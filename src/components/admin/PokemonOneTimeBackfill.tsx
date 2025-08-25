@@ -60,45 +60,53 @@ export default function PokemonOneTimeBackfill() {
       setStartTime(Date.now()); // Reset start time
       setProgress(prev => ({ ...prev, currentSet: "Starting..." }));
 
-      const url = `https://dmpoandoydaqxhzdjnmk.supabase.co/functions/v1/catalog-sync-pokemon`;
-      const body = incremental ? { since: getRecentDate() } : {};
+      // Use proper Supabase client instead of direct fetch
+      const params = incremental ? { since: getRecentDate() } : {};
       
-      const res = await fetch(url, { 
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body)
+      const { data, error } = await supabase.functions.invoke('catalog-sync-pokemon', {
+        body: params
       });
       
-      const json = await res.json().catch(() => ({}));
-      setResult({ ok: res.ok, ...json, at: new Date().toISOString() });
+      setResult({ 
+        ok: !error, 
+        data, 
+        error: error?.message, 
+        at: new Date().toISOString() 
+      });
       
-      if (!res.ok) {
-        toast.error(`Backfill failed: ${res.status}`);
+      if (error) {
+        toast.error(`Backfill failed: ${error.message}`);
         return;
       }
 
       // Start polling for progress
-      if (json.queued_sets) {
-        pollProgress(json.queued_sets);
+      if (data?.queued_sets) {
+        pollProgress(data.queued_sets);
       }
 
       // Only mark as fully done for full backfill
       if (!incremental) {
-        const { error } = await supabase
+        const { error: settingError } = await supabase
           .from("system_settings")
           .upsert({ key_name: SETTING_KEY, key_value: "true" }, { onConflict: "key_name" });
         
-        if (error) {
+        if (settingError) {
           toast.error("Backfill ok, but failed to save completion flag.");
         } else {
           setDone(true);
           toast.success("Pokémon catalog backfilled and locked.");
         }
       } else {
-        toast.success(`Incremental sync started for ${json.queued_sets} sets`);
+        toast.success(`Incremental sync started for ${data?.queued_sets || 0} sets`);
       }
     } catch (e: any) {
-      toast.error(e?.message || "Backfill error");
+      console.error("Backfill error:", e);
+      toast.error(`Backfill error: ${e?.message || "Unknown error"}`);
+      setResult({ 
+        ok: false, 
+        error: e?.message || "Unknown error", 
+        at: new Date().toISOString() 
+      });
     } finally {
       setLoading(false);
     }
