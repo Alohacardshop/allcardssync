@@ -30,58 +30,53 @@ async function fetchAll(path: string, qs: Record<string, string> = {}) {
 serve(async (req) => {
   try {
     const url = new URL(req.url);
+    const setId = (url.searchParams.get("setId") || "").trim();     // NEW
     const since = (url.searchParams.get("since") || "").trim();
 
-    // 1) Sets
-    const sets = await fetchAll("sets");
+    // --- 1) Sets
+    let sets: any[] = [];
+    if (setId) {
+      const res = await fetch(`${API}/sets/${setId}`, { headers: HDRS });
+      if (!res.ok) throw new Error(`sets/${setId} ${res.status}`);
+      const j: any = await res.json();
+      sets = j?.data ? [j.data] : [];
+    } else {
+      sets = await fetchAll("sets");
+    }
     const setRows = sets.map((s: any) => ({
-      id: s.id,
-      game: "pokemon",
-      name: s.name,
-      series: s.series ?? null,
-      printed_total: s.printedTotal ?? null,
-      total: s.total ?? null,
-      release_date: s.releaseDate ?? null,
-      images: s.images ?? null,
+      id: s.id, game: "pokemon", name: s.name, series: s.series ?? null,
+      printed_total: s.printedTotal ?? null, total: s.total ?? null,
+      release_date: s.releaseDate ?? null, images: s.images ?? null,
       updated_at: new Date().toISOString(),
     }));
-    {
+    if (setRows.length) {
       const { error } = await sb.from("catalog_v2.sets").upsert(setRows, { onConflict: "id" });
       if (error) throw error;
     }
 
-    // 2) Cards (optionally incremental by set releaseDate)
-    const cardsQs: Record<string, string> = {};
-    if (since) cardsQs.q = `set.releaseDate>="${since}"`;
-    const cards = await fetchAll("cards", cardsQs);
-    const cardRows = cards.map((c: any) => ({
-      id: c.id,
-      game: "pokemon",
-      name: c.name,
-      number: c.number ?? null,
-      set_id: c.set?.id ?? null,
-      rarity: c.rarity ?? null,
-      supertype: c.supertype ?? null,
-      subtypes: c.subtypes ?? null,
-      images: c.images ?? null,                     // { small, large }
-      tcgplayer_product_id: c.tcgplayer?.productId ?? null,
-      tcgplayer_url: c.tcgplayer?.url ?? null,
-      data: c,                                      // keep raw for future classifiers
-      updated_at: new Date().toISOString(),
+    // --- 2) Cards
+    const cardQs: Record<string,string> = {};
+    if (since) cardQs.q = `set.releaseDate>="${since}"`;
+    if (setId) cardQs.q = cardQs.q ? `${cardQs.q} AND set.id:"${setId}"` : `set.id:"${setId}"`;
+
+    const cards = await fetchAll("cards", cardQs);
+    const cardRows = cards.map((c:any)=>({
+      id: c.id, game: "pokemon",
+      name: c.name, number: c.number ?? null, set_id: c.set?.id ?? null,
+      rarity: c.rarity ?? null, supertype: c.supertype ?? null, subtypes: c.subtypes ?? null,
+      images: c.images ?? null, tcgplayer_product_id: c.tcgplayer?.productId ?? null,
+      tcgplayer_url: c.tcgplayer?.url ?? null, data: c, updated_at: new Date().toISOString(),
     }));
-    if (cardRows.length) {
-      // Upsert in chunks to avoid payload limits
-      const chunkSize = 1000;
-      for (let i = 0; i < cardRows.length; i += chunkSize) {
-        const chunk = cardRows.slice(i, i + chunkSize);
-        const { error } = await sb.from("catalog_v2.cards").upsert(chunk, { onConflict: "id" });
-        if (error) throw error;
-      }
+    for (let i=0; i<cardRows.length; i+=1000) {
+      const chunk = cardRows.slice(i, i+1000);
+      const { error } = await sb.from("catalog_v2.cards").upsert(chunk, { onConflict: "id" });
+      if (error) throw error;
     }
 
-    return new Response(JSON.stringify({ sets: setRows.length, cards: cardRows.length }), {
-      headers: { "Content-Type": "application/json" },
-    });
+    return new Response(JSON.stringify({
+      mode: setId ? "bySetId" : (since ? "incremental" : "full"),
+      sets: setRows.length, cards: cardRows.length
+    }), { headers: { "Content-Type":"application/json" }});
   } catch (e: any) {
     return new Response(e?.message || "error", { status: 500 });
   }
