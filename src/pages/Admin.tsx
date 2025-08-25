@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Navigation } from '@/components/Navigation';
 import PokemonCatalogSync from '@/components/admin/PokemonCatalogSync';
+import PokemonOneTimeBackfill from '@/components/admin/PokemonOneTimeBackfill';
 
 interface ShopifyConfig {
   storeDomain: string;
@@ -638,7 +639,10 @@ const Admin = () => {
       />
 
       {/* Pokémon Catalog Sync Section */}
-      <PokemonCatalogSync />
+      <div className="grid grid-cols-1 gap-4">
+        <PokemonOneTimeBackfill />
+        <PokemonCatalogSync />
+      </div>
 
       {/* JustTCG Integration Section */}
       <Card>
