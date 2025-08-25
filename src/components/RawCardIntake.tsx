@@ -10,6 +10,8 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { searchCardsByNameNumber, searchCatalogV2, getReferencePriceByTcgplayerId, type JustTCGCard } from '@/lib/justtcg';
 import { USE_V2_POKEMON } from '@/lib/catalogEnv';
+
+const FUNCTIONS_BASE = import.meta.env.VITE_SUPABASE_FUNCTIONS_URL?.replace(/\/+$/, "") || "/functions/v1";
 import { normalizeStr, normalizeNumber, includesLoose, similarityScore } from '@/lib/cardSearch';
 import type { GameKey, JObjectCard, Printing } from '@/lib/types';
 import { GAME_OPTIONS } from '@/lib/types';
@@ -54,6 +56,7 @@ export function RawCardIntake({
   const [referencePrice, setReferencePrice] = useState<number | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [saving, setSaving] = useState(false);
+  const [syncSetId, setSyncSetId] = useState('');
 
   const { toast } = useToast();
   const debounceRef = useRef<NodeJS.Timeout>();
@@ -448,9 +451,43 @@ export function RawCardIntake({
           </div>
 
           {!loading && suggestions.length === 0 && normalizedName && normalizedName.length >= 3 && (
-            <div className="text-center py-8 text-muted-foreground">
-              No matches found for "{name}"
-            </div>
+            <>
+              {game === 'pokemon' && USE_V2_POKEMON ? (
+                <div className="rounded border p-3 text-sm space-y-2">
+                  <div>No local results. If a new set just dropped, you can sync it now.</div>
+                  <div className="flex items-center gap-2">
+                    <Input 
+                      className="text-sm" 
+                      placeholder="Set ID (e.g. sv6pt5)" 
+                      value={syncSetId} 
+                      onChange={(e) => setSyncSetId(e.target.value)} 
+                    />
+                    <Button 
+                      size="sm"
+                      onClick={async () => {
+                        try {
+                          await fetch(`${FUNCTIONS_BASE}/catalog-sync-pokemon?setId=${encodeURIComponent(syncSetId)}`, { method: 'POST' });
+                          toast({ title: 'Sync started', description: 'Refreshing search results...' });
+                          await doSearch();
+                        } catch (error) {
+                          toast({ title: 'Sync failed', description: 'Could not sync the set', variant: 'destructive' });
+                        }
+                      }}
+                      disabled={!syncSetId.trim()}
+                    >
+                      Sync set
+                    </Button>
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Tip: leave Set ID blank and ask an admin to run a broader sync from the Admin page.
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  No matches found for "{name}"
+                </div>
+              )}
+            </>
           )}
 
           {!loading && suggestions.length === 0 && normalizedName && normalizedName.length < 3 && (
