@@ -1,1 +1,4 @@
 project_id = "dmpoandoydaqxhzdjnmk"
+
+[functions.justtcg]
+verify_jwt = false
