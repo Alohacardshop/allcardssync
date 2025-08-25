@@ -8,7 +8,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, Search, Plus } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { searchCards } from '@/integrations/justtcg';
+import { searchCardsByNameNumber, getReferencePriceByTcgplayerId, type JustTCGCard } from '@/lib/justtcg';
 import { normalizeStr, normalizeNumber, includesLoose, similarityScore } from '@/lib/cardSearch';
 import type { GameKey, JObjectCard, Printing } from '@/lib/types';
 import { GAME_OPTIONS } from '@/lib/types';
@@ -19,7 +19,7 @@ interface RawCardIntakeProps {
   defaultConditions?: string;
   autoSaveToBatch?: boolean;
   onPick?: (payload: {
-    card: JObjectCard;
+    card: JustTCGCard;
     chosenVariant?: {
       condition: string;
       printing: Printing;
@@ -44,11 +44,12 @@ export function RawCardIntake({
   const [number, setNumber] = useState('');
   const [printing, setPrinting] = useState<Printing>(defaultPrinting);
   const [conditionCsv, setConditionCsv] = useState(defaultConditions);
-  const [suggestions, setSuggestions] = useState<JObjectCard[]>([]);
+  const [suggestions, setSuggestions] = useState<JustTCGCard[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [picked, setPicked] = useState<JObjectCard | null>(null);
+  const [picked, setPicked] = useState<JustTCGCard | null>(null);
   const [chosenVariant, setChosenVariant] = useState<any>(null);
+  const [referencePrice, setReferencePrice] = useState<number | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [saving, setSaving] = useState(false);
 
@@ -83,50 +84,17 @@ export function RawCardIntake({
       setError(null);
 
       try {
-        const { data } = await searchCards({
+        const data = await searchCardsByNameNumber({
           name: normalizedName,
           game,
           number: normalizedNumber.num,
+          limit: 10
         });
 
         if (controller.signal.aborted) return;
 
-        // Filter and rank results
-        const filtered = (data || []).filter(card => {
-          // Name must match
-          if (!includesLoose(card.name || '', normalizedName)) return false;
-
-          // Number filter if provided
-          if (normalizedNumber.num) {
-            const cardNum = String(card.number || '');
-            if (!cardNum) return false;
-
-            if (normalizedNumber.denom) {
-              // Exact match for "201/197" format
-              const [n, d] = cardNum.split('/');
-              return n === normalizedNumber.num && d === normalizedNumber.denom;
-            } else {
-              // Match "201" or "201/xxx"
-              const [n] = cardNum.split('/');
-              return n === normalizedNumber.num || cardNum === normalizedNumber.num;
-            }
-          }
-
-          return true;
-        });
-
-        // Rank by similarity
-        const ranked = filtered
-          .map(card => ({
-            card,
-            score: similarityScore(card.name || '', name) + 
-                   (String(card.number) === number ? 0.05 : 0),
-          }))
-          .sort((a, b) => b.score - a.score)
-          .slice(0, 5)
-          .map(x => x.card);
-
-        setSuggestions(ranked);
+        // Skip number-based filtering since JustTCG handles this
+        setSuggestions(data.slice(0, 5));
       } catch (err: any) {
         if (err.name !== 'AbortError') {
           const message = err.message || 'Failed to search cards';
@@ -181,7 +149,7 @@ export function RawCardIntake({
     return variants.find(v => v.printing === printing) || variants[0];
   };
 
-  const generateSKU = (card: JObjectCard, variant: any, game: GameKey): string => {
+  const generateSKU = (card: JustTCGCard, variant: any, game: GameKey): string => {
     const gameAbbr = game === 'pokemon' ? 'PKM' : game === 'pokemon_japan' ? 'PKJ' : 'MTG';
     const conditionAbbr = String(variant?.condition || 'NM').replace(/[^A-Z]/g, '').substring(0, 2) || 'NM';
     const randomSuffix = Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -259,24 +227,52 @@ export function RawCardIntake({
     }
   };
 
-  const handleSuggestionClick = async (card: JObjectCard) => {
+  const handleSuggestionClick = async (card: JustTCGCard) => {
     setPicked(card);
-    const variant = findBestVariant(card);
-    setChosenVariant(variant);
+    
+    // Get reference price if tcgplayerId exists
+    let variant = null;
+    let price = null;
+    
+    if (card.tcgplayerId) {
+      try {
+        const variants = await getReferencePriceByTcgplayerId(card.tcgplayerId, {
+          condition: conditionCsv.split(',')[0]?.trim() || 'NM',
+          printing: printing === 'Foil' ? 'Foil' : 'Normal'
+        });
+        
+        if (variants.length > 0) {
+          variant = variants[0];
+          price = variant.price;
+          setReferencePrice(price || null);
+        }
+      } catch (error) {
+        console.error('Failed to get reference price:', error);
+        toast({
+          title: 'Price Lookup Failed',  
+          description: 'Could not fetch reference price',
+          variant: 'destructive',
+        });
+      }
+    }
+    
+    const chosenVar = {
+      condition: conditionCsv.split(',')[0]?.trim() || 'NM',
+      printing: printing,
+      price: price
+    };
+    
+    setChosenVariant(chosenVar);
     
     const payload = {
       card,
-      chosenVariant: variant ? {
-        condition: String(variant.condition),
-        printing: variant.printing,
-        price: variant.price,
-      } : undefined,
+      chosenVariant: chosenVar,
     };
 
     onPick?.(payload);
 
     // Auto-save if enabled
-    if (autoSaveToBatch && variant) {
+    if (autoSaveToBatch && chosenVar) {
       setTimeout(addToBatch, 100);
     }
   };
@@ -370,23 +366,20 @@ export function RawCardIntake({
           </div>
           
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3" role="region" aria-live="polite">
-            {suggestions.map(card => (
+            {suggestions.map((card, index) => (
               <Button
-                key={card.cardId}
+                key={card.id || `card-${index}`}
                 variant="outline"
                 className="h-auto p-3 text-left flex flex-col items-start"
                 onClick={() => handleSuggestionClick(card)}
-                aria-label={`Select ${card.name} from ${card.set}`}
+                aria-label={`Select ${card.name}`}
               >
-                <img
-                  src={card.images?.small || card.images?.large || '/placeholder.svg'}
-                  alt={card.name}
-                  className="w-full h-32 object-contain mb-2 rounded"
-                  loading="lazy"
-                />
+                <div className="w-full h-32 bg-muted rounded mb-2 flex items-center justify-center text-xs text-muted-foreground">
+                  {card.name?.substring(0, 20)}...
+                </div>
                 <div className="text-sm font-medium truncate w-full">{card.name}</div>
                 <div className="text-xs text-muted-foreground">
-                  {card.set} {card.number ? `• #${card.number}` : ''}
+                  TCG ID: {card.tcgplayerId}
                 </div>
               </Button>
             ))}
@@ -409,7 +402,8 @@ export function RawCardIntake({
               <ChosenPricePanel 
                 card={picked} 
                 printing={printing} 
-                conditionCsv={conditionCsv} 
+                conditionCsv={conditionCsv}
+                referencePrice={referencePrice}
               />
               
               {/* Quantity and Add to Batch */}
@@ -451,51 +445,37 @@ export function RawCardIntake({
 function ChosenPricePanel({ 
   card, 
   printing, 
-  conditionCsv 
+  conditionCsv,
+  referencePrice 
 }: { 
-  card: JObjectCard; 
+  card: JustTCGCard; 
   printing: Printing; 
-  conditionCsv: string; 
+  conditionCsv: string;
+  referencePrice?: number | null;
 }) {
-  const preferences = conditionCsv.split(',').map(s => s.trim()).filter(Boolean);
-  const variants = card.variants || [];
-  
-  const conditionMap: Record<string, string> = {
-    'SEALED': 'S', 'NEAR MINT': 'NM', 'LIGHTLY PLAYED': 'LP',
-    'MODERATELY PLAYED': 'MP', 'HEAVILY PLAYED': 'HP', 'DAMAGED': 'DMG'
-  };
-  
-  const normalizeCondition = (cond: string) => {
-    const upper = normalizeStr(cond).toUpperCase();
-    return conditionMap[upper] || upper;
-  };
-
-  let chosenVariant = null;
-  for (const pref of preferences) {
-    const match = variants.find(v => 
-      v.printing === printing && 
-      normalizeCondition(String(v.condition)) === normalizeCondition(pref)
-    );
-    if (match) {
-      chosenVariant = match;
-      break;
-    }
-  }
-  
-  if (!chosenVariant) {
-    chosenVariant = variants.find(v => v.printing === printing) || variants[0];
-  }
+  const condition = conditionCsv.split(',')[0]?.trim() || 'NM';
 
   return (
     <div className="space-y-2">
       <div><span className="text-muted-foreground">Name:</span> {card.name}</div>
-      <div><span className="text-muted-foreground">Set:</span> {card.set || '—'}</div>
-      <div><span className="text-muted-foreground">Number:</span> {card.number || '—'}</div>
+      <div><span className="text-muted-foreground">TCG Player ID:</span> {card.tcgplayerId || '—'}</div>
       <div><span className="text-muted-foreground">Printing:</span> {printing}</div>
-      <div><span className="text-muted-foreground">Condition:</span> {chosenVariant?.condition || '—'}</div>
-      <div><span className="text-muted-foreground">Price:</span> {
-        chosenVariant?.price != null ? `$${Number(chosenVariant.price).toFixed(2)}` : '—'
+      <div><span className="text-muted-foreground">Condition:</span> {condition}</div>
+      <div><span className="text-muted-foreground">Reference Price:</span> {
+        referencePrice != null ? `$${Number(referencePrice).toFixed(2)}` : '—'
       }</div>
+      <div className="mt-4 pt-4 border-t">
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <Label htmlFor="our-price">Our Price</Label>
+            <Input id="our-price" placeholder="$0.00" />
+          </div>
+          <div>
+            <Label htmlFor="our-cost">Our Cost</Label>
+            <Input id="our-cost" placeholder="$0.00" />
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
