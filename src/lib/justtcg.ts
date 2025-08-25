@@ -1,7 +1,5 @@
 // src/lib/justtcg.ts
-const FUNCTIONS_BASE =
-  import.meta.env.VITE_SUPABASE_FUNCTIONS_URL?.replace(/\/+$/, "") || "/functions/v1";
-const BASE = `${FUNCTIONS_BASE}/justtcg`;
+const BASE = "https://dmpoandoydaqxhzdjnmk.supabase.co/functions/v1/justtcg";
 
 // Helper to unwrap potentially nested data from Edge Function responses
 function unwrapData(response: any): any[] {
@@ -67,10 +65,7 @@ export async function searchCardsByNameNumber(params: {
   set?: string;      // optional (free-text set filter)
   limit?: number;    // default 5
 }) {
-  // Handle both relative and absolute BASE URLs
-  const url = BASE.startsWith('http') 
-    ? new URL(`${BASE}/cards`) 
-    : new URL(`${BASE}/cards`, window.location.origin);
+  const url = new URL(`${BASE}/cards`);
     
   if (params.name)   url.searchParams.set("name", params.name);
   if (params.number) url.searchParams.set("number", params.number);
@@ -98,10 +93,7 @@ export async function getReferencePriceByTcgplayerId(
   tcgplayerId: string | number,
   opts?: { condition?: string; printing?: string }
 ) {
-  // Handle both relative and absolute BASE URLs
-  const url = BASE.startsWith('http') 
-    ? new URL(`${BASE}/cards`) 
-    : new URL(`${BASE}/cards`, window.location.origin);
+  const url = new URL(`${BASE}/cards`);
     
   url.searchParams.set("tcgplayerId", String(tcgplayerId));
   if (opts?.condition) url.searchParams.set("condition", opts.condition);

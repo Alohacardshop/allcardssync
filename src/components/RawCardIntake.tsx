@@ -68,6 +68,7 @@ export function RawCardIntake({
   }, [name, number, game]);
 
   const doSearch = async () => {
+    console.log('Starting card search...');
     if (!normalizedName || normalizedName.length < 2) {
       toast({
         title: 'Invalid Search',
@@ -109,6 +110,7 @@ export function RawCardIntake({
       const results = Array.isArray(data) ? data.slice(0, 5) : [];
       searchCache.set(cacheKey, results);
       setSuggestions(results);
+      console.log('Search completed, found', results.length, 'results');
     } catch (err: any) {
       if (err.name !== 'AbortError') {
         const message = err.message || 'Failed to search cards';
@@ -383,7 +385,7 @@ export function RawCardIntake({
             <Button 
               size="sm" 
               onClick={doSearch}
-              disabled={loading || name.trim().length < 2}
+              disabled={loading}
             >
               {loading ? (
                 <>

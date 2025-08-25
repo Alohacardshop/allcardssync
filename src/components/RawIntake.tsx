@@ -97,6 +97,7 @@ export default function RawIntake() {
   }, [form.name, form.card_number, form.game]);
 
   const doSearch = async () => {
+    console.log('Starting card search...');
     const rawName = (form.name || "").trim();
     const inputCard = (form.card_number || "").trim();
 
@@ -134,6 +135,7 @@ export default function RawIntake() {
       const results = Array.isArray(response) ? response : [];
       searchCache.set(cacheKey, results);
       setSuggestions(results);
+      console.log('Search completed, found', results.length, 'results');
     } catch (e) {
       console.error('JustTCG API search error:', e);
       setSuggestions([]);
@@ -344,7 +346,7 @@ export default function RawIntake() {
           <Button 
             size="sm" 
             onClick={doSearch}
-            disabled={loading || (form.name || '').trim().length < 2}
+            disabled={loading}
           >
             {loading ? 'Searching...' : 'Search'}
           </Button>
