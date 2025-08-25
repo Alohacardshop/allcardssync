@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Navigation } from '@/components/Navigation';
+import PokemonCatalogSync from '@/components/admin/PokemonCatalogSync';
 
 interface ShopifyConfig {
   storeDomain: string;
@@ -635,6 +636,9 @@ const Admin = () => {
         results={saveResults}
         storeName={saveResultsStore}
       />
+
+      {/* Pokémon Catalog Sync Section */}
+      <PokemonCatalogSync />
 
       {/* JustTCG Integration Section */}
       <Card>
