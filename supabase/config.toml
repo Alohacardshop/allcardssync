@@ -1,0 +1,25 @@
+project_id = "dmpoandoydaqxhzdjnmk"
+
+[functions.get-printnode-key]
+verify_jwt = false
+
+[functions.psa-scrape]
+verify_jwt = false
+
+[functions.shopify-webhook]
+verify_jwt = false
+
+[functions.shopify-import]
+verify_jwt = false
+
+[functions.shopify-config-check]
+verify_jwt = false
+
+[functions.shopify-webhook-test]
+verify_jwt = false
+
+[functions.render-label]
+verify_jwt = false
+
+[functions.get-system-setting]
+verify_jwt = false
