@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { GAME_OPTIONS, GameKey, JObjectCard } from "@/lib/types";
 import { searchCardsByNameNumber } from "@/lib/justtcg";
+import { LRUCache } from '@/lib/lruCache';
 
 interface RawTradeInForm {
   game: string;
@@ -54,7 +55,9 @@ export default function RawIntake() {
   
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [searchCache] = useState(new Map<string, any[]>());
+  
+  const debounceRef = useRef<NodeJS.Timeout>();
+  const searchCache = useRef(new LRUCache<string, any[]>(200));
 
   const autoSku = useMemo(() => {
     const condMap: Record<string, string> = {
@@ -91,64 +94,56 @@ export default function RawIntake() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoSku]);
 
+  // build cache key
+  const buildKey = (g: string, n: string, num?: string) =>
+    `${g}|${n.trim().toLowerCase()}|${(num||'').trim().toLowerCase()}`;
+
   // Clear suggestions when inputs change to avoid stale results
   useEffect(() => {
     setSuggestions([]);
   }, [form.name, form.card_number, form.game]);
 
   const doSearch = async () => {
-    console.log('Starting card search...');
     const rawName = (form.name || "").trim();
     const inputCard = (form.card_number || "").trim();
-
-    if (rawName.length < 2) {
-      toast.error('Please enter at least 2 characters for the card name');
+    if (rawName.length < 3) {
+      toast.error('Please enter at least 3 characters for the card name');
       return;
     }
 
-    // Map game label to game string for JustTCG API
-    const gameMap: Record<string, string> = {
-      'Pokémon': 'pokemon',
-      'Pokémon Japan': 'pokemon', 
-      'Magic: The Gathering': 'magic-the-gathering'
-    };
-    
-    const gameParam = gameMap[form.game] || 'pokemon';
-    const cacheKey = `${gameParam}|${rawName}|${inputCard}`;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      const gameMap: Record<string, string> = {
+        'Pokémon': 'pokemon',
+        'Pokémon Japan': 'pokemon',
+        'Magic: The Gathering': 'magic-the-gathering'
+      };
+      const gameParam = gameMap[form.game] || 'pokemon';
+      const cacheKey = buildKey(gameParam, rawName, inputCard);
 
-    // Check cache first
-    if (searchCache.has(cacheKey)) {
-      setSuggestions(searchCache.get(cacheKey) || []);
-      return;
-    }
+      const cached = searchCache.current.get(cacheKey);
+      if (cached) { setSuggestions(cached); return; }
 
-    setLoading(true);
-
-    try {
-      const response = await searchCardsByNameNumber({
-        name: rawName,
-        number: inputCard || undefined,
-        game: gameParam,
-        limit: 5
-      });
-
-      const results = Array.isArray(response) ? response : [];
-      searchCache.set(cacheKey, results);
-      setSuggestions(results);
-      console.log('Search completed, found', results.length, 'results');
-    } catch (e) {
-      console.error('JustTCG API search error:', e);
-      setSuggestions([]);
-      
-      // Handle rate limiting
-      if (e instanceof Error && e.message.includes('429')) {
-        toast.error('Rate limit reached. Please wait a moment before searching again.');
-      } else {
-        toast.error('Failed to search cards. Please try again.');
+      setLoading(true);
+      try {
+        const response = await searchCardsByNameNumber({
+          name: rawName,
+          number: inputCard || undefined,
+          game: gameParam,
+          limit: 5
+        });
+        const results = Array.isArray(response) ? response : [];
+        searchCache.current.set(cacheKey, results);
+        setSuggestions(results);
+      } catch (e: any) {
+        console.error('JustTCG API search error:', e);
+        setSuggestions([]);
+        if (e?.message?.includes('429')) toast.error('Rate limit reached. Please wait a moment.');
+        else toast.error('Failed to search cards. Please try again.');
+      } finally {
+        setLoading(false);
       }
-    } finally {
-      setLoading(false);
-    }
+    }, 450);
   };
 
   const applySuggestion = (s: any) => {
@@ -369,10 +364,10 @@ export default function RawIntake() {
               </li>
             ))}
           </ul>
-        ) : ((form.name || '').trim().length >= 2 ? (
+        ) : ((form.name || '').trim().length >= 3 ? (
           <div className="text-sm text-muted-foreground mt-2">No matches found. Try different search terms.</div>
         ) : (
-          <div className="text-sm text-muted-foreground mt-2">Enter card name (2+ characters) to search</div>
+          <div className="text-sm text-muted-foreground mt-2">Enter card name (3+ characters) to search</div>
         ))}
       </div>
 

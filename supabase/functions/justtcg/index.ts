@@ -82,6 +82,14 @@ serve(async (req) => {
       const cached = cacheGet(cacheKey);
       if (cached) return new Response(JSON.stringify({ data: cached, fromCache: true }), { headers: cors });
 
+      // Server-side safeguards
+      const name = (url.searchParams.get('name') || '').trim();
+      if (name && name.length < 3) {
+        return new Response(JSON.stringify({ error: 'min_length' }), { status: 400, headers: cors });
+      }
+      const limit = Math.min(5, Math.max(1, Number(url.searchParams.get('limit') || 5)));
+      url.searchParams.set('limit', String(limit));
+
       const qs = url.searchParams.toString();
       const upstream = `https://api.justtcg.com/v1/cards${qs ? `?${qs}` : ""}`;
       const res = await fetchWithRetry(upstream, {

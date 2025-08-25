@@ -12,6 +12,7 @@ import { searchCardsByNameNumber, getReferencePriceByTcgplayerId, type JustTCGCa
 import { normalizeStr, normalizeNumber, includesLoose, similarityScore } from '@/lib/cardSearch';
 import type { GameKey, JObjectCard, Printing } from '@/lib/types';
 import { GAME_OPTIONS } from '@/lib/types';
+import { LRUCache } from '@/lib/lruCache';
 
 interface RawCardIntakeProps {
   defaultGame?: GameKey;
@@ -47,7 +48,6 @@ export function RawCardIntake({
   const [suggestions, setSuggestions] = useState<JustTCGCard[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [searchCache] = useState(new Map<string, JustTCGCard[]>());
   const [picked, setPicked] = useState<JustTCGCard | null>(null);
   const [chosenVariant, setChosenVariant] = useState<any>(null);
   const [referencePrice, setReferencePrice] = useState<number | null>(null);
@@ -56,10 +56,14 @@ export function RawCardIntake({
 
   const { toast } = useToast();
   const debounceRef = useRef<NodeJS.Timeout>();
+  const cacheRef = useRef(new LRUCache<string, JustTCGCard[]>(200));
   const abortControllerRef = useRef<AbortController>();
 
   const normalizedName = useMemo(() => normalizeStr(name), [name]);
   const normalizedNumber = useMemo(() => normalizeNumber(number), [number]);
+
+  const buildSearchKey = (g: string, n: string, num?: string) =>
+    `${g}|${n.trim().toLowerCase()}|${(num||'').trim().toLowerCase()}`;
 
   // Clear suggestions when inputs change to avoid stale results
   useEffect(() => {
@@ -68,71 +72,58 @@ export function RawCardIntake({
   }, [name, number, game]);
 
   const doSearch = async () => {
-    console.log('Starting card search...');
-    if (!normalizedName || normalizedName.length < 2) {
-      toast({
-        title: 'Invalid Search',
-        description: 'Please enter at least 2 characters for card name',
-        variant: 'destructive',
-      });
+    // guard: min length 3
+    if (!normalizedName || normalizedName.length < 3) {
+      toast({ title: 'Invalid Search', description: 'Enter at least 3 characters', variant: 'destructive' });
       return;
     }
 
-    // Abort previous request if any
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
+    // coalesce triggers in quick succession
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      // abort previous request if any
+      if (abortControllerRef.current) abortControllerRef.current.abort();
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
 
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
+      const cacheKey = buildSearchKey(game, normalizedName, normalizedNumber.num);
 
-    const cacheKey = `${game}|${normalizedName}|${normalizedNumber.num || ''}`;
-
-    // Check cache first  
-    if (searchCache.has(cacheKey)) {
-      setSuggestions(searchCache.get(cacheKey) || []);
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      const data = await searchCardsByNameNumber({
-        name: normalizedName,
-        game,
-        number: normalizedNumber.num,
-        limit: 10
-      });
-
-      if (controller.signal.aborted) return;
-
-      const results = Array.isArray(data) ? data.slice(0, 5) : [];
-      searchCache.set(cacheKey, results);
-      setSuggestions(results);
-      console.log('Search completed, found', results.length, 'results');
-    } catch (err: any) {
-      if (err.name !== 'AbortError') {
-        const message = err.message || 'Failed to search cards';
-        setError(message);
-        
-        if (message.includes('429')) {
-          toast({
-            title: 'Rate Limit',
-            description: 'Please wait a moment before searching again',
-            variant: 'destructive',
-          });
-        } else {
-          toast({
-            title: 'Search Error',
-            description: message,
-            variant: 'destructive',
-          });
-        }
+      // LRU cache first
+      const cached = cacheRef.current.get(cacheKey);
+      if (cached) {
+        setSuggestions(cached.slice(0, 5));
+        setError(null);
+        return;
       }
-    } finally {
-      setLoading(false);
-    }
+
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await searchCardsByNameNumber({
+          name: normalizedName,
+          game,
+          number: normalizedNumber.num,
+          limit: 5,
+        });
+
+        if (controller.signal.aborted) return;
+
+        const results = Array.isArray(data) ? data.slice(0, 5) : [];
+        cacheRef.current.set(cacheKey, results);
+        setSuggestions(results);
+      } catch (err: any) {
+        if (err?.name === 'AbortError') return;
+        const message = err?.message || 'Failed to search cards';
+        setError(message);
+        if (message.includes('429')) {
+          toast({ title: 'Rate Limit', description: 'Please wait a moment before searching again', variant: 'destructive' });
+        } else {
+          toast({ title: 'Search Error', description: message, variant: 'destructive' });
+        }
+      } finally {
+        setLoading(false);
+      }
+    }, 450);
   };
 
   const findBestVariant = (card: JObjectCard) => {
@@ -418,9 +409,15 @@ export function RawCardIntake({
             ))}
           </div>
 
-          {!loading && suggestions.length === 0 && normalizedName && (
+          {!loading && suggestions.length === 0 && normalizedName && normalizedName.length >= 3 && (
             <div className="text-center py-8 text-muted-foreground">
               No matches found for "{name}"
+            </div>
+          )}
+
+          {!loading && suggestions.length === 0 && normalizedName && normalizedName.length < 3 && (
+            <div className="text-center py-8 text-muted-foreground">
+              Enter card name (3+ characters) to search
             </div>
           )}
         </div>
