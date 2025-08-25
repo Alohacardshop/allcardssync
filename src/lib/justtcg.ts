@@ -30,6 +30,7 @@ export type JustTCGCard = {
   set?: string;
   variants?: JustTCGVariant[];
   tcgplayerId?: string | number;
+  images?: { small?: string; large?: string };
 };
 
 async function postCards(payload: any[]) {
@@ -103,4 +104,19 @@ export async function getReferencePriceByTcgplayerId(
   const response = await res.json();
   const cards = unwrapData(response) as JustTCGCard[];
   return (cards?.[0]?.variants || []) as JustTCGVariant[]; // filtered variants with price
+}
+
+// Catalog V2 search (local database)
+const FUNCTIONS_BASE = import.meta.env.VITE_SUPABASE_FUNCTIONS_URL?.replace(/\/+$/, "") || "/functions/v1";
+
+export async function searchCatalogV2(game: 'pokemon'|'pokemon_japan'|'mtg', name: string, number?: string, limit = 5) {
+  const u = new URL(`${FUNCTIONS_BASE}/catalog-search`, window.location.origin);
+  u.searchParams.set("game", game);
+  u.searchParams.set("name", name);
+  if (number) u.searchParams.set("number", number);
+  u.searchParams.set("limit", String(limit));
+  const res = await fetch(u.toString());
+  if (!res.ok) throw new Error(await res.text());
+  const { data } = await res.json();
+  return data as Array<{ id:string; game:string; name:string; number?:string; set?:{name?:string}; images?:{small?:string}; tcgplayer_product_id?: number }>;
 }

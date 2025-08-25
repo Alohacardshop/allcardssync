@@ -8,7 +8,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, Search, Plus } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { searchCardsByNameNumber, getReferencePriceByTcgplayerId, type JustTCGCard } from '@/lib/justtcg';
+import { searchCardsByNameNumber, searchCatalogV2, getReferencePriceByTcgplayerId, type JustTCGCard } from '@/lib/justtcg';
+import { USE_V2_POKEMON } from '@/lib/catalogEnv';
 import { normalizeStr, normalizeNumber, includesLoose, similarityScore } from '@/lib/cardSearch';
 import type { GameKey, JObjectCard, Printing } from '@/lib/types';
 import { GAME_OPTIONS } from '@/lib/types';
@@ -99,6 +100,30 @@ export function RawCardIntake({
       setLoading(true);
       setError(null);
       try {
+        let results: JustTCGCard[] = [];
+        
+        // Try local catalog v2 search first for Pokemon
+        if (game === 'pokemon' && USE_V2_POKEMON) {
+          const local = await searchCatalogV2('pokemon', normalizedName, normalizedNumber.num, 5);
+          if (local.length > 0) {
+            results = local.map(c => ({
+              id: c.id,
+              name: c.name,
+              number: c.number,
+              set: c.set?.name,
+              images: c.images,
+              tcgplayerId: c.tcgplayer_product_id ?? undefined
+            }));
+            
+            if (controller.signal.aborted) return;
+            
+            cacheRef.current.set(cacheKey, results);
+            setSuggestions(results);
+            return;
+          }
+        }
+        
+        // Fallback to JustTCG remote search
         const data = await searchCardsByNameNumber({
           name: normalizedName,
           game,
@@ -108,7 +133,7 @@ export function RawCardIntake({
 
         if (controller.signal.aborted) return;
 
-        const results = Array.isArray(data) ? data.slice(0, 5) : [];
+        results = Array.isArray(data) ? data.slice(0, 5) : [];
         cacheRef.current.set(cacheKey, results);
         setSuggestions(results);
       } catch (err: any) {
@@ -398,8 +423,21 @@ export function RawCardIntake({
                 onClick={() => handleSuggestionClick(card)}
                 aria-label={`Select ${card.name}`}
               >
-                <div className="w-full h-32 bg-muted rounded mb-2 flex items-center justify-center text-xs text-muted-foreground">
-                  {card.name?.substring(0, 20)}...
+                <div className="w-full h-32 bg-muted rounded mb-2 flex items-center justify-center text-xs text-muted-foreground overflow-hidden">
+                  {card.images?.small ? (
+                    <img 
+                      src={card.images.small} 
+                      alt={card.name} 
+                      className="w-full h-full object-cover rounded"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                        e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                      }}
+                    />
+                  ) : null}
+                  <div className={`${card.images?.small ? 'hidden' : ''} flex items-center justify-center w-full h-full`}>
+                    {card.name?.substring(0, 20)}...
+                  </div>
                 </div>
                 <div className="text-sm font-medium truncate w-full">{card.name}</div>
                 <div className="text-xs text-muted-foreground">
