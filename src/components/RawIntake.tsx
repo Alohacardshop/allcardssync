@@ -106,10 +106,6 @@ export default function RawIntake() {
   const doSearch = async () => {
     const rawName = (form.name || "").trim();
     const inputCard = (form.card_number || "").trim();
-    
-    // Debug: Log the search parameters
-    console.log('Search params:', { name: rawName, number: inputCard, game: form.game });
-    
     if (rawName.length < 3) {
       toast.error('Please enter at least 3 characters for the card name');
       return;
@@ -126,33 +122,17 @@ export default function RawIntake() {
       const cacheKey = buildKey(gameParam, rawName, inputCard);
 
       const cached = searchCache.current.get(cacheKey);
-      if (cached) { 
-        console.log('Using cached results:', cached);
-        setSuggestions(cached); 
-        return; 
-      }
+      if (cached) { setSuggestions(cached); return; }
 
       setLoading(true);
       try {
-        // Try search without card number first if it doesn't return results
-        let searchParams = {
+        const response = await searchCardsByNameNumber({
           name: rawName,
+          number: inputCard || undefined,
           game: gameParam,
           limit: 5
-        } as any;
-        
-        // Only add number if it's not empty
-        if (inputCard) {
-          searchParams.number = inputCard;
-        }
-        
-        console.log('Calling API with:', searchParams);
-        const response = await searchCardsByNameNumber(searchParams);
-        console.log('Raw API response:', response);
-        
+        });
         const results = Array.isArray(response) ? response : [];
-        console.log('Filtered results:', results);
-        
         searchCache.current.set(cacheKey, results);
         setSuggestions(results);
       } catch (e: any) {
