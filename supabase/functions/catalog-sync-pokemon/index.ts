@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -38,7 +39,7 @@ serve(async (req) => {
   }
   try {
     const url = new URL(req.url);
-    const setId = (url.searchParams.get("setId") || "").trim();     // NEW
+    const setId = (url.searchParams.get("setId") || "").trim();
     const since = (url.searchParams.get("since") || "").trim();
 
     // --- 1) Sets
@@ -58,7 +59,7 @@ serve(async (req) => {
       updated_at: new Date().toISOString(),
     }));
     if (setRows.length) {
-      const { error } = await sb.from("catalog_v2.sets").upsert(setRows, { onConflict: "id" });
+      const { error } = await sb.schema("catalog_v2").from("sets").upsert(setRows, { onConflict: "id" });
       if (error) throw error;
     }
 
@@ -77,7 +78,7 @@ serve(async (req) => {
     }));
     for (let i=0; i<cardRows.length; i+=1000) {
       const chunk = cardRows.slice(i, i+1000);
-      const { error } = await sb.from("catalog_v2.cards").upsert(chunk, { onConflict: "id" });
+      const { error } = await sb.schema("catalog_v2").from("cards").upsert(chunk, { onConflict: "id" });
       if (error) throw error;
     }
 
