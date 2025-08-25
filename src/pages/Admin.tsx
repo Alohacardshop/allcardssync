@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Navigation } from '@/components/Navigation';
 import PokemonCatalogSync from '@/components/admin/PokemonCatalogSync';
 import PokemonOneTimeBackfill from '@/components/admin/PokemonOneTimeBackfill';
+import PokemonSyncErrors from '@/components/admin/PokemonSyncErrors';
 
 interface ShopifyConfig {
   storeDomain: string;
@@ -642,6 +643,7 @@ const Admin = () => {
       <div className="grid grid-cols-1 gap-4">
         <PokemonOneTimeBackfill />
         <PokemonCatalogSync />
+        <PokemonSyncErrors />
       </div>
 
       {/* JustTCG Integration Section */}
