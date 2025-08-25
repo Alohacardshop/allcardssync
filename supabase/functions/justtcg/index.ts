@@ -15,17 +15,6 @@ const TTL = 5 * 60 * 1000;
 type CacheEntry = { t: number; data: unknown };
 const cache = new Map<string, CacheEntry>();
 
-// RPM rate limiting
-let tokens = 100;
-let lastRefill = Date.now();
-function takeToken() {
-  const now = Date.now();
-  const elapsed = (now - lastRefill) / 1000;
-  if (elapsed >= 60) { tokens = 100; lastRefill = now; }
-  if (tokens <= 0) return false;
-  tokens--; return true;
-}
-
 function cacheGet(key: string) {
   const e = cache.get(key);
   if (!e) return null;
@@ -79,11 +68,6 @@ serve(async (req) => {
   }
 
   try {
-    // RPM rate limiting check
-    if (!takeToken()) {
-      return new Response(JSON.stringify({ error: "rate_limited_rpm" }), { status: 429, headers: cors });
-    }
-
     const apiKey = await getApiKey();
     if (!apiKey) {
       return new Response(JSON.stringify({ error: "JUSTTCG_API_KEY not set" }), { status: 500, headers: cors });
@@ -125,15 +109,10 @@ serve(async (req) => {
       const cached = cacheGet(cacheKey);
       if (cached) return new Response(JSON.stringify({ data: cached, fromCache: true }), { headers: cors });
 
-      // Clamp POST batch size to 200
-      let body: any[] = [];
-      try { body = JSON.parse(bodyText || "[]"); } catch {}
-      if (Array.isArray(body) && body.length > 200) body = body.slice(0, 200);
-
       const res = await fetchWithRetry("https://api.justtcg.com/v1/cards", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-api-key": apiKey },
-        body: JSON.stringify(body)
+        body: bodyText || "[]"
       });
       const text = await res.text();
       if (!res.ok) return new Response(text || res.statusText, { status: res.status, headers: cors });
