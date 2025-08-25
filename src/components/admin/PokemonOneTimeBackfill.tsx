@@ -69,6 +69,9 @@ export default function PokemonOneTimeBackfill() {
         <p className="text-sm text-muted-foreground">
           This will fetch all Pokémon sets & cards into <code>catalog_v2</code> (names, numbers, images).
           Pricing is not touched. This button disables itself after a successful run.
+          {result?.queued_sets && <span className="block mt-2 text-green-600">
+            Queued {result.queued_sets} sets for processing. This may take a few minutes in the background.
+          </span>}
         </p>
 
         <div className="flex items-center gap-2">
