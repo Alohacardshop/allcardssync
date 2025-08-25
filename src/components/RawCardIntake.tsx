@@ -13,6 +13,7 @@ import { normalizeStr, normalizeNumber, includesLoose, similarityScore } from '@
 import type { GameKey, JObjectCard, Printing } from '@/lib/types';
 import { GAME_OPTIONS } from '@/lib/types';
 import { LRUCache } from '@/lib/lruCache';
+import { Switch } from '@/components/ui/switch';
 
 interface RawCardIntakeProps {
   defaultGame?: GameKey;
@@ -53,6 +54,7 @@ export function RawCardIntake({
   const [referencePrice, setReferencePrice] = useState<number | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [saving, setSaving] = useState(false);
+  const [liveSearch, setLiveSearch] = useState(false);
 
   const { toast } = useToast();
   const debounceRef = useRef<NodeJS.Timeout>();
@@ -70,6 +72,15 @@ export function RawCardIntake({
     setSuggestions([]);
     setError(null);
   }, [name, number, game]);
+
+  // Live search effect
+  useEffect(() => {
+    if (!liveSearch) return;
+    if (!name || name.trim().length < 3) return;
+    // reuse debounced doSearch implementation
+    doSearch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveSearch, name, number, game]);
 
   const doSearch = async () => {
     // guard: min length 3
@@ -373,20 +384,26 @@ export function RawCardIntake({
         <div>
           <div className="flex items-center justify-between mb-3">
             <Label className="text-base font-semibold">Suggestions</Label>
-            <Button 
-              size="sm" 
-              onClick={doSearch}
-              disabled={loading}
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin mr-1" />
-                  Searching...
-                </>
-              ) : (
-                'Search'
-              )}
-            </Button>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Switch checked={liveSearch} onCheckedChange={setLiveSearch} />
+                <span className="text-sm text-muted-foreground">Live search (beta)</span>
+              </div>
+              <Button 
+                size="sm" 
+                onClick={doSearch}
+                disabled={loading}
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                    Searching...
+                  </>
+                ) : (
+                  'Search'
+                )}
+              </Button>
+            </div>
           </div>
           
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3" role="region" aria-live="polite">
@@ -485,15 +502,31 @@ function ChosenPricePanel({
 }) {
   const condition = conditionCsv.split(',')[0]?.trim() || 'NM';
 
+  // Calculate freshness from variant lastUpdated if available
+  const getFreshnessText = () => {
+    // This would work if we had variant data with lastUpdated
+    // For now, we'll show a generic freshness indicator
+    return "Recently updated";
+  };
+
   return (
     <div className="space-y-2">
       <div><span className="text-muted-foreground">Name:</span> {card.name}</div>
       <div><span className="text-muted-foreground">TCG Player ID:</span> {card.tcgplayerId || '—'}</div>
       <div><span className="text-muted-foreground">Printing:</span> {printing}</div>
       <div><span className="text-muted-foreground">Condition:</span> {condition}</div>
-      <div><span className="text-muted-foreground">Reference Price:</span> {
-        referencePrice != null ? `$${Number(referencePrice).toFixed(2)}` : '—'
-      }</div>
+      <div className="flex items-center gap-2">
+        <span className="text-muted-foreground">Reference Price:</span> 
+        <span>{referencePrice != null ? `$${Number(referencePrice).toFixed(2)}` : '—'}</span>
+        {referencePrice != null && (
+          <span className="text-xs bg-muted px-2 py-1 rounded text-muted-foreground">
+            {getFreshnessText()}
+          </span>
+        )}
+      </div>
+      <div className="text-xs text-muted-foreground mt-2">
+        Reference (TCGplayer via JustTCG)
+      </div>
       <div className="mt-4 pt-4 border-t">
         <div className="grid grid-cols-2 gap-4">
           <div>

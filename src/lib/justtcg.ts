@@ -104,3 +104,33 @@ export async function getReferencePriceByTcgplayerId(
   const cards = unwrapData(response) as JustTCGCard[];
   return (cards?.[0]?.variants || []) as JustTCGVariant[]; // filtered variants with price
 }
+
+export async function getCardsByTcgplayerIdsChunked(
+  ids: (string|number)[],
+  opts?: { printing?: string; condition?: string },
+  chunkSize = 200,
+  concurrency = 2
+) {
+  const chunks: (string|number)[][] = [];
+  for (let i=0; i<ids.length; i+=chunkSize) chunks.push(ids.slice(i, i+chunkSize));
+
+  const results: JustTCGCard[] = [];
+  let inFlight = 0, idx = 0;
+  return await new Promise<JustTCGCard[]>((resolve, reject) => {
+    const run = () => {
+      while (inFlight < concurrency && idx < chunks.length) {
+        const myIdx = idx++;
+        inFlight++;
+        getCardsByTcgplayerIds(chunks[myIdx], opts)
+          .then(res => results.push(...res))
+          .catch(reject)
+          .finally(() => {
+            inFlight--;
+            if (results.length && inFlight === 0 && idx >= chunks.length) resolve(results);
+            else run();
+          });
+      }
+    };
+    run();
+  });
+}
