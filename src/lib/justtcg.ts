@@ -3,6 +3,21 @@ const FUNCTIONS_BASE =
   import.meta.env.VITE_SUPABASE_FUNCTIONS_URL?.replace(/\/+$/, "") || "/functions/v1";
 const BASE = `${FUNCTIONS_BASE}/justtcg`;
 
+// Helper to unwrap potentially nested data from Edge Function responses
+function unwrapData(response: any): any[] {
+  // Handle multiple levels of nesting: { data: { data: [...] } } or { data: [...] }
+  if (response?.data?.data && Array.isArray(response.data.data)) {
+    return response.data.data;
+  }
+  if (response?.data && Array.isArray(response.data)) {
+    return response.data;
+  }
+  if (Array.isArray(response)) {
+    return response;
+  }
+  return [];
+}
+
 export type JustTCGVariant = {
   id: string;
   printing?: string;
@@ -65,8 +80,18 @@ export async function searchCardsByNameNumber(params: {
 
   const res = await fetch(url.toString(), { method: "GET" });
   if (!res.ok) throw new Error(await res.text());
-  const { data } = await res.json(); // Card[]
-  return (data || []) as JustTCGCard[];
+  const response = await res.json();
+  const cards = unwrapData(response) as JustTCGCard[];
+  
+  // Filter out sealed products and improve quality
+  return cards.filter(card => {
+    const name = card.name?.toLowerCase() || '';
+    return !name.includes('booster') && 
+           !name.includes('box') && 
+           !name.includes('pack') &&
+           !name.includes('sealed') &&
+           card.name !== 'N/A';
+  });
 }
 
 export async function getReferencePriceByTcgplayerId(
@@ -83,6 +108,7 @@ export async function getReferencePriceByTcgplayerId(
   if (opts?.printing)  url.searchParams.set("printing", opts.printing);
   const res = await fetch(url.toString(), { method: "GET" });
   if (!res.ok) throw new Error(await res.text());
-  const { data } = await res.json(); // Card[]
-  return (data?.[0]?.variants || []) as JustTCGVariant[]; // filtered variants with price
+  const response = await res.json();
+  const cards = unwrapData(response) as JustTCGCard[];
+  return (cards?.[0]?.variants || []) as JustTCGVariant[]; // filtered variants with price
 }

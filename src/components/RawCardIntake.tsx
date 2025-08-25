@@ -106,7 +106,7 @@ export function RawCardIntake({
 
       if (controller.signal.aborted) return;
 
-      const results = data.slice(0, 5);
+      const results = Array.isArray(data) ? data.slice(0, 5) : [];
       searchCache.set(cacheKey, results);
       setSuggestions(results);
     } catch (err: any) {

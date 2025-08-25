@@ -131,7 +131,7 @@ export default function RawIntake() {
         limit: 5
       });
 
-      const results = response || [];
+      const results = Array.isArray(response) ? response : [];
       searchCache.set(cacheKey, results);
       setSuggestions(results);
     } catch (e) {
