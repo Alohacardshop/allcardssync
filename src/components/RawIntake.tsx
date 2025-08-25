@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { GAME_OPTIONS, GameKey, JObjectCard } from "@/lib/types";
-import { searchCards } from "@/integrations/justtcg";
+import { searchCardsByNameNumber } from "@/lib/justtcg";
 
 interface RawTradeInForm {
   game: string;
@@ -52,7 +52,7 @@ export default function RawIntake() {
     product_id: undefined,
   });
   
-  const [suggestions, setSuggestions] = useState<JObjectCard[]>([]);
+  const [suggestions, setSuggestions] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
   const autoSku = useMemo(() => {
@@ -96,35 +96,42 @@ export default function RawIntake() {
       const rawName = (form.name || "").trim();
       const inputCard = (form.card_number || "").trim();
 
-      // Require both name (at least 2 chars) and card number (at least 1 char)
-      if (rawName.length < 2 || inputCard.length < 1) {
+      // Require name (at least 2 chars), card number is optional
+      if (rawName.length < 2) {
         if (active) setSuggestions([]);
         return;
       }
 
       setLoading(true);
 
-      // Map game label to GameKey for API
-      const gameKeyMap: Record<string, GameKey> = {
+      // Map game label to game string for JustTCG API
+      const gameMap: Record<string, string> = {
         'Pokémon': 'pokemon',
-        'Pokémon Japan': 'pokemon_japan', 
-        'Magic: The Gathering': 'mtg'
+        'Pokémon Japan': 'pokemon', 
+        'Magic: The Gathering': 'magic-the-gathering'
       };
       
-      const gameKey = gameKeyMap[form.game] || 'pokemon';
+      const gameParam = gameMap[form.game] || 'pokemon';
 
       try {
-        const response = await searchCards({
+        const response = await searchCardsByNameNumber({
           name: rawName,
-          number: inputCard,
-          game: gameKey
+          number: inputCard || undefined,
+          game: gameParam,
+          limit: 5
         });
 
-        if (active) setSuggestions(response.data || []);
+        if (active) setSuggestions(response || []);
       } catch (e) {
         console.error('JustTCG API search error:', e);
         if (active) setSuggestions([]);
-        toast.error('Failed to search cards. Please check your API connection.');
+        
+        // Handle rate limiting
+        if (e instanceof Error && e.message.includes('429')) {
+          toast.error('Rate limit reached. Please wait a moment before searching again.');
+        } else {
+          toast.error('Failed to search cards. Please try again.');
+        }
       } finally {
         if (active) setLoading(false);
       }
@@ -136,7 +143,7 @@ export default function RawIntake() {
     };
   }, [form.name, form.card_number, form.game]);
 
-  const applySuggestion = (s: JObjectCard) => {
+  const applySuggestion = (s: any) => {
     setForm((f) => ({
       ...f,
       name: s.name || f.name,
@@ -150,7 +157,7 @@ export default function RawIntake() {
       price_each: f.price_each,
       cost_each: f.cost_each,
       sku: f.sku,
-      product_id: undefined, // Clear product_id since this is from API
+      product_id: s.tcgplayerId ? Number(s.tcgplayerId) : undefined,
     }));
   };
 
@@ -320,22 +327,23 @@ export default function RawIntake() {
         ) : suggestions.length > 0 ? (
           <ul className="mt-2 space-y-2">
             {suggestions.map((s, i) => (
-              <li key={`${s.cardId}-${i}`} className="flex items-center gap-3 border rounded-md p-2">
-                {s.images?.small && (
-                  <img src={s.images.small} alt={s.name} className="w-12 h-16 object-cover rounded" />
-                )}
+              <li key={`${s.id || s.tcgplayerId}-${i}`} className="flex items-center gap-3 border rounded-md p-2">
+                <div className="w-12 h-16 bg-muted rounded flex items-center justify-center text-xs text-muted-foreground">
+                  IMG
+                </div>
                 <div className="flex-1 text-sm">
                   <div className="font-medium">{s.name}</div>
                   <div className="text-muted-foreground">{[s.set, s.number].filter(Boolean).join(" • ")}</div>
+                  {s.tcgplayerId && <div className="text-xs text-muted-foreground">TCG ID: {s.tcgplayerId}</div>}
                 </div>
                 <Button size="sm" variant="secondary" onClick={() => applySuggestion(s)}>Use</Button>
               </li>
             ))}
           </ul>
-        ) : ((form.name || '').trim().length >= 2 && (form.card_number || '').trim().length >= 1 ? (
+        ) : ((form.name || '').trim().length >= 2 ? (
           <div className="text-sm text-muted-foreground mt-2">No matches found. Try different search terms.</div>
         ) : (
-          <div className="text-sm text-muted-foreground mt-2">Enter both card name (2+ characters) and card number to search</div>
+          <div className="text-sm text-muted-foreground mt-2">Enter card name (2+ characters) to search</div>
         ))}
       </div>
 
