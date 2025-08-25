@@ -47,6 +47,7 @@ export function RawCardIntake({
   const [suggestions, setSuggestions] = useState<JustTCGCard[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [searchCache] = useState(new Map<string, JustTCGCard[]>());
   const [picked, setPicked] = useState<JustTCGCard | null>(null);
   const [chosenVariant, setChosenVariant] = useState<any>(null);
   const [referencePrice, setReferencePrice] = useState<number | null>(null);
@@ -60,62 +61,77 @@ export function RawCardIntake({
   const normalizedName = useMemo(() => normalizeStr(name), [name]);
   const normalizedNumber = useMemo(() => normalizeNumber(number), [number]);
 
-  // Search effect
+  // Clear suggestions when inputs change to avoid stale results
   useEffect(() => {
-    if (!normalizedName) {
-      setSuggestions([]);
+    setSuggestions([]);
+    setError(null);
+  }, [name, number, game]);
+
+  const doSearch = async () => {
+    if (!normalizedName || normalizedName.length < 2) {
+      toast({
+        title: 'Invalid Search',
+        description: 'Please enter at least 2 characters for card name',
+        variant: 'destructive',
+      });
       return;
     }
 
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
+    // Abort previous request if any
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
     }
 
-    debounceRef.current = setTimeout(async () => {
-      // Abort previous request
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
 
-      const controller = new AbortController();
-      abortControllerRef.current = controller;
+    const cacheKey = `${game}|${normalizedName}|${normalizedNumber.num || ''}`;
 
-      setLoading(true);
-      setError(null);
+    // Check cache first  
+    if (searchCache.has(cacheKey)) {
+      setSuggestions(searchCache.get(cacheKey) || []);
+      return;
+    }
 
-      try {
-        const data = await searchCardsByNameNumber({
-          name: normalizedName,
-          game,
-          number: normalizedNumber.num,
-          limit: 10
-        });
+    setLoading(true);
+    setError(null);
 
-        if (controller.signal.aborted) return;
+    try {
+      const data = await searchCardsByNameNumber({
+        name: normalizedName,
+        game,
+        number: normalizedNumber.num,
+        limit: 10
+      });
 
-        // Skip number-based filtering since JustTCG handles this
-        setSuggestions(data.slice(0, 5));
-      } catch (err: any) {
-        if (err.name !== 'AbortError') {
-          const message = err.message || 'Failed to search cards';
-          setError(message);
+      if (controller.signal.aborted) return;
+
+      const results = data.slice(0, 5);
+      searchCache.set(cacheKey, results);
+      setSuggestions(results);
+    } catch (err: any) {
+      if (err.name !== 'AbortError') {
+        const message = err.message || 'Failed to search cards';
+        setError(message);
+        
+        if (message.includes('429')) {
+          toast({
+            title: 'Rate Limit',
+            description: 'Please wait a moment before searching again',
+            variant: 'destructive',
+          });
+        } else {
           toast({
             title: 'Search Error',
             description: message,
             variant: 'destructive',
           });
         }
-      } finally {
-        setLoading(false);
       }
-    }, 200);
-
-    return () => {
-      if (debounceRef.current) {
-        clearTimeout(debounceRef.current);
-      }
-    };
-  }, [game, normalizedName, normalizedNumber.num, name, number, toast]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const findBestVariant = (card: JObjectCard) => {
     const preferences = conditionCsv.split(',').map(s => s.trim()).filter(Boolean);
@@ -338,6 +354,7 @@ export function RawCardIntake({
               placeholder="e.g., Charizard ex"
               value={name}
               onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && doSearch()}
             />
           </div>
           <div>
@@ -347,6 +364,7 @@ export function RawCardIntake({
               placeholder="e.g., 201/197 or 201"
               value={number}
               onChange={(e) => setNumber(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && doSearch()}
             />
           </div>
         </div>
@@ -360,9 +378,22 @@ export function RawCardIntake({
 
         {/* Suggestions */}
         <div>
-          <div className="flex items-center gap-2 mb-3">
+          <div className="flex items-center justify-between mb-3">
             <Label className="text-base font-semibold">Suggestions</Label>
-            {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+            <Button 
+              size="sm" 
+              onClick={doSearch}
+              disabled={loading || name.trim().length < 2}
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                  Searching...
+                </>
+              ) : (
+                'Search'
+              )}
+            </Button>
           </div>
           
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3" role="region" aria-live="polite">

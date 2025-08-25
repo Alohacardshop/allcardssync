@@ -54,6 +54,7 @@ export default function RawIntake() {
   
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [searchCache] = useState(new Map<string, any[]>());
 
   const autoSku = useMemo(() => {
     const condMap: Record<string, string> = {
@@ -90,58 +91,63 @@ export default function RawIntake() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoSku]);
 
+  // Clear suggestions when inputs change to avoid stale results
   useEffect(() => {
-    let active = true;
-    const t = setTimeout(async () => {
-      const rawName = (form.name || "").trim();
-      const inputCard = (form.card_number || "").trim();
-
-      // Require name (at least 2 chars), card number is optional
-      if (rawName.length < 2) {
-        if (active) setSuggestions([]);
-        return;
-      }
-
-      setLoading(true);
-
-      // Map game label to game string for JustTCG API
-      const gameMap: Record<string, string> = {
-        'Pokémon': 'pokemon',
-        'Pokémon Japan': 'pokemon', 
-        'Magic: The Gathering': 'magic-the-gathering'
-      };
-      
-      const gameParam = gameMap[form.game] || 'pokemon';
-
-      try {
-        const response = await searchCardsByNameNumber({
-          name: rawName,
-          number: inputCard || undefined,
-          game: gameParam,
-          limit: 5
-        });
-
-        if (active) setSuggestions(response || []);
-      } catch (e) {
-        console.error('JustTCG API search error:', e);
-        if (active) setSuggestions([]);
-        
-        // Handle rate limiting
-        if (e instanceof Error && e.message.includes('429')) {
-          toast.error('Rate limit reached. Please wait a moment before searching again.');
-        } else {
-          toast.error('Failed to search cards. Please try again.');
-        }
-      } finally {
-        if (active) setLoading(false);
-      }
-    }, 300);
-
-    return () => {
-      active = false;
-      clearTimeout(t);
-    };
+    setSuggestions([]);
   }, [form.name, form.card_number, form.game]);
+
+  const doSearch = async () => {
+    const rawName = (form.name || "").trim();
+    const inputCard = (form.card_number || "").trim();
+
+    if (rawName.length < 2) {
+      toast.error('Please enter at least 2 characters for the card name');
+      return;
+    }
+
+    // Map game label to game string for JustTCG API
+    const gameMap: Record<string, string> = {
+      'Pokémon': 'pokemon',
+      'Pokémon Japan': 'pokemon', 
+      'Magic: The Gathering': 'magic-the-gathering'
+    };
+    
+    const gameParam = gameMap[form.game] || 'pokemon';
+    const cacheKey = `${gameParam}|${rawName}|${inputCard}`;
+
+    // Check cache first
+    if (searchCache.has(cacheKey)) {
+      setSuggestions(searchCache.get(cacheKey) || []);
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const response = await searchCardsByNameNumber({
+        name: rawName,
+        number: inputCard || undefined,
+        game: gameParam,
+        limit: 5
+      });
+
+      const results = response || [];
+      searchCache.set(cacheKey, results);
+      setSuggestions(results);
+    } catch (e) {
+      console.error('JustTCG API search error:', e);
+      setSuggestions([]);
+      
+      // Handle rate limiting
+      if (e instanceof Error && e.message.includes('429')) {
+        toast.error('Rate limit reached. Please wait a moment before searching again.');
+      } else {
+        toast.error('Failed to search cards. Please try again.');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const applySuggestion = (s: any) => {
     setForm((f) => ({
@@ -249,7 +255,13 @@ export default function RawIntake() {
 
         <div>
           <Label htmlFor="name">Name</Label>
-          <Input id="name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Card name (e.g., Charizard)" />
+          <Input 
+            id="name" 
+            value={form.name} 
+            onChange={(e) => setForm({ ...form, name: e.target.value })} 
+            onKeyDown={(e) => e.key === 'Enter' && doSearch()}
+            placeholder="Card name (e.g., Charizard)" 
+          />
         </div>
         <div>
           <Label htmlFor="set">Set</Label>
@@ -261,7 +273,13 @@ export default function RawIntake() {
         </div>
         <div>
           <Label htmlFor="card_number">Card #</Label>
-          <Input id="card_number" value={form.card_number} onChange={(e) => setForm({ ...form, card_number: e.target.value })} placeholder="e.g., 201/197 or 201" />
+          <Input 
+            id="card_number" 
+            value={form.card_number} 
+            onChange={(e) => setForm({ ...form, card_number: e.target.value })} 
+            onKeyDown={(e) => e.key === 'Enter' && doSearch()}
+            placeholder="e.g., 201/197 or 201" 
+          />
         </div>
         <div>
           <Label htmlFor="product_id">Product ID</Label>
@@ -321,7 +339,16 @@ export default function RawIntake() {
       </div>
 
       <div className="mt-4">
-        <Label>Suggestions</Label>
+        <div className="flex items-center justify-between mb-2">
+          <Label>Suggestions</Label>
+          <Button 
+            size="sm" 
+            onClick={doSearch}
+            disabled={loading || (form.name || '').trim().length < 2}
+          >
+            {loading ? 'Searching...' : 'Search'}
+          </Button>
+        </div>
         {loading ? (
           <div className="text-sm text-muted-foreground mt-2">Searching…</div>
         ) : suggestions.length > 0 ? (
