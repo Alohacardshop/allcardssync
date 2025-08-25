@@ -59,7 +59,9 @@ serve(async (req) => {
       updated_at: new Date().toISOString(),
     }));
     if (setRows.length) {
-      const { error } = await sb.schema("catalog_v2").from("sets").upsert(setRows, { onConflict: "id" });
+      const { error } = await sb.rpc('catalog_v2_upsert_sets', {
+        rows: setRows as any
+      });
       if (error) throw error;
     }
 
@@ -76,10 +78,16 @@ serve(async (req) => {
       images: c.images ?? null, tcgplayer_product_id: c.tcgplayer?.productId ?? null,
       tcgplayer_url: c.tcgplayer?.url ?? null, data: c, updated_at: new Date().toISOString(),
     }));
-    for (let i=0; i<cardRows.length; i+=1000) {
-      const chunk = cardRows.slice(i, i+1000);
-      const { error } = await sb.schema("catalog_v2").from("cards").upsert(chunk, { onConflict: "id" });
-      if (error) throw error;
+    
+    if (cardRows.length) {
+      const chunkSize = 500; // safe payload size
+      for (let i = 0; i < cardRows.length; i += chunkSize) {
+        const chunk = cardRows.slice(i, i + chunkSize);
+        const { error } = await sb.rpc('catalog_v2_upsert_cards', {
+          rows: chunk as any
+        });
+        if (error) throw error;
+      }
     }
 
     return new Response(JSON.stringify({

@@ -583,6 +583,14 @@ export type Database = {
       }
     }
     Functions: {
+      catalog_v2_upsert_cards: {
+        Args: { rows: Json }
+        Returns: undefined
+      }
+      catalog_v2_upsert_sets: {
+        Args: { rows: Json }
+        Returns: undefined
+      }
       claim_next_print_job: {
         Args: { ws: string }
         Returns: {
