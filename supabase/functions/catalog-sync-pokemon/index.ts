@@ -5,6 +5,11 @@ const API = "https://api.pokemontcg.io/v2";
 const POKE_KEY = Deno.env.get("POKEMONTCG_API_KEY") || "";
 const HDRS: HeadersInit = POKE_KEY ? { "X-Api-Key": POKE_KEY } : {};
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
 const sb = createClient(
   Deno.env.get("SUPABASE_URL")!,
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
@@ -28,6 +33,9 @@ async function fetchAll(path: string, qs: Record<string, string> = {}) {
 }
 
 serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
   try {
     const url = new URL(req.url);
     const setId = (url.searchParams.get("setId") || "").trim();     // NEW
@@ -76,8 +84,8 @@ serve(async (req) => {
     return new Response(JSON.stringify({
       mode: setId ? "bySetId" : (since ? "incremental" : "full"),
       sets: setRows.length, cards: cardRows.length
-    }), { headers: { "Content-Type":"application/json" }});
+    }), { headers: { "Content-Type":"application/json", ...corsHeaders }});
   } catch (e: any) {
-    return new Response(e?.message || "error", { status: 500 });
+    return new Response(e?.message || "error", { status: 500, headers: { ...corsHeaders } });
   }
 });
