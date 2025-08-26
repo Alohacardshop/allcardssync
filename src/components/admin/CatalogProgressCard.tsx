@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, CheckCircle, AlertCircle, Database, Calendar, RefreshCw } from "lucide-react";
+import { Loader2, CheckCircle, AlertCircle, Database, Calendar, RefreshCw, Activity, Clock } from "lucide-react";
 
 const FUNCTIONS_BASE = `https://dmpoandoydaqxhzdjnmk.supabase.co/functions/v1`;
 
@@ -30,14 +30,22 @@ export default function CatalogProgressCard({ game, functionPath, title }: Catal
   }>({ sets: 0, cards: 0, totalSets: 0 });
   const [startTime, setStartTime] = useState(Date.now());
   const [isActiveSync, setIsActiveSync] = useState(false);
+  const [history, setHistory] = useState<Array<{ t: number; cards: number; sets: number }>>([]);
+  const [lastChangeAt, setLastChangeAt] = useState<number | null>(null);
+  const [now, setNow] = useState(Date.now());
   
   const statsIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const timeIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     loadCatalogStats();
     
+    // Start 1-second interval for updating "time ago" display
+    timeIntervalRef.current = setInterval(() => setNow(Date.now()), 1000);
+    
     return () => {
       if (statsIntervalRef.current) clearInterval(statsIntervalRef.current);
+      if (timeIntervalRef.current) clearInterval(timeIntervalRef.current);
     };
   }, [game]);
 
@@ -65,11 +73,26 @@ export default function CatalogProgressCard({ game, functionPath, title }: Catal
       
       const row = Array.isArray(data) ? data[0] : data;
       const pendingSets = Number(row?.pending_sets ?? 0);
+      const newSets = Number(row?.sets_count ?? 0);
+      const newCards = Number(row?.cards_count ?? 0);
+      
+      // Track history and detect changes
+      const currentTime = Date.now();
+      setHistory(prev => {
+        const newHistory = [...prev, { t: currentTime, cards: newCards, sets: newSets }];
+        // Keep only last 2 minutes of history
+        return newHistory.filter(h => h.t > currentTime - 120000);
+      });
+
+      // Detect changes (increase in cards or sets)
+      if (progress.cards > 0 && (newCards > progress.cards || newSets > progress.sets)) {
+        setLastChangeAt(currentTime);
+      }
       
       setProgress(prev => ({
         ...prev,
-        sets: Number(row?.sets_count ?? 0),
-        cards: Number(row?.cards_count ?? 0),
+        sets: newSets,
+        cards: newCards,
         totalSets: pendingSets,
       }));
       
@@ -93,6 +116,10 @@ export default function CatalogProgressCard({ game, functionPath, title }: Catal
     setLoading(true);
     setResult(null);
     setStartTime(Date.now());
+    
+    // Reset tracking when starting a new sync
+    setHistory([]);
+    setLastChangeAt(null);
     
     try {
       // Build the URL with query parameters for the edge function
@@ -159,6 +186,40 @@ export default function CatalogProgressCard({ game, functionPath, title }: Catal
     return date.toISOString().split('T')[0];
   };
 
+  // Helper functions for throughput and time formatting
+  const computeThroughput = () => {
+    if (history.length < 2) return 0;
+    
+    const windowStart = now - 60000; // 60 seconds ago
+    const windowHistory = history.filter(h => h.t >= windowStart);
+    
+    if (windowHistory.length < 2) return 0;
+    
+    const oldest = windowHistory[0];
+    const newest = windowHistory[windowHistory.length - 1];
+    const timeDiff = (newest.t - oldest.t) / 60000; // minutes
+    
+    if (timeDiff <= 0) return 0;
+    
+    const cardsDiff = newest.cards - oldest.cards;
+    return Math.max(0, cardsDiff / timeDiff);
+  };
+
+  const formatTimeAgo = (timestamp: number | null) => {
+    if (!timestamp) return "—";
+    
+    const secondsAgo = Math.floor((now - timestamp) / 1000);
+    if (secondsAgo < 60) return `${secondsAgo}s ago`;
+    
+    const minutesAgo = Math.floor(secondsAgo / 60);
+    if (minutesAgo < 60) return `${minutesAgo}m ago`;
+    
+    const hoursAgo = Math.floor(minutesAgo / 60);
+    return `${hoursAgo}h ago`;
+  };
+
+  const throughput = computeThroughput();
+
   return (
     <Card>
       <CardHeader>
@@ -193,6 +254,27 @@ export default function CatalogProgressCard({ game, functionPath, title }: Catal
                 {isActiveSync ? "Syncing..." : progress.cards > 0 ? "Ready" : "Empty"}
               </Badge>
             </div>
+          </div>
+        </div>
+
+        {/* Activity Status */}
+        <div className="flex items-center justify-center gap-6 p-3 bg-muted/30 rounded-lg">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            {isActiveSync && throughput > 0 ? (
+              <Activity className="h-3 w-3 text-green-600" />
+            ) : (
+              <CheckCircle className="h-3 w-3 text-muted-foreground" />
+            )}
+            <span>
+              {isActiveSync && throughput > 0 
+                ? `≈ ${throughput.toFixed(1)} cards/min` 
+                : "Idle"
+              }
+            </span>
+          </div>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Clock className="h-3 w-3" />
+            <span>Last change: {formatTimeAgo(lastChangeAt)}</span>
           </div>
         </div>
 
