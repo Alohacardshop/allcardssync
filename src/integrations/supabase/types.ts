@@ -583,6 +583,25 @@ export type Database = {
       }
     }
     Functions: {
+      catalog_v2_pending_sets: {
+        Args: { game_in: string; limit_in?: number }
+        Returns: {
+          name: string
+          set_id: string
+        }[]
+      }
+      catalog_v2_queue_pending_sets: {
+        Args: { functions_base: string; game_in: string }
+        Returns: number
+      }
+      catalog_v2_stats: {
+        Args: { game_in: string }
+        Returns: {
+          cards_count: number
+          pending_sets: number
+          sets_count: number
+        }[]
+      }
       catalog_v2_upsert_cards: {
         Args: { rows: Json }
         Returns: undefined
