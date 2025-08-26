@@ -176,6 +176,58 @@ export async function drainQueue(mode: GameMode): Promise<SyncResult> {
   };
 }
 
+// Audit interfaces
+export interface AuditTotals {
+  sets_upstream: number;
+  sets_local: number;
+  sets_missing: number;
+  cards_upstream: number;
+  cards_local: number;
+  cards_missing: number;
+  variants_upstream: number;
+  variants_local: number;
+  variants_missing: number;
+  variants_stale: number;
+}
+
+export interface AuditResult {
+  mode: string;
+  scope: string;
+  totals: AuditTotals;
+  sampleMissing: {
+    sets: string[];
+    cards: string[];
+    variants: string[];
+  };
+  nextActions: string[];
+}
+
+// Run audit
+export async function runAudit(mode: GameMode, options: { setId?: string; exportFormat?: 'json' | 'csv' } = {}): Promise<AuditResult | string> {
+  const url = new URL(`${FUNCTIONS_BASE}/catalog-audit`);
+  url.searchParams.set('game', mode.game);
+  
+  if (mode.filterJapanese) {
+    url.searchParams.set('filterJapanese', 'true');
+  }
+  
+  if (options.setId) url.searchParams.set('setId', options.setId);
+  if (options.exportFormat) url.searchParams.set('exportFormat', options.exportFormat);
+
+  const response = await fetch(url.toString(), { method: 'POST' });
+  
+  if (options.exportFormat === 'csv') {
+    return response.text();
+  }
+  
+  return response.json();
+}
+
+// Fix set (run sync and return result)
+export async function fixSet(mode: GameMode, setId: string): Promise<SyncResult> {
+  return runSync(mode, { setId });
+}
+
 // Utility functions
 export function getIncrementalDate(months: number = 6): string {
   const date = new Date();

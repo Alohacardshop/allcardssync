@@ -692,7 +692,7 @@ const Admin = () => {
         </TabsContent>
 
         <TabsContent value="audit" className="space-y-6">
-          <AuditReconcile />
+          <AuditReconcile selectedMode={GAME_MODES.find(m => m.value === selectedMode) || GAME_MODES[0]} />
         </TabsContent>
 
         <TabsContent value="config" className="space-y-6">
