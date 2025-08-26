@@ -292,12 +292,12 @@ const DataTab: React.FC<DataTabProps> = ({ selectedMode }) => {
                 {activeTab === 'cards' && (
                   <div>
                     <Label htmlFor="rarity">Rarity</Label>
-                    <Select value={filters.rarity || ''} onValueChange={(value) => handleFilterChange('rarity', value || undefined)}>
+                    <Select value={filters.rarity || 'all'} onValueChange={(value) => handleFilterChange('rarity', value === 'all' ? undefined : value)}>
                       <SelectTrigger>
                         <SelectValue placeholder="All rarities" />
                       </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="">All rarities</SelectItem>
+                        <SelectContent>
+                          <SelectItem value="all">All rarities</SelectItem>
                         <SelectItem value="Common">Common</SelectItem>
                         <SelectItem value="Uncommon">Uncommon</SelectItem>
                         <SelectItem value="Rare">Rare</SelectItem>
@@ -312,12 +312,12 @@ const DataTab: React.FC<DataTabProps> = ({ selectedMode }) => {
                   <>
                     <div>
                       <Label htmlFor="language">Language</Label>
-                      <Select value={filters.language || ''} onValueChange={(value) => handleFilterChange('language', value || undefined)}>
+                      <Select value={filters.language || 'all'} onValueChange={(value) => handleFilterChange('language', value === 'all' ? undefined : value)}>
                         <SelectTrigger>
                           <SelectValue placeholder="All languages" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">All languages</SelectItem>
+                          <SelectItem value="all">All languages</SelectItem>
                           <SelectItem value="English">English</SelectItem>
                           <SelectItem value="Japanese">Japanese</SelectItem>
                           <SelectItem value="French">French</SelectItem>
@@ -330,12 +330,12 @@ const DataTab: React.FC<DataTabProps> = ({ selectedMode }) => {
 
                     <div>
                       <Label htmlFor="condition">Condition</Label>
-                      <Select value={filters.condition || ''} onValueChange={(value) => handleFilterChange('condition', value || undefined)}>
+                      <Select value={filters.condition || 'all'} onValueChange={(value) => handleFilterChange('condition', value === 'all' ? undefined : value)}>
                         <SelectTrigger>
                           <SelectValue placeholder="All conditions" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">All conditions</SelectItem>
+                          <SelectItem value="all">All conditions</SelectItem>
                           <SelectItem value="Near Mint">Near Mint</SelectItem>
                           <SelectItem value="Lightly Played">Lightly Played</SelectItem>
                           <SelectItem value="Moderately Played">Moderately Played</SelectItem>
