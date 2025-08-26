@@ -14,7 +14,6 @@ import { Navigation } from '@/components/Navigation';
 import PokemonCatalogSync from '@/components/admin/PokemonCatalogSync';
 import PokemonOneTimeBackfill from '@/components/admin/PokemonOneTimeBackfill';
 import PokemonSyncErrors from '@/components/admin/PokemonSyncErrors';
-import PokemonCatalogProgress from '@/components/admin/PokemonCatalogProgress';
 
 interface ShopifyConfig {
   storeDomain: string;
@@ -642,7 +641,6 @@ const Admin = () => {
 
       {/* Pokémon Catalog Sync Section */}
       <div className="grid grid-cols-1 gap-4">
-        <PokemonCatalogProgress />
         <PokemonOneTimeBackfill />
         <PokemonCatalogSync />
         <PokemonSyncErrors />
