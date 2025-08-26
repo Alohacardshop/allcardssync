@@ -19,15 +19,26 @@ const corsHeaders = {
 
 const sb = createClient(SUPABASE_URL, SERVICE_KEY);
 
+async function fetchJsonWithRetry(url: string, headers: HeadersInit, retries = 5, baseDelayMs = 500) {
+  for (let i = 0; i <= retries; i++) {
+    const res = await fetch(url, { headers });
+    if (res.ok) return await res.json();
+    if (res.status === 429 || res.status >= 500) {
+      await new Promise(r => setTimeout(r, baseDelayMs * Math.pow(2, i))); // expo backoff
+      continue;
+    }
+    throw new Error(`${url} ${res.status} ${await res.text().catch(()=> '')}`);
+  }
+  throw new Error(`retry_exhausted ${url}`);
+}
+
 async function fetchAll(path: string, qs: Record<string, string> = {}) {
   const params = new URLSearchParams({ pageSize: "250", ...qs });
-  let page = 1;
-  const out: any[] = [];
+  let page = 1, out: any[] = [];
   for (;;) {
     params.set("page", String(page));
-    const res = await fetch(`${API}/${path}?${params.toString()}`, { headers: HDRS });
-    if (!res.ok) throw new Error(`${path} ${res.status}`);
-    const json: any = await res.json();
+    const url = `${API}/${path}?${params.toString()}`;
+    const json: any = await fetchJsonWithRetry(url, HDRS);
     const data = json?.data ?? [];
     out.push(...data);
     if (data.length < 250) break;
@@ -52,64 +63,73 @@ async function upsertCards(rows: any[]) {
   }
 }
 
+async function logError(setId: string, step: string, err: any, detail?: any) {
+  console.error("sync error", { setId, step, err: err?.message || String(err) });
+  await sb.rpc('catalog_v2_log_error', { 
+    payload: { 
+      game: 'pokemon', 
+      set_id: setId, 
+      step, 
+      message: err?.message || String(err), 
+      detail 
+    } as any 
+  });
+}
+
 async function syncSingleSet(setId: string) {
-  // 1) set
-  const sres = await fetch(`${API}/sets/${setId}`, { headers: HDRS });
-  if (!sres.ok) throw new Error(`sets/${setId} ${sres.status}`);
-  const sjson: any = await sres.json();
-  const s = sjson?.data;
-  if (!s) return { sets: 0, cards: 0, setId };
+  try {
+    // 1) set
+    const sres = await fetchJsonWithRetry(`${API}/sets/${setId}`, HDRS);
+    const s = sres?.data;
+    if (!s) return { sets: 0, cards: 0, setId };
 
-  await upsertSets([{
-    id: s.id,
-    game: "pokemon",
-    name: s.name,
-    series: s.series ?? null,
-    printed_total: s.printedTotal ?? null,
-    total: s.total ?? null,
-    release_date: s.releaseDate ?? null,
-    images: s.images ?? null,
-    updated_at: new Date().toISOString(),
-  }]);
+    await upsertSets([{
+      id: s.id,
+      game: "pokemon",
+      name: s.name,
+      series: s.series ?? null,
+      printed_total: s.printedTotal ?? null,
+      total: s.total ?? null,
+      release_date: s.releaseDate ?? null,
+      images: s.images ?? null,
+      updated_at: new Date().toISOString(),
+    }]);
 
-  // 2) cards for set
-  const cards = await fetchAll("cards", { q: `set.id:"${setId}"` });
-  const cardRows = cards.map((c: any) => ({
-    id: c.id,
-    game: "pokemon",
-    name: c.name,
-    number: c.number ?? null,
-    set_id: c.set?.id ?? null,
-    rarity: c.rarity ?? null,
-    supertype: c.supertype ?? null,
-    subtypes: c.subtypes ?? null,
-    images: c.images ?? null,
-    tcgplayer_product_id: c.tcgplayer?.productId ?? null,
-    tcgplayer_url: c.tcgplayer?.url ?? null,
-    data: c,
-    updated_at: new Date().toISOString(),
-  }));
-  await upsertCards(cardRows);
+    // 2) cards for set
+    const cards = await fetchAll("cards", { q: `set.id:"${setId}"` });
+    const cardRows = cards.map((c: any) => ({
+      id: c.id,
+      game: "pokemon",
+      name: c.name,
+      number: c.number ?? null,
+      set_id: c.set?.id ?? null,
+      rarity: c.rarity ?? null,
+      supertype: c.supertype ?? null,
+      subtypes: c.subtypes ?? null,
+      images: c.images ?? null,
+      tcgplayer_product_id: c.tcgplayer?.productId ?? null,
+      tcgplayer_url: c.tcgplayer?.url ?? null,
+      data: c,
+      updated_at: new Date().toISOString(),
+    }));
+    await upsertCards(cardRows);
 
-  return { sets: 1, cards: cardRows.length, setId };
+    return { sets: 1, cards: cardRows.length, setId };
+  } catch (err: any) {
+    await logError(setId, "sync", err);
+    throw err;
+  }
 }
 
 async function queueSelfForSet(setId: string) {
-  // Use pg_net to fire-and-forget a POST to this same function with setId param
-  // Requires pg_net extension (already enabled by Lovable earlier)
-  const { data, error } = await sb.rpc("net_http_post", {
-    url: `${FUNCTIONS_BASE}/catalog-sync-pokemon?setId=${encodeURIComponent(setId)}`,
-    headers: JSON.stringify({ "Content-Type": "application/json" }),
-    body: "{}",
-  } as any);
-  if (error) {
-    // fallback to direct fetch (synchronous) if pg_net not available
-    await fetch(`${FUNCTIONS_BASE}/catalog-sync-pokemon?setId=${encodeURIComponent(setId)}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: "{}",
-    });
-  }
+  const url = `${FUNCTIONS_BASE}/catalog-sync-pokemon?setId=${encodeURIComponent(setId)}`;
+  // Queue asynchronously via RPC -> pg_net
+  const { error } = await sb.rpc("http_post_async", {
+    url,
+    headers: { "Content-Type": "application/json" } as any,
+    body: {} as any,
+  });
+  if (error) throw error;
 }
 
 serve(async (req) => {

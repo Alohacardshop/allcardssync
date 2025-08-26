@@ -583,6 +583,10 @@ export type Database = {
       }
     }
     Functions: {
+      catalog_v2_log_error: {
+        Args: { payload: Json }
+        Returns: undefined
+      }
       catalog_v2_pending_sets: {
         Args: { game_in: string; limit_in?: number }
         Returns: {
@@ -658,6 +662,10 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      http_post_async: {
+        Args: { body: Json; headers: Json; url: string }
+        Returns: string
       }
       set_limit: {
         Args: { "": number }
