@@ -308,7 +308,13 @@ async function syncSet(game: string, setId: string, filterJapanese = false) {
         status: 'empty',
         pageCount
       });
-      return { setId, cards: 0, sets: 0, variants: 0, variantsStored: 0 };
+      return { 
+        setsProcessed: 0, 
+        cardsProcessed: 0, 
+        variantsProcessed: 0, 
+        skipped: { sets: 0, cards: 0 },
+        errors: []
+      };
     }
 
     // Extract set info from first card and upsert
@@ -333,12 +339,18 @@ async function syncSet(game: string, setId: string, filterJapanese = false) {
     const cardRows: any[] = [];
     const variantRows: any[] = [];
     let totalVariants = 0;
+    let skippedCards = 0;
     
     for (const card of allCards) {
       // Filter variants for Japanese-only Pokémon if requested
       let variants = card.variants || [];
       if (filterJapanese && game === 'pokemon') {
         variants = variants.filter((variant: any) => variant.language === 'Japanese');
+        // Skip card if no Japanese variants remain
+        if (variants.length === 0) {
+          skippedCards++;
+          continue;
+        }
       }
       
       totalVariants += variants.length;
@@ -396,15 +408,16 @@ async function syncSet(game: string, setId: string, filterJapanese = false) {
       setsUpserted: firstCard?.set ? 1 : 0,
       cardsUpserted: cardRows.length,
       variantsUpserted: variantRows.length,
-      totalVariants
+      totalVariants,
+      skippedCards
     });
     
     return { 
-      setId, 
-      cards: cardRows.length, 
-      sets: firstCard?.set ? 1 : 0, 
-      variants: totalVariants,
-      variantsStored: variantRows.length
+      setsProcessed: firstCard?.set ? 1 : 0,
+      cardsProcessed: cardRows.length,
+      variantsProcessed: variantRows.length,
+      skipped: { sets: 0, cards: skippedCards },
+      errors: []
     };
     
   } catch (error: any) {
@@ -581,10 +594,24 @@ serve(async (req) => {
       }
     }
 
-    const game = (url.searchParams.get("game") || "").trim().toLowerCase();
-    const setId = (url.searchParams.get("setId") || "").trim();
-    const since = (url.searchParams.get("since") || "").trim();
-    const filterJapanese = url.searchParams.get("filterJapanese") === "true";
+    // Parse input from both JSON body and query parameters
+    let inputParams: any = {};
+    
+    // Try to parse JSON body first
+    try {
+      const bodyText = await req.text();
+      if (bodyText.trim()) {
+        inputParams = JSON.parse(bodyText);
+      }
+    } catch (e) {
+      // Fall back to query parameters if JSON parsing fails
+    }
+    
+    // Merge with query parameters (query params take precedence)
+    const game = (url.searchParams.get("game") || inputParams.game || "").toString().trim().toLowerCase();
+    const setId = (url.searchParams.get("setId") || inputParams.setId || "").toString().trim();
+    const since = (url.searchParams.get("since") || inputParams.since || "").toString().trim();
+    const filterJapanese = (url.searchParams.get("filterJapanese") === "true") || Boolean(inputParams.filterJapanese);
 
     const requestTracker = new PerformanceTracker({
       operation: 'catalog_sync_request',
@@ -605,21 +632,59 @@ serve(async (req) => {
       );
     }
 
-    const apiKey = await getApiKey();
+    // Validate JUSTTCG_API_KEY exists and return 500 with clear message if missing
+    let apiKey: string;
+    try {
+      apiKey = await getApiKey();
+    } catch (error: any) {
+      requestTracker.error('API key validation failed', error, {
+        status: 'api_key_error'
+      });
+      return new Response(
+        JSON.stringify({ error: "JUSTTCG_API_KEY not found in environment or system_settings" }), 
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
     const headers = { "X-API-Key": apiKey };
+    
+    // Determine mode for response
+    const mode = game === 'mtg' ? 'mtg' : (filterJapanese ? 'pokemon-jp' : 'pokemon-all');
     
     // If setId is provided, sync just that set
     if (setId) {
-      const result = await syncSet(game, setId, filterJapanese);
-      requestTracker.log('Single set sync completed', {
-        status: 'success',
-        mode: 'single_set',
-        ...result
-      });
-      return new Response(
-        JSON.stringify({ mode: "bySetId", game, filterJapanese, ...result }), 
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      try {
+        const result = await syncSet(game, setId, filterJapanese);
+        requestTracker.log('Single set sync completed', {
+          status: 'success',
+          mode: 'single_set',
+          ...result
+        });
+        return new Response(
+          JSON.stringify({ 
+            mode,
+            game, 
+            filterJapanese, 
+            ...result
+          }), 
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      } catch (error: any) {
+        requestTracker.error('Single set sync failed', error);
+        return new Response(
+          JSON.stringify({ 
+            mode,
+            game, 
+            filterJapanese,
+            setsProcessed: 0,
+            cardsProcessed: 0,
+            variantsProcessed: 0,
+            skipped: { sets: 0, cards: 0 },
+            errors: [{ scope: 'set', id: setId, reason: error.message }]
+          }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     // Otherwise, orchestrate: fetch all sets and queue them
@@ -717,11 +782,14 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify({ 
-        mode: since ? "orchestrate_incremental" : "orchestrate_full", 
+        mode,
         game,
         filterJapanese,
-        queued_sets: filteredSets.length,
-        total_sets_found: allSets.length
+        setsProcessed: filteredSets.length,
+        cardsProcessed: 0, // Orchestration only queues sets, doesn't process cards directly
+        variantsProcessed: 0, // Orchestration only queues sets, doesn't process variants directly
+        skipped: { sets: allSets.length - filteredSets.length, cards: 0 },
+        errors: []
       }), 
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
