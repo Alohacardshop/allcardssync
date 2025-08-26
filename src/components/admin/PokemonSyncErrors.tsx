@@ -16,9 +16,11 @@ interface SyncError {
 
 interface PokemonSyncErrorsProps {
   autoRefresh?: boolean;
+  game?: string;
+  title?: string;
 }
 
-export default function PokemonSyncErrors({ autoRefresh = false }: PokemonSyncErrorsProps) {
+export default function PokemonSyncErrors({ autoRefresh = false, game = 'pokemon', title = 'Pokémon Sync — Recent Failures' }: PokemonSyncErrorsProps) {
   const [rows, setRows] = useState<SyncError[]>([]);
   const [loading, setLoading] = useState(false);
   
@@ -27,7 +29,9 @@ export default function PokemonSyncErrors({ autoRefresh = false }: PokemonSyncEr
   async function load() {
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('sync-errors');
+      const { data, error } = await supabase.functions.invoke('sync-errors', {
+        body: { game, limit: 20 }
+      });
 
       if (error) {
         console.error('Error loading sync errors:', error);
@@ -99,7 +103,7 @@ export default function PokemonSyncErrors({ autoRefresh = false }: PokemonSyncEr
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          Pokémon Sync — Recent Failures
+          {title}
           {autoRefresh && <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />}
         </CardTitle>
       </CardHeader>

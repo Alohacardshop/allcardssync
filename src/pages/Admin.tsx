@@ -662,7 +662,15 @@ const Admin = () => {
             title="MTG Catalog — Progress"
           />
         )}
-        <PokemonSyncErrors />
+        {USE_V2_POKEMON && (
+          <PokemonSyncErrors game="pokemon" title="Pokémon Sync — Recent Failures" />
+        )}
+        {USE_V2_POKEMON_JAPAN && (
+          <PokemonSyncErrors game="pokemon_japan" title="Pokémon Japan Sync — Recent Failures" />
+        )}
+        {USE_V2_MTG && (
+          <PokemonSyncErrors game="mtg" title="MTG Sync — Recent Failures" />
+        )}
       </div>
 
       {/* JustTCG Integration Section */}

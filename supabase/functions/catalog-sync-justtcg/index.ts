@@ -1,6 +1,11 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
 const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
 const JTCG = "https://api.justtcg.com/v1";
@@ -13,6 +18,14 @@ const GAME_MAP: Record<string, string> = {
   "magic-the-gathering": "mtg",
   "pokemon-japan": "pokemon_japan"
 };
+
+// API parameter mapping: for pokemon-japan, we need to use pokemon&region=japan
+function getApiParams(externalGame: string) {
+  if (externalGame === "pokemon-japan") {
+    return "pokemon&region=japan";
+  }
+  return externalGame;
+}
 
 // --- helpers ---
 async function backoffWait(ms: number) { return new Promise(r => setTimeout(r, ms)); }
@@ -146,11 +159,22 @@ async function orchestrateFullSync(externalGame: string) {
     throw new Error(`Unsupported game: ${externalGame}`);
   }
 
-  // 1) Fetch all sets from JustTCG
-  const setsResponse = await fetchJsonWithRetry(`${JTCG}/sets?game=${encodeURIComponent(externalGame)}`, JHDRS);
+  // 1) Fetch all sets from JustTCG (use correct API params for pokemon-japan)
+  const apiParams = getApiParams(externalGame);
+  const setsResponse = await fetchJsonWithRetry(`${JTCG}/sets?game=${apiParams}`, JHDRS);
   const sets = setsResponse?.data || [];
 
   if (!sets.length) {
+    // Log error for empty sets response
+    await sb.rpc('catalog_v2_log_error', {
+      payload: {
+        game: internalGame,
+        set_id: null,
+        step: 'orchestrate_sets',
+        message: `No sets returned from JustTCG API for game: ${externalGame}`,
+        detail: { api_params: apiParams, response: setsResponse }
+      }
+    });
     return { mode: "orchestrate", game: internalGame, queued_sets: 0 };
   }
 
@@ -195,9 +219,10 @@ async function syncSetCards(externalGame: string, setName: string) {
 
   console.log(`Starting sync for ${setName} (${externalGame} -> ${internalGame})`);
 
-  // Page through all cards for this set
+  // Page through all cards for this set (use correct API params for pokemon-japan)
   while (true) {
-    const url = `${JTCG}/cards?game=${encodeURIComponent(externalGame)}&set=${encodeURIComponent(setName)}&limit=${limit}&offset=${offset}`;
+    const apiParams = getApiParams(externalGame);
+    const url = `${JTCG}/cards?game=${apiParams}&set=${encodeURIComponent(setName)}&limit=${limit}&offset=${offset}`;
     console.log(`Fetching page: offset=${offset}, limit=${limit}`);
     
     const response = await fetchJsonWithRetry(url, JHDRS);
@@ -265,6 +290,11 @@ async function syncSetCards(externalGame: string, setName: string) {
 }
 
 serve(async (req) => {
+  // Handle CORS preflight requests
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
   try {
     const url = new URL(req.url);
     const game = url.searchParams.get("game")?.trim();
@@ -296,7 +326,7 @@ serve(async (req) => {
     }
 
     return new Response(JSON.stringify(result), {
-      headers: { "Content-Type": "application/json" }
+      headers: { ...corsHeaders, "Content-Type": "application/json" }
     });
   } catch (e: any) {
     console.error("catalog-sync-justtcg error:", e);
@@ -305,7 +335,7 @@ serve(async (req) => {
       stack: e?.stack 
     }), {
       status: 500,
-      headers: { "Content-Type": "application/json" }
+      headers: { ...corsHeaders, "Content-Type": "application/json" }
     });
   }
 });

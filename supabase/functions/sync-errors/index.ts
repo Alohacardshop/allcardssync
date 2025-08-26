@@ -13,6 +13,10 @@ serve(async (req) => {
   }
 
   try {
+    const url = new URL(req.url);
+    const game = url.searchParams.get("game") || 'pokemon';
+    const limit = parseInt(url.searchParams.get("limit") || '20');
+
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     
@@ -21,8 +25,8 @@ serve(async (req) => {
     // Query sync errors using RPC function
     const { data, error } = await supabase
       .rpc('catalog_v2_get_recent_sync_errors', {
-        game_in: 'pokemon',
-        limit_in: 20
+        game_in: game,
+        limit_in: limit
       })
 
     if (error) {
