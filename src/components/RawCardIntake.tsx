@@ -9,7 +9,7 @@ import { Loader2, Search, Plus } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { searchCardsByNameNumber, searchCatalogV2, getReferencePriceByTcgplayerId, type JustTCGCard } from '@/lib/justtcg';
-import { USE_V2_POKEMON } from '@/lib/catalogEnv';
+import { USE_V2_POKEMON, USE_V2_POKEMON_JAPAN, USE_V2_MTG } from '@/lib/catalogEnv';
 
 const FUNCTIONS_BASE = import.meta.env.VITE_SUPABASE_FUNCTIONS_URL?.replace(/\/+$/, "") || "/functions/v1";
 import { normalizeStr, normalizeNumber, includesLoose, similarityScore } from '@/lib/cardSearch';
@@ -105,9 +105,23 @@ export function RawCardIntake({
       try {
         let results: JustTCGCard[] = [];
         
-        // Try local catalog v2 search first for Pokemon
+        // Try local catalog v2 search first for supported games
+        let useLocalCatalog = false;
+        let catalogGame = '';
+        
         if (game === 'pokemon' && USE_V2_POKEMON) {
-          const local = await searchCatalogV2('pokemon', normalizedName, normalizedNumber.num, 5);
+          useLocalCatalog = true;
+          catalogGame = 'pokemon';
+        } else if (game === 'pokemon_japan' && USE_V2_POKEMON_JAPAN) {
+          useLocalCatalog = true;
+          catalogGame = 'pokemon_japan';
+        } else if (game === 'mtg' && USE_V2_MTG) {
+          useLocalCatalog = true;
+          catalogGame = 'mtg';
+        }
+        
+        if (useLocalCatalog) {
+          const local = await searchCatalogV2(catalogGame as any, normalizedName, normalizedNumber.num, 5);
           if (local.length > 0) {
             results = local.map(c => ({
               id: c.id,
@@ -452,13 +466,15 @@ export function RawCardIntake({
 
           {!loading && suggestions.length === 0 && normalizedName && normalizedName.length >= 3 && (
             <>
-              {game === 'pokemon' && USE_V2_POKEMON ? (
+              {((game === 'pokemon' && USE_V2_POKEMON) || 
+                (game === 'pokemon_japan' && USE_V2_POKEMON_JAPAN) || 
+                (game === 'mtg' && USE_V2_MTG)) ? (
                 <div className="rounded border p-3 text-sm space-y-2">
                   <div>No local results. If a new set just dropped, you can sync it now.</div>
                   <div className="flex items-center gap-2">
                     <Input 
                       className="text-sm" 
-                      placeholder="Set ID (e.g. sv6pt5)" 
+                      placeholder="Set Name (e.g. Base Set)" 
                       value={syncSetId} 
                       onChange={(e) => setSyncSetId(e.target.value)} 
                     />
@@ -466,7 +482,10 @@ export function RawCardIntake({
                       size="sm"
                       onClick={async () => {
                         try {
-                          await fetch(`${FUNCTIONS_BASE}/catalog-sync-pokemon?setId=${encodeURIComponent(syncSetId)}`, { method: 'POST' });
+                          const functionPath = game === 'pokemon' 
+                            ? `/catalog-sync-pokemon?setId=${encodeURIComponent(syncSetId)}`
+                            : `/catalog-sync-justtcg?game=${game === 'pokemon_japan' ? 'pokemon-japan' : 'magic-the-gathering'}&set=${encodeURIComponent(syncSetId)}`;
+                          await fetch(`${FUNCTIONS_BASE}${functionPath}`, { method: 'POST' });
                           toast({ title: 'Sync started', description: 'Refreshing search results...' });
                           await doSearch();
                         } catch (error) {
@@ -479,7 +498,7 @@ export function RawCardIntake({
                     </Button>
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    Tip: leave Set ID blank and ask an admin to run a broader sync from the Admin page.
+                    Tip: leave Set Name blank and ask an admin to run a broader sync from the Admin page.
                   </div>
                 </div>
               ) : (
