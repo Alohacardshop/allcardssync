@@ -124,7 +124,15 @@ async function syncSingleSet(setId: string) {
     }]);
 
     // 2) cards for set
-    const cards = await fetchAll("cards", { q: `set.id:"${setId}"` });
+    let cards: any[] = [];
+    try {
+      cards = await fetchAll("cards", { q: `set.id:"${setId}"` });
+    } catch (e) {
+      await logError(setId, "fetch_cards", e);
+      // skip this set for now (it'll be retried by "queue pending" later)
+      return { sets: 1, cards: 0, setId, skipped: true };
+    }
+    
     const cardRows = cards.map((c: any) => ({
       id: c.id,
       game: "pokemon",
