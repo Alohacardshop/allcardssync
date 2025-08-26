@@ -17,10 +17,53 @@ const GAME_MAP: Record<string, string> = {
 // --- helpers ---
 async function backoffWait(ms: number) { return new Promise(r => setTimeout(r, ms)); }
 
+// Global throttling state
+let lastRequestTime = 0;
+let requestsThisMinute = 0;
+let minuteStartTime = Date.now();
+let rateLimitInfo: { 
+  requestsPerMinute?: number; 
+  requestsPerDay?: number; 
+  plan?: string;
+} = {};
+
+async function adaptiveThrottle() {
+  const now = Date.now();
+  
+  // Reset minute counter if a minute has passed
+  if (now - minuteStartTime > 60000) {
+    requestsThisMinute = 0;
+    minuteStartTime = now;
+  }
+  
+  // If we have rate limit info, respect it
+  if (rateLimitInfo.requestsPerMinute && requestsThisMinute >= rateLimitInfo.requestsPerMinute * 0.8) {
+    const waitTime = 60000 - (now - minuteStartTime);
+    if (waitTime > 0) {
+      console.log(`Throttling: waiting ${waitTime}ms for rate limit reset`);
+      await backoffWait(waitTime);
+      requestsThisMinute = 0;
+      minuteStartTime = Date.now();
+    }
+  }
+  
+  // Minimum delay between requests (100ms for paid plans, 500ms for free)
+  const minDelay = rateLimitInfo.plan === 'free' ? 500 : 100;
+  const timeSinceLastRequest = now - lastRequestTime;
+  if (timeSinceLastRequest < minDelay) {
+    await backoffWait(minDelay - timeSinceLastRequest);
+  }
+  
+  lastRequestTime = Date.now();
+  requestsThisMinute++;
+}
+
 async function fetchJsonWithRetry(url: string, headers: HeadersInit = {}, tries = 6, baseDelayMs = 500) {
   let last: any;
   for (let i = 0; i < tries; i++) {
     try {
+      await adaptiveThrottle();
+      
       const res = await fetch(url, { headers });
       if (!res.ok) {
         if (res.status === 404) {
@@ -31,12 +74,27 @@ async function fetchJsonWithRetry(url: string, headers: HeadersInit = {}, tries 
           // Use rate-limit headers if available
           const retryAfter = res.headers.get('retry-after');
           const delayMs = retryAfter ? parseInt(retryAfter) * 1000 : baseDelayMs * (2 ** i);
+          console.log(`Rate limited, waiting ${delayMs}ms`);
           await backoffWait(delayMs);
           continue;
         }
         throw new Error(`${url} ${res.status} ${await res.text().catch(() => '')}`);
       }
-      return await res.json();
+      
+      const data = await res.json();
+      
+      // Extract rate limit info from _metadata for adaptive throttling
+      if (data._metadata) {
+        const meta = data._metadata;
+        rateLimitInfo = {
+          requestsPerMinute: meta.usage?.requestsPerMinute?.limit,
+          requestsPerDay: meta.usage?.requestsPerDay?.limit,
+          plan: meta.plan?.name
+        };
+        console.log(`Rate limit info: ${JSON.stringify(rateLimitInfo)}`);
+      }
+      
+      return data;
     } catch (e) {
       last = e;
       await backoffWait(baseDelayMs * (2 ** i));
@@ -132,20 +190,26 @@ async function syncSetCards(externalGame: string, setName: string) {
   }
 
   let offset = 0;
-  const limit = 100;
+  const limit = 100; // Use larger page size for efficiency
   const allCards: any[] = [];
+
+  console.log(`Starting sync for ${setName} (${externalGame} -> ${internalGame})`);
 
   // Page through all cards for this set
   while (true) {
     const url = `${JTCG}/cards?game=${encodeURIComponent(externalGame)}&set=${encodeURIComponent(setName)}&limit=${limit}&offset=${offset}`;
+    console.log(`Fetching page: offset=${offset}, limit=${limit}`);
+    
     const response = await fetchJsonWithRetry(url, JHDRS);
     
     const cards = response?.data || [];
     const hasMore = response?.meta?.hasMore ?? false;
 
+    console.log(`Received ${cards.length} cards, hasMore: ${hasMore}`);
+
     if (!cards.length) break;
 
-    // Extract only essential fields, ignore variants
+    // Extract only minimal essential fields for lightweight storage
     for (const card of cards) {
       allCards.push({
         id: card.id || `${setName}-${card.number || card.name}`,
@@ -155,13 +219,18 @@ async function syncSetCards(externalGame: string, setName: string) {
         set_id: null, // Will be set below
         rarity: card.rarity ?? null,
         supertype: card.supertype ?? null,
-        subtypes: card.subtypes ?? null,
-        images: card.images ?? null,
-        tcgplayer_product_id: card.tcgplayerId ?? null,
+        subtypes: Array.isArray(card.subtypes) ? card.subtypes : null,
+        images: card.images ? { 
+          small: card.images.small, 
+          normal: card.images.normal 
+        } : null, // Minimal image data
+        tcgplayer_product_id: card.tcgplayerId ?? null, // Critical for price lookups
         tcgplayer_url: null,
-        data: {
-          ...card,
-          set: card.set // Store original set data
+        data: { 
+          // Store only essential metadata, not full card data
+          id: card.id,
+          tcgplayerId: card.tcgplayerId,
+          set: card.set
         },
         updated_at: new Date().toISOString(),
       });
@@ -169,9 +238,13 @@ async function syncSetCards(externalGame: string, setName: string) {
 
     if (!hasMore) break;
     offset += limit;
+    
+    // Brief pause between pages to be gentle on the API
+    await backoffWait(50);
   }
 
   if (!allCards.length) {
+    console.log(`No cards found for set: ${setName}`);
     return { mode: "worker", game: internalGame, setName, cards: 0 };
   }
 
@@ -185,6 +258,7 @@ async function syncSetCards(externalGame: string, setName: string) {
     });
   }
 
+  console.log(`Upserting ${allCards.length} cards for set: ${setName}`);
   await upsertCards(allCards);
 
   return { mode: "worker", game: internalGame, setName, cards: allCards.length, set_id: setId };
