@@ -11,12 +11,10 @@ import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Navigation } from '@/components/Navigation';
-import CatalogProgressCard from '@/components/admin/CatalogProgressCard';
-import PokemonSyncErrors from '@/components/admin/PokemonSyncErrors';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import GameScopedCatalogSync from '@/components/admin/GameScopedCatalogSync';
+import SyncTab from '@/components/admin/SyncTab';
 import AuditReconcile from '@/components/admin/AuditReconcile';
-import { USE_V2_POKEMON, USE_V2_POKEMON_JAPAN, USE_V2_MTG } from '@/lib/catalogEnv';
+import { GAME_MODES, type HealthStatus } from '@/lib/api';
 
 interface ShopifyConfig {
   storeDomain: string;
@@ -133,6 +131,10 @@ const Admin = () => {
   const [isSavingJustTcg, setIsSavingJustTcg] = useState(false);
   const [firecrawlApiKey, setFirecrawlApiKey] = useState('');
   const [isSavingFirecrawl, setIsSavingFirecrawl] = useState(false);
+  
+  // New sync state
+  const [selectedMode, setSelectedMode] = useState<string>('mtg');
+  const [healthStatus, setHealthStatus] = useState<HealthStatus | null>(null);
 
   const loadConfiguration = async () => {
     setIsLoading(true);
@@ -642,51 +644,51 @@ const Admin = () => {
         storeName={saveResultsStore}
       />
 
+      {/* Mode Selector Bar */}
+      <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
+        <div className="flex items-center gap-4">
+          <Label htmlFor="global-mode-select" className="font-medium">Mode:</Label>
+          <Select value={selectedMode} onValueChange={setSelectedMode}>
+            <SelectTrigger id="global-mode-select" className="w-64">
+              <SelectValue placeholder="Select a mode..." />
+            </SelectTrigger>
+            <SelectContent>
+              {GAME_MODES.map((mode) => (
+                <SelectItem key={mode.value} value={mode.value}>
+                  {mode.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        
+        <div className="flex items-center gap-2">
+          {healthStatus?.ok ? (
+            <CheckCircle className="h-4 w-4 text-green-500" />
+          ) : (
+            <AlertCircle className="h-4 w-4 text-red-500" />
+          )}
+          <span className="text-sm text-muted-foreground">
+            Last updated: {healthStatus ? new Date().toLocaleTimeString() : '—'}
+          </span>
+        </div>
+      </div>
+
       {/* Main Admin Tabs */}
       <Tabs defaultValue="sync" className="w-full">
         <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="sync">Catalog Sync</TabsTrigger>
+          <TabsTrigger value="sync">Sync</TabsTrigger>
           <TabsTrigger value="audit">Audit & Reconcile</TabsTrigger>
           <TabsTrigger value="config">Configuration</TabsTrigger>
         </TabsList>
         
         <TabsContent value="sync" className="space-y-6">
-          {/* Game-Scoped Catalog Sync */}
-          <GameScopedCatalogSync />
-
-          {/* Legacy Catalog Sync Sections */}
-          <div className="grid grid-cols-1 gap-4">
-            {USE_V2_POKEMON && (
-              <CatalogProgressCard
-                game="pokemon" 
-                functionPath="/catalog-sync-pokemon"
-                title="Pokémon Catalog — Progress (Legacy)"
-              />
-            )}
-            {USE_V2_POKEMON_JAPAN && (
-              <CatalogProgressCard
-                game="pokemon_japan" 
-                functionPath="/catalog-sync-justtcg?game=pokemon-japan"
-                title="Pokémon Japan Catalog — Progress (Legacy)"
-              />
-            )}
-            {USE_V2_MTG && (
-              <CatalogProgressCard
-                game="mtg"
-                functionPath="/catalog-sync-mtg" 
-                title="MTG Catalog — Progress (Legacy)"
-              />
-            )}
-            {USE_V2_POKEMON && (
-              <PokemonSyncErrors game="pokemon" title="Pokémon Sync — Recent Failures" />
-            )}
-            {USE_V2_POKEMON_JAPAN && (
-              <PokemonSyncErrors game="pokemon_japan" title="Pokémon Japan Sync — Recent Failures" />
-            )}
-            {USE_V2_MTG && (
-              <PokemonSyncErrors game="mtg" title="MTG Sync — Recent Failures" />
-            )}
-          </div>
+          <SyncTab 
+            selectedMode={selectedMode}
+            onModeChange={setSelectedMode}
+            healthStatus={healthStatus}
+            onHealthUpdate={setHealthStatus}
+          />
         </TabsContent>
 
         <TabsContent value="audit" className="space-y-6">
