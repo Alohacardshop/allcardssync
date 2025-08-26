@@ -767,7 +767,7 @@ export type Database = {
         Args: { game_in: string }
         Returns: {
           cards_count: number
-          pending_sets: number
+          pending_count: number
           sets_count: number
         }[]
       }
