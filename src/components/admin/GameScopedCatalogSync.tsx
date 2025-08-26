@@ -15,7 +15,9 @@ import {
   Calendar, 
   RefreshCw,
   Activity,
-  Clock
+  Clock,
+  Search,
+  FileText
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -64,6 +66,30 @@ interface SyncError {
   created_at: string;
 }
 
+interface AuditResult {
+  game: string;
+  scope: string;
+  filterJapanese: boolean;
+  totals: {
+    sets_upstream: number;
+    sets_local: number;
+    sets_missing: number;
+    cards_upstream: number;
+    cards_local: number;
+    cards_missing: number;
+    variants_upstream: number;
+    variants_local: number;
+    variants_missing: number;
+    variants_stale: number;
+  };
+  sampleMissing: {
+    sets: string[];
+    cards: string[];
+    variants: string[];
+  };
+  nextActions: string[];
+}
+
 export default function GameScopedCatalogSync() {
   const { toast } = useToast();
   const [selectedGame, setSelectedGame] = useState<string>('');
@@ -76,6 +102,8 @@ export default function GameScopedCatalogSync() {
   const [queueStats, setQueueStats] = useState<QueueStats | null>(null);
   const [errors, setErrors] = useState<SyncError[]>([]);
   const [isActiveSync, setIsActiveSync] = useState(false);
+  const [auditResult, setAuditResult] = useState<AuditResult | null>(null);
+  const [auditing, setAuditing] = useState(false);
 
   const selectedGameOption = GAME_OPTIONS.find(g => g.value === selectedGame);
 
@@ -334,6 +362,106 @@ export default function GameScopedCatalogSync() {
     }
   };
 
+  const runAudit = async () => {
+    if (!selectedGameOption) return;
+
+    setAuditing(true);
+    setAuditResult(null);
+    
+    try {
+      const url = new URL(`${FUNCTIONS_BASE}/catalog-audit`);
+      
+      const response = await fetch(url.toString(), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          game: selectedGameOption.gameParam,
+          setId: setId || undefined,
+          filterJapanese: selectedGameOption.filterJapanese || false,
+          export: 'json'
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok) {
+        setAuditResult(data);
+        toast({
+          title: "Audit Complete",
+          description: `Found ${data.totals.sets_missing + data.totals.cards_missing + data.totals.variants_missing} missing items`,
+        });
+      } else {
+        toast({
+          title: "Audit Failed",
+          description: data.error || 'Unknown error occurred',
+          variant: "destructive",
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setAuditing(false);
+    }
+  };
+
+  const downloadAuditCsv = async () => {
+    if (!selectedGameOption) return;
+
+    try {
+      const url = new URL(`${FUNCTIONS_BASE}/catalog-audit`);
+      
+      const response = await fetch(url.toString(), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          game: selectedGameOption.gameParam,
+          setId: setId || undefined,
+          filterJapanese: selectedGameOption.filterJapanese || false,
+          export: 'csv'
+        })
+      });
+      
+      if (response.ok) {
+        const blob = await response.blob();
+        const downloadUrl = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        const filename = response.headers.get('Content-Disposition')?.split('filename=')[1]?.replace(/"/g, '') || 'catalog-audit.csv';
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(downloadUrl);
+        
+        toast({
+          title: "Success",
+          description: "Audit CSV downloaded successfully",
+        });
+      } else {
+        const data = await response.json();
+        toast({
+          title: "Download Failed",
+          description: data.error || 'Unknown error occurred',
+          variant: "destructive",
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
   const getIncrementalDate = () => {
     const date = new Date();
     date.setMonth(date.getMonth() - 6);
@@ -345,7 +473,7 @@ export default function GameScopedCatalogSync() {
     callSync({ setId: error.set_id });
   };
 
-  const isDisabled = loading || queueing;
+  const isDisabled = loading || queueing || auditing;
 
   return (
     <Card>
@@ -504,6 +632,32 @@ export default function GameScopedCatalogSync() {
                 <Calendar className="h-4 w-4" />
                 Incremental (6 months)
               </Button>
+
+              <Button
+                variant="outline"
+                onClick={runAudit}
+                disabled={isDisabled}
+                className="flex items-center gap-2"
+              >
+                {auditing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Search className="h-4 w-4" />
+                )}
+                Audit Catalog
+              </Button>
+
+              {auditResult && (
+                <Button
+                  variant="outline"
+                  onClick={downloadAuditCsv}
+                  disabled={isDisabled}
+                  className="flex items-center gap-2"
+                >
+                  <FileText className="h-4 w-4" />
+                  Download CSV
+                </Button>
+              )}
             </div>
 
             {/* Recent Errors */}
@@ -559,6 +713,87 @@ export default function GameScopedCatalogSync() {
               </details>
             )}
 
+            {/* Audit Results */}
+            {auditResult && (
+              <div className="space-y-4 border-t pt-4">
+                <Label className="text-lg font-semibold">Audit Results</Label>
+                
+                {/* Summary Stats */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="text-center p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                    <div className="text-2xl font-bold text-blue-600">{auditResult.totals.sets_upstream}</div>
+                    <div className="text-xs text-muted-foreground">Upstream Sets</div>
+                    <div className="text-sm text-red-600">{auditResult.totals.sets_missing} missing</div>
+                  </div>
+                  <div className="text-center p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                    <div className="text-2xl font-bold text-green-600">{auditResult.totals.cards_upstream}</div>
+                    <div className="text-xs text-muted-foreground">Upstream Cards</div>
+                    <div className="text-sm text-red-600">{auditResult.totals.cards_missing} missing</div>
+                  </div>
+                  <div className="text-center p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
+                    <div className="text-2xl font-bold text-purple-600">{auditResult.totals.variants_upstream}</div>
+                    <div className="text-xs text-muted-foreground">Upstream Variants</div>
+                    <div className="text-sm text-red-600">{auditResult.totals.variants_missing} missing</div>
+                  </div>
+                  <div className="text-center p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
+                    <div className="text-2xl font-bold text-yellow-600">{auditResult.totals.variants_stale}</div>
+                    <div className="text-xs text-muted-foreground">Stale Variants</div>
+                  </div>
+                </div>
+
+                {/* Sample Missing Items */}
+                {(auditResult.sampleMissing.sets.length > 0 || auditResult.sampleMissing.cards.length > 0 || auditResult.sampleMissing.variants.length > 0) && (
+                  <div className="space-y-2">
+                    <Label className="font-medium">Sample Missing Items</Label>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                      {auditResult.sampleMissing.sets.length > 0 && (
+                        <div>
+                          <strong>Missing Sets:</strong>
+                          <ul className="list-disc list-inside mt-1 text-muted-foreground">
+                            {auditResult.sampleMissing.sets.slice(0, 5).map((setId, i) => (
+                              <li key={i}>{setId}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {auditResult.sampleMissing.cards.length > 0 && (
+                        <div>
+                          <strong>Missing Cards:</strong>
+                          <ul className="list-disc list-inside mt-1 text-muted-foreground">
+                            {auditResult.sampleMissing.cards.slice(0, 5).map((cardId, i) => (
+                              <li key={i}>{cardId}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {auditResult.sampleMissing.variants.length > 0 && (
+                        <div>
+                          <strong>Missing Variants:</strong>
+                          <ul className="list-disc list-inside mt-1 text-muted-foreground">
+                            {auditResult.sampleMissing.variants.slice(0, 5).map((variantId, i) => (
+                              <li key={i}>{variantId}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Next Actions */}
+                {auditResult.nextActions.length > 0 && (
+                  <div className="space-y-2">
+                    <Label className="font-medium">Recommended Actions</Label>
+                    <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1">
+                      {auditResult.nextActions.map((action, i) => (
+                        <li key={i}>{action}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Help Text */}
             <div className="text-sm text-muted-foreground space-y-1 border-t pt-4">
               <p>
@@ -572,6 +807,9 @@ export default function GameScopedCatalogSync() {
               </p>
               <p>
                 <strong>Incremental:</strong> Sync only sets released in the last 6 months.
+              </p>
+              <p>
+                <strong>Audit Catalog:</strong> Compare upstream data with local database to identify missing or stale content.
               </p>
               {selectedGameOption?.filterJapanese && (
                 <p>
