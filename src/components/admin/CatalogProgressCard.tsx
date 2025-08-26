@@ -95,8 +95,9 @@ export default function CatalogProgressCard({ game, functionPath, title }: Catal
     setStartTime(Date.now());
     
     try {
+      // Build the URL with query parameters for the edge function
       const url = new URL(`${FUNCTIONS_BASE}${functionPath}`, window.location.origin);
-      if (params.setId) url.searchParams.set("set", params.setId);
+      if (params.setId) url.searchParams.set("setName", params.setId);
       if (params.since) url.searchParams.set("since", params.since);
       
       const res = await fetch(url.toString(), { method: "POST" });
