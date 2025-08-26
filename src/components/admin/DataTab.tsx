@@ -16,12 +16,15 @@ import {
   runAudit,
   runSync,
   formatTimeAgo,
+  getCatalogStats,
+  GAME_MODES,
   type GameMode,
   type CatalogSet,
   type CatalogCard,
   type CatalogVariant,
   type DataFilters,
-  type PaginatedResponse
+  type PaginatedResponse,
+  type CatalogStats
 } from '@/lib/api';
 
 interface DataTabProps {
@@ -46,6 +49,10 @@ const DataTab: React.FC<DataTabProps> = ({ selectedMode }) => {
   const [cardsData, setCardsData] = useState<PaginatedResponse<CatalogCard> | null>(null);
   const [variantsData, setVariantsData] = useState<PaginatedResponse<CatalogVariant> | null>(null);
   
+  // Card count states
+  const [cardCounts, setCardCounts] = useState<Record<string, CatalogStats>>({});
+  const [countsLoading, setCountsLoading] = useState(false);
+  
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<Set<string>>(new Set());
 
@@ -58,6 +65,11 @@ const DataTab: React.FC<DataTabProps> = ({ selectedMode }) => {
   useEffect(() => {
     loadData();
   }, [activeTab, selectedMode, filters]);
+
+  // Load card counts on component mount
+  useEffect(() => {
+    loadCardCounts();
+  }, []);
 
   const loadData = async () => {
     setLoading(true);
@@ -85,6 +97,30 @@ const DataTab: React.FC<DataTabProps> = ({ selectedMode }) => {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadCardCounts = async () => {
+    setCountsLoading(true);
+    try {
+      const counts: Record<string, CatalogStats> = {};
+      
+      // Load stats for all game modes
+      for (const mode of GAME_MODES) {
+        try {
+          const stats = await getCatalogStats(mode);
+          counts[mode.value] = stats;
+        } catch (error) {
+          console.error(`Failed to load stats for ${mode.value}:`, error);
+          // Continue loading other modes even if one fails
+        }
+      }
+      
+      setCardCounts(counts);
+    } catch (error: any) {
+      console.error('Failed to load card counts:', error);
+    } finally {
+      setCountsLoading(false);
     }
   };
 
@@ -156,6 +192,56 @@ const DataTab: React.FC<DataTabProps> = ({ selectedMode }) => {
 
   return (
     <div className="space-y-6">
+      {/* Card Count Summary */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Database className="h-5 w-5" />
+            Database Overview
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {GAME_MODES.map((mode) => {
+              const stats = cardCounts[mode.value];
+              return (
+                <div key={mode.value} className="p-4 border rounded-lg">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="font-medium">{mode.label}</h3>
+                    {mode.value === 'pokemon-japan' && (
+                      <Badge variant="secondary" className="text-xs">JP</Badge>
+                    )}
+                  </div>
+                  {countsLoading ? (
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                      <span>Loading...</span>
+                    </div>
+                  ) : stats ? (
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-sm">
+                        <span>Sets:</span>
+                        <span className="font-mono">{stats.sets_count.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span>Cards:</span>
+                        <span className="font-mono">{stats.cards_count.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between text-sm text-muted-foreground">
+                        <span>Pending:</span>
+                        <span className="font-mono">{stats.pending_sets.toLocaleString()}</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-sm text-muted-foreground">No data</div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
