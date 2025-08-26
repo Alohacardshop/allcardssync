@@ -1,12 +1,27 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
 const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
 const JTCG = "https://api.justtcg.com/v1";
-const JHDRS: HeadersInit = { "X-API-Key": Deno.env.get("JUSTTCG_API_KEY")! };
 const FUNCTIONS_BASE = (Deno.env.get("SUPABASE_FUNCTIONS_URL") ||
   Deno.env.get("SUPABASE_URL")!.replace(".supabase.co", ".functions.supabase.co")).replace(/\/+$/,"");
+
+// Get API key from env or system_settings table
+async function getApiKey(): Promise<string> {
+  const envKey = Deno.env.get("JUSTTCG_API_KEY");
+  if (envKey) return envKey;
+  
+  const { data } = await sb.from('system_settings').select('key_value').eq('key_name', 'JUSTTCG_API_KEY').single();
+  if (data?.key_value) return data.key_value;
+  
+  throw new Error("JUSTTCG_API_KEY not found in environment or system_settings");
+}
 
 // --- helpers shared with pokemon function style ---
 async function backoffWait(ms:number){ return new Promise(r=>setTimeout(r,ms)); }
@@ -53,8 +68,11 @@ async function queueSelfForSet(code: string) {
 
 // --- JustTCG-specific ---
 async function syncSet(setId: string) {
+  const apiKey = await getApiKey();
+  const headers = { "X-API-Key": apiKey };
+  
   // 1) Fetch all cards for this set from JustTCG
-  const response = await fetchJsonWithRetry(`${JTCG}/cards?game=magic-the-gathering&set=${encodeURIComponent(setId)}&limit=1000`, JHDRS);
+  const response = await fetchJsonWithRetry(`${JTCG}/cards?game=magic-the-gathering&set=${encodeURIComponent(setId)}&limit=1000`, headers);
   const cards = response?.data || [];
   
   if (!cards.length) {
@@ -99,6 +117,11 @@ async function syncSet(setId: string) {
 }
 
 serve(async (req) => {
+  // Handle CORS preflight requests
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
   try {
     const url = new URL(req.url);
     const setId = (url.searchParams.get("setId")||"").trim();
@@ -106,11 +129,14 @@ serve(async (req) => {
 
     if (setId) {
       const res = await syncSet(setId);
-      return new Response(JSON.stringify({ mode:"bySetId", ...res }), { headers: { "Content-Type":"application/json" }});
+      return new Response(JSON.stringify({ mode:"bySetId", ...res }), { headers: { ...corsHeaders, "Content-Type":"application/json" }});
     }
 
+    const apiKey = await getApiKey();
+    const headers = { "X-API-Key": apiKey };
+    
     // orchestrate: fetch all sets from JustTCG
-    const setsResponse = await fetchJsonWithRetry(`${JTCG}/sets?game=magic-the-gathering`, JHDRS);
+    const setsResponse = await fetchJsonWithRetry(`${JTCG}/sets?game=magic-the-gathering`, headers);
     const all = setsResponse?.data ?? [];
     const filtered = all.filter((s:any)=> !since || (s.releaseDate && s.releaseDate >= since));
     await upsertSets(filtered.map((s:any)=>({
@@ -127,9 +153,10 @@ serve(async (req) => {
     for (const s of filtered) await queueSelfForSet(s.code || s.id);
 
     return new Response(JSON.stringify({ mode: since ? "orchestrate_incremental" : "orchestrate_full", queued_sets: filtered.length }), {
-      headers: { "Content-Type":"application/json" }
+      headers: { ...corsHeaders, "Content-Type":"application/json" }
     });
   } catch (e:any) {
-    return new Response(JSON.stringify({ error: e?.message || "error" }), { status: 500, headers: { "Content-Type":"application/json" }});
+    console.error('MTG sync error:', e);
+    return new Response(JSON.stringify({ error: e?.message || "error" }), { status: 500, headers: { ...corsHeaders, "Content-Type":"application/json" }});
   }
 });
