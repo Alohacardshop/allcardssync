@@ -16,7 +16,7 @@ const FUNCTIONS_BASE = (Deno.env.get("SUPABASE_FUNCTIONS_URL") ||
 // Game mapping: external name -> internal slug
 const GAME_MAP: Record<string, string> = {
   "magic-the-gathering": "mtg",
-  "pokemon-japan": "pokemon_japan"
+  "pokemon-japan": "pokemon-japan"
 };
 
 // API parameter mapping: for pokemon-japan, we need to use pokemon&region=japan
@@ -179,7 +179,7 @@ async function orchestrateFullSync(externalGame: string) {
 
   // 2) Upsert sets into catalog_v2.sets
   const setRows = sets.map((s: any) => ({
-    id: s.code || s.id || s.name,
+    set_id: s.code || s.id || s.name,
     game: internalGame,
     name: s.name ?? null,
     series: s.series ?? null,
@@ -236,7 +236,7 @@ async function syncSetCards(externalGame: string, setName: string) {
     // Extract only minimal essential fields for lightweight storage
     for (const card of cards) {
       allCards.push({
-        id: card.id || `${setName}-${card.number || card.name}`,
+        card_id: card.id || `${setName}-${card.number || card.name}`,
         game: internalGame,
         name: card.name ?? null,
         number: card.number ?? null,

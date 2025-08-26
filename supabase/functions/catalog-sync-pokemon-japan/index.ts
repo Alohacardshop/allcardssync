@@ -85,8 +85,8 @@ async function syncSet(setId: string) {
   const firstCard = cards[0];
   if (firstCard?.set) {
     await upsertSets([{
-      id: setId,
-      game: "pokemon_japan",
+      set_id: setId,
+      game: "pokemon-japan",
       name: firstCard.set.name ?? null,
       series: firstCard.set.series ?? null,
       printed_total: null,
@@ -99,8 +99,8 @@ async function syncSet(setId: string) {
 
   // 3) Process cards
   const rows = cards.map((c: any) => ({
-    id: c.id || `${setId}-${c.number}`,
-    game: "pokemon_japan",
+    card_id: c.id || `${setId}-${c.number}`,
+    game: "pokemon-japan",
     name: c.name ?? null,
     number: c.number ?? null,
     set_id: setId,
@@ -142,8 +142,8 @@ serve(async (req) => {
     const all = setsResponse?.data ?? [];
     const filtered = all.filter((s:any)=> !since || (s.releaseDate && s.releaseDate >= since));
     await upsertSets(filtered.map((s:any)=>({
-      id: s.code || s.id,
-      game: "pokemon_japan",
+      set_id: s.code || s.id,
+      game: "pokemon-japan",
       name: s.name ?? null,
       series: s.series ?? null,
       printed_total: null,
