@@ -1,11 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, CheckCircle, AlertCircle, Database, Calendar } from "lucide-react";
+import { Loader2, CheckCircle, AlertCircle, Database, Calendar, RefreshCw } from "lucide-react";
+import PokemonSyncErrors from "./PokemonSyncErrors";
 
 const SETTING_KEY = "POKEMON_V2_BACKFILL_DONE";
 
@@ -24,11 +25,37 @@ export default function PokemonOneTimeBackfill() {
   }>({ sets: 0, cards: 0, totalSets: 0 });
   const [showIncremental, setShowIncremental] = useState(false);
   const [startTime, setStartTime] = useState(Date.now());
+  const [isActiveSync, setIsActiveSync] = useState(false);
+  
+  const statsIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const errorsIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     checkBackfillStatus();
     loadCatalogStats();
+    
+    return () => {
+      if (statsIntervalRef.current) clearInterval(statsIntervalRef.current);
+      if (errorsIntervalRef.current) clearInterval(errorsIntervalRef.current);
+    };
   }, []);
+
+  // Start auto-refresh when sync is active
+  useEffect(() => {
+    if (isActiveSync) {
+      // Auto-refresh stats every 5 seconds
+      statsIntervalRef.current = setInterval(loadCatalogStats, 5000);
+    } else {
+      if (statsIntervalRef.current) {
+        clearInterval(statsIntervalRef.current);
+        statsIntervalRef.current = null;
+      }
+    }
+    
+    return () => {
+      if (statsIntervalRef.current) clearInterval(statsIntervalRef.current);
+    };
+  }, [isActiveSync]);
 
   const checkBackfillStatus = async () => {
     const { data, error } = await supabase
@@ -45,12 +72,17 @@ export default function PokemonOneTimeBackfill() {
       if (error) throw error;
       
       const row = Array.isArray(data) ? data[0] : data; // supabase-js returns array for set-returning functions
+      const pendingSets = Number(row?.pending_sets ?? 0);
+      
       setProgress(prev => ({
         ...prev,
         sets: Number(row?.sets_count ?? 0),
         cards: Number(row?.cards_count ?? 0),
-        totalSets: Number(row?.pending_sets ?? 0),
+        totalSets: pendingSets,
       }));
+      
+      // Update active sync status based on pending sets
+      setIsActiveSync(pendingSets > 0);
       
       setShowIncremental(true);
     } catch (error) {
@@ -63,6 +95,7 @@ export default function PokemonOneTimeBackfill() {
         cards: 0,
         totalSets: 0,
       }));
+      setIsActiveSync(false);
     }
   };
 
@@ -141,6 +174,7 @@ export default function PokemonOneTimeBackfill() {
       if (error) throw error;
       toast.success(`Queued ${data ?? 0} sets`);
       await loadCatalogStats(); // refresh stats after queuing
+      setIsActiveSync(true); // Start monitoring sync progress
     } catch (e: any) {
       toast.error(e.message || "Failed to queue");
     } finally {
@@ -194,15 +228,17 @@ export default function PokemonOneTimeBackfill() {
             <div className="text-2xl font-bold text-primary">{progress.totalSets}</div>
             <div className="text-xs text-muted-foreground">Pending Sets</div>
             <div className="flex items-center justify-center gap-1 mt-1">
-              {done ? (
+              {isActiveSync ? (
+                <RefreshCw className="h-4 w-4 text-blue-600 animate-spin" />
+              ) : done ? (
                 <CheckCircle className="h-4 w-4 text-green-600" />
               ) : progress.cards > 0 ? (
                 <AlertCircle className="h-4 w-4 text-amber-600" />
               ) : (
                 <Database className="h-4 w-4 text-muted-foreground" />
               )}
-              <Badge variant={done ? "default" : progress.cards > 0 ? "secondary" : "outline"}>
-                {done ? "Complete" : progress.cards > 0 ? "Partial" : "Empty"}
+              <Badge variant={isActiveSync ? "secondary" : done ? "default" : progress.cards > 0 ? "secondary" : "outline"}>
+                {isActiveSync ? "Syncing..." : done ? "Complete" : progress.cards > 0 ? "Partial" : "Empty"}
               </Badge>
             </div>
           </div>
@@ -243,21 +279,19 @@ export default function PokemonOneTimeBackfill() {
               {done ? "Already Backfilled" : (loading ? "Backfilling…" : "Run Full Backfill")}
             </Button>
 
-            {progress.totalSets > 0 && (
-              <Button 
-                variant="secondary" 
-                onClick={queueAllPending} 
-                disabled={queueing || loading}
-                className="flex items-center gap-2"
-              >
-                {queueing ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Database className="h-4 w-4" />
-                )}
-                {queueing ? "Queuing…" : `Queue All Pending Sets (${progress.totalSets})`}
-              </Button>
-            )}
+            <Button 
+              variant="secondary" 
+              onClick={queueAllPending} 
+              disabled={queueing || loading || progress.totalSets === 0}
+              className="flex items-center gap-2"
+            >
+              {queueing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Database className="h-4 w-4" />
+              )}
+              {queueing ? "Queuing…" : `Queue All Pending Sets (${progress.totalSets})`}
+            </Button>
 
             {showIncremental && !done && (
               <Button 
@@ -318,6 +352,9 @@ export default function PokemonOneTimeBackfill() {
             </pre>
           </details>
         )}
+
+        {/* Embedded Sync Errors - Auto-refresh while active */}
+        <PokemonSyncErrors autoRefresh={isActiveSync} />
       </CardContent>
     </Card>
   );
