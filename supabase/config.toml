@@ -3,6 +3,9 @@ project_id = "dmpoandoydaqxhzdjnmk"
 [functions.justtcg]
 verify_jwt = false
 
+[functions.catalog-sync]
+verify_jwt = false
+
 [functions.catalog-sync-pokemon]
 verify_jwt = false
 

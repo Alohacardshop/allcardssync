@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Navigation } from '@/components/Navigation';
 import CatalogProgressCard from '@/components/admin/CatalogProgressCard';
 import PokemonSyncErrors from '@/components/admin/PokemonSyncErrors';
+import GameScopedCatalogSync from '@/components/admin/GameScopedCatalogSync';
 import { USE_V2_POKEMON, USE_V2_POKEMON_JAPAN, USE_V2_MTG } from '@/lib/catalogEnv';
 
 interface ShopifyConfig {
@@ -639,27 +640,30 @@ const Admin = () => {
         storeName={saveResultsStore}
       />
 
-      {/* Catalog Sync Sections */}
+      {/* Game-Scoped Catalog Sync */}
+      <GameScopedCatalogSync />
+
+      {/* Legacy Catalog Sync Sections */}
       <div className="grid grid-cols-1 gap-4">
         {USE_V2_POKEMON && (
           <CatalogProgressCard
             game="pokemon" 
             functionPath="/catalog-sync-pokemon"
-            title="Pokémon Catalog — Progress"
+            title="Pokémon Catalog — Progress (Legacy)"
           />
         )}
         {USE_V2_POKEMON_JAPAN && (
           <CatalogProgressCard
             game="pokemon_japan" 
             functionPath="/catalog-sync-justtcg?game=pokemon-japan"
-            title="Pokémon Japan Catalog — Progress"
+            title="Pokémon Japan Catalog — Progress (Legacy)"
           />
         )}
         {USE_V2_MTG && (
           <CatalogProgressCard
             game="mtg"
             functionPath="/catalog-sync-mtg" 
-            title="MTG Catalog — Progress"
+            title="MTG Catalog — Progress (Legacy)"
           />
         )}
         {USE_V2_POKEMON && (
