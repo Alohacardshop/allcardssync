@@ -240,10 +240,11 @@ async function fetchUpstreamCardsAndVariants(game: string, setIds: string[], api
 }
 
 // Fetch local data from database
-async function fetchLocalData(game: string, setIds?: string[]): Promise<{sets: any[], cards: any[], variants: any[]}> {
+async function fetchLocalData(game: string, filterJapanese = false, setIds?: string[]): Promise<{sets: any[], cards: any[], variants: any[]}> {
   const tracker = new PerformanceTracker({
     operation: 'fetch_local_data',
     game,
+    filterJapanese,
     setCount: setIds?.length
   });
 
@@ -280,13 +281,19 @@ async function fetchLocalData(game: string, setIds?: string[]): Promise<{sets: a
     variantsQuery = variantsQuery.in('set_id', setIds);
   }
   
+  // Filter by Japanese language for Pokémon JP mode
+  if (filterJapanese && game === 'pokemon') {
+    variantsQuery = variantsQuery.eq('language', 'Japanese');
+  }
+  
   const { data: variants, error: variantsError } = await variantsQuery;
   if (variantsError) throw variantsError;
   
   tracker.log('Local data fetched', {
     sets: sets?.length || 0,
     cards: cards?.length || 0,
-    variants: variants?.length || 0
+    variants: variants?.length || 0,
+    filterJapanese
   });
   
   return {
@@ -491,7 +498,7 @@ serve(async (req) => {
     );
     
     // Fetch local data
-    const localData = await fetchLocalData(game, setId ? [setId] : undefined);
+    const localData = await fetchLocalData(game, filterJapanese, setId ? [setId] : undefined);
     
     // Compute differences
     const diffs = computeDiffs(
@@ -503,12 +510,12 @@ serve(async (req) => {
     const nextActions = generateNextActions(diffs, game, setId);
     
     const scope = setId ? `set:${setId}` : 'all';
+    const mode = game === 'mtg' ? 'mtg' : (filterJapanese ? 'pokemon-jp' : 'pokemon-all');
     
     // Prepare response
     const response = {
-      game,
+      mode,
       scope,
-      filterJapanese,
       totals: diffs.totals,
       sampleMissing: diffs.sampleMissing,
       nextActions
