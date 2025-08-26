@@ -5,6 +5,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { RefreshCw } from "lucide-react";
 
+const FUNCTIONS_BASE = "https://dmpoandoydaqxhzdjnmk.functions.supabase.co";
+
 interface SyncError {
   set_id: string;
   step: string;
@@ -61,6 +63,14 @@ export default function PokemonSyncErrors({ autoRefresh = false }: PokemonSyncEr
     }
   }
 
+  async function retryAllFailures() {
+    const ids = Array.from(new Set(rows.map(r => r.set_id))).filter(Boolean);
+    for (const id of ids) {
+      await fetch(`${FUNCTIONS_BASE}/catalog-sync-pokemon?setId=${encodeURIComponent(id)}`, { method: "POST" });
+    }
+    toast.success(`Re-queued ${ids.length} sets`);
+  }
+
   useEffect(() => { 
     load(); 
     
@@ -97,6 +107,9 @@ export default function PokemonSyncErrors({ autoRefresh = false }: PokemonSyncEr
         <div className="flex items-center gap-2">
           <Button size="sm" variant="secondary" onClick={load} disabled={loading}>
             {loading ? "Refreshing…" : "Refresh"}
+          </Button>
+          <Button size="sm" onClick={retryAllFailures} disabled={rows.length === 0}>
+            Retry All
           </Button>
           {autoRefresh && (
             <span className="text-xs text-muted-foreground">Auto-refreshing every 15s</span>
