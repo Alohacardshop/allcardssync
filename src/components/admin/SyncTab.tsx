@@ -105,7 +105,7 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
       setStats(newStats);
       
       // Update active sync status based on pending sets and processing queue
-      const hasActivity = newStats.pending_sets > 0 || (queueStats && queueStats.processing > 0);
+      const hasActivity = newStats.pending_count > 0 || (queueStats && queueStats.processing > 0);
       setIsActiveSync(hasActivity);
       
     } catch (error: any) {
@@ -384,7 +384,7 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
                     <Button 
                       variant="secondary"
                       onClick={handleQueuePending}
-                      disabled={isDisabled || !stats?.pending_sets}
+                      disabled={isDisabled || !stats?.pending_count}
                       className="flex-1"
                     >
                       {queueing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
@@ -427,7 +427,7 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
                       <div className="text-xs text-muted-foreground">Cards</div>
                     </div>
                     <div className="text-center p-3 bg-muted/50 rounded-lg">
-                      <div className="text-2xl font-bold text-primary">{stats?.pending_sets || 0}</div>
+                      <div className="text-2xl font-bold text-primary">{stats?.pending_count || 0}</div>
                       <div className="text-xs text-muted-foreground">Pending</div>
                     </div>
                   </div>

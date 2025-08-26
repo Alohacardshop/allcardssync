@@ -229,7 +229,7 @@ const DataTab: React.FC<DataTabProps> = ({ selectedMode }) => {
                       </div>
                       <div className="flex justify-between text-sm text-muted-foreground">
                         <span>Pending:</span>
-                        <span className="font-mono">{stats.pending_sets.toLocaleString()}</span>
+                        <span className="font-mono">{stats.pending_count.toLocaleString()}</span>
                       </div>
                     </div>
                   ) : (

@@ -52,7 +52,7 @@ export const GAME_MODES: GameMode[] = [
 export interface CatalogStats {
   sets_count: number;
   cards_count: number;
-  pending_sets: number;
+  pending_count: number; // Changed from pending_sets to match RPC function
 }
 
 export interface QueueStats {
@@ -108,7 +108,7 @@ export async function getCatalogStats(mode: GameMode): Promise<CatalogStats> {
     return {
       sets_count: Number(row?.sets_count ?? 0),
       cards_count: Number(row?.cards_count ?? 0),
-      pending_sets: Number(row?.pending_sets ?? 0),
+      pending_count: Number(row?.pending_count ?? 0),
     };
   }, `catalog stats for ${mode.label}`);
 }

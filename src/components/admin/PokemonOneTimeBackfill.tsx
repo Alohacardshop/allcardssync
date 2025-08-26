@@ -72,7 +72,7 @@ export default function PokemonOneTimeBackfill() {
       if (error) throw error;
       
       const row = Array.isArray(data) ? data[0] : data; // supabase-js returns array for set-returning functions
-      const pendingSets = Number(row?.pending_sets ?? 0);
+      const pendingSets = Number(row?.pending_count ?? 0);
       
       setProgress(prev => ({
         ...prev,

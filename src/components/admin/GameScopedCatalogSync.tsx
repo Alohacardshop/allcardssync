@@ -48,7 +48,7 @@ const GAME_OPTIONS: GameOption[] = [
 interface CatalogStats {
   sets_count: number;
   cards_count: number;
-  pending_sets: number;
+  pending_count: number; // Changed from pending_sets to match RPC function
 }
 
 interface QueueStats {
@@ -143,11 +143,11 @@ export default function GameScopedCatalogSync() {
       const newStats = {
         sets_count: Number(row?.sets_count ?? 0),
         cards_count: Number(row?.cards_count ?? 0),
-        pending_sets: Number(row?.pending_sets ?? 0),
+        pending_count: Number(row?.pending_count ?? 0),
       };
       
       setStats(newStats);
-      setIsActiveSync(newStats.pending_sets > 0 || (queueStats && queueStats.processing > 0));
+      setIsActiveSync(newStats.pending_count > 0 || (queueStats && queueStats.processing > 0));
       
     } catch (error: any) {
       console.error('Error loading catalog stats:', error);
@@ -514,7 +514,7 @@ export default function GameScopedCatalogSync() {
                 <div className="text-xs text-muted-foreground">Cards in Catalog</div>
               </div>
               <div className="text-center p-3 bg-muted/50 rounded-lg">
-                <div className="text-2xl font-bold text-primary">{stats.pending_sets}</div>
+                <div className="text-2xl font-bold text-primary">{stats.pending_count}</div>
                 <div className="text-xs text-muted-foreground">Pending Sets</div>
                 <div className="flex items-center justify-center gap-1 mt-1">
                   {isActiveSync ? (
@@ -598,7 +598,7 @@ export default function GameScopedCatalogSync() {
               <Button
                 variant="secondary"
                 onClick={queuePendingSets}
-                disabled={isDisabled || stats.pending_sets === 0}
+                disabled={isDisabled || stats.pending_count === 0}
                 className="flex items-center gap-2"
               >
                 {queueing ? (
@@ -606,7 +606,7 @@ export default function GameScopedCatalogSync() {
                 ) : (
                   <Database className="h-4 w-4" />
                 )}
-                Queue Pending Sets ({stats.pending_sets})
+                Queue Pending Sets ({stats.pending_count})
               </Button>
 
               <Button

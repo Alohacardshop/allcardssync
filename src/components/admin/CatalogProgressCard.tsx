@@ -72,7 +72,7 @@ export default function CatalogProgressCard({ game, functionPath, title }: Catal
       if (error) throw error;
       
       const row = Array.isArray(data) ? data[0] : data;
-      const pendingSets = Number(row?.pending_sets ?? 0);
+      const pendingSets = Number(row?.pending_count ?? 0);
       const newSets = Number(row?.sets_count ?? 0);
       const newCards = Number(row?.cards_count ?? 0);
       
