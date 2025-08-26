@@ -38,18 +38,28 @@ export default function PokemonOneTimeBackfill() {
 
   const loadCatalogStats = async () => {
     try {
-      // Simple fallback - just enable incremental option
-      setShowIncremental(true);
+      const { data, error } = await supabase.rpc("catalog_v2_stats", { game_in: "pokemon" });
+      if (error) throw error;
       
-      // Set some default placeholder values for display
+      const row = Array.isArray(data) ? data[0] : data; // supabase-js returns array for set-returning functions
       setProgress(prev => ({
         ...prev,
-        sets: 168, // We know from earlier query
-        cards: 0   // We know cards failed
+        sets: Number(row?.sets_count ?? 0),
+        cards: Number(row?.cards_count ?? 0),
+        totalSets: Number(row?.pending_sets ?? 0),
       }));
+      
+      setShowIncremental(true);
     } catch (error) {
       console.error("Error loading catalog stats:", error);
       setShowIncremental(true);
+      // Set fallback values on error
+      setProgress(prev => ({
+        ...prev,
+        sets: 0,
+        cards: 0,
+        totalSets: 0,
+      }));
     }
   };
 
@@ -161,7 +171,9 @@ export default function PokemonOneTimeBackfill() {
             <div className="text-xs text-muted-foreground">Cards in Catalog</div>
           </div>
           <div className="text-center p-3 bg-muted/50 rounded-lg">
-            <div className="flex items-center justify-center gap-1">
+            <div className="text-2xl font-bold text-primary">{progress.totalSets}</div>
+            <div className="text-xs text-muted-foreground">Pending Sets</div>
+            <div className="flex items-center justify-center gap-1 mt-1">
               {done ? (
                 <CheckCircle className="h-4 w-4 text-green-600" />
               ) : progress.cards > 0 ? (
