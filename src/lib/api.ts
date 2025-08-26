@@ -16,16 +16,14 @@ export const GAME_MODES: GameMode[] = [
     game: 'mtg'
   },
   {
-    value: 'pokemon-all',
-    label: 'Pokémon (All)',
-    game: 'pokemon',
-    filterJapanese: false
+    value: 'pokemon',
+    label: 'Pokémon (Global)',
+    game: 'pokemon'
   },
   {
-    value: 'pokemon-jp',
-    label: 'Pokémon (Japanese Only)',
-    game: 'pokemon',
-    filterJapanese: true
+    value: 'pokemon-japan',
+    label: 'Pokémon Japan',
+    game: 'pokemon-japan'
   }
 ];
 
@@ -91,11 +89,8 @@ export async function getCatalogStats(mode: GameMode): Promise<CatalogStats> {
 
 // Get queue stats by mode
 export async function getQueueStatsByMode(mode: GameMode): Promise<QueueStats> {
-  const modeParam = mode.value === 'pokemon-jp' ? 'pokemon-jp' : 
-                   mode.value === 'pokemon-all' ? 'pokemon-all' : 'mtg';
-  
   const { data, error } = await supabase.rpc('catalog_v2_queue_stats_by_mode', { 
-    mode_in: modeParam
+    mode_in: mode.value
   });
   
   if (error) throw error;
@@ -125,10 +120,6 @@ export async function runSync(mode: GameMode, options: { setId?: string; since?:
   const url = new URL(`${FUNCTIONS_BASE}/catalog-sync`);
   url.searchParams.set('game', mode.game);
   
-  if (mode.filterJapanese) {
-    url.searchParams.set('filterJapanese', 'true');
-  }
-  
   if (options.setId) url.searchParams.set('setId', options.setId);
   if (options.since) url.searchParams.set('since', options.since);
 
@@ -144,13 +135,10 @@ export async function runSync(mode: GameMode, options: { setId?: string; since?:
 
 // Queue pending sets for a mode
 export async function queuePendingSets(mode: GameMode): Promise<number> {
-  const modeParam = mode.value === 'pokemon-jp' ? 'pokemon-jp' : 
-                   mode.value === 'pokemon-all' ? 'pokemon-all' : 'mtg';
-  
   const { data, error } = await supabase.rpc('catalog_v2_queue_pending_sets_by_mode', {
-    mode_in: modeParam,
+    mode_in: mode.value,
     game_in: mode.game,
-    filter_japanese: mode.filterJapanese || false
+    filter_japanese: false
   });
   
   if (error) throw error;
@@ -160,11 +148,7 @@ export async function queuePendingSets(mode: GameMode): Promise<number> {
 // Drain queue (process next item)
 export async function drainQueue(mode: GameMode): Promise<SyncResult> {
   const url = new URL(`${FUNCTIONS_BASE}/catalog-sync/drain`);
-  url.searchParams.set('game', mode.game);
-  
-  if (mode.filterJapanese) {
-    url.searchParams.set('filterJapanese', 'true');
-  }
+  url.searchParams.set('mode', mode.value);
 
   const response = await fetch(url.toString(), { method: 'POST' });
   const data = await response.json();
@@ -206,10 +190,6 @@ export interface AuditResult {
 export async function runAudit(mode: GameMode, options: { setId?: string; exportFormat?: 'json' | 'csv' } = {}): Promise<AuditResult | string> {
   const url = new URL(`${FUNCTIONS_BASE}/catalog-audit`);
   url.searchParams.set('game', mode.game);
-  
-  if (mode.filterJapanese) {
-    url.searchParams.set('filterJapanese', 'true');
-  }
   
   if (options.setId) url.searchParams.set('setId', options.setId);
   if (options.exportFormat) url.searchParams.set('exportFormat', options.exportFormat);
@@ -288,7 +268,7 @@ export interface PaginatedResponse<T> {
 export async function getCatalogSets(mode: GameMode, filters: DataFilters = {}): Promise<PaginatedResponse<CatalogSet>> {
   const { data, error } = await supabase.rpc('catalog_v2_browse_sets', {
     game_in: mode.game,
-    filter_japanese: mode.filterJapanese || false,
+    filter_japanese: false,
     search_in: filters.search || null,
     sort_by: filters.sortBy || 'set_id',
     sort_order: filters.sortOrder || 'asc',
@@ -312,7 +292,7 @@ export async function getCatalogSets(mode: GameMode, filters: DataFilters = {}):
 export async function getCatalogCards(mode: GameMode, filters: DataFilters = {}): Promise<PaginatedResponse<CatalogCard>> {
   const { data, error } = await supabase.rpc('catalog_v2_browse_cards', {
     game_in: mode.game,
-    filter_japanese: mode.filterJapanese || false,
+    filter_japanese: false,
     search_in: filters.search || null,
     set_id_in: filters.setId || null,
     rarity_in: filters.rarity || null,
@@ -338,7 +318,7 @@ export async function getCatalogCards(mode: GameMode, filters: DataFilters = {})
 export async function getCatalogVariants(mode: GameMode, filters: DataFilters = {}): Promise<PaginatedResponse<CatalogVariant>> {
   const { data, error } = await supabase.rpc('catalog_v2_browse_variants', {
     game_in: mode.game,
-    filter_japanese: mode.filterJapanese || false,
+    filter_japanese: false,
     search_in: filters.search || null,
     set_id_in: filters.setId || null,
     language_in: filters.language || null,

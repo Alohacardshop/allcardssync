@@ -161,6 +161,9 @@ const DataTab: React.FC<DataTabProps> = ({ selectedMode }) => {
           <CardTitle className="flex items-center gap-2">
             <Database className="h-5 w-5" />
             Data Browser - {selectedMode.label}
+            {selectedMode.value === 'pokemon-japan' && (
+              <Badge variant="secondary" className="text-xs">JP</Badge>
+            )}
           </CardTitle>
         </CardHeader>
         <CardContent>

@@ -11,7 +11,17 @@ const supabaseClient = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 );
 
-const JUSTTCG_BASE = "https://api.justtcg.com/v1";
+const GAME_MAP = new Map<string, string>([
+  ['mtg', 'magic-the-gathering'],
+  ['magic-the-gathering', 'magic-the-gathering'],
+  ['pokemon', 'pokemon'],
+  ['pokemon-japan', 'pokemon-japan'],
+]);
+
+function normalizeGame(game: string): string {
+  const key = game.trim().toLowerCase();
+  return GAME_MAP.get(key) ?? key;
+}
 
 // Structured logging helper
 function logStructured(level: 'INFO' | 'ERROR' | 'WARN', message: string, context: Record<string, any> = {}) {
@@ -124,7 +134,7 @@ async function fetchUpstreamSets(game: string, apiKey: string, setId?: string): 
   });
 
   const headers = { "X-API-Key": apiKey };
-  const apiGame = game === 'mtg' ? 'magic-the-gathering' : game;
+  const apiGame = normalizeGame(game);
   
   if (setId) {
     // Fetch single set
@@ -178,19 +188,19 @@ async function fetchUpstreamSets(game: string, apiKey: string, setId?: string): 
 }
 
 // Fetch all upstream cards and variants for sets
-async function fetchUpstreamCardsAndVariants(game: string, setIds: string[], apiKey: string, filterJapanese = false): Promise<{cards: any[], variants: any[]}> {
+async function fetchUpstreamCardsAndVariants(game: string, setIds: string[], apiKey: string): Promise<{cards: any[], variants: any[]}> {
   const tracker = new PerformanceTracker({
     operation: 'fetch_upstream_cards_variants',
     game,
-    setCount: setIds.length,
-    filterJapanese
+    setCount: setIds.length
   });
 
   const headers = { "X-API-Key": apiKey };
-  const apiGame = game === 'mtg' ? 'magic-the-gathering' : game;
+  const apiGame = normalizeGame(game);
   
   let allCards: any[] = [];
   let allVariants: any[] = [];
+  let nonJapaneseVariants = 0;
   
   for (const setId of setIds) {
     let limit = 100;
@@ -219,8 +229,22 @@ async function fetchUpstreamCardsAndVariants(game: string, setIds: string[], api
         allCards.push(card);
         
         let variants = card.variants || [];
-        if (filterJapanese && game === 'pokemon') {
-          variants = variants.filter((variant: any) => variant.language === 'Japanese');
+        
+        // Defensive check: warn if pokemon-japan variant is not Japanese
+        if (game === 'pokemon-japan') {
+          for (const variant of variants) {
+            if (variant.language && variant.language !== 'Japanese') {
+              nonJapaneseVariants++;
+              logStructured('WARN', 'Non-Japanese variant in pokemon-japan audit', {
+                operation: 'fetch_upstream_cards_variants',
+                game,
+                setId,
+                cardId: card.id,
+                variantLanguage: variant.language,
+                expectedLanguage: 'Japanese'
+              });
+            }
+          }
         }
         
         allVariants = allVariants.concat(variants);
@@ -231,20 +255,28 @@ async function fetchUpstreamCardsAndVariants(game: string, setIds: string[], api
     }
   }
   
+  if (nonJapaneseVariants > 0) {
+    logStructured('WARN', `Found ${nonJapaneseVariants} non-Japanese variants in pokemon-japan audit`, {
+      operation: 'fetch_upstream_cards_variants',
+      game,
+      nonJapaneseVariants
+    });
+  }
+  
   tracker.log('Cards and variants fetched', {
     totalCards: allCards.length,
-    totalVariants: allVariants.length
+    totalVariants: allVariants.length,
+    nonJapaneseVariants
   });
   
   return { cards: allCards, variants: allVariants };
 }
 
 // Fetch local data from database
-async function fetchLocalData(game: string, filterJapanese = false, setIds?: string[]): Promise<{sets: any[], cards: any[], variants: any[]}> {
+async function fetchLocalData(game: string, setIds?: string[]): Promise<{sets: any[], cards: any[], variants: any[]}> {
   const tracker = new PerformanceTracker({
     operation: 'fetch_local_data',
     game,
-    filterJapanese,
     setCount: setIds?.length
   });
 
@@ -281,19 +313,13 @@ async function fetchLocalData(game: string, filterJapanese = false, setIds?: str
     variantsQuery = variantsQuery.in('set_id', setIds);
   }
   
-  // Filter by Japanese language for Pokémon JP mode
-  if (filterJapanese && game === 'pokemon') {
-    variantsQuery = variantsQuery.eq('language', 'Japanese');
-  }
-  
   const { data: variants, error: variantsError } = await variantsQuery;
   if (variantsError) throw variantsError;
   
   tracker.log('Local data fetched', {
     sets: sets?.length || 0,
     cards: cards?.length || 0,
-    variants: variants?.length || 0,
-    filterJapanese
+    variants: variants?.length || 0
   });
   
   return {
@@ -462,24 +488,22 @@ serve(async (req) => {
     // Extract parameters from query string or request body
     const game = (url.searchParams.get("game") || requestBody.game || "").trim().toLowerCase();
     const setId = (url.searchParams.get("setId") || requestBody.setId || "").trim();
-    const filterJapanese = (url.searchParams.get("filterJapanese") || requestBody.filterJapanese) === "true";
     const exportFormat = (url.searchParams.get("export") || requestBody.export || "json").toLowerCase();
 
     const requestTracker = new PerformanceTracker({
       operation: 'catalog_audit_request',
       game,
       setId: setId || 'all',
-      filterJapanese,
       exportFormat
     });
 
     // Validate game parameter
-    if (!["mtg", "pokemon"].includes(game)) {
+    if (!["mtg", "pokemon", "pokemon-japan"].includes(game)) {
       requestTracker.error('Invalid game parameter', new Error(`Invalid game: ${game}`), {
         status: 'validation_error'
       });
       return new Response(
-        JSON.stringify({ error: "Invalid game. Must be 'mtg' or 'pokemon'" }), 
+        JSON.stringify({ error: "Invalid game. Must be 'mtg', 'pokemon', or 'pokemon-japan'" }), 
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -493,12 +517,11 @@ serve(async (req) => {
     const { cards: upstreamCards, variants: upstreamVariants } = await fetchUpstreamCardsAndVariants(
       game, 
       setIds, 
-      apiKey, 
-      filterJapanese
+      apiKey
     );
     
     // Fetch local data
-    const localData = await fetchLocalData(game, filterJapanese, setId ? [setId] : undefined);
+    const localData = await fetchLocalData(game, setIds);
     
     // Compute differences
     const diffs = computeDiffs(
@@ -510,7 +533,7 @@ serve(async (req) => {
     const nextActions = generateNextActions(diffs, game, setId);
     
     const scope = setId ? `set:${setId}` : 'all';
-    const mode = game === 'mtg' ? 'mtg' : (filterJapanese ? 'pokemon-jp' : 'pokemon-all');
+    const mode = game;
     
     // Prepare response
     const response = {

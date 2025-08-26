@@ -11,7 +11,17 @@ const supabaseClient = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 );
 
-const JUSTTCG_BASE = "https://api.justtcg.com/v1";
+const GAME_MAP = new Map<string, string>([
+  ['mtg', 'magic-the-gathering'],
+  ['magic-the-gathering', 'magic-the-gathering'],
+  ['pokemon', 'pokemon'],
+  ['pokemon-japan', 'pokemon-japan'],
+]);
+
+function normalizeGame(game: string): string {
+  const key = game.trim().toLowerCase();
+  return GAME_MAP.get(key) ?? key;
+}
 const FUNCTIONS_BASE = (Deno.env.get("SUPABASE_FUNCTIONS_URL") ||
   Deno.env.get("SUPABASE_URL")!.replace(".supabase.co", ".functions.supabase.co")).replace(/\/+$/, "");
 
@@ -236,12 +246,11 @@ async function queueSelfForSet(game: string, setId: string) {
 }
 
 // Game-specific sync logic
-async function syncSet(game: string, setId: string, filterJapanese = false) {
+async function syncSet(game: string, setId: string) {
   const tracker = new PerformanceTracker({
     operation: 'sync_set',
     game,
-    setId,
-    filterJapanese
+    setId
   });
 
   try {
@@ -251,12 +260,11 @@ async function syncSet(game: string, setId: string, filterJapanese = false) {
     logStructured('INFO', 'Starting set sync', {
       operation: 'sync_set',
       game,
-      setId,
-      filterJapanese
+      setId
     });
     
     // Normalize game parameter for JustTCG API
-    const apiGame = game === 'mtg' ? 'magic-the-gathering' : game;
+    const apiGame = normalizeGame(game);
     
     let allCards: any[] = [];
     let limit = 100;
@@ -320,11 +328,10 @@ async function syncSet(game: string, setId: string, filterJapanese = false) {
     // Extract set info from first card and upsert
     const firstCard = allCards[0];
     if (firstCard?.set) {
-      const gameSlug = game === 'mtg' ? 'mtg' : game === 'pokemon' ? 'pokemon' : game;
       await upsertSets([{
         provider: 'justtcg',
         set_id: setId,
-        game: gameSlug,
+        game: game,
         name: firstCard.set.name ?? null,
         series: firstCard.set.series ?? null,
         printed_total: firstCard.set.printedTotal ?? null,
@@ -340,28 +347,17 @@ async function syncSet(game: string, setId: string, filterJapanese = false) {
     const variantRows: any[] = [];
     let totalVariants = 0;
     let skippedCards = 0;
+    let nonJapaneseVariants = 0;
     
     for (const card of allCards) {
-      // Filter variants for Japanese-only Pokémon if requested
-      let variants = card.variants || [];
-      if (filterJapanese && game === 'pokemon') {
-        variants = variants.filter((variant: any) => variant.language === 'Japanese');
-        // Skip card if no Japanese variants remain
-        if (variants.length === 0) {
-          skippedCards++;
-          continue;
-        }
-      }
-      
+      const variants = card.variants || [];
       totalVariants += variants.length;
-      
-      const gameSlug = game === 'mtg' ? 'mtg' : game === 'pokemon' ? 'pokemon' : game;
       
       // Add card to batch
       cardRows.push({
         provider: 'justtcg',
         card_id: card.id || `${setId}-${card.number}`,
-        game: gameSlug,
+        game: game,
         set_id: setId,
         name: card.name ?? null,
         number: card.number ?? null,
@@ -374,13 +370,26 @@ async function syncSet(game: string, setId: string, filterJapanese = false) {
         data: card
       });
       
-      // Add variants to batch
+      // Add variants to batch with defensive check for pokemon-japan
       for (const variant of variants) {
+        // Defensive check: warn if pokemon-japan variant is not Japanese
+        if (game === 'pokemon-japan' && variant.language && variant.language !== 'Japanese') {
+          logStructured('WARN', 'Non-Japanese variant in pokemon-japan game', {
+            operation: 'sync_set',
+            game,
+            setId,
+            cardId: card.id,
+            variantLanguage: variant.language,
+            expectedLanguage: 'Japanese'
+          });
+          nonJapaneseVariants++;
+        }
+        
         variantRows.push({
           provider: 'justtcg',
           variant_id: variant.id ?? null,
           card_id: card.id || `${setId}-${card.number}`,
-          game: gameSlug,
+          game: game,
           language: variant.language ?? null,
           printing: variant.printing ?? null,
           condition: variant.condition ?? null,
@@ -402,6 +411,8 @@ async function syncSet(game: string, setId: string, filterJapanese = false) {
       await upsertVariants(variantRows);
     }
     
+    const warnings = nonJapaneseVariants > 0 ? [`${nonJapaneseVariants} non-Japanese variants found in pokemon-japan data`] : [];
+    
     tracker.log('Set sync completed successfully', {
       status: 'success',
       pageCount,
@@ -409,7 +420,9 @@ async function syncSet(game: string, setId: string, filterJapanese = false) {
       cardsUpserted: cardRows.length,
       variantsUpserted: variantRows.length,
       totalVariants,
-      skippedCards
+      skippedCards,
+      nonJapaneseVariants,
+      warnings
     });
     
     return { 
@@ -417,7 +430,8 @@ async function syncSet(game: string, setId: string, filterJapanese = false) {
       cardsProcessed: cardRows.length,
       variantsProcessed: variantRows.length,
       skipped: { sets: 0, cards: skippedCards },
-      errors: []
+      errors: [],
+      warnings
     };
     
   } catch (error: any) {
@@ -453,9 +467,9 @@ serve(async (req) => {
     if (url.pathname.endsWith('/drain')) {
       const mode = (url.searchParams.get("mode") || "").trim().toLowerCase();
       
-      if (!mode || !["mtg", "pokemon-all", "pokemon-jp"].includes(mode)) {
+      if (!mode || !["mtg", "pokemon", "pokemon-japan"].includes(mode)) {
         return new Response(
-          JSON.stringify({ ok: false, error: 'Missing or invalid mode parameter. Must be: mtg, pokemon-all, or pokemon-jp' }), 
+          JSON.stringify({ ok: false, error: 'Missing or invalid mode parameter. Must be: mtg, pokemon, or pokemon-japan' }), 
           { 
             status: 400, 
             headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
@@ -507,10 +521,9 @@ serve(async (req) => {
           status: 'processing'
         });
 
-        // Process the single set with correct flags based on mode
+        // Process the single set
         try {
-          const filterJapanese = mode === 'pokemon-jp';
-          const result = await syncSet(queueItem.game, queueItem.set_id, filterJapanese);
+          const result = await syncSet(queueItem.game, queueItem.set_id);
           
           // Mark as done
           const { error: markDoneError } = await supabaseClient.rpc('catalog_v2_mark_queue_item_done', { 
@@ -617,23 +630,21 @@ serve(async (req) => {
     const game = (url.searchParams.get("game") || inputParams.game || "").toString().trim().toLowerCase();
     const setId = (url.searchParams.get("setId") || inputParams.setId || "").toString().trim();
     const since = (url.searchParams.get("since") || inputParams.since || "").toString().trim();
-    const filterJapanese = (url.searchParams.get("filterJapanese") === "true") || Boolean(inputParams.filterJapanese);
 
     const requestTracker = new PerformanceTracker({
       operation: 'catalog_sync_request',
       game,
       setId: setId || 'orchestration',
-      since,
-      filterJapanese
+      since
     });
 
     // Validate game parameter
-    if (!["mtg", "pokemon"].includes(game)) {
+    if (!["mtg", "pokemon", "pokemon-japan"].includes(game)) {
       requestTracker.error('Invalid game parameter', new Error(`Invalid game: ${game}`), {
         status: 'validation_error'
       });
       return new Response(
-        JSON.stringify({ error: "Invalid game. Must be 'mtg' or 'pokemon'" }), 
+        JSON.stringify({ error: "Invalid game. Must be 'mtg', 'pokemon', or 'pokemon-japan'" }), 
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -654,13 +665,13 @@ serve(async (req) => {
     
     const headers = { "X-API-Key": apiKey };
     
-    // Determine mode for response
-    const mode = game === 'mtg' ? 'mtg' : (filterJapanese ? 'pokemon-jp' : 'pokemon-all');
+    // Determine mode for response (legacy support)
+    const mode = game;
     
     // If setId is provided, sync just that set
     if (setId) {
       try {
-        const result = await syncSet(game, setId, filterJapanese);
+        const result = await syncSet(game, setId);
         requestTracker.log('Single set sync completed', {
           status: 'success',
           mode: 'single_set',
@@ -669,8 +680,7 @@ serve(async (req) => {
         return new Response(
           JSON.stringify({ 
             mode,
-            game, 
-            filterJapanese, 
+            game,
             ...result
           }), 
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -680,8 +690,7 @@ serve(async (req) => {
         return new Response(
           JSON.stringify({ 
             mode,
-            game, 
-            filterJapanese,
+            game,
             setsProcessed: 0,
             cardsProcessed: 0,
             variantsProcessed: 0,
@@ -694,14 +703,13 @@ serve(async (req) => {
     }
 
     // Otherwise, orchestrate: fetch all sets and queue them
-    const apiGame = game === 'mtg' ? 'magic-the-gathering' : game;
+    const apiGame = normalizeGame(game);
     
     logStructured('INFO', 'Starting orchestration sync', {
       operation: 'orchestration_start',
       game,
       apiGame,
-      since,
-      filterJapanese
+      since
     });
     
     // Fetch sets with pagination
@@ -756,11 +764,10 @@ serve(async (req) => {
     });
     
     // Upsert all sets to database
-    const gameSlug = game === 'mtg' ? 'mtg' : game === 'pokemon' ? 'pokemon' : game;
     const setRows = filteredSets.map((s: any) => ({
       provider: 'justtcg',
       set_id: s.code || s.id,
-      game: gameSlug,
+      game: game,
       name: s.name ?? null,
       series: s.series ?? null,
       printed_total: s.printedTotal ?? null,
@@ -775,9 +782,9 @@ serve(async (req) => {
     // Queue individual set syncs using mode-based queuing
     const { data: queuedCount, error: queueError } = await supabaseClient
       .rpc('catalog_v2_queue_pending_sets_by_mode', { 
-        mode_in: mode, 
+        mode_in: game, 
         game_in: game, 
-        filter_japanese: filterJapanese 
+        filter_japanese: false
       });
 
     if (queueError) {
@@ -796,7 +803,6 @@ serve(async (req) => {
       JSON.stringify({ 
         mode,
         game,
-        filterJapanese,
         setsProcessed: filteredSets.length,
         cardsProcessed: 0, // Orchestration only queues sets, doesn't process cards directly
         variantsProcessed: 0, // Orchestration only queues sets, doesn't process variants directly
