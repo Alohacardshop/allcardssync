@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Database, Search, RefreshCw, Copy, ExternalLink, ChevronLeft, ChevronRight } from 'lucide-react';
-import { toast } from 'sonner';
+import { useToast } from '@/hooks/use-toast';
 import {
   getCatalogSets,
   getCatalogCards,
@@ -31,6 +31,7 @@ interface DataTabProps {
 const ITEMS_PER_PAGE = 50;
 
 const DataTab: React.FC<DataTabProps> = ({ selectedMode }) => {
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState('sets');
   const [filters, setFilters] = useState<DataFilters>({
     search: '',
@@ -77,7 +78,11 @@ const DataTab: React.FC<DataTabProps> = ({ selectedMode }) => {
       }
     } catch (error: any) {
       console.error('Failed to load data:', error);
-      toast.error('Failed to load data', { description: error.message });
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
@@ -95,10 +100,17 @@ const DataTab: React.FC<DataTabProps> = ({ selectedMode }) => {
     setActionLoading(prev => new Set(prev).add(setId));
     try {
       await runSync(selectedMode, { setId });
-      toast.success(`Set ${setId} sync initiated`);
+      toast({
+        title: "Success",
+        description: `Set ${setId} sync initiated`,
+      });
       setTimeout(loadData, 1000);
     } catch (error: any) {
-      toast.error('Sync failed', { description: error.message });
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
     } finally {
       setActionLoading(prev => {
         const newSet = new Set(prev);
@@ -112,9 +124,16 @@ const DataTab: React.FC<DataTabProps> = ({ selectedMode }) => {
     setActionLoading(prev => new Set(prev).add(`audit-${setId}`));
     try {
       await runAudit(selectedMode, { setId });
-      toast.success(`Set ${setId} audit completed`);
+      toast({
+        title: "Success",
+        description: `Set ${setId} audit completed`,
+      });
     } catch (error: any) {
-      toast.error('Audit failed', { description: error.message });
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
     } finally {
       setActionLoading(prev => {
         const newSet = new Set(prev);
@@ -126,7 +145,10 @@ const DataTab: React.FC<DataTabProps> = ({ selectedMode }) => {
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
-    toast.success('Copied to clipboard');
+    toast({
+      title: "Success",
+      description: "Copied to clipboard",
+    });
   };
 
   const currentData = activeTab === 'sets' ? setsData : 

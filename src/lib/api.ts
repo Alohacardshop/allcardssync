@@ -298,7 +298,7 @@ export async function getCatalogSets(mode: GameMode, filters: DataFilters = {}):
   
   if (error) throw error;
   
-  const result = Array.isArray(data) ? data[0] : data;
+  const result = data as unknown as { sets: CatalogSet[]; total_count: number };
   return {
     data: result?.sets || [],
     total: result?.total_count || 0,
@@ -324,7 +324,7 @@ export async function getCatalogCards(mode: GameMode, filters: DataFilters = {})
   
   if (error) throw error;
   
-  const result = Array.isArray(data) ? data[0] : data;
+  const result = data as unknown as { cards: CatalogCard[]; total_count: number };
   return {
     data: result?.cards || [],
     total: result?.total_count || 0,
@@ -354,7 +354,7 @@ export async function getCatalogVariants(mode: GameMode, filters: DataFilters = 
   
   if (error) throw error;
   
-  const result = Array.isArray(data) ? data[0] : data;
+  const result = data as unknown as { variants: CatalogVariant[]; total_count: number };
   return {
     data: result?.variants || [],
     total: result?.total_count || 0,

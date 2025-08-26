@@ -619,6 +619,50 @@ export type Database = {
       }
     }
     Functions: {
+      catalog_v2_browse_cards: {
+        Args: {
+          filter_japanese?: boolean
+          game_in: string
+          limit_in?: number
+          page_in?: number
+          rarity_in?: string
+          search_in?: string
+          set_id_in?: string
+          sort_by?: string
+          sort_order?: string
+        }
+        Returns: Json
+      }
+      catalog_v2_browse_sets: {
+        Args: {
+          filter_japanese?: boolean
+          game_in: string
+          limit_in?: number
+          page_in?: number
+          search_in?: string
+          sort_by?: string
+          sort_order?: string
+        }
+        Returns: Json
+      }
+      catalog_v2_browse_variants: {
+        Args: {
+          condition_in?: string
+          filter_japanese?: boolean
+          game_in: string
+          language_in?: string
+          limit_in?: number
+          page_in?: number
+          price_max?: number
+          price_min?: number
+          printing_in?: string
+          search_in?: string
+          set_id_in?: string
+          sort_by?: string
+          sort_order?: string
+        }
+        Returns: Json
+      }
       catalog_v2_clear_sync_errors: {
         Args: { before_in?: string; game_in: string }
         Returns: number
