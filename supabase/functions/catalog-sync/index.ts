@@ -93,6 +93,15 @@ async function upsertCards(rows: any[]) {
   }
 }
 
+async function upsertVariants(rows: any[]) {
+  if (!rows.length) return;
+  const chunk = 400;
+  for (let i = 0; i < rows.length; i += chunk) {
+    const { error } = await supabaseClient.rpc("catalog_v2_upsert_variants", { rows: rows.slice(i, i + chunk) as any });
+    if (error) throw error;
+  }
+}
+
 async function queueSelfForSet(game: string, setId: string) {
   const { error } = await supabaseClient.rpc("http_post_async", {
     url: `${FUNCTIONS_BASE}/catalog-sync?game=${encodeURIComponent(game)}&setId=${encodeURIComponent(setId)}`,
@@ -146,7 +155,8 @@ async function syncSet(game: string, setId: string, filterJapanese = false) {
   if (firstCard?.set) {
     const gameSlug = game === 'mtg' ? 'mtg' : game === 'pokemon' ? 'pokemon' : game;
     await upsertSets([{
-      id: setId,
+      provider: 'justtcg',
+      set_id: setId,
       game: gameSlug,
       name: firstCard.set.name ?? null,
       series: firstCard.set.series ?? null,
@@ -154,12 +164,13 @@ async function syncSet(game: string, setId: string, filterJapanese = false) {
       total: firstCard.set.total ?? null,
       release_date: firstCard.set.releaseDate ?? null,
       images: firstCard.set.images ?? null,
-      updated_at: new Date().toISOString()
+      data: firstCard.set
     }]);
   }
 
   // Process cards and their variants
   const cardRows: any[] = [];
+  const variantRows: any[] = [];
   let totalVariants = 0;
   
   for (const card of allCards) {
@@ -172,24 +183,51 @@ async function syncSet(game: string, setId: string, filterJapanese = false) {
     totalVariants += variants.length;
     
     const gameSlug = game === 'mtg' ? 'mtg' : game === 'pokemon' ? 'pokemon' : game;
+    
+    // Add card to batch
     cardRows.push({
-      id: card.id || `${setId}-${card.number}`,
+      provider: 'justtcg',
+      card_id: card.id || `${setId}-${card.number}`,
       game: gameSlug,
+      set_id: setId,
       name: card.name ?? null,
       number: card.number ?? null,
-      set_id: setId,
       rarity: card.rarity ?? null,
       supertype: card.supertype ?? null,
       subtypes: card.subtypes ?? null,
       images: card.images ?? null,
       tcgplayer_product_id: card.tcgplayerId ?? null,
       tcgplayer_url: card.tcgplayerUrl ?? null,
-      data: { ...card, variants }, // Store filtered variants in data
-      updated_at: new Date().toISOString(),
+      data: card
     });
+    
+    // Add variants to batch
+    for (const variant of variants) {
+      variantRows.push({
+        provider: 'justtcg',
+        variant_id: variant.id ?? null,
+        card_id: card.id || `${setId}-${card.number}`,
+        game: gameSlug,
+        language: variant.language ?? null,
+        printing: variant.printing ?? null,
+        condition: variant.condition ?? null,
+        sku: variant.sku ?? null,
+        price: variant.price ?? null,
+        market_price: variant.marketPrice ?? null,
+        low_price: variant.lowPrice ?? null,
+        mid_price: variant.midPrice ?? null,
+        high_price: variant.highPrice ?? null,
+        currency: variant.currency ?? 'USD',
+        data: variant
+      });
+    }
   }
   
+  // Upsert in order: sets -> cards -> variants (due to foreign keys)
   await upsertCards(cardRows);
+  if (variantRows.length > 0) {
+    await upsertVariants(variantRows);
+  }
   
   console.log(`Synced ${cardRows.length} cards with ${totalVariants} variants for set ${setId}`);
   
@@ -197,7 +235,8 @@ async function syncSet(game: string, setId: string, filterJapanese = false) {
     setId, 
     cards: cardRows.length, 
     sets: firstCard?.set ? 1 : 0, 
-    variants: totalVariants 
+    variants: totalVariants,
+    variantsStored: variantRows.length
   };
 }
 
@@ -273,7 +312,8 @@ serve(async (req) => {
     // Upsert all sets to database
     const gameSlug = game === 'mtg' ? 'mtg' : game === 'pokemon' ? 'pokemon' : game;
     const setRows = filteredSets.map((s: any) => ({
-      id: s.code || s.id,
+      provider: 'justtcg',
+      set_id: s.code || s.id,
       game: gameSlug,
       name: s.name ?? null,
       series: s.series ?? null,
@@ -281,7 +321,7 @@ serve(async (req) => {
       total: s.total ?? null,
       release_date: s.releaseDate ?? null,
       images: s.images ?? null,
-      updated_at: new Date().toISOString(),
+      data: s
     }));
     
     await upsertSets(setRows);

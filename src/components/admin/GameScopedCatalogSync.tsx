@@ -51,6 +51,7 @@ interface CatalogStats {
 
 interface SyncError {
   set_id: string;
+  card_id: string;
   step: string;
   message: string;
   created_at: string;
@@ -382,7 +383,11 @@ export default function GameScopedCatalogSync() {
                       <AlertDescription>
                         <div className="flex items-center justify-between">
                           <div>
-                            <strong>Set {error.set_id}:</strong> {error.message}
+                            <strong>
+                              {error.set_id && `Set ${error.set_id}`}
+                              {error.card_id && error.set_id && ' / '}
+                              {error.card_id && `Card ${error.card_id}`}:
+                            </strong> {error.message}
                             <div className="text-xs text-muted-foreground mt-1">
                               {new Date(error.created_at).toLocaleString()}
                             </div>

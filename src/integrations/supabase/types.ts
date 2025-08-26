@@ -595,6 +595,24 @@ export type Database = {
         Args: { game_in: string; id_in: string }
         Returns: string
       }
+      catalog_v2_get_recent_sync_errors: {
+        Args: { game_in?: string; limit_in?: number }
+        Returns: {
+          card_id: string
+          created_at: string
+          message: string
+          set_id: string
+          step: string
+        }[]
+      }
+      catalog_v2_get_stale_sets: {
+        Args: { game_in: string; since_timestamp: string }
+        Returns: {
+          last_seen_at: string
+          name: string
+          set_id: string
+        }[]
+      }
       catalog_v2_log_error: {
         Args: { payload: Json }
         Returns: undefined
@@ -627,6 +645,10 @@ export type Database = {
         Returns: undefined
       }
       catalog_v2_upsert_sets: {
+        Args: { rows: Json }
+        Returns: undefined
+      }
+      catalog_v2_upsert_variants: {
         Args: { rows: Json }
         Returns: undefined
       }
