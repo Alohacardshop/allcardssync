@@ -678,7 +678,7 @@ export type Database = {
       }
       http_post_async: {
         Args: { body: Json; headers: Json; url: string }
-        Returns: string
+        Returns: number
       }
       set_limit: {
         Args: { "": number }
