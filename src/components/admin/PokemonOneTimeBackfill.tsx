@@ -9,9 +9,12 @@ import { Loader2, CheckCircle, AlertCircle, Database, Calendar } from "lucide-re
 
 const SETTING_KEY = "POKEMON_V2_BACKFILL_DONE";
 
+const FUNCTIONS_BASE = `https://dmpoandoydaqxhzdjnmk.supabase.co/functions/v1`;
+
 export default function PokemonOneTimeBackfill() {
   const [done, setDone] = useState<boolean>(false);
   const [loading, setLoading] = useState(false);
+  const [queueing, setQueueing] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [progress, setProgress] = useState<{
     sets: number;
@@ -128,6 +131,23 @@ export default function PokemonOneTimeBackfill() {
     return date.toISOString().split('T')[0];
   };
 
+  const queueAllPending = async () => {
+    setQueueing(true);
+    try {
+      const { data, error } = await supabase.rpc("catalog_v2_queue_pending_sets", {
+        game_in: "pokemon",
+        functions_base: FUNCTIONS_BASE,
+      });
+      if (error) throw error;
+      toast.success(`Queued ${data ?? 0} sets`);
+      await loadCatalogStats(); // refresh stats after queuing
+    } catch (e: any) {
+      toast.error(e.message || "Failed to queue");
+    } finally {
+      setQueueing(false);
+    }
+  };
+
   const pollProgress = async (totalSets: number) => {
     // Simplified progress polling without DB queries
     const interval = setInterval(() => {
@@ -210,7 +230,7 @@ export default function PokemonOneTimeBackfill() {
           <div className="flex flex-wrap gap-2">
             <Button 
               onClick={() => runBackfill(false)} 
-              disabled={loading || done}
+              disabled={loading || done || queueing}
               className="flex items-center gap-2"
             >
               {loading ? (
@@ -223,11 +243,27 @@ export default function PokemonOneTimeBackfill() {
               {done ? "Already Backfilled" : (loading ? "Backfilling…" : "Run Full Backfill")}
             </Button>
 
+            {progress.totalSets > 0 && (
+              <Button 
+                variant="secondary" 
+                onClick={queueAllPending} 
+                disabled={queueing || loading}
+                className="flex items-center gap-2"
+              >
+                {queueing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Database className="h-4 w-4" />
+                )}
+                {queueing ? "Queuing…" : `Queue All Pending Sets (${progress.totalSets})`}
+              </Button>
+            )}
+
             {showIncremental && !done && (
               <Button 
                 variant="outline"
                 onClick={() => runBackfill(true)} 
-                disabled={loading}
+                disabled={loading || queueing}
                 className="flex items-center gap-2"
               >
                 <Calendar className="h-4 w-4" />
