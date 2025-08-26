@@ -436,6 +436,151 @@ serve(async (req) => {
       });
     }
 
+    // Queue drain endpoint
+    if (url.pathname.endsWith('/drain')) {
+      const game = (url.searchParams.get("game") || "").trim().toLowerCase();
+      
+      if (!game) {
+        return new Response(
+          JSON.stringify({ ok: false, error: 'Missing game parameter' }), 
+          { 
+            status: 400, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          }
+        );
+      }
+
+      const drainTracker = new PerformanceTracker({
+        operation: 'queue_drain',
+        game
+      });
+
+      try {
+        // Get next item from queue
+        const { data: queueItem, error: queueError } = await supabaseClient
+          .rpc('catalog_v2_get_next_queue_item', { game_in: game })
+          .maybeSingle();
+
+        if (queueError) {
+          drainTracker.error('Queue query failed', queueError, {
+            status: 'queue_error'
+          });
+          throw queueError;
+        }
+
+        if (!queueItem) {
+          drainTracker.log('No queue items available', {
+            status: 'idle'
+          });
+          return new Response(
+            JSON.stringify({ 
+              ok: true, 
+              message: 'No items in queue',
+              game,
+              status: 'idle'
+            }), 
+            { 
+              status: 200, 
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+            }
+          );
+        }
+
+        drainTracker.log('Processing queue item', { 
+          setId: queueItem.set_id, 
+          queueItemId: queueItem.id,
+          status: 'processing'
+        });
+
+        // Process the single set
+        try {
+          const filterJapanese = url.searchParams.get("filterJapanese") === "true";
+          const result = await syncSet(game, queueItem.set_id, filterJapanese);
+          
+          // Mark as done
+          const { error: markDoneError } = await supabaseClient.rpc('catalog_v2_mark_queue_item_done', { 
+            item_id: queueItem.id 
+          });
+
+          if (markDoneError) {
+            drainTracker.error('Failed to mark queue item as done', markDoneError);
+            throw markDoneError;
+          }
+
+          drainTracker.log('Queue item completed successfully', { 
+            setId: queueItem.set_id, 
+            status: 'done',
+            counts: result
+          });
+
+          return new Response(
+            JSON.stringify({ 
+              ok: true, 
+              queueItemId: queueItem.id,
+              game,
+              setId: queueItem.set_id,
+              status: 'done',
+              counts: result
+            }), 
+            { 
+              status: 200, 
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+            }
+          );
+
+        } catch (syncError: any) {
+          // Mark as error with retry logic
+          const { error: markErrorError } = await supabaseClient.rpc('catalog_v2_mark_queue_item_error', { 
+            item_id: queueItem.id, 
+            error_message: syncError.message 
+          });
+
+          if (markErrorError) {
+            drainTracker.error('Failed to mark queue item as error', markErrorError);
+          }
+
+          drainTracker.error('Queue item sync failed', syncError, { 
+            setId: queueItem.set_id, 
+            status: 'error',
+            upstreamError: syncError.message
+          });
+
+          return new Response(
+            JSON.stringify({ 
+              ok: false, 
+              queueItemId: queueItem.id,
+              game,
+              setId: queueItem.set_id,
+              error: syncError.message,
+              status: 'error'
+            }), 
+            { 
+              status: 500, 
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+            }
+          );
+        }
+
+      } catch (error: any) {
+        drainTracker.error('Queue drain operation failed', error, {
+          status: 'error'
+        });
+
+        return new Response(
+          JSON.stringify({ 
+            ok: false, 
+            error: error.message,
+            game,
+            status: 'error'
+          }), 
+          { 
+            status: 500, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          }
+        );
+      }
+    }
+
     const game = (url.searchParams.get("game") || "").trim().toLowerCase();
     const setId = (url.searchParams.get("setId") || "").trim();
     const since = (url.searchParams.get("since") || "").trim();

@@ -49,6 +49,13 @@ interface CatalogStats {
   pending_sets: number;
 }
 
+interface QueueStats {
+  queued: number;
+  processing: number;
+  done: number;
+  error: number;
+}
+
 interface SyncError {
   set_id: string;
   card_id: string;
@@ -66,6 +73,7 @@ export default function GameScopedCatalogSync() {
   const [queueing, setQueueing] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [stats, setStats] = useState<CatalogStats | null>(null);
+  const [queueStats, setQueueStats] = useState<QueueStats | null>(null);
   const [errors, setErrors] = useState<SyncError[]>([]);
   const [isActiveSync, setIsActiveSync] = useState(false);
 
@@ -74,6 +82,7 @@ export default function GameScopedCatalogSync() {
   useEffect(() => {
     if (selectedGame) {
       loadStats();
+      loadQueueStats();
       loadRecentErrors();
     }
   }, [selectedGame]);
@@ -82,7 +91,10 @@ export default function GameScopedCatalogSync() {
     let interval: NodeJS.Timeout;
     if (isActiveSync && selectedGame) {
       // Auto-refresh stats during active sync
-      interval = setInterval(loadStats, 5000);
+      interval = setInterval(() => {
+        loadStats();
+        loadQueueStats();
+      }, 5000);
     }
     return () => {
       if (interval) clearInterval(interval);
@@ -107,7 +119,7 @@ export default function GameScopedCatalogSync() {
       };
       
       setStats(newStats);
-      setIsActiveSync(newStats.pending_sets > 0);
+      setIsActiveSync(newStats.pending_sets > 0 || (queueStats && queueStats.processing > 0));
       
     } catch (error: any) {
       console.error('Error loading catalog stats:', error);
@@ -116,6 +128,31 @@ export default function GameScopedCatalogSync() {
         description: `Failed to load stats: ${error.message}`,
         variant: "destructive",
       });
+    }
+  };
+
+  const loadQueueStats = async () => {
+    if (!selectedGameOption) return;
+
+    try {
+      const { data, error } = await supabase.rpc('catalog_v2_queue_stats', { 
+        game_in: selectedGameOption.gameParam 
+      });
+      
+      if (error) throw error;
+      
+      const row = Array.isArray(data) ? data[0] : data;
+      const newQueueStats = {
+        queued: Number(row?.queued ?? 0),
+        processing: Number(row?.processing ?? 0),
+        done: Number(row?.done ?? 0),
+        error: Number(row?.error ?? 0),
+      };
+      
+      setQueueStats(newQueueStats);
+      
+    } catch (error: any) {
+      console.error('Error loading queue stats:', error);
     }
   };
 
@@ -225,10 +262,8 @@ export default function GameScopedCatalogSync() {
 
     setQueueing(true);
     try {
-      const { data, error } = await supabase.rpc('catalog_v2_queue_pending_sets_generic', {
-        game_in: selectedGameOption.gameParam,
-        functions_base: FUNCTIONS_BASE,
-        function_path: `/catalog-sync?game=${selectedGameOption.gameParam}${selectedGameOption.filterJapanese ? '&filterJapanese=true' : ''}`
+      const { data, error } = await supabase.rpc('catalog_v2_queue_pending_sets_to_queue', {
+        game_in: selectedGameOption.gameParam
       });
       
       if (error) throw error;
@@ -239,6 +274,7 @@ export default function GameScopedCatalogSync() {
       });
       
       await loadStats();
+      await loadQueueStats();
       setIsActiveSync(true);
     } catch (error: any) {
       toast({
@@ -248,6 +284,53 @@ export default function GameScopedCatalogSync() {
       });
     } finally {
       setQueueing(false);
+    }
+  };
+
+  const drainQueue = async () => {
+    if (!selectedGameOption) return;
+
+    setLoading(true);
+    try {
+      const url = new URL(`${FUNCTIONS_BASE}/catalog-sync/drain`);
+      url.searchParams.set('game', selectedGameOption.gameParam);
+      
+      if (selectedGameOption.filterJapanese) {
+        url.searchParams.set('filterJapanese', 'true');
+      }
+
+      const response = await fetch(url.toString(), { method: 'POST' });
+      const data = await response.json();
+      
+      if (response.ok) {
+        if (data.status === 'idle') {
+          toast({
+            title: "Queue Empty",
+            description: "No items in queue to process",
+          });
+        } else {
+          toast({
+            title: "Success",
+            description: `Processed set ${data.setId} in ${data.durationMs}ms`,
+          });
+        }
+        await loadStats();
+        await loadQueueStats();
+      } else {
+        toast({
+          title: "Drain Failed",
+          description: data.error || 'Unknown error occurred',
+          variant: "destructive",
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -320,6 +403,28 @@ export default function GameScopedCatalogSync() {
               </div>
             </div>
 
+            {/* Queue Status */}
+            {queueStats && (
+              <div className="grid grid-cols-4 gap-2">
+                <div className="text-center p-2 bg-muted/30 rounded">
+                  <div className="text-lg font-semibold text-blue-600">{queueStats.queued}</div>
+                  <div className="text-xs text-muted-foreground">Queued</div>
+                </div>
+                <div className="text-center p-2 bg-muted/30 rounded">
+                  <div className="text-lg font-semibold text-yellow-600">{queueStats.processing}</div>
+                  <div className="text-xs text-muted-foreground">Processing</div>
+                </div>
+                <div className="text-center p-2 bg-muted/30 rounded">
+                  <div className="text-lg font-semibold text-green-600">{queueStats.done}</div>
+                  <div className="text-xs text-muted-foreground">Done</div>
+                </div>
+                <div className="text-center p-2 bg-muted/30 rounded">
+                  <div className="text-lg font-semibold text-red-600">{queueStats.error}</div>
+                  <div className="text-xs text-muted-foreground">Error</div>
+                </div>
+              </div>
+            )}
+
             {/* Manual Sync Controls */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
               <div>
@@ -374,6 +479,20 @@ export default function GameScopedCatalogSync() {
                   <Database className="h-4 w-4" />
                 )}
                 Queue Pending Sets ({stats.pending_sets})
+              </Button>
+
+              <Button
+                variant="outline"
+                onClick={drainQueue}
+                disabled={isDisabled || !queueStats || queueStats.queued === 0}
+                className="flex items-center gap-2"
+              >
+                {loading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Activity className="h-4 w-4" />
+                )}
+                Drain Queue ({queueStats?.queued || 0})
               </Button>
 
               <Button
@@ -446,7 +565,10 @@ export default function GameScopedCatalogSync() {
                 <strong>Sync Now:</strong> Sync specific set ID or date range. Leave empty for full sync.
               </p>
               <p>
-                <strong>Queue Pending:</strong> Process sets that haven't been synced yet.
+                <strong>Queue Pending:</strong> Add pending sets to the sync queue for batch processing.
+              </p>
+              <p>
+                <strong>Drain Queue:</strong> Process the next item in the queue. Safe to resume after interruption.
               </p>
               <p>
                 <strong>Incremental:</strong> Sync only sets released in the last 6 months.

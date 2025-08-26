@@ -405,6 +405,39 @@ export type Database = {
         }
         Relationships: []
       }
+      sync_queue: {
+        Row: {
+          created_at: string
+          game: string
+          id: string
+          last_error: string | null
+          retries: number
+          set_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          game: string
+          id?: string
+          last_error?: string | null
+          retries?: number
+          set_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          game?: string
+          id?: string
+          last_error?: string | null
+          retries?: number
+          set_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       system_settings: {
         Row: {
           category: string | null
@@ -595,6 +628,14 @@ export type Database = {
         Args: { game_in: string; id_in: string }
         Returns: string
       }
+      catalog_v2_get_next_queue_item: {
+        Args: { game_in: string }
+        Returns: {
+          game: string
+          id: string
+          set_id: string
+        }[]
+      }
       catalog_v2_get_recent_sync_errors: {
         Args: { game_in?: string; limit_in?: number }
         Returns: {
@@ -617,6 +658,14 @@ export type Database = {
         Args: { payload: Json }
         Returns: undefined
       }
+      catalog_v2_mark_queue_item_done: {
+        Args: { item_id: string }
+        Returns: undefined
+      }
+      catalog_v2_mark_queue_item_error: {
+        Args: { error_message: string; item_id: string; max_retries?: number }
+        Returns: undefined
+      }
       catalog_v2_pending_sets: {
         Args: { game_in: string; limit_in?: number }
         Returns: {
@@ -631,6 +680,19 @@ export type Database = {
       catalog_v2_queue_pending_sets_generic: {
         Args: { function_path: string; functions_base: string; game_in: string }
         Returns: number
+      }
+      catalog_v2_queue_pending_sets_to_queue: {
+        Args: { game_in: string }
+        Returns: number
+      }
+      catalog_v2_queue_stats: {
+        Args: { game_in: string }
+        Returns: {
+          done: number
+          error: number
+          processing: number
+          queued: number
+        }[]
       }
       catalog_v2_stats: {
         Args: { game_in: string }
