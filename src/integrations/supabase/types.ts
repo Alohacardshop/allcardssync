@@ -411,6 +411,7 @@ export type Database = {
           game: string
           id: string
           last_error: string | null
+          mode: string
           retries: number
           set_id: string
           status: string
@@ -421,6 +422,7 @@ export type Database = {
           game: string
           id?: string
           last_error?: string | null
+          mode: string
           retries?: number
           set_id: string
           status?: string
@@ -431,6 +433,7 @@ export type Database = {
           game?: string
           id?: string
           last_error?: string | null
+          mode?: string
           retries?: number
           set_id?: string
           status?: string
@@ -636,6 +639,15 @@ export type Database = {
           set_id: string
         }[]
       }
+      catalog_v2_get_next_queue_item_by_mode: {
+        Args: { mode_in: string }
+        Returns: {
+          game: string
+          id: string
+          mode: string
+          set_id: string
+        }[]
+      }
       catalog_v2_get_recent_sync_errors: {
         Args: { game_in?: string; limit_in?: number }
         Returns: {
@@ -677,6 +689,10 @@ export type Database = {
         Args: { functions_base: string; game_in: string }
         Returns: number
       }
+      catalog_v2_queue_pending_sets_by_mode: {
+        Args: { filter_japanese?: boolean; game_in: string; mode_in: string }
+        Returns: number
+      }
       catalog_v2_queue_pending_sets_generic: {
         Args: { function_path: string; functions_base: string; game_in: string }
         Returns: number
@@ -687,6 +703,15 @@ export type Database = {
       }
       catalog_v2_queue_stats: {
         Args: { game_in: string }
+        Returns: {
+          done: number
+          error: number
+          processing: number
+          queued: number
+        }[]
+      }
+      catalog_v2_queue_stats_by_mode: {
+        Args: { mode_in: string }
         Returns: {
           done: number
           error: number

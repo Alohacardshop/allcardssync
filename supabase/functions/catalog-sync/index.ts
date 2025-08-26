@@ -451,11 +451,11 @@ serve(async (req) => {
 
     // Queue drain endpoint
     if (url.pathname.endsWith('/drain')) {
-      const game = (url.searchParams.get("game") || "").trim().toLowerCase();
+      const mode = (url.searchParams.get("mode") || "").trim().toLowerCase();
       
-      if (!game) {
+      if (!mode || !["mtg", "pokemon-all", "pokemon-jp"].includes(mode)) {
         return new Response(
-          JSON.stringify({ ok: false, error: 'Missing game parameter' }), 
+          JSON.stringify({ ok: false, error: 'Missing or invalid mode parameter. Must be: mtg, pokemon-all, or pokemon-jp' }), 
           { 
             status: 400, 
             headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
@@ -465,13 +465,13 @@ serve(async (req) => {
 
       const drainTracker = new PerformanceTracker({
         operation: 'queue_drain',
-        game
+        mode
       });
 
       try {
-        // Get next item from queue
+        // Get next item from queue by mode
         const { data: queueItem, error: queueError } = await supabaseClient
-          .rpc('catalog_v2_get_next_queue_item', { game_in: game })
+          .rpc('catalog_v2_get_next_queue_item_by_mode', { mode_in: mode })
           .maybeSingle();
 
         if (queueError) {
@@ -489,7 +489,7 @@ serve(async (req) => {
             JSON.stringify({ 
               ok: true, 
               message: 'No items in queue',
-              game,
+              mode,
               status: 'idle'
             }), 
             { 
@@ -502,13 +502,15 @@ serve(async (req) => {
         drainTracker.log('Processing queue item', { 
           setId: queueItem.set_id, 
           queueItemId: queueItem.id,
+          mode: queueItem.mode,
+          game: queueItem.game,
           status: 'processing'
         });
 
-        // Process the single set
+        // Process the single set with correct flags based on mode
         try {
-          const filterJapanese = url.searchParams.get("filterJapanese") === "true";
-          const result = await syncSet(game, queueItem.set_id, filterJapanese);
+          const filterJapanese = mode === 'pokemon-jp';
+          const result = await syncSet(queueItem.game, queueItem.set_id, filterJapanese);
           
           // Mark as done
           const { error: markDoneError } = await supabaseClient.rpc('catalog_v2_mark_queue_item_done', { 
@@ -522,6 +524,7 @@ serve(async (req) => {
 
           drainTracker.log('Queue item completed successfully', { 
             setId: queueItem.set_id, 
+            mode: queueItem.mode,
             status: 'done',
             counts: result
           });
@@ -530,7 +533,8 @@ serve(async (req) => {
             JSON.stringify({ 
               ok: true, 
               queueItemId: queueItem.id,
-              game,
+              mode: queueItem.mode,
+              game: queueItem.game,
               setId: queueItem.set_id,
               status: 'done',
               counts: result
@@ -554,6 +558,7 @@ serve(async (req) => {
 
           drainTracker.error('Queue item sync failed', syncError, { 
             setId: queueItem.set_id, 
+            mode: queueItem.mode,
             status: 'error',
             upstreamError: syncError.message
           });
@@ -562,7 +567,8 @@ serve(async (req) => {
             JSON.stringify({ 
               ok: false, 
               queueItemId: queueItem.id,
-              game,
+              mode: queueItem.mode,
+              game: queueItem.game,
               setId: queueItem.set_id,
               error: syncError.message,
               status: 'error'
@@ -583,7 +589,7 @@ serve(async (req) => {
           JSON.stringify({ 
             ok: false, 
             error: error.message,
-            game,
+            mode,
             status: 'error'
           }), 
           { 
@@ -766,10 +772,16 @@ serve(async (req) => {
     
     await upsertSets(setRows);
     
-    // Queue individual set syncs
-    for (const set of filteredSets) {
-      const setCode = set.code || set.id;
-      await queueSelfForSet(game + (filterJapanese ? '&filterJapanese=true' : ''), setCode);
+    // Queue individual set syncs using mode-based queuing
+    const { data: queuedCount, error: queueError } = await supabaseClient
+      .rpc('catalog_v2_queue_pending_sets_by_mode', { 
+        mode_in: mode, 
+        game_in: game, 
+        filter_japanese: filterJapanese 
+      });
+
+    if (queueError) {
+      throw queueError;
     }
 
     requestTracker.log('Orchestration sync completed', {
