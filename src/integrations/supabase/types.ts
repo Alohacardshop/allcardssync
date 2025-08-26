@@ -587,6 +587,10 @@ export type Database = {
         Args: { game_in: string; name_in: string }
         Returns: string
       }
+      catalog_v2_find_set_name_by_id: {
+        Args: { game_in: string; id_in: string }
+        Returns: string
+      }
       catalog_v2_get_recent_sync_errors: {
         Args: { game_in?: string; limit_in?: number }
         Returns: {

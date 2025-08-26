@@ -97,7 +97,15 @@ export default function CatalogProgressCard({ game, functionPath, title }: Catal
     try {
       // Build the URL with query parameters for the edge function
       const url = new URL(`${FUNCTIONS_BASE}${functionPath}`, window.location.origin);
-      if (params.setId) url.searchParams.set("setName", params.setId);
+      
+      // Use correct parameter name based on function path
+      if (params.setId) {
+        if (functionPath.includes('catalog-sync-justtcg')) {
+          url.searchParams.set("set", params.setId); // JustTCG functions expect 'set' parameter
+        } else {
+          url.searchParams.set("setId", params.setId); // Pokémon functions expect 'setId' parameter
+        }
+      }
       if (params.since) url.searchParams.set("since", params.since);
       
       const res = await fetch(url.toString(), { method: "POST" });
@@ -208,9 +216,11 @@ export default function CatalogProgressCard({ game, functionPath, title }: Catal
         {/* Manual Sync Controls */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
           <div>
-            <label className="text-sm">Set Name (optional)</label>
+            <label className="text-sm">
+              {functionPath.includes('catalog-sync-justtcg') ? 'Set Name (optional)' : 'Set ID (optional)'}
+            </label>
             <Input 
-              placeholder="e.g. Base Set" 
+              placeholder={functionPath.includes('catalog-sync-justtcg') ? "e.g. Unfinity" : "e.g. sv3pt5"} 
               value={setId} 
               onChange={(e) => setSetId(e.target.value)} 
               disabled={loading || queueing}
