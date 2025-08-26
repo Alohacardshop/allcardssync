@@ -583,6 +583,10 @@ export type Database = {
       }
     }
     Functions: {
+      catalog_v2_find_set_id_by_name: {
+        Args: { game_in: string; name_in: string }
+        Returns: string
+      }
       catalog_v2_get_recent_sync_errors: {
         Args: { game_in?: string; limit_in?: number }
         Returns: {

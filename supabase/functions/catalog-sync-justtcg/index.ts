@@ -142,14 +142,13 @@ async function queueChildJob(game: string, setName: string) {
 
 async function findSetByName(game: string, setName: string): Promise<string | null> {
   const { data, error } = await sb
-    .from('catalog_v2.sets')
-    .select('id')
-    .eq('game', game)
-    .eq('name', setName)
-    .maybeSingle();
+    .rpc('catalog_v2_find_set_id_by_name', {
+      game_in: game,
+      name_in: setName
+    });
   
   if (error) throw error;
-  return data?.id || null;
+  return data || null;
 }
 
 // --- Orchestrator mode: sync all sets ---
