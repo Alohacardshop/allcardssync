@@ -32,8 +32,8 @@ serve(async (req) => {
       });
     }
 
-    let q = sb.from("catalog_v2.cards")
-      .select("id,game,name,number,images,tcgplayer_product_id,set:catalog_v2.sets(name)")
+    let q = sb.schema("catalog_v2").from("cards")
+      .select("id,game,name,number,images,tcgplayer_product_id,set:sets(name)")
       .eq("game", game)
       .limit(limit);
 
