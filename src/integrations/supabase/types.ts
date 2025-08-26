@@ -607,6 +607,10 @@ export type Database = {
         Args: { functions_base: string; game_in: string }
         Returns: number
       }
+      catalog_v2_queue_pending_sets_generic: {
+        Args: { function_path: string; functions_base: string; game_in: string }
+        Returns: number
+      }
       catalog_v2_stats: {
         Args: { game_in: string }
         Returns: {
