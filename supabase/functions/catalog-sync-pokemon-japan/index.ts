@@ -8,7 +8,7 @@ const JHDRS: HeadersInit = { "X-API-Key": Deno.env.get("JUSTTCG_API_KEY")! };
 const FUNCTIONS_BASE = (Deno.env.get("SUPABASE_FUNCTIONS_URL") ||
   Deno.env.get("SUPABASE_URL")!.replace(".supabase.co", ".functions.supabase.co")).replace(/\/+$/,"");
 
-// --- helpers shared with pokemon function style ---
+// --- helpers shared with other sync functions ---
 async function backoffWait(ms:number){ return new Promise(r=>setTimeout(r,ms)); }
 
 async function fetchJsonWithRetry(url: string, headers: HeadersInit = {}, tries = 6, baseDelayMs = 500) {
@@ -34,7 +34,9 @@ async function upsertSets(rows:any[]){
   const { error } = await sb.rpc("catalog_v2_upsert_sets",{ rows: rows as any });
   if (error) throw error;
 }
+
 async function upsertCards(rows:any[]){
+  if (!rows.length) return;
   const chunk = 400;
   for (let i=0;i<rows.length;i+=chunk){
     const { error } = await sb.rpc("catalog_v2_upsert_cards",{ rows: rows.slice(i,i+chunk) as any });
@@ -42,19 +44,19 @@ async function upsertCards(rows:any[]){
   }
 }
 
-async function queueSelfForSet(code: string) {
+async function queueSelfForSet(setId: string) {
   const { error } = await sb.rpc("http_post_async", {
-    url: `${FUNCTIONS_BASE}/catalog-sync-mtg?setId=${encodeURIComponent(code)}`,
+    url: `${FUNCTIONS_BASE}/catalog-sync-pokemon-japan?setId=${encodeURIComponent(setId)}`,
     headers: { "Content-Type":"application/json" } as any,
     body: {} as any
   });
   if (error) throw error;
 }
 
-// --- JustTCG-specific ---
+// --- JustTCG-specific for Pokémon Japan ---
 async function syncSet(setId: string) {
   // 1) Fetch all cards for this set from JustTCG
-  const response = await fetchJsonWithRetry(`${JTCG}/cards?game=magic-the-gathering&set=${encodeURIComponent(setId)}&limit=1000`, JHDRS);
+  const response = await fetchJsonWithRetry(`${JTCG}/cards?game=pokemon&region=japan&set=${encodeURIComponent(setId)}&limit=1000`, JHDRS);
   const cards = response?.data || [];
   
   if (!cards.length) {
@@ -66,9 +68,9 @@ async function syncSet(setId: string) {
   if (firstCard?.set) {
     await upsertSets([{
       id: setId,
-      game: "mtg", 
+      game: "pokemon_japan",
       name: firstCard.set.name ?? null,
-      series: null,
+      series: firstCard.set.series ?? null,
       printed_total: null,
       total: null,
       release_date: firstCard.set.releaseDate ?? null,
@@ -80,13 +82,13 @@ async function syncSet(setId: string) {
   // 3) Process cards
   const rows = cards.map((c: any) => ({
     id: c.id || `${setId}-${c.number}`,
-    game: "mtg",
+    game: "pokemon_japan",
     name: c.name ?? null,
     number: c.number ?? null,
     set_id: setId,
     rarity: c.rarity ?? null,
-    supertype: c.type ?? null,
-    subtypes: null,
+    supertype: c.supertype ?? null,
+    subtypes: c.subtypes ?? null,
     images: c.images ?? null,
     tcgplayer_product_id: c.tcgplayerId ?? null,
     tcgplayer_url: null,
@@ -110,17 +112,17 @@ serve(async (req) => {
     }
 
     // orchestrate: fetch all sets from JustTCG
-    const setsResponse = await fetchJsonWithRetry(`${JTCG}/sets?game=magic-the-gathering`, JHDRS);
+    const setsResponse = await fetchJsonWithRetry(`${JTCG}/sets?game=pokemon&region=japan`, JHDRS);
     const all = setsResponse?.data ?? [];
     const filtered = all.filter((s:any)=> !since || (s.releaseDate && s.releaseDate >= since));
     await upsertSets(filtered.map((s:any)=>({
-      id: s.code || s.id, 
-      game: "mtg", 
-      name: s.name ?? null, 
-      series: null,
-      printed_total: null, 
+      id: s.code || s.id,
+      game: "pokemon_japan",
+      name: s.name ?? null,
+      series: s.series ?? null,
+      printed_total: null,
       total: null,
-      release_date: s.releaseDate ?? null, 
+      release_date: s.releaseDate ?? null,
       images: s.images ?? null,
       updated_at: new Date().toISOString(),
     })));
