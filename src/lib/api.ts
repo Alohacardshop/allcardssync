@@ -2,6 +2,28 @@ import { supabase } from '@/integrations/supabase/client';
 
 const FUNCTIONS_BASE = `https://dmpoandoydaqxhzdjnmk.supabase.co/functions/v1`;
 
+// Enhanced API call with better error handling
+async function apiCall<T>(fn: () => Promise<T>, operation: string): Promise<T> {
+  try {
+    return await fn();
+  } catch (error: any) {
+    console.error(`API Error - ${operation}:`, error);
+    
+    // Enhanced error reporting for debugging
+    if (error?.code === 'PGRST301') {
+      throw new Error(`Database query error in ${operation}: ${error.message}`);
+    } else if (error?.message?.includes('fetch')) {
+      throw new Error(`Network error during ${operation}: Connection failed`);
+    } else if (error?.status === 404) {
+      throw new Error(`API endpoint not found for ${operation}`);
+    } else if (error?.status >= 500) {
+      throw new Error(`Backend service error during ${operation}: ${error.message}`);
+    }
+    
+    throw error;
+  }
+}
+
 export interface GameMode {
   value: string;
   label: string;
@@ -67,97 +89,111 @@ export interface SyncResult {
 
 // Health check
 export async function checkHealth(): Promise<HealthStatus> {
-  const response = await fetch(`${FUNCTIONS_BASE}/catalog-sync/health`);
-  return response.json();
+  return apiCall(async () => {
+    const response = await fetch(`${FUNCTIONS_BASE}/catalog-sync/health`);
+    return response.json();
+  }, 'health check');
 }
 
 // Get catalog stats for a game
 export async function getCatalogStats(mode: GameMode): Promise<CatalogStats> {
-  const { data, error } = await supabase.rpc('catalog_v2_stats', { 
-    game_in: mode.game 
-  });
-  
-  if (error) throw error;
-  
-  const row = Array.isArray(data) ? data[0] : data;
-  return {
-    sets_count: Number(row?.sets_count ?? 0),
-    cards_count: Number(row?.cards_count ?? 0),
-    pending_sets: Number(row?.pending_sets ?? 0),
-  };
+  return apiCall(async () => {
+    const { data, error } = await supabase.rpc('catalog_v2_stats', { 
+      game_in: mode.game 
+    });
+    
+    if (error) throw error;
+    
+    const row = Array.isArray(data) ? data[0] : data;
+    return {
+      sets_count: Number(row?.sets_count ?? 0),
+      cards_count: Number(row?.cards_count ?? 0),
+      pending_sets: Number(row?.pending_sets ?? 0),
+    };
+  }, `catalog stats for ${mode.label}`);
 }
 
 // Get queue stats by mode
 export async function getQueueStatsByMode(mode: GameMode): Promise<QueueStats> {
-  const { data, error } = await supabase.rpc('catalog_v2_queue_stats_by_mode', { 
-    mode_in: mode.value
-  });
-  
-  if (error) throw error;
-  
-  const row = Array.isArray(data) ? data[0] : data;
-  return {
-    queued: Number(row?.queued ?? 0),
-    processing: Number(row?.processing ?? 0),
-    done: Number(row?.done ?? 0),
-    error: Number(row?.error ?? 0),
-  };
+  return apiCall(async () => {
+    const { data, error } = await supabase.rpc('catalog_v2_queue_stats_by_mode', { 
+      mode_in: mode.value
+    });
+    
+    if (error) throw error;
+    
+    const row = Array.isArray(data) ? data[0] : data;
+    return {
+      queued: Number(row?.queued ?? 0),
+      processing: Number(row?.processing ?? 0),
+      done: Number(row?.done ?? 0),
+      error: Number(row?.error ?? 0),
+    };
+  }, `queue stats for ${mode.label}`);
 }
 
 // Get recent sync errors
 export async function getRecentSyncErrors(mode: GameMode, limit: number = 5): Promise<SyncError[]> {
-  const { data, error } = await supabase.rpc('catalog_v2_get_recent_sync_errors', {
-    game_in: mode.game,
-    limit_in: limit
-  });
-  
-  if (error) throw error;
-  return data || [];
+  return apiCall(async () => {
+    const { data, error } = await supabase.rpc('catalog_v2_get_recent_sync_errors', {
+      game_in: mode.game,
+      limit_in: limit
+    });
+    
+    if (error) throw error;
+    return data || [];
+  }, `recent sync errors for ${mode.label}`);
 }
 
 // Run sync operation
 export async function runSync(mode: GameMode, options: { setId?: string; since?: string } = {}): Promise<SyncResult> {
-  const url = new URL(`${FUNCTIONS_BASE}/catalog-sync`);
-  url.searchParams.set('game', mode.game);
-  
-  if (options.setId) url.searchParams.set('setId', options.setId);
-  if (options.since) url.searchParams.set('since', options.since);
+  return apiCall(async () => {
+    const url = new URL(`${FUNCTIONS_BASE}/catalog-sync`);
+    url.searchParams.set('game', mode.game);
+    
+    if (options.setId) url.searchParams.set('setId', options.setId);
+    if (options.since) url.searchParams.set('since', options.since);
 
-  const response = await fetch(url.toString(), { method: 'POST' });
-  const data = await response.json();
-  
-  return { 
-    ok: response.ok, 
-    ...data, 
-    at: new Date().toISOString() 
-  };
+    const response = await fetch(url.toString(), { method: 'POST' });
+    const data = await response.json();
+    
+    return { 
+      ok: response.ok, 
+      ...data, 
+      at: new Date().toISOString() 
+    };
+  }, `sync operation for ${mode.label}${options.setId ? ` (set: ${options.setId})` : ''}`);
 }
 
 // Queue pending sets for a mode
 export async function queuePendingSets(mode: GameMode): Promise<number> {
-  const { data, error } = await supabase.rpc('catalog_v2_queue_pending_sets_by_mode', {
-    mode_in: mode.value,
-    game_in: mode.game,
-    filter_japanese: false
-  });
-  
-  if (error) throw error;
-  return data ?? 0;
+  return apiCall(async () => {
+    const { data, error } = await supabase.rpc('catalog_v2_queue_pending_sets_by_mode', {
+      mode_in: mode.value,
+      game_in: mode.game,
+      filter_japanese: false
+    });
+    
+    if (error) throw error;
+    return data ?? 0;
+  }, `queue pending sets for ${mode.label}`);
 }
 
 // Drain queue (process next item)
 export async function drainQueue(mode: GameMode): Promise<SyncResult> {
-  const url = new URL(`${FUNCTIONS_BASE}/catalog-sync/drain`);
-  url.searchParams.set('mode', mode.value);
+  return apiCall(async () => {
+    const url = new URL(`${FUNCTIONS_BASE}/catalog-sync/drain`);
+    url.searchParams.set('mode', mode.value);
 
-  const response = await fetch(url.toString(), { method: 'POST' });
-  const data = await response.json();
-  
-  return {
-    ok: response.ok,
-    ...data,
-    at: new Date().toISOString()
-  };
+    const response = await fetch(url.toString(), { method: 'POST' });
+    const data = await response.json();
+    
+    return {
+      ok: response.ok,
+      ...data,
+      at: new Date().toISOString()
+    };
+  }, `drain queue for ${mode.label}`);
 }
 
 // Audit interfaces

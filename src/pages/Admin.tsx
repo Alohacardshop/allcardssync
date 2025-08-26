@@ -15,6 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import SyncTab from '@/components/admin/SyncTab';
 import AuditReconcile from '@/components/admin/AuditReconcile';
 import DataTab from '@/components/admin/DataTab';
+import { SystemHealthCard } from '@/components/admin/SystemHealthCard';
 import { GAME_MODES, type HealthStatus } from '@/lib/api';
 
 interface ShopifyConfig {
@@ -702,6 +703,8 @@ const Admin = () => {
         </TabsContent>
 
         <TabsContent value="config" className="space-y-6">
+          {/* System Health Monitoring */}
+          <SystemHealthCard onHealthUpdate={setHealthStatus} />
 
       {/* JustTCG Integration Section */}
       <Card>
