@@ -19,30 +19,58 @@ const corsHeaders = {
 
 const sb = createClient(SUPABASE_URL, SERVICE_KEY);
 
-async function fetchJsonWithRetry(url: string, headers: HeadersInit, retries = 5, baseDelayMs = 500) {
-  for (let i = 0; i <= retries; i++) {
-    const res = await fetch(url, { headers });
-    if (res.ok) return await res.json();
-    if (res.status === 429 || res.status >= 500) {
-      await new Promise(r => setTimeout(r, baseDelayMs * Math.pow(2, i))); // expo backoff
-      continue;
+// 1) Fetch with exponential backoff. Retries both HTTP errors and thrown network errors.
+async function fetchJsonWithRetry(url: string, headers: HeadersInit, {
+  tries = 6, baseDelayMs = 500, okOn404 = false
+}: { tries?: number; baseDelayMs?: number; okOn404?: boolean } = {}) {
+  let lastErr: any;
+  for (let i = 0; i < tries; i++) {
+    try {
+      const res = await fetch(url, { headers });
+      if (res.status === 404 && okOn404) return { data: [], page: 0, pageSize: 0, count: 0, totalCount: 0 };
+      if (!res.ok) {
+        // 429/5xx → retry with backoff; others → throw
+        if (res.status === 429 || res.status >= 500) {
+          await new Promise(r => setTimeout(r, baseDelayMs * Math.pow(2, i)));
+          continue;
+        }
+        const text = await res.text().catch(() => "");
+        throw new Error(`${url} ${res.status} ${text}`);
+      }
+      return await res.json();
+    } catch (e) {
+      // network/TLS resets land here; retry with backoff
+      lastErr = e;
+      await new Promise(r => setTimeout(r, baseDelayMs * Math.pow(2, i)));
     }
-    throw new Error(`${url} ${res.status} ${await res.text().catch(()=> '')}`);
   }
-  throw new Error(`retry_exhausted ${url}`);
+  throw lastErr || new Error(`retry_exhausted ${url}`);
 }
 
+// 2) Page-aware fetch that stops at last page (uses totalCount from page 1)
 async function fetchAll(path: string, qs: Record<string, string> = {}) {
-  const params = new URLSearchParams({ pageSize: "250", ...qs });
-  let page = 1, out: any[] = [];
-  for (;;) {
+  const pageSize = Number(qs.pageSize || 250);
+  const params = new URLSearchParams({ pageSize: String(pageSize), ...qs });
+
+  // First page
+  params.set("page", "1");
+  const firstUrl = `${API}/${path}?${params.toString()}`;
+  const first = await fetchJsonWithRetry(firstUrl, HDRS, { okOn404: true });
+  const out: any[] = [...(first?.data ?? [])];
+
+  const totalCount = Number(first?.totalCount ?? (first?.data?.length ?? 0));
+  if (totalCount <= pageSize) return out;
+
+  const lastPage = Math.ceil(totalCount / pageSize);
+
+  // Remaining pages (2..lastPage). If any 404s (odd backend), treat as done.
+  for (let page = 2; page <= lastPage; page++) {
     params.set("page", String(page));
     const url = `${API}/${path}?${params.toString()}`;
-    const json: any = await fetchJsonWithRetry(url, HDRS);
+    const json = await fetchJsonWithRetry(url, HDRS, { okOn404: true });
     const data = json?.data ?? [];
+    if (data.length === 0) break; // guard against inconsistent totals
     out.push(...data);
-    if (data.length < 250) break;
-    page++;
   }
   return out;
 }
