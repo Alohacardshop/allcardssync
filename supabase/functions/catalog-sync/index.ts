@@ -25,6 +25,8 @@ function normalizeGame(game: string): string {
 const FUNCTIONS_BASE = (Deno.env.get("SUPABASE_FUNCTIONS_URL") ||
   Deno.env.get("SUPABASE_URL")!.replace(".supabase.co", ".functions.supabase.co")).replace(/\/+$/, "");
 
+const JUSTTCG_BASE = "https://api.justtcg.com/v1";
+
 // Structured logging helper
 function logStructured(level: 'INFO' | 'ERROR' | 'WARN', message: string, context: Record<string, any> = {}) {
   const logEntry = {
