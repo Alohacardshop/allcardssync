@@ -15,6 +15,48 @@ const JUSTTCG_BASE = "https://api.justtcg.com/v1";
 const FUNCTIONS_BASE = (Deno.env.get("SUPABASE_FUNCTIONS_URL") ||
   Deno.env.get("SUPABASE_URL")!.replace(".supabase.co", ".functions.supabase.co")).replace(/\/+$/, "");
 
+// Structured logging helper
+function logStructured(level: 'INFO' | 'ERROR' | 'WARN', message: string, context: Record<string, any> = {}) {
+  const logEntry = {
+    timestamp: new Date().toISOString(),
+    level,
+    message,
+    ...context
+  };
+  console.log(JSON.stringify(logEntry));
+}
+
+// Performance tracking helper
+class PerformanceTracker {
+  private startTime: number;
+  private context: Record<string, any>;
+
+  constructor(context: Record<string, any> = {}) {
+    this.startTime = Date.now();
+    this.context = context;
+  }
+
+  log(message: string, additionalContext: Record<string, any> = {}) {
+    const durationMs = Date.now() - this.startTime;
+    logStructured('INFO', message, {
+      ...this.context,
+      ...additionalContext,
+      durationMs
+    });
+  }
+
+  error(message: string, error: any, additionalContext: Record<string, any> = {}) {
+    const durationMs = Date.now() - this.startTime;
+    logStructured('ERROR', message, {
+      ...this.context,
+      ...additionalContext,
+      durationMs,
+      error: error?.message || error,
+      stack: error?.stack
+    });
+  }
+}
+
 // Get API key from env or system_settings table
 async function getApiKey(): Promise<string> {
   const envKey = Deno.env.get("JUSTTCG_API_KEY");
@@ -26,26 +68,108 @@ async function getApiKey(): Promise<string> {
   throw new Error("JUSTTCG_API_KEY not found in environment or system_settings");
 }
 
+// Health check endpoint
+async function healthCheck(): Promise<{ ok: boolean; api?: string; reason?: string; details?: any }> {
+  try {
+    // Check if API key is available
+    let apiKey: string;
+    try {
+      apiKey = await getApiKey();
+      if (!apiKey || apiKey.length < 10) {
+        return { ok: false, reason: "Invalid or missing JUSTTCG_API_KEY" };
+      }
+    } catch (error) {
+      return { ok: false, reason: "JUSTTCG_API_KEY not configured", details: error.message };
+    }
+
+    // Make lightweight probe to JustTCG /games endpoint
+    try {
+      const response = await fetch(`${JUSTTCG_BASE}/games`, {
+        headers: { "X-API-Key": apiKey },
+        signal: AbortSignal.timeout(10000) // 10 second timeout
+      });
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          return { ok: false, reason: "Invalid JUSTTCG_API_KEY - authentication failed" };
+        }
+        if (response.status === 403) {
+          return { ok: false, reason: "JUSTTCG_API_KEY - insufficient permissions" };
+        }
+        return { ok: false, reason: `JustTCG API error: ${response.status} ${response.statusText}` };
+      }
+
+      const data = await response.json();
+      const gameCount = data?.data?.length || 0;
+      
+      logStructured('INFO', 'Health check successful', {
+        operation: 'health_check',
+        gameCount,
+        responseTime: response.headers.get('x-response-time')
+      });
+
+      return { ok: true, api: 'up', details: { gameCount } };
+
+    } catch (error) {
+      return { ok: false, reason: `JustTCG API connection failed: ${error.message}` };
+    }
+
+  } catch (error: any) {
+    return { ok: false, reason: `Health check failed: ${error.message}` };
+  }
+}
+
 // Helper functions for retry logic and backoff
 async function backoffWait(ms: number) { 
   return new Promise(r => setTimeout(r, ms)); 
 }
 
-async function fetchJsonWithRetry(url: string, headers: HeadersInit = {}, tries = 6, baseDelayMs = 500) {
+async function fetchJsonWithRetry(url: string, headers: HeadersInit = {}, tries = 6, baseDelayMs = 500, context: Record<string, any> = {}) {
   let lastError: any;
   for (let i = 0; i < tries; i++) {
+    const attemptStart = Date.now();
     try {
       const res = await fetch(url, { headers });
+      const durationMs = Date.now() - attemptStart;
+      
       if (!res.ok) {
+        logStructured('WARN', `HTTP error on attempt ${i + 1}`, {
+          ...context,
+          url,
+          status: res.status,
+          statusText: res.statusText,
+          attempt: i + 1,
+          durationMs
+        });
+        
         if (res.status === 429 || res.status >= 500) { 
           await backoffWait(baseDelayMs * 2**i); 
           continue; 
         }
         throw new Error(`${url} ${res.status} ${await res.text().catch(() => '')}`);
       }
+      
+      logStructured('INFO', 'Successful API request', {
+        ...context,
+        url,
+        status: res.status,
+        attempt: i + 1,
+        durationMs
+      });
+      
       return await res.json();
     } catch (e) {
+      const durationMs = Date.now() - attemptStart;
       lastError = e;
+      
+      logStructured('ERROR', `Request failed on attempt ${i + 1}`, {
+        ...context,
+        url,
+        attempt: i + 1,
+        error: e?.message || e,
+        durationMs
+      });
+      
       await backoffWait(baseDelayMs * 2**i);
     }
   }
@@ -113,131 +237,184 @@ async function queueSelfForSet(game: string, setId: string) {
 
 // Game-specific sync logic
 async function syncSet(game: string, setId: string, filterJapanese = false) {
-  const apiKey = await getApiKey();
-  const headers = { "X-API-Key": apiKey };
-  
-  console.log(`Syncing set ${setId} for game ${game}, filterJapanese: ${filterJapanese}`);
-  
-  // Normalize game parameter for JustTCG API
-  const apiGame = game === 'mtg' ? 'magic-the-gathering' : game;
-  
-  let allCards: any[] = [];
-  let limit = 100;
-  let offset = 0;
-  let hasMore = true;
-  
-  // Fetch all cards for this set
-  while (hasMore) {
-    const url = `${JUSTTCG_BASE}/cards?game=${encodeURIComponent(apiGame)}&set=${encodeURIComponent(setId)}&limit=${limit}&offset=${offset}`;
-    console.log(`Fetching cards from: ${url}`);
-    
-    const response = await fetchJsonWithRetry(url, headers);
-    const cards = response?.data || [];
-    
-    if (cards.length === 0) {
-      hasMore = false;
-      break;
-    }
-    
-    allCards = allCards.concat(cards);
-    hasMore = response?.meta?.hasMore || false;
-    offset += limit;
-    
-    console.log(`Fetched ${cards.length} cards, total: ${allCards.length}, hasMore: ${hasMore}`);
-  }
-  
-  if (!allCards.length) {
-    return { setId, cards: 0, sets: 0, variants: 0 };
-  }
+  const tracker = new PerformanceTracker({
+    operation: 'sync_set',
+    game,
+    setId,
+    filterJapanese
+  });
 
-  // Extract set info from first card and upsert
-  const firstCard = allCards[0];
-  if (firstCard?.set) {
-    const gameSlug = game === 'mtg' ? 'mtg' : game === 'pokemon' ? 'pokemon' : game;
-    await upsertSets([{
-      provider: 'justtcg',
-      set_id: setId,
-      game: gameSlug,
-      name: firstCard.set.name ?? null,
-      series: firstCard.set.series ?? null,
-      printed_total: firstCard.set.printedTotal ?? null,
-      total: firstCard.set.total ?? null,
-      release_date: firstCard.set.releaseDate ?? null,
-      images: firstCard.set.images ?? null,
-      data: firstCard.set
-    }]);
-  }
-
-  // Process cards and their variants
-  const cardRows: any[] = [];
-  const variantRows: any[] = [];
-  let totalVariants = 0;
-  
-  for (const card of allCards) {
-    // Filter variants for Japanese-only Pokémon if requested
-    let variants = card.variants || [];
-    if (filterJapanese && game === 'pokemon') {
-      variants = variants.filter((variant: any) => variant.language === 'Japanese');
-    }
+  try {
+    const apiKey = await getApiKey();
+    const headers = { "X-API-Key": apiKey };
     
-    totalVariants += variants.length;
-    
-    const gameSlug = game === 'mtg' ? 'mtg' : game === 'pokemon' ? 'pokemon' : game;
-    
-    // Add card to batch
-    cardRows.push({
-      provider: 'justtcg',
-      card_id: card.id || `${setId}-${card.number}`,
-      game: gameSlug,
-      set_id: setId,
-      name: card.name ?? null,
-      number: card.number ?? null,
-      rarity: card.rarity ?? null,
-      supertype: card.supertype ?? null,
-      subtypes: card.subtypes ?? null,
-      images: card.images ?? null,
-      tcgplayer_product_id: card.tcgplayerId ?? null,
-      tcgplayer_url: card.tcgplayerUrl ?? null,
-      data: card
+    logStructured('INFO', 'Starting set sync', {
+      operation: 'sync_set',
+      game,
+      setId,
+      filterJapanese
     });
     
-    // Add variants to batch
-    for (const variant of variants) {
-      variantRows.push({
-        provider: 'justtcg',
-        variant_id: variant.id ?? null,
-        card_id: card.id || `${setId}-${card.number}`,
-        game: gameSlug,
-        language: variant.language ?? null,
-        printing: variant.printing ?? null,
-        condition: variant.condition ?? null,
-        sku: variant.sku ?? null,
-        price: variant.price ?? null,
-        market_price: variant.marketPrice ?? null,
-        low_price: variant.lowPrice ?? null,
-        mid_price: variant.midPrice ?? null,
-        high_price: variant.highPrice ?? null,
-        currency: variant.currency ?? 'USD',
-        data: variant
+    // Normalize game parameter for JustTCG API
+    const apiGame = game === 'mtg' ? 'magic-the-gathering' : game;
+    
+    let allCards: any[] = [];
+    let limit = 100;
+    let offset = 0;
+    let hasMore = true;
+    let pageCount = 0;
+    
+    // Fetch all cards for this set
+    while (hasMore) {
+      pageCount++;
+      const pageTracker = new PerformanceTracker({
+        operation: 'sync_set_page',
+        game,
+        setId,
+        page: pageCount,
+        offset,
+        limit
+      });
+
+      const url = `${JUSTTCG_BASE}/cards?game=${encodeURIComponent(apiGame)}&set=${encodeURIComponent(setId)}&limit=${limit}&offset=${offset}`;
+      
+      const response = await fetchJsonWithRetry(url, headers, 6, 500, {
+        operation: 'fetch_cards_page',
+        game,
+        setId,
+        page: pageCount
+      });
+      
+      const cards = response?.data || [];
+      
+      if (cards.length === 0) {
+        hasMore = false;
+        break;
+      }
+      
+      allCards = allCards.concat(cards);
+      hasMore = response?.meta?.hasMore || false;
+      offset += limit;
+      
+      pageTracker.log('Completed page fetch', {
+        cardsOnPage: cards.length,
+        totalCards: allCards.length,
+        hasMore
       });
     }
+    
+    if (!allCards.length) {
+      tracker.log('Set sync completed - no cards found', {
+        status: 'empty',
+        pageCount
+      });
+      return { setId, cards: 0, sets: 0, variants: 0, variantsStored: 0 };
+    }
+
+    // Extract set info from first card and upsert
+    const firstCard = allCards[0];
+    if (firstCard?.set) {
+      const gameSlug = game === 'mtg' ? 'mtg' : game === 'pokemon' ? 'pokemon' : game;
+      await upsertSets([{
+        provider: 'justtcg',
+        set_id: setId,
+        game: gameSlug,
+        name: firstCard.set.name ?? null,
+        series: firstCard.set.series ?? null,
+        printed_total: firstCard.set.printedTotal ?? null,
+        total: firstCard.set.total ?? null,
+        release_date: firstCard.set.releaseDate ?? null,
+        images: firstCard.set.images ?? null,
+        data: firstCard.set
+      }]);
+    }
+
+    // Process cards and their variants
+    const cardRows: any[] = [];
+    const variantRows: any[] = [];
+    let totalVariants = 0;
+    
+    for (const card of allCards) {
+      // Filter variants for Japanese-only Pokémon if requested
+      let variants = card.variants || [];
+      if (filterJapanese && game === 'pokemon') {
+        variants = variants.filter((variant: any) => variant.language === 'Japanese');
+      }
+      
+      totalVariants += variants.length;
+      
+      const gameSlug = game === 'mtg' ? 'mtg' : game === 'pokemon' ? 'pokemon' : game;
+      
+      // Add card to batch
+      cardRows.push({
+        provider: 'justtcg',
+        card_id: card.id || `${setId}-${card.number}`,
+        game: gameSlug,
+        set_id: setId,
+        name: card.name ?? null,
+        number: card.number ?? null,
+        rarity: card.rarity ?? null,
+        supertype: card.supertype ?? null,
+        subtypes: card.subtypes ?? null,
+        images: card.images ?? null,
+        tcgplayer_product_id: card.tcgplayerId ?? null,
+        tcgplayer_url: card.tcgplayerUrl ?? null,
+        data: card
+      });
+      
+      // Add variants to batch
+      for (const variant of variants) {
+        variantRows.push({
+          provider: 'justtcg',
+          variant_id: variant.id ?? null,
+          card_id: card.id || `${setId}-${card.number}`,
+          game: gameSlug,
+          language: variant.language ?? null,
+          printing: variant.printing ?? null,
+          condition: variant.condition ?? null,
+          sku: variant.sku ?? null,
+          price: variant.price ?? null,
+          market_price: variant.marketPrice ?? null,
+          low_price: variant.lowPrice ?? null,
+          mid_price: variant.midPrice ?? null,
+          high_price: variant.highPrice ?? null,
+          currency: variant.currency ?? 'USD',
+          data: variant
+        });
+      }
+    }
+    
+    // Upsert in order: sets -> cards -> variants (due to foreign keys)
+    await upsertCards(cardRows);
+    if (variantRows.length > 0) {
+      await upsertVariants(variantRows);
+    }
+    
+    tracker.log('Set sync completed successfully', {
+      status: 'success',
+      pageCount,
+      setsUpserted: firstCard?.set ? 1 : 0,
+      cardsUpserted: cardRows.length,
+      variantsUpserted: variantRows.length,
+      totalVariants
+    });
+    
+    return { 
+      setId, 
+      cards: cardRows.length, 
+      sets: firstCard?.set ? 1 : 0, 
+      variants: totalVariants,
+      variantsStored: variantRows.length
+    };
+    
+  } catch (error: any) {
+    tracker.error('Set sync failed', error, {
+      status: 'error',
+      upstreamError: error?.message,
+      upstreamCode: error?.status || error?.code
+    });
+    throw error;
   }
-  
-  // Upsert in order: sets -> cards -> variants (due to foreign keys)
-  await upsertCards(cardRows);
-  if (variantRows.length > 0) {
-    await upsertVariants(variantRows);
-  }
-  
-  console.log(`Synced ${cardRows.length} cards with ${totalVariants} variants for set ${setId}`);
-  
-  return { 
-    setId, 
-    cards: cardRows.length, 
-    sets: firstCard?.set ? 1 : 0, 
-    variants: totalVariants,
-    variantsStored: variantRows.length
-  };
 }
 
 serve(async (req) => {
@@ -248,13 +425,35 @@ serve(async (req) => {
 
   try {
     const url = new URL(req.url);
+    
+    // Health check endpoint
+    if (url.pathname.endsWith('/health')) {
+      const health = await healthCheck();
+      const status = health.ok ? 200 : 503;
+      return new Response(JSON.stringify(health), { 
+        status,
+        headers: { ...corsHeaders, "Content-Type": "application/json" } 
+      });
+    }
+
     const game = (url.searchParams.get("game") || "").trim().toLowerCase();
     const setId = (url.searchParams.get("setId") || "").trim();
     const since = (url.searchParams.get("since") || "").trim();
     const filterJapanese = url.searchParams.get("filterJapanese") === "true";
 
+    const requestTracker = new PerformanceTracker({
+      operation: 'catalog_sync_request',
+      game,
+      setId: setId || 'orchestration',
+      since,
+      filterJapanese
+    });
+
     // Validate game parameter
     if (!["mtg", "pokemon"].includes(game)) {
+      requestTracker.error('Invalid game parameter', new Error(`Invalid game: ${game}`), {
+        status: 'validation_error'
+      });
       return new Response(
         JSON.stringify({ error: "Invalid game. Must be 'mtg' or 'pokemon'" }), 
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -267,6 +466,11 @@ serve(async (req) => {
     // If setId is provided, sync just that set
     if (setId) {
       const result = await syncSet(game, setId, filterJapanese);
+      requestTracker.log('Single set sync completed', {
+        status: 'success',
+        mode: 'single_set',
+        ...result
+      });
       return new Response(
         JSON.stringify({ mode: "bySetId", game, filterJapanese, ...result }), 
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -275,19 +479,32 @@ serve(async (req) => {
 
     // Otherwise, orchestrate: fetch all sets and queue them
     const apiGame = game === 'mtg' ? 'magic-the-gathering' : game;
-    console.log(`Orchestrating sync for game: ${game} (API: ${apiGame}), since: ${since}, filterJapanese: ${filterJapanese}`);
+    
+    logStructured('INFO', 'Starting orchestration sync', {
+      operation: 'orchestration_start',
+      game,
+      apiGame,
+      since,
+      filterJapanese
+    });
     
     // Fetch sets with pagination
     let allSets: any[] = [];
     let limit = 100;
     let offset = 0;
     let hasMore = true;
+    let pageCount = 0;
     
     while (hasMore) {
+      pageCount++;
       const setsUrl = `${JUSTTCG_BASE}/sets?game=${encodeURIComponent(apiGame)}&limit=${limit}&offset=${offset}`;
-      console.log(`Fetching sets from: ${setsUrl}`);
       
-      const setsResponse = await fetchJsonWithRetry(setsUrl, headers);
+      const setsResponse = await fetchJsonWithRetry(setsUrl, headers, 6, 500, {
+        operation: 'fetch_sets_page',
+        game,
+        page: pageCount
+      });
+      
       const sets = setsResponse?.data || [];
       
       if (sets.length === 0) {
@@ -299,7 +516,14 @@ serve(async (req) => {
       hasMore = setsResponse?.meta?.hasMore || false;
       offset += limit;
       
-      console.log(`Fetched ${sets.length} sets, total: ${allSets.length}, hasMore: ${hasMore}`);
+      logStructured('INFO', 'Fetched sets page', {
+        operation: 'fetch_sets_page',
+        game,
+        page: pageCount,
+        setsOnPage: sets.length,
+        totalSets: allSets.length,
+        hasMore
+      });
     }
     
     // Filter by date if since parameter provided
@@ -307,7 +531,13 @@ serve(async (req) => {
       ? allSets.filter((s: any) => !s.releaseDate || s.releaseDate >= since)
       : allSets;
     
-    console.log(`Found ${allSets.length} total sets, ${filteredSets.length} after date filter`);
+    logStructured('INFO', 'Sets filtered', {
+      operation: 'sets_filter',
+      game,
+      totalSets: allSets.length,
+      filteredSets: filteredSets.length,
+      since
+    });
     
     // Upsert all sets to database
     const gameSlug = game === 'mtg' ? 'mtg' : game === 'pokemon' ? 'pokemon' : game;
@@ -332,6 +562,14 @@ serve(async (req) => {
       await queueSelfForSet(game + (filterJapanese ? '&filterJapanese=true' : ''), setCode);
     }
 
+    requestTracker.log('Orchestration sync completed', {
+      status: 'success',
+      mode: since ? 'orchestrate_incremental' : 'orchestrate_full',
+      setsQueued: filteredSets.length,
+      totalSetsFound: allSets.length,
+      pageCount
+    });
+
     return new Response(
       JSON.stringify({ 
         mode: since ? "orchestrate_incremental" : "orchestrate_full", 
@@ -344,7 +582,13 @@ serve(async (req) => {
     );
     
   } catch (e: any) {
-    console.error('Catalog sync error:', e);
+    logStructured('ERROR', 'Catalog sync request failed', {
+      operation: 'catalog_sync_request',
+      error: e?.message || e,
+      stack: e?.stack,
+      upstreamCode: e?.status || e?.code
+    });
+    
     return new Response(
       JSON.stringify({ error: e?.message || "error" }), 
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

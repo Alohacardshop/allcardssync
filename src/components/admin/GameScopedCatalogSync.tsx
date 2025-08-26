@@ -150,6 +150,21 @@ export default function GameScopedCatalogSync() {
     setResult(null);
 
     try {
+      // First check health endpoint
+      const healthUrl = new URL(`${FUNCTIONS_BASE}/catalog-sync/health`);
+      const healthResponse = await fetch(healthUrl.toString());
+      const healthData = await healthResponse.json();
+      
+      if (!healthData.ok) {
+        toast({
+          title: "Configuration Error",
+          description: healthData.reason || "System health check failed",
+          variant: "destructive",
+        });
+        setResult({ ok: false, error: healthData.reason, health: healthData, at: new Date().toISOString() });
+        return;
+      }
+
       const url = new URL(`${FUNCTIONS_BASE}/catalog-sync`);
       url.searchParams.set('game', selectedGameOption.gameParam);
       
