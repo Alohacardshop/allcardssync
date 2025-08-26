@@ -9,17 +9,11 @@ const HDRS: HeadersInit = POKE_KEY ? { "X-Api-Key": POKE_KEY } : {};
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const FUNCTIONS_BASE =
-  Deno.env.get("SUPABASE_FUNCTIONS_URL")?.replace(/\/+$/, "") ||
-  `${SUPABASE_URL.replace(".supabase.co", ".functions.supabase.co")}`;
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+  (Deno.env.get("SUPABASE_FUNCTIONS_URL") || `${SUPABASE_URL.replace(".supabase.co",".functions.supabase.co")}`).replace(/\/+$/,"");
 
 const sb = createClient(SUPABASE_URL, SERVICE_KEY);
 
-// 1) Fetch with exponential backoff. Retries both HTTP errors and thrown network errors.
+// ---------- helpers ----------
 async function fetchJsonWithRetry(url: string, headers: HeadersInit, {
   tries = 6, baseDelayMs = 500, okOn404 = false
 }: { tries?: number; baseDelayMs?: number; okOn404?: boolean } = {}) {
@@ -29,17 +23,14 @@ async function fetchJsonWithRetry(url: string, headers: HeadersInit, {
       const res = await fetch(url, { headers });
       if (res.status === 404 && okOn404) return { data: [], page: 0, pageSize: 0, count: 0, totalCount: 0 };
       if (!res.ok) {
-        // 429/5xx → retry with backoff; others → throw
         if (res.status === 429 || res.status >= 500) {
           await new Promise(r => setTimeout(r, baseDelayMs * Math.pow(2, i)));
           continue;
         }
-        const text = await res.text().catch(() => "");
-        throw new Error(`${url} ${res.status} ${text}`);
+        throw new Error(`${url} ${res.status} ${await res.text().catch(()=> "")}`);
       }
       return await res.json();
     } catch (e) {
-      // network/TLS resets land here; retry with backoff
       lastErr = e;
       await new Promise(r => setTimeout(r, baseDelayMs * Math.pow(2, i)));
     }
@@ -47,12 +38,10 @@ async function fetchJsonWithRetry(url: string, headers: HeadersInit, {
   throw lastErr || new Error(`retry_exhausted ${url}`);
 }
 
-// 2) Page-aware fetch that stops at last page (uses totalCount from page 1)
 async function fetchAll(path: string, qs: Record<string, string> = {}) {
   const pageSize = Number(qs.pageSize || 250);
   const params = new URLSearchParams({ pageSize: String(pageSize), ...qs });
 
-  // First page
   params.set("page", "1");
   const firstUrl = `${API}/${path}?${params.toString()}`;
   const first = await fetchJsonWithRetry(firstUrl, HDRS, { okOn404: true });
@@ -62,14 +51,12 @@ async function fetchAll(path: string, qs: Record<string, string> = {}) {
   if (totalCount <= pageSize) return out;
 
   const lastPage = Math.ceil(totalCount / pageSize);
-
-  // Remaining pages (2..lastPage). If any 404s (odd backend), treat as done.
   for (let page = 2; page <= lastPage; page++) {
     params.set("page", String(page));
     const url = `${API}/${path}?${params.toString()}`;
     const json = await fetchJsonWithRetry(url, HDRS, { okOn404: true });
     const data = json?.data ?? [];
-    if (data.length === 0) break; // guard against inconsistent totals
+    if (data.length === 0) break;
     out.push(...data);
   }
   return out;
@@ -83,7 +70,7 @@ async function upsertSets(rows: any[]) {
 
 async function upsertCards(rows: any[]) {
   if (!rows.length) return;
-  const chunkSize = 400; // keep payloads modest
+  const chunkSize = 400;
   for (let i = 0; i < rows.length; i += chunkSize) {
     const chunk = rows.slice(i, i + chunkSize);
     const { error } = await sb.rpc("catalog_v2_upsert_cards", { rows: chunk as any });
@@ -91,132 +78,74 @@ async function upsertCards(rows: any[]) {
   }
 }
 
-async function logError(setId: string, step: string, err: any, detail?: any) {
-  console.error("sync error", { setId, step, err: err?.message || String(err) });
-  await sb.rpc('catalog_v2_log_error', { 
-    payload: { 
-      game: 'pokemon', 
-      set_id: setId, 
-      step, 
-      message: err?.message || String(err), 
-      detail 
-    } as any 
-  });
-}
-
-async function syncSingleSet(setId: string) {
-  try {
-    // 1) set
-    const sres = await fetchJsonWithRetry(`${API}/sets/${setId}`, HDRS);
-    const s = sres?.data;
-    if (!s) return { sets: 0, cards: 0, setId };
-
-    await upsertSets([{
-      id: s.id,
-      game: "pokemon",
-      name: s.name,
-      series: s.series ?? null,
-      printed_total: s.printedTotal ?? null,
-      total: s.total ?? null,
-      release_date: s.releaseDate ?? null,
-      images: s.images ?? null,
-      updated_at: new Date().toISOString(),
-    }]);
-
-    // 2) cards for set
-    let cards: any[] = [];
-    try {
-      cards = await fetchAll("cards", { q: `set.id:"${setId}"` });
-    } catch (e) {
-      await logError(setId, "fetch_cards", e);
-      // skip this set for now (it'll be retried by "queue pending" later)
-      return { sets: 1, cards: 0, setId, skipped: true };
-    }
-    
-    const cardRows = cards.map((c: any) => ({
-      id: c.id,
-      game: "pokemon",
-      name: c.name,
-      number: c.number ?? null,
-      set_id: c.set?.id ?? null,
-      rarity: c.rarity ?? null,
-      supertype: c.supertype ?? null,
-      subtypes: c.subtypes ?? null,
-      images: c.images ?? null,
-      tcgplayer_product_id: c.tcgplayer?.productId ?? null,
-      tcgplayer_url: c.tcgplayer?.url ?? null,
-      data: c,
-      updated_at: new Date().toISOString(),
-    }));
-    await upsertCards(cardRows);
-
-    return { sets: 1, cards: cardRows.length, setId };
-  } catch (err: any) {
-    await logError(setId, "sync", err);
-    throw err;
-  }
-}
-
 async function queueSelfForSet(setId: string) {
-  const url = `${FUNCTIONS_BASE}/catalog-sync-pokemon?setId=${encodeURIComponent(setId)}`;
-  // Queue asynchronously via RPC -> pg_net
   const { error } = await sb.rpc("http_post_async", {
-    url,
+    url: `${FUNCTIONS_BASE}/catalog-sync-pokemon?setId=${encodeURIComponent(setId)}`,
     headers: { "Content-Type": "application/json" } as any,
     body: {} as any,
   });
   if (error) throw error;
 }
 
-serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+async function syncSingleSet(setId: string) {
+  // 1) upsert set metadata
+  const sres = await fetchJsonWithRetry(`${API}/sets/${setId}`, HDRS);
+  const s = (sres as any)?.data;
+  if (s) {
+    await upsertSets([{
+      id: s.id, game: "pokemon", name: s.name, series: s.series ?? null,
+      printed_total: s.printedTotal ?? null, total: s.total ?? null,
+      release_date: s.releaseDate ?? null, images: s.images ?? null,
+      updated_at: new Date().toISOString(),
+    }]);
   }
+
+  // 2) upsert cards
+  const cards = await fetchAll("cards", { q: `set.id:"${setId}"` });
+  const rows = cards.map((c: any) => ({
+    id: c.id, game: "pokemon",
+    name: c.name, number: c.number ?? null, set_id: c.set?.id ?? null,
+    rarity: c.rarity ?? null, supertype: c.supertype ?? null, subtypes: c.subtypes ?? null,
+    images: c.images ?? null, tcgplayer_product_id: c.tcgplayer?.productId ?? null,
+    tcgplayer_url: c.tcgplayer?.url ?? null, data: c, updated_at: new Date().toISOString(),
+  }));
+  await upsertCards(rows);
+
+  return { sets: s ? 1 : 0, cards: rows.length, setId };
+}
+
+// ---------- HTTP handler ----------
+serve(async (req) => {
   try {
     const url = new URL(req.url);
     const setId = (url.searchParams.get("setId") || "").trim();
     const since = (url.searchParams.get("since") || "").trim();
 
-    // If called with setId → do that one set (short-running)
     if (setId) {
       const res = await syncSingleSet(setId);
-      return new Response(JSON.stringify({ mode: "bySetId", ...res }), { 
-        headers: { "Content-Type": "application/json", ...corsHeaders } 
-      });
+      return new Response(JSON.stringify({ mode: "bySetId", ...res }), { headers: { "Content-Type": "application/json" } });
     }
 
-    // Orchestration path (no setId):
-    // 1) get all sets (or, if since provided, just recent sets)
+    // Orchestrator: enqueue one job per set (optionally filtered by since)
     const setQs: Record<string, string> = {};
     if (since) setQs.q = `releaseDate>="${since}"`;
     const sets = await fetchAll("sets", setQs);
-    const setIds: string[] = sets.map((s: any) => s.id);
-
-    // 2) upsert basic set rows first (fast)
     await upsertSets(sets.map((s: any) => ({
-      id: s.id,
-      game: "pokemon",
-      name: s.name,
-      series: s.series ?? null,
-      printed_total: s.printedTotal ?? null,
-      total: s.total ?? null,
-      release_date: s.releaseDate ?? null,
-      images: s.images ?? null,
+      id: s.id, game: "pokemon", name: s.name, series: s.series ?? null,
+      printed_total: s.printedTotal ?? null, total: s.total ?? null,
+      release_date: s.releaseDate ?? null, images: s.images ?? null,
       updated_at: new Date().toISOString(),
     })));
+    const ids: string[] = sets.map((s: any) => s.id);
+    for (const id of ids) await queueSelfForSet(id);
 
-    // 3) enqueue each set as its own job (so the big work happens in many short calls)
-    for (const id of setIds) await queueSelfForSet(id);
-
-    // 4) return immediately so we never hit function timeout
     return new Response(JSON.stringify({
       mode: since ? "orchestrate_incremental" : "orchestrate_full",
-      queued_sets: setIds.length,
-    }), { headers: { "Content-Type": "application/json", ...corsHeaders } });
+      queued_sets: ids.length
+    }), { headers: { "Content-Type": "application/json" } });
   } catch (e: any) {
-    return new Response(JSON.stringify({ error: e?.message || "error" }), { 
-      status: 500, 
-      headers: { "Content-Type": "application/json", ...corsHeaders } 
+    return new Response(JSON.stringify({ error: e?.message || "error" }), {
+      status: 500, headers: { "Content-Type": "application/json" }
     });
   }
 });
