@@ -658,7 +658,7 @@ const Admin = () => {
         {USE_V2_MTG && (
           <CatalogProgressCard
             game="mtg"
-            functionPath="/catalog-sync-justtcg?game=magic-the-gathering" 
+            functionPath="/catalog-sync-mtg" 
             title="MTG Catalog — Progress"
           />
         )}
