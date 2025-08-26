@@ -228,6 +228,142 @@ export async function fixSet(mode: GameMode, setId: string): Promise<SyncResult>
   return runSync(mode, { setId });
 }
 
+// Data browser interfaces
+export interface CatalogSet {
+  set_id: string;
+  name: string;
+  release_date: string | null;
+  total: number | null;
+  last_seen_at: string;
+  cards_count?: number;
+}
+
+export interface CatalogCard {
+  card_id: string;
+  set_id: string;
+  name: string;
+  number: string | null;
+  rarity: string | null;
+  supertype: string | null;
+  last_seen_at: string;
+}
+
+export interface CatalogVariant {
+  variant_key: string;
+  card_id: string;
+  language: string | null;
+  printing: string | null;
+  condition: string | null;
+  sku: string | null;
+  price: number | null;
+  market_price: number | null;
+  currency: string;
+  last_seen_at: string;
+}
+
+export interface DataFilters {
+  search?: string;
+  setId?: string;
+  rarity?: string;
+  language?: string;
+  printing?: string;
+  condition?: string;
+  priceMin?: number;
+  priceMax?: number;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+  page?: number;
+  limit?: number;
+}
+
+export interface PaginatedResponse<T> {
+  data: T[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+// Fetch catalog sets
+export async function getCatalogSets(mode: GameMode, filters: DataFilters = {}): Promise<PaginatedResponse<CatalogSet>> {
+  const { data, error } = await supabase.rpc('catalog_v2_browse_sets', {
+    game_in: mode.game,
+    filter_japanese: mode.filterJapanese || false,
+    search_in: filters.search || null,
+    sort_by: filters.sortBy || 'set_id',
+    sort_order: filters.sortOrder || 'asc',
+    page_in: filters.page || 1,
+    limit_in: filters.limit || 50
+  });
+  
+  if (error) throw error;
+  
+  const result = Array.isArray(data) ? data[0] : data;
+  return {
+    data: result?.sets || [],
+    total: result?.total_count || 0,
+    page: filters.page || 1,
+    limit: filters.limit || 50,
+    totalPages: Math.ceil((result?.total_count || 0) / (filters.limit || 50))
+  };
+}
+
+// Fetch catalog cards
+export async function getCatalogCards(mode: GameMode, filters: DataFilters = {}): Promise<PaginatedResponse<CatalogCard>> {
+  const { data, error } = await supabase.rpc('catalog_v2_browse_cards', {
+    game_in: mode.game,
+    filter_japanese: mode.filterJapanese || false,
+    search_in: filters.search || null,
+    set_id_in: filters.setId || null,
+    rarity_in: filters.rarity || null,
+    sort_by: filters.sortBy || 'card_id',
+    sort_order: filters.sortOrder || 'asc',
+    page_in: filters.page || 1,
+    limit_in: filters.limit || 50
+  });
+  
+  if (error) throw error;
+  
+  const result = Array.isArray(data) ? data[0] : data;
+  return {
+    data: result?.cards || [],
+    total: result?.total_count || 0,
+    page: filters.page || 1,
+    limit: filters.limit || 50,
+    totalPages: Math.ceil((result?.total_count || 0) / (filters.limit || 50))
+  };
+}
+
+// Fetch catalog variants
+export async function getCatalogVariants(mode: GameMode, filters: DataFilters = {}): Promise<PaginatedResponse<CatalogVariant>> {
+  const { data, error } = await supabase.rpc('catalog_v2_browse_variants', {
+    game_in: mode.game,
+    filter_japanese: mode.filterJapanese || false,
+    search_in: filters.search || null,
+    set_id_in: filters.setId || null,
+    language_in: filters.language || null,
+    printing_in: filters.printing || null,
+    condition_in: filters.condition || null,
+    price_min: filters.priceMin || null,
+    price_max: filters.priceMax || null,
+    sort_by: filters.sortBy || 'variant_key',
+    sort_order: filters.sortOrder || 'asc',
+    page_in: filters.page || 1,
+    limit_in: filters.limit || 50
+  });
+  
+  if (error) throw error;
+  
+  const result = Array.isArray(data) ? data[0] : data;
+  return {
+    data: result?.variants || [],
+    total: result?.total_count || 0,
+    page: filters.page || 1,
+    limit: filters.limit || 50,
+    totalPages: Math.ceil((result?.total_count || 0) / (filters.limit || 50))
+  };
+}
+
 // Utility functions
 export function getIncrementalDate(months: number = 6): string {
   const date = new Date();
