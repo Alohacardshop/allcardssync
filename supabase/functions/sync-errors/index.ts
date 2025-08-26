@@ -18,14 +18,12 @@ serve(async (req) => {
     
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-    // Query sync errors from catalog_v2 schema
+    // Query sync errors using RPC function
     const { data, error } = await supabase
-      .schema('catalog_v2')
-      .from('sync_errors')
-      .select('set_id, step, message, created_at')
-      .eq('game', 'pokemon')
-      .order('created_at', { ascending: false })
-      .limit(20)
+      .rpc('catalog_v2_get_recent_sync_errors', {
+        game_in: 'pokemon',
+        limit_in: 20
+      })
 
     if (error) {
       console.error('Error querying sync errors:', error)

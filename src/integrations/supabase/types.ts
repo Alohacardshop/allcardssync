@@ -583,6 +583,15 @@ export type Database = {
       }
     }
     Functions: {
+      catalog_v2_get_recent_sync_errors: {
+        Args: { game_in?: string; limit_in?: number }
+        Returns: {
+          created_at: string
+          message: string
+          set_id: string
+          step: string
+        }[]
+      }
       catalog_v2_log_error: {
         Args: { payload: Json }
         Returns: undefined
