@@ -836,6 +836,10 @@ export type Database = {
         Args: { body: Json; headers: Json; url: string }
         Returns: number
       }
+      normalize_game_slug: {
+        Args: { input_game: string }
+        Returns: string
+      }
       set_limit: {
         Args: { "": number }
         Returns: number
