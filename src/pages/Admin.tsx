@@ -11,8 +11,7 @@ import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Navigation } from '@/components/Navigation';
-import PokemonCatalogSync from '@/components/admin/PokemonCatalogSync';
-import PokemonOneTimeBackfill from '@/components/admin/PokemonOneTimeBackfill';
+import CatalogProgressCard from '@/components/admin/CatalogProgressCard';
 import PokemonSyncErrors from '@/components/admin/PokemonSyncErrors';
 
 interface ShopifyConfig {
@@ -639,10 +638,18 @@ const Admin = () => {
         storeName={saveResultsStore}
       />
 
-      {/* Pokémon Catalog Sync Section */}
+      {/* Catalog Sync Sections */}
       <div className="grid grid-cols-1 gap-4">
-        <PokemonOneTimeBackfill />
-        <PokemonCatalogSync />
+        <CatalogProgressCard
+          game="pokemon_japan" 
+          functionPath="/catalog-sync-justtcg?game=pokemon-japan"
+          title="Pokémon Japan Catalog — Progress"
+        />
+        <CatalogProgressCard
+          game="mtg"
+          functionPath="/catalog-sync-justtcg?game=magic-the-gathering" 
+          title="MTG Catalog — Progress"
+        />
         <PokemonSyncErrors />
       </div>
 
