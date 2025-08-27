@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Navigation } from '@/components/Navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useLocalStorageString } from '@/hooks/useLocalStorage';
 
 import AuditReconcile from '@/components/admin/AuditReconcile';
 import DataTab from '@/components/admin/DataTab';
@@ -136,8 +137,9 @@ const Admin = () => {
   const [firecrawlApiKey, setFirecrawlApiKey] = useState('');
   const [isSavingFirecrawl, setIsSavingFirecrawl] = useState(false);
   
-  // New sync state
-  const [selectedMode, setSelectedMode] = useState<string>('mtg');
+  // Tab and mode state
+  const [activeTab, setActiveTab] = useLocalStorageString('admin-active-tab', 'analytics');
+  const [selectedMode, setSelectedMode] = useLocalStorageString('admin-selected-mode', 'mtg');
   const [healthStatus, setHealthStatus] = useState<HealthStatus | null>(null);
 
   const loadConfiguration = async () => {
@@ -648,38 +650,40 @@ const Admin = () => {
         storeName={saveResultsStore}
       />
 
-      {/* Mode Selector Bar */}
-      <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
-        <div className="flex items-center gap-4">
-          <Label htmlFor="global-mode-select" className="font-medium">Mode:</Label>
-          <Select value={selectedMode} onValueChange={setSelectedMode}>
-            <SelectTrigger id="global-mode-select" className="w-64">
-              <SelectValue placeholder="Select a mode..." />
-            </SelectTrigger>
-            <SelectContent>
-              {GAME_MODES.map((mode) => (
-                <SelectItem key={mode.value} value={mode.value}>
-                  {mode.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      {/* Mode Selector Bar - Only show on audit and data tabs */}
+      {(activeTab === 'audit' || activeTab === 'data') && (
+        <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
+          <div className="flex items-center gap-4">
+            <Label htmlFor="global-mode-select" className="font-medium">Mode:</Label>
+            <Select value={selectedMode} onValueChange={setSelectedMode}>
+              <SelectTrigger id="global-mode-select" className="w-64">
+                <SelectValue placeholder="Select a mode..." />
+              </SelectTrigger>
+              <SelectContent>
+                {GAME_MODES.map((mode) => (
+                  <SelectItem key={mode.value} value={mode.value}>
+                    {mode.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            {healthStatus?.ok ? (
+              <CheckCircle className="h-4 w-4 text-green-500" />
+            ) : (
+              <AlertCircle className="h-4 w-4 text-red-500" />
+            )}
+            <span className="text-sm text-muted-foreground">
+              Last updated: {healthStatus ? new Date().toLocaleTimeString() : '—'}
+            </span>
+          </div>
         </div>
-        
-        <div className="flex items-center gap-2">
-          {healthStatus?.ok ? (
-            <CheckCircle className="h-4 w-4 text-green-500" />
-          ) : (
-            <AlertCircle className="h-4 w-4 text-red-500" />
-          )}
-          <span className="text-sm text-muted-foreground">
-            Last updated: {healthStatus ? new Date().toLocaleTimeString() : '—'}
-          </span>
-        </div>
-      </div>
+      )}
 
       {/* Main Admin Tabs */}
-      <Tabs defaultValue="analytics" className="w-full">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="analytics">Analytics</TabsTrigger>
           <TabsTrigger value="audit">Audit & Reconcile</TabsTrigger>
