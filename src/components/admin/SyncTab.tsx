@@ -471,6 +471,8 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
   const [queueing, setQueueing] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [processingAll, setProcessingAll] = useState(false);
+  const [turboMode, setTurboMode] = useLocalStorage('admin-turbo-mode', false);
+  const [isBackgroundProcessing, setIsBackgroundProcessing] = useState(false);
   const [stats, setStats] = useState<CatalogStats | null>(null);
   const [queueStats, setQueueStats] = useState<QueueStats | null>(null);
   const [errors, setErrors] = useState<SyncError[]>([]);
@@ -988,6 +990,66 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
       });
     } finally {
       setManualRefreshLoading(false);
+    }
+  };
+
+  const handleFinishInBackground = async () => {
+    if (!mode) return;
+    
+    setIsBackgroundProcessing(true);
+    
+    try {
+      const concurrency = turboMode ? 5 : 3;
+      const batches = turboMode ? 20 : 10;
+      const batchSize = turboMode ? 8 : 5;
+      
+      const response = await fetch(`${FUNCTIONS_BASE}/catalog-turbo-worker?mode=${encodeURIComponent(mode.value)}&concurrency=${concurrency}&batches=${batches}&batchSize=${batchSize}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Background processing failed: ${response.status} ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      
+      toast.success('Background processing started', {
+        description: `Processing with ${concurrency}x concurrency. Check logs for progress.`
+      });
+      
+    } catch (error: any) {
+      toast.error('Background processing failed', {
+        description: error.message
+      });
+      setIsBackgroundProcessing(false);
+    }
+  };
+
+  const handleRetryAllFailed = async () => {
+    if (!mode || !errors.length) return;
+    
+    try {
+      // Requeue all failed sets
+      const failedSetIds = [...new Set(errors.map(e => e.set_id))];
+      
+      for (const setId of failedSetIds) {
+        await fetch(`${FUNCTIONS_BASE}/catalog-sync?game=${encodeURIComponent(mode.value)}&setId=${encodeURIComponent(setId)}&turbo=${turboMode}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      
+      toast.success(`Retrying ${failedSetIds.length} failed sets`, {
+        description: turboMode ? 'Using turbo mode for faster processing' : 'Using standard processing'
+      });
+      
+      await loadAllData();
+      
+    } catch (error: any) {
+      toast.error('Failed to retry failed sets', {
+        description: error.message
+      });
     }
   };
 

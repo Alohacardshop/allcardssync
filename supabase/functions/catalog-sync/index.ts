@@ -257,31 +257,31 @@ async function postJsonWithRetry(url: string, body: any, headers: HeadersInit = 
   throw lastError || new Error(`retry_exhausted ${url}`);
 }
 
-// Database operations
+// Database operations with configurable chunk sizes
 async function upsertSets(rows: any[]) {
   if (!rows.length) return;
   const { error } = await supabaseClient.rpc("catalog_v2_upsert_sets", { rows: rows as any });
   if (error) throw error;
 }
 
-async function upsertCards(rows: any[]) {
+async function upsertCards(rows: any[], turboMode = false) {
   if (!rows.length) return;
-  const chunk = 120;
+  const chunk = turboMode ? 350 : 120; // Larger chunks in turbo mode
   for (let i = 0; i < rows.length; i += chunk) {
     const { error } = await supabaseClient.rpc("catalog_v2_upsert_cards", { rows: rows.slice(i, i + chunk) as any });
     if (error) throw error;
-    // small yield to avoid DB timeouts when many chunks
-    await backoffWait(50);
+    // Reduced delay in turbo mode
+    await backoffWait(turboMode ? 25 : 50);
   }
 }
 
-async function upsertVariants(rows: any[]) {
+async function upsertVariants(rows: any[], turboMode = false) {
   if (!rows.length) return;
-  const chunk = 120;
+  const chunk = turboMode ? 350 : 120; // Larger chunks in turbo mode
   for (let i = 0; i < rows.length; i += chunk) {
     const { error } = await supabaseClient.rpc("catalog_v2_upsert_variants", { rows: rows.slice(i, i + chunk) as any });
     if (error) throw error;
-    await backoffWait(50);
+    await backoffWait(turboMode ? 25 : 50);
   }
 }
 
@@ -294,8 +294,8 @@ async function queueSelfForSet(game: string, setId: string) {
   if (error) throw error;
 }
 
-// Game-specific sync logic
-async function syncSet(game: string, setId: string) {
+// Game-specific sync logic with turbo mode support
+async function syncSet(game: string, setId: string, turboMode = false) {
   const tracker = new PerformanceTracker({
     operation: 'sync_set',
     game,
@@ -316,7 +316,7 @@ async function syncSet(game: string, setId: string) {
     const apiGame = normalizeGame(game);
     
     let allCards: any[] = [];
-    let limit = 100;
+    let limit = turboMode ? 250 : 100; // Larger pages in turbo mode
     let offset = 0;
     let hasMore = true;
     let pageCount = 0;
@@ -455,9 +455,9 @@ async function syncSet(game: string, setId: string) {
     }
     
     // Upsert in order: sets -> cards -> variants (due to foreign keys)
-    await upsertCards(cardRows);
+    await upsertCards(cardRows, turboMode);
     if (variantRows.length > 0) {
-      await upsertVariants(variantRows);
+      await upsertVariants(variantRows, turboMode);
     }
     
     const warnings = nonJapaneseVariants > 0 ? [`${nonJapaneseVariants} non-Japanese variants found in pokemon-japan data`] : [];
@@ -571,8 +571,9 @@ serve(async (req) => {
         });
 
         // Process the single set
+        const turboMode = url.searchParams.get("turbo") === "true";
         try {
-          const result = await syncSet(queueItem.game, queueItem.set_id);
+          const result = await syncSet(queueItem.game, queueItem.set_id, turboMode);
           
           // Mark as done
           const { error: markDoneError } = await supabaseClient.rpc('catalog_v2_mark_queue_item_done', { 
@@ -720,8 +721,9 @@ serve(async (req) => {
     
     // If setId is provided, sync just that set
     if (setId) {
+      const turboMode = url.searchParams.get("turbo") === "true";
       try {
-        const result = await syncSet(game, setId);
+        const result = await syncSet(game, setId, turboMode);
         requestTracker.log('Single set sync completed', {
           status: 'success',
           mode: 'single_set',
@@ -763,8 +765,9 @@ serve(async (req) => {
     });
     
     // Fetch sets with pagination
+    const turboMode = url.searchParams.get("turbo") === "true";
     let allSets: any[] = [];
-    let limit = 100;
+    let limit = turboMode ? 250 : 100; // Larger pages in turbo mode
     let offset = 0;
     let hasMore = true;
     let pageCount = 0;
