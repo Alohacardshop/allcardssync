@@ -950,6 +950,10 @@ export type Database = {
         Args: { body: Json; headers: Json; url: string }
         Returns: number
       }
+      manage_justtcg_cron_jobs: {
+        Args: { action: string }
+        Returns: string
+      }
       normalize_game_slug: {
         Args: { input_game: string }
         Returns: string
