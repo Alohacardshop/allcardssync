@@ -38,6 +38,27 @@ export type Database = {
         }
         Relationships: []
       }
+      games: {
+        Row: {
+          discovered_at: string | null
+          id: string
+          name: string
+          raw: Json | null
+        }
+        Insert: {
+          discovered_at?: string | null
+          id: string
+          name: string
+          raw?: Json | null
+        }
+        Update: {
+          discovered_at?: string | null
+          id?: string
+          name?: string
+          raw?: Json | null
+        }
+        Relationships: []
+      }
       groups: {
         Row: {
           category_id: number | null
@@ -682,6 +703,15 @@ export type Database = {
       }
     }
     Views: {
+      game_catalog_stats: {
+        Row: {
+          cards_count: number | null
+          game_id: string | null
+          game_name: string | null
+          sets_count: number | null
+        }
+        Relationships: []
+      }
       group_sync_status: {
         Row: {
           category_id: number | null

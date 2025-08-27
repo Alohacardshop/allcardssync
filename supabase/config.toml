@@ -1,5 +1,11 @@
 project_id = "dmpoandoydaqxhzdjnmk"
 
+[functions.discover-games]
+verify_jwt = false
+
+[functions.discover-sets]
+verify_jwt = false
+
 [functions.justtcg-import]
 verify_jwt = false
 

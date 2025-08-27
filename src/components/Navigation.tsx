@@ -7,7 +7,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Home, Package, Tags, Settings, Users, FileText, Menu, LogOut, Upload } from "lucide-react";
+import { Home, Package, Tags, Settings, Users, FileText, Menu, LogOut, Upload, Database } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { cleanupAuthState } from "@/lib/auth";
 import { useEffect, useState } from "react";
@@ -71,7 +71,8 @@ export function Navigation({ showMobileMenu = true }: NavigationProps) {
 
   if (isAdmin) {
     navItems.push(
-      { to: "/admin", label: "Admin", icon: Settings }
+      { to: "/admin", label: "Admin", icon: Settings },
+      { to: "/justtcg-sync", label: "JustTCG Sync", icon: Database }
     );
   }
 
