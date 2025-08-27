@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Switch } from '@/components/ui/switch';
 import { 
   Database, 
   Loader2, 
@@ -42,6 +43,7 @@ import {
 } from '@/lib/api';
 import { ImportJobsTable } from './ImportJobsTable';
 import { RebuildProgressWidget } from './RebuildProgressWidget';
+import { useLocalStorage } from '@/hooks/useLocalStorage';
 
 interface SyncTabProps {
   selectedMode: string;
@@ -479,6 +481,8 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
   const [refreshRate, setRefreshRate] = useState<number>(1000); // milliseconds
   const [manualRefreshLoading, setManualRefreshLoading] = useState(false);
   const [draining, setDraining] = useState(false);
+  const [autoDrainEnabled, setAutoDrainEnabled] = useLocalStorage('sync-auto-drain-enabled', true);
+  const [isAutoDraining, setIsAutoDraining] = useState(false);
   
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const mode = GAME_MODES.find(m => m.value === selectedMode);
@@ -486,10 +490,23 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
   // Reset liveDelta when mode changes or on fresh loads
   useEffect(() => {
     setLiveDelta({ sets: 0, cards: 0 });
+    setIsAutoDraining(false); // Reset auto-drain state when mode changes
     if (mode) {
       loadAllData();
     }
   }, [mode]);
+
+  // Auto-drain when queue has items
+  useEffect(() => {
+    if (!mode || !autoDrainEnabled || draining || isAutoDraining || processing || processingAll) return;
+    
+    // Check if queue has items and nothing is currently processing
+    if (queueStats && queueStats.queued > 0 && queueStats.processing === 0) {
+      console.log('Auto-drain: Starting auto-drain, queue has', queueStats.queued, 'items');
+      setIsAutoDraining(true);
+      handleAutodrainQueue();
+    }
+  }, [queueStats, autoDrainEnabled, draining, isAutoDraining, processing, processingAll, mode]);
 
   useEffect(() => {
     // Poll progress during active sync with configurable interval
@@ -763,7 +780,7 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
         }
         
         if (result.status === 'idle') {
-          toast.success(`Auto-drain complete! Processed ${totalProcessed} items total`);
+          toast.success(`Drain complete! Processed ${totalProcessed} items total`);
           setIsActiveSync(false);
           break;
         }
@@ -784,12 +801,56 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
         await new Promise(resolve => setTimeout(resolve, 500));
       }
     } catch (error: any) {
-      toast.error('Auto-drain failed', {
+      toast.error('Drain failed', {
         description: error.message
       });
       setIsActiveSync(false);
     } finally {
       setDraining(false);
+    }
+  };
+
+  const handleAutodrainQueue = async () => {
+    if (!mode || !autoDrainEnabled) return;
+    
+    let totalProcessed = 0;
+    
+    try {
+      // Keep processing until queue is empty, error occurs, or auto-drain is disabled
+      while (autoDrainEnabled) {
+        const result = await drainQueue(mode);
+        const counts = normalizeApiCounts(result);
+        setLastRun({ ...result, ...counts });
+        
+        if (!result.ok) {
+          console.log('Auto-drain: Failed to process item, stopping auto-drain');
+          break;
+        }
+        
+        if (result.status === 'idle') {
+          console.log(`Auto-drain: Queue empty, processed ${totalProcessed} items total`);
+          break;
+        }
+        
+        // Increment counters and update UI
+        if (counts.cardsProcessed > 0) {
+          totalProcessed++;
+          setLiveDelta(prev => ({ 
+            sets: prev.sets + (counts.setsProcessed || 0), 
+            cards: prev.cards + counts.cardsProcessed 
+          }));
+        }
+        
+        // Update stats after each item
+        await Promise.all([loadQueueStats(), loadStats()]);
+        
+        // Small delay to prevent overwhelming the API
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    } catch (error: any) {
+      console.error('Auto-drain error:', error);
+    } finally {
+      setIsAutoDraining(false);
     }
   };
 
@@ -1226,12 +1287,42 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
                 </div>
               </div>
 
+              {/* Auto-drain Toggle */}
+              <div className="pt-4 border-t">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Activity className="h-4 w-4" />
+                    <span className="text-sm font-medium">Auto Processing</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="auto-drain" className="text-sm">
+                      Auto-drain when queue has items
+                    </Label>
+                    <Switch
+                      id="auto-drain"
+                      checked={autoDrainEnabled}
+                      onCheckedChange={setAutoDrainEnabled}
+                    />
+                  </div>
+                </div>
+                
+                {/* Auto-drain status banner */}
+                {isAutoDraining && (
+                  <Alert className="mb-3 bg-blue-50 border-blue-200">
+                    <RefreshCw className="h-4 w-4 animate-spin text-blue-600" />
+                    <AlertDescription className="text-blue-700">
+                      Auto-draining queue... ({queueStats?.queued || 0} items remaining)
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </div>
+
               {/* Queue Processing Controls */}
               {queueStats && (queueStats.queued > 0 || queueStats.processing > 0) && (
                 <div className="pt-4 border-t">
                   <div className="flex items-center gap-2 mb-3">
                     <Activity className="h-4 w-4" />
-                    <span className="text-sm font-medium">Queue Processing</span>
+                    <span className="text-sm font-medium">Manual Queue Processing</span>
                   </div>
                   <div className="flex gap-2">
                     <Button
@@ -1247,16 +1338,19 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
                     <Button
                       variant="secondary"
                       size="sm"
-                      onClick={handleProcessAll}
+                      onClick={handleDrainQueue}
                       disabled={isDisabled}
                       className="flex-1"
                     >
-                      {processingAll ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                      Process All
+                      {draining ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                      Drain Queue
                     </Button>
                   </div>
                   <div className="text-xs text-muted-foreground mt-2">
                     {queueStats.queued} items queued • {queueStats.processing} processing
+                    {autoDrainEnabled && !isAutoDraining && queueStats.queued > 0 && (
+                      <span className="text-blue-600"> • Auto-drain enabled</span>
+                    )}
                   </div>
                 </div>
               )}
