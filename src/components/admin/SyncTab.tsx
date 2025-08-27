@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Checkbox } from '@/components/ui/checkbox';
 import { 
   Database, 
   Loader2, 
@@ -17,8 +18,10 @@ import {
   Activity,
   Clock,
   Zap,
-  RotateCcw
+  RotateCcw,
+  Trash2
 } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import {
   GAME_MODES,
@@ -58,6 +61,230 @@ function normalizeApiCounts(result: any): { setsProcessed: number; cardsProcesse
     cardsProcessed: result.cardsProcessed || result.cards || 0
   };
 }
+
+const FUNCTIONS_BASE = import.meta.env.VITE_SUPABASE_FUNCTIONS_URL?.replace(/\/+$/, '') || '/functions/v1'
+
+interface ResetResult {
+  success: boolean
+  total_records_deleted: number
+  games_processed: number
+  summaries: Array<{
+    game: string
+    variants_deleted: number
+    cards_deleted: number
+    sets_deleted: number
+    sync_errors_deleted: number
+    queue_items_deleted: number
+  }>
+  error?: string
+}
+
+// Reset & Rebuild Catalog Section Component
+const ResetCatalogSection = () => {
+  const [selectedGames, setSelectedGames] = useState(['pokemon', 'pokemon-japan', 'mtg']);
+  const [isResetting, setIsResetting] = useState(false);
+  const [resetResult, setResetResult] = useState<any>(null);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+
+  const gameOptions = [
+    { value: 'pokemon', label: 'Pokémon (Global)' },
+    { value: 'pokemon-japan', label: 'Pokémon Japan' },
+    { value: 'mtg', label: 'Magic: The Gathering' }
+  ];
+
+  const handleGameToggle = (gameValue: string) => {
+    setSelectedGames(prev => 
+      prev.includes(gameValue) 
+        ? prev.filter(g => g !== gameValue)
+        : [...prev, gameValue]
+    );
+  };
+
+  const handleResetAndRebuild = async () => {
+    setShowConfirmDialog(false);
+    setIsResetting(true);
+    setResetResult(null);
+
+    try {
+      console.log('🧹 Starting catalog reset for games:', selectedGames);
+      
+      // Step 1: Reset catalogs
+      const resetResponse = await fetch(`${FUNCTIONS_BASE}/catalog-reset`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ games: selectedGames })
+      });
+
+      if (!resetResponse.ok) {
+        throw new Error(`Reset failed: ${resetResponse.statusText}`);
+      }
+
+      const resetData: ResetResult = await resetResponse.json();
+      console.log('Reset response:', resetData);
+
+      if (!resetData.success) {
+        throw new Error(resetData.error || 'Reset failed');
+      }
+
+      toast.success(`Reset completed: ${resetData.total_records_deleted} records deleted`);
+
+      // Step 2: Trigger syncs for each selected game
+      const syncResults: any[] = [];
+
+      for (const game of selectedGames) {
+        console.log(`🚀 Starting sync for ${game}`);
+        
+        try {
+          let syncResponse: Response;
+          
+          if (game === 'pokemon') {
+            syncResponse = await fetch(`${FUNCTIONS_BASE}/catalog-sync-pokemon`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({})
+            });
+          } else if (game === 'pokemon-japan') {
+            syncResponse = await fetch(`${FUNCTIONS_BASE}/catalog-sync-justtcg?game=pokemon-japan`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({})
+            });
+          } else if (game === 'mtg') {
+            syncResponse = await fetch(`${FUNCTIONS_BASE}/catalog-sync-justtcg?game=magic-the-gathering`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({})
+            });
+          } else {
+            continue;
+          }
+
+          const syncData = await syncResponse.json();
+          syncResults.push({ game, success: syncResponse.ok, data: syncData });
+          
+          if (syncResponse.ok) {
+            console.log(`✅ ${game} sync started:`, syncData.message || 'Started');
+          } else {
+            console.error(`❌ ${game} sync failed:`, syncData.error);
+          }
+        } catch (syncError: any) {
+          console.error(`❌ ${game} sync error:`, syncError.message);
+          syncResults.push({ game, success: false, error: syncError.message });
+        }
+      }
+
+      const result = {
+        resetData,
+        syncResults,
+        timestamp: new Date().toISOString()
+      };
+      
+      setResetResult(result);
+      
+      const successfulSyncs = syncResults.filter(r => r.success).length;
+      toast.success(`Reset & rebuild completed! ${successfulSyncs}/${selectedGames.length} syncs started`);
+
+    } catch (error: any) {
+      console.error('❌ Reset & rebuild error:', error);
+      toast.error('Reset & rebuild failed', {
+        description: error.message
+      });
+      setResetResult({
+        error: error.message,
+        timestamp: new Date().toISOString()
+      });
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>
+          This will permanently delete all local catalog data for the selected games and trigger fresh imports from upstream sources.
+        </AlertDescription>
+      </Alert>
+
+      <div className="space-y-3">
+        <Label className="text-sm font-medium">Select Games to Reset:</Label>
+        <div className="grid grid-cols-1 gap-3">
+          {gameOptions.map((option) => (
+            <div key={option.value} className="flex items-center space-x-2">
+              <Checkbox
+                id={`game-${option.value}`}
+                checked={selectedGames.includes(option.value)}
+                onCheckedChange={() => handleGameToggle(option.value)}
+                disabled={isResetting}
+              />
+              <Label 
+                htmlFor={`game-${option.value}`} 
+                className="text-sm cursor-pointer"
+              >
+                {option.label}
+              </Label>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex gap-2">
+        <Button
+          variant="destructive"
+          onClick={() => setShowConfirmDialog(true)}
+          disabled={isResetting || selectedGames.length === 0}
+          className="flex-1"
+        >
+          {isResetting ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              Resetting...
+            </>
+          ) : (
+            <>
+              <Trash2 className="h-4 w-4 mr-2" />
+              Reset & Rebuild Catalog
+            </>
+          )}
+        </Button>
+      </div>
+
+      {resetResult && (
+        <div className="mt-4 p-3 bg-muted/50 rounded-lg">
+          <h4 className="font-semibold mb-2">Reset & Rebuild Results:</h4>
+          <pre className="text-xs overflow-auto max-h-64">
+            {JSON.stringify(resetResult, null, 2)}
+          </pre>
+        </div>
+      )}
+
+      <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-destructive" />
+              Confirm Catalog Reset
+            </DialogTitle>
+            <DialogDescription>
+              This will delete all local catalog data for the selected games: <strong>{selectedGames.join(', ')}</strong>.
+              <br /><br />
+              Fresh imports will be triggered automatically. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-2 justify-end">
+            <Button variant="outline" onClick={() => setShowConfirmDialog(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleResetAndRebuild}>
+              Yes, Reset & Rebuild
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+};
 
 export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHealthUpdate }: SyncTabProps) {
   const [setId, setSetId] = useState('');
@@ -529,6 +756,19 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
               </Alert>
             )}
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Reset & Rebuild Catalog */}
+      <Card className="border-destructive/20">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-destructive">
+            <Trash2 className="h-5 w-5" />
+            Reset & Rebuild Catalog
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ResetCatalogSection />
         </CardContent>
       </Card>
 
