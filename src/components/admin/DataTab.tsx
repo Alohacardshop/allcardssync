@@ -492,14 +492,27 @@ const DataTab: React.FC<DataTabProps> = ({ selectedMode }) => {
             {/* Loading States and Error Handling */}
             {loading && longRunning && (
               <div className="p-4 bg-muted rounded-lg border border-dashed">
-                <div className="flex items-center gap-3">
-                  <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                  <div>
-                    <p className="font-medium">Query is taking longer than expected</p>
-                    <p className="text-sm text-muted-foreground">
-                      Large datasets may take some time to process. You can wait or try simplifying your search.
-                    </p>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                    <div>
+                      <p className="font-medium">Query is taking longer than expected</p>
+                      <p className="text-sm text-muted-foreground">
+                        Large datasets may take some time to process. You can wait or try simplifying your search.
+                      </p>
+                    </div>
                   </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      if (abortControllerRef.current) {
+                        abortControllerRef.current.abort();
+                      }
+                    }}
+                  >
+                    Cancel Query
+                  </Button>
                 </div>
               </div>
             )}
