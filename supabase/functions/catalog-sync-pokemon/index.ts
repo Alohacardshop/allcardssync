@@ -98,21 +98,20 @@ async function syncSingleSet(setId: string) {
   const s = (sres as any)?.data;
   if (s) {
     await upsertSets([{
-      id: s.id, game: "pokemon", name: s.name, series: s.series ?? null,
+      provider: "pokemontcg", set_id: s.id, game: "pokemon", name: s.name, series: s.series ?? null,
       printed_total: s.printedTotal ?? null, total: s.total ?? null,
-      release_date: s.releaseDate ?? null, images: s.images ?? null,
-      updated_at: new Date().toISOString(),
+      release_date: s.releaseDate ?? null, images: s.images ?? null, data: s,
     }]);
   }
 
   // 2) cards (paged with totalCount; 404 on a page == end-of-data, not failure)
   const cards = await fetchAll("cards", { q: `set.id:"${setId}"` });
   const rows = cards.map((c: any) => ({
-    id: c.id, game: "pokemon",
+    provider: "pokemontcg", card_id: c.id, game: "pokemon",
     name: c.name, number: c.number ?? null, set_id: c.set?.id ?? null,
     rarity: c.rarity ?? null, supertype: c.supertype ?? null, subtypes: c.subtypes ?? null,
     images: c.images ?? null, tcgplayer_product_id: c.tcgplayer?.productId ?? null,
-    tcgplayer_url: c.tcgplayer?.url ?? null, data: c, updated_at: new Date().toISOString(),
+    tcgplayer_url: c.tcgplayer?.url ?? null, data: c,
   }));
   await upsertCards(rows);
 
@@ -136,10 +135,9 @@ serve(async (req) => {
     if (since) setQs.q = `releaseDate>="${since}"`;
     const sets = await fetchAll("sets", setQs);
     await upsertSets(sets.map((s: any) => ({
-      id: s.id, game: "pokemon", name: s.name, series: s.series ?? null,
+      provider: "pokemontcg", set_id: s.id, game: "pokemon", name: s.name, series: s.series ?? null,
       printed_total: s.printedTotal ?? null, total: s.total ?? null,
-      release_date: s.releaseDate ?? null, images: s.images ?? null,
-      updated_at: new Date().toISOString(),
+      release_date: s.releaseDate ?? null, images: s.images ?? null, data: s,
     })));
     const ids: string[] = sets.map((s: any) => s.id);
     for (const id of ids) await queueSelfForSet(id);
