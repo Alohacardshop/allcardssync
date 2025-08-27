@@ -60,37 +60,30 @@ serve(async (req) => {
       
       try {
         // 1. Delete variants (must be first due to foreign key constraints)
-        // First get card IDs, then delete variants
-        const { data: cardIds } = await supabase
-          .from('catalog_v2.cards')
-          .select('card_id')
+        const { count: variantsDeleted } = await supabase
+          .schema('catalog_v2')
+          .from('variants')
+          .delete()
           .eq('game', game)
-
-        const cardIdList = cardIds?.map(c => c.card_id) || []
-        let variantsDeleted = 0
-        if (cardIdList.length > 0) {
-          const { count } = await supabase
-            .from('catalog_v2.variants')
-            .delete()
-            .in('card_id', cardIdList)
-          variantsDeleted = count || 0
-        }
 
         // 2. Delete cards
         const { count: cardsDeleted } = await supabase
-          .from('catalog_v2.cards')
+          .schema('catalog_v2')
+          .from('cards')
           .delete()
           .eq('game', game)
 
         // 3. Delete sets
         const { count: setsDeleted } = await supabase
-          .from('catalog_v2.sets')
+          .schema('catalog_v2')
+          .from('sets')
           .delete()
           .eq('game', game)
 
         // 4. Delete sync errors
         const { count: errorsDeleted } = await supabase
-          .from('catalog_v2.sync_errors')
+          .schema('catalog_v2')
+          .from('sync_errors')
           .delete()
           .eq('game', game)
 
@@ -102,7 +95,7 @@ serve(async (req) => {
 
         const summary: ResetSummary = {
           game,
-          variants_deleted: variantsDeleted,
+          variants_deleted: variantsDeleted || 0,
           cards_deleted: cardsDeleted || 0,
           sets_deleted: setsDeleted || 0,
           sync_errors_deleted: errorsDeleted || 0,
