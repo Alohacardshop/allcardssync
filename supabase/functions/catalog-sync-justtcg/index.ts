@@ -192,11 +192,22 @@ async function orchestrateFullSync(externalGame: string) {
 
   await upsertSets(setRows);
 
-  // 3) Queue child jobs for each set
+  // 3) Create import jobs for each set and queue child jobs
   let queuedCount = 0;
   for (const set of sets) {
     const setName = set.name || set.code || set.id;
+    const setId = set.code || set.id || set.name;
+    
     if (setName) {
+      // Create import job entry
+      await sb.schema('catalog_v2').from('import_jobs').insert({
+        source: 'justtcg',
+        game: internalGame,
+        set_id: setId,
+        set_code: set.code || null,
+        status: 'queued'
+      });
+
       await queueChildJob(externalGame, setName);
       queuedCount++;
     }
@@ -212,80 +223,154 @@ async function syncSetCards(externalGame: string, setName: string) {
     throw new Error(`Unsupported game: ${externalGame}`);
   }
 
+  // Find import job for this set to update status
+  const setId = await findSetByName(internalGame, setName);
+  let jobId: string | null = null;
+  
+  // Try to find and update the import job
+  try {
+    const { data: job } = await sb.schema('catalog_v2').from('import_jobs')
+      .select('id')
+      .eq('game', internalGame)
+      .eq('set_id', setId || setName)
+      .eq('status', 'queued')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    
+    jobId = job?.id || null;
+    
+    if (jobId) {
+      // Update job to running status
+      await sb.schema('catalog_v2').from('import_jobs')
+        .update({ 
+          status: 'running', 
+          started_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', jobId);
+    }
+  } catch (e) {
+    console.warn('Could not update job status:', e);
+  }
+
   let offset = 0;
   const limit = 100; // Use larger page size for efficiency
   const allCards: any[] = [];
 
   console.log(`Starting sync for ${setName} (${externalGame} -> ${internalGame})`);
 
-  // Page through all cards for this set (use correct API params for pokemon-japan)
-  while (true) {
-    const apiParams = getApiParams(externalGame);
-    const url = `${JTCG}/cards?game=${apiParams}&set=${encodeURIComponent(setName)}&limit=${limit}&offset=${offset}`;
-    console.log(`Fetching page: offset=${offset}, limit=${limit}`);
-    
-    const response = await fetchJsonWithRetry(url, JHDRS);
-    
-    const cards = response?.data || [];
-    const hasMore = response?.meta?.hasMore ?? false;
+  try {
+    // Page through all cards for this set (use correct API params for pokemon-japan)
+    while (true) {
+      const apiParams = getApiParams(externalGame);
+      const url = `${JTCG}/cards?game=${apiParams}&set=${encodeURIComponent(setName)}&limit=${limit}&offset=${offset}`;
+      console.log(`Fetching page: offset=${offset}, limit=${limit}`);
+      
+      const response = await fetchJsonWithRetry(url, JHDRS);
+      
+      const cards = response?.data || [];
+      const hasMore = response?.meta?.hasMore ?? false;
 
-    console.log(`Received ${cards.length} cards, hasMore: ${hasMore}`);
+      console.log(`Received ${cards.length} cards, hasMore: ${hasMore}`);
 
-    if (!cards.length) break;
+      if (!cards.length) break;
 
-    // Extract only minimal essential fields for lightweight storage
-    for (const card of cards) {
-      allCards.push({
-        card_id: card.id || `${setName}-${card.number || card.name}`,
-        game: internalGame,
-        name: card.name ?? null,
-        number: card.number ?? null,
-        set_id: null, // Will be set below
-        rarity: card.rarity ?? null,
-        supertype: card.supertype ?? null,
-        subtypes: Array.isArray(card.subtypes) ? card.subtypes : null,
-        images: card.images ? { 
-          small: card.images.small, 
-          normal: card.images.normal 
-        } : null, // Minimal image data
-        tcgplayer_product_id: card.tcgplayerId ?? null, // Critical for price lookups
-        tcgplayer_url: null,
-        data: { 
-          // Store only essential metadata, not full card data
-          id: card.id,
-          tcgplayerId: card.tcgplayerId,
-          set: card.set
-        },
-        updated_at: new Date().toISOString(),
+      // Extract only minimal essential fields for lightweight storage
+      for (const card of cards) {
+        allCards.push({
+          card_id: card.id || `${setName}-${card.number || card.name}`,
+          game: internalGame,
+          name: card.name ?? null,
+          number: card.number ?? null,
+          set_id: null, // Will be set below
+          rarity: card.rarity ?? null,
+          supertype: card.supertype ?? null,
+          subtypes: Array.isArray(card.subtypes) ? card.subtypes : null,
+          images: card.images ? { 
+            small: card.images.small, 
+            normal: card.images.normal 
+          } : null, // Minimal image data
+          tcgplayer_product_id: card.tcgplayerId ?? null, // Critical for price lookups
+          tcgplayer_url: null,
+          data: { 
+            // Store only essential metadata, not full card data
+            id: card.id,
+            tcgplayerId: card.tcgplayerId,
+            set: card.set
+          },
+          updated_at: new Date().toISOString(),
+        });
+      }
+
+      if (!hasMore) break;
+      offset += limit;
+      
+      // Brief pause between pages to be gentle on the API
+      await backoffWait(50);
+    }
+
+    if (!allCards.length) {
+      console.log(`No cards found for set: ${setName}`);
+      
+      // Update job to succeeded with 0 cards
+      if (jobId) {
+        await sb.schema('catalog_v2').from('import_jobs')
+          .update({ 
+            status: 'succeeded', 
+            inserted: 0,
+            total: 0,
+            finished_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', jobId);
+      }
+      
+      return { mode: "worker", game: internalGame, setName, cards: 0 };
+    }
+
+    // Update all cards with set_id if found
+    if (setId) {
+      allCards.forEach(card => {
+        card.set_id = setId;
       });
     }
 
-    if (!hasMore) break;
-    offset += limit;
+    console.log(`Upserting ${allCards.length} cards for set: ${setName}`);
+    await upsertCards(allCards);
+
+    // Update job to succeeded
+    if (jobId) {
+      await sb.schema('catalog_v2').from('import_jobs')
+        .update({ 
+          status: 'succeeded', 
+          inserted: allCards.length,
+          total: allCards.length,
+          finished_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', jobId);
+    }
+
+    return { mode: "worker", game: internalGame, setName, cards: allCards.length, set_id: setId };
     
-    // Brief pause between pages to be gentle on the API
-    await backoffWait(50);
+  } catch (error: any) {
+    console.error(`Error syncing set ${setName}:`, error);
+    
+    // Update job to failed
+    if (jobId) {
+      await sb.schema('catalog_v2').from('import_jobs')
+        .update({ 
+          status: 'failed', 
+          error: error.message || 'Unknown error',
+          finished_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', jobId);
+    }
+    
+    throw error;
   }
-
-  if (!allCards.length) {
-    console.log(`No cards found for set: ${setName}`);
-    return { mode: "worker", game: internalGame, setName, cards: 0 };
-  }
-
-  // Try to find set_id by name
-  const setId = await findSetByName(internalGame, setName);
-  
-  // Update all cards with set_id if found
-  if (setId) {
-    allCards.forEach(card => {
-      card.set_id = setId;
-    });
-  }
-
-  console.log(`Upserting ${allCards.length} cards for set: ${setName}`);
-  await upsertCards(allCards);
-
-  return { mode: "worker", game: internalGame, setName, cards: allCards.length, set_id: setId };
 }
 
 serve(async (req) => {

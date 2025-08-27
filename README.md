@@ -1,128 +1,156 @@
 # AllCards Sync
 
-A modern inventory management and label printing system for trading card games, built with React, TypeScript, and Supabase.
+A modern inventory management and label printing system for trading card games.
 
 ## Features
 
-- **Card Catalog Management**: Comprehensive catalog sync for Pokémon, Magic: The Gathering, and Pokémon Japan
-- **Inventory Management**: Track intake items, trade-ins, and product data
-- **Label Designer**: Custom label templates with drag-and-drop editing
-- **Print Management**: Queue-based printing system with support for thermal printers
-- **Shopify Integration**: Sync products and manage multiple store configurations
-- **Admin Dashboard**: System monitoring, diagnostics, and user management
+- **Card Catalog Management**: Comprehensive database with MTG, Pokémon (English & Japanese), and other TCG support
+- **Inventory Tracking**: Raw intake, PSA submissions, and product management
+- **Label Design & Print**: Visual label designer with real-time preview and print management
+- **Shopify Integration**: Two-way sync for inventory and order management
+- **Admin Dashboard**: Health monitoring, sync management, and configuration tools
 
 ## Tech Stack
 
-- **Frontend**: React 18, TypeScript, Tailwind CSS, Vite
+- **Frontend**: React, TypeScript, Tailwind CSS, Vite
 - **Backend**: Supabase (PostgreSQL, Edge Functions, Auth)
 - **UI Components**: Radix UI, shadcn/ui
-- **State Management**: React Query (TanStack Query)
+- **State Management**: React Query
 - **Routing**: React Router DOM
-
-## Database Architecture
-
-### Catalog System (`catalog_v2` schema)
-- Always query `catalog_v2` with `supabase.schema('catalog_v2').from('<table>')`
-- Relationship selects inside a schema drop the schema prefix (e.g., `set:sets(name)`)
-- Admin "Database Overview" uses `catalog_v2_stats(game_in)` with values: `mtg`, `pokemon`, `pokemon-japan`
-
-### Game Slug Mapping
-- **MTG**: `mtg`
-- **Pokémon Global**: `pokemon` 
-- **Pokémon Japan**: `pokemon-japan`
 
 ## Development
 
 ### Prerequisites
+
 - Node.js 18+
 - Supabase CLI
 - npm or pnpm
 
 ### Setup
+
 ```bash
-# Clone the repository
-git clone <YOUR_GIT_URL>
-cd <YOUR_PROJECT_NAME>
-
-# Install dependencies  
+git clone <repository>
+cd allcardssync
 npm install
-
-# Start development server
 npm run dev
-
-# Start Supabase locally (optional)
-supabase start
 ```
+
+### Database Architecture
+
+The system uses the `catalog_v2` schema for card data with normalized game slugs:
+- `mtg` (Magic: The Gathering)
+- `pokemon` (Pokémon English)
+- `pokemon-japan` (Pokémon Japanese)
 
 ### Smoke Tests
-The following scripts help verify system functionality:
+
+Run quick system verification:
 
 ```bash
-# Test catalog search endpoint (requires jq)
-npm run smoke:search
-
-# Test catalog stats (requires psql and SUPABASE_DB_URL)
-npm run smoke:stats
+bash scripts/smoke.sh
 ```
 
-### Environment Variables
-Set up your environment variables for local development.
+This tests:
+- Card search API
+- Catalog stats query
+- Sync job queueing
+- Status endpoint
+
+## Ingestion & Progress
+
+### Queue All Pending
+
+The admin interface provides a "Queue All Pending" button that:
+1. Fetches all sets for the selected game from external APIs
+2. Creates import job entries in `catalog_v2.import_jobs`
+3. Queues individual set sync jobs
+4. Provides real-time progress tracking
+
+### Import Jobs System
+
+Import jobs are tracked in `catalog_v2.import_jobs` with the following lifecycle:
+
+- **queued**: Job created, waiting to process
+- **running**: Currently fetching and processing cards
+- **succeeded**: Completed successfully with card counts
+- **failed**: Failed with error message
+- **cancelled**: Manually cancelled
+
+### Status API
+
+The `catalog-sync-status` endpoint provides:
+```json
+{
+  "id": "uuid",
+  "source": "justtcg",
+  "game": "mtg",
+  "set_id": "set-code",
+  "set_code": "display-code",
+  "total": 100,
+  "inserted": 95,
+  "status": "succeeded",
+  "error": null,
+  "started_at": "2024-01-01T10:00:00Z",
+  "finished_at": "2024-01-01T10:05:00Z",
+  "created_at": "2024-01-01T09:59:00Z",
+  "updated_at": "2024-01-01T10:05:00Z"
+}
+```
+
+### Security Model
+
+- **import_jobs**: Read-only for authenticated users, writes restricted to service role
+- Edge Functions use service role to bypass RLS for job management
+- Admin interface polls status endpoint every 5 seconds during active syncs
 
 ## Key Concepts
 
 ### Catalog Synchronization
-The system syncs card data from external APIs (JustTCG, etc.) into the `catalog_v2` schema:
-1. **Sets**: Basic set information (name, release date, total cards)
-2. **Cards**: Individual card data (name, number, rarity, images)
-3. **Variants**: Card variants with pricing and condition info
+
+The system syncs card data into the `catalog_v2` schema with three main entities:
+- **Sets**: Game releases with metadata
+- **Cards**: Individual card data with images and identifiers  
+- **Variants**: Different printings, conditions, and pricing
 
 ### Print System
-- **Templates**: Custom label designs stored as Fabric.js JSON
-- **Jobs**: Print requests queued per workstation
-- **Rendering**: Server-side label rendering to TSPL commands
+
+Label templates support dynamic field replacement and can be rendered server-side for consistent output across different printers.
 
 ### Authentication & Authorization
-- Role-based access control (admin, staff)
-- Row-level security policies on all tables
-- Secure API endpoints with proper authentication
 
-## Deployment
+Role-based access control with RLS policies:
+- `admin`: Full system access
+- `staff`: Inventory and print operations
+- `user`: Basic read access
 
-Simply open [Lovable](https://lovable.dev/projects/27406049-6243-4487-9589-cdc440cd3aa0) and click on Share -> Publish.
+## Deployment & Security
 
-The application auto-deploys edge functions. For production:
+- **Deployment**: Lovable platform with auto-deployment of edge functions
+- **Security**: RLS policies, `SECURITY DEFINER` for edge functions, encrypted API keys
+- **Performance**: Trigram indexes for fuzzy search, connection pooling
 
-1. Configure Supabase project settings
-2. Set up proper RLS policies  
-3. Configure authentication providers
-4. Set environment variables for integrations
+### Database Query Guidelines
 
-## Security Notes
+Always use schema-qualified queries for catalog data:
+```typescript
+// ✅ Correct
+const { data } = await sb.schema('catalog_v2').from('cards').select()
 
-- All database operations use RLS policies
-- Edge functions use SECURITY DEFINER for privileged operations
-- API keys stored encrypted in `system_settings`
-- Regular security linter checks recommended
-
-## Technologies Used
-
-This project is built with:
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-- Supabase
+// ❌ Incorrect
+const { data } = await sb.from('catalog_v2_cards').select()
+```
 
 ## Contributing
 
-1. Follow existing code patterns and conventions
-2. Ensure all new tables have proper RLS policies
-3. Test edge functions thoroughly before deployment
-4. Update this README for significant architectural changes
+1. Follow existing code patterns and component structure
+2. Ensure RLS policies are properly configured for new tables
+3. Test edge functions locally before deployment
+4. Update this README for significant changes
 
-## Custom Domain
+## Rollback Plan
 
-You can connect a custom domain by navigating to Project > Settings > Domains and clicking Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+If issues arise with the import jobs system:
+- `DROP TABLE catalog_v2.import_jobs;` (if needed)
+- Remove `catalog-sync-status` function directory
+- Revert Admin UI changes (button + table)
+- No change to `catalog_v2.stats()` or existing data

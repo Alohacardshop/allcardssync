@@ -36,6 +36,7 @@ import {
   getIncrementalDate,
   formatTimeAgo
 } from '@/lib/api';
+import { ImportJobsTable } from './ImportJobsTable';
 
 interface SyncTabProps {
   selectedMode: string;
@@ -580,6 +581,11 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
             </Card>
           )}
         </>
+      )}
+
+      {/* Import Jobs Table */}
+      {mode && (
+        <ImportJobsTable game={selectedMode} />
       )}
     </div>
   );
