@@ -49,6 +49,13 @@ export const GAME_MODES: GameMode[] = [
   }
 ];
 
+// Game slug mapping for RPC calls
+export const GAME_SLUG_MAP = {
+  'Magic: The Gathering': 'mtg',
+  'Pokémon (Global)': 'pokemon',
+  'Pokémon Japan': 'pokemon-japan',
+} as const;
+
 export interface CatalogStats {
   sets_count: number;
   cards_count: number;

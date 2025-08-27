@@ -69,7 +69,10 @@ export default function CatalogProgressCard({ game, functionPath, title }: Catal
   const loadCatalogStats = async () => {
     try {
       const { data, error } = await supabase.rpc("catalog_v2_stats", { game_in: game });
-      if (error) throw error;
+      if (error) {
+        console.error("Error loading catalog stats:", error);
+        throw error;
+      }
       
       const row = Array.isArray(data) ? data[0] : data;
       const pendingSets = Number(row?.pending_count ?? 0);
