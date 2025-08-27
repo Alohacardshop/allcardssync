@@ -177,11 +177,13 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
       setLastRun(result);
       
       if (result.ok) {
-        if (result.queued_sets) {
-          toast.success(`Started sync for ${result.queued_sets} sets`);
+        if (result.setsProcessed > 0 && result.cardsProcessed === 0) {
+          toast.success(`Sync completed: ${result.setsProcessed} sets queued`);
           setIsActiveSync(true);
-        } else if (result.cards !== undefined) {
-          toast.success(`Synced ${result.cards} cards for set ${result.setId}`);
+        } else if (result.cardsProcessed > 0) {
+          toast.success(`Sync completed: ${result.cardsProcessed} cards processed`);
+        } else if (result.setsProcessed > 0) {
+          toast.success(`Sync completed: ${result.setsProcessed} sets processed`);
         } else {
           toast.success('Sync operation completed');
         }

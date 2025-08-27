@@ -94,7 +94,12 @@ export interface SyncResult {
   status?: 'idle' | 'done' | 'error';
   message?: string;
   counts?: any;
-  at: string;
+  setsProcessed?: number;
+  cardsProcessed?: number;
+  variantsProcessed?: number;
+  skipped?: { sets?: number; cards?: number };
+  errors?: any[];
+  at?: string;
 }
 
 // Health check
