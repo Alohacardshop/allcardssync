@@ -81,19 +81,36 @@ export default function Auth() {
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    try {
-      cleanupAuthState();
-      try { await supabase.auth.signOut({ scope: 'global' } as any); } catch {}
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) throw error;
-      toast.success("Signed in");
-      window.location.href = "/";
-    } catch (err: any) {
-      console.error(err);
-      toast.error(err?.message || "Sign in failed");
-    } finally {
-      setLoading(false);
-    }
+    
+    const attemptSignIn = async (retryCount = 0): Promise<void> => {
+      try {
+        cleanupAuthState();
+        try { await supabase.auth.signOut({ scope: 'global' } as any); } catch {}
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        toast.success("Signed in");
+        window.location.href = "/";
+      } catch (err: any) {
+        console.error(err);
+        
+        // Retry on 503 Service Unavailable or network errors
+        if ((err?.status === 503 || err?.name === 'AuthRetryableFetchError') && retryCount < 3) {
+          const delay = Math.pow(2, retryCount) * 1000; // Exponential backoff: 1s, 2s, 4s
+          toast.error(`Service temporarily unavailable. Retrying in ${delay/1000}s...`);
+          setTimeout(() => attemptSignIn(retryCount + 1), delay);
+          return;
+        }
+        
+        if (err?.status === 503) {
+          toast.error("Supabase service is temporarily unavailable. Please try again in a few minutes.");
+        } else {
+          toast.error(err?.message || "Sign in failed");
+        }
+        setLoading(false);
+      }
+    };
+    
+    await attemptSignIn();
   };
 
   const handleSignUp = async (e: React.FormEvent) => {
