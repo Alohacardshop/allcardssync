@@ -7,14 +7,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Database, Search, RefreshCw, Copy, ExternalLink, ChevronLeft, ChevronRight, AlertCircle, Loader2 } from 'lucide-react';
+import { Database, Search, RefreshCw, Copy, ExternalLink, ChevronLeft, ChevronRight, AlertCircle, Loader2, Info } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   getCatalogSets,
   getCatalogCards,
   getCatalogVariants,
   runAudit,
-  runSync,
   formatTimeAgo,
   getCatalogStats,
   GAME_MODES,
@@ -204,29 +204,6 @@ const DataTab: React.FC<DataTabProps> = ({ selectedMode }) => {
     }));
   };
 
-  const handleSyncSet = async (setId: string) => {
-    setActionLoading(prev => new Set(prev).add(setId));
-    try {
-      await runSync(selectedMode, { setId });
-      toast({
-        title: "Success",
-        description: `Set ${setId} sync initiated`,
-      });
-      setTimeout(loadData, 1000);
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
-    } finally {
-      setActionLoading(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(setId);
-        return newSet;
-      });
-    }
-  };
 
   const handleAuditSet = async (setId: string) => {
     setActionLoading(prev => new Set(prev).add(`audit-${setId}`));
@@ -264,6 +241,16 @@ const DataTab: React.FC<DataTabProps> = ({ selectedMode }) => {
 
   return (
     <div className="space-y-6">
+      {/* JustTCG Sync Notice */}
+      <Alert>
+        <Info className="h-4 w-4" />
+        <AlertDescription>
+          For JustTCG synchronization operations, please use the dedicated{' '}
+          <a href="/justtcg-sync" className="underline font-medium">JustTCG Sync page</a>.
+          This browser provides catalog data viewing and auditing capabilities.
+        </AlertDescription>
+      </Alert>
+
       {/* Card Count Summary */}
       <Card>
         <CardHeader>
@@ -609,33 +596,25 @@ const DataTab: React.FC<DataTabProps> = ({ selectedMode }) => {
                             <TableCell>{set.release_date ? new Date(set.release_date).toLocaleDateString() : '—'}</TableCell>
                             <TableCell>{set.total || set.cards_count || '—'}</TableCell>
                             <TableCell>{formatTimeAgo(set.last_seen_at)}</TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-2">
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => handleSyncSet(set.set_id)}
-                                  disabled={actionLoading.has(set.set_id)}
-                                >
-                                  <RefreshCw className={`h-3 w-3 ${actionLoading.has(set.set_id) ? 'animate-spin' : ''}`} />
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => handleAuditSet(set.set_id)}
-                                  disabled={actionLoading.has(`audit-${set.set_id}`)}
-                                >
-                                  Audit
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => copyToClipboard(set.set_id)}
-                                >
-                                  <Copy className="h-3 w-3" />
-                                </Button>
-                              </div>
-                            </TableCell>
+                             <TableCell>
+                               <div className="flex items-center gap-2">
+                                 <Button
+                                   size="sm"
+                                   variant="outline"
+                                   onClick={() => handleAuditSet(set.set_id)}
+                                   disabled={actionLoading.has(`audit-${set.set_id}`)}
+                                 >
+                                   Audit
+                                 </Button>
+                                 <Button
+                                   size="sm"
+                                   variant="ghost"
+                                   onClick={() => copyToClipboard(set.set_id)}
+                                 >
+                                   <Copy className="h-3 w-3" />
+                                 </Button>
+                               </div>
+                             </TableCell>
                           </TableRow>
                         ))
                       )}
