@@ -21,10 +21,18 @@ class JustTCGApiError extends Error {
   }
 }
 
+// Game type mapping to match catalog-sync function expectations
+const GAME_TYPE_MAP = {
+  'magic-the-gathering': 'mtg',
+  'pokemon': 'pokemon',
+  'pokemon-japan': 'pokemon-japan'
+} as const;
+
 // Sync functions
 export async function syncGame(game: GameType): Promise<SyncResult> {
-  // Use unified catalog-sync endpoint with game query parameter
-  const endpoint = `${FUNCTIONS_BASE}/catalog-sync?game=${encodeURIComponent(game)}`;
+  // Map the game type to what the catalog-sync function expects
+  const mappedGame = GAME_TYPE_MAP[game as keyof typeof GAME_TYPE_MAP] || game;
+  const endpoint = `${FUNCTIONS_BASE}/catalog-sync?game=${encodeURIComponent(mappedGame)}`;
 
   const response = await fetch(endpoint, {
     method: 'POST',
