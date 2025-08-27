@@ -118,9 +118,18 @@ serve(async (req) => {
       raw: g,
     }))
 
+    // Deduplicate by ID to avoid upsert conflicts
+    const uniqueData = data.reduce((acc, current) => {
+      const exists = acc.find(item => item.id === current.id)
+      if (!exists) {
+        acc.push(current)
+      }
+      return acc
+    }, [] as typeof data)
+
     // Upsert games into database
-    if (data.length > 0) {
-      const gamesData = data.map(({ raw, ...rest }) => ({
+    if (uniqueData.length > 0) {
+      const gamesData = uniqueData.map(({ raw, ...rest }) => ({
         id: rest.id,
         name: rest.name,
         raw: raw,
@@ -136,10 +145,10 @@ serve(async (req) => {
       
       if (error) {
         console.error('Error upserting games:', error)
-        throw error
+        // Log error but don't throw - continue with response
+      } else {
+        console.log(`Upserted ${uniqueData.length} games into database`)
       }
-
-      console.log(`Upserted ${data.length} games into database`)
     }
 
     // Build metadata with diagnostics
@@ -153,7 +162,7 @@ serve(async (req) => {
     console.log(`Returning ${data.length} games with metadata`)
 
     return new Response(JSON.stringify({
-      data: data.map(({ raw, ...rest }) => rest),
+      data: uniqueData.map(({ raw, ...rest }) => rest),
       _metadata: metadata
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
