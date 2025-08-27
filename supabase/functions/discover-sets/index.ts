@@ -57,6 +57,7 @@ async function discoverSetsForGame(supabase: any, apiKey: string, gameId: string
   const response = await fetch(`https://api.justtcg.com/v1/sets?game=${encodeURIComponent(gameId)}`, {
     headers: {
       'x-api-key': apiKey,
+      'Accept': 'application/json',
       'Content-Type': 'application/json'
     }
   })
@@ -65,8 +66,18 @@ async function discoverSetsForGame(supabase: any, apiKey: string, gameId: string
     throw new Error(`JustTCG API error for ${gameId}: ${response.status} ${response.statusText}`)
   }
 
-  const apiResponse = await response.json()
-  const sets = apiResponse.sets || []
+  const raw = await response.json()
+  
+  // Robust parsing - support common envelope formats
+  const sets = Array.isArray(raw)
+    ? raw
+    : Array.isArray(raw?.data)
+      ? raw.data
+      : Array.isArray(raw?.sets)
+        ? raw.sets
+        : Array.isArray(raw?.results)
+          ? raw.results
+          : []
   
   console.log(`Found ${sets.length} sets for ${gameId}`)
 
@@ -113,9 +124,12 @@ serve(async (req) => {
     
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
+    const apiKey = await getApiKey()
+    
     // Parse query parameters and JSON body
     const url = new URL(req.url)
     let gameParam = url.searchParams.get('game')
+    let gamesToProcess: string[] = []
     
     // Check for JSON body to get games array
     if (req.method === 'POST' && req.headers.get('content-type')?.includes('application/json')) {
@@ -137,10 +151,6 @@ serve(async (req) => {
     } else if (gameParam) {
       gamesToProcess = [gameParam]
     }
-
-    const apiKey = await getApiKey()
-    
-    let gamesToProcess: string[] = []
     
     if (gamesToProcess.length === 0) {
       // Get all games from database if no specific games were requested
@@ -186,7 +196,11 @@ serve(async (req) => {
       _metadata: {
         gamesProcessed: results.length,
         totalSetsDiscovered: totalSets,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        ...(totalSets === 0 && {
+          topLevelKeys: gamesToProcess.length > 0 ? ["limited-sample"] : ["no-games-processed"],
+          sample: "Check logs for detailed API response diagnostics"
+        })
       }
     }
 

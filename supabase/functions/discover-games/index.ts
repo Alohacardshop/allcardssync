@@ -74,6 +74,7 @@ serve(async (req) => {
     const response = await fetch('https://api.justtcg.com/v1/games', {
       headers: {
         'x-api-key': apiKey,
+        'Accept': 'application/json',
         'Content-Type': 'application/json'
       }
     })
@@ -82,18 +83,47 @@ serve(async (req) => {
       throw new Error(`JustTCG API error: ${response.status} ${response.statusText}`)
     }
 
-    const apiResponse = await response.json()
-    const games = apiResponse.games || []
-    const metadata = apiResponse._metadata || {}
+    const raw = await response.json()
+    console.log('Raw API response keys:', Object.keys(raw || {}))
+    
+    // Robust parsing - support common envelope formats
+    const arr = Array.isArray(raw)
+      ? raw
+      : Array.isArray(raw?.data)
+        ? raw.data
+        : Array.isArray(raw?.games)
+          ? raw.games
+          : Array.isArray(raw?.results)
+            ? raw.results
+            : []
 
-    console.log(`Discovered ${games.length} games from JustTCG API`)
+    console.log(`Discovered ${arr.length} games from JustTCG API`)
+
+    // Map to the exact API shape
+    type APIGame = {
+      id: string;
+      name: string;
+      game_id?: string;
+      cards_count?: number;
+      sets_count?: number;
+      [k: string]: unknown;
+    };
+
+    const data = arr.map((g: APIGame) => ({
+      id: String(g.id),
+      name: String(g.name ?? ""),
+      game_id: String(g.game_id ?? g.id ?? ""),
+      cards_count: Number(g.cards_count ?? 0),
+      sets_count: Number(g.sets_count ?? 0),
+      raw: g,
+    }))
 
     // Upsert games into database
-    if (games.length > 0) {
-      const gamesData = games.map((game: any) => ({
-        id: game.id,
-        name: game.name || game.id,
-        raw: game,
+    if (data.length > 0) {
+      const gamesData = data.map(({ raw, ...rest }) => ({
+        id: rest.id,
+        name: rest.name,
+        raw: raw,
         discovered_at: new Date().toISOString()
       }))
 
@@ -109,31 +139,23 @@ serve(async (req) => {
         throw error
       }
 
-      console.log(`Upserted ${games.length} games into database`)
+      console.log(`Upserted ${data.length} games into database`)
     }
 
-    // Return fresh list from database
-    const { data: dbGames, error: fetchError } = await supabase
-      .from('games')
-      .select('*')
-      .order('name')
-
-    if (fetchError) {
-      throw fetchError
+    // Build metadata with diagnostics
+    const metadata = {
+      count: data.length,
+      topLevelKeys: Array.isArray(raw) ? ["<array>"] : Object.keys(raw || {}),
+      sample: typeof raw === "object" ? JSON.stringify(raw).slice(0, 600) : String(raw).slice(0, 600),
+      timestamp: new Date().toISOString()
     }
 
-    const result = {
-      data: dbGames || [],
-      _metadata: {
-        ...metadata,
-        gamesDiscovered: games.length,
-        timestamp: new Date().toISOString()
-      }
-    }
+    console.log(`Returning ${data.length} games with metadata`)
 
-    console.log(`Returning ${dbGames?.length || 0} games from database`)
-
-    return new Response(JSON.stringify(result), {
+    return new Response(JSON.stringify({
+      data: data.map(({ raw, ...rest }) => rest),
+      _metadata: metadata
+    }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })
     

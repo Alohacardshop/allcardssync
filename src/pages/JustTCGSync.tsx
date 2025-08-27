@@ -103,7 +103,7 @@ export default function JustTCGSync() {
   };
 
   // Fetch discovered games
-  const { data: games = [], isLoading: gamesLoading, refetch: refetchGames } = useQuery({
+  const { data: gamesResponse, isLoading: gamesLoading, refetch: refetchGames } = useQuery({
     queryKey: ['discovered-games'],
     queryFn: async () => {
       addLog('📡 Fetching games from JustTCG API...'); 
@@ -116,10 +116,13 @@ export default function JustTCGSync() {
       }
       
       addLog(`✅ Discovered ${data?.data?.length || 0} games`);
-      return data?.data || [];
+      return data; // Return full response with _metadata
     },
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
+
+  const games = gamesResponse?.data || [];
+  const gamesMetadata = gamesResponse?._metadata;
 
   // Discover sets mutation
   const discoverSetsMutation = useMutation({
@@ -472,6 +475,28 @@ export default function JustTCGSync() {
                 {selectedGames.length} of {games.length} selected
               </Badge>
             </div>
+
+            {/* Show diagnostics when no games are returned */}
+            {!gamesLoading && games.length === 0 && gamesMetadata && (
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  <div className="space-y-2">
+                    <div>No games returned from JustTCG API.</div>
+                    {gamesMetadata.topLevelKeys && (
+                      <div className="text-xs">
+                        <strong>API Response Keys:</strong> {gamesMetadata.topLevelKeys.join(', ')}
+                      </div>
+                    )}
+                    {gamesMetadata.sample && (
+                      <div className="text-xs">
+                        <strong>Sample Response:</strong> <code className="bg-muted px-1 rounded">{gamesMetadata.sample.slice(0, 100)}...</code>
+                      </div>
+                    )}
+                  </div>
+                </AlertDescription>
+              </Alert>
+            )}
 
             <div className="relative">
               <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
