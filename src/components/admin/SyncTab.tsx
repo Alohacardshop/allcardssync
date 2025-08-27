@@ -46,6 +46,19 @@ interface SyncTabProps {
   onHealthUpdate: (status: HealthStatus) => void;
 }
 
+interface LiveDelta {
+  sets: number;
+  cards: number;
+}
+
+// Helper function to normalize API response counts
+function normalizeApiCounts(result: any): { setsProcessed: number; cardsProcessed: number } {
+  return {
+    setsProcessed: result.setsProcessed || result.queued_sets || result.sets || 0,
+    cardsProcessed: result.cardsProcessed || result.cards || 0
+  };
+}
+
 export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHealthUpdate }: SyncTabProps) {
   const [setId, setSetId] = useState('');
   const [since, setSince] = useState('');
@@ -59,11 +72,14 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
   const [lastRun, setLastRun] = useState<any>(null);
   const [isActiveSync, setIsActiveSync] = useState(false);
   const [retryingError, setRetryingError] = useState<string | null>(null);
+  const [liveDelta, setLiveDelta] = useState<LiveDelta>({ sets: 0, cards: 0 });
   
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const mode = GAME_MODES.find(m => m.value === selectedMode);
 
+  // Reset liveDelta when mode changes or on fresh loads
   useEffect(() => {
+    setLiveDelta({ sets: 0, cards: 0 });
     if (mode) {
       loadAllData();
     }
@@ -167,6 +183,7 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
     }
 
     setLoading(true);
+    setLiveDelta({ sets: 0, cards: 0 }); // Reset delta on new sync
     
     try {
       const result = await runSync(mode, { 
@@ -174,16 +191,17 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
         since: since || undefined 
       });
       
-      setLastRun(result);
+      const counts = normalizeApiCounts(result);
+      setLastRun({ ...result, ...counts });
       
       if (result.ok) {
-        if (result.setsProcessed > 0 && result.cardsProcessed === 0) {
-          toast.success(`Sync completed: ${result.setsProcessed} sets queued`);
+        if (counts.setsProcessed > 0 && counts.cardsProcessed === 0) {
+          toast.success(`Sync completed: ${counts.setsProcessed} sets queued`);
           setIsActiveSync(true);
-        } else if (result.cardsProcessed > 0) {
-          toast.success(`Sync completed: ${result.cardsProcessed} cards processed`);
-        } else if (result.setsProcessed > 0) {
-          toast.success(`Sync completed: ${result.setsProcessed} sets processed`);
+        } else if (counts.cardsProcessed > 0) {
+          toast.success(`Sync completed: ${counts.cardsProcessed} cards processed`);
+        } else if (counts.setsProcessed > 0) {
+          toast.success(`Sync completed: ${counts.setsProcessed} sets processed`);
         } else {
           toast.success('Sync operation completed');
         }
@@ -231,16 +249,18 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
     if (!mode) return;
 
     setLoading(true);
+    setLiveDelta({ sets: 0, cards: 0 }); // Reset delta on new sync
     
     try {
       const result = await runSync(mode, { since: incrementalDate });
-      setLastRun(result);
+      const counts = normalizeApiCounts(result);
+      setLastRun({ ...result, ...counts });
       
       if (result.ok) {
         toast.success('Incremental sync started (6 months)', {
-          description: result.setsProcessed ? `Processing ${result.setsProcessed} sets` : 'Sync completed'
+          description: counts.setsProcessed ? `Processing ${counts.setsProcessed} sets` : 'Sync completed'
         });
-        if (result.setsProcessed) setIsActiveSync(true);
+        if (counts.setsProcessed) setIsActiveSync(true);
         await loadAllData();
       } else {
         toast.error('Incremental sync failed', {
@@ -264,15 +284,24 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
     
     try {
       const result = await drainQueue(mode);
-      setLastRun(result);
+      const counts = normalizeApiCounts(result);
+      setLastRun({ ...result, ...counts });
       
       if (result.ok) {
         if (result.status === 'idle') {
           toast.info('Queue is empty - no items to process');
           setIsActiveSync(false);
         } else {
+          // Increment liveDelta immediately for instant UI feedback
+          if (counts.cardsProcessed > 0) {
+            setLiveDelta(prev => ({ 
+              sets: prev.sets + (counts.setsProcessed || 0), 
+              cards: prev.cards + counts.cardsProcessed 
+            }));
+          }
+          
           toast.success('Processed one queue item', {
-            description: result.cardsProcessed ? `Synced ${result.cardsProcessed} cards` : 'Item processed'
+            description: counts.cardsProcessed ? `Synced ${counts.cardsProcessed} cards` : 'Item processed'
           });
           // Update local state immediately for faster UI feedback
           await Promise.all([loadQueueStats(), loadStats()]);
@@ -317,6 +346,15 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
           break;
         }
         
+        // Increment liveDelta immediately for each processed item
+        const counts = normalizeApiCounts(result);
+        if (counts.cardsProcessed > 0) {
+          setLiveDelta(prev => ({ 
+            sets: prev.sets + (counts.setsProcessed || 0), 
+            cards: prev.cards + counts.cardsProcessed 
+          }));
+        }
+        
         processed++;
         
         // Update stats more frequently for better live feedback
@@ -359,11 +397,12 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
     
     try {
       const result = await runSync(mode, { setId: error.set_id });
-      setLastRun(result);
+      const counts = normalizeApiCounts(result);
+      setLastRun({ ...result, ...counts });
       
       if (result.ok) {
         toast.success(`Retry successful for set ${error.set_id}`, {
-          description: result.cardsProcessed ? `Synced ${result.cardsProcessed} cards` : 'Sync completed'
+          description: counts.cardsProcessed ? `Synced ${counts.cardsProcessed} cards` : 'Sync completed'
         });
         await loadAllData();
       } else {
@@ -553,20 +592,26 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="text-center p-3 bg-muted/50 rounded-lg">
-                      <div className="text-2xl font-bold text-primary">{stats?.sets_count || 0}</div>
-                      <div className="text-xs text-muted-foreground">Sets</div>
-                    </div>
-                    <div className="text-center p-3 bg-muted/50 rounded-lg">
-                      <div className="text-2xl font-bold text-primary">{stats?.cards_count || 0}</div>
-                      <div className="text-xs text-muted-foreground">Cards</div>
-                    </div>
-                    <div className="text-center p-3 bg-muted/50 rounded-lg">
-                      <div className="text-2xl font-bold text-primary">{stats?.pending_count || 0}</div>
-                      <div className="text-xs text-muted-foreground">Pending</div>
-                    </div>
-                  </div>
+                   <div className="grid grid-cols-3 gap-4">
+                     <div className="text-center p-3 bg-muted/50 rounded-lg">
+                       <div className="text-2xl font-bold text-primary">{(stats?.sets_count || 0) + liveDelta.sets}</div>
+                       <div className="text-xs text-muted-foreground">Sets</div>
+                       {liveDelta.sets > 0 && (
+                         <div className="text-xs text-green-600 font-medium">+{liveDelta.sets} live</div>
+                       )}
+                     </div>
+                     <div className="text-center p-3 bg-muted/50 rounded-lg">
+                       <div className="text-2xl font-bold text-primary">{(stats?.cards_count || 0) + liveDelta.cards}</div>
+                       <div className="text-xs text-muted-foreground">Cards</div>
+                       {liveDelta.cards > 0 && (
+                         <div className="text-xs text-green-600 font-medium">+{liveDelta.cards} live</div>
+                       )}
+                     </div>
+                     <div className="text-center p-3 bg-muted/50 rounded-lg">
+                       <div className="text-2xl font-bold text-primary">{stats?.pending_count || 0}</div>
+                       <div className="text-xs text-muted-foreground">Pending</div>
+                     </div>
+                   </div>
 
                   <div className="flex items-center justify-center gap-2">
                     {isActiveSync ? (
@@ -621,13 +666,13 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
                         </span>
                       </div>
                       
-                      {lastRun.ok && (
-                        <div className="text-sm text-muted-foreground">
-                          {lastRun.setsProcessed && `Queued ${lastRun.setsProcessed} sets`}
-                          {lastRun.cardsProcessed !== undefined && `Synced ${lastRun.cardsProcessed} cards`}
-                          {lastRun.setId && ` for set ${lastRun.setId}`}
-                        </div>
-                      )}
+                       {lastRun.ok && (
+                         <div className="text-sm text-muted-foreground">
+                           {lastRun.setsProcessed && `Queued ${lastRun.setsProcessed} sets`}
+                           {lastRun.cardsProcessed !== undefined && ` • Synced ${lastRun.cardsProcessed} cards`}
+                           {lastRun.setId && ` for set ${lastRun.setId}`}
+                         </div>
+                       )}
                       
                       {!lastRun.ok && lastRun.error && (
                         <div className="text-sm text-red-500">
