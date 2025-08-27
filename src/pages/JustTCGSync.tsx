@@ -25,8 +25,6 @@ import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
-const FUNCTIONS_BASE = 'https://dmpoandoydaqxhzdjnmk.supabase.co/functions/v1';
-
 interface Game {
   id: string;
   name: string;
@@ -109,13 +107,16 @@ export default function JustTCGSync() {
     queryKey: ['discovered-games'],
     queryFn: async () => {
       addLog('📡 Fetching games from JustTCG API...'); 
-      const response = await fetch(`${FUNCTIONS_BASE}/discover-games`);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch games: ${response.statusText}`);
+      const { data, error } = await supabase.functions.invoke('discover-games', {
+        body: {}
+      });
+      
+      if (error) {
+        throw new Error(`Failed to fetch games: ${error.message}`);
       }
-      const result = await response.json();
-      addLog(`✅ Discovered ${result.data?.length || 0} games`);
-      return result.data || [];
+      
+      addLog(`✅ Discovered ${data?.data?.length || 0} games`);
+      return data?.data || [];
     },
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
@@ -123,17 +124,19 @@ export default function JustTCGSync() {
   // Discover sets mutation
   const discoverSetsMutation = useMutation({
     mutationFn: async (gameIds?: string[]) => {
-      const endpoint = gameIds && gameIds.length > 0
-        ? `${FUNCTIONS_BASE}/discover-sets?${gameIds.map(id => `game=${encodeURIComponent(id)}`).join('&')}`
-        : `${FUNCTIONS_BASE}/discover-sets`;
-      
       addLog(`🔍 Discovering sets for ${gameIds ? gameIds.length + ' selected games' : 'all games'}...`);
       
-      const response = await fetch(endpoint);
-      if (!response.ok) {
-        throw new Error(`Failed to discover sets: ${response.statusText}`);
+      const body = gameIds && gameIds.length > 0 ? { games: gameIds } : {};
+      
+      const { data, error } = await supabase.functions.invoke('discover-sets', {
+        body
+      });
+      
+      if (error) {
+        throw new Error(`Failed to discover sets: ${error.message}`);
       }
-      return response.json();
+      
+      return data;
     },
     onSuccess: async (data) => {
       addLog(`✅ Set discovery completed: ${data._metadata?.totalSetsDiscovered || 0} total sets discovered`);
@@ -254,15 +257,13 @@ export default function JustTCGSync() {
         try {
           addLog(`⚡ Syncing ${setName} (${gameId})...`);
           
-          const response = await fetch(
-            `${FUNCTIONS_BASE}/justtcg-import?game=${encodeURIComponent(gameId)}&setId=${encodeURIComponent(setId)}`
-          );
+          const { data: result, error } = await supabase.functions.invoke('justtcg-import', {
+            body: { game: gameId, setId }
+          });
           
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          if (error) {
+            throw new Error(`Sync failed: ${error.message}`);
           }
-          
-          const result = await response.json();
           results.push(result);
           
           // Update progress to done
