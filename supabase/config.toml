@@ -15,6 +15,30 @@ verify_jwt = false
 [functions.catalog-sync-justtcg]
 verify_jwt = false
 
+[functions.catalog-refresh]
+verify_jwt = false
+
+[functions.catalog-search]
+verify_jwt = false
+
+[functions.catalog-snapshots]
+verify_jwt = false
+
+[functions.sync-errors]
+verify_jwt = false
+
+[functions.catalog-sync-status]
+verify_jwt = false
+
+[functions.catalog-sync-retry]
+verify_jwt = false
+
+[functions.catalog-sync-cancel]
+verify_jwt = false
+
+[functions.catalog-audit]
+verify_jwt = false
+
 [functions.catalog-audit]
 verify_jwt = false
 

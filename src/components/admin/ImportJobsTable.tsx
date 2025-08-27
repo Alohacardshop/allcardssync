@@ -41,7 +41,7 @@ export function ImportJobsTable({ game, refreshInterval = 5000 }: ImportJobsTabl
       const SUPABASE_URL = "https://dmpoandoydaqxhzdjnmk.supabase.co";
       const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRtcG9hbmRveWRhcXhoemRqbm1rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ0MDU5NDMsImV4cCI6MjA2OTk4MTk0M30.WoHlHO_Z4_ogeO5nt4I29j11aq09RMBtNug8a5rStgk";
       
-      const url = new URL(`${SUPABASE_URL}/functions/v1/catalog-sync-status`);
+      const url = new URL(`https://dmpoandoydaqxhzdjnmk.supabase.co/functions/v1/catalog-sync-status`);
       url.searchParams.set('game', game);
       url.searchParams.set('limit', '50');
 

@@ -3,7 +3,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
-const FUNCTIONS_BASE = import.meta.env.VITE_SUPABASE_FUNCTIONS_URL?.replace(/\/+$/, "") || "/functions/v1";
+const FUNCTIONS_BASE = "https://dmpoandoydaqxhzdjnmk.supabase.co/functions/v1";
 
 export default function PokemonCatalogSync() {
   const [setId, setSetId] = useState("");

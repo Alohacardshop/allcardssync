@@ -65,7 +65,7 @@ function normalizeApiCounts(result: any): { setsProcessed: number; cardsProcesse
   };
 }
 
-const FUNCTIONS_BASE = import.meta.env.VITE_SUPABASE_FUNCTIONS_URL?.replace(/\/+$/, '') || '/functions/v1'
+const FUNCTIONS_BASE = 'https://dmpoandoydaqxhzdjnmk.supabase.co/functions/v1';
 
 
 

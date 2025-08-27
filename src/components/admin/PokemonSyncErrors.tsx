@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { RefreshCw } from "lucide-react";
 
-const FUNCTIONS_BASE = "https://dmpoandoydaqxhzdjnmk.functions.supabase.co";
+const FUNCTIONS_BASE = "https://dmpoandoydaqxhzdjnmk.supabase.co/functions/v1";
 
 interface SyncError {
   set_id: string;

@@ -11,7 +11,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { searchCardsByNameNumber, searchCatalogV2, getReferencePriceByTcgplayerId, type JustTCGCard } from '@/lib/justtcg-types';
 import { USE_V2_POKEMON, USE_V2_POKEMON_JAPAN, USE_V2_MTG } from '@/lib/catalogEnv';
 
-const FUNCTIONS_BASE = import.meta.env.VITE_SUPABASE_FUNCTIONS_URL?.replace(/\/+$/, "") || "/functions/v1";
+const FUNCTIONS_BASE = "https://dmpoandoydaqxhzdjnmk.supabase.co/functions/v1";
 import { normalizeStr, normalizeNumber, includesLoose, similarityScore } from '@/lib/cardSearch';
 import type { GameKey, JObjectCard, Printing } from '@/lib/types';
 import { GAME_OPTIONS } from '@/lib/types';

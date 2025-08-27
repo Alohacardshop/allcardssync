@@ -12,7 +12,7 @@ import type {
   ApiMetadata
 } from '@/types/justtcg';
 
-const FUNCTIONS_BASE = '/functions/v1';
+const FUNCTIONS_BASE = 'https://dmpoandoydaqxhzdjnmk.supabase.co/functions/v1';
 
 class JustTCGApiError extends Error {
   constructor(message: string, public status?: number) {
@@ -30,7 +30,7 @@ export async function syncGame(game: GameType): Promise<SyncResult> {
   } else if (game === 'pokemon-japan') {
     endpoint = `${FUNCTIONS_BASE}/catalog-sync-pokemon-japan`;
   } else if (game === 'magic-the-gathering') {
-    endpoint = `${FUNCTIONS_BASE}/catalog-sync-mtg`;
+    endpoint = `${FUNCTIONS_BASE}/catalog-sync-justtcg?game=magic-the-gathering`;
   } else {
     throw new JustTCGApiError(`Unsupported game type: ${game}`);
   }

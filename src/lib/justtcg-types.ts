@@ -12,7 +12,7 @@ export type JustTCGCard = {
 
 // For components that need to search cards via edge functions
 export async function searchCatalogV2(game: 'pokemon'|'pokemon_japan'|'mtg', name: string, number?: string, limit = 5) {
-  const url = new URL(`/functions/v1/catalog-search`, window.location.origin);
+  const url = new URL(`https://dmpoandoydaqxhzdjnmk.supabase.co/functions/v1/catalog-search`);
   url.searchParams.set("game", game);
   url.searchParams.set("name", name);
   if (number) url.searchParams.set("number", number);
@@ -37,7 +37,7 @@ export async function getReferencePriceByTcgplayerId(
   tcgplayerId: string | number,
   opts?: { condition?: string; printing?: string }
 ) {
-  const url = new URL(`/functions/v1/justtcg/cards`, window.location.origin);
+  const url = new URL(`https://dmpoandoydaqxhzdjnmk.supabase.co/functions/v1/justtcg/cards`);
   url.searchParams.set("tcgplayerId", String(tcgplayerId));
   if (opts?.condition) url.searchParams.set("condition", opts.condition);
   if (opts?.printing) url.searchParams.set("printing", opts.printing);
@@ -57,7 +57,7 @@ export async function searchCardsByNameNumber(params: {
   set?: string;
   limit?: number;
 }): Promise<JustTCGCard[]> {
-  const url = new URL(`/functions/v1/justtcg/cards`, window.location.origin);
+  const url = new URL(`https://dmpoandoydaqxhzdjnmk.supabase.co/functions/v1/justtcg/cards`);
   
   if (params.name) url.searchParams.set("name", params.name);
   if (params.number) url.searchParams.set("number", params.number);
