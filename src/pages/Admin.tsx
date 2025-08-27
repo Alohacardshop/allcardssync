@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Navigation } from '@/components/Navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import SyncTab from '@/components/admin/SyncTab';
+
 import AuditReconcile from '@/components/admin/AuditReconcile';
 import DataTab from '@/components/admin/DataTab';
 import { SystemHealthCard } from '@/components/admin/SystemHealthCard';
@@ -679,23 +679,13 @@ const Admin = () => {
       </div>
 
       {/* Main Admin Tabs */}
-      <Tabs defaultValue="sync" className="w-full">
-        <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="sync">Sync</TabsTrigger>
+      <Tabs defaultValue="analytics" className="w-full">
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="analytics">Analytics</TabsTrigger>
           <TabsTrigger value="audit">Audit & Reconcile</TabsTrigger>
           <TabsTrigger value="data">Data</TabsTrigger>
-          <TabsTrigger value="analytics">Analytics</TabsTrigger>
           <TabsTrigger value="config">Configuration</TabsTrigger>
         </TabsList>
-        
-        <TabsContent value="sync" className="space-y-6">
-          <SyncTab 
-            selectedMode={selectedMode}
-            onModeChange={setSelectedMode}
-            healthStatus={healthStatus}
-            onHealthUpdate={setHealthStatus}
-          />
-        </TabsContent>
 
         <TabsContent value="audit" className="space-y-6">
           <AuditReconcile selectedMode={GAME_MODES.find(m => m.value === selectedMode) || GAME_MODES[0]} />
@@ -709,7 +699,7 @@ const Admin = () => {
           <div className="mb-4">
             <h3 className="text-lg font-semibold mb-2">JustTCG Analytics & Catalog Management</h3>
             <p className="text-sm text-muted-foreground">
-              Enhanced catalog sync with 500 RPM rate limiting, bulk operations, and automated nightly analytics snapshots.
+              Incremental catalog sync with 500 RPM rate limiting, bulk operations, and automated nightly analytics snapshots.
             </p>
             <Badge variant="secondary" className="mt-2">Nightly Snapshots: 3:15 AM UTC</Badge>
           </div>
