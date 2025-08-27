@@ -70,12 +70,12 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
   }, [mode]);
 
   useEffect(() => {
-    // Poll progress during active sync
+    // Poll progress during active sync with faster interval
     if (isActiveSync && mode) {
       pollIntervalRef.current = setInterval(() => {
         loadStats();
         loadQueueStats();
-      }, 3000);
+      }, 1000); // Faster 1-second polling when active
     } else {
       if (pollIntervalRef.current) {
         clearInterval(pollIntervalRef.current);
@@ -238,9 +238,9 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
       
       if (result.ok) {
         toast.success('Incremental sync started (6 months)', {
-          description: result.queued_sets ? `Processing ${result.queued_sets} sets` : 'Sync completed'
+          description: result.setsProcessed ? `Processing ${result.setsProcessed} sets` : 'Sync completed'
         });
-        if (result.queued_sets) setIsActiveSync(true);
+        if (result.setsProcessed) setIsActiveSync(true);
         await loadAllData();
       } else {
         toast.error('Incremental sync failed', {
@@ -260,6 +260,7 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
     if (!mode) return;
 
     setProcessing(true);
+    setIsActiveSync(true); // Start active polling
     
     try {
       const result = await drainQueue(mode);
@@ -268,21 +269,25 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
       if (result.ok) {
         if (result.status === 'idle') {
           toast.info('Queue is empty - no items to process');
+          setIsActiveSync(false);
         } else {
           toast.success('Processed one queue item', {
-            description: result.cards ? `Synced ${result.cards} cards` : 'Item processed'
+            description: result.cardsProcessed ? `Synced ${result.cardsProcessed} cards` : 'Item processed'
           });
+          // Update local state immediately for faster UI feedback
+          await Promise.all([loadQueueStats(), loadStats()]);
         }
-        await loadAllData();
       } else {
         toast.error('Failed to process queue item', {
           description: result.error
         });
+        setIsActiveSync(false);
       }
     } catch (error: any) {
       toast.error('Failed to process queue item', {
         description: error.message
       });
+      setIsActiveSync(false);
     } finally {
       setProcessing(false);
     }
@@ -292,6 +297,7 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
     if (!mode) return;
 
     setProcessingAll(true);
+    setIsActiveSync(true); // Start active polling
     let processed = 0;
     const maxItems = 100; // Safety limit
     
@@ -313,9 +319,9 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
         
         processed++;
         
-        // Update stats periodically
-        if (processed % 5 === 0) {
-          await loadAllData();
+        // Update stats more frequently for better live feedback
+        if (processed % 2 === 0) {
+          await Promise.all([loadQueueStats(), loadStats()]);
         }
         
         // Small delay to prevent overwhelming the system
@@ -332,6 +338,7 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
         toast.info('Queue is empty - no items to process');
       }
       
+      // Final update
       await loadAllData();
       
     } catch (error: any) {
@@ -340,6 +347,7 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
       });
     } finally {
       setProcessingAll(false);
+      // Let polling handle the final isActiveSync state
     }
   };
 
@@ -355,7 +363,7 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
       
       if (result.ok) {
         toast.success(`Retry successful for set ${error.set_id}`, {
-          description: result.cards ? `Synced ${result.cards} cards` : 'Sync completed'
+          description: result.cardsProcessed ? `Synced ${result.cardsProcessed} cards` : 'Sync completed'
         });
         await loadAllData();
       } else {
@@ -615,8 +623,8 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
                       
                       {lastRun.ok && (
                         <div className="text-sm text-muted-foreground">
-                          {lastRun.queued_sets && `Queued ${lastRun.queued_sets} sets`}
-                          {lastRun.cards !== undefined && `Synced ${lastRun.cards} cards`}
+                          {lastRun.setsProcessed && `Queued ${lastRun.setsProcessed} sets`}
+                          {lastRun.cardsProcessed !== undefined && `Synced ${lastRun.cardsProcessed} cards`}
                           {lastRun.setId && ` for set ${lastRun.setId}`}
                         </div>
                       )}
