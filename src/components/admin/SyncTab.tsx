@@ -858,66 +858,90 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
     if (!mode) return;
 
     setProcessingAll(true);
-    setIsActiveSync(true); // Start active polling
-    let processed = 0;
-    const maxItems = 100; // Safety limit
+    setIsActiveSync(true);
+    
+    let totalProcessed = 0;
+    let consecutiveErrors = 0;
+    const MAX_CONSECUTIVE_ERRORS = 3;
     
     try {
-      while (processed < maxItems) {
+      // First, enable auto-drain
+      setAutoDrainEnabled(true);
+      
+      // Then queue any pending sets
+      console.log('Process All: Queueing pending sets...');
+      try {
+        const queuedCount = await queuePendingSets(mode);
+        if (queuedCount > 0) {
+          toast.success(`Queued ${queuedCount} pending sets - auto-processing enabled`);
+        } else {
+          toast.info('No pending sets to queue - processing existing queue');
+        }
+        await loadQueueStats(); // Refresh queue stats after queueing
+      } catch (error: any) {
+        console.warn('Process All: Failed to queue pending sets:', error.message);
+        toast.warning('Failed to queue some pending sets', {
+          description: 'Continuing with existing queue items'
+        });
+      }
+      
+      // Then drain the entire queue
+      console.log('Process All: Starting queue drain...');
+      while (true) {
         const result = await drainQueue(mode);
+        const counts = normalizeApiCounts(result);
+        setLastRun({ ...result, ...counts });
         
         if (!result.ok) {
-          toast.error('Processing stopped due to error', {
-            description: result.error
-          });
-          break;
+          consecutiveErrors++;
+          console.warn(`Process All: Error #${consecutiveErrors}:`, result.error);
+          
+          if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+            toast.error(`Process All stopped after ${MAX_CONSECUTIVE_ERRORS} consecutive errors`, {
+              description: 'Check recent errors for details'
+            });
+            break;
+          } else {
+            toast.warning(`Error processing item (${consecutiveErrors}/${MAX_CONSECUTIVE_ERRORS})`, {
+              description: result.error
+            });
+            // Wait a bit before retrying
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            continue;
+          }
         }
+        
+        // Reset error counter on success
+        consecutiveErrors = 0;
         
         if (result.status === 'idle') {
-          // Queue is empty
+          toast.success(`Process All complete! Processed ${totalProcessed} items total`);
+          setIsActiveSync(false);
           break;
         }
         
-        // Increment liveDelta immediately for each processed item
-        const counts = normalizeApiCounts(result);
+        // Increment counters and update UI
         if (counts.cardsProcessed > 0) {
+          totalProcessed++;
           setLiveDelta(prev => ({ 
             sets: prev.sets + (counts.setsProcessed || 0), 
             cards: prev.cards + counts.cardsProcessed 
           }));
         }
         
-        processed++;
+        // Update stats after each item
+        await Promise.all([loadQueueStats(), loadStats()]);
         
-        // Update stats more frequently for better live feedback
-        if (processed % 2 === 0) {
-          await Promise.all([loadQueueStats(), loadStats()]);
-        }
-        
-        // Small delay to prevent overwhelming the system
-        await new Promise(resolve => setTimeout(resolve, 100));
+        // Small delay to prevent overwhelming the API
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
-      
-      if (processed === maxItems) {
-        toast.warning(`Processed ${processed} items (safety limit reached)`, {
-          description: 'Click "Process All" again to continue'
-        });
-      } else if (processed > 0) {
-        toast.success(`Processed ${processed} queue items`);
-      } else {
-        toast.info('Queue is empty - no items to process');
-      }
-      
-      // Final update
-      await loadAllData();
-      
     } catch (error: any) {
-      toast.error('Failed to process queue', {
+      toast.error('Process All failed', {
         description: error.message
       });
+      setIsActiveSync(false);
     } finally {
       setProcessingAll(false);
-      // Let polling handle the final isActiveSync state
     }
   };
 
@@ -1315,6 +1339,31 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
                     </AlertDescription>
                   </Alert>
                 )}
+              </div>
+
+              {/* Process All Automatically Button */}
+              <div className="pt-4 border-t">
+                <Button
+                  onClick={handleProcessAll}
+                  disabled={isDisabled}
+                  className="w-full bg-primary hover:bg-primary/90"
+                  size="lg"
+                >
+                  {processingAll ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      Processing All...
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="h-4 w-4 mr-2" />
+                      Process All Automatically
+                    </>
+                  )}
+                </Button>
+                <p className="text-xs text-muted-foreground mt-2 text-center">
+                  Queues pending sets, enables auto-drain, and processes everything automatically
+                </p>
               </div>
 
               {/* Queue Processing Controls */}
