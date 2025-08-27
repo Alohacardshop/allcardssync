@@ -266,19 +266,22 @@ async function upsertSets(rows: any[]) {
 
 async function upsertCards(rows: any[]) {
   if (!rows.length) return;
-  const chunk = 400;
+  const chunk = 120;
   for (let i = 0; i < rows.length; i += chunk) {
     const { error } = await supabaseClient.rpc("catalog_v2_upsert_cards", { rows: rows.slice(i, i + chunk) as any });
     if (error) throw error;
+    // small yield to avoid DB timeouts when many chunks
+    await backoffWait(50);
   }
 }
 
 async function upsertVariants(rows: any[]) {
   if (!rows.length) return;
-  const chunk = 400;
+  const chunk = 120;
   for (let i = 0; i < rows.length; i += chunk) {
     const { error } = await supabaseClient.rpc("catalog_v2_upsert_variants", { rows: rows.slice(i, i + chunk) as any });
     if (error) throw error;
+    await backoffWait(50);
   }
 }
 
