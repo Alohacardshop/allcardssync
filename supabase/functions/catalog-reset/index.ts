@@ -60,38 +60,54 @@ serve(async (req) => {
       
       try {
         // 1. Delete variants (must be first due to foreign key constraints)
-        const { count: variantsDeleted } = await supabase
-          .schema('catalog_v2')
-          .from('variants')
-          .delete()
+        const { count: variantsDeleted, error: variantsError } = await supabase
+          .from('catalog_v2.variants')
+          .delete({ count: 'exact' })
           .eq('game', game)
+
+        if (variantsError) {
+          console.error(`Variants deletion error for ${game}:`, variantsError)
+        }
 
         // 2. Delete cards
-        const { count: cardsDeleted } = await supabase
-          .schema('catalog_v2')
-          .from('cards')
-          .delete()
+        const { count: cardsDeleted, error: cardsError } = await supabase
+          .from('catalog_v2.cards')
+          .delete({ count: 'exact' })
           .eq('game', game)
+
+        if (cardsError) {
+          console.error(`Cards deletion error for ${game}:`, cardsError)
+        }
 
         // 3. Delete sets
-        const { count: setsDeleted } = await supabase
-          .schema('catalog_v2')
-          .from('sets')
-          .delete()
+        const { count: setsDeleted, error: setsError } = await supabase
+          .from('catalog_v2.sets')
+          .delete({ count: 'exact' })
           .eq('game', game)
+
+        if (setsError) {
+          console.error(`Sets deletion error for ${game}:`, setsError)
+        }
 
         // 4. Delete sync errors
-        const { count: errorsDeleted } = await supabase
-          .schema('catalog_v2')
-          .from('sync_errors')
-          .delete()
+        const { count: errorsDeleted, error: errorsError } = await supabase
+          .from('catalog_v2.sync_errors')
+          .delete({ count: 'exact' })
           .eq('game', game)
 
-        // 5. Delete queue items (check both game and mode columns)
-        const { count: queueDeleted } = await supabase
+        if (errorsError) {
+          console.error(`Sync errors deletion error for ${game}:`, errorsError)
+        }
+
+        // 5. Delete queue items
+        const { count: queueDeleted, error: queueError } = await supabase
           .from('sync_queue')
-          .delete()
-          .or(`game.eq.${game},mode.eq.${game}`)
+          .delete({ count: 'exact' })
+          .eq('game', game)
+
+        if (queueError) {
+          console.error(`Queue deletion error for ${game}:`, queueError)
+        }
 
         const summary: ResetSummary = {
           game,
