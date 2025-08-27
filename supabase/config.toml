@@ -9,6 +9,9 @@ verify_jwt = false
 [functions.catalog-sync-pokemon]
 verify_jwt = false
 
+[functions.catalog-sync-pokemon-japan]
+verify_jwt = false
+
 [functions.catalog-sync-justtcg]
 verify_jwt = false
 
