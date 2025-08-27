@@ -162,6 +162,24 @@ function sanitizeImages(images: any): any {
   return null;
 }
 
+// Helper function to sanitize data objects for JSON storage
+function sanitizeData(obj: any): any {
+  if (!obj) return null;
+  
+  try {
+    // Use JSON.parse(JSON.stringify()) to remove circular references, 
+    // undefined values, and other non-serializable data
+    return JSON.parse(JSON.stringify(obj));
+  } catch (error) {
+    logStructured('WARN', 'Failed to sanitize data object', {
+      operation: 'sanitize_data',
+      error: error.message,
+      dataType: typeof obj
+    });
+    return null;
+  }
+}
+
 async function fetchJsonWithRetry(url: string, headers: HeadersInit = {}, tries = 6, baseDelayMs = 500, context: Record<string, any> = {}) {
   let lastError: any;
   for (let i = 0; i < tries; i++) {
@@ -366,7 +384,7 @@ async function syncSet(game: string, setId: string) {
         total: firstCard.set.total ?? null,
         release_date: firstCard.set.releaseDate ?? null,
         images: sanitizeImages(firstCard.set.images),
-        data: firstCard.set
+        data: sanitizeData(firstCard.set)
       }]);
     }
 
@@ -395,7 +413,7 @@ async function syncSet(game: string, setId: string) {
         images: sanitizeImages(card.images),
         tcgplayer_product_id: card.tcgplayerId ?? null,
         tcgplayer_url: card.tcgplayerUrl ?? null,
-        data: card
+        data: sanitizeData(card)
       });
       
       // Add variants to batch with defensive check for pokemon-japan
@@ -428,7 +446,7 @@ async function syncSet(game: string, setId: string) {
           mid_price: variant.midPrice ?? null,
           high_price: variant.highPrice ?? null,
           currency: variant.currency ?? 'USD',
-          data: variant
+          data: sanitizeData(variant)
         });
       }
     }
@@ -802,7 +820,7 @@ serve(async (req) => {
       total: s.total ?? null,
       release_date: s.releaseDate ?? null,
       images: sanitizeImages(s.images),
-      data: s
+      data: sanitizeData(s)
     }));
     
     await upsertSets(setRows);
