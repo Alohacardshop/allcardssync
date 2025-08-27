@@ -482,10 +482,18 @@ export function RawCardIntake({
                       size="sm"
                       onClick={async () => {
                         try {
-                          const functionPath = game === 'pokemon' 
-                            ? `/catalog-sync-pokemon?setId=${encodeURIComponent(syncSetId)}`
-                            : `/catalog-sync-justtcg?game=${game === 'pokemon_japan' ? 'pokemon-japan' : 'magic-the-gathering'}&set=${encodeURIComponent(syncSetId)}`;
-                          await fetch(`${FUNCTIONS_BASE}${functionPath}`, { method: 'POST' });
+                          // Use unified catalog-sync endpoint
+                          const gameParam = game === 'pokemon_japan' ? 'pokemon-japan' : game === 'mtg' ? 'mtg' : 'pokemon';
+                          const url = new URL(`${FUNCTIONS_BASE}/catalog-sync`);
+                          url.searchParams.set('game', gameParam);
+                          if (syncSetId) {
+                            if (game === 'pokemon') {
+                              url.searchParams.set('setId', syncSetId);
+                            } else {
+                              url.searchParams.set('set', syncSetId);
+                            }
+                          }
+                          await fetch(url.toString(), { method: 'POST' });
                           toast({ title: 'Sync started', description: 'Refreshing search results...' });
                           await doSearch();
                         } catch (error) {

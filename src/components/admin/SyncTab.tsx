@@ -213,7 +213,7 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
     }
   };
 
-  const handleSync = async () => {
+  const handleSyncSets = async () => {
     if (!mode) return;
 
     // Check health first
@@ -237,24 +237,20 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
       setLastRun({ ...result, ...counts });
       
       if (result.ok) {
-        if (counts.setsProcessed > 0 && counts.cardsProcessed === 0) {
-          toast.success(`Sync completed: ${counts.setsProcessed} sets queued`);
+        if (counts.setsProcessed > 0) {
+          toast.success(`Sets sync completed: ${counts.setsProcessed} sets queued for processing`);
           setIsActiveSync(true);
-        } else if (counts.cardsProcessed > 0) {
-          toast.success(`Sync completed: ${counts.cardsProcessed} cards processed`);
-        } else if (counts.setsProcessed > 0) {
-          toast.success(`Sync completed: ${counts.setsProcessed} sets processed`);
         } else {
-          toast.success('Sync operation completed');
+          toast.success('Sets sync completed - no new sets found');
         }
         await loadAllData();
       } else {
-        toast.error('Sync failed', {
+        toast.error('Sets sync failed', {
           description: result.error || 'Unknown error occurred'
         });
       }
     } catch (error: any) {
-      toast.error('Sync failed', {
+      toast.error('Sets sync failed', {
         description: error.message
       });
     } finally {
@@ -933,7 +929,7 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
                 <div className="space-y-2">
                   <Label>&nbsp;</Label>
                   <Button 
-                    onClick={handleSync}
+                    onClick={handleSyncSets}
                     disabled={isDisabled}
                     className="w-full"
                   >

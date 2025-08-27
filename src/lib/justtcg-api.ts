@@ -47,6 +47,49 @@ export async function syncGame(game: GameType): Promise<SyncResult> {
   return response.json();
 }
 
+// New separated sync functions
+export async function syncSets(game: GameType, options?: { setId?: string; since?: string }): Promise<SyncResult> {
+  const mappedGame = GAME_TYPE_MAP[game as keyof typeof GAME_TYPE_MAP] || game;
+  const url = new URL(`${FUNCTIONS_BASE}/catalog-sync`);
+  url.searchParams.set('game', mappedGame);
+  
+  if (options?.setId) {
+    url.searchParams.set('setId', options.setId);
+  }
+  if (options?.since) {
+    url.searchParams.set('since', options.since);
+  }
+
+  const response = await fetch(url.toString(), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' }
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new JustTCGApiError(`HTTP ${response.status}: ${errorText}`, response.status);
+  }
+
+  return response.json();
+}
+
+export async function drainCardQueue(game: GameType): Promise<RefreshResult> {
+  const mappedGame = GAME_TYPE_MAP[game as keyof typeof GAME_TYPE_MAP] || game;
+  const endpoint = `${FUNCTIONS_BASE}/catalog-sync/drain?mode=${encodeURIComponent(mappedGame)}`;
+
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' }
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new JustTCGApiError(`HTTP ${response.status}: ${errorText}`, response.status);
+  }
+
+  return response.json();
+}
+
 // Refresh functions
 export async function refreshList(request: RefreshListRequest): Promise<RefreshResult> {
   const response = await fetch(`${FUNCTIONS_BASE}/catalog-refresh`, {

@@ -50,38 +50,17 @@ export default function PokemonSyncErrors({ autoRefresh = false, game = 'pokemon
 
   async function retry(setId: string) {
     try {
-      if (game === 'pokemon') {
-        // Pokémon uses catalog-sync-pokemon function
-        const { error } = await supabase.functions.invoke('catalog-sync-pokemon', {
-          body: { setId }
-        });
+      // Use unified catalog-sync endpoint
+      const gameParam = game === 'mtg' ? 'mtg' : game === 'pokemon_japan' ? 'pokemon-japan' : 'pokemon';
+      const url = new URL(`${FUNCTIONS_BASE}/catalog-sync`);
+      url.searchParams.set('game', gameParam);
+      url.searchParams.set('setId', setId);
 
-        if (error) {
-          toast.error(`Failed to retry set ${setId}: ${error.message}`);
-          return;
-        }
-      } else if (game === 'mtg' || game === 'pokemon_japan') {
-        // MTG and Pokémon Japan use catalog-sync-justtcg function
-        // First get the set name from the ID
-        const { data: setName } = await supabase.rpc('catalog_v2_find_set_name_by_id', {
-          game_in: game === 'mtg' ? 'magic-the-gathering' : 'pokemon-japan',
-          id_in: setId
-        });
+      const response = await fetch(url.toString(), { method: "POST" });
 
-        if (!setName) {
-          toast.error(`Set name not found for ID: ${setId}`);
-          return;
-        }
-
-        const gameParam = game === 'mtg' ? 'magic-the-gathering' : 'pokemon-japan';
-        const response = await fetch(`${FUNCTIONS_BASE}/catalog-sync-justtcg?game=${gameParam}&set=${encodeURIComponent(setName)}`, { 
-          method: "POST" 
-        });
-
-        if (!response.ok) {
-          toast.error(`Failed to retry set ${setId}`);
-          return;
-        }
+      if (!response.ok) {
+        toast.error(`Failed to retry set ${setId}`);
+        return;
       }
 
       toast.success(`Retrying sync for set ${setId}`);
@@ -95,27 +74,16 @@ export default function PokemonSyncErrors({ autoRefresh = false, game = 'pokemon
   async function retryAllFailures() {
     const ids = Array.from(new Set(rows.map(r => r.set_id))).filter(Boolean);
     
+    const gameParam = game === 'mtg' ? 'mtg' : game === 'pokemon_japan' ? 'pokemon-japan' : 'pokemon';
+    
     for (const id of ids) {
-      if (game === 'pokemon') {
-        // Pokémon uses catalog-sync-pokemon function
-        await fetch(`${FUNCTIONS_BASE}/catalog-sync-pokemon?setId=${encodeURIComponent(id)}`, { method: "POST" });
-      } else if (game === 'mtg' || game === 'pokemon_japan') {
-        // MTG and Pokémon Japan use catalog-sync-justtcg function
-        try {
-          const { data: setName } = await supabase.rpc('catalog_v2_find_set_name_by_id', {
-            game_in: game === 'mtg' ? 'magic-the-gathering' : 'pokemon-japan',
-            id_in: id
-          });
-
-          if (setName) {
-            const gameParam = game === 'mtg' ? 'magic-the-gathering' : 'pokemon-japan';
-            await fetch(`${FUNCTIONS_BASE}/catalog-sync-justtcg?game=${gameParam}&set=${encodeURIComponent(setName)}`, { 
-              method: "POST" 
-            });
-          }
-        } catch (err) {
-          console.error(`Failed to retry set ${id}:`, err);
-        }
+      try {
+        const url = new URL(`${FUNCTIONS_BASE}/catalog-sync`);
+        url.searchParams.set('game', gameParam);
+        url.searchParams.set('setId', id);
+        await fetch(url.toString(), { method: "POST" });
+      } catch (err) {
+        console.error(`Failed to retry set ${id}:`, err);
       }
     }
     
