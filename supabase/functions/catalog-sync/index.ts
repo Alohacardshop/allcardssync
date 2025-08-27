@@ -627,16 +627,17 @@ serve(async (req) => {
 
           return new Response(
             JSON.stringify({ 
-              ok: false, 
+              ok: true, // Changed to true so UI continues processing queue
               queueItemId: queueItem.id,
               mode: queueItem.mode,
               game: queueItem.game,
               setId: queueItem.set_id,
               error: syncError.message,
-              status: 'error'
+              status: 'error',
+              message: 'Item failed but marked as error, continuing queue'
             }), 
             { 
-              status: 500, 
+              status: 200, // Changed to 200 so UI doesn't stop
               headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
             }
           );
