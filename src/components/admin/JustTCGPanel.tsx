@@ -29,6 +29,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   syncGame, 
   syncSets,
+  drainQueueUntilEmpty,
+  getQueueStats,
+  startBackgroundProcessing,
   refreshList, 
   refreshById, 
   runSnapshots,
@@ -57,6 +60,19 @@ export default function JustTCGPanel() {
     game: 'pokemon' as GameType,
     setId: '',
     since: ''
+  });
+
+  // State for queue processing
+  const [queueStats, setQueueStats] = useState<Record<GameType, { queued: number; processing: number; done: number; error: number }>>({
+    'magic-the-gathering': { queued: 0, processing: 0, done: 0, error: 0 },
+    'pokemon': { queued: 0, processing: 0, done: 0, error: 0 },
+    'pokemon-japan': { queued: 0, processing: 0, done: 0, error: 0 }
+  });
+  
+  const [processingState, setProcessingState] = useState<Record<GameType, { isProcessing: boolean; processed: number }>>({
+    'magic-the-gathering': { isProcessing: false, processed: 0 },
+    'pokemon': { isProcessing: false, processed: 0 },
+    'pokemon-japan': { isProcessing: false, processed: 0 }
   });
   
   // State for forms
@@ -92,6 +108,29 @@ export default function JustTCGPanel() {
     refetchInterval: 30000,
     staleTime: 30000
   });
+
+  // Update queue stats periodically
+  useEffect(() => {
+    const updateQueueStats = async () => {
+      const games: GameType[] = ['magic-the-gathering', 'pokemon', 'pokemon-japan'];
+      const newStats: Record<GameType, { queued: number; processing: number; done: number; error: number }> = {} as any;
+      
+      for (const game of games) {
+        try {
+          newStats[game] = await getQueueStats(game);
+        } catch (error) {
+          console.warn(`Failed to get queue stats for ${game}:`, error);
+          newStats[game] = { queued: 0, processing: 0, done: 0, error: 0 };
+        }
+      }
+      
+      setQueueStats(newStats);
+    };
+
+    updateQueueStats();
+    const interval = setInterval(updateQueueStats, 5000); // Update every 5 seconds
+    return () => clearInterval(interval);
+  }, []);
 
   // Snapshots query
   const { data: snapshots, isLoading: snapshotsLoading } = useQuery({
@@ -190,8 +229,61 @@ export default function JustTCGPanel() {
     });
   };
 
-  const handleSyncGame = (game: GameType) => {
-    syncMutation.mutate(game);
+  const handlePullCards = async (game: GameType) => {
+    setProcessingState(prev => ({ 
+      ...prev, 
+      [game]: { isProcessing: true, processed: 0 } 
+    }));
+
+    try {
+      const result = await drainQueueUntilEmpty(game, (processed, queued) => {
+        setProcessingState(prev => ({ 
+          ...prev, 
+          [game]: { isProcessing: true, processed } 
+        }));
+      });
+
+      setProcessingState(prev => ({ 
+        ...prev, 
+        [game]: { isProcessing: false, processed: result.totalProcessed } 
+      }));
+
+      if (result.status === 'idle') {
+        toast.success(`${getGameDisplayName(game)} queue processing completed`, {
+          description: `Processed ${result.totalProcessed} sets`
+        });
+      } else {
+        toast.error(`${getGameDisplayName(game)} queue processing stopped`, {
+          description: `Processed ${result.totalProcessed} sets before error`
+        });
+      }
+    } catch (error: any) {
+      setProcessingState(prev => ({ 
+        ...prev, 
+        [game]: { isProcessing: false, processed: 0 } 
+      }));
+      toast.error(`${getGameDisplayName(game)} queue processing failed`, {
+        description: error.message
+      });
+    }
+  };
+
+  const handleBackgroundProcessing = async (game: GameType) => {
+    try {
+      await startBackgroundProcessing(game, { 
+        concurrency: 3, 
+        batches: 20, 
+        batchSize: 5 
+      });
+      
+      toast.success(`${getGameDisplayName(game)} background processing started`, {
+        description: 'Processing will continue in the background'
+      });
+    } catch (error: any) {
+      toast.error(`${getGameDisplayName(game)} background processing failed`, {
+        description: error.message
+      });
+    }
   };
 
   const handleListRefresh = () => {
@@ -386,57 +478,112 @@ export default function JustTCGPanel() {
             </CardContent>
           </Card>
 
-          {/* Step 2: Sync Cards */}
+          {/* Step 2: Pull Cards from Queue */}
           <Card className="rounded-2xl">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <div className="w-6 h-6 rounded-full bg-secondary text-secondary-foreground text-sm flex items-center justify-center font-semibold">2</div>
                 <RotateCw className="h-5 w-5 text-secondary" />
-                Sync Cards from Sets
+                Pull Cards from Sets
               </CardTitle>
               <p className="text-sm text-muted-foreground">
-                After syncing sets, click on a game to pull card data from those sets.
+                After syncing sets, process the queued sets to pull card data.
               </p>
             </CardHeader>
             <CardContent>
+              {/* Queue Status Overview */}
+              <div className="mb-6 p-4 bg-muted/50 rounded-lg">
+                <h4 className="text-sm font-medium mb-3">Queue Status</h4>
+                <div className="grid grid-cols-3 gap-4 text-center">
+                  {(['magic-the-gathering', 'pokemon', 'pokemon-japan'] as GameType[]).map((game) => (
+                    <div key={game} className="space-y-1">
+                      <div className="text-xs text-muted-foreground">{getGameDisplayName(game)}</div>
+                      <div className="flex justify-center gap-2 text-xs">
+                        <Badge variant="outline" className="text-blue-600">
+                          {queueStats[game].queued} queued
+                        </Badge>
+                        {queueStats[game].processing > 0 && (
+                          <Badge variant="outline" className="text-yellow-600">
+                            {queueStats[game].processing} processing
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {(['magic-the-gathering', 'pokemon', 'pokemon-japan'] as GameType[]).map((game) => (
-              <Card key={game} className="rounded-2xl">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <RotateCw className="h-5 w-5 text-primary" />
-                    {getGameDisplayName(game)}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <Button
-                    onClick={() => handleSyncGame(game)}
-                    disabled={syncMutation.isPending}
-                    className="w-full"
-                    size="lg"
-                  >
-                    {syncMutation.isPending && syncMutation.variables === game ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Syncing Cards...
-                      </>
-                    ) : (
-                      `Pull Cards from ${getGameDisplayName(game)}`
-                    )}
-                  </Button>
-                  
-                  {syncMutation.isSuccess && syncMutation.variables === game && (
-                    <Alert>
-                      <CheckCircle2 className="h-4 w-4" />
-                      <AlertDescription>
-                        Processed {syncMutation.data.cardsProcessed.toLocaleString()} cards, {' '}
-                        {syncMutation.data.variantsProcessed.toLocaleString()} variants
-                      </AlertDescription>
-                    </Alert>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
+                {(['magic-the-gathering', 'pokemon', 'pokemon-japan'] as GameType[]).map((game) => (
+                  <Card key={game} className="rounded-2xl">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <RotateCw className="h-5 w-5 text-primary" />
+                        {getGameDisplayName(game)}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      {/* Queue Stats */}
+                      <div className="text-xs text-muted-foreground space-y-1">
+                        <div className="flex justify-between">
+                          <span>Queued:</span>
+                          <span className="font-medium">{queueStats[game].queued}</span>
+                        </div>
+                        {queueStats[game].processing > 0 && (
+                          <div className="flex justify-between text-yellow-600">
+                            <span>Processing:</span>
+                            <span className="font-medium">{queueStats[game].processing}</span>
+                          </div>
+                        )}
+                        {processingState[game].processed > 0 && (
+                          <div className="flex justify-between text-green-600">
+                            <span>Processed:</span>
+                            <span className="font-medium">{processingState[game].processed}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Processing Status */}
+                      {processingState[game].isProcessing && (
+                        <div className="text-xs text-muted-foreground">
+                          <div className="flex items-center gap-2">
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            Processing queue... ({processingState[game].processed} completed)
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="space-y-2">
+                        <Button
+                          onClick={() => handlePullCards(game)}
+                          disabled={processingState[game].isProcessing || queueStats[game].queued === 0}
+                          className="w-full"
+                          size="lg"
+                        >
+                          {processingState[game].isProcessing ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              Processing Queue...
+                            </>
+                          ) : (
+                            `Pull Cards from ${getGameDisplayName(game)}`
+                          )}
+                        </Button>
+
+                        <Button
+                          onClick={() => handleBackgroundProcessing(game)}
+                          disabled={queueStats[game].queued === 0}
+                          variant="outline"
+                          className="w-full"
+                          size="sm"
+                        >
+                          <Timer className="h-4 w-4 mr-2" />
+                          Finish in Background
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
               </div>
             </CardContent>
           </Card>

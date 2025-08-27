@@ -147,6 +147,78 @@ export async function searchCard(params: {
   return response.json();
 }
 
+// Queue management functions
+export async function getQueueStats(game: GameType): Promise<{ queued: number; processing: number; done: number; error: number }> {
+  const mappedGame = GAME_TYPE_MAP[game as keyof typeof GAME_TYPE_MAP] || game;
+  
+  const { data, error } = await supabase.rpc('catalog_v2_queue_stats_by_mode', { 
+    mode_in: mappedGame 
+  });
+
+  if (error) {
+    console.warn('Failed to get queue stats:', error);
+    return { queued: 0, processing: 0, done: 0, error: 0 };
+  }
+
+  return data[0] || { queued: 0, processing: 0, done: 0, error: 0 };
+}
+
+export async function drainQueueUntilEmpty(game: GameType, onProgress?: (processed: number, queued: number) => void): Promise<{ totalProcessed: number; status: 'idle' | 'error' }> {
+  const mappedGame = GAME_TYPE_MAP[game as keyof typeof GAME_TYPE_MAP] || game;
+  let totalProcessed = 0;
+  
+  while (true) {
+    try {
+      // Check queue status first
+      const stats = await getQueueStats(game);
+      onProgress?.(totalProcessed, stats.queued);
+      
+      if (stats.queued === 0 && stats.processing === 0) {
+        return { totalProcessed, status: 'idle' };
+      }
+      
+      // Process one item
+      const result = await drainCardQueue(game);
+      
+      // Check if the result indicates no more items to process
+      if (result.message?.includes('idle') || result.message?.includes('No items')) {
+        return { totalProcessed, status: 'idle' };
+      }
+      
+      totalProcessed++;
+      
+      // Small delay to avoid overwhelming the system
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+    } catch (error) {
+      console.error('Error draining queue:', error);
+      return { totalProcessed, status: 'error' };
+    }
+  }
+}
+
+export async function startBackgroundProcessing(game: GameType, options?: { concurrency?: number; batches?: number; batchSize?: number }): Promise<any> {
+  const mappedGame = GAME_TYPE_MAP[game as keyof typeof GAME_TYPE_MAP] || game;
+  const url = new URL(`${FUNCTIONS_BASE}/catalog-turbo-worker`);
+  url.searchParams.set('mode', mappedGame);
+  
+  if (options?.concurrency) url.searchParams.set('concurrency', String(options.concurrency));
+  if (options?.batches) url.searchParams.set('batches', String(options.batches));
+  if (options?.batchSize) url.searchParams.set('batchSize', String(options.batchSize));
+
+  const response = await fetch(url.toString(), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' }
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new JustTCGApiError(`HTTP ${response.status}: ${errorText}`, response.status);
+  }
+
+  return response.json();
+}
+
 // Analytics snapshots
 export async function runSnapshots(): Promise<any> {
   const response = await fetch(`${FUNCTIONS_BASE}/catalog-snapshots`, {
