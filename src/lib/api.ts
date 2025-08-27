@@ -91,6 +91,9 @@ export interface SyncResult {
   cards?: number;
   setId?: string;
   mode?: string;
+  status?: 'idle' | 'done' | 'error';
+  message?: string;
+  counts?: any;
   at: string;
 }
 

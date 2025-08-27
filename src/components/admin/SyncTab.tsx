@@ -33,6 +33,7 @@ import {
   getRecentSyncErrors,
   runSync,
   queuePendingSets,
+  drainQueue,
   getIncrementalDate,
   formatTimeAgo
 } from '@/lib/api';
@@ -50,6 +51,8 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
   const [since, setSince] = useState('');
   const [loading, setLoading] = useState(false);
   const [queueing, setQueueing] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [processingAll, setProcessingAll] = useState(false);
   const [stats, setStats] = useState<CatalogStats | null>(null);
   const [queueStats, setQueueStats] = useState<QueueStats | null>(null);
   const [errors, setErrors] = useState<SyncError[]>([]);
@@ -251,6 +254,93 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
     }
   };
 
+  const handleProcessNext = async () => {
+    if (!mode) return;
+
+    setProcessing(true);
+    
+    try {
+      const result = await drainQueue(mode);
+      setLastRun(result);
+      
+      if (result.ok) {
+        if (result.status === 'idle') {
+          toast.info('Queue is empty - no items to process');
+        } else {
+          toast.success('Processed one queue item', {
+            description: result.cards ? `Synced ${result.cards} cards` : 'Item processed'
+          });
+        }
+        await loadAllData();
+      } else {
+        toast.error('Failed to process queue item', {
+          description: result.error
+        });
+      }
+    } catch (error: any) {
+      toast.error('Failed to process queue item', {
+        description: error.message
+      });
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleProcessAll = async () => {
+    if (!mode) return;
+
+    setProcessingAll(true);
+    let processed = 0;
+    const maxItems = 100; // Safety limit
+    
+    try {
+      while (processed < maxItems) {
+        const result = await drainQueue(mode);
+        
+        if (!result.ok) {
+          toast.error('Processing stopped due to error', {
+            description: result.error
+          });
+          break;
+        }
+        
+        if (result.status === 'idle') {
+          // Queue is empty
+          break;
+        }
+        
+        processed++;
+        
+        // Update stats periodically
+        if (processed % 5 === 0) {
+          await loadAllData();
+        }
+        
+        // Small delay to prevent overwhelming the system
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      
+      if (processed === maxItems) {
+        toast.warning(`Processed ${processed} items (safety limit reached)`, {
+          description: 'Click "Process All" again to continue'
+        });
+      } else if (processed > 0) {
+        toast.success(`Processed ${processed} queue items`);
+      } else {
+        toast.info('Queue is empty - no items to process');
+      }
+      
+      await loadAllData();
+      
+    } catch (error: any) {
+      toast.error('Failed to process queue', {
+        description: error.message
+      });
+    } finally {
+      setProcessingAll(false);
+    }
+  };
+
   const handleRetryError = async (error: SyncError) => {
     if (!mode) return;
     
@@ -280,7 +370,7 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
     }
   };
 
-  const isDisabled = loading || queueing || retryingError !== null;
+  const isDisabled = loading || queueing || processing || processingAll || retryingError !== null;
   const totalProcessed = (stats?.sets_count || 0) + (stats?.cards_count || 0);
   const queueTotal = (queueStats?.queued || 0) + (queueStats?.processing || 0) + (queueStats?.done || 0) + (queueStats?.error || 0);
 
@@ -403,6 +493,41 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
                   </div>
                 </div>
               </div>
+
+              {/* Queue Processing Controls */}
+              {queueStats && (queueStats.queued > 0 || queueStats.processing > 0) && (
+                <div className="pt-4 border-t">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Activity className="h-4 w-4" />
+                    <span className="text-sm font-medium">Queue Processing</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleProcessNext}
+                      disabled={isDisabled}
+                      className="flex-1"
+                    >
+                      {processing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                      Process Next
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={handleProcessAll}
+                      disabled={isDisabled}
+                      className="flex-1"
+                    >
+                      {processingAll ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                      Process All
+                    </Button>
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-2">
+                    {queueStats.queued} items queued • {queueStats.processing} processing
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 
