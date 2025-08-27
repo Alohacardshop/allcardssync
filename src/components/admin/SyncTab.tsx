@@ -478,6 +478,7 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
   const [liveDelta, setLiveDelta] = useState<LiveDelta>({ sets: 0, cards: 0 });
   const [refreshRate, setRefreshRate] = useState<number>(1000); // milliseconds
   const [manualRefreshLoading, setManualRefreshLoading] = useState(false);
+  const [draining, setDraining] = useState(false);
   
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const mode = GAME_MODES.find(m => m.value === selectedMode);
@@ -739,6 +740,59 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
     }
   };
 
+  const handleDrainQueue = async () => {
+    if (!mode) return;
+
+    setDraining(true);
+    setIsActiveSync(true);
+    
+    let totalProcessed = 0;
+    
+    try {
+      // Keep processing until queue is empty or error occurs
+      while (true) {
+        const result = await drainQueue(mode);
+        const counts = normalizeApiCounts(result);
+        setLastRun({ ...result, ...counts });
+        
+        if (!result.ok) {
+          toast.error('Failed to process queue item', {
+            description: result.error
+          });
+          break;
+        }
+        
+        if (result.status === 'idle') {
+          toast.success(`Auto-drain complete! Processed ${totalProcessed} items total`);
+          setIsActiveSync(false);
+          break;
+        }
+        
+        // Increment counters and update UI
+        if (counts.cardsProcessed > 0) {
+          totalProcessed++;
+          setLiveDelta(prev => ({ 
+            sets: prev.sets + (counts.setsProcessed || 0), 
+            cards: prev.cards + counts.cardsProcessed 
+          }));
+        }
+        
+        // Update stats after each item
+        await Promise.all([loadQueueStats(), loadStats()]);
+        
+        // Small delay to prevent overwhelming the API
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    } catch (error: any) {
+      toast.error('Auto-drain failed', {
+        description: error.message
+      });
+      setIsActiveSync(false);
+    } finally {
+      setDraining(false);
+    }
+  };
+
   const handleProcessAll = async () => {
     if (!mode) return;
 
@@ -961,9 +1015,11 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
                 isActiveSync={isActiveSync}
                 onQueuePending={handleQueuePending}
                 onProcessNext={handleProcessNext}
+                onDrainQueue={handleDrainQueue}
                 onRefresh={handleManualRefresh}
                 queueing={queueing}
                 processing={processing}
+                draining={draining}
                 refreshing={manualRefreshLoading}
               />
             </div>

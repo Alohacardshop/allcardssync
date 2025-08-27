@@ -23,9 +23,11 @@ interface RebuildProgressWidgetProps {
   isActiveSync: boolean;
   onQueuePending: () => void;
   onProcessNext: () => void;
+  onDrainQueue: () => void;
   onRefresh: () => void;
   queueing: boolean;
   processing: boolean;
+  draining: boolean;
   refreshing: boolean;
 }
 
@@ -37,9 +39,11 @@ export function RebuildProgressWidget({
   isActiveSync,
   onQueuePending,
   onProcessNext,
+  onDrainQueue,
   onRefresh,
   queueing,
   processing,
+  draining,
   refreshing
 }: RebuildProgressWidgetProps) {
   const totalItems = queueStats ? queueStats.queued + queueStats.processing + queueStats.done + queueStats.error : 0;
@@ -56,6 +60,7 @@ export function RebuildProgressWidget({
 
   const getStatusText = () => {
     if (!queueStats) return 'Loading...';
+    if (draining) return 'Auto-draining';
     if (queueStats.processing > 0) return 'Processing';
     if (queueStats.queued > 0) return 'Queued';
     if (queueStats.error > 0) return 'Has Errors';
@@ -160,42 +165,63 @@ export function RebuildProgressWidget({
         )}
 
         {/* Action Buttons */}
-        <div className="flex gap-2">
+        <div className="space-y-2">
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onQueuePending}
+              disabled={queueing || draining || !stats?.pending_count}
+              className="flex-1 text-xs h-7"
+            >
+              {queueing ? (
+                <>
+                  <RefreshCw className="h-3 w-3 animate-spin mr-1" />
+                  Queueing...
+                </>
+              ) : (
+                <>
+                  <Clock className="h-3 w-3 mr-1" />
+                  Queue Pending ({stats?.pending_count || 0})
+                </>
+              )}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onProcessNext}
+              disabled={processing || draining || !queueStats?.queued}
+              className="flex-1 text-xs h-7"
+            >
+              {processing ? (
+                <>
+                  <RefreshCw className="h-3 w-3 animate-spin mr-1" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  <Zap className="h-3 w-3 mr-1" />
+                  Process Next
+                </>
+              )}
+            </Button>
+          </div>
           <Button
-            variant="outline"
+            variant="default"
             size="sm"
-            onClick={onQueuePending}
-            disabled={queueing || !stats?.pending_count}
-            className="flex-1 text-xs h-7"
+            onClick={onDrainQueue}
+            disabled={draining || processing || queueing || !queueStats?.queued}
+            className="w-full text-xs h-7"
           >
-            {queueing ? (
+            {draining ? (
               <>
                 <RefreshCw className="h-3 w-3 animate-spin mr-1" />
-                Queueing...
-              </>
-            ) : (
-              <>
-                <Clock className="h-3 w-3 mr-1" />
-                Queue Pending ({stats?.pending_count || 0})
-              </>
-            )}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onProcessNext}
-            disabled={processing || !queueStats?.queued}
-            className="flex-1 text-xs h-7"
-          >
-            {processing ? (
-              <>
-                <RefreshCw className="h-3 w-3 animate-spin mr-1" />
-                Processing...
+                Auto-draining Queue...
               </>
             ) : (
               <>
                 <Zap className="h-3 w-3 mr-1" />
-                Process Next
+                Drain Queue ({queueStats?.queued || 0})
               </>
             )}
           </Button>
