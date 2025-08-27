@@ -136,7 +136,7 @@ const Admin = () => {
   const [isSavingFirecrawl, setIsSavingFirecrawl] = useState(false);
   
   // Tab and mode state
-  const [activeTab, setActiveTab] = useLocalStorageString('admin-active-tab', 'analytics');
+  const [activeTab, setActiveTab] = useLocalStorageString('admin-active-tab', 'audit');
   const [selectedMode, setSelectedMode] = useLocalStorageString('admin-selected-mode', 'mtg');
   const [healthStatus, setHealthStatus] = useState<HealthStatus | null>(null);
 
@@ -581,8 +581,7 @@ const Admin = () => {
 
       {/* Main Admin Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="analytics">Analytics</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="audit">Audit & Reconcile</TabsTrigger>
           <TabsTrigger value="data">Data</TabsTrigger>
           <TabsTrigger value="config">Configuration</TabsTrigger>
