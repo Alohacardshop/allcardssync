@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Database, Search, RefreshCw, Copy, ExternalLink, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Database, Search, RefreshCw, Copy, ExternalLink, ChevronLeft, ChevronRight, AlertCircle, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   getCatalogSets,
@@ -54,11 +54,37 @@ const DataTab: React.FC<DataTabProps> = ({ selectedMode }) => {
   const [countsLoading, setCountsLoading] = useState(false);
   
   const [loading, setLoading] = useState(false);
+  const [longRunning, setLongRunning] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<Set<string>>(new Set());
+  
+  // Search state for debouncing
+  const [searchInput, setSearchInput] = useState(filters.search || '');
+  const searchTimeoutRef = useRef<NodeJS.Timeout>();
+  const abortControllerRef = useRef<AbortController>();
+  const longRunningTimeoutRef = useRef<NodeJS.Timeout>();
+
+  // Debounced search effect
+  useEffect(() => {
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+    
+    searchTimeoutRef.current = setTimeout(() => {
+      handleFilterChange('search', searchInput);
+    }, 500);
+    
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, [searchInput]);
 
   // Reset page when switching tabs or filters
   useEffect(() => {
     setFilters(prev => ({ ...prev, page: 1 }));
+    setError(null);
   }, [activeTab, selectedMode]);
 
   // Load data when filters change
@@ -71,32 +97,78 @@ const DataTab: React.FC<DataTabProps> = ({ selectedMode }) => {
     loadCardCounts();
   }, []);
 
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      if (longRunningTimeoutRef.current) {
+        clearTimeout(longRunningTimeoutRef.current);
+      }
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const loadData = async () => {
+    // Cancel any existing request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    
+    // Clear long running timeout
+    if (longRunningTimeoutRef.current) {
+      clearTimeout(longRunningTimeoutRef.current);
+    }
+    
+    // Create new abort controller
+    abortControllerRef.current = new AbortController();
+    
     setLoading(true);
+    setLongRunning(false);
+    setError(null);
+    
+    // Set long running timeout
+    longRunningTimeoutRef.current = setTimeout(() => {
+      setLongRunning(true);
+    }, 3000);
+    
     try {
+      let result;
       switch (activeTab) {
         case 'sets':
-          const sets = await getCatalogSets(selectedMode, filters);
-          setSetsData(sets);
+          result = await getCatalogSets(selectedMode, filters);
+          setSetsData(result);
           break;
         case 'cards':
-          const cards = await getCatalogCards(selectedMode, filters);
-          setCardsData(cards);
+          result = await getCatalogCards(selectedMode, filters);
+          setCardsData(result);
           break;
         case 'variants':
-          const variants = await getCatalogVariants(selectedMode, filters);
-          setVariantsData(variants);
+          result = await getCatalogVariants(selectedMode, filters);
+          setVariantsData(result);
           break;
       }
     } catch (error: any) {
+      if (error.name === 'AbortError') {
+        return; // Request was cancelled, don't show error
+      }
+      
       console.error('Failed to load data:', error);
+      setError(error.message || 'Failed to load data');
       toast({
         title: "Error",
-        description: error.message,
+        description: error.message || 'Failed to load data',
         variant: "destructive",
       });
     } finally {
       setLoading(false);
+      setLongRunning(false);
+      if (longRunningTimeoutRef.current) {
+        clearTimeout(longRunningTimeoutRef.current);
+      }
     }
   };
 
@@ -269,11 +341,14 @@ const DataTab: React.FC<DataTabProps> = ({ selectedMode }) => {
                     <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input
                       id="search"
-                      value={filters.search || ''}
-                      onChange={(e) => handleFilterChange('search', e.target.value)}
+                      value={searchInput}
+                      onChange={(e) => setSearchInput(e.target.value)}
                       placeholder="Name, ID or code..."
                       className="pl-8"
                     />
+                    {searchInput !== filters.search && (
+                      <Loader2 className="absolute right-2 top-2.5 h-4 w-4 animate-spin text-muted-foreground" />
+                    )}
                   </div>
                 </div>
 
@@ -413,6 +488,48 @@ const DataTab: React.FC<DataTabProps> = ({ selectedMode }) => {
                 </div>
               )}
             </div>
+
+            {/* Loading States and Error Handling */}
+            {loading && longRunning && (
+              <div className="p-4 bg-muted rounded-lg border border-dashed">
+                <div className="flex items-center gap-3">
+                  <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                  <div>
+                    <p className="font-medium">Query is taking longer than expected</p>
+                    <p className="text-sm text-muted-foreground">
+                      Large datasets may take some time to process. You can wait or try simplifying your search.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {error && (
+              <div className="p-4 bg-destructive/10 rounded-lg border border-destructive/20">
+                <div className="flex items-center gap-3">
+                  <AlertCircle className="h-5 w-5 text-destructive" />
+                  <div className="flex-1">
+                    <p className="font-medium text-destructive">Failed to load data</p>
+                    <p className="text-sm text-muted-foreground">{error}</p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => loadData()}
+                    disabled={loading}
+                  >
+                    {loading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <>
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                        Retry
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
 
             {/* Sets Tab */}
             <TabsContent value="sets" className="mt-6">
