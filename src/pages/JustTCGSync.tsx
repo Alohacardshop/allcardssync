@@ -1,49 +1,50 @@
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
+import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { Separator } from '@/components/ui/separator';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Checkbox } from '@/components/ui/checkbox';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Navigation } from '@/components/Navigation';
 import { 
-  Database, 
+  CheckCircle, 
+  Clock, 
+  AlertCircle, 
+  Play, 
+  Loader2, 
   Search,
-  Play,
-  Pause,
-  CheckCircle2,
-  AlertCircle,
-  Clock,
-  BarChart3,
-  RefreshCw,
-  Gamepad2,
-  Package,
-  Loader2,
-  Check,
-  X
+  Database,
+  Settings,
+  Activity,
+  RefreshCw
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 
 const FUNCTIONS_BASE = 'https://dmpoandoydaqxhzdjnmk.supabase.co/functions/v1';
 
 interface Game {
   id: string;
   name: string;
-  raw: any;
-  discovered_at: string;
+  raw?: any;
 }
 
 interface GameSet {
-  set_id: string;
-  name: string;
+  id: string;
   game: string;
+  name: string;
+  released_at?: string;
+  cards_count?: number;
 }
 
 interface SyncProgress {
   gameId: string;
   setId: string;
+  setName: string;
   status: 'queued' | 'running' | 'done' | 'error';
   message?: string;
 }
@@ -52,46 +53,43 @@ interface ApiMetadata {
   apiRequestsUsed?: number;
   apiRequestsRemaining?: number;
   apiRateLimit?: number;
-  timestamp?: string;
+  resetTime?: string;
 }
 
 export default function JustTCGSync() {
-  const queryClient = useQueryClient();
-  
-  // State
+  // State management
   const [selectedGames, setSelectedGames] = useState<string[]>([]);
   const [selectedSets, setSelectedSets] = useState<string[]>([]);
-  const [gameSearch, setGameSearch] = useState('');
-  const [setSearch, setSetSearch] = useState('');
-  const [setsGroupedByGame, setSetsGroupedByGame] = useState<Record<string, GameSet[]>>({});
+  const [gameSearchQuery, setGameSearchQuery] = useState('');
+  const [setSearchQueries, setSetSearchQueries] = useState<{ [gameId: string]: string }>({});
+  const [groupedSets, setGroupedSets] = useState<{ [gameId: string]: GameSet[] }>({});
   const [syncProgress, setSyncProgress] = useState<SyncProgress[]>([]);
   const [logs, setLogs] = useState<string[]>([]);
   const [isRunning, setIsRunning] = useState(false);
-  const [apiMetadata, setApiMetadata] = useState<ApiMetadata>({});
+  const [apiMetadata, setApiMetadata] = useState<ApiMetadata | null>(null);
 
-  // Load from localStorage on mount
+  const queryClient = useQueryClient();
+
+  // Load/save selections from localStorage
   useEffect(() => {
     const savedGames = localStorage.getItem('justtcg-selected-games');
     const savedSets = localStorage.getItem('justtcg-selected-sets');
-    
     if (savedGames) {
       try {
         setSelectedGames(JSON.parse(savedGames));
       } catch (e) {
-        console.warn('Failed to parse saved games');
+        console.warn('Failed to parse saved games:', e);
       }
     }
-    
     if (savedSets) {
       try {
         setSelectedSets(JSON.parse(savedSets));
       } catch (e) {
-        console.warn('Failed to parse saved sets');
+        console.warn('Failed to parse saved sets:', e);
       }
     }
   }, []);
 
-  // Save to localStorage when selections change
   useEffect(() => {
     localStorage.setItem('justtcg-selected-games', JSON.stringify(selectedGames));
   }, [selectedGames]);
@@ -100,524 +98,641 @@ export default function JustTCGSync() {
     localStorage.setItem('justtcg-selected-sets', JSON.stringify(selectedSets));
   }, [selectedSets]);
 
-  // Queries
+  // Helper function to add log entries
+  const addLog = (message: string) => {
+    const timestamp = new Date().toLocaleTimeString();
+    setLogs(prev => [...prev.slice(-99), `[${timestamp}] ${message}`]);
+  };
+
+  // Fetch discovered games
   const { data: games = [], isLoading: gamesLoading, refetch: refetchGames } = useQuery({
-    queryKey: ['discover-games'],
+    queryKey: ['discovered-games'],
     queryFn: async () => {
-      const response = await fetch(`${FUNCTIONS_BASE}/discover-games`, { method: 'POST' });
-      if (!response.ok) throw new Error('Failed to discover games');
+      addLog('📡 Fetching games from JustTCG API...'); 
+      const response = await fetch(`${FUNCTIONS_BASE}/discover-games`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch games: ${response.statusText}`);
+      }
       const result = await response.json();
-      if (result._metadata) setApiMetadata(result._metadata);
+      addLog(`✅ Discovered ${result.data?.length || 0} games`);
       return result.data || [];
     },
     staleTime: 5 * 60 * 1000, // 5 minutes
-    refetchOnWindowFocus: false
   });
 
-  // Mutations
+  // Discover sets mutation
   const discoverSetsMutation = useMutation({
     mutationFn: async (gameIds?: string[]) => {
-      const url = gameIds?.length 
+      const endpoint = gameIds && gameIds.length > 0
         ? `${FUNCTIONS_BASE}/discover-sets?${gameIds.map(id => `game=${encodeURIComponent(id)}`).join('&')}`
         : `${FUNCTIONS_BASE}/discover-sets`;
       
-      const response = await fetch(url, { method: 'POST' });
-      if (!response.ok) throw new Error('Failed to discover sets');
-      const result = await response.json();
-      if (result._metadata) setApiMetadata(result._metadata);
-      return result.data || [];
+      addLog(`🔍 Discovering sets for ${gameIds ? gameIds.length + ' selected games' : 'all games'}...`);
+      
+      const response = await fetch(endpoint);
+      if (!response.ok) {
+        throw new Error(`Failed to discover sets: ${response.statusText}`);
+      }
+      return response.json();
     },
     onSuccess: async (data) => {
-      // Fetch the actual sets from the database
-      const setsMap: Record<string, GameSet[]> = {};
+      addLog(`✅ Set discovery completed: ${data._metadata?.totalSetsDiscovered || 0} total sets discovered`);
       
-      for (const gameResult of data) {
-        if (gameResult.setsCount > 0) {
+      // Update API metadata if available
+      if (data._metadata) {
+        setApiMetadata({
+          apiRequestsUsed: data._metadata.apiRequestsUsed,
+          apiRequestsRemaining: data._metadata.apiRequestsRemaining,
+          apiRateLimit: data._metadata.apiRateLimit,
+          resetTime: data._metadata.resetTime
+        });
+      }
+
+      // Now fetch sets from the database for selected games
+      const setsMap: { [gameId: string]: GameSet[] } = {};
+      
+      if (selectedGames.length > 0) {
+        for (const gameId of selectedGames) {
           try {
-            const response = await fetch(`${FUNCTIONS_BASE}/catalog-search?game=${encodeURIComponent(gameResult.gameId)}&type=sets&limit=1000`);
-            if (response.ok) {
-              const setsResult = await response.json();
-              setsMap[gameResult.gameId] = setsResult.sets || [];
+            const { data: setsData, error } = await supabase
+              .from('sets')
+              .select('id, name, game, released_at, cards_count')
+              .eq('game', gameId)
+              .order('name');
+            
+            if (error) {
+              console.warn(`Failed to fetch sets for ${gameId}:`, error);
+              setsMap[gameId] = [];
+            } else {
+              setsMap[gameId] = (setsData || []).map(set => ({
+                id: set.id,
+                game: set.game,
+                name: set.name,
+                released_at: set.released_at,
+                cards_count: set.cards_count
+              }));
             }
           } catch (e) {
-            console.warn(`Failed to fetch sets for ${gameResult.gameId}`);
-            setsMap[gameResult.gameId] = [];
+            console.warn(`Error fetching sets for ${gameId}:`, e);
+            setsMap[gameId] = [];
           }
-        } else {
-          setsMap[gameResult.gameId] = [];
         }
       }
       
-      setSetsGroupedByGame(setsMap);
-      toast.success(`Discovered sets for ${data.length} games`);
-      addLog(`✅ Sets discovered for ${data.length} games`);
+      setGroupedSets(setsMap);
     },
     onError: (error: any) => {
-      toast.error('Failed to discover sets', { description: error.message });
-      addLog(`❌ Sets discovery failed: ${error.message}`);
+      addLog(`❌ Set discovery failed: ${error.message}`);
+      toast.error('Set discovery failed', { description: error.message });
     }
   });
 
+  // Sync sets mutation
   const syncSetsMutation = useMutation({
-    mutationFn: async (sets: { gameId: string; setId: string }[]) => {
+    mutationFn: async (params: { mode: 'selected' | 'all-for-games' | 'all-games'; gameIds?: string[]; setIds?: string[] }) => {
       setIsRunning(true);
-      const results = [];
+      setSyncProgress([]);
+      
+      let setsToSync: Array<{ gameId: string; setId: string; setName: string }> = [];
+      
+      if (params.mode === 'selected' && params.setIds) {
+        // Get set details for selected sets
+        setsToSync = params.setIds.map(setId => {
+          for (const gameId in groupedSets) {
+            const set = groupedSets[gameId].find(s => s.id === setId);
+            if (set) {
+              return { gameId, setId, setName: set.name };
+            }
+          }
+          return { gameId: 'unknown', setId, setName: setId };
+        });
+      } else if (params.mode === 'all-for-games' && params.gameIds) {
+        // Get all sets for selected games
+        for (const gameId of params.gameIds) {
+          if (groupedSets[gameId]) {
+            setsToSync.push(...groupedSets[gameId].map(set => ({
+              gameId,
+              setId: set.id,
+              setName: set.name
+            })));
+          }
+        }
+      } else if (params.mode === 'all-games') {
+        // Get all sets for all games
+        for (const gameId in groupedSets) {
+          setsToSync.push(...groupedSets[gameId].map(set => ({
+            gameId,
+            setId: set.id,
+            setName: set.name
+          })));
+        }
+      }
       
       // Initialize progress tracking
-      const initialProgress = sets.map(({ gameId, setId }) => ({
+      const initialProgress: SyncProgress[] = setsToSync.map(({ gameId, setId, setName }) => ({
         gameId,
         setId,
-        status: 'queued' as const
+        setName,
+        status: 'queued'
       }));
       setSyncProgress(initialProgress);
       
-      for (let i = 0; i < sets.length; i++) {
-        const { gameId, setId } = sets[i];
+      addLog(`🚀 Starting sync for ${setsToSync.length} sets...`);
+      
+      // Sync each set sequentially
+      const results = [];
+      for (let i = 0; i < setsToSync.length; i++) {
+        const { gameId, setId, setName } = setsToSync[i];
         
-        // Update status to running
+        // Update progress to running
         setSyncProgress(prev => prev.map(p => 
           p.gameId === gameId && p.setId === setId 
             ? { ...p, status: 'running' }
             : p
         ));
         
-        addLog(`🚀 Syncing ${gameId}/${setId}...`);
-        
         try {
+          addLog(`⚡ Syncing ${setName} (${gameId})...`);
+          
           const response = await fetch(
-            `${FUNCTIONS_BASE}/justtcg-import?game=${encodeURIComponent(gameId)}&setId=${encodeURIComponent(setId)}`,
-            { method: 'POST' }
+            `${FUNCTIONS_BASE}/justtcg-import?game=${encodeURIComponent(gameId)}&setId=${encodeURIComponent(setId)}`
           );
           
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
           
           const result = await response.json();
           results.push(result);
           
-          // Update status to done
+          // Update progress to done
           setSyncProgress(prev => prev.map(p => 
             p.gameId === gameId && p.setId === setId 
-              ? { ...p, status: 'done', message: `${result.cardsProcessed || 0} cards` }
+              ? { ...p, status: 'done', message: `${result.cardsProcessed || 0} cards, ${result.variantsProcessed || 0} variants` }
               : p
           ));
           
-          addLog(`✅ ${gameId}/${setId}: ${result.cardsProcessed || 0} cards, ${result.variantsProcessed || 0} variants`);
+          addLog(`✅ ${setName}: ${result.cardsProcessed || 0} cards, ${result.variantsProcessed || 0} variants`);
           
-          if (result._metadata) setApiMetadata(result._metadata);
-          
-          // Small delay between requests
-          if (i < sets.length - 1) {
-            await new Promise(resolve => setTimeout(resolve, 200));
-          }
         } catch (error: any) {
-          // Update status to error
+          // Update progress to error
           setSyncProgress(prev => prev.map(p => 
             p.gameId === gameId && p.setId === setId 
               ? { ...p, status: 'error', message: error.message }
               : p
           ));
           
-          addLog(`❌ ${gameId}/${setId}: ${error.message}`);
+          addLog(`❌ ${setName} failed: ${error.message}`);
+        }
+        
+        // Small delay between requests
+        if (i < setsToSync.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 100));
         }
       }
       
-      return results;
+      return { results, totalSets: setsToSync.length };
     },
     onSuccess: () => {
-      setIsRunning(false);
-      toast.success('Sync completed');
-      queryClient.invalidateQueries({ queryKey: ['discover-games'] });
+      const successCount = syncProgress.filter(p => p.status === 'done').length;
+      const errorCount = syncProgress.filter(p => p.status === 'error').length;
+      
+      addLog(`🎉 Sync completed: ${successCount} successful, ${errorCount} failed`);
+      toast.success('Sync completed', { 
+        description: `${successCount} sets synced successfully${errorCount > 0 ? `, ${errorCount} failed` : ''}`
+      });
     },
     onError: (error: any) => {
-      setIsRunning(false);
+      addLog(`💥 Sync failed: ${error.message}`);
       toast.error('Sync failed', { description: error.message });
+    },
+    onSettled: () => {
+      setIsRunning(false);
     }
   });
 
-  // Helper functions
-  const addLog = (message: string) => {
-    const timestamp = new Date().toLocaleTimeString();
-    setLogs(prev => [`[${timestamp}] ${message}`, ...prev.slice(0, 99)]);
-  };
-
-  const filteredGames = games.filter((game: Game) => 
-    game.name.toLowerCase().includes(gameSearch.toLowerCase()) ||
-    game.id.toLowerCase().includes(gameSearch.toLowerCase())
-  );
-
+  // Handle game selection
   const handleGameSelection = (gameId: string, checked: boolean) => {
-    setSelectedGames(prev => 
-      checked 
-        ? [...prev, gameId]
-        : prev.filter(id => id !== gameId)
-    );
+    if (checked) {
+      setSelectedGames(prev => [...prev, gameId]);
+    } else {
+      setSelectedGames(prev => prev.filter(id => id !== gameId));
+      // Also remove all sets from this game
+      if (groupedSets[gameId]) {
+        const gameSetIds = groupedSets[gameId].map(set => set.id);
+        setSelectedSets(prev => prev.filter(id => !gameSetIds.includes(id)));
+      }
+    }
   };
 
+  // Handle set selection
+  const handleSetSelection = (setId: string, checked: boolean) => {
+    if (checked) {
+      setSelectedSets(prev => [...prev, setId]);
+    } else {
+      setSelectedSets(prev => prev.filter(id => id !== setId));
+    }
+  };
+
+  // Handle "Select All" / "Clear All" for games
   const handleSelectAllGames = () => {
-    const allGameIds = filteredGames.map((g: Game) => g.id);
-    setSelectedGames(allGameIds);
+    setSelectedGames(games.map(g => g.id));
   };
 
   const handleClearAllGames = () => {
     setSelectedGames([]);
+    setSelectedSets([]);
   };
 
-  const handleSetSelection = (setId: string, checked: boolean) => {
-    setSelectedSets(prev => 
-      checked 
-        ? [...prev, setId]
-        : prev.filter(id => id !== setId)
-    );
-  };
-
+  // Handle "Select All" / "Clear All" for sets in a game
   const handleSelectAllSetsForGame = (gameId: string) => {
-    const gameSets = setsGroupedByGame[gameId] || [];
-    const gameSetIds = gameSets.map(s => s.set_id);
+    const gameSets = groupedSets[gameId] || [];
+    const gameSetIds = gameSets.map(set => set.id);
     setSelectedSets(prev => [...new Set([...prev, ...gameSetIds])]);
   };
 
   const handleClearAllSetsForGame = (gameId: string) => {
-    const gameSets = setsGroupedByGame[gameId] || [];
-    const gameSetIds = gameSets.map(s => s.set_id);
+    const gameSets = groupedSets[gameId] || [];
+    const gameSetIds = gameSets.map(set => set.id);
     setSelectedSets(prev => prev.filter(id => !gameSetIds.includes(id)));
   };
 
-  const handleFetchSets = () => {
-    const gamesToFetch = selectedGames.length > 0 ? selectedGames : undefined;
-    discoverSetsMutation.mutate(gamesToFetch);
-  };
-
+  // Sync button handlers
   const handleSyncSelectedSets = () => {
     if (selectedSets.length === 0) {
-      toast.error('No sets selected');
+      toast.warning('No sets selected', { description: 'Please select at least one set to sync' });
       return;
     }
-
-    const setsToSync = selectedSets.map(setId => {
-      // Find which game this set belongs to
-      for (const [gameId, sets] of Object.entries(setsGroupedByGame)) {
-        const set = sets.find(s => s.set_id === setId);
-        if (set) return { gameId, setId };
-      }
-      return null;
-    }).filter(Boolean) as { gameId: string; setId: string }[];
-
-    if (setsToSync.length === 0) {
-      toast.error('No valid sets to sync');
-      return;
-    }
-
-    syncSetsMutation.mutate(setsToSync);
+    syncSetsMutation.mutate({ mode: 'selected', setIds: selectedSets });
   };
 
   const handleSyncAllSetsForSelectedGames = () => {
     if (selectedGames.length === 0) {
-      toast.error('No games selected');
+      toast.warning('No games selected', { description: 'Please select at least one game' });
       return;
     }
+    syncSetsMutation.mutate({ mode: 'all-for-games', gameIds: selectedGames });
+  };
 
-    const allSetsToSync: { gameId: string; setId: string }[] = [];
+  const handleSyncAllGamesAndSets = () => {
+    const totalSets = Object.values(groupedSets).reduce((sum, sets) => sum + sets.length, 0);
+    if (totalSets === 0) {
+      toast.warning('No sets available', { description: 'Please discover sets first' });
+      return;
+    }
     
-    selectedGames.forEach(gameId => {
-      const gameSets = setsGroupedByGame[gameId] || [];
-      gameSets.forEach(set => {
-        allSetsToSync.push({ gameId, setId: set.set_id });
-      });
-    });
-
-    if (allSetsToSync.length === 0) {
-      toast.error('No sets found for selected games');
-      return;
-    }
-
-    syncSetsMutation.mutate(allSetsToSync);
-  };
-
-  const handleSyncAllGames = async () => {
-    if (!confirm('This will sync ALL games and ALL sets. This may take a very long time. Continue?')) {
-      return;
-    }
-
-    // First discover all games
-    const gamesResult = await refetchGames();
-    const allGames = gamesResult.data || [];
-
-    // Then discover sets for all games
-    discoverSetsMutation.mutate(undefined, {
-      onSuccess: () => {
-        // After sets are discovered, sync everything
-        setTimeout(() => {
-          const allSetsToSync: { gameId: string; setId: string }[] = [];
-          
-          Object.entries(setsGroupedByGame).forEach(([gameId, sets]) => {
-            sets.forEach(set => {
-              allSetsToSync.push({ gameId, setId: set.set_id });
-            });
-          });
-
-          syncSetsMutation.mutate(allSetsToSync);
-        }, 1000);
-      }
-    });
-  };
-
-  const getProgressPercentage = () => {
-    if (syncProgress.length === 0) return 0;
-    const completed = syncProgress.filter(p => p.status === 'done' || p.status === 'error').length;
-    return (completed / syncProgress.length) * 100;
-  };
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'queued': return <Clock className="h-4 w-4 text-gray-500" />;
-      case 'running': return <Loader2 className="h-4 w-4 animate-spin text-blue-500" />;
-      case 'done': return <CheckCircle2 className="h-4 w-4 text-green-500" />;
-      case 'error': return <AlertCircle className="h-4 w-4 text-red-500" />;
-      default: return null;
+    // Show confirmation for full sync
+    if (window.confirm(`This will sync ALL games and sets (${totalSets} total sets). This may take a long time. Continue?`)) {
+      syncSetsMutation.mutate({ mode: 'all-games' });
     }
   };
+
+  // Filter games by search query
+  const filteredGames = games.filter(game => 
+    game.name.toLowerCase().includes(gameSearchQuery.toLowerCase()) ||
+    game.id.toLowerCase().includes(gameSearchQuery.toLowerCase())
+  );
+
+  // Calculate progress
+  const totalProgress = syncProgress.length > 0 
+    ? (syncProgress.filter(p => p.status === 'done' || p.status === 'error').length / syncProgress.length) * 100
+    : 0;
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold">JustTCG Sync System</h1>
-        <p className="text-muted-foreground mt-2">
-          Dynamic game and set discovery with synchronized importing
-        </p>
-        
-        {/* Usage Widget */}
-        {apiMetadata.apiRateLimit && (
-          <div className="mt-4 flex items-center gap-4 text-sm">
-            <Badge variant="outline">
-              API Usage: {apiMetadata.apiRequestsUsed || 0} / {apiMetadata.apiRateLimit}
-            </Badge>
-            <Badge variant="outline">
-              Remaining: {apiMetadata.apiRequestsRemaining || 0}
-            </Badge>
+    <div className="min-h-screen bg-background">
+      <header className="border-b">
+        <div className="container mx-auto px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Database className="h-6 w-6" />
+            <h1 className="text-3xl font-bold">JustTCG Sync System</h1>
           </div>
-        )}
-      </div>
+          <Navigation />
+        </div>
+      </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Pick Games Card */}
+      <div className="container mx-auto p-6 space-y-8">
+        {/* API Usage Widget */}
+        {apiMetadata && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Activity className="h-5 w-5" />
+                API Usage
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <div>
+                  <div className="text-2xl font-bold">{apiMetadata.apiRequestsUsed || 0}</div>
+                  <div className="text-sm text-muted-foreground">Used</div>
+                </div>
+                <div>
+                  <div className="text-2xl font-bold">{apiMetadata.apiRequestsRemaining || 0}</div>
+                  <div className="text-sm text-muted-foreground">Remaining</div>
+                </div>
+                <div>
+                  <div className="text-2xl font-bold">{apiMetadata.apiRateLimit || 0}</div>
+                  <div className="text-sm text-muted-foreground">Rate Limit</div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Step 1: Pick Games */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Gamepad2 className="h-5 w-5" />
-              Pick Games ({selectedGames.length} selected)
+              <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">1</div>
+              Pick Games
             </CardTitle>
+            <CardDescription>
+              Select games to discover sets and sync data. Games are auto-discovered from the JustTCG API.
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex gap-2">
+            <div className="flex gap-4">
               <Button
                 onClick={() => refetchGames()}
                 disabled={gamesLoading}
-                size="sm"
                 variant="outline"
+                size="sm"
               >
                 {gamesLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                Discover Games
+                Refresh Games
               </Button>
-              <Button onClick={handleSelectAllGames} size="sm" variant="outline">
+              <Button onClick={handleSelectAllGames} variant="outline" size="sm">
                 Select All
               </Button>
-              <Button onClick={handleClearAllGames} size="sm" variant="outline">
-                Clear
+              <Button onClick={handleClearAllGames} variant="outline" size="sm">
+                Clear All
               </Button>
+              <Badge variant="secondary">
+                {selectedGames.length} of {games.length} selected
+              </Badge>
             </div>
 
-            <div className="space-y-2">
-              <Label>Search Games</Label>
+            <div className="relative">
+              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search by name or ID..."
-                value={gameSearch}
-                onChange={(e) => setGameSearch(e.target.value)}
+                placeholder="Search games..."
+                value={gameSearchQuery}
+                onChange={(e) => setGameSearchQuery(e.target.value)}
+                className="pl-10"
               />
             </div>
 
-            <div className="max-h-64 overflow-y-auto space-y-2">
-              {filteredGames.map((game: Game) => (
-                <div key={game.id} className="flex items-center space-x-2 p-2 border rounded">
-                  <Checkbox
-                    id={`game-${game.id}`}
-                    checked={selectedGames.includes(game.id)}
-                    onCheckedChange={(checked) => handleGameSelection(game.id, !!checked)}
-                  />
-                  <label htmlFor={`game-${game.id}`} className="flex-1 text-sm cursor-pointer">
-                    <div className="font-medium">{game.name}</div>
-                    <div className="text-muted-foreground text-xs">{game.id}</div>
-                  </label>
-                </div>
-              ))}
-            </div>
+            <ScrollArea className="h-64 border rounded-md p-4">
+              <div className="space-y-2">
+                {gamesLoading ? (
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Loading games...</span>
+                  </div>
+                ) : filteredGames.length > 0 ? (
+                  filteredGames.map((game) => (
+                    <div key={game.id} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`game-${game.id}`}
+                        checked={selectedGames.includes(game.id)}
+                        onCheckedChange={(checked) => handleGameSelection(game.id, checked as boolean)}
+                      />
+                      <label
+                        htmlFor={`game-${game.id}`}
+                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                      >
+                        {game.name} ({game.id})
+                      </label>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center text-muted-foreground py-4">
+                    No games found matching your search.
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
           </CardContent>
         </Card>
 
-        {/* Pick Sets Card */}
+        {/* Step 2: Pick Sets */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Package className="h-5 w-5" />
-              Pick Sets ({selectedSets.length} selected)
+              <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">2</div>
+              Pick Sets
             </CardTitle>
+            <CardDescription>
+              Discover and select sets for the chosen games. Sets are fetched dynamically from the JustTCG API.
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Button
-              onClick={handleFetchSets}
-              disabled={discoverSetsMutation.isPending}
-              className="w-full"
-            >
-              {discoverSetsMutation.isPending ? (
-                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Fetching Sets...</>
-              ) : (
-                <><Database className="h-4 w-4 mr-2" /> Fetch Sets</>
-              )}
-            </Button>
-
-            <div className="space-y-2">
-              <Label>Search Sets</Label>
-              <Input
-                placeholder="Search by set name..."
-                value={setSearch}
-                onChange={(e) => setSetSearch(e.target.value)}
-              />
+            <div className="flex gap-4">
+              <Button
+                onClick={() => discoverSetsMutation.mutate(selectedGames.length > 0 ? selectedGames : undefined)}
+                disabled={discoverSetsMutation.isPending}
+                variant="outline"
+              >
+                {discoverSetsMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                Fetch Sets
+              </Button>
+              <Badge variant="secondary">
+                {selectedSets.length} sets selected
+              </Badge>
             </div>
 
-            <div className="max-h-80 overflow-y-auto space-y-4">
-              {Object.entries(setsGroupedByGame).map(([gameId, sets]) => {
-                const game = games.find((g: Game) => g.id === gameId);
-                const filteredSets = sets.filter(set => 
-                  set.name.toLowerCase().includes(setSearch.toLowerCase())
-                );
-                
-                if (filteredSets.length === 0) return null;
-                
-                return (
-                  <div key={gameId} className="border rounded p-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="font-medium text-sm">
-                        {game?.name || gameId} ({filteredSets.length} sets)
-                      </div>
-                      <div className="flex gap-1">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleSelectAllSetsForGame(gameId)}
-                        >
-                          All
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleClearAllSetsForGame(gameId)}
-                        >
-                          Clear
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="space-y-1 max-h-32 overflow-y-auto">
-                      {filteredSets.map(set => (
-                        <div key={set.set_id} className="flex items-center space-x-2">
-                          <Checkbox
-                            id={`set-${set.set_id}`}
-                            checked={selectedSets.includes(set.set_id)}
-                            onCheckedChange={(checked) => handleSetSelection(set.set_id, !!checked)}
-                          />
-                          <label htmlFor={`set-${set.set_id}`} className="text-xs cursor-pointer flex-1">
-                            {set.name}
-                          </label>
+            {Object.keys(groupedSets).length > 0 && (
+              <div className="space-y-4">
+                {Object.entries(groupedSets).map(([gameId, sets]) => {
+                  const game = games.find(g => g.id === gameId);
+                  const searchQuery = setSearchQueries[gameId] || '';
+                  const filteredSets = sets.filter(set =>
+                    set.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    set.id.toLowerCase().includes(searchQuery.toLowerCase())
+                  );
+                  const selectedSetsInGame = sets.filter(set => selectedSets.includes(set.id)).length;
+
+                  return (
+                    <div key={gameId} className="border rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="font-medium">
+                          {game?.name || gameId} ({sets.length} sets)
+                        </h4>
+                        <div className="flex gap-2">
+                          <Button
+                            onClick={() => handleSelectAllSetsForGame(gameId)}
+                            variant="outline"
+                            size="sm"
+                          >
+                            Select All
+                          </Button>
+                          <Button
+                            onClick={() => handleClearAllSetsForGame(gameId)}
+                            variant="outline"
+                            size="sm"
+                          >
+                            Clear All
+                          </Button>
+                          <Badge variant="secondary">
+                            {selectedSetsInGame} selected
+                          </Badge>
                         </div>
-                      ))}
+                      </div>
+
+                      <div className="relative mb-3">
+                        <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          placeholder={`Search sets in ${game?.name || gameId}...`}
+                          value={searchQuery}
+                          onChange={(e) => setSetSearchQueries(prev => ({ ...prev, [gameId]: e.target.value }))}
+                          className="pl-10"
+                        />
+                      </div>
+
+                      <ScrollArea className="h-48">
+                        <div className="space-y-2">
+                          {filteredSets.map((set) => (
+                            <div key={set.id} className="flex items-center space-x-2">
+                              <Checkbox
+                                id={`set-${set.id}`}
+                                checked={selectedSets.includes(set.id)}
+                                onCheckedChange={(checked) => handleSetSelection(set.id, checked as boolean)}
+                              />
+                              <label
+                                htmlFor={`set-${set.id}`}
+                                className="text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer flex-1"
+                              >
+                                {set.name}
+                                {set.cards_count && (
+                                  <span className="text-muted-foreground ml-2">({set.cards_count} cards)</span>
+                                )}
+                              </label>
+                            </div>
+                          ))}
+                        </div>
+                      </ScrollArea>
                     </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Step 3: Sync Controls & Progress */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">3</div>
+              Sync Controls & Progress
+            </CardTitle>
+            <CardDescription>
+              Start the synchronization process and monitor progress in real-time.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Sync Buttons */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <Button
+                onClick={handleSyncSelectedSets}
+                disabled={isRunning || selectedSets.length === 0}
+                className="w-full"
+              >
+                <Play className="h-4 w-4 mr-2" />
+                Sync Selected Sets ({selectedSets.length})
+              </Button>
+              <Button
+                onClick={handleSyncAllSetsForSelectedGames}
+                disabled={isRunning || selectedGames.length === 0}
+                variant="outline"
+                className="w-full"
+              >
+                <Settings className="h-4 w-4 mr-2" />
+                Sync All Sets for Selected Games
+              </Button>
+              <Button
+                onClick={handleSyncAllGamesAndSets}
+                disabled={isRunning}
+                variant="destructive"
+                className="w-full"
+              >
+                <Database className="h-4 w-4 mr-2" />
+                Sync All Games & Sets
+              </Button>
+            </div>
+
+            {/* Progress Bar */}
+            {syncProgress.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span>Progress</span>
+                  <span>{Math.round(totalProgress)}%</span>
+                </div>
+                <Progress value={totalProgress} className="w-full" />
+              </div>
+            )}
+
+            {/* Progress Panel */}
+            {syncProgress.length > 0 && (
+              <div>
+                <h4 className="font-medium mb-3">Sync Progress</h4>
+                <ScrollArea className="h-64 border rounded-md p-4">
+                  <div className="space-y-2">
+                    {syncProgress.map((progress, index) => (
+                      <div key={`${progress.gameId}-${progress.setId}`} className="flex items-center gap-3 p-2 rounded border">
+                        <div className="flex-shrink-0">
+                          {progress.status === 'queued' && <Clock className="h-4 w-4 text-muted-foreground" />}
+                          {progress.status === 'running' && <Loader2 className="h-4 w-4 animate-spin text-blue-500" />}
+                          {progress.status === 'done' && <CheckCircle className="h-4 w-4 text-green-500" />}
+                          {progress.status === 'error' && <AlertCircle className="h-4 w-4 text-red-500" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium truncate">{progress.setName}</div>
+                          <div className="text-sm text-muted-foreground">
+                            {progress.gameId} • {progress.status}
+                            {progress.message && ` • ${progress.message}`}
+                          </div>
+                        </div>
+                        <Badge
+                          variant={
+                            progress.status === 'done' ? 'default' :
+                            progress.status === 'error' ? 'destructive' :
+                            progress.status === 'running' ? 'secondary' : 'outline'
+                          }
+                        >
+                          {progress.status}
+                        </Badge>
+                      </div>
+                    ))}
                   </div>
-                );
-              })}
+                </ScrollArea>
+              </div>
+            )}
+
+            <Separator />
+
+            {/* Live Logs */}
+            <div>
+              <h4 className="font-medium mb-3">Live Logs</h4>
+              <ScrollArea className="h-48 border rounded-md p-4 bg-muted/50 font-mono text-sm">
+                <div className="space-y-1">
+                  {logs.length > 0 ? (
+                    logs.slice(-100).map((log, index) => (
+                      <div key={index} className="text-xs">
+                        {log}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-muted-foreground text-center py-4">
+                      Logs will appear here during sync operations...
+                    </div>
+                  )}
+                </div>
+              </ScrollArea>
             </div>
           </CardContent>
         </Card>
       </div>
-
-      {/* Sync Controls & Progress Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Play className="h-5 w-5" />
-            Sync Controls & Progress
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex flex-wrap gap-2">
-            <Button
-              onClick={handleSyncSelectedSets}
-              disabled={isRunning || selectedSets.length === 0}
-            >
-              <Play className="h-4 w-4 mr-2" />
-              Sync Selected Sets ({selectedSets.length})
-            </Button>
-            
-            <Button
-              onClick={handleSyncAllSetsForSelectedGames}
-              disabled={isRunning || selectedGames.length === 0}
-              variant="secondary"
-            >
-              <Database className="h-4 w-4 mr-2" />
-              Sync All Sets for Selected Games
-            </Button>
-            
-            <Button
-              onClick={handleSyncAllGames}
-              disabled={isRunning}
-              variant="destructive"
-            >
-              <BarChart3 className="h-4 w-4 mr-2" />
-              Sync All Games
-            </Button>
-          </div>
-
-          {/* Progress Bar */}
-          {syncProgress.length > 0 && (
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span>Progress</span>
-                <span>{Math.round(getProgressPercentage())}%</span>
-              </div>
-              <Progress value={getProgressPercentage()} className="w-full" />
-            </div>
-          )}
-
-          {/* Progress List */}
-          {syncProgress.length > 0 && (
-            <div className="max-h-32 overflow-y-auto space-y-1">
-              {syncProgress.map((item, index) => (
-                <div key={`${item.gameId}-${item.setId}-${index}`} className="flex items-center gap-2 text-sm">
-                  {getStatusIcon(item.status)}
-                  <span className="font-mono flex-1">
-                    {item.gameId}/{item.setId}
-                  </span>
-                  {item.message && (
-                    <span className="text-muted-foreground text-xs">{item.message}</span>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Logs */}
-          <div className="space-y-2">
-            <Label>Live Logs (Last 100)</Label>
-            <div className="bg-slate-950 text-green-400 p-3 rounded font-mono text-xs max-h-48 overflow-y-auto">
-              {logs.length === 0 ? (
-                <div className="text-slate-400">No activity yet...</div>
-              ) : (
-                logs.map((log, index) => (
-                  <div key={index}>{log}</div>
-                ))
-              )}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }

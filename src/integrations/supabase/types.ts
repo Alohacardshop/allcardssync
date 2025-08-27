@@ -480,6 +480,51 @@ export type Database = {
           },
         ]
       }
+      sets: {
+        Row: {
+          cards_count: number | null
+          discovered_at: string | null
+          game: string
+          id: string
+          name: string
+          raw: Json | null
+          released_at: string | null
+        }
+        Insert: {
+          cards_count?: number | null
+          discovered_at?: string | null
+          game: string
+          id: string
+          name: string
+          raw?: Json | null
+          released_at?: string | null
+        }
+        Update: {
+          cards_count?: number | null
+          discovered_at?: string | null
+          game?: string
+          id?: string
+          name?: string
+          raw?: Json | null
+          released_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sets_game_fkey"
+            columns: ["game"]
+            isOneToOne: false
+            referencedRelation: "game_catalog_stats"
+            referencedColumns: ["game_id"]
+          },
+          {
+            foreignKeyName: "sets_game_fkey"
+            columns: ["game"]
+            isOneToOne: false
+            referencedRelation: "games"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       shopify_stores: {
         Row: {
           api_version: string | null
