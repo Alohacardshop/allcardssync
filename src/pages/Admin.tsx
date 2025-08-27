@@ -16,6 +16,7 @@ import SyncTab from '@/components/admin/SyncTab';
 import AuditReconcile from '@/components/admin/AuditReconcile';
 import DataTab from '@/components/admin/DataTab';
 import { SystemHealthCard } from '@/components/admin/SystemHealthCard';
+import JustTCGPanel from '@/components/admin/JustTCGPanel';
 import { GAME_MODES, type HealthStatus } from '@/lib/api';
 
 interface ShopifyConfig {
@@ -678,10 +679,11 @@ const Admin = () => {
 
       {/* Main Admin Tabs */}
       <Tabs defaultValue="sync" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="sync">Sync</TabsTrigger>
           <TabsTrigger value="audit">Audit & Reconcile</TabsTrigger>
           <TabsTrigger value="data">Data</TabsTrigger>
+          <TabsTrigger value="analytics">Analytics</TabsTrigger>
           <TabsTrigger value="config">Configuration</TabsTrigger>
         </TabsList>
         
@@ -700,6 +702,10 @@ const Admin = () => {
 
         <TabsContent value="data" className="space-y-6">
           <DataTab selectedMode={GAME_MODES.find(m => m.value === selectedMode) || GAME_MODES[0]} />
+        </TabsContent>
+
+        <TabsContent value="analytics" className="space-y-6">
+          <JustTCGPanel />
         </TabsContent>
 
         <TabsContent value="config" className="space-y-6">
