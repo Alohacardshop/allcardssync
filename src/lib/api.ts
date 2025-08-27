@@ -161,13 +161,14 @@ export async function getRecentSyncErrors(mode: GameMode, limit: number = 5): Pr
 }
 
 // Run sync operation
-export async function runSync(mode: GameMode, options: { setId?: string; since?: string } = {}): Promise<SyncResult> {
+export async function runSync(mode: GameMode, options: { setId?: string; since?: string } = {}, turboMode = false): Promise<SyncResult> {
   return apiCall(async () => {
     const url = new URL(`${FUNCTIONS_BASE}/catalog-sync`);
     url.searchParams.set('game', mode.game);
     
     if (options.setId) url.searchParams.set('setId', options.setId);
     if (options.since) url.searchParams.set('since', options.since);
+    if (turboMode) url.searchParams.set('turbo', 'true');
 
     const response = await fetch(url.toString(), { method: 'POST' });
     const data = await response.json();

@@ -626,7 +626,7 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
       const result = await runSync(mode, { 
         setId: setId || undefined, 
         since: since || undefined 
-      });
+      }, turboMode);
       
       const counts = normalizeApiCounts(result);
       setLastRun({ ...result, ...counts });
@@ -689,7 +689,7 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
     setLiveDelta({ sets: 0, cards: 0 }); // Reset delta on new sync
     
     try {
-      const result = await runSync(mode, { since: incrementalDate });
+      const result = await runSync(mode, { since: incrementalDate }, turboMode);
       const counts = normalizeApiCounts(result);
       setLastRun({ ...result, ...counts });
       
@@ -954,7 +954,7 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
     setSetId(error.set_id);
     
     try {
-      const result = await runSync(mode, { setId: error.set_id });
+      const result = await runSync(mode, { setId: error.set_id }, turboMode);
       const counts = normalizeApiCounts(result);
       setLastRun({ ...result, ...counts });
       
