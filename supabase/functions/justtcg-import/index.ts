@@ -58,7 +58,7 @@ async function makeApiRequest(url: string): Promise<any> {
   
   const response = await fetch(url, {
     headers: {
-      'Authorization': `Bearer ${apiKey}`,
+      'x-api-key': apiKey,
       'Content-Type': 'application/json'
     }
   })
@@ -272,10 +272,21 @@ serve(async (req) => {
     
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-    // Parse query parameters
+    // Parse query parameters and JSON body
     const url = new URL(req.url)
-    const gameId = url.searchParams.get('game')
-    const setId = url.searchParams.get('setId')
+    let gameId = url.searchParams.get('game')
+    let setId = url.searchParams.get('setId')
+    
+    // Check for JSON body for parameters
+    if (req.method === 'POST' && req.headers.get('content-type')?.includes('application/json')) {
+      try {
+        const body = await req.json()
+        if (body.game) gameId = body.game
+        if (body.setId) setId = body.setId
+      } catch (e) {
+        // Use query params as fallback
+      }
+    }
 
     let result: any = {
       success: true,

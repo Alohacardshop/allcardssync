@@ -56,7 +56,7 @@ async function discoverSetsForGame(supabase: any, apiKey: string, gameId: string
   
   const response = await fetch(`https://api.justtcg.com/v1/sets?game=${encodeURIComponent(gameId)}`, {
     headers: {
-      'Authorization': `Bearer ${apiKey}`,
+      'x-api-key': apiKey,
       'Content-Type': 'application/json'
     }
   })
@@ -113,20 +113,37 @@ serve(async (req) => {
     
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-    // Parse query parameters
+    // Parse query parameters and JSON body
     const url = new URL(req.url)
-    const gameParam = url.searchParams.get('game')
+    let gameParam = url.searchParams.get('game')
+    
+    // Check for JSON body to get games array
+    if (req.method === 'POST' && req.headers.get('content-type')?.includes('application/json')) {
+      try {
+        const body = await req.json()
+        if (body.games && Array.isArray(body.games)) {
+          // Multiple games from body
+          gamesToProcess = body.games
+          console.log(`Processing ${gamesToProcess.length} games from request body`)
+        } else if (gameParam) {
+          gamesToProcess = [gameParam]
+        }
+      } catch (e) {
+        // Fallback to query param if JSON parsing fails
+        if (gameParam) {
+          gamesToProcess = [gameParam]
+        }
+      }
+    } else if (gameParam) {
+      gamesToProcess = [gameParam]
+    }
 
     const apiKey = await getApiKey()
     
     let gamesToProcess: string[] = []
     
-    if (gameParam) {
-      // Single game specified
-      gamesToProcess = [gameParam]
-      console.log(`Processing single game: ${gameParam}`)
-    } else {
-      // Get all games from database
+    if (gamesToProcess.length === 0) {
+      // Get all games from database if no specific games were requested
       const { data: games, error: gamesError } = await supabase
         .from('games')
         .select('id')
@@ -138,6 +155,8 @@ serve(async (req) => {
 
       gamesToProcess = games?.map(g => g.id) || []
       console.log(`Processing all ${gamesToProcess.length} games from database`)
+    } else {
+      console.log(`Processing games: ${gamesToProcess.join(', ')}`)
     }
 
     const results: { gameId: string; setsCount: number }[] = []

@@ -73,7 +73,7 @@ serve(async (req) => {
     // Call JustTCG API
     const response = await fetch('https://api.justtcg.com/v1/games', {
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
+        'x-api-key': apiKey,
         'Content-Type': 'application/json'
       }
     })
