@@ -7,395 +7,221 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Separator } from '@/components/ui/separator';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { 
-  Loader2, 
+  RotateCw,
+  Database, 
+  TrendingUp, 
   Activity,
-  RefreshCw,
-  TrendingUp,
-  Clock,
-  BarChart3,
-  Calendar,
-  Zap
+  RefreshCcw,
+  Timer,
+  Settings2,
+  Loader2,
+  Download,
+  AlertCircle,
+  CheckCircle2,
+  Clock
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { supabase } from '@/integrations/supabase/client';
-
-interface SyncResult {
-  setsProcessed?: number;
-  cardsProcessed: number;
-  variantsProcessed: number;
-  skipped?: number;
-  errors?: number;
-  message?: string;
-}
-
-interface RefreshResult {
-  mode?: string;
-  idsRequested?: number;
-  game?: string;
-  set?: string;
-  cardsProcessed: number;
-  variantsProcessed: number;
-  orderBy?: string;
-  cardSortBy?: string;
-  variantSortBy?: string;
-  _metadata?: any;
-  message: string;
-}
-
-interface ApiMetadata {
-  apiRequestsUsed: number;
-  apiRequestsRemaining: number;
-  apiRateLimit: number;
-  resetTime?: string;
-}
-
-interface LogEntry {
-  timestamp: string;
-  level: string;
-  message: string;
-  service?: string;
-  [key: string]: any;
-}
-
-interface AnalyticsSnapshot {
-  id: number;
-  captured_at: string;
-  game: string;
-  card_id: string;
-  card_name: string;
-  cheapest_price: number;
-  change_24h: number;
-  change_7d: number;
-  change_30d: number;
-}
-
-const FUNCTIONS_BASE = '/functions/v1';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { 
+  syncGame, 
+  refreshList, 
+  refreshById, 
+  runSnapshots,
+  getSnapshots,
+  getCachedApiMetadata,
+  parseIdList,
+  formatPrice,
+  formatChange,
+  getChangeColor
+} from '@/lib/justtcg-api';
+import type { 
+  GameType, 
+  OrderByType, 
+  SortOrderType, 
+  MetricType,
+  RefreshListRequest,
+  RefreshIdRequest,
+  ApiMetadata
+} from '@/types/justtcg';
 
 export default function JustTCGPanel() {
-  const [loading, setLoading] = useState<Record<string, boolean>>({});
-  const [results, setResults] = useState<Record<string, SyncResult | RefreshResult>>({});
+  const queryClient = useQueryClient();
   
-  // Refresh/Analytics state
+  // State for forms
   const [refreshMode, setRefreshMode] = useState<'list' | 'id'>('list');
-  const [refreshIds, setRefreshIds] = useState<string>('');
-  const [listGame, setListGame] = useState<string>('');
-  const [listSet, setListSet] = useState<string>('');
-  const [orderBy, setOrderBy] = useState<string>('');
-  const [order, setOrder] = useState<string>('asc');
-  const [cardSortBy, setCardSortBy] = useState<string>('');
-  const [cardSortOrder, setCardSortOrder] = useState<string>('asc');
-  const [variantSortBy, setVariantSortBy] = useState<string>('');
-  const [variantSortOrder, setVariantSortOrder] = useState<string>('asc');
+  const [listForm, setListForm] = useState<RefreshListRequest>({
+    game: '',
+    set: '',
+    orderBy: 'price',
+    order: 'desc',
+    limit: 200
+  });
+  const [idForm, setIdForm] = useState<RefreshIdRequest & { idsText: string }>({
+    ids: [],
+    idsText: '',
+    cardSortBy: 'name',
+    cardSortOrder: 'asc',
+    variantSortBy: 'price',
+    variantSortOrder: 'asc'
+  });
   
-  // Analytics state
-  const [snapshots, setSnapshots] = useState<AnalyticsSnapshot[]>([]);
-  const [snapshotGame, setSnapshotGame] = useState<string>('');
-  const [snapshotMetric, setSnapshotMetric] = useState<string>('change_24h');
-  const [startDate, setStartDate] = useState<string>('');
-  const [endDate, setEndDate] = useState<string>('');
-  
-  const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [apiMetadata, setApiMetadata] = useState<ApiMetadata | null>(null);
+  // Snapshots filters
+  const [snapshotFilters, setSnapshotFilters] = useState({
+    game: 'pokemon',
+    startDate: '',
+    endDate: '',
+    metric: 'change_24h' as MetricType
+  });
 
-  // Load snapshots on component mount
-  useEffect(() => {
-    loadSnapshots();
-  }, [snapshotGame, snapshotMetric, startDate, endDate]);
+  // API metadata query
+  const { data: apiMetadata } = useQuery({
+    queryKey: ['api-metadata'],
+    queryFn: getCachedApiMetadata,
+    refetchInterval: 30000,
+    staleTime: 30000
+  });
 
-  // Load API metadata and recent logs
-  useEffect(() => {
-    loadApiMetadata();
-    loadRecentLogs();
-    
-    // Refresh every 30 seconds
-    const interval = setInterval(() => {
-      loadApiMetadata();
-      loadRecentLogs();
-    }, 30000);
+  // Snapshots query
+  const { data: snapshots, isLoading: snapshotsLoading } = useQuery({
+    queryKey: ['snapshots', snapshotFilters],
+    queryFn: () => getSnapshots(snapshotFilters),
+    enabled: !!snapshotFilters.game
+  });
 
-    return () => clearInterval(interval);
-  }, []);
-
-  const loadApiMetadata = async () => {
-    try {
-      // Try to get the latest metadata from recent function calls or system cache
-      // In production, this would ideally come from the latest function response _metadata
-      const { data, error } = await supabase
-        .from('system_settings')
-        .select('key_value')
-        .eq('key_name', 'JUSTTCG_API_USAGE_CACHE')
-        .maybeSingle();
-        
-      if (data?.key_value) {
-        try {
-          const cached = JSON.parse(data.key_value);
-          if (cached.timestamp && Date.now() - cached.timestamp < 300000) { // 5 min cache
-            setApiMetadata(cached.metadata);
-            return;
-          }
-        } catch (e) {
-          console.warn('Invalid cached metadata:', e);
-        }
-      }
-      
-      // Fallback to realistic simulation
-      setApiMetadata({
-        apiRequestsUsed: Math.floor(Math.random() * 5000) + 1000,
-        apiRequestsRemaining: 30000 - Math.floor(Math.random() * 5000) - 1000,
-        apiRateLimit: 30000,
-        resetTime: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+  // Mutations
+  const syncMutation = useMutation({
+    mutationFn: syncGame,
+    onSuccess: (data, game) => {
+      toast.success(`${getGameDisplayName(game)} sync completed`, {
+        description: `Processed ${data.cardsProcessed} cards, ${data.variantsProcessed} variants`
       });
-    } catch (error) {
-      console.error('Failed to load API metadata:', error);
-    }
-  };
-
-  const loadRecentLogs = async () => {
-    try {
-      // Query recent logs from edge function logs or system logs table
-      // This is a simplified version - in production you'd query actual logs
-      const recentLogs: LogEntry[] = [
-        {
-          timestamp: new Date().toISOString(),
-          level: 'INFO',
-          message: 'System ready',
-          service: 'catalog-sync-justtcg'
-        }
-      ];
-      setLogs(recentLogs);
-    } catch (error) {
-      console.error('Failed to load logs:', error);
-    }
-  };
-
-  const setLoadingState = (key: string, isLoading: boolean) => {
-    setLoading(prev => ({ ...prev, [key]: isLoading }));
-  };
-
-  const handleSyncGame = async (game: string, gameName: string) => {
-    const key = `sync-${game}`;
-    setLoadingState(key, true);
-    
-    try {
-      const response = await fetch(`${FUNCTIONS_BASE}/catalog-sync-justtcg?game=${encodeURIComponent(game)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const result: SyncResult = await response.json();
-      setResults(prev => ({ ...prev, [key]: result }));
-
-      toast.success(`${gameName} sync completed`, {
-        description: `Processed ${result.cardsProcessed} cards, ${result.variantsProcessed} variants${result.skipped ? `, skipped ${result.skipped} unchanged` : ''}`
-      });
-
-      // Update API metadata from response if available
-      if ((result as any)._metadata) {
-        setApiMetadata({
-          apiRequestsUsed: (result as any)._metadata.apiRequestsUsed || 0,
-          apiRequestsRemaining: (result as any)._metadata.apiRequestsRemaining || 0,
-          apiRateLimit: (result as any)._metadata.apiRateLimit || 30000,
-          resetTime: (result as any)._metadata.resetTime || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
-        });
-      }
-
-      // Refresh metadata after sync
-      await loadApiMetadata();
-      await loadRecentLogs();
-
-    } catch (error: any) {
-      toast.error(`${gameName} sync failed`, {
+      queryClient.invalidateQueries({ queryKey: ['api-metadata'] });
+    },
+    onError: (error: any, game) => {
+      toast.error(`${getGameDisplayName(game)} sync failed`, {
         description: error.message
       });
-      console.error(`Sync error for ${game}:`, error);
-    } finally {
-      setLoadingState(key, false);
     }
-  };
+  });
 
-  const handleRefresh = async () => {
-    const key = 'refresh';
-    setLoadingState(key, true);
-
-    try {
-      let requestBody: any = {};
-      
-      if (refreshMode === 'id') {
-        // ID Mode
-        const ids = refreshIds
-          .split(/[\n,\s]+/)
-          .map(id => id.trim())
-          .filter(id => id.length > 0);
-
-        if (ids.length === 0) {
-          throw new Error('Please provide at least one card ID');
-        }
-
-        if (ids.length > 1000) {
-          throw new Error('Maximum 1000 IDs allowed per request');
-        }
-
-        requestBody.ids = ids;
-        if (orderBy && orderBy !== 'default') requestBody.orderBy = orderBy;
-        if (cardSortBy && cardSortBy !== 'none') requestBody.cardSortBy = cardSortBy;
-        if (cardSortOrder) requestBody.cardSortOrder = cardSortOrder;
-        if (variantSortBy && variantSortBy !== 'none') requestBody.variantSortBy = variantSortBy;
-        if (variantSortOrder) requestBody.variantSortOrder = variantSortOrder;
-      } else {
-        // List Mode
-        if (!listGame) {
-          throw new Error('Please select a game');
-        }
-
-        requestBody.game = listGame;
-        if (listSet) requestBody.set = listSet;
-        if (orderBy && orderBy !== 'default') requestBody.orderBy = orderBy;
-        if (order) requestBody.order = order;
-      }
-
-      const response = await fetch(`${FUNCTIONS_BASE}/catalog-refresh`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody)
+  const refreshListMutation = useMutation({
+    mutationFn: refreshList,
+    onSuccess: (data) => {
+      toast.success('List refresh completed', {
+        description: `Processed ${data.cardsProcessed} cards, ${data.variantsProcessed} variants`
       });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const result: RefreshResult = await response.json();
-      setResults(prev => ({ ...prev, [key]: result }));
-
-      toast.success(`${result.mode} refresh completed`, {
-        description: `Processed ${result.cardsProcessed} cards, ${result.variantsProcessed} variants`
-      });
-
-      // Clear inputs
-      if (refreshMode === 'id') {
-        setRefreshIds('');
-      }
-
-      // Update API metadata from response if available
-      if (result._metadata) {
-        setApiMetadata({
-          apiRequestsUsed: result._metadata.apiRequestsUsed || 0,
-          apiRequestsRemaining: result._metadata.apiRequestsRemaining || 0,
-          apiRateLimit: result._metadata.apiRateLimit || 30000,
-          resetTime: result._metadata.resetTime || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
-        });
-        
-        // Cache the metadata for other UI components
-        try {
-          await supabase
-            .from('system_settings')
-            .upsert({
-              key_name: 'JUSTTCG_API_USAGE_CACHE',
-              key_value: JSON.stringify({
-                metadata: result._metadata,
-                timestamp: Date.now()
-              }),
-              category: 'cache'
-            }, { onConflict: 'key_name' });
-        } catch (e) {
-          console.warn('Failed to cache API metadata:', e);
-        }
-      }
-
-      // Refresh metadata
-      await loadApiMetadata();
-      await loadRecentLogs();
-
-    } catch (error: any) {
-      toast.error('Refresh failed', {
+      queryClient.invalidateQueries({ queryKey: ['api-metadata'] });
+    },
+    onError: (error: any) => {
+      toast.error('List refresh failed', {
         description: error.message
       });
-      console.error('Refresh error:', error);
-    } finally {
-      setLoadingState(key, false);
     }
-  };
+  });
 
-  const loadSnapshots = async () => {
-    try {
-      let query = supabase
-        .from('justtcg_analytics_snapshots')
-        .select('*')
-        .order('captured_at', { ascending: false })
-        .limit(100);
-
-      if (snapshotGame && snapshotGame !== 'all') {
-        query = query.eq('game', snapshotGame);
-      }
-
-      if (startDate) {
-        query = query.gte('captured_at', startDate);
-      }
-
-      if (endDate) {
-        query = query.lte('captured_at', endDate + 'T23:59:59');
-      }
-
-      const { data, error } = await query;
-
-      if (error) throw error;
-
-      // Filter by metric and sort
-      const filtered = (data || [])
-        .filter(row => row[snapshotMetric] !== null)
-        .sort((a, b) => Math.abs(b[snapshotMetric]) - Math.abs(a[snapshotMetric]));
-
-      setSnapshots(filtered);
-    } catch (error: any) {
-      console.error('Failed to load snapshots:', error);
-    }
-  };
-
-  const runSnapshot = async () => {
-    const key = 'snapshot';
-    setLoadingState(key, true);
-
-    try {
-      const response = await fetch(`${FUNCTIONS_BASE}/catalog-snapshots`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+  const refreshIdMutation = useMutation({
+    mutationFn: refreshById,
+    onSuccess: (data) => {
+      toast.success('ID refresh completed', {
+        description: `Processed ${data.cardsProcessed} cards, ${data.variantsProcessed} variants`
       });
+      setIdForm(prev => ({ ...prev, idsText: '', ids: [] }));
+      queryClient.invalidateQueries({ queryKey: ['api-metadata'] });
+    },
+    onError: (error: any) => {
+      toast.error('ID refresh failed', {
+        description: error.message
+      });
+    }
+  });
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const result = await response.json();
-
+  const snapshotMutation = useMutation({
+    mutationFn: runSnapshots,
+    onSuccess: (data) => {
       toast.success('Analytics snapshot completed', {
-        description: `Saved ${result.totalSnapshots} snapshots for ${result.games?.length} games`
+        description: `Saved snapshots for ${data.games?.length || 0} games`
       });
-
-      // Refresh snapshots
-      await loadSnapshots();
-
-    } catch (error: any) {
+      queryClient.invalidateQueries({ queryKey: ['snapshots'] });
+    },
+    onError: (error: any) => {
       toast.error('Snapshot failed', {
         description: error.message
       });
-      console.error('Snapshot error:', error);
-    } finally {
-      setLoadingState(key, false);
+    }
+  });
+
+  // Handlers
+  const handleSyncGame = (game: GameType) => {
+    syncMutation.mutate(game);
+  };
+
+  const handleListRefresh = () => {
+    if (!listForm.game) {
+      toast.error('Please select a game');
+      return;
+    }
+    refreshListMutation.mutate(listForm);
+  };
+
+  const handleIdRefresh = () => {
+    const ids = parseIdList(idForm.idsText);
+    if (ids.length === 0) {
+      toast.error('Please provide at least one card ID');
+      return;
+    }
+    if (ids.length > 100) {
+      toast.error('Maximum 100 IDs allowed per request');
+      return;
+    }
+    
+    const request: RefreshIdRequest = {
+      ids,
+      cardSortBy: idForm.cardSortBy,
+      cardSortOrder: idForm.cardSortOrder,
+      variantSortBy: idForm.variantSortBy,
+      variantSortOrder: idForm.variantSortOrder
+    };
+    
+    refreshIdMutation.mutate(request);
+  };
+
+  const exportCSV = (data: any[], filename: string) => {
+    if (!data || data.length === 0) return;
+    
+    const headers = Object.keys(data[0]);
+    const csv = [
+      headers.join(','),
+      ...data.map(row => headers.map(h => `"${row[h] || ''}"`).join(','))
+    ].join('\n');
+    
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const getGameDisplayName = (game: GameType): string => {
+    switch (game) {
+      case 'magic-the-gathering': return 'Magic: The Gathering';
+      case 'pokemon': return 'Pokémon (EN)';
+      case 'pokemon-japan': return 'Pokémon (JP)';
+      default: return game;
     }
   };
 
-  const formatNumber = (num: number) => num.toLocaleString();
-
-  const getUsagePercentage = () => {
+  const getUsagePercentage = (): number => {
     if (!apiMetadata) return 0;
     return (apiMetadata.apiRequestsUsed / apiMetadata.apiRateLimit) * 100;
   };
 
-  const getUsageColor = () => {
+  const getUsageColor = (): string => {
     const percentage = getUsagePercentage();
     if (percentage > 90) return 'text-red-500';
     if (percentage > 75) return 'text-yellow-500';
@@ -403,419 +229,499 @@ export default function JustTCGPanel() {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Game Sync Controls */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Zap className="h-5 w-5 text-red-500" />
-              Magic: The Gathering
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Button
-              onClick={() => handleSyncGame('magic-the-gathering', 'Magic: The Gathering')}
-              disabled={loading['sync-magic-the-gathering']}
-              className="w-full"
-            >
-              {loading['sync-magic-the-gathering'] ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Syncing MTG...
-                </>
-              ) : (
-                'Sync MTG'
-              )}
-            </Button>
-            
-            {results['sync-magic-the-gathering'] && (
-              <div className="text-sm space-y-1">
-                <div className="flex justify-between">
-                  <span>Cards:</span>
-                  <span className="font-medium">
-                    {formatNumber((results['sync-magic-the-gathering'] as SyncResult).cardsProcessed)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Variants:</span>
-                  <span className="font-medium">
-                    {formatNumber((results['sync-magic-the-gathering'] as SyncResult).variantsProcessed)}
-                  </span>
-                </div>
-                {(results['sync-magic-the-gathering'] as SyncResult).skipped && (
-                  <div className="flex justify-between">
-                    <span>Skipped:</span>
-                    <span className="font-medium text-muted-foreground">
-                      {formatNumber((results['sync-magic-the-gathering'] as SyncResult).skipped!)}
-                    </span>
-                  </div>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Zap className="h-5 w-5 text-blue-500" />
-              Pokémon (Global)
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Button
-              onClick={() => handleSyncGame('pokemon', 'Pokémon (Global)')}
-              disabled={loading['sync-pokemon']}
-              className="w-full"
-            >
-              {loading['sync-pokemon'] ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Syncing Pokémon...
-                </>
-              ) : (
-                'Sync Pokémon (EN)'
-              )}
-            </Button>
-            
-            {results['sync-pokemon'] && (
-              <div className="text-sm space-y-1">
-                <div className="flex justify-between">
-                  <span>Cards:</span>
-                  <span className="font-medium">
-                    {formatNumber((results['sync-pokemon'] as SyncResult).cardsProcessed)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Variants:</span>
-                  <span className="font-medium">
-                    {formatNumber((results['sync-pokemon'] as SyncResult).variantsProcessed)}
-                  </span>
-                </div>
-                {(results['sync-pokemon'] as SyncResult).skipped && (
-                  <div className="flex justify-between">
-                    <span>Skipped:</span>
-                    <span className="font-medium text-muted-foreground">
-                      {formatNumber((results['sync-pokemon'] as SyncResult).skipped!)}
-                    </span>
-                  </div>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Zap className="h-5 w-5 text-purple-500" />
-              Pokémon (Japan)
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Button
-              onClick={() => handleSyncGame('pokemon-japan', 'Pokémon (Japan)')}
-              disabled={loading['sync-pokemon-japan']}
-              className="w-full"
-            >
-              {loading['sync-pokemon-japan'] ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Syncing Pokémon JP...
-                </>
-              ) : (
-                'Sync Pokémon (JP)'
-              )}
-            </Button>
-            
-            {results['sync-pokemon-japan'] && (
-              <div className="text-sm space-y-1">
-                <div className="flex justify-between">
-                  <span>Cards:</span>
-                  <span className="font-medium">
-                    {formatNumber((results['sync-pokemon-japan'] as SyncResult).cardsProcessed)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Variants:</span>
-                  <span className="font-medium">
-                    {formatNumber((results['sync-pokemon-japan'] as SyncResult).variantsProcessed)}
-                  </span>
-                </div>
-                {(results['sync-pokemon-japan'] as SyncResult).skipped && (
-                  <div className="flex justify-between">
-                    <span>Skipped:</span>
-                    <span className="font-medium text-muted-foreground">
-                      {formatNumber((results['sync-pokemon-japan'] as SyncResult).skipped!)}
-                    </span>
-                  </div>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+    <div className="space-y-8">
+      {/* Header */}
+      <div>
+        <h1 className="text-3xl font-bold">JustTCG Admin</h1>
+        <p className="text-muted-foreground mt-2">
+          Manage catalog syncing, analytics refresh, and API usage monitoring
+        </p>
+        {apiMetadata && (
+          <div className="mt-2 flex items-center gap-4 text-sm">
+            <span className="text-muted-foreground">Last updated:</span>
+            <span>{new Date().toLocaleString()}</span>
+            <Badge variant="outline" className={getUsageColor()}>
+              {Math.round(getUsagePercentage())}% API usage
+            </Badge>
+          </div>
+        )}
       </div>
 
-      {/* API Usage Status */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Activity className="h-5 w-5" />
-            JustTCG API Usage & Status
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {apiMetadata ? (
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="text-center p-3 bg-muted/50 rounded-lg">
-                <div className={`text-2xl font-bold ${getUsageColor()}`}>
-                  {formatNumber(apiMetadata.apiRequestsUsed)}
-                </div>
-                <div className="text-xs text-muted-foreground">Requests Used</div>
-              </div>
-              <div className="text-center p-3 bg-muted/50 rounded-lg">
-                <div className="text-2xl font-bold text-green-500">
-                  {formatNumber(apiMetadata.apiRequestsRemaining)}
-                </div>
-                <div className="text-xs text-muted-foreground">Remaining</div>
-              </div>
-              <div className="text-center p-3 bg-muted/50 rounded-lg">
-                <div className="text-2xl font-bold text-blue-500">
-                  {formatNumber(apiMetadata.apiRateLimit)}
-                </div>
-                <div className="text-xs text-muted-foreground">Daily Limit</div>
-              </div>
-              <div className="text-center p-3 bg-muted/50 rounded-lg">
-                <div className={`text-2xl font-bold ${getUsageColor()}`}>
-                  {getUsagePercentage().toFixed(1)}%
-                </div>
-                <div className="text-xs text-muted-foreground">Usage</div>
-              </div>
-            </div>
-          ) : (
-            <div className="flex items-center justify-center p-4">
-              <Loader2 className="h-6 w-6 animate-spin mr-2" />
-              Loading API status...
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Tabs defaultValue="refresh" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="refresh">Refresh & Analytics</TabsTrigger>
-          <TabsTrigger value="snapshots">Analytics Snapshots</TabsTrigger>
-          <TabsTrigger value="activity">Recent Activity</TabsTrigger>
+      <Tabs defaultValue="sync" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="sync" className="flex items-center gap-2">
+            <Database className="h-4 w-4" />
+            Sync
+          </TabsTrigger>
+          <TabsTrigger value="refresh" className="flex items-center gap-2">
+            <RefreshCcw className="h-4 w-4" />
+            Refresh & Analytics
+          </TabsTrigger>
+          <TabsTrigger value="usage" className="flex items-center gap-2">
+            <Activity className="h-4 w-4" />
+            Usage & Logs
+          </TabsTrigger>
+          <TabsTrigger value="snapshots" className="flex items-center gap-2">
+            <TrendingUp className="h-4 w-4" />
+            Snapshots
+          </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="refresh" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <RefreshCw className="h-5 w-5" />
-                Enhanced Refresh & Analytics
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center gap-4">
-                <Label>Mode:</Label>
-                <Select value={refreshMode} onValueChange={(value: 'list' | 'id') => setRefreshMode(value)}>
-                  <SelectTrigger className="w-48">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="list">List Mode</SelectItem>
-                    <SelectItem value="id">ID Mode</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {refreshMode === 'list' && (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
-                    <Label>Game</Label>
-                    <Select value={listGame} onValueChange={setListGame}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select game" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="magic-the-gathering">Magic: The Gathering</SelectItem>
-                        <SelectItem value="pokemon">Pokémon</SelectItem>
-                        <SelectItem value="pokemon_japan">Pokémon Japan</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>Set (optional)</Label>
-                    <Input
-                      value={listSet}
-                      onChange={(e) => setListSet(e.target.value)}
-                      placeholder="Set name"
-                    />
-                  </div>
-                  <div>
-                    <Label>Order By</Label>
-                    <Select value={orderBy} onValueChange={setOrderBy}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select order" />
-                      </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="default">Default</SelectItem>
-                          <SelectItem value="price">Price</SelectItem>
-                          <SelectItem value="24h">24h Change</SelectItem>
-                          <SelectItem value="7d">7d Change</SelectItem>
-                          <SelectItem value="30d">30d Change</SelectItem>
-                        </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              )}
-
-              {refreshMode === 'id' && (
-                <div className="space-y-4">
-                  <div>
-                    <Label>Card IDs (one per line or comma-separated)</Label>
-                    <Textarea
-                      value={refreshIds}
-                      onChange={(e) => setRefreshIds(e.target.value)}
-                      placeholder="Enter card IDs..."
-                      className="h-32"
-                    />
-                  </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <Label>Order By</Label>
-                      <Select value={orderBy} onValueChange={setOrderBy}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select order" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="default">Default</SelectItem>
-                          <SelectItem value="price">Price</SelectItem>
-                          <SelectItem value="24h">24h Change</SelectItem>
-                          <SelectItem value="7d">7d Change</SelectItem>
-                          <SelectItem value="30d">30d Change</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    
-                    <div>
-                      <Label>Card Sort By</Label>
-                      <Select value={cardSortBy} onValueChange={setCardSortBy}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Card sort" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">None</SelectItem>
-                          <SelectItem value="price">Price</SelectItem>
-                          <SelectItem value="24h">24h Change</SelectItem>
-                          <SelectItem value="7d">7d Change</SelectItem>
-                          <SelectItem value="30d">30d Change</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    
-                    <div>
-                      <Label>Variant Sort By</Label>
-                      <Select value={variantSortBy} onValueChange={setVariantSortBy}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Variant sort" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">None</SelectItem>
-                          <SelectItem value="price">Price</SelectItem>
-                          <SelectItem value="24h">24h Change</SelectItem>
-                          <SelectItem value="7d">7d Change</SelectItem>
-                          <SelectItem value="30d">30d Change</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <Button 
-                onClick={handleRefresh}
-                disabled={loading.refresh}
-                className="w-full"
-              >
-                {loading.refresh ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Processing Refresh...
-                  </>
-                ) : (
-                  'Run Enhanced Refresh'
-                )}
-              </Button>
-
-              {results.refresh && (
-                <div className="mt-4 p-4 bg-muted/50 rounded-lg">
-                  <h4 className="font-medium mb-2">Refresh Results:</h4>
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>Mode: {(results.refresh as RefreshResult).mode || 'Unknown'}</div>
-                    <div>Cards: {formatNumber(results.refresh.cardsProcessed)}</div>
-                    <div>Variants: {formatNumber(results.refresh.variantsProcessed)}</div>
-                    {(results.refresh as RefreshResult).idsRequested && (
-                      <div>IDs Requested: {formatNumber((results.refresh as RefreshResult).idsRequested!)}</div>
+        {/* Sync Tab */}
+        <TabsContent value="sync" className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {(['magic-the-gathering', 'pokemon', 'pokemon-japan'] as GameType[]).map((game) => (
+              <Card key={game} className="rounded-2xl">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <RotateCw className="h-5 w-5 text-primary" />
+                    {getGameDisplayName(game)}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <Button
+                    onClick={() => handleSyncGame(game)}
+                    disabled={syncMutation.isPending}
+                    className="w-full"
+                    size="lg"
+                  >
+                    {syncMutation.isPending && syncMutation.variables === game ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Syncing...
+                      </>
+                    ) : (
+                      `Sync ${getGameDisplayName(game)}`
                     )}
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                  </Button>
+                  
+                  {syncMutation.isSuccess && syncMutation.variables === game && (
+                    <Alert>
+                      <CheckCircle2 className="h-4 w-4" />
+                      <AlertDescription>
+                        Processed {syncMutation.data.cardsProcessed.toLocaleString()} cards, {' '}
+                        {syncMutation.data.variantsProcessed.toLocaleString()} variants
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </TabsContent>
 
-        <TabsContent value="snapshots" className="space-y-4">
-          <Card>
+        {/* Refresh & Analytics Tab */}
+        <TabsContent value="refresh" className="space-y-6">
+          <Tabs value={refreshMode} onValueChange={(v) => setRefreshMode(v as 'list' | 'id')}>
+            <TabsList>
+              <TabsTrigger value="list">List Mode</TabsTrigger>
+              <TabsTrigger value="id">ID Mode</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="list" className="space-y-4">
+              <Card className="rounded-2xl">
+                <CardHeader>
+                  <CardTitle>List Refresh</CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    Refresh cards by game/set with sorting options
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="space-y-2">
+                      <Label>Game</Label>
+                      <Select 
+                        value={listForm.game} 
+                        onValueChange={(v) => setListForm(prev => ({ ...prev, game: v }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select game" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="magic-the-gathering">Magic: The Gathering</SelectItem>
+                          <SelectItem value="pokemon">Pokémon (EN)</SelectItem>
+                          <SelectItem value="pokemon-japan">Pokémon (JP)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Set (Optional)</Label>
+                      <Input
+                        placeholder="Enter set name"
+                        value={listForm.set}
+                        onChange={(e) => setListForm(prev => ({ ...prev, set: e.target.value }))}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Order By</Label>
+                      <Select 
+                        value={listForm.orderBy} 
+                        onValueChange={(v: OrderByType) => setListForm(prev => ({ ...prev, orderBy: v }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="price">Price</SelectItem>
+                          <SelectItem value="24h">24h Change</SelectItem>
+                          <SelectItem value="7d">7d Change</SelectItem>
+                          <SelectItem value="30d">30d Change</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Order</Label>
+                      <Select 
+                        value={listForm.order} 
+                        onValueChange={(v: SortOrderType) => setListForm(prev => ({ ...prev, order: v }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="asc">Ascending</SelectItem>
+                          <SelectItem value="desc">Descending</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-4">
+                    <Button 
+                      onClick={handleListRefresh}
+                      disabled={refreshListMutation.isPending || !listForm.game}
+                      size="lg"
+                    >
+                      {refreshListMutation.isPending ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Running...
+                        </>
+                      ) : (
+                        'Run List Refresh'
+                      )}
+                    </Button>
+
+                    {refreshListMutation.data?.data && (
+                      <Button 
+                        variant="outline" 
+                        onClick={() => exportCSV(refreshListMutation.data.data!, 'list-refresh.csv')}
+                      >
+                        <Download className="h-4 w-4 mr-2" />
+                        Export CSV
+                      </Button>
+                    )}
+                  </div>
+
+                  {refreshListMutation.data && (
+                    <Alert>
+                      <CheckCircle2 className="h-4 w-4" />
+                      <AlertDescription>
+                        {refreshListMutation.data.message} - {' '}
+                        Processed {refreshListMutation.data.cardsProcessed} cards
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="id" className="space-y-4">
+              <Card className="rounded-2xl">
+                <CardHeader>
+                  <CardTitle>ID Refresh</CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    Refresh specific cards by ID (max 100 per request)
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Card IDs</Label>
+                    <Textarea
+                      placeholder="Enter card IDs (one per line or comma-separated)&#10;Example:&#10;xy1-1&#10;base1-4&#10;neo1-17"
+                      value={idForm.idsText}
+                      onChange={(e) => setIdForm(prev => ({ ...prev, idsText: e.target.value }))}
+                      className="min-h-[120px]"
+                    />
+                    <div className="text-xs text-muted-foreground">
+                      {parseIdList(idForm.idsText).length} IDs entered (max 100)
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="space-y-2">
+                      <Label>Card Sort By</Label>
+                      <Select 
+                        value={idForm.cardSortBy} 
+                        onValueChange={(v) => setIdForm(prev => ({ ...prev, cardSortBy: v }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="name">Name</SelectItem>
+                          <SelectItem value="set">Set</SelectItem>
+                          <SelectItem value="number">Number</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Card Order</Label>
+                      <Select 
+                        value={idForm.cardSortOrder} 
+                        onValueChange={(v: SortOrderType) => setIdForm(prev => ({ ...prev, cardSortOrder: v }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="asc">Ascending</SelectItem>
+                          <SelectItem value="desc">Descending</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Variant Sort By</Label>
+                      <Select 
+                        value={idForm.variantSortBy} 
+                        onValueChange={(v) => setIdForm(prev => ({ ...prev, variantSortBy: v }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="price">Price</SelectItem>
+                          <SelectItem value="condition">Condition</SelectItem>
+                          <SelectItem value="printing">Printing</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Variant Order</Label>
+                      <Select 
+                        value={idForm.variantSortOrder} 
+                        onValueChange={(v: SortOrderType) => setIdForm(prev => ({ ...prev, variantSortOrder: v }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="asc">Ascending</SelectItem>
+                          <SelectItem value="desc">Descending</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-4">
+                    <Button 
+                      onClick={handleIdRefresh}
+                      disabled={refreshIdMutation.isPending || parseIdList(idForm.idsText).length === 0}
+                      size="lg"
+                    >
+                      {refreshIdMutation.isPending ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Running...
+                        </>
+                      ) : (
+                        'Run ID Refresh'
+                      )}
+                    </Button>
+
+                    {refreshIdMutation.data?.data && (
+                      <Button 
+                        variant="outline" 
+                        onClick={() => exportCSV(refreshIdMutation.data.data!, 'id-refresh.csv')}
+                      >
+                        <Download className="h-4 w-4 mr-2" />
+                        Export CSV
+                      </Button>
+                    )}
+                  </div>
+
+                  {refreshIdMutation.data && (
+                    <Alert>
+                      <CheckCircle2 className="h-4 w-4" />
+                      <AlertDescription>
+                        {refreshIdMutation.data.message} - {' '}
+                        Processed {refreshIdMutation.data.cardsProcessed} cards
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+        </TabsContent>
+
+        {/* Usage & Logs Tab */}
+        <TabsContent value="usage" className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card className="rounded-2xl">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Activity className="h-5 w-5" />
+                  API Usage Status
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {apiMetadata ? (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label className="text-muted-foreground">Requests Used</Label>
+                        <div className="text-2xl font-bold">
+                          {apiMetadata.apiRequestsUsed.toLocaleString()}
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-muted-foreground">Remaining</Label>
+                        <div className="text-2xl font-bold">
+                          {apiMetadata.apiRequestsRemaining.toLocaleString()}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label className="text-muted-foreground">Usage</Label>
+                      <div className="w-full bg-secondary rounded-full h-2">
+                        <div 
+                          className="bg-primary h-2 rounded-full transition-all" 
+                          style={{ width: `${Math.min(100, getUsagePercentage())}%` }}
+                        />
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        {Math.round(getUsagePercentage())}% of {apiMetadata.apiRateLimit.toLocaleString()} daily limit
+                      </div>
+                    </div>
+
+                    {apiMetadata.resetTime && (
+                      <div className="space-y-2">
+                        <Label className="text-muted-foreground">Resets At</Label>
+                        <div className="flex items-center gap-2">
+                          <Clock className="h-4 w-4" />
+                          {new Date(apiMetadata.resetTime).toLocaleString()}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <AlertCircle className="h-8 w-8 mx-auto mb-2" />
+                    No usage data available
+                    <div className="text-xs mt-1">
+                      Run a sync or refresh operation to see API usage
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="rounded-2xl">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Settings2 className="h-5 w-5" />
+                  System Status
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">Sync Functions</span>
+                    <Badge variant="outline">
+                      <CheckCircle2 className="h-3 w-3 mr-1" />
+                      Online
+                    </Badge>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">Refresh Functions</span>
+                    <Badge variant="outline">
+                      <CheckCircle2 className="h-3 w-3 mr-1" />
+                      Online
+                    </Badge>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">Analytics</span>
+                    <Badge variant="outline">
+                      <CheckCircle2 className="h-3 w-3 mr-1" />
+                      Online
+                    </Badge>
+                  </div>
+                </div>
+
+                <Separator />
+
+                <div className="text-xs text-muted-foreground space-y-1">
+                  <div>Rate limit: 500 requests/minute</div>
+                  <div>Page size: 200 cards per request</div>
+                  <div>Worker concurrency: 24</div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* Snapshots Tab */}
+        <TabsContent value="snapshots" className="space-y-6">
+          <Card className="rounded-2xl">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <BarChart3 className="h-5 w-5" />
-                Analytics Snapshots
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center gap-4 flex-wrap">
+              <CardTitle className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5" />
+                  Analytics Snapshots
+                </div>
                 <Button 
-                  onClick={runSnapshot}
-                  disabled={loading.snapshot}
-                  className="flex items-center gap-2"
+                  onClick={() => snapshotMutation.mutate()}
+                  disabled={snapshotMutation.isPending}
+                  variant="outline"
                 >
-                  {loading.snapshot ? (
+                  {snapshotMutation.isPending ? (
                     <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                       Running...
                     </>
                   ) : (
                     <>
-                      <TrendingUp className="h-4 w-4" />
+                      <RefreshCcw className="h-4 w-4 mr-2" />
                       Run Snapshot
                     </>
                   )}
                 </Button>
-              </div>
-
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div>
+                <div className="space-y-2">
                   <Label>Game</Label>
-                  <Select value={snapshotGame} onValueChange={setSnapshotGame}>
+                  <Select 
+                    value={snapshotFilters.game} 
+                    onValueChange={(v) => setSnapshotFilters(prev => ({ ...prev, game: v }))}
+                  >
                     <SelectTrigger>
-                      <SelectValue placeholder="All games" />
+                      <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Games</SelectItem>
                       <SelectItem value="magic-the-gathering">Magic: The Gathering</SelectItem>
-                      <SelectItem value="pokemon">Pokémon</SelectItem>
-                      <SelectItem value="pokemon_japan">Pokémon Japan</SelectItem>
+                      <SelectItem value="pokemon">Pokémon (EN)</SelectItem>
+                      <SelectItem value="pokemon-japan">Pokémon (JP)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-                
-                <div>
+
+                <div className="space-y-2">
                   <Label>Metric</Label>
-                  <Select value={snapshotMetric} onValueChange={setSnapshotMetric}>
+                  <Select 
+                    value={snapshotFilters.metric} 
+                    onValueChange={(v: MetricType) => setSnapshotFilters(prev => ({ ...prev, metric: v }))}
+                  >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -823,95 +729,107 @@ export default function JustTCGPanel() {
                       <SelectItem value="change_24h">24h Change</SelectItem>
                       <SelectItem value="change_7d">7d Change</SelectItem>
                       <SelectItem value="change_30d">30d Change</SelectItem>
-                      <SelectItem value="cheapest_price">Cheapest Price</SelectItem>
+                      <SelectItem value="cheapest_price">Price</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-                
-                <div>
-                  <Label>Start Date</Label>
+
+                <div className="space-y-2">
+                  <Label>From Date</Label>
                   <Input
                     type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
+                    value={snapshotFilters.startDate}
+                    onChange={(e) => setSnapshotFilters(prev => ({ ...prev, startDate: e.target.value }))}
                   />
                 </div>
-                
-                <div>
-                  <Label>End Date</Label>
+
+                <div className="space-y-2">
+                  <Label>To Date</Label>
                   <Input
                     type="date"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
+                    value={snapshotFilters.endDate}
+                    onChange={(e) => setSnapshotFilters(prev => ({ ...prev, endDate: e.target.value }))}
                   />
                 </div>
               </div>
 
-              {snapshots.length > 0 && (
-                <div className="mt-6">
-                  <h4 className="font-medium mb-3">
-                    Top {snapshots.length} Cards by {snapshotMetric.replace('_', ' ')}
-                  </h4>
-                  <div className="space-y-2 max-h-96 overflow-y-auto">
-                    {snapshots.map((snapshot, index) => (
-                      <div key={snapshot.id} className="flex items-center justify-between p-3 bg-muted/30 rounded">
-                        <div className="flex-1">
-                          <div className="font-medium text-sm">{snapshot.card_name}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {snapshot.game} • {new Date(snapshot.captured_at).toLocaleDateString()}
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <div className="font-bold">
-                            {snapshotMetric === 'cheapest_price' 
-                              ? `$${snapshot.cheapest_price?.toFixed(2) || '0.00'}`
-                              : `${Number(snapshot[snapshotMetric as keyof AnalyticsSnapshot]) > 0 ? '+' : ''}${Number(snapshot[snapshotMetric as keyof AnalyticsSnapshot])?.toFixed(1) || 0}%`
-                            }
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            ${snapshot.cheapest_price?.toFixed(2) || '0.00'}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+              {snapshots && snapshots.length > 0 && (
+                <>
+                  <div className="flex items-center gap-4">
+                    <Badge variant="outline">
+                      {snapshots.length} snapshots found
+                    </Badge>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => exportCSV(snapshots, 'analytics-snapshots.csv')}
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      Export CSV
+                    </Button>
+                  </div>
+
+                  <div className="border rounded-lg">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Card</TableHead>
+                          <TableHead>Game</TableHead>
+                          <TableHead>Price</TableHead>
+                          <TableHead>24h</TableHead>
+                          <TableHead>7d</TableHead>
+                          <TableHead>30d</TableHead>
+                          <TableHead>Captured</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {snapshots.slice(0, 50).map((snapshot) => (
+                          <TableRow key={`${snapshot.id}-${snapshot.captured_at}`}>
+                            <TableCell className="font-medium">
+                              {snapshot.card_name}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="secondary" className="text-xs">
+                                {snapshot.game}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>{formatPrice(snapshot.cheapest_price)}</TableCell>
+                            <TableCell className={getChangeColor(snapshot.change_24h)}>
+                              {formatChange(snapshot.change_24h)}
+                            </TableCell>
+                            <TableCell className={getChangeColor(snapshot.change_7d)}>
+                              {formatChange(snapshot.change_7d)}
+                            </TableCell>
+                            <TableCell className={getChangeColor(snapshot.change_30d)}>
+                              {formatChange(snapshot.change_30d)}
+                            </TableCell>
+                            <TableCell className="text-xs text-muted-foreground">
+                              {new Date(snapshot.captured_at).toLocaleDateString()}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </>
+              )}
+
+              {snapshotsLoading && (
+                <div className="text-center py-8">
+                  <Loader2 className="h-8 w-8 mx-auto animate-spin mb-2" />
+                  <div className="text-muted-foreground">Loading snapshots...</div>
+                </div>
+              )}
+
+              {!snapshotsLoading && (!snapshots || snapshots.length === 0) && (
+                <div className="text-center py-8 text-muted-foreground">
+                  <TrendingUp className="h-8 w-8 mx-auto mb-2" />
+                  No snapshots found
+                  <div className="text-xs mt-1">
+                    Adjust your filters or run a snapshot to see data
                   </div>
                 </div>
               )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="activity" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Clock className="h-5 w-5" />
-                Recent Activity
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {logs.length > 0 ? (
-                  logs.map((log, index) => (
-                    <div key={index} className="flex items-center gap-3 p-3 bg-muted/30 rounded">
-                      <Badge variant="outline">{log.level}</Badge>
-                      <div className="flex-1">
-                        <div className="text-sm">{log.message}</div>
-                        {log.service && (
-                          <div className="text-xs text-muted-foreground">{log.service}</div>
-                        )}
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        {new Date(log.timestamp).toLocaleTimeString()}
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="text-center py-8 text-muted-foreground">
-                    No recent activity
-                  </div>
-                )}
-              </div>
             </CardContent>
           </Card>
         </TabsContent>
