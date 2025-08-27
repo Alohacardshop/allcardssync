@@ -41,6 +41,7 @@ import {
   formatTimeAgo
 } from '@/lib/api';
 import { ImportJobsTable } from './ImportJobsTable';
+import { RebuildProgressWidget } from './RebuildProgressWidget';
 
 interface SyncTabProps {
   selectedMode: string;
@@ -949,6 +950,160 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
 
       {mode && (
         <>
+          {/* Rebuild Progress Widget */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className="lg:col-span-1">
+              <RebuildProgressWidget
+                mode={mode}
+                stats={stats}
+                queueStats={queueStats}
+                errors={errors}
+                isActiveSync={isActiveSync}
+                onQueuePending={handleQueuePending}
+                onProcessNext={handleProcessNext}
+                onRefresh={handleManualRefresh}
+                queueing={queueing}
+                processing={processing}
+                refreshing={manualRefreshLoading}
+              />
+            </div>
+            
+            {/* Current Progress & Last Run */}
+            <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Current Progress */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Activity className="h-5 w-5" />
+                    Current Progress
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                     <div className="grid grid-cols-3 gap-4">
+                       <div className="text-center p-3 bg-muted/50 rounded-lg">
+                         <div className="text-2xl font-bold text-primary">{(stats?.sets_count || 0) + liveDelta.sets}</div>
+                         <div className="text-xs text-muted-foreground">Sets</div>
+                         {liveDelta.sets > 0 && (
+                           <div className="text-xs text-green-600 font-medium">+{liveDelta.sets} live</div>
+                         )}
+                       </div>
+                       <div className="text-center p-3 bg-muted/50 rounded-lg">
+                         <div className="text-2xl font-bold text-primary">{(stats?.cards_count || 0) + liveDelta.cards}</div>
+                         <div className="text-xs text-muted-foreground">Cards</div>
+                         {liveDelta.cards > 0 && (
+                           <div className="text-xs text-green-600 font-medium">+{liveDelta.cards} live</div>
+                         )}
+                       </div>
+                       <div className="text-center p-3 bg-muted/50 rounded-lg">
+                         <div className="text-2xl font-bold text-primary">{stats?.pending_count || 0}</div>
+                         <div className="text-xs text-muted-foreground">Pending</div>
+                       </div>
+                     </div>
+
+                    <div className="flex items-center justify-center gap-2">
+                      {isActiveSync ? (
+                        <RefreshCw className="h-4 w-4 text-blue-600 animate-spin" />
+                      ) : totalProcessed > 0 ? (
+                        <CheckCircle className="h-4 w-4 text-green-600" />
+                      ) : (
+                        <Database className="h-4 w-4 text-muted-foreground" />
+                      )}
+                      <Badge variant={isActiveSync ? "secondary" : totalProcessed > 0 ? "default" : "outline"}>
+                        {isActiveSync ? "Syncing..." : totalProcessed > 0 ? "Ready" : "Empty"}
+                      </Badge>
+                    </div>
+
+                    {/* Progress bar for queue processing */}
+                    {queueStats && queueTotal > 0 && (
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span>Queue Progress</span>
+                          <span>{queueStats.done}/{queueTotal}</span>
+                        </div>
+                        <Progress value={(queueStats.done / queueTotal) * 100} className="w-full" />
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Last Run Status */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Clock className="h-5 w-5" />
+                    Last Run
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {lastRun ? (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          {lastRun.ok ? (
+                            <CheckCircle className="h-4 w-4 text-green-500" />
+                          ) : (
+                            <AlertCircle className="h-4 w-4 text-red-500" />
+                          )}
+                          <span className="font-medium">
+                            {lastRun.ok ? 'Success' : 'Failed'}
+                          </span>
+                          <span className="text-sm text-muted-foreground">
+                            {formatTimeAgo(lastRun.at)}
+                          </span>
+                        </div>
+                        
+                         {lastRun.ok && (
+                           <div className="text-sm text-muted-foreground">
+                             {lastRun.setsProcessed && `Queued ${lastRun.setsProcessed} sets`}
+                             {lastRun.cardsProcessed !== undefined && ` • Synced ${lastRun.cardsProcessed} cards`}
+                             {lastRun.setId && ` for set ${lastRun.setId}`}
+                           </div>
+                         )}
+                        
+                        {!lastRun.ok && lastRun.error && (
+                          <div className="text-sm text-red-500">
+                            {lastRun.error}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="text-sm text-muted-foreground">
+                        No recent runs
+                      </div>
+                    )}
+
+                    {/* Queue Status */}
+                    {queueStats && (
+                      <div className="pt-2 border-t space-y-2">
+                        <div className="text-sm font-medium">Queue Status</div>
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div className="flex justify-between">
+                            <span>Queued:</span>
+                            <span>{queueStats.queued}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Processing:</span>
+                            <span>{queueStats.processing}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Done:</span>
+                            <span>{queueStats.done}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Errors:</span>
+                            <span>{queueStats.error}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+
           {/* Controls Row */}
           <Card>
             <CardHeader>
@@ -1051,141 +1206,6 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
               )}
             </CardContent>
           </Card>
-
-          {/* Progress Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Today's Progress */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Activity className="h-5 w-5" />
-                  Current Progress
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                   <div className="grid grid-cols-3 gap-4">
-                     <div className="text-center p-3 bg-muted/50 rounded-lg">
-                       <div className="text-2xl font-bold text-primary">{(stats?.sets_count || 0) + liveDelta.sets}</div>
-                       <div className="text-xs text-muted-foreground">Sets</div>
-                       {liveDelta.sets > 0 && (
-                         <div className="text-xs text-green-600 font-medium">+{liveDelta.sets} live</div>
-                       )}
-                     </div>
-                     <div className="text-center p-3 bg-muted/50 rounded-lg">
-                       <div className="text-2xl font-bold text-primary">{(stats?.cards_count || 0) + liveDelta.cards}</div>
-                       <div className="text-xs text-muted-foreground">Cards</div>
-                       {liveDelta.cards > 0 && (
-                         <div className="text-xs text-green-600 font-medium">+{liveDelta.cards} live</div>
-                       )}
-                     </div>
-                     <div className="text-center p-3 bg-muted/50 rounded-lg">
-                       <div className="text-2xl font-bold text-primary">{stats?.pending_count || 0}</div>
-                       <div className="text-xs text-muted-foreground">Pending</div>
-                     </div>
-                   </div>
-
-                  <div className="flex items-center justify-center gap-2">
-                    {isActiveSync ? (
-                      <RefreshCw className="h-4 w-4 text-blue-600 animate-spin" />
-                    ) : totalProcessed > 0 ? (
-                      <CheckCircle className="h-4 w-4 text-green-600" />
-                    ) : (
-                      <Database className="h-4 w-4 text-muted-foreground" />
-                    )}
-                    <Badge variant={isActiveSync ? "secondary" : totalProcessed > 0 ? "default" : "outline"}>
-                      {isActiveSync ? "Syncing..." : totalProcessed > 0 ? "Ready" : "Empty"}
-                    </Badge>
-                  </div>
-
-                  {/* Progress bar for queue processing */}
-                  {queueStats && queueTotal > 0 && (
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span>Queue Progress</span>
-                        <span>{queueStats.done}/{queueTotal}</span>
-                      </div>
-                      <Progress value={(queueStats.done / queueTotal) * 100} className="w-full" />
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Last Run Status */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Clock className="h-5 w-5" />
-                  Last Run
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {lastRun ? (
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        {lastRun.ok ? (
-                          <CheckCircle className="h-4 w-4 text-green-500" />
-                        ) : (
-                          <AlertCircle className="h-4 w-4 text-red-500" />
-                        )}
-                        <span className="font-medium">
-                          {lastRun.ok ? 'Success' : 'Failed'}
-                        </span>
-                        <span className="text-sm text-muted-foreground">
-                          {formatTimeAgo(lastRun.at)}
-                        </span>
-                      </div>
-                      
-                       {lastRun.ok && (
-                         <div className="text-sm text-muted-foreground">
-                           {lastRun.setsProcessed && `Queued ${lastRun.setsProcessed} sets`}
-                           {lastRun.cardsProcessed !== undefined && ` • Synced ${lastRun.cardsProcessed} cards`}
-                           {lastRun.setId && ` for set ${lastRun.setId}`}
-                         </div>
-                       )}
-                      
-                      {!lastRun.ok && lastRun.error && (
-                        <div className="text-sm text-red-500">
-                          {lastRun.error}
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="text-sm text-muted-foreground">
-                      No recent runs
-                    </div>
-                  )}
-
-                  {/* Queue Status */}
-                  {queueStats && (
-                    <div className="pt-2 border-t space-y-2">
-                      <div className="text-sm font-medium">Queue Status</div>
-                      <div className="grid grid-cols-2 gap-2 text-xs">
-                        <div className="flex justify-between">
-                          <span>Queued:</span>
-                          <span>{queueStats.queued}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Processing:</span>
-                          <span>{queueStats.processing}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Done:</span>
-                          <span>{queueStats.done}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Errors:</span>
-                          <span>{queueStats.error}</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
 
           {/* Recent Errors */}
           {errors.length > 0 && (
