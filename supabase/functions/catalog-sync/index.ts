@@ -137,6 +137,31 @@ async function backoffWait(ms: number) {
   return new Promise(r => setTimeout(r, ms)); 
 }
 
+// Helper function to sanitize image fields for database compatibility
+function sanitizeImages(images: any): any {
+  if (!images) return null;
+  
+  // If it's already a valid object, return as-is
+  if (typeof images === 'object' && !Array.isArray(images)) {
+    return images;
+  }
+  
+  // If it's a string URL, wrap it in an object
+  if (typeof images === 'string') {
+    return { url: images };
+  }
+  
+  // If it's an array of strings, convert to array of objects
+  if (Array.isArray(images)) {
+    return images.map(img => 
+      typeof img === 'string' ? { url: img } : img
+    );
+  }
+  
+  // For any other invalid format, return null
+  return null;
+}
+
 async function fetchJsonWithRetry(url: string, headers: HeadersInit = {}, tries = 6, baseDelayMs = 500, context: Record<string, any> = {}) {
   let lastError: any;
   for (let i = 0; i < tries; i++) {
@@ -340,7 +365,7 @@ async function syncSet(game: string, setId: string) {
         printed_total: firstCard.set.printedTotal ?? null,
         total: firstCard.set.total ?? null,
         release_date: firstCard.set.releaseDate ?? null,
-        images: firstCard.set.images ?? null,
+        images: sanitizeImages(firstCard.set.images),
         data: firstCard.set
       }]);
     }
@@ -367,7 +392,7 @@ async function syncSet(game: string, setId: string) {
         rarity: card.rarity ?? null,
         supertype: card.supertype ?? null,
         subtypes: card.subtypes ?? null,
-        images: card.images ?? null,
+        images: sanitizeImages(card.images),
         tcgplayer_product_id: card.tcgplayerId ?? null,
         tcgplayer_url: card.tcgplayerUrl ?? null,
         data: card
@@ -776,7 +801,7 @@ serve(async (req) => {
       printed_total: s.printedTotal ?? null,
       total: s.total ?? null,
       release_date: s.releaseDate ?? null,
-      images: s.images ?? null,
+      images: sanitizeImages(s.images),
       data: s
     }));
     
