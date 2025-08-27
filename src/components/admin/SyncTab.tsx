@@ -85,6 +85,16 @@ const ResetCatalogSection = () => {
   const [isResetting, setIsResetting] = useState(false);
   const [resetResult, setResetResult] = useState<any>(null);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [logs, setLogs] = useState<Array<{timestamp: string, level: string, message: string, data?: any}>>([]);
+  const [showLogs, setShowLogs] = useState(false);
+  const logsEndRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll logs to bottom
+  useEffect(() => {
+    if (showLogs && logsEndRef.current) {
+      logsEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [logs, showLogs]);
 
   const gameOptions = [
     { value: 'pokemon', label: 'Pokémon (Global)' },
@@ -104,96 +114,78 @@ const ResetCatalogSection = () => {
     setShowConfirmDialog(false);
     setIsResetting(true);
     setResetResult(null);
+    setLogs([]);
+    setShowLogs(true);
 
     try {
-      console.log('🧹 Starting catalog reset for games:', selectedGames);
-      
-      // Step 1: Reset catalogs
-      const resetResponse = await fetch(`${FUNCTIONS_BASE}/catalog-reset`, {
+      // Use fetch with POST to trigger the stream, then switch to EventSource
+      const response = await fetch(`${FUNCTIONS_BASE}/catalog-rebuild-stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ games: selectedGames })
       });
 
-      if (!resetResponse.ok) {
-        throw new Error(`Reset failed: ${resetResponse.statusText}`);
+      if (!response.ok) {
+        throw new Error(`Failed to start rebuild: ${response.statusText}`);
       }
 
-      const resetData: ResetResult = await resetResponse.json();
-      console.log('Reset response:', resetData);
-
-      if (!resetData.success) {
-        throw new Error(resetData.error || 'Reset failed');
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('Failed to read response stream');
       }
 
-      toast.success(`Reset completed: ${resetData.total_records_deleted} records deleted`);
-
-      // Step 2: Trigger syncs for each selected game
-      const syncResults: any[] = [];
-
-      for (const game of selectedGames) {
-        console.log(`🚀 Starting sync for ${game}`);
-        
+      const decoder = new TextDecoder();
+      
+      const readStream = async () => {
         try {
-          let syncResponse: Response;
-          
-          if (game === 'pokemon') {
-            syncResponse = await fetch(`${FUNCTIONS_BASE}/catalog-sync-pokemon`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({})
-            });
-          } else if (game === 'pokemon-japan') {
-            syncResponse = await fetch(`${FUNCTIONS_BASE}/catalog-sync-justtcg?game=pokemon-japan`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({})
-            });
-          } else if (game === 'mtg') {
-            syncResponse = await fetch(`${FUNCTIONS_BASE}/catalog-sync-justtcg?game=magic-the-gathering`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({})
-            });
-          } else {
-            continue;
-          }
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
 
-          const syncData = await syncResponse.json();
-          syncResults.push({ game, success: syncResponse.ok, data: syncData });
-          
-          if (syncResponse.ok) {
-            console.log(`✅ ${game} sync started:`, syncData.message || 'Started');
-          } else {
-            console.error(`❌ ${game} sync failed:`, syncData.error);
+            const chunk = decoder.decode(value);
+            const lines = chunk.split('\n');
+            
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                try {
+                  const logData = JSON.parse(line.slice(6));
+                  setLogs(prev => [...prev, logData]);
+                  
+                  if (logData.message === 'COMPLETE') {
+                    setResetResult(logData.data);
+                    setIsResetting(false);
+                    
+                    const successfulSyncs = logData.data?.successfulSyncs || 0;
+                    const totalGames = selectedGames.length;
+                    toast.success(`Reset & rebuild completed! ${successfulSyncs}/${totalGames} syncs started`);
+                    break;
+                  } else if (logData.level === 'error' && logData.message.includes('Process failed')) {
+                    setIsResetting(false);
+                    toast.error('Reset & rebuild failed', {
+                      description: logData.message
+                    });
+                    break;
+                  }
+                } catch (err) {
+                  console.error('Error parsing SSE data:', err, line);
+                }
+              }
+            }
           }
-        } catch (syncError: any) {
-          console.error(`❌ ${game} sync error:`, syncError.message);
-          syncResults.push({ game, success: false, error: syncError.message });
+        } catch (error) {
+          console.error('Stream reading error:', error);
+          setIsResetting(false);
+          toast.error('Connection lost during reset & rebuild');
         }
-      }
-
-      const result = {
-        resetData,
-        syncResults,
-        timestamp: new Date().toISOString()
       };
-      
-      setResetResult(result);
-      
-      const successfulSyncs = syncResults.filter(r => r.success).length;
-      toast.success(`Reset & rebuild completed! ${successfulSyncs}/${selectedGames.length} syncs started`);
+
+      readStream();
 
     } catch (error: any) {
       console.error('❌ Reset & rebuild error:', error);
       toast.error('Reset & rebuild failed', {
         description: error.message
       });
-      setResetResult({
-        error: error.message,
-        timestamp: new Date().toISOString()
-      });
-    } finally {
       setIsResetting(false);
     }
   };
@@ -250,9 +242,42 @@ const ResetCatalogSection = () => {
         </Button>
       </div>
 
+      {showLogs && (
+        <div className="mt-4 space-y-2">
+          <div className="flex items-center justify-between">
+            <h4 className="font-semibold">Live Progress:</h4>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowLogs(!showLogs)}
+            >
+              {showLogs ? 'Hide' : 'Show'} Logs
+            </Button>
+          </div>
+          <div className="bg-background border rounded-lg p-3 max-h-64 overflow-auto font-mono text-xs space-y-1">
+            {logs.map((log, index) => (
+              <div key={index} className="flex gap-2">
+                <span className="text-muted-foreground whitespace-nowrap">
+                  {new Date(log.timestamp).toLocaleTimeString()}
+                </span>
+                <span className={`
+                  ${log.level === 'success' ? 'text-green-600' : ''}
+                  ${log.level === 'error' ? 'text-red-600' : ''}
+                  ${log.level === 'warning' ? 'text-yellow-600' : ''}
+                  ${log.level === 'info' ? 'text-blue-600' : ''}
+                `}>
+                  {log.message}
+                </span>
+              </div>
+            ))}
+            <div ref={logsEndRef} />
+          </div>
+        </div>
+      )}
+
       {resetResult && (
         <div className="mt-4 p-3 bg-muted/50 rounded-lg">
-          <h4 className="font-semibold mb-2">Reset & Rebuild Results:</h4>
+          <h4 className="font-semibold mb-2">Final Results:</h4>
           <pre className="text-xs overflow-auto max-h-64">
             {JSON.stringify(resetResult, null, 2)}
           </pre>

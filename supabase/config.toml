@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.catalog-reset]
 verify_jwt = false
+
+[functions.catalog-rebuild-stream]
+verify_jwt = false
