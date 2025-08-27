@@ -1,6 +1,14 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+// Import shared utilities
+import {
+  CONFIG,
+  rpmGate,
+  fetchJsonWithRetry,
+  logStructured
+} from "../_lib/justtcg.ts";
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -10,73 +18,6 @@ const supabaseClient = createClient(
   Deno.env.get("SUPABASE_URL")!,
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 );
-
-// Configuration constants
-const CONFIG = {
-  PAGE_SIZE: 200,
-  MAX_BATCH_POST: 100,
-  MAX_CONCURRENT: 24,
-  RPM: 500,
-  JUSTTCG_BASE: "https://api.justtcg.com/v1"
-} as const;
-
-// Global rate limiter using token bucket algorithm
-class TokenBucket {
-  private tokens: number;
-  private lastRefill: number;
-  private readonly capacity: number;
-  private readonly refillRate: number; // tokens per millisecond
-
-  constructor(capacity: number, refillPerMinute: number) {
-    this.capacity = capacity;
-    this.refillRate = refillPerMinute / (60 * 1000); // convert to per ms
-    this.tokens = capacity;
-    this.lastRefill = Date.now();
-  }
-
-  async acquire(): Promise<void> {
-    this.refill();
-    
-    if (this.tokens >= 1) {
-      this.tokens -= 1;
-      return;
-    }
-
-    // Wait until we can get a token
-    const waitTime = Math.ceil((1 - this.tokens) / this.refillRate);
-    await new Promise(resolve => setTimeout(resolve, waitTime));
-    return this.acquire();
-  }
-
-  private refill() {
-    const now = Date.now();
-    const elapsed = now - this.lastRefill;
-    const tokensToAdd = elapsed * this.refillRate;
-    
-    this.tokens = Math.min(this.capacity, this.tokens + tokensToAdd);
-    this.lastRefill = now;
-  }
-
-  getAvailableTokens(): number {
-    this.refill();
-    return Math.floor(this.tokens);
-  }
-}
-
-// Global rate limiter instance
-const rateLimiter = new TokenBucket(CONFIG.RPM, CONFIG.RPM);
-
-// Structured logging
-function logStructured(level: 'INFO' | 'ERROR' | 'WARN', message: string, context: Record<string, any> = {}) {
-  const logEntry = {
-    timestamp: new Date().toISOString(),
-    level,
-    message,
-    service: 'catalog-sync-justtcg',
-    ...context
-  };
-  console.log(JSON.stringify(logEntry));
-}
 
 // Get API key from environment or system settings
 async function getApiKey(): Promise<string> {
@@ -91,84 +32,6 @@ async function getApiKey(): Promise<string> {
     
   if (data?.key_value) return data.key_value;
   throw new Error("JUSTTCG_API_KEY not found");
-}
-
-// Enhanced fetch with rate limiting, backoff, and jitter
-async function fetchWithRateLimit(url: string, options: RequestInit = {}, retries = 5): Promise<Response> {
-  // Wait for rate limit token
-  await rateLimiter.acquire();
-  
-  let lastError: Error | null = null;
-  
-  for (let attempt = 0; attempt < retries; attempt++) {
-    try {
-      const response = await fetch(url, options);
-      
-      // Handle rate limiting
-      if (response.status === 429) {
-        const retryAfter = response.headers.get('retry-after');
-        const delay = retryAfter ? parseInt(retryAfter) * 1000 : Math.pow(2, attempt) * 1000;
-        const jitter = Math.random() * 1000;
-        
-        logStructured('WARN', 'Rate limited, waiting', {
-          attempt: attempt + 1,
-          retryAfter,
-          delay: delay + jitter,
-          url
-        });
-        
-        await new Promise(resolve => setTimeout(resolve, delay + jitter));
-        continue;
-      }
-      
-      // Handle server errors with exponential backoff
-      if (response.status >= 500) {
-        const delay = Math.pow(2, attempt) * 1000;
-        const jitter = Math.random() * 1000;
-        
-        logStructured('WARN', 'Server error, retrying', {
-          attempt: attempt + 1,
-          status: response.status,
-          delay: delay + jitter,
-          url
-        });
-        
-        await new Promise(resolve => setTimeout(resolve, delay + jitter));
-        continue;
-      }
-      
-      return response;
-      
-    } catch (error) {
-      lastError = error as Error;
-      const delay = Math.pow(2, attempt) * 1000;
-      const jitter = Math.random() * 1000;
-      
-      logStructured('ERROR', 'Network error, retrying', {
-        attempt: attempt + 1,
-        error: error.message,
-        delay: delay + jitter,
-        url
-      });
-      
-      if (attempt < retries - 1) {
-        await new Promise(resolve => setTimeout(resolve, delay + jitter));
-      }
-    }
-  }
-  
-  throw lastError || new Error(`Failed after ${retries} attempts`);
-}
-
-// Fetch JSON with rate limiting
-async function fetchJsonWithRateLimit(url: string, headers: HeadersInit = {}): Promise<any> {
-  const response = await fetchWithRateLimit(url, { headers });
-  
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-  }
-  
-  return await response.json();
 }
 
 // Database operations
@@ -260,13 +123,13 @@ async function syncSet(game: string, setId: string, apiKey: string): Promise<{
   let hasMore = true;
   let pageCount = 0;
   
-  // Fetch all cards with enhanced pagination
+  // Fetch all cards with enhanced pagination using shared library
   while (hasMore) {
     pageCount++;
-    const url = `${CONFIG.JUSTTCG_BASE}/cards?game=${encodeURIComponent(game)}&set=${encodeURIComponent(setId)}&limit=${CONFIG.PAGE_SIZE}&offset=${offset}`;
+    const url = `${CONFIG.JUSTTCG_BASE}/cards?game=${encodeURIComponent(game)}&set=${encodeURIComponent(setId)}&limit=${CONFIG.PAGE_SIZE_GET}&offset=${offset}`;
     
-    const response = await fetchJsonWithRateLimit(url, headers);
-    const cards = response?.data || [];
+    const response = await fetchJsonWithRetry(url, { headers });
+    const cards = response.data || [];
     
     if (cards.length === 0) {
       hasMore = false;
@@ -274,8 +137,8 @@ async function syncSet(game: string, setId: string, apiKey: string): Promise<{
     }
     
     allCards = allCards.concat(cards);
-    hasMore = response?.meta?.hasMore || false;
-    offset += CONFIG.PAGE_SIZE;
+    hasMore = response._metadata?.hasMore || false;
+    offset += CONFIG.PAGE_SIZE_GET;
     
     logStructured('INFO', 'Fetched page', {
       game,
@@ -479,13 +342,13 @@ serve(async (req) => {
     logStructured('INFO', 'Starting full game sync', { 
       game, 
       config: CONFIG,
-      availableTokens: rateLimiter.getAvailableTokens()
+      availableTokens: rpmGate.getAvailableTokens()
     });
 
-    // Fetch all sets for the game
+    // Fetch all sets for the game using shared library
     const setsUrl = `${CONFIG.JUSTTCG_BASE}/sets?game=${encodeURIComponent(game)}`;
-    const setsResponse = await fetchJsonWithRateLimit(setsUrl, headers);
-    const sets = setsResponse?.data || [];
+    const setsResponse = await fetchJsonWithRetry(setsUrl, { headers });
+    const sets = setsResponse.data || [];
 
     if (!sets.length) {
       return new Response(
@@ -542,7 +405,7 @@ serve(async (req) => {
       totalVariants,
       totalSkipped,
       errors,
-      availableTokens: rateLimiter.getAvailableTokens()
+      availableTokens: rpmGate.getAvailableTokens()
     });
 
     return new Response(

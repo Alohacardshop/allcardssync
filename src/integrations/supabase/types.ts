@@ -151,6 +151,66 @@ export type Database = {
         }
         Relationships: []
       }
+      justtcg_analytics_snapshots: {
+        Row: {
+          captured_at: string
+          card_id: string
+          card_name: string | null
+          change_24h: number | null
+          change_30d: number | null
+          change_7d: number | null
+          cheapest_price: number | null
+          game: string
+          id: number
+          raw: Json | null
+        }
+        Insert: {
+          captured_at?: string
+          card_id: string
+          card_name?: string | null
+          change_24h?: number | null
+          change_30d?: number | null
+          change_7d?: number | null
+          cheapest_price?: number | null
+          game: string
+          id?: number
+          raw?: Json | null
+        }
+        Update: {
+          captured_at?: string
+          card_id?: string
+          card_name?: string | null
+          change_24h?: number | null
+          change_30d?: number | null
+          change_7d?: number | null
+          cheapest_price?: number | null
+          game?: string
+          id?: number
+          raw?: Json | null
+        }
+        Relationships: []
+      }
+      justtcg_watchlist: {
+        Row: {
+          card_id: string
+          created_at: string | null
+          game: string
+          id: number
+        }
+        Insert: {
+          card_id: string
+          created_at?: string | null
+          game: string
+          id?: number
+        }
+        Update: {
+          card_id?: string
+          created_at?: string | null
+          game?: string
+          id?: number
+        }
+        Relationships: []
+      }
       label_templates: {
         Row: {
           canvas: Json
