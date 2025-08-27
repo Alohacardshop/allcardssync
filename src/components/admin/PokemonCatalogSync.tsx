@@ -14,7 +14,8 @@ export default function PokemonCatalogSync() {
   async function callSync(params: { setId?: string; since?: string } = {}) {
     setLoading(true);
     try {
-      const u = new URL(`${FUNCTIONS_BASE}/catalog-sync-pokemon`, window.location.origin);
+      const u = new URL(`${FUNCTIONS_BASE}/catalog-sync`, window.location.origin);
+      u.searchParams.set("game", "pokemon");
       if (params.setId) u.searchParams.set("setId", params.setId);
       if (params.since) u.searchParams.set("since", params.since);
       const res = await fetch(u.toString(), { method: "POST" });

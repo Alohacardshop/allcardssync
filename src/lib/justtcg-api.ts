@@ -23,17 +23,8 @@ class JustTCGApiError extends Error {
 
 // Sync functions
 export async function syncGame(game: GameType): Promise<SyncResult> {
-  // Route to the correct sync function based on game type
-  let endpoint = '';
-  if (game === 'pokemon') {
-    endpoint = `${FUNCTIONS_BASE}/catalog-sync-pokemon`;
-  } else if (game === 'pokemon-japan') {
-    endpoint = `${FUNCTIONS_BASE}/catalog-sync-pokemon-japan`;
-  } else if (game === 'magic-the-gathering') {
-    endpoint = `${FUNCTIONS_BASE}/catalog-sync-justtcg?game=magic-the-gathering`;
-  } else {
-    throw new JustTCGApiError(`Unsupported game type: ${game}`);
-  }
+  // Use unified catalog-sync endpoint with game query parameter
+  const endpoint = `${FUNCTIONS_BASE}/catalog-sync?game=${encodeURIComponent(game)}`;
 
   const response = await fetch(endpoint, {
     method: 'POST',
