@@ -73,6 +73,8 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
   const [isActiveSync, setIsActiveSync] = useState(false);
   const [retryingError, setRetryingError] = useState<string | null>(null);
   const [liveDelta, setLiveDelta] = useState<LiveDelta>({ sets: 0, cards: 0 });
+  const [refreshRate, setRefreshRate] = useState<number>(1000); // milliseconds
+  const [manualRefreshLoading, setManualRefreshLoading] = useState(false);
   
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const mode = GAME_MODES.find(m => m.value === selectedMode);
@@ -86,12 +88,12 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
   }, [mode]);
 
   useEffect(() => {
-    // Poll progress during active sync with faster interval
+    // Poll progress during active sync with configurable interval
     if (isActiveSync && mode) {
       pollIntervalRef.current = setInterval(() => {
         loadStats();
         loadQueueStats();
-      }, 1000); // Faster 1-second polling when active
+      }, refreshRate);
     } else {
       if (pollIntervalRef.current) {
         clearInterval(pollIntervalRef.current);
@@ -104,7 +106,19 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
         clearInterval(pollIntervalRef.current);
       }
     };
-  }, [isActiveSync, mode]);
+  }, [isActiveSync, mode, refreshRate]);
+
+  // Refresh on tab focus
+  useEffect(() => {
+    const handleFocus = () => {
+      if (mode && document.visibilityState === 'visible') {
+        loadAllData();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleFocus);
+    return () => document.removeEventListener('visibilitychange', handleFocus);
+  }, [mode]);
 
   const loadAllData = async () => {
     if (!mode) return;
@@ -419,6 +433,22 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
     }
   };
 
+  const handleManualRefresh = async () => {
+    if (!mode) return;
+    
+    setManualRefreshLoading(true);
+    try {
+      await loadAllData();
+      toast.success('Data refreshed');
+    } catch (error: any) {
+      toast.error('Failed to refresh data', {
+        description: error.message
+      });
+    } finally {
+      setManualRefreshLoading(false);
+    }
+  };
+
   const isDisabled = loading || queueing || processing || processingAll || retryingError !== null;
   const totalProcessed = (stats?.sets_count || 0) + (stats?.cards_count || 0);
   const queueTotal = (queueStats?.queued || 0) + (queueStats?.processing || 0) + (queueStats?.done || 0) + (queueStats?.error || 0);
@@ -433,15 +463,42 @@ export default function SyncTab({ selectedMode, onModeChange, healthStatus, onHe
               <Database className="h-5 w-5" />
               Catalog Sync
             </div>
-            <div className="flex items-center gap-2">
-              {healthStatus?.ok ? (
-                <CheckCircle className="h-4 w-4 text-green-500" />
-              ) : (
-                <AlertCircle className="h-4 w-4 text-red-500" />
-              )}
-              <Badge variant={healthStatus?.ok ? "secondary" : "destructive"}>
-                {healthStatus?.ok ? 'Healthy' : 'Issues'}
-              </Badge>
+            <div className="flex items-center gap-4">
+              {/* Refresh Settings */}
+              <div className="flex items-center gap-2">
+                <Label htmlFor="refresh-rate" className="text-sm">Refresh:</Label>
+                <Select value={refreshRate.toString()} onValueChange={(value) => setRefreshRate(parseInt(value))}>
+                  <SelectTrigger id="refresh-rate" className="w-20 h-8">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="500">0.5s</SelectItem>
+                    <SelectItem value="1000">1s</SelectItem>
+                    <SelectItem value="2000">2s</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleManualRefresh}
+                  disabled={manualRefreshLoading}
+                  className="h-8 w-8 p-0"
+                >
+                  <RefreshCw className={`h-3 w-3 ${manualRefreshLoading ? 'animate-spin' : ''}`} />
+                </Button>
+              </div>
+              
+              {/* Health Status */}
+              <div className="flex items-center gap-2">
+                {healthStatus?.ok ? (
+                  <CheckCircle className="h-4 w-4 text-green-500" />
+                ) : (
+                  <AlertCircle className="h-4 w-4 text-red-500" />
+                )}
+                <Badge variant={healthStatus?.ok ? "secondary" : "destructive"}>
+                  {healthStatus?.ok ? 'Healthy' : 'Issues'}
+                </Badge>
+              </div>
             </div>
           </CardTitle>
         </CardHeader>
