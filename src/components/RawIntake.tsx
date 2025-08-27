@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { GAME_OPTIONS, GameKey, JObjectCard } from "@/lib/types";
-import { searchCardsByNameNumber } from "@/lib/justtcg";
+import { searchCardsByNameNumber } from "@/lib/justtcg-types";
 import { LRUCache } from '@/lib/lruCache';
 
 interface RawTradeInForm {

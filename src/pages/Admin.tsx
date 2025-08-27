@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle, CheckCircle, Settings, Store, Webhook, Key, Globe, X } from 'lucide-react';
@@ -705,6 +706,13 @@ const Admin = () => {
         </TabsContent>
 
         <TabsContent value="analytics" className="space-y-6">
+          <div className="mb-4">
+            <h3 className="text-lg font-semibold mb-2">JustTCG Analytics & Catalog Management</h3>
+            <p className="text-sm text-muted-foreground">
+              Enhanced catalog sync with 500 RPM rate limiting, bulk operations, and automated nightly analytics snapshots.
+            </p>
+            <Badge variant="secondary" className="mt-2">Nightly Snapshots: 3:15 AM UTC</Badge>
+          </div>
           <JustTCGPanel />
         </TabsContent>
 
