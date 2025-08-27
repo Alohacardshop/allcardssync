@@ -217,10 +217,10 @@ export default function JustTCGAdmin() {
         }
 
         requestBody.ids = ids;
-        if (orderBy) requestBody.orderBy = orderBy;
-        if (cardSortBy) requestBody.cardSortBy = cardSortBy;
+        if (orderBy && orderBy !== 'default') requestBody.orderBy = orderBy;
+        if (cardSortBy && cardSortBy !== 'none') requestBody.cardSortBy = cardSortBy;
         if (cardSortOrder) requestBody.cardSortOrder = cardSortOrder;
-        if (variantSortBy) requestBody.variantSortBy = variantSortBy;
+        if (variantSortBy && variantSortBy !== 'none') requestBody.variantSortBy = variantSortBy;
         if (variantSortOrder) requestBody.variantSortOrder = variantSortOrder;
       } else {
         // List Mode
@@ -230,7 +230,7 @@ export default function JustTCGAdmin() {
 
         requestBody.game = listGame;
         if (listSet) requestBody.set = listSet;
-        if (orderBy) requestBody.orderBy = orderBy;
+        if (orderBy && orderBy !== 'default') requestBody.orderBy = orderBy;
         if (order) requestBody.order = order;
       }
 
@@ -278,7 +278,7 @@ export default function JustTCGAdmin() {
         .order('captured_at', { ascending: false })
         .limit(100);
 
-      if (snapshotGame) {
+      if (snapshotGame && snapshotGame !== 'all') {
         query = query.eq('game', snapshotGame);
       }
 
@@ -613,13 +613,13 @@ export default function JustTCGAdmin() {
                     <SelectTrigger id="list-order-by">
                       <SelectValue placeholder="Default order" />
                     </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">Default</SelectItem>
-                      <SelectItem value="price">Current Price</SelectItem>
-                      <SelectItem value="24h">24h Change</SelectItem>
-                      <SelectItem value="7d">7d Change</SelectItem>
-                      <SelectItem value="30d">30d Change</SelectItem>
-                    </SelectContent>
+                     <SelectContent>
+                       <SelectItem value="default">Default</SelectItem>
+                       <SelectItem value="price">Current Price</SelectItem>
+                       <SelectItem value="24h">24h Change</SelectItem>
+                       <SelectItem value="7d">7d Change</SelectItem>
+                       <SelectItem value="30d">30d Change</SelectItem>
+                     </SelectContent>
                   </Select>
                 </div>
                 
@@ -662,13 +662,13 @@ export default function JustTCGAdmin() {
                       <SelectTrigger id="id-order-by">
                         <SelectValue placeholder="Default order" />
                       </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="">Default</SelectItem>
-                        <SelectItem value="price">Current Price</SelectItem>
-                        <SelectItem value="24h">24h Change</SelectItem>
-                        <SelectItem value="7d">7d Change</SelectItem>
-                        <SelectItem value="30d">30d Change</SelectItem>
-                      </SelectContent>
+                       <SelectContent>
+                         <SelectItem value="default">Default</SelectItem>
+                         <SelectItem value="price">Current Price</SelectItem>
+                         <SelectItem value="24h">24h Change</SelectItem>
+                         <SelectItem value="7d">7d Change</SelectItem>
+                         <SelectItem value="30d">30d Change</SelectItem>
+                       </SelectContent>
                     </Select>
                   </div>
                 </div>
@@ -681,13 +681,13 @@ export default function JustTCGAdmin() {
                         <SelectTrigger>
                           <SelectValue placeholder="Sort by" />
                         </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="">None</SelectItem>
-                          <SelectItem value="price">Price</SelectItem>
-                          <SelectItem value="24h">24h Change</SelectItem>
-                          <SelectItem value="7d">7d Change</SelectItem>
-                          <SelectItem value="30d">30d Change</SelectItem>
-                        </SelectContent>
+                         <SelectContent>
+                           <SelectItem value="none">None</SelectItem>
+                           <SelectItem value="price">Price</SelectItem>
+                           <SelectItem value="24h">24h Change</SelectItem>
+                           <SelectItem value="7d">7d Change</SelectItem>
+                           <SelectItem value="30d">30d Change</SelectItem>
+                         </SelectContent>
                       </Select>
                       <Select value={cardSortOrder} onValueChange={setCardSortOrder} disabled={loading['refresh']}>
                         <SelectTrigger>
@@ -708,13 +708,13 @@ export default function JustTCGAdmin() {
                         <SelectTrigger>
                           <SelectValue placeholder="Sort by" />
                         </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="">None</SelectItem>
-                          <SelectItem value="price">Price</SelectItem>
-                          <SelectItem value="24h">24h Change</SelectItem>
-                          <SelectItem value="7d">7d Change</SelectItem>
-                          <SelectItem value="30d">30d Change</SelectItem>
-                        </SelectContent>
+                         <SelectContent>
+                           <SelectItem value="none">None</SelectItem>
+                           <SelectItem value="price">Price</SelectItem>
+                           <SelectItem value="24h">24h Change</SelectItem>
+                           <SelectItem value="7d">7d Change</SelectItem>
+                           <SelectItem value="30d">30d Change</SelectItem>
+                         </SelectContent>
                       </Select>
                       <Select value={variantSortOrder} onValueChange={setVariantSortOrder} disabled={loading['refresh']}>
                         <SelectTrigger>
@@ -782,12 +782,12 @@ export default function JustTCGAdmin() {
                 <SelectTrigger id="snapshot-game">
                   <SelectValue placeholder="All games" />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">All games</SelectItem>
-                  <SelectItem value="magic-the-gathering">Magic: The Gathering</SelectItem>
-                  <SelectItem value="pokemon">Pokémon (Global)</SelectItem>
-                  <SelectItem value="pokemon-japan">Pokémon Japan</SelectItem>
-                </SelectContent>
+                 <SelectContent>
+                   <SelectItem value="all">All games</SelectItem>
+                   <SelectItem value="magic-the-gathering">Magic: The Gathering</SelectItem>
+                   <SelectItem value="pokemon">Pokémon (Global)</SelectItem>
+                   <SelectItem value="pokemon-japan">Pokémon Japan</SelectItem>
+                 </SelectContent>
               </Select>
             </div>
             
