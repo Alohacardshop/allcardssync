@@ -8,6 +8,7 @@ import Index from "./pages/Index";
 import Inventory from "./pages/Inventory";
 import LabelDesigner from "./pages/LabelDesigner";
 import Admin from "./pages/Admin";
+import JustTCGAdmin from "./pages/JustTCGAdmin";
 import NotFound from "./pages/NotFound";
 import Auth from "./pages/Auth";
 import PrintLogs from "./pages/PrintLogs";
@@ -79,6 +80,7 @@ const App = () => (
           <Route path="/labels" element={<ProtectedRoute><LabelDesigner /></ProtectedRoute>} />
           <Route path="/bulk-import" element={<ProtectedRoute><BulkImport /></ProtectedRoute>} />
             <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
+            <Route path="/justtcg-admin" element={<ProtectedRoute><JustTCGAdmin /></ProtectedRoute>} />
             <Route path="/shopify-mapping" element={<ProtectedRoute><ShopifyMapping /></ProtectedRoute>} />
             <Route path="/print-logs" element={<ProtectedRoute><PrintLogs /></ProtectedRoute>} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
