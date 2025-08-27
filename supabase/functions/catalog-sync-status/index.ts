@@ -34,6 +34,27 @@ serve(async (req) => {
       });
     }
 
+    // Clean up stuck jobs (running for more than 2 hours)
+    try {
+      const { error: cleanupError } = await sb
+        .schema('catalog_v2')
+        .from('import_jobs')
+        .update({
+          status: 'failed',
+          error: 'timeout',
+          finished_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('status', 'running')
+        .lt('updated_at', new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString());
+      
+      if (cleanupError) {
+        console.warn('Failed to clean up stuck jobs:', cleanupError);
+      }
+    } catch (cleanupErr) {
+      console.warn('Cleanup error:', cleanupErr);
+    }
+
     // Query import jobs for the specified game
     const { data, error } = await sb
       .schema('catalog_v2')

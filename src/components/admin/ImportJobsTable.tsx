@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { Loader2, CheckCircle, XCircle, Clock, AlertCircle, RefreshCw } from 'lucide-react';
+import { Loader2, CheckCircle, XCircle, Clock, AlertCircle, RefreshCw, RotateCcw, X } from 'lucide-react';
 import { formatTimeAgo } from '@/lib/api';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -33,14 +33,30 @@ export function ImportJobsTable({ game, refreshInterval = 5000 }: ImportJobsTabl
   const [jobs, setJobs] = useState<ImportJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [queueingAll, setQueueingAll] = useState(false);
+  const [retryingJobs, setRetryingJobs] = useState<Set<string>>(new Set());
+  const [cancellingJobs, setCancellingJobs] = useState<Set<string>>(new Set());
 
   const loadJobs = async () => {
     try {
-      const { data, error } = await supabase.functions.invoke('catalog-sync-status', {
-        body: { game, limit: 50 }
+      const SUPABASE_URL = "https://dmpoandoydaqxhzdjnmk.supabase.co";
+      const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRtcG9hbmRveWRhcXhoemRqbm1rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ0MDU5NDMsImV4cCI6MjA2OTk4MTk0M30.WoHlHO_Z4_ogeO5nt4I29j11aq09RMBtNug8a5rStgk";
+      
+      const url = new URL(`${SUPABASE_URL}/functions/v1/catalog-sync-status`);
+      url.searchParams.set('game', game);
+      url.searchParams.set('limit', '50');
+
+      const response = await fetch(url.toString(), {
+        headers: {
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json'
+        }
       });
 
-      if (error) throw error;
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
       setJobs(data || []);
     } catch (error: any) {
       console.error('Error loading import jobs:', error);
@@ -77,6 +93,68 @@ export function ImportJobsTable({ game, refreshInterval = 5000 }: ImportJobsTabl
       toast.error('Failed to queue all sets', { description: error.message });
     } finally {
       setQueueingAll(false);
+    }
+  };
+
+  const handleRetryJob = async (jobId: string) => {
+    setRetryingJobs(prev => new Set(prev).add(jobId));
+    try {
+      const { data, error } = await supabase.functions.invoke('catalog-sync-retry', {
+        body: { job_id: jobId }
+      });
+
+      if (error) throw error;
+      
+      toast.success('Job retry initiated');
+      loadJobs(); // Refresh the jobs list
+    } catch (error: any) {
+      console.error('Error retrying job:', error);
+      toast.error('Failed to retry job', { description: error.message });
+    } finally {
+      setRetryingJobs(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(jobId);
+        return newSet;
+      });
+    }
+  };
+
+  const handleCancelJob = async (jobId: string) => {
+    setCancellingJobs(prev => new Set(prev).add(jobId));
+    try {
+      const { data, error } = await supabase.functions.invoke('catalog-sync-cancel', {
+        body: { job_id: jobId }
+      });
+
+      if (error) throw error;
+      
+      toast.success('Job cancelled');
+      loadJobs(); // Refresh the jobs list
+    } catch (error: any) {
+      console.error('Error cancelling job:', error);
+      toast.error('Failed to cancel job', { description: error.message });
+    } finally {
+      setCancellingJobs(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(jobId);
+        return newSet;
+      });
+    }
+  };
+
+  const handleCancelAllRunning = async () => {
+    const runningJobs = jobs.filter(job => ['queued', 'running'].includes(job.status));
+    if (runningJobs.length === 0) {
+      toast.info('No active jobs to cancel');
+      return;
+    }
+
+    for (const job of runningJobs) {
+      try {
+        await handleCancelJob(job.id);
+      } catch (error) {
+        console.error(`Failed to cancel job ${job.id}:`, error);
+      }
     }
   };
 
@@ -187,9 +265,20 @@ export function ImportJobsTable({ game, refreshInterval = 5000 }: ImportJobsTabl
               Queue All Pending
             </Button>
             {hasActiveJobs && (
-              <Badge variant="secondary" className="animate-pulse">
-                {activeJobs.length} active
-              </Badge>
+              <>
+                <Button
+                  onClick={handleCancelAllRunning}
+                  size="sm"
+                  variant="destructive"
+                  disabled={activeJobs.length === 0}
+                >
+                  <X className="h-4 w-4 mr-2" />
+                  Cancel All Running
+                </Button>
+                <Badge variant="secondary" className="animate-pulse">
+                  {activeJobs.length} active
+                </Badge>
+              </>
             )}
           </div>
         </CardTitle>
@@ -198,7 +287,7 @@ export function ImportJobsTable({ game, refreshInterval = 5000 }: ImportJobsTabl
       <CardContent>
         {/* Summary */}
         {jobs.length > 0 && (
-          <div className="grid grid-cols-5 gap-4 mb-6 p-4 bg-muted/50 rounded-lg">
+          <div className="grid grid-cols-6 gap-4 mb-6 p-4 bg-muted/50 rounded-lg">
             <div className="text-center">
               <div className="text-lg font-semibold text-gray-500">{summary.queued}</div>
               <div className="text-xs text-muted-foreground">Queued</div>
@@ -214,6 +303,10 @@ export function ImportJobsTable({ game, refreshInterval = 5000 }: ImportJobsTabl
             <div className="text-center">
               <div className="text-lg font-semibold text-red-600">{summary.failed}</div>
               <div className="text-xs text-muted-foreground">Failed</div>
+            </div>
+            <div className="text-center">
+              <div className="text-lg font-semibold text-yellow-600">{summary.cancelled}</div>
+              <div className="text-xs text-muted-foreground">Cancelled</div>
             </div>
             <div className="text-center">
               <div className="text-lg font-semibold text-primary">{summary.totalCards}</div>
@@ -262,6 +355,39 @@ export function ImportJobsTable({ game, refreshInterval = 5000 }: ImportJobsTabl
                 </div>
 
                 <div className="flex items-center gap-4">
+                  {/* Action buttons */}
+                  <div className="flex gap-2">
+                    {job.status === 'failed' && (
+                      <Button
+                        onClick={() => handleRetryJob(job.id)}
+                        disabled={retryingJobs.has(job.id)}
+                        size="sm"
+                        variant="outline"
+                      >
+                        {retryingJobs.has(job.id) ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                          <RotateCcw className="h-3 w-3" />
+                        )}
+                      </Button>
+                    )}
+                    
+                    {['queued', 'running'].includes(job.status) && (
+                      <Button
+                        onClick={() => handleCancelJob(job.id)}
+                        disabled={cancellingJobs.has(job.id)}
+                        size="sm"
+                        variant="destructive"
+                      >
+                        {cancellingJobs.has(job.id) ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                          <X className="h-3 w-3" />
+                        )}
+                      </Button>
+                    )}
+                  </div>
+
                   {/* Progress indicator */}
                   {job.status === 'running' && (
                     <div className="w-20">

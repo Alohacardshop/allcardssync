@@ -199,17 +199,26 @@ async function orchestrateFullSync(externalGame: string) {
     const setId = set.code || set.id || set.name;
     
     if (setName) {
-      // Create import job entry
-      await sb.schema('catalog_v2').from('import_jobs').insert({
-        source: 'justtcg',
-        game: internalGame,
-        set_id: setId,
-        set_code: set.code || null,
-        status: 'queued'
-      });
+      // Try to create import job entry with idempotency (will fail if duplicate exists due to unique index)
+      try {
+        await sb.schema('catalog_v2').from('import_jobs').insert({
+          source: 'justtcg',
+          game: internalGame,
+          set_id: setId,
+          set_code: set.code || null,
+          status: 'queued'
+        });
 
-      await queueChildJob(externalGame, setName);
-      queuedCount++;
+        await queueChildJob(externalGame, setName);
+        queuedCount++;
+      } catch (insertError: any) {
+        // If insert fails due to duplicate, skip this set (already queued/running)
+        if (insertError.code === '23505') { // unique_violation
+          console.log(`Set ${setName} already has active job, skipping`);
+        } else {
+          throw insertError; // Re-throw other errors
+        }
+      }
     }
   }
 
@@ -263,6 +272,20 @@ async function syncSetCards(externalGame: string, setName: string) {
   try {
     // Page through all cards for this set (use correct API params for pokemon-japan)
     while (true) {
+      // Check if job has been cancelled before heavy operations
+      if (jobId) {
+        const { data: currentJob } = await sb.schema('catalog_v2')
+          .from('import_jobs')
+          .select('status')
+          .eq('id', jobId)
+          .single();
+        
+        if (currentJob?.status === 'cancelled') {
+          console.log(`Job ${jobId} was cancelled, aborting sync for ${setName}`);
+          return { mode: "worker", game: internalGame, setName, cards: 0, cancelled: true };
+        }
+      }
+
       const apiParams = getApiParams(externalGame);
       const url = `${JTCG}/cards?game=${apiParams}&set=${encodeURIComponent(setName)}&limit=${limit}&offset=${offset}`;
       console.log(`Fetching page: offset=${offset}, limit=${limit}`);
@@ -334,6 +357,20 @@ async function syncSetCards(externalGame: string, setName: string) {
       allCards.forEach(card => {
         card.set_id = setId;
       });
+    }
+
+    // Final cancellation check before upsert
+    if (jobId) {
+      const { data: currentJob } = await sb.schema('catalog_v2')
+        .from('import_jobs')
+        .select('status')
+        .eq('id', jobId)
+        .single();
+      
+      if (currentJob?.status === 'cancelled') {
+        console.log(`Job ${jobId} was cancelled before upsert, aborting sync for ${setName}`);
+        return { mode: "worker", game: internalGame, setName, cards: 0, cancelled: true };
+      }
     }
 
     console.log(`Upserting ${allCards.length} cards for set: ${setName}`);
