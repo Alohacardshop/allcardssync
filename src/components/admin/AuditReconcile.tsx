@@ -121,31 +121,31 @@ const AuditReconcile: React.FC<AuditReconcileProps> = ({ selectedMode }) => {
         </CardContent>
       </Card>
 
-      {auditResult && (
+      {auditResult && auditResult.totals && (
         <>
           {/* Summary Tiles */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <Card>
               <CardContent className="pt-6">
-                <div className="text-2xl font-bold text-primary">{auditResult.totals.sets_upstream}</div>
+                <div className="text-2xl font-bold text-primary">{auditResult.totals.sets_upstream || 0}</div>
                 <p className="text-xs text-muted-foreground">Sets Upstream</p>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="pt-6">
-                <div className="text-2xl font-bold">{auditResult.totals.sets_local}</div>
+                <div className="text-2xl font-bold">{auditResult.totals.sets_local || 0}</div>
                 <p className="text-xs text-muted-foreground">Sets Local</p>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="pt-6">
-                <div className="text-2xl font-bold text-destructive">{auditResult.totals.sets_missing}</div>
+                <div className="text-2xl font-bold text-destructive">{auditResult.totals.sets_missing || 0}</div>
                 <p className="text-xs text-muted-foreground">Sets Missing</p>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="pt-6">
-                <div className="text-2xl font-bold text-amber-600">{auditResult.totals.variants_stale}</div>
+                <div className="text-2xl font-bold text-amber-600">{auditResult.totals.variants_stale || 0}</div>
                 <p className="text-xs text-muted-foreground">Variants Stale</p>
               </CardContent>
             </Card>
@@ -154,13 +154,13 @@ const AuditReconcile: React.FC<AuditReconcileProps> = ({ selectedMode }) => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Card>
               <CardContent className="pt-6">
-                <div className="text-2xl font-bold text-primary">{auditResult.totals.cards_upstream}</div>
+                <div className="text-2xl font-bold text-primary">{auditResult.totals.cards_upstream || 0}</div>
                 <p className="text-xs text-muted-foreground">Cards Upstream</p>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="pt-6">
-                <div className="text-2xl font-bold">{auditResult.totals.cards_local}</div>
+                <div className="text-2xl font-bold">{auditResult.totals.cards_local || 0}</div>
                 <p className="text-xs text-muted-foreground">Cards Local</p>
               </CardContent>
             </Card>
@@ -169,26 +169,26 @@ const AuditReconcile: React.FC<AuditReconcileProps> = ({ selectedMode }) => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Card>
               <CardContent className="pt-6">
-                <div className="text-2xl font-bold text-primary">{auditResult.totals.variants_upstream}</div>
+                <div className="text-2xl font-bold text-primary">{auditResult.totals.variants_upstream || 0}</div>
                 <p className="text-xs text-muted-foreground">Variants Upstream</p>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="pt-6">
-                <div className="text-2xl font-bold">{auditResult.totals.variants_local}</div>
+                <div className="text-2xl font-bold">{auditResult.totals.variants_local || 0}</div>
                 <p className="text-xs text-muted-foreground">Variants Local</p>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="pt-6">
-                <div className="text-2xl font-bold text-destructive">{auditResult.totals.variants_missing}</div>
+                <div className="text-2xl font-bold text-destructive">{auditResult.totals.variants_missing || 0}</div>
                 <p className="text-xs text-muted-foreground">Variants Missing</p>
               </CardContent>
             </Card>
           </div>
 
           {/* Missing Sets */}
-          {auditResult.sampleMissing.sets.length > 0 && (
+          {auditResult.sampleMissing?.sets?.length > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -228,7 +228,7 @@ const AuditReconcile: React.FC<AuditReconcileProps> = ({ selectedMode }) => {
           )}
 
           {/* Next Actions */}
-          {auditResult.nextActions.length > 0 && (
+          {auditResult.nextActions?.length > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -250,10 +250,10 @@ const AuditReconcile: React.FC<AuditReconcileProps> = ({ selectedMode }) => {
           )}
 
           {/* Perfect State */}
-          {auditResult.totals.sets_missing === 0 && 
-           auditResult.totals.cards_missing === 0 && 
-           auditResult.totals.variants_missing === 0 && 
-           auditResult.totals.variants_stale === 0 && (
+          {auditResult.totals?.sets_missing === 0 && 
+           auditResult.totals?.cards_missing === 0 && 
+           auditResult.totals?.variants_missing === 0 && 
+           auditResult.totals?.variants_stale === 0 && (
             <Card className="border-green-200 bg-green-50">
               <CardContent className="pt-6">
                 <div className="flex items-center gap-2 text-green-700">
