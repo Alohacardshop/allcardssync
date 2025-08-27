@@ -118,76 +118,226 @@ const ResetCatalogSection = () => {
     setShowLogs(true);
 
     try {
-      // Use fetch with POST to trigger the stream, then switch to EventSource
-      const response = await fetch(`${FUNCTIONS_BASE}/catalog-rebuild-stream`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ games: selectedGames })
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to start rebuild: ${response.statusText}`);
-      }
-
-      const reader = response.body?.getReader();
-      if (!reader) {
-        throw new Error('Failed to read response stream');
-      }
-
-      const decoder = new TextDecoder();
+      console.log('🧹 Starting catalog reset for games:', selectedGames);
       
-      const readStream = async () => {
-        try {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
+      // Add initial log
+      setLogs([{
+        timestamp: new Date().toISOString(),
+        level: 'info',
+        message: `Starting catalog reset and rebuild for games: ${selectedGames.join(', ')}`
+      }]);
 
-            const chunk = decoder.decode(value);
-            const lines = chunk.split('\n');
-            
-            for (const line of lines) {
-              if (line.startsWith('data: ')) {
-                try {
-                  const logData = JSON.parse(line.slice(6));
-                  setLogs(prev => [...prev, logData]);
-                  
-                  if (logData.message === 'COMPLETE') {
-                    setResetResult(logData.data);
-                    setIsResetting(false);
+      // Try the streaming endpoint first, fallback to regular if it fails
+      try {
+        const streamUrl = `${FUNCTIONS_BASE}/catalog-rebuild-stream`;
+        console.log('Attempting to connect to stream:', streamUrl);
+        
+        const response = await fetch(streamUrl, {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ games: selectedGames })
+        });
+
+        console.log('Stream response:', response.status, response.statusText);
+
+        if (!response.ok) {
+          throw new Error(`Stream failed: ${response.status} ${response.statusText}`);
+        }
+
+        const reader = response.body?.getReader();
+        if (!reader) {
+          throw new Error('No response body reader');
+        }
+
+        const decoder = new TextDecoder();
+        
+        const readStream = async () => {
+          try {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+
+              const chunk = decoder.decode(value);
+              const lines = chunk.split('\n');
+              
+              for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                  try {
+                    const logData = JSON.parse(line.slice(6));
+                    setLogs(prev => [...prev, logData]);
                     
-                    const successfulSyncs = logData.data?.successfulSyncs || 0;
-                    const totalGames = selectedGames.length;
-                    toast.success(`Reset & rebuild completed! ${successfulSyncs}/${totalGames} syncs started`);
-                    break;
-                  } else if (logData.level === 'error' && logData.message.includes('Process failed')) {
-                    setIsResetting(false);
-                    toast.error('Reset & rebuild failed', {
-                      description: logData.message
-                    });
-                    break;
+                    if (logData.message === 'COMPLETE') {
+                      setResetResult(logData.data);
+                      setIsResetting(false);
+                      
+                      const successfulSyncs = logData.data?.successfulSyncs || 0;
+                      const totalGames = selectedGames.length;
+                      toast.success(`Reset & rebuild completed! ${successfulSyncs}/${totalGames} syncs started`);
+                      return;
+                    } else if (logData.level === 'error' && logData.message.includes('Process failed')) {
+                      setIsResetting(false);
+                      toast.error('Reset & rebuild failed', {
+                        description: logData.message
+                      });
+                      return;
+                    }
+                  } catch (err) {
+                    console.error('Error parsing SSE data:', err, line);
                   }
-                } catch (err) {
-                  console.error('Error parsing SSE data:', err, line);
                 }
               }
             }
+          } catch (streamError) {
+            console.error('Stream reading error:', streamError);
+            throw streamError;
           }
-        } catch (error) {
-          console.error('Stream reading error:', error);
-          setIsResetting(false);
-          toast.error('Connection lost during reset & rebuild');
-        }
-      };
+        };
 
-      readStream();
+        await readStream();
+
+      } catch (streamError: any) {
+        console.error('Streaming failed, falling back to regular method:', streamError.message);
+        
+        setLogs(prev => [...prev, {
+          timestamp: new Date().toISOString(),
+          level: 'warning',
+          message: `Streaming unavailable, using fallback method: ${streamError.message}`
+        }]);
+
+        // Fallback to the original non-streaming method
+        await fallbackResetAndRebuild();
+      }
 
     } catch (error: any) {
       console.error('❌ Reset & rebuild error:', error);
       toast.error('Reset & rebuild failed', {
         description: error.message
       });
+      setLogs(prev => [...prev, {
+        timestamp: new Date().toISOString(),
+        level: 'error',
+        message: `Error: ${error.message}`
+      }]);
       setIsResetting(false);
     }
+  };
+
+  const fallbackResetAndRebuild = async () => {
+    setLogs(prev => [...prev, {
+      timestamp: new Date().toISOString(),
+      level: 'info',
+      message: '🧹 Step 1/2: Resetting catalog data...'
+    }]);
+
+    // Step 1: Reset catalogs
+    const resetResponse = await fetch(`${FUNCTIONS_BASE}/catalog-reset`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ games: selectedGames })
+    });
+
+    if (!resetResponse.ok) {
+      throw new Error(`Reset failed: ${resetResponse.statusText}`);
+    }
+
+    const resetData: ResetResult = await resetResponse.json();
+
+    if (!resetData.success) {
+      throw new Error(resetData.error || 'Reset failed');
+    }
+
+    setLogs(prev => [...prev, {
+      timestamp: new Date().toISOString(),
+      level: 'success',
+      message: `✅ Reset completed: ${resetData.total_records_deleted} records deleted`
+    }]);
+
+    // Step 2: Trigger syncs for each selected game
+    setLogs(prev => [...prev, {
+      timestamp: new Date().toISOString(),
+      level: 'info',
+      message: '🚀 Step 2/2: Starting fresh imports...'
+    }]);
+
+    const syncResults: any[] = [];
+
+    for (const game of selectedGames) {
+      setLogs(prev => [...prev, {
+        timestamp: new Date().toISOString(),
+        level: 'info',
+        message: `Starting sync for ${game}...`
+      }]);
+      
+      try {
+        let syncResponse: Response;
+        
+        if (game === 'pokemon') {
+          syncResponse = await fetch(`${FUNCTIONS_BASE}/catalog-sync-pokemon`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+          });
+        } else if (game === 'pokemon-japan') {
+          syncResponse = await fetch(`${FUNCTIONS_BASE}/catalog-sync-justtcg?game=pokemon-japan`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+          });
+        } else if (game === 'mtg') {
+          syncResponse = await fetch(`${FUNCTIONS_BASE}/catalog-sync-justtcg?game=magic-the-gathering`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+          });
+        } else {
+          continue;
+        }
+
+        const syncData = await syncResponse.json();
+        syncResults.push({ game, success: syncResponse.ok, data: syncData });
+        
+        if (syncResponse.ok) {
+          setLogs(prev => [...prev, {
+            timestamp: new Date().toISOString(),
+            level: 'success',
+            message: `✅ ${game} sync started successfully`
+          }]);
+        } else {
+          setLogs(prev => [...prev, {
+            timestamp: new Date().toISOString(),
+            level: 'error',
+            message: `❌ ${game} sync failed: ${syncData.error || 'Unknown error'}`
+          }]);
+        }
+      } catch (syncError: any) {
+        setLogs(prev => [...prev, {
+          timestamp: new Date().toISOString(),
+          level: 'error',
+          message: `❌ ${game} sync error: ${syncError.message}`
+        }]);
+        syncResults.push({ game, success: false, error: syncError.message });
+      }
+    }
+
+    const result = {
+      resetData,
+      syncResults,
+      timestamp: new Date().toISOString()
+    };
+    
+    setResetResult(result);
+    
+    const successfulSyncs = syncResults.filter(r => r.success).length;
+    setLogs(prev => [...prev, {
+      timestamp: new Date().toISOString(),
+      level: 'success',
+      message: `🎉 Reset & rebuild completed! ${successfulSyncs}/${selectedGames.length} syncs started successfully`
+    }]);
+    
+    toast.success(`Reset & rebuild completed! ${successfulSyncs}/${selectedGames.length} syncs started`);
+    setIsResetting(false);
   };
 
   return (
