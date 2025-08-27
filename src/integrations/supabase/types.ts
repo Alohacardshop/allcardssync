@@ -190,6 +190,30 @@ export type Database = {
         }
         Relationships: []
       }
+      justtcg_games: {
+        Row: {
+          active: boolean | null
+          created_at: string | null
+          id: string
+          name: string
+          updated_at: string | null
+        }
+        Insert: {
+          active?: boolean | null
+          created_at?: string | null
+          id: string
+          name: string
+          updated_at?: string | null
+        }
+        Update: {
+          active?: boolean | null
+          created_at?: string | null
+          id?: string
+          name?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       justtcg_watchlist: {
         Row: {
           card_id: string

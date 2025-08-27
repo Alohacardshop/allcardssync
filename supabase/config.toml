@@ -1,5 +1,8 @@
 project_id = "dmpoandoydaqxhzdjnmk"
 
+[functions.justtcg-import]
+verify_jwt = false
+
 [functions.justtcg]
 verify_jwt = false
 

@@ -22,10 +22,12 @@ import {
   Download,
   AlertCircle,
   CheckCircle2,
-  Clock
+  Clock,
+  Rocket
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import JustTCGImportPanel from './JustTCGImportPanel';
 import { 
   syncGame, 
   syncSets,
@@ -374,11 +376,15 @@ export default function JustTCGPanel() {
         )}
       </div>
 
-      <Tabs defaultValue="sync" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
+      <Tabs defaultValue="fresh-import" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-5">
+          <TabsTrigger value="fresh-import" className="flex items-center gap-2">
+            <Rocket className="h-4 w-4" />
+            Fresh Import
+          </TabsTrigger>
           <TabsTrigger value="sync" className="flex items-center gap-2">
             <Database className="h-4 w-4" />
-            Sync
+            Legacy Sync
           </TabsTrigger>
           <TabsTrigger value="refresh" className="flex items-center gap-2">
             <RefreshCcw className="h-4 w-4" />
@@ -394,7 +400,12 @@ export default function JustTCGPanel() {
           </TabsTrigger>
         </TabsList>
 
-        {/* Sync Tab */}
+        {/* Fresh Import Tab */}
+        <TabsContent value="fresh-import" className="space-y-6">
+          <JustTCGImportPanel />
+        </TabsContent>
+
+        {/* Legacy Sync Tab */}
         <TabsContent value="sync" className="space-y-6">
           {/* Step 1: Sync Sets */}
           <Card className="rounded-2xl border-2 border-primary/20">
