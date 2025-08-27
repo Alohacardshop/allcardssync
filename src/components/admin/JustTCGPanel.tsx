@@ -28,6 +28,7 @@ import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   syncGame, 
+  syncSets,
   refreshList, 
   refreshById, 
   runSnapshots,
@@ -50,6 +51,13 @@ import type {
 
 export default function JustTCGPanel() {
   const queryClient = useQueryClient();
+  
+  // State for sync sets
+  const [syncSetsForm, setSyncSetsForm] = useState({
+    game: 'pokemon' as GameType,
+    setId: '',
+    since: ''
+  });
   
   // State for forms
   const [refreshMode, setRefreshMode] = useState<'list' | 'id'>('list');
@@ -93,16 +101,32 @@ export default function JustTCGPanel() {
   });
 
   // Mutations
+  const syncSetsMutation = useMutation({
+    mutationFn: ({ game, options }: { game: GameType; options?: { setId?: string; since?: string } }) => 
+      syncSets(game, options),
+    onSuccess: (data, { game }) => {
+      toast.success(`${getGameDisplayName(game)} sets sync completed`, {
+        description: `${data.setsProcessed || 0} sets queued for processing`
+      });
+      queryClient.invalidateQueries({ queryKey: ['api-metadata'] });
+    },
+    onError: (error: any, { game }) => {
+      toast.error(`${getGameDisplayName(game)} sets sync failed`, {
+        description: error.message
+      });
+    }
+  });
+
   const syncMutation = useMutation({
     mutationFn: syncGame,
     onSuccess: (data, game) => {
-      toast.success(`${getGameDisplayName(game)} sync completed`, {
+      toast.success(`${getGameDisplayName(game)} cards sync completed`, {
         description: `Processed ${data.cardsProcessed} cards, ${data.variantsProcessed} variants`
       });
       queryClient.invalidateQueries({ queryKey: ['api-metadata'] });
     },
     onError: (error: any, game) => {
-      toast.error(`${getGameDisplayName(game)} sync failed`, {
+      toast.error(`${getGameDisplayName(game)} cards sync failed`, {
         description: error.message
       });
     }
@@ -155,6 +179,17 @@ export default function JustTCGPanel() {
   });
 
   // Handlers
+  const handleSyncSets = () => {
+    const options: { setId?: string; since?: string } = {};
+    if (syncSetsForm.setId.trim()) options.setId = syncSetsForm.setId.trim();
+    if (syncSetsForm.since.trim()) options.since = syncSetsForm.since.trim();
+    
+    syncSetsMutation.mutate({ 
+      game: syncSetsForm.game, 
+      options: Object.keys(options).length > 0 ? options : undefined 
+    });
+  };
+
   const handleSyncGame = (game: GameType) => {
     syncMutation.mutate(game);
   };
@@ -269,7 +304,102 @@ export default function JustTCGPanel() {
 
         {/* Sync Tab */}
         <TabsContent value="sync" className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Step 1: Sync Sets */}
+          <Card className="rounded-2xl border-2 border-primary/20">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-full bg-primary text-primary-foreground text-sm flex items-center justify-center font-semibold">1</div>
+                <Database className="h-5 w-5 text-primary" />
+                Sync Sets (Categories)
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                First, sync the available sets/categories. This will queue them for card processing.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="space-y-2">
+                  <Label>Game</Label>
+                  <Select 
+                    value={syncSetsForm.game} 
+                    onValueChange={(v: GameType) => setSyncSetsForm(prev => ({ ...prev, game: v }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="magic-the-gathering">Magic: The Gathering</SelectItem>
+                      <SelectItem value="pokemon">Pokémon (EN)</SelectItem>
+                      <SelectItem value="pokemon-japan">Pokémon (JP)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Set ID (Optional)</Label>
+                  <Input
+                    placeholder="e.g., sv5"
+                    value={syncSetsForm.setId}
+                    onChange={(e) => setSyncSetsForm(prev => ({ ...prev, setId: e.target.value }))}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Since Date (Optional)</Label>
+                  <Input
+                    type="date"
+                    value={syncSetsForm.since}
+                    onChange={(e) => setSyncSetsForm(prev => ({ ...prev, since: e.target.value }))}
+                  />
+                </div>
+
+                <div className="flex items-end">
+                  <Button
+                    onClick={handleSyncSets}
+                    disabled={syncSetsMutation.isPending}
+                    className="w-full"
+                    size="lg"
+                  >
+                    {syncSetsMutation.isPending ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Syncing Sets...
+                      </>
+                    ) : (
+                      <>
+                        <Database className="h-4 w-4 mr-2" />
+                        Sync Sets
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+
+              {syncSetsMutation.isSuccess && (
+                <Alert>
+                  <CheckCircle2 className="h-4 w-4" />
+                  <AlertDescription>
+                    Successfully queued {syncSetsMutation.data.setsProcessed || 0} sets for processing
+                  </AlertDescription>
+                </Alert>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Step 2: Sync Cards */}
+          <Card className="rounded-2xl">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-full bg-secondary text-secondary-foreground text-sm flex items-center justify-center font-semibold">2</div>
+                <RotateCw className="h-5 w-5 text-secondary" />
+                Sync Cards from Sets
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                After syncing sets, click on a game to pull card data from those sets.
+              </p>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {(['magic-the-gathering', 'pokemon', 'pokemon-japan'] as GameType[]).map((game) => (
               <Card key={game} className="rounded-2xl">
                 <CardHeader>
@@ -288,10 +418,10 @@ export default function JustTCGPanel() {
                     {syncMutation.isPending && syncMutation.variables === game ? (
                       <>
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Syncing...
+                        Syncing Cards...
                       </>
                     ) : (
-                      `Sync ${getGameDisplayName(game)}`
+                      `Pull Cards from ${getGameDisplayName(game)}`
                     )}
                   </Button>
                   
@@ -307,7 +437,9 @@ export default function JustTCGPanel() {
                 </CardContent>
               </Card>
             ))}
-          </div>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* Refresh & Analytics Tab */}
