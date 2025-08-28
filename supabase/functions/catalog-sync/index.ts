@@ -969,8 +969,7 @@ serve(async (req) => {
         const cooldownThreshold = new Date(Date.now() - cooldownHours * 60 * 60 * 1000);
         
         const { data: existingSet, error: setCheckError } = await supabaseClient
-          .schema('catalog_v2')
-          .from('sets')
+          .from('catalog_v2.sets')
           .select('set_id, name, last_seen_at')
           .eq('game', game)
           .eq('set_id', setId)
