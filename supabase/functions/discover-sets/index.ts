@@ -98,7 +98,7 @@ async function discoverSetsForGame(supabase: any, apiKey: string, gameId: string
     }))
 
     const { error } = await supabase.rpc('catalog_v2_upsert_sets', {
-      rows: JSON.stringify(setsData)
+      rows: setsData
     })
     
     if (error) {
