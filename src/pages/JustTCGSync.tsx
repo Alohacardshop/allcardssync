@@ -89,6 +89,7 @@ export default function JustTCGSync() {
   const [isRunning, setIsRunning] = useState(false);
   const [isKillingJobs, setIsKillingJobs] = useState(false);
   const [isLoadingSets, setIsLoadingSets] = useState(false);
+  const [isBackfilling, setIsBackfilling] = useState(false);
   const [apiMetadata, setApiMetadata] = useState<ApiMetadata | null>(null);
   
   const FUNCTIONS_BASE = 'https://dmpoandoydaqxhzdjnmk.supabase.co/functions/v1';
@@ -489,6 +490,48 @@ export default function JustTCGSync() {
     }
   };
 
+  // Backfill provider IDs for the selected game
+  const handleBackfillProviderIds = async () => {
+    if (!selectedGame) return;
+    
+    setIsBackfilling(true);
+    const startTime = Date.now();
+    
+    try {
+      const normalizedGame = normalizeGameSlug(selectedGame);
+      addLog(`🔄 Starting provider ID backfill for ${normalizedGame}...`);
+
+      const { data, error } = await supabase.functions.invoke('backfill-provider-ids', {
+        body: { games: [normalizedGame] }
+      });
+
+      if (error) throw error;
+
+      const duration = Date.now() - startTime;
+      const results = data?.results || [];
+      const gameResult = results.find((r: any) => r.game === normalizedGame) || {};
+
+      addLog(`✅ Backfill complete: ${gameResult.updated || 0}/${gameResult.processed || 0} provider IDs updated (${duration}ms)`);
+
+      toast.success("Backfill Complete", {
+        description: `${gameResult.updated || 0}/${gameResult.processed || 0} provider IDs updated (${duration}ms)`,
+      });
+
+      // Reload sets to reflect the updated provider_ids
+      await loadSetsFromDBForGame(selectedGame);
+      
+      // Refresh catalog stats
+      queryClient.invalidateQueries({ queryKey: ['catalog_v2_stats', normalizedGame] });
+    } catch (error: any) {
+      addLog(`❌ Backfill failed: ${error.message}`);
+      toast.error("Backfill Failed", {
+        description: error.message,
+      });
+    } finally {
+      setIsBackfilling(false);
+    }
+  };
+
   // Filtered sets
   const filteredSets = gameSets.filter(set =>
     set.name.toLowerCase().includes(setSearchQuery.toLowerCase()) ||
@@ -629,6 +672,20 @@ export default function JustTCGSync() {
                       >
                         <Search className="h-3 w-3 mr-1" />
                         Discover New Sets (API)
+                      </Button>
+
+                      <Button
+                        variant="outline" 
+                        size="sm"
+                        onClick={handleBackfillProviderIds}
+                        disabled={!selectedGame || isBackfilling}
+                      >
+                        {isBackfilling ? (
+                          <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                        ) : (
+                          <RefreshCw className="h-3 w-3 mr-1" />
+                        )}
+                        {isBackfilling ? 'Backfilling...' : 'Backfill Provider IDs'}
                       </Button>
 
                       <Button
