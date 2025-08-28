@@ -419,37 +419,73 @@ export default function JustTCGSync() {
     }
   });
 
-  // Load sets for selected game
+  // Load sets for selected game from DB
   useEffect(() => {
     if (selectedGame) {
-      loadSetsForGame(selectedGame);
+      setGameSets([]);
+      setSelectedSets([]);
+      loadSetsFromDBForGame(selectedGame);
+    } else {
+      setGameSets([]);
+      setSelectedSets([]);
     }
   }, [selectedGame]);
 
-  const loadSetsForGame = async (gameId: string) => {
+  // Load sets from the DB using the RPC (selected game only)
+  const loadSetsFromDBForGame = async (gameId: string) => {
+    const game = normalizeGameSlug(gameId);
     setIsLoadingSets(true);
     try {
-      const { data, error } = await supabase.functions.invoke('discover-sets', {
-        body: { games: [gameId] }
+      const { data: browse, error } = await supabase.rpc('catalog_v2_browse_sets', {
+        game_in: game,
+        page_in: 1,
+        limit_in: 1000
       });
-
       if (error) throw error;
 
-      // Transform the response into sets format
-      const sets = data?.data?.[0]?.sets || [];
-      setGameSets(sets.map((set: any) => ({
-        id: set.id,
-        game: gameId,
-        name: set.name,
-        released_at: set.released_at,
-        cards_count: set.cards_count || 0
-      })));
-    } catch (error: any) {
-      console.error('Failed to load sets:', error);
-      toast.error('Failed to load sets', { description: error.message });
+      const setsResp = (browse as any) || {};
+      const sets = (setsResp.sets || []).map((s: any) => ({
+        id: s.set_id,                 // note: set_id from RPC
+        name: s.name,
+        game,
+        released_at: s.release_date,
+        cards_count: s.cards_count ?? 0,
+      }));
+
+      setGameSets(sets);
+      addLog(`📋 Loaded ${sets.length} sets for ${game}`);
+    } catch (e: any) {
+      addLog(`❌ Failed to load sets for ${game}: ${e.message || e}`);
       setGameSets([]);
     } finally {
       setIsLoadingSets(false);
+    }
+  };
+
+  // Discover new sets from API and refresh DB
+  const discoverNewSets = async () => {
+    if (!selectedGame) return;
+    
+    try {
+      const game = normalizeGameSlug(selectedGame);
+      addLog(`🔎 Discovering new sets from API for ${game}…`);
+      
+      // Edge Function that talks to JustTCG, upserts sets via catalog_v2_upsert_sets
+      const res = await supabase.functions.invoke('discover-sets', {
+        body: { games: [game] }
+      });
+      
+      if (res.error) throw new Error(res.error.message);
+      
+      addLog(`✅ Discover complete for ${game}. Reloading DB sets…`);
+      await loadSetsFromDBForGame(selectedGame);
+      
+      toast.success('New sets discovered', { 
+        description: `Successfully discovered new sets for ${game}` 
+      });
+    } catch (e: any) {
+      addLog(`❌ Discover failed: ${e.message || e}`);
+      toast.error('Failed to discover sets', { description: e.message });
     }
   };
 
@@ -570,14 +606,40 @@ export default function JustTCGSync() {
                     <label className="text-sm font-medium">
                       Select Sets ({selectedSets.length} of {filteredSets.length} selected)
                     </label>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleSelectAllSets}
-                      disabled={isLoadingSets}
-                    >
-                      {selectedSets.length === filteredSets.length ? 'Deselect All' : 'Select All'}
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => selectedGame && loadSetsFromDBForGame(selectedGame)}
+                        disabled={!selectedGame || isLoadingSets}
+                      >
+                        {isLoadingSets ? (
+                          <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                        ) : (
+                          <RefreshCw className="h-3 w-3 mr-1" />
+                        )}
+                        Refresh Sets (DB)
+                      </Button>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={discoverNewSets}
+                        disabled={!selectedGame || isLoadingSets}
+                      >
+                        <Search className="h-3 w-3 mr-1" />
+                        Discover New Sets (API)
+                      </Button>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleSelectAllSets}
+                        disabled={isLoadingSets}
+                      >
+                        {selectedSets.length === filteredSets.length ? 'Deselect All' : 'Select All'}
+                      </Button>
+                    </div>
                   </div>
 
                   <div className="relative mb-4">
