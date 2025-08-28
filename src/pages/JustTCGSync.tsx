@@ -581,11 +581,11 @@ export default function JustTCGSync() {
               // Update progress to done
               setSyncProgress(prev => prev.map(p => 
                 p.gameId === gameId && p.setId === setId 
-                  ? { ...p, status: 'done', message: `${result.cardsProcessed || 0} cards, ${result.variantsProcessed || 0} variants` }
+                  ? { ...p, status: 'done', message: `${result?.cardsProcessed || 0} cards, ${result?.variantsProcessed || 0} variants` }
                   : p
               ));
               
-              addLog(`✅ ${setName}: ${result.cardsProcessed || 0} cards, ${result.variantsProcessed || 0} variants`);
+              addLog(`✅ ${setName}: ${result?.cardsProcessed || 0} cards, ${result?.variantsProcessed || 0} variants`);
             }
           
           } catch (syncError: any) {
