@@ -131,14 +131,104 @@ serve(async (req) => {
     let gameParam = url.searchParams.get('game')
     let gamesToProcess: string[] = []
     
-    // Check for JSON body to get games array
+    // Check for JSON body to get games array and loadFromDB mode
     if (req.method === 'POST' && req.headers.get('content-type')?.includes('application/json')) {
       try {
         const body = await req.json()
+        
+        // Handle loadFromDB mode - query sets from database instead of API
+        if (body.loadFromDB === true) {
+          console.log('Load from DB mode requested')
+          
+          // Get games to query (from body.games, body.gameIds, or all games)
+          let gameIds: string[] = []
+          if (body.games && Array.isArray(body.games)) {
+            gameIds = body.games
+          } else if (body.gameIds && Array.isArray(body.gameIds)) {
+            gameIds = body.gameIds
+          } else if (gameParam) {
+            gameIds = [gameParam]
+          }
+          
+          if (gameIds.length === 0) {
+            // Get all games from database
+            const { data: games, error: gamesError } = await supabase
+              .from('games')
+              .select('id')
+              .order('id')
+
+            if (gamesError) {
+              throw gamesError
+            }
+            gameIds = games?.map(g => g.id) || []
+          }
+          
+          console.log(`Querying sets from DB for games: ${gameIds.join(', ')}`)
+          
+          // Query sets from database using catalog_v2_browse_sets
+          const setsByGame: { [gameId: string]: any[] } = {}
+          let totalSits = 0
+          
+          for (const gameId of gameIds) {
+            try {
+              const { data: setsData, error: setsError } = await supabase.rpc('catalog_v2_browse_sets', {
+                game_in: gameId,
+                page_in: 1,
+                limit_in: 1000 // Get more sets per game
+              })
+              
+              if (setsError) {
+                console.error(`Error querying sets for ${gameId}:`, setsError)
+                setsByGame[gameId] = []
+                continue
+              }
+              
+              if (setsData && setsData.sets) {
+                const sets = setsData.sets.map((set: any) => ({
+                  id: set.set_id,
+                  name: set.name,
+                  released_at: set.release_date,
+                  cards_count: set.cards_count
+                }))
+                setsByGame[gameId] = sets
+                totalSits += sets.length
+                console.log(`Found ${sets.length} sets for ${gameId}`)
+              } else {
+                setsByGame[gameId] = []
+              }
+            } catch (error: any) {
+              console.error(`Error processing ${gameId}:`, error.message)
+              setsByGame[gameId] = []
+            }
+          }
+          
+          const responseData = {
+            setsByGame,
+            totalSets: totalSits,
+            _metadata: {
+              gamesProcessed: gameIds.length,
+              totalSetsLoaded: totalSits,
+              timestamp: new Date().toISOString(),
+              mode: 'database'
+            }
+          }
+          
+          console.log(`DB query completed: ${gameIds.length} games, ${totalSits} total sets`)
+          
+          return new Response(JSON.stringify(responseData), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          })
+        }
+        
+        // Normal API discovery mode
         if (body.games && Array.isArray(body.games)) {
           // Multiple games from body
           gamesToProcess = body.games
           console.log(`Processing ${gamesToProcess.length} games from request body`)
+        } else if (body.gameIds && Array.isArray(body.gameIds)) {
+          // Handle gameIds as well
+          gamesToProcess = body.gameIds
+          console.log(`Processing ${gamesToProcess.length} games from gameIds`)
         } else if (gameParam) {
           gamesToProcess = [gameParam]
         }
@@ -193,10 +283,12 @@ serve(async (req) => {
 
     const responseData = {
       data: results,
+      totalSets,
       _metadata: {
         gamesProcessed: results.length,
         totalSetsDiscovered: totalSets,
         timestamp: new Date().toISOString(),
+        mode: 'api_discovery',
         ...(totalSets === 0 && {
           topLevelKeys: gamesToProcess.length > 0 ? ["limited-sample"] : ["no-games-processed"],
           sample: "Check logs for detailed API response diagnostics"

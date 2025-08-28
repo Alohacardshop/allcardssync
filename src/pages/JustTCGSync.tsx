@@ -158,7 +158,7 @@ export default function JustTCGSync() {
 
   // Auto-load sets when games are selected
   useEffect(() => {
-    if (selectedGames.length > 0) {
+    if (selectedGames.length > 0 && games.length > 0) {
       loadSetsFromDB(selectedGames, games);
     }
   }, [selectedGames]);
@@ -447,7 +447,7 @@ export default function JustTCGSync() {
   // Discover sets mutation
   const discoverSetsMutation = useMutation({
     mutationFn: async (gameIds?: string[]) => {
-      const payload = gameIds && gameIds.length > 0 ? { gameIds } : {};
+      const payload = gameIds && gameIds.length > 0 ? { games: gameIds } : {};
       const { data, error } = await supabase.functions.invoke('discover-sets', {
         body: payload
       });
@@ -457,10 +457,11 @@ export default function JustTCGSync() {
     },
     onSuccess: (data) => {
       console.log('Sets discovery completed:', data);
+      const totalSets = data.totalSets || data._metadata?.totalSetsDiscovered || 'unknown';
       toast.success('Sets discovery completed', { 
-        description: `Discovered ${data.totalSets || 'unknown'} sets`
+        description: `Discovered ${totalSets} sets`
       });
-      addLog(`🔍 Sets discovery completed: ${data.totalSets || 'unknown'} sets`);
+      addLog(`🔍 Sets discovery completed: ${totalSets} sets`);
       
       // Reload sets data
       if (selectedGames.length > 0) {
@@ -498,14 +499,19 @@ export default function JustTCGSync() {
   });
 
   // Load sets from database
-  const loadSetsFromDB = async (gameIds: string[], allGames: Game[]) => {
+  const loadSetsFromDB = async (gameIds?: string[], allGames?: Game[]) => {
+    if (!gameIds || gameIds.length === 0) {
+      addLog('⚠️ No games provided to load sets for');
+      return;
+    }
+    
     setIsLoadingSets(true);
     addLog(`📚 Loading sets for ${gameIds.length} games from database...`);
     
     try {
       const { data, error } = await supabase.functions.invoke('discover-sets', {
         body: { 
-          gameIds: gameIds.length > 0 ? gameIds : undefined,
+          games: gameIds,
           loadFromDB: true
         }
       });
@@ -536,13 +542,26 @@ export default function JustTCGSync() {
         addLog(`✅ Loaded ${totalSets} sets from database`);
         toast.success('Sets loaded', { description: `Loaded ${totalSets} sets from database` });
       } else {
-        addLog('⚠️ No sets data returned from database');
+        // Handle empty response with client-side fallback
+        addLog('⚠️ No sets data returned from database, initializing empty structure');
+        const emptyGroupedSets: { [gameId: string]: GameSet[] } = {};
+        gameIds.forEach(gameId => {
+          emptyGroupedSets[gameId] = [];
+        });
+        setGroupedSets(emptyGroupedSets);
       }
       
     } catch (error: any) {
       console.error('Error loading sets from DB:', error);
       addLog(`❌ Failed to load sets: ${error.message}`);
       toast.error('Failed to load sets', { description: error.message });
+      
+      // Initialize empty structure on error
+      const emptyGroupedSets: { [gameId: string]: GameSet[] } = {};
+      gameIds.forEach(gameId => {
+        emptyGroupedSets[gameId] = [];
+      });
+      setGroupedSets(emptyGroupedSets);
     } finally {
       setIsLoadingSets(false);
     }
@@ -739,7 +758,7 @@ export default function JustTCGSync() {
           <CardContent className="space-y-4">
             <div className="flex flex-wrap gap-4 items-center">
               <Button
-                onClick={() => loadSetsFromDB(selectedGames.length > 0 ? selectedGames : undefined, games)}
+                onClick={() => loadSetsFromDB(selectedGames.length > 0 ? selectedGames : games.map(g => g.id), games)}
                 disabled={isLoadingSets}
                 variant="default"
               >
@@ -764,8 +783,8 @@ export default function JustTCGSync() {
                       <SelectTrigger className="w-48">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All games</SelectItem>
+                       <SelectContent className="z-50">
+                         <SelectItem value="all">All games</SelectItem>
                         {Object.keys(groupedSets).map(gameId => {
                           const game = games.find(g => g.id === gameId);
                           return (
@@ -792,7 +811,7 @@ export default function JustTCGSync() {
               </Badge>
             </div>
 
-            {Object.keys(groupedSets).length > 0 && (
+            {Object.keys(groupedSets).length > 0 ? (
               <div className="space-y-4">
                 {Object.entries(groupedSets)
                   .filter(([gameId]) => setsGameFilter === 'all' || gameId === setsGameFilter)
@@ -871,6 +890,18 @@ export default function JustTCGSync() {
                     </div>
                   );
                 })}
+              </div>
+            ) : selectedGames.length > 0 ? (
+              <div className="text-center text-muted-foreground py-8">
+                <Database className="mx-auto h-12 w-12 mb-4 opacity-50" />
+                <p className="text-lg font-medium mb-2">No sets loaded</p>
+                <p>Click "Load Sets from DB" or "Refresh Sets from API" to load sets for the selected games.</p>
+              </div>
+            ) : (
+              <div className="text-center text-muted-foreground py-8">
+                <Database className="mx-auto h-12 w-12 mb-4 opacity-50" />
+                <p className="text-lg font-medium mb-2">Select games first</p>
+                <p>Choose one or more games in step 1 to load their sets.</p>
               </div>
             )}
           </CardContent>
