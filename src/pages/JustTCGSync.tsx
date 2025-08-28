@@ -21,6 +21,12 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { 
   Play, 
   Database, 
@@ -83,7 +89,11 @@ export default function JustTCGSync() {
   const [isLoadingSets, setIsLoadingSets] = useState(false);
   const [apiMetadata, setApiMetadata] = useState<ApiMetadata | null>(null);
   
-  // Smart sync settings  
+  // Pokemon Japan controls
+  const [pokemonJapanSetId, setPokemonJapanSetId] = useState('');
+  const [isRunningJapanSync, setIsRunningJapanSync] = useState(false);
+  
+  // Smart sync settings
   const [onlyNewSets, setOnlyNewSets] = useState(() => {
     const saved = localStorage.getItem('justtcg-only-new-sets');
     return saved !== null ? JSON.parse(saved) : true;
@@ -480,6 +490,73 @@ export default function JustTCGSync() {
       addLog(`💥 Sync failed: ${error.message}`);
       toast.error('Sync failed', { description: error.message });
       setIsRunning(false);
+    }
+  });
+
+  // Pokemon Japan sync mutations
+  const runJapanOrchestratorMutation = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke('catalog-sync-pokemon-japan');
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      toast.success('Pokemon Japan orchestrator started', { 
+        description: `Queued ${data.setsQueued || 0} sets for processing`
+      });
+      addLog(`🇯🇵 Japan orchestrator: Queued ${data.setsQueued || 0} sets`);
+      // Refresh stats
+      queryClient.invalidateQueries({ queryKey: ['catalog-stats-overall'] });
+      queryClient.invalidateQueries({ queryKey: ['queue-stats'] });
+    },
+    onError: (error: any) => {
+      console.error('Japan orchestrator failed:', error);
+      toast.error('Japan orchestrator failed', { description: error.message });
+      addLog(`💥 Japan orchestrator failed: ${error.message}`);
+    }
+  });
+
+  const runSingleJapanSetMutation = useMutation({
+    mutationFn: async (setId: string) => {
+      const { data, error } = await supabase.functions.invoke('catalog-sync-pokemon-japan', {
+        body: { setId }
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      toast.success('Pokemon Japan set sync completed', { 
+        description: `Processed ${data.cardsProcessed || 0} cards`
+      });
+      addLog(`🇯🇵 Japan set sync: ${data.cardsProcessed || 0} cards processed`);
+      setPokemonJapanSetId('');
+      // Refresh stats
+      queryClient.invalidateQueries({ queryKey: ['catalog-stats-overall'] });
+      queryClient.invalidateQueries({ queryKey: ['catalog-stats-selected'] });
+    },
+    onError: (error: any) => {
+      console.error('Japan set sync failed:', error);
+      toast.error('Japan set sync failed', { description: error.message });
+      addLog(`💥 Japan set sync failed: ${error.message}`);
+    }
+  });
+
+  const refreshStatsMutation = useMutation({
+    mutationFn: async () => {
+      // Just trigger a refresh by invalidating queries
+      queryClient.invalidateQueries({ queryKey: ['catalog-stats-overall'] });
+      queryClient.invalidateQueries({ queryKey: ['catalog-stats-selected'] });
+      queryClient.invalidateQueries({ queryKey: ['queue-stats'] });
+      // Wait a bit for the queries to complete
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    },
+    onSuccess: () => {
+      toast.success('Stats refreshed');
+      addLog('📊 Stats refreshed');
+    },
+    onError: (error: any) => {
+      toast.error('Failed to refresh stats', { description: error.message });
+      addLog(`💥 Stats refresh failed: ${error.message}`);
     }
   });
 
@@ -1102,7 +1179,16 @@ export default function JustTCGSync() {
                           <Badge variant="secondary">{stats.cards_count || 0}</Badge>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-sm">Pending:</span>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="text-sm cursor-help">Pending:</span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Sets discovered with 0 cards in the database</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                           <Badge variant={stats.pending_count > 0 ? "destructive" : "default"}>
                             {stats.pending_count || 0}
                           </Badge>
@@ -1191,6 +1277,70 @@ export default function JustTCGSync() {
                     </div>
                   )}
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Pokemon Japan Controls */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                🇯🇵 Pokemon Japan Controls
+              </CardTitle>
+              <CardDescription>
+                Special controls for Pokemon Japan synchronization and management
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Button
+                  onClick={() => runJapanOrchestratorMutation.mutate()}
+                  disabled={runJapanOrchestratorMutation.isPending}
+                  variant="default"
+                  className="w-full"
+                >
+                  {runJapanOrchestratorMutation.isPending ? 
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" /> : 
+                    <Play className="h-4 w-4 mr-2" />
+                  }
+                  Run Japan Orchestrator
+                </Button>
+                
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Enter setId..."
+                    value={pokemonJapanSetId}
+                    onChange={(e) => setPokemonJapanSetId(e.target.value)}
+                    className="flex-1"
+                  />
+                  <Button
+                    onClick={() => runSingleJapanSetMutation.mutate(pokemonJapanSetId)}
+                    disabled={runSingleJapanSetMutation.isPending || !pokemonJapanSetId.trim()}
+                    variant="outline"
+                  >
+                    {runSingleJapanSetMutation.isPending ? 
+                      <Loader2 className="h-4 w-4 animate-spin" /> : 
+                      <Play className="h-4 w-4" />
+                    }
+                  </Button>
+                </div>
+                
+                <Button
+                  onClick={() => refreshStatsMutation.mutate()}
+                  disabled={refreshStatsMutation.isPending}
+                  variant="secondary"
+                  className="w-full"
+                >
+                  {refreshStatsMutation.isPending ? 
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" /> : 
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                  }
+                  Refresh Stats
+                </Button>
+              </div>
+              
+              <div className="text-xs text-muted-foreground bg-yellow-50 border border-yellow-200 rounded p-2">
+                💡 Use the orchestrator to queue all Pokemon Japan sets, or sync a specific set by entering its setId above.
               </div>
             </CardContent>
           </Card>
