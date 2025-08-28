@@ -1,56 +1,22 @@
-// HTTP utilities with retry logic
+// supabase/functions/_shared/http.ts
+function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
 
-function sleep(ms: number): Promise<void> { 
-  return new Promise(resolve => setTimeout(resolve, ms)); 
-}
-
-export async function fetchWithRetry(
-  url: string, 
-  init: RequestInit = {}, 
-  opts?: { retries?: number; baseDelayMs?: number; jitter?: boolean }
-): Promise<Response> {
-  const retries = opts?.retries ?? 3;
-  const baseDelayMs = opts?.baseDelayMs ?? 500;
+export async function fetchWithRetry(url: string, init: RequestInit = {}, opts?: { retries?: number; baseDelayMs?: number; jitter?: boolean }) {
+  const retries = opts?.retries ?? 4;
+  const base = opts?.baseDelayMs ?? 500;
   const jitter = opts?.jitter ?? true;
 
-  let lastError: Error;
-  
-  for (let attempt = 0; attempt <= retries; attempt++) {
+  let attempt = 0;
+  while (true) {
     try {
-      const response = await fetch(url, init);
-      
-      // Return successful responses immediately
-      if (response.ok) {
-        return response;
-      }
-      
-      // For non-success responses, only retry on specific status codes
-      if (attempt < retries && [429, 500, 502, 503, 504].includes(response.status)) {
-        const delay = Math.floor(
-          baseDelayMs * Math.pow(2, attempt) * 
-          (jitter ? (0.75 + Math.random() * 0.5) : 1)
-        );
-        await sleep(delay);
-        continue;
-      }
-      
-      // Return non-success responses that shouldn't be retried
-      return response;
-      
-    } catch (error: any) {
-      lastError = error;
-      
-      // Only retry network errors
-      if (attempt < retries) {
-        const delay = Math.floor(
-          baseDelayMs * Math.pow(2, attempt) * 
-          (jitter ? (0.75 + Math.random() * 0.5) : 1)
-        );
-        await sleep(delay);
-        continue;
-      }
+      const res = await fetch(url, init);
+      if (res.ok) return res;
+      if (![429, 500, 502, 503, 504].includes(res.status) || attempt >= retries) return res;
+    } catch (e) {
+      if (attempt >= retries) throw e;
     }
+    const delay = Math.floor(base * Math.pow(2, attempt) * (jitter ? (0.75 + Math.random() * 0.5) : 1));
+    await sleep(delay);
+    attempt++;
   }
-  
-  throw lastError!;
 }

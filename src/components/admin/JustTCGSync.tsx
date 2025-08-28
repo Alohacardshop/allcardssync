@@ -20,6 +20,10 @@ function normalizeGameSlug(g: string) {
   return g;
 }
 
+async function syncSelectedSets(game: string, setIds: string[]) {
+  return runEdge('catalog-sync', { method: 'POST', query: { game, setIds } })
+}
+
 interface GameData {
   id: string;
   name: string;
