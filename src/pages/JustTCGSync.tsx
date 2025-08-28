@@ -157,7 +157,9 @@ export default function JustTCGSync() {
           try {
             const { data, error } = await supabase.rpc('catalog_v2_stats', { game_in: gameId });
             if (error) throw error;
-            return { game: gameId, ...data };
+            // RPC returns an array, get the first element
+            const statsData = Array.isArray(data) ? data[0] : data;
+            return { game: gameId, ...statsData };
           } catch {
             return { game: gameId, sets_count: 0, cards_count: 0, pending_count: 0 };
           }
@@ -174,7 +176,8 @@ export default function JustTCGSync() {
       if (!selectedGame) return null;
       const { data, error } = await supabase.rpc('catalog_v2_stats', { game_in: selectedGame });
       if (error) throw error;
-      return data;
+      // RPC returns an array, get the first element
+      return Array.isArray(data) ? data[0] : data;
     },
     enabled: !!selectedGame,
     staleTime: 2 * 60 * 1000, // 2 minutes
@@ -189,7 +192,9 @@ export default function JustTCGSync() {
           try {
             const { data, error } = await supabase.rpc('catalog_v2_queue_stats_by_mode', { mode_in: mode });
             if (error) throw error;
-            return { mode, ...data };
+            // RPC returns an array, get the first element
+            const statsData = Array.isArray(data) ? data[0] : data;
+            return { mode, ...statsData };
           } catch {
             return { mode, queued: 0, processing: 0, done: 0, error: 0 };
           }
