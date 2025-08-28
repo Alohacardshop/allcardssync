@@ -321,31 +321,69 @@ async function syncSet(game: string, setId: string, turboMode = false) {
     let hasMore = true;
     let pageCount = 0;
     
-    // Fetch all cards for this set
+    // Fetch all cards for this set, with slug fallback
+    let attemptedSlugFallback = false;
+    let currentSetId = setId;
+    
     while (hasMore) {
       pageCount++;
       const pageTracker = new PerformanceTracker({
         operation: 'sync_set_page',
         game,
-        setId,
+        setId: currentSetId,
         page: pageCount,
         offset,
         limit
       });
 
-      const url = `${JUSTTCG_BASE}/cards?game=${encodeURIComponent(apiGame)}&set=${encodeURIComponent(setId)}&limit=${limit}&offset=${offset}`;
+      const url = `${JUSTTCG_BASE}/cards?game=${encodeURIComponent(apiGame)}&set=${encodeURIComponent(currentSetId)}&limit=${limit}&offset=${offset}`;
+      
+      logStructured('INFO', 'Fetching cards page', {
+        operation: 'fetch_cards_page',
+        game,
+        setId: currentSetId,
+        originalSetId: setId,
+        page: pageCount,
+        url
+      });
       
       const response = await fetchJsonWithRetry(url, headers, 6, 500, {
         operation: 'fetch_cards_page',
         game,
-        setId,
+        setId: currentSetId,
         page: pageCount
       });
       
       const cards = response?.data || [];
       
+      // If no cards found on first page and we haven't tried slug fallback yet
+      if (cards.length === 0 && pageCount === 1 && !attemptedSlugFallback) {
+        const slugifiedSetId = setId.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+        
+        if (slugifiedSetId !== setId) {
+          logStructured('INFO', 'No cards found with original setId, trying slug fallback', {
+            operation: 'slug_fallback',
+            originalSetId: setId,
+            slugifiedSetId,
+            game
+          });
+          
+          attemptedSlugFallback = true;
+          currentSetId = slugifiedSetId;
+          pageCount = 0; // Reset page count for new attempt
+          continue; // Retry with slugified setId
+        }
+      }
+      
       if (cards.length === 0) {
         hasMore = false;
+        logStructured('INFO', 'No more cards found, ending pagination', {
+          operation: 'pagination_end',
+          game,
+          setId: currentSetId,
+          totalCards: allCards.length,
+          pageCount
+        });
         break;
       }
       

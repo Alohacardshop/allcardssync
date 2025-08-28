@@ -384,7 +384,7 @@ export default function JustTCGSync() {
         try {
           addLog(`⚡ Syncing ${setName} (${gameId})...`);
           
-          const { data: result, error } = await supabase.functions.invoke('justtcg-import', {
+          const { data: result, error } = await supabase.functions.invoke('catalog-sync', {
             body: { game: gameId, setId }
           });
           

@@ -261,7 +261,7 @@ async function fetchCards(supabase: any, gameId: string, setId: string): Promise
     }
 
     offset += limit
-    hasMore = cards.length === limit
+    hasMore = response?.meta?.hasMore || false
   }
 
   return { cards: totalCards, variants: totalVariants }
