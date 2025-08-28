@@ -171,30 +171,36 @@ const JustTCGSync = () => {
 
     setIsLoadingSets(true);
     try {
+      const selectedGame = preferences.selected_games[0];
+      console.log('Loading sets for game:', selectedGame, 'only_new_sets:', preferences.only_new_sets);
+      
       if (preferences.only_new_sets) {
         // Only show sets with no cards (pending sets)
         const { data: pendingSets, error } = await supabase
           .rpc('catalog_v2_pending_sets', {
-            game_in: preferences.selected_games[0], // For now, use first game
+            game_in: selectedGame,
             limit_in: 1000
           });
 
         if (error) throw error;
+        console.log('Pending sets response:', pendingSets?.length, 'sets');
         setSets(pendingSets?.map((s: any) => ({ set_id: s.set_id, name: s.name })) || []);
       } else {
         // Use browse sets function to get all sets for the selected game
         const { data: browseSetsResponse, error } = await supabase
           .rpc('catalog_v2_browse_sets', {
-            game_in: preferences.selected_games[0], // For now, use first game
+            game_in: selectedGame,
             limit_in: 1000
           });
 
         if (error) throw error;
         const setsResponse = browseSetsResponse as any;
         const setsData = setsResponse?.sets || [];
+        console.log('Browse sets response:', setsData.length, 'sets for game:', selectedGame);
         setSets(setsData.map((s: any) => ({ set_id: s.set_id, name: s.name })));
       }
     } catch (error: any) {
+      console.error('Error loading sets:', error);
       toast({
         title: "Error loading sets",
         description: error.message,
