@@ -53,8 +53,15 @@ async function discoverSetsForGame(supabase: any, apiKey: string, gameId: string
   if (!checkRateLimit()) {
     throw new Error('Rate limit exceeded while fetching sets')
   }
+
+  // Use correct game parameters for JustTCG API
+  const { game, region } = toJustTCGParams(gameId)
+  const regionParam = region ? `&region=${encodeURIComponent(region)}` : ''
+  const url = `https://api.justtcg.com/v1/sets?game=${encodeURIComponent(game)}${regionParam}`
   
-  const response = await fetch(`https://api.justtcg.com/v1/sets?game=${encodeURIComponent(gameId)}`, {
+  console.log(`Calling JustTCG API: ${url}`)
+  
+  const response = await fetch(url, {
     headers: {
       'x-api-key': apiKey,
       'Accept': 'application/json',
@@ -85,7 +92,8 @@ async function discoverSetsForGame(supabase: any, apiKey: string, gameId: string
   if (sets.length > 0) {
     const setsData = sets.map((set: any) => ({
       provider: 'justtcg',
-      set_id: set.id,
+      set_id: set.id, // Keep as display/stable local key 
+      provider_id: set.id, // Store API identifier for fetching
       game: gameId,
       name: set.name,
       series: set.series,
@@ -108,6 +116,21 @@ async function discoverSetsForGame(supabase: any, apiKey: string, gameId: string
   }
 
   return { gameId, setsCount: sets.length }
+}
+
+// Helper functions for parameter mapping
+function toJustTCGParams(gameIn: string): { game: string; region?: string } {
+  const g = normalizeGameSlug(gameIn);
+  if (g === 'pokemon-japan') return { game: 'pokemon', region: 'japan' };
+  return { game: g, region: undefined };
+}
+
+function normalizeGameSlug(g?: string): string {
+  if (!g) return '';
+  const x = g.toLowerCase().replace(/\s+/g, '-');
+  if (x === 'pokemon_japan') return 'pokemon-japan';
+  if (x === 'mtg') return 'magic-the-gathering';
+  return x;
 }
 
 serve(async (req) => {

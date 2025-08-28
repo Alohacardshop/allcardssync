@@ -1,6 +1,6 @@
-// supabase/functions/_shared/justtcg.ts
+// Game slug and parameter mapping utilities
 export function normalizeGameSlug(appGame: string): string {
-  const g = (appGame || '').trim().toLowerCase();
+  const g = (appGame || '').trim().toLowerCase().replace(/\s+/g, '-');
   if (g === 'mtg') return 'magic-the-gathering';
   if (g === 'pokemon_japan') return 'pokemon-japan';
   return g;
@@ -9,12 +9,29 @@ export function normalizeGameSlug(appGame: string): string {
 export function toJustTCGParams(appGame: string): { game: string; region?: string } {
   const g = normalizeGameSlug(appGame);
   if (g === 'pokemon-japan') return { game: 'pokemon', region: 'japan' };
-  return { game: g };
+  return { game: g, region: undefined };
 }
 
 // Map raw JustTCG card/variant to our DB row shapes
-export type SetRow = { set_id: string; game: string; name?: string | null; code?: string | null; released_at?: string | null; };
-export type CardRow = { card_id: string; set_id: string; game: string; name?: string | null; rarity?: string | null; number?: string | null; tcgplayer_id?: string | null; };
+export type SetRow = { 
+  set_id: string; 
+  game: string; 
+  name?: string | null; 
+  code?: string | null; 
+  released_at?: string | null; 
+  provider_id?: string | null;
+};
+
+export type CardRow = { 
+  card_id: string; 
+  set_id: string; 
+  game: string; 
+  name?: string | null; 
+  rarity?: string | null; 
+  number?: string | null; 
+  tcgplayer_id?: string | null; 
+};
+
 export type VariantRow = {
   id: string; card_id: string; set_id: string; game: string;
   condition: string; printing: string; language?: string | null;
@@ -27,8 +44,16 @@ export type VariantRow = {
 };
 
 export function mapSet(game: string, s: any): SetRow {
-  return { set_id: s.id, game, name: s.name ?? null, code: s.code ?? null, released_at: s.releasedAt ?? null };
+  return { 
+    set_id: s.id, 
+    game, 
+    name: s.name ?? null, 
+    code: s.code ?? null, 
+    released_at: s.releasedAt ?? null,
+    provider_id: s.id // Store API identifier
+  };
 }
+
 export function mapCard(game: string, c: any): CardRow {
   return {
     card_id: c.id, set_id: c.setId, game,
@@ -36,6 +61,7 @@ export function mapCard(game: string, c: any): CardRow {
     tcgplayer_id: c.tcgplayerId ?? null,
   };
 }
+
 export function mapVariant(game: string, v: any): VariantRow {
   return {
     id: v.id, card_id: v.cardId, set_id: v.setId, game,

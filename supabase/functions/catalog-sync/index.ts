@@ -37,40 +37,112 @@ export async function syncCatalogGeneric(params: { game: string; setIds?: string
   const headers = { 'X-API-Key': Deno.env.get('JUSTTCG_API_KEY')! };
   const qRegion = region ? `&region=${encodeURIComponent(region)}` : '';
 
-  log('INFO', 'catalog-sync:start', { game: inputGame, mappedGame: game, region });
+  log('INFO', 'catalog-sync:start', { gameSlug: inputGame, gameParam: game, region });
 
   // 1) Fetch sets from JustTCG
   const setsUrl = `${BASE}/sets?game=${encodeURIComponent(game)}${qRegion}`;
   const setsResp = await fetchJSON(setsUrl, headers);
   const sets = (setsResp?.data ?? []) as any[];
-  const setRows = sets.map(s => mapSet(inputGame, s));
+  
+  // Map sets with provider_id
+  const setRows = sets.map(s => ({
+    ...mapSet(inputGame, s),
+    provider_id: s.id // Store API identifier
+  }));
+  
   await rpcChunk(supabase, 'catalog_v2_upsert_sets', setRows);
   log('INFO', 'catalog-sync:upserted-sets', { count: setRows.length });
 
-  // If specific setIds provided, filter
-  const targetSetIds = params.setIds?.length ? new Set(params.setIds) : null;
-  const targetSets = targetSetIds ? sets.filter(s => targetSetIds.has(s.id)) : sets;
-
-  // Idempotency: import_runs guard
-  const importRunId = `run_${Date.now()}`;
-  // (Optional) write a row to import_runs here if you maintain such table; skip if newer exists (left out for brevity).
+  // Get target sets - use DB lookup to get provider_id for specific setIds
+  let targetSets = sets;
+  if (params.setIds?.length) {
+    // Query DB to get provider_id for the requested setIds
+    const { data: dbSets } = await supabase
+      .schema('catalog_v2')
+      .from('sets')
+      .select('set_id, provider_id, name')
+      .eq('game', inputGame)
+      .in('set_id', params.setIds);
+    
+    if (dbSets?.length) {
+      // Use provider_id from DB, fallback to set_id if provider_id is null
+      targetSets = dbSets.map(dbSet => ({
+        id: dbSet.provider_id || dbSet.set_id,
+        name: dbSet.name,
+        dbSetId: dbSet.set_id
+      }));
+    } else {
+      // Fallback: filter API sets by setIds
+      targetSets = sets.filter(s => params.setIds!.includes(s.id));
+    }
+  }
 
   // 2) Per-set fan-out for cards (idempotent via RPC upserts)
   let totalCards = 0;
   let totalVariants = 0;
   
   for (const s of targetSets) {
-    const setId = s.id;
-    log('INFO', 'catalog-sync:set-start', { setId });
+    const setIdent = s.id; // This is provider_id for fetching
+    const dbSetId = s.dbSetId || s.id; // This is our local set_id for DB updates
+    
+    log('INFO', 'catalog-sync:set-start', { 
+      setIdLocal: dbSetId, 
+      setProviderId: setIdent,
+      gameSlug: inputGame,
+      gameParam: game, 
+      region 
+    });
 
-    // page through cards if needed; assume JustTCG supports limit/offset
+    // Warn if using fallback
+    if (!s.dbSetId && params.setIds?.length) {
+      log('WARN', 'Using fallback set identifier', { 
+        setIdLocal: dbSetId, 
+        setProviderId: setIdent 
+      });
+    }
+
+    // page through cards if needed
     let offset = 0; const limit = 200;
     let setTotal = 0;
+    const reqId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
     while (true) {
-      const cardsUrl = `${BASE}/cards?game=${encodeURIComponent(game)}${qRegion}&set=${encodeURIComponent(setId)}&limit=${limit}&offset=${offset}`;
+      const cardsUrl = `${BASE}/cards?game=${encodeURIComponent(game)}${qRegion}&set=${encodeURIComponent(setIdent)}&limit=${limit}&offset=${offset}`;
+      
+      log('INFO', 'cards-fetch', { 
+        op: 'cards-fetch',
+        gameSlug: inputGame, 
+        gameParam: game, 
+        region, 
+        setIdLocal: dbSetId, 
+        setProviderId: setIdent,
+        url: cardsUrl,
+        reqId 
+      });
+      
       const cardsResp = await fetchJSON(cardsUrl, headers);
       const cards = (cardsResp?.data ?? []) as any[];
-      if (!cards.length) break;
+      
+      log('INFO', 'cards-response', { 
+        setIdLocal: dbSetId, 
+        setProviderId: setIdent, 
+        offset, 
+        count: cards.length,
+        reqId 
+      });
+      
+      if (!cards.length) {
+        if (setTotal === 0) {
+          log('WARN', 'No cards found for set', { 
+            setIdLocal: dbSetId, 
+            setProviderId: setIdent,
+            gameSlug: inputGame,
+            gameParam: game,
+            region 
+          });
+        }
+        break;
+      }
 
       // Map & write cards
       const cardRows = cards.map(c => mapCard(inputGame, c));
@@ -84,20 +156,20 @@ export async function syncCatalogGeneric(params: { game: string; setIds?: string
 
       setTotal += cards.length;
       totalVariants += variantRows.length;
-      log('INFO', 'catalog-sync:set-page', { setId, offset, count: cards.length, total: setTotal });
+      log('INFO', 'catalog-sync:set-page', { setIdLocal: dbSetId, offset, count: cards.length, total: setTotal });
       offset += limit;
       if (cards.length < limit) break;
     }
     totalCards += setTotal;
-    log('INFO', 'catalog-sync:set-complete', { setId });
+    log('INFO', 'catalog-sync:set-complete', { setIdLocal: dbSetId, cardsProcessed: setTotal });
     
-    // Update last_synced_at for this set
+    // Update last_synced_at using our local set_id
     await supabase
       .schema('catalog_v2')
       .from('sets')
       .update({ last_synced_at: new Date().toISOString() })
       .eq('game', inputGame)
-      .eq('set_id', setId);
+      .eq('set_id', dbSetId);
   }
 
   log('INFO', 'catalog-sync:complete', { game: inputGame, cardsProcessed: totalCards, variantsProcessed: totalVariants });
