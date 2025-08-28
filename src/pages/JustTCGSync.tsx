@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -67,6 +67,8 @@ export default function JustTCGSync() {
   const [logs, setLogs] = useState<string[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [apiMetadata, setApiMetadata] = useState<ApiMetadata | null>(null);
+
+  const cancelRequestedRef = useRef(false);
 
   const queryClient = useQueryClient();
 
@@ -215,6 +217,7 @@ export default function JustTCGSync() {
     mutationFn: async (params: { mode: 'selected' | 'all-for-games' | 'all-games'; gameIds?: string[]; setIds?: string[] }) => {
       setIsRunning(true);
       setSyncProgress([]);
+      cancelRequestedRef.current = false;
       
       let setsToSync: Array<{ gameId: string; setId: string; setName: string }> = [];
       
@@ -263,8 +266,21 @@ export default function JustTCGSync() {
       addLog(`🚀 Starting sync for ${setsToSync.length} sets...`);
       
       // Sync each set sequentially
-      const results = [];
+      const results = [] as any[];
+      let cancelled = false;
       for (let i = 0; i < setsToSync.length; i++) {
+        if (cancelRequestedRef.current) {
+          cancelled = true;
+          addLog('🛑 Stop requested. Halting sync...');
+          // Mark remaining queued/running as cancelled
+          setSyncProgress(prev => prev.map(p => 
+            (p.status === 'queued' || p.status === 'running')
+              ? { ...p, status: 'error', message: 'Cancelled by user' }
+              : p
+          ));
+          break;
+        }
+
         const { gameId, setId, setName } = setsToSync[i];
         
         // Update progress to running
@@ -312,16 +328,23 @@ export default function JustTCGSync() {
         }
       }
       
-      return { results, totalSets: setsToSync.length };
+      return { results, totalSets: setsToSync.length, cancelled };
     },
-    onSuccess: () => {
+    onSuccess: (data: { results: any[]; totalSets: number; cancelled?: boolean }) => {
       const successCount = syncProgress.filter(p => p.status === 'done').length;
       const errorCount = syncProgress.filter(p => p.status === 'error').length;
-      
-      addLog(`🎉 Sync completed: ${successCount} successful, ${errorCount} failed`);
-      toast.success('Sync completed', { 
-        description: `${successCount} sets synced successfully${errorCount > 0 ? `, ${errorCount} failed` : ''}`
-      });
+
+      if (data?.cancelled) {
+        addLog(`🛑 Sync cancelled by user. ${successCount} completed, ${errorCount} marked as cancelled/errors.`);
+        toast.warning('Sync cancelled', { 
+          description: `${successCount} sets completed before stop${errorCount > 0 ? `, ${errorCount} cancelled/failed` : ''}`
+        });
+      } else {
+        addLog(`🎉 Sync completed: ${successCount} successful, ${errorCount} failed`);
+        toast.success('Sync completed', { 
+          description: `${successCount} sets synced successfully${errorCount > 0 ? `, ${errorCount} failed` : ''}`
+        });
+      }
     },
     onError: (error: any) => {
       addLog(`💥 Sync failed: ${error.message}`);
@@ -423,6 +446,13 @@ export default function JustTCGSync() {
     if (window.confirm(`This will sync ALL games and sets (${totalSets} total sets). This may take a long time. Continue?`)) {
       syncSetsMutation.mutate({ mode: 'all-games' });
     }
+  };
+
+  const handleHardStop = () => {
+    if (!isRunning) return;
+    cancelRequestedRef.current = true;
+    addLog('🛑 Hard stop requested by user');
+    toast.warning('Stopping sync...', { description: 'Current set will finish, then syncing will halt.' });
   };
 
   // Filter games by search query
@@ -754,6 +784,15 @@ export default function JustTCGSync() {
                 Sync All Games & Sets
               </Button>
             </div>
+
+            {isRunning && (
+              <div className="flex items-center justify-end">
+                <Button variant="destructive" onClick={handleHardStop}>
+                  <AlertCircle className="h-4 w-4 mr-2" />
+                  Hard Stop Now
+                </Button>
+              </div>
+            )}
 
             {/* Progress Bar */}
             {syncProgress.length > 0 && (
