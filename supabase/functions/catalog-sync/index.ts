@@ -28,13 +28,28 @@ serve(async (req) => {
 
   try {
     const url = new URL(req.url);
-    const setId = url.searchParams.get("setId");
-    const game = url.searchParams.get("game") || "pokemon";
-    const since = url.searchParams.get("since") || "";
-    const queueOnly = url.searchParams.get("queueOnly") === "true";
-    const turbo = url.searchParams.get("turbo") === "true";
-    const cooldownHours = parseInt(url.searchParams.get("cooldownHours") || "12");
-    const forceSync = url.searchParams.get("forceSync") === "true";
+    let setId, game, since, queueOnly, turbo, cooldownHours, forceSync;
+    
+    // Handle both GET (query params) and POST (JSON body) requests
+    if (req.method === 'GET') {
+      setId = url.searchParams.get("setId");
+      game = url.searchParams.get("game") || "pokemon";
+      since = url.searchParams.get("since") || "";
+      queueOnly = url.searchParams.get("queueOnly") === "true";
+      turbo = url.searchParams.get("turbo") === "true";
+      cooldownHours = parseInt(url.searchParams.get("cooldownHours") || "12");
+      forceSync = url.searchParams.get("forceSync") === "true";
+    } else {
+      // Handle POST request with JSON body
+      const body = await req.json();
+      setId = body.setId || url.searchParams.get("setId");
+      game = body.game || url.searchParams.get("game") || "pokemon";
+      since = body.since || url.searchParams.get("since") || "";
+      queueOnly = body.queueOnly || url.searchParams.get("queueOnly") === "true";
+      turbo = body.turbo || url.searchParams.get("turbo") === "true";
+      cooldownHours = parseInt(body.cooldownHours || url.searchParams.get("cooldownHours") || "12");
+      forceSync = body.forceSync || url.searchParams.get("forceSync") === "true";
+    }
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
