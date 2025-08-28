@@ -140,7 +140,7 @@ async function fetchCards(supabase: any, gameId: string, setId: string): Promise
   console.log(`Fetching cards for ${gameId}/${setId}`)
   
   let offset = 0
-  const limit = 200
+  const limit = 100 // Cap at 100 to be safe across all API plans
   let totalCards = 0
   let totalVariants = 0
   let hasMore = true
@@ -149,9 +149,18 @@ async function fetchCards(supabase: any, gameId: string, setId: string): Promise
     const url = `https://api.justtcg.com/v1/cards?game=${encodeURIComponent(gameId)}&set=${encodeURIComponent(setId)}&limit=${limit}&offset=${offset}`
     
     const response = await makeApiRequest(url)
-    const cards = response.cards || []
+    
+    // Extract cards from response - try multiple possible locations
+    let cards = response.data || response.cards || response
+    
+    // Ensure cards is an array
+    if (!Array.isArray(cards)) {
+      cards = []
+    }
     
     if (cards.length === 0) {
+      // Log response structure when no cards found for debugging
+      console.log(`No cards found in response. Available keys:`, Object.keys(response))
       hasMore = false
       break
     }
