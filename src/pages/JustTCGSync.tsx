@@ -154,7 +154,7 @@ export default function JustTCGSync() {
             game: gameId,
             name: set.name,
             released_at: set.release_date,
-            cards_count: set.cards_count
+            cards_count: Number(set.cards_count ?? 0)
           }));
           addLog(`📋 Loaded ${sets.length} sets for ${gameId} from DB`);
         }
@@ -283,7 +283,7 @@ export default function JustTCGSync() {
                 game: gameId,
                 name: set.name,
                 released_at: set.release_date,
-                cards_count: set.cards_count
+                cards_count: Number(set.cards_count ?? 0)
               }));
               addLog(`📋 Found ${sets.length} sets for ${gameId}`);
             }
@@ -890,7 +890,7 @@ export default function JustTCGSync() {
                                 className="text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer flex-1"
                               >
                                 {set.name}
-                                {set.cards_count && (
+                                {Number(set.cards_count) > 0 && (
                                   <span className="text-muted-foreground ml-2">({set.cards_count} cards)</span>
                                 )}
                               </label>
