@@ -25,6 +25,7 @@ import {
 import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { getCatalogSyncStatus, parseFunctionError } from '@/lib/fns';
 
 interface Game {
   id: string;
@@ -633,13 +634,12 @@ export default function JustTCGSync() {
       
       for (const game of games) {
         try {
-          // Get status for this game
-          const { data: jobs, error: statusError } = await supabase.functions.invoke('catalog-sync-status', {
-            body: { game, limit: 100 }
-          });
+          // Get status for this game using proper query parameters
+          const { data: jobs, error: statusError } = await getCatalogSyncStatus(game, 100);
           
           if (statusError) {
-            addLog(`⚠️ Failed to get job status for ${game}: ${statusError.message}`);
+            const errorMessage = parseFunctionError(statusError);
+            addLog(`⚠️ Failed to get job status for ${game}: ${errorMessage}`);
             continue;
           }
           
