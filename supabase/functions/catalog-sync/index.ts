@@ -907,6 +907,10 @@ serve(async (req) => {
     const game = (url.searchParams.get("game") || inputParams.game || "").toString().trim().toLowerCase();
     const setId = (url.searchParams.get("setId") || inputParams.setId || "").toString().trim();
     const since = (url.searchParams.get("since") || inputParams.since || "").toString().trim();
+    const turboMode = url.searchParams.get("turbo") === "true" || inputParams.turbo === true;
+    const cooldownHours = parseInt(url.searchParams.get("cooldownHours") || inputParams.cooldownHours || "12");
+    const forceSyncParam = url.searchParams.get("forceSync") === "true" || inputParams.forceSync === true;
+    const queueOnly = url.searchParams.get("queueOnly") === "true" || inputParams.queueOnly === true;
 
     const requestTracker = new PerformanceTracker({
       operation: 'catalog_sync_request',
@@ -959,17 +963,14 @@ serve(async (req) => {
     
     // If setId is provided, sync just that set
     if (setId) {
-      const turboMode = url.searchParams.get("turbo") === "true";
-      const cooldownHours = parseInt(url.searchParams.get("cooldownHours") || "12");
-      const forceSyncParam = url.searchParams.get("forceSync") === "true";
-      const queueOnly = url.searchParams.get("queueOnly") === "true";
       
       // Check cooldown unless force sync is enabled
       if (!forceSyncParam && cooldownHours > 0) {
         const cooldownThreshold = new Date(Date.now() - cooldownHours * 60 * 60 * 1000);
         
         const { data: existingSet, error: setCheckError } = await supabaseClient
-          .from('catalog_v2.sets')
+          .schema('catalog_v2')
+          .from('sets')
           .select('set_id, name, last_seen_at')
           .eq('game', game)
           .eq('set_id', setId)
