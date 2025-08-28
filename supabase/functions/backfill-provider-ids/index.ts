@@ -56,9 +56,10 @@ async function backfillProviderId(supabase: any, apiKey: string, gameId: string)
   // Get sets without provider_id  
   console.log(`Querying catalog_v2.sets WHERE game='${normalizedGame}' AND provider_id IS NULL`);
   const { data: setsToBackfill, error: queryError } = await supabase
-    .from('catalog_v2.sets')
+    .schema('catalog_v2')
+    .from('sets')
     .select('set_id, name, release_date')
-    .eq('game', normalizedGame)
+    .or(`game.eq.${normalizedGame},game.eq.${game}`)
     .is('provider_id', null);
   
   console.log(`Query result: found ${setsToBackfill?.length || 0} sets, error: ${queryError?.message || 'none'}`);
