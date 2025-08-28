@@ -10,13 +10,7 @@ import {
   CardTitle
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from '@/components/ui/select';
+import { GameCombobox } from '@/components/ui/game-combobox';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
@@ -86,9 +80,8 @@ function normalizeGameSlug(game: string): string {
 
 export default function JustTCGSync() {
   // State management
-  const [selectedGame, setSelectedGame] = useState<string>('');
+  const [selectedGame, setSelectedGame] = useState<string>('pokemon');
   const [selectedSets, setSelectedSets] = useState<string[]>([]);
-  const [gameSearchQuery, setGameSearchQuery] = useState('');
   const [setSearchQuery, setSetSearchQuery] = useState('');
   const [gameSets, setGameSets] = useState<GameSet[]>([]);
   const [syncProgress, setSyncProgress] = useState<SyncProgress[]>([]);
@@ -460,16 +453,19 @@ export default function JustTCGSync() {
     }
   };
 
-  // Filtered games and sets
-  const filteredGames = games?.filter(game =>
-    game.name.toLowerCase().includes(gameSearchQuery.toLowerCase()) ||
-    game.id.toLowerCase().includes(gameSearchQuery.toLowerCase())
-  ) || [];
-
+  // Filtered sets
   const filteredSets = gameSets.filter(set =>
     set.name.toLowerCase().includes(setSearchQuery.toLowerCase()) ||
     set.id.toLowerCase().includes(setSearchQuery.toLowerCase())
   );
+
+  const handleGameChange = (newGame: string) => {
+    setSelectedGame(newGame);
+    // Refresh stats for the selected game immediately
+    queryClient.invalidateQueries({ queryKey: ['catalog-stats-selected'] });
+    // Clear selected sets when changing games
+    setSelectedSets([]);
+  };
 
   const handleSetToggle = (setId: string, checked: boolean) => {
     if (checked) {
@@ -516,51 +512,16 @@ export default function JustTCGSync() {
               <div>
                 <div className="flex items-center gap-4 mb-4">
                   <div className="flex-1">
-                    <label className="text-sm font-medium">Select Game</label>
+                    <label className="text-sm font-medium mb-2 block">Select Game</label>
                     
-                    {/* Search input moved outside Select */}
-                    <div className="relative mb-2">
-                      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                      <Input
-                        placeholder="Search games..."
-                        value={gameSearchQuery}
-                        onChange={(e) => setGameSearchQuery(e.target.value)}
-                        className="pl-10"
-                      />
-                    </div>
-                    
-                    <Select 
-                      value={selectedGame} 
-                      onValueChange={setSelectedGame}
-                      disabled={gamesLoading || filteredGames.length === 0}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder={gamesLoading ? "Loading games..." : "Choose a game to sync..."} />
-                      </SelectTrigger>
-                      <SelectContent className="z-[9999] bg-background">
-                        {gamesLoading ? (
-                          <div className="p-4 text-center">
-                            <Loader2 className="h-4 w-4 animate-spin mx-auto" />
-                            <p className="text-sm text-muted-foreground mt-2">Loading games...</p>
-                          </div>
-                        ) : filteredGames.length > 0 ? (
-                          filteredGames.map((game) => (
-                            <SelectItem key={game.id} value={game.id}>
-                              <div className="flex items-center justify-between w-full">
-                                <span>{game.name}</span>
-                                <Badge variant="secondary" className="ml-2">
-                                  {game.id}
-                                </Badge>
-                              </div>
-                            </SelectItem>
-                          ))
-                        ) : (
-                          <div className="p-4 text-center text-muted-foreground">
-                            No games found
-                          </div>
-                        )}
-                      </SelectContent>
-                    </Select>
+                    <GameCombobox
+                      value={selectedGame}
+                      onChange={handleGameChange}
+                      items={games || []}
+                      disabled={gamesLoading}
+                      placeholder={gamesLoading ? "Loading games..." : "Choose a game to sync..."}
+                      inputPlaceholder="Search games..."
+                    />
                   </div>
                   
                   <Button
