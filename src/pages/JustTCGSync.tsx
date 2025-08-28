@@ -128,7 +128,13 @@ export default function JustTCGSync() {
         throw new Error(`Failed to fetch games: ${error.message}`);
       }
       
+      console.log('Games response:', data);
+      console.log('Games data:', data?.data);
       addLog(`✅ Discovered ${data?.data?.length || 0} games`);
+      addLog(`Response keys: ${Object.keys(data || {}).join(', ')}`);
+      if (data?.data?.length > 0) {
+        addLog(`First game sample: ${JSON.stringify(data.data[0])}`);
+      }
       return data; // Return full response with _metadata
     },
     staleTime: 5 * 60 * 1000, // 5 minutes
@@ -136,6 +142,11 @@ export default function JustTCGSync() {
 
   const games = gamesResponse?.data || [];
   const gamesMetadata = gamesResponse?._metadata;
+
+  // Debug logging
+  console.log('Games array:', games);
+  console.log('Games length:', games.length);
+  console.log('Games metadata:', gamesMetadata);
 
   // Discover sets mutation
   const discoverSetsMutation = useMutation({
