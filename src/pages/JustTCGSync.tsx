@@ -8,6 +8,7 @@ import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Navigation } from '@/components/Navigation';
 import { 
   CheckCircle, 
@@ -61,6 +62,7 @@ export default function JustTCGSync() {
   const [gameSearchQuery, setGameSearchQuery] = useState('');
   const [setSearchQueries, setSetSearchQueries] = useState<{ [gameId: string]: string }>({});
   const [groupedSets, setGroupedSets] = useState<{ [gameId: string]: GameSet[] }>({});
+  const [setsGameFilter, setSetsGameFilter] = useState<string>('all');
   const [syncProgress, setSyncProgress] = useState<SyncProgress[]>([]);
   const [logs, setLogs] = useState<string[]>([]);
   const [isRunning, setIsRunning] = useState(false);
@@ -72,6 +74,7 @@ export default function JustTCGSync() {
   useEffect(() => {
     const savedGames = localStorage.getItem('justtcg-selected-games');
     const savedSets = localStorage.getItem('justtcg-selected-sets');
+    const savedSetsGameFilter = localStorage.getItem('justtcg-sets-game-filter');
     if (savedGames) {
       try {
         setSelectedGames(JSON.parse(savedGames));
@@ -86,6 +89,9 @@ export default function JustTCGSync() {
         console.warn('Failed to parse saved sets:', e);
       }
     }
+    if (savedSetsGameFilter) {
+      setSetsGameFilter(savedSetsGameFilter);
+    }
   }, []);
 
   useEffect(() => {
@@ -95,6 +101,10 @@ export default function JustTCGSync() {
   useEffect(() => {
     localStorage.setItem('justtcg-selected-sets', JSON.stringify(selectedSets));
   }, [selectedSets]);
+
+  useEffect(() => {
+    localStorage.setItem('justtcg-sets-game-filter', setsGameFilter);
+  }, [setsGameFilter]);
 
   // Helper function to add log entries
   const addLog = (message: string) => {
@@ -368,6 +378,23 @@ export default function JustTCGSync() {
     setSelectedSets(prev => prev.filter(id => !gameSetIds.includes(id)));
   };
 
+  // Handle "Select All Shown" / "Clear All Shown" for filtered sets
+  const handleSelectAllShownSets = () => {
+    const filteredGameSets = setsGameFilter === 'all' ? groupedSets : 
+      setsGameFilter in groupedSets ? { [setsGameFilter]: groupedSets[setsGameFilter] } : {};
+    
+    const allShownSetIds = Object.values(filteredGameSets).flat().map(set => set.id);
+    setSelectedSets(prev => [...new Set([...prev, ...allShownSetIds])]);
+  };
+
+  const handleClearAllShownSets = () => {
+    const filteredGameSets = setsGameFilter === 'all' ? groupedSets : 
+      setsGameFilter in groupedSets ? { [setsGameFilter]: groupedSets[setsGameFilter] } : {};
+    
+    const allShownSetIds = Object.values(filteredGameSets).flat().map(set => set.id);
+    setSelectedSets(prev => prev.filter(id => !allShownSetIds.includes(id)));
+  };
+
   // Sync button handlers
   const handleSyncSelectedSets = () => {
     if (selectedSets.length === 0) {
@@ -560,7 +587,7 @@ export default function JustTCGSync() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex gap-4">
+            <div className="flex flex-wrap gap-4 items-center">
               <Button
                 onClick={() => discoverSetsMutation.mutate(selectedGames.length > 0 ? selectedGames : undefined)}
                 disabled={discoverSetsMutation.isPending}
@@ -569,6 +596,38 @@ export default function JustTCGSync() {
                 {discoverSetsMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
                 Fetch Sets
               </Button>
+              
+              {Object.keys(groupedSets).length > 0 && (
+                <>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium">Game:</span>
+                    <Select value={setsGameFilter} onValueChange={setSetsGameFilter}>
+                      <SelectTrigger className="w-48">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All games</SelectItem>
+                        {Object.keys(groupedSets).map(gameId => {
+                          const game = games.find(g => g.id === gameId);
+                          return (
+                            <SelectItem key={gameId} value={gameId}>
+                              {game?.name || gameId}
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <Button onClick={handleSelectAllShownSets} variant="outline" size="sm">
+                    Select All Shown
+                  </Button>
+                  <Button onClick={handleClearAllShownSets} variant="outline" size="sm">
+                    Clear All Shown
+                  </Button>
+                </>
+              )}
+              
               <Badge variant="secondary">
                 {selectedSets.length} sets selected
               </Badge>
@@ -576,7 +635,9 @@ export default function JustTCGSync() {
 
             {Object.keys(groupedSets).length > 0 && (
               <div className="space-y-4">
-                {Object.entries(groupedSets).map(([gameId, sets]) => {
+                {Object.entries(groupedSets)
+                  .filter(([gameId]) => setsGameFilter === 'all' || gameId === setsGameFilter)
+                  .map(([gameId, sets]) => {
                   const game = games.find(g => g.id === gameId);
                   const searchQuery = setSearchQueries[gameId] || '';
                   const filteredSets = sets.filter(set =>
