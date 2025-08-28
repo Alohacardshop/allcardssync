@@ -9,7 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, Play, Square, RotateCcw, Clock, CheckCircle2, AlertCircle, Info } from "lucide-react";
+import { Loader2, Play, Square, RotateCcw, Clock, CheckCircle2, AlertCircle, Info, RefreshCw } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { debounce } from 'lodash';
@@ -48,6 +48,7 @@ const JustTCGSync = () => {
   const [isLoadingGames, setIsLoadingGames] = useState(false);
   const [isLoadingSets, setIsLoadingSets] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isBackfilling, setIsBackfilling] = useState(false);
   const [syncResults, setSyncResults] = useState<any[]>([]);
 
   // User preferences state
@@ -350,6 +351,53 @@ const JustTCGSync = () => {
     }
   };
 
+  // Handle backfill provider IDs
+  const handleBackfillProviderIds = async () => {
+    if (!preferences.selected_games.length) {
+      toast({
+        title: "No game selected",
+        description: "Please select a game first",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsBackfilling(true);
+    const startTime = Date.now();
+
+    try {
+      const selectedGame = preferences.selected_games[0];
+      const normalizedGame = normalizeGameSlug(selectedGame);
+      
+      const { data, error } = await supabase.functions.invoke('backfill-provider-ids', {
+        body: { games: [normalizedGame] }
+      });
+
+      if (error) throw error;
+
+      const duration = Date.now() - startTime;
+      const summary = data?.summary || {};
+      const results = data?.results || [];
+      const gameResult = results.find((r: any) => r.game === normalizedGame) || {};
+
+      toast({
+        title: "Backfill Complete",
+        description: `${gameResult.updated || 0}/${gameResult.processed || 0} provider IDs updated (${duration}ms)`,
+      });
+
+      // Reload sets to reflect the updated provider_ids
+      loadSets();
+    } catch (error: any) {
+      toast({
+        title: "Backfill Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsBackfilling(false);
+    }
+  };
+
   return (
     <div className="container mx-auto p-6 space-y-6">
       <Card>
@@ -360,6 +408,28 @@ const JustTCGSync = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
+          {/* Action Buttons */}
+          <div className="flex gap-2 mb-4">
+            <Button
+              onClick={handleBackfillProviderIds}
+              disabled={!preferences.selected_games.length || isBackfilling}
+              variant="outline"
+              size="sm"
+            >
+              {isBackfilling ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Backfilling...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Backfill Provider IDs
+                </>
+              )}
+            </Button>
+          </div>
+
           {/* Game Selection */}
           <div className="space-y-2">
             <Label>Select Games</Label>
