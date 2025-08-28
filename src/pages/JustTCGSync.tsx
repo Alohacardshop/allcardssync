@@ -459,12 +459,31 @@ export default function JustTCGSync() {
     set.id.toLowerCase().includes(setSearchQuery.toLowerCase())
   );
 
-  const handleGameChange = (newGame: string) => {
+  const handleGameChange = async (newGame: string) => {
     setSelectedGame(newGame);
-    // Refresh stats for the selected game immediately
-    queryClient.invalidateQueries({ queryKey: ['catalog-stats-selected'] });
+    
+    // Immediately refresh stats for the new game using react-query
+    const normalizedGame = normalizeGameSlug(newGame);
+    await queryClient.invalidateQueries({ queryKey: ['catalog-stats', normalizedGame] });
+    
     // Clear selected sets when changing games
     setSelectedSets([]);
+    
+    // Optional: preload sets for snappier UX
+    await preloadSetsForGame(newGame);
+  };
+
+  // Optional: preload sets to make downstream UI snappier
+  const preloadSetsForGame = async (gameId: string) => {
+    try {
+      // Use the new catalog-sets API to warm the cache
+      const normalizedGame = normalizeGameSlug(gameId);
+      await fetch(`${FUNCTIONS_BASE}/api-catalog-sets?game=${encodeURIComponent(normalizedGame)}`);
+      // Fire-and-forget, just warming the cache
+    } catch (error) {
+      // Fire-and-forget, ignore errors
+      console.debug('Preload sets failed:', error);
+    }
   };
 
   const handleSetToggle = (setId: string, checked: boolean) => {

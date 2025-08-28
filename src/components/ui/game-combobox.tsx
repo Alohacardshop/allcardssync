@@ -19,11 +19,12 @@ interface Game {
 
 type Props = {
   value: string | undefined;
-  onChange: (value: string) => void;
+  onChange: (v: string) => void;
   items: Game[];
   disabled?: boolean;
   placeholder?: string;
   inputPlaceholder?: string;
+  className?: string;
 };
 
 export function GameCombobox({
@@ -33,6 +34,7 @@ export function GameCombobox({
   disabled,
   placeholder = "Select game",
   inputPlaceholder = "Search games…",
+  className,
 }: Props) {
   const [open, setOpen] = React.useState(false);
 
@@ -46,17 +48,17 @@ export function GameCombobox({
           role="combobox"
           aria-expanded={open}
           disabled={disabled}
-          className="w-full justify-between"
+          className={cn("w-[240px] justify-between", className)}
         >
-          {selectedGame ? selectedGame.name : placeholder}
+          {selectedGame ? selectedGame.name : (value || placeholder)}
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-full p-0 z-[9999] bg-background" align="start">
+      <PopoverContent className="w-[280px] p-0 z-[9999] bg-background">
         <Command>
           <CommandInput placeholder={inputPlaceholder} />
           <CommandList>
-            <CommandEmpty>No games found.</CommandEmpty>
+            <CommandEmpty>No matches.</CommandEmpty>
             <CommandGroup>
               {items.map((game) => (
                 <CommandItem
@@ -67,11 +69,11 @@ export function GameCombobox({
                     setOpen(false);
                   }}
                 >
-                  <Check 
+                  <Check
                     className={cn(
-                      "mr-2 h-4 w-4", 
-                      value === game.id ? "opacity-100" : "opacity-0"
-                    )} 
+                      "mr-2 h-4 w-4",
+                      equalsIgnoreCase(value, game.id) ? "opacity-100" : "opacity-0"
+                    )}
                   />
                   <div className="flex items-center justify-between w-full">
                     <span>{game.name}</span>
@@ -87,4 +89,8 @@ export function GameCombobox({
       </PopoverContent>
     </Popover>
   );
+}
+
+function equalsIgnoreCase(a?: string, b?: string) {
+  return (a || "").toLowerCase() === (b || "").toLowerCase();
 }
