@@ -171,12 +171,6 @@ const JustTCGSync = () => {
 
     setIsLoadingSets(true);
     try {
-      let query = supabase
-        .from('catalog_v2.sets')
-        .select('set_id, name')
-        .in('game', preferences.selected_games)
-        .order('name');
-
       if (preferences.only_new_sets) {
         // Only show sets with no cards (pending sets)
         const { data: pendingSets, error } = await supabase
@@ -188,9 +182,17 @@ const JustTCGSync = () => {
         if (error) throw error;
         setSets(pendingSets?.map((s: any) => ({ set_id: s.set_id, name: s.name })) || []);
       } else {
-        const { data, error } = await query;
+        // Use browse sets function to get all sets for the selected game
+        const { data: browseSetsResponse, error } = await supabase
+          .rpc('catalog_v2_browse_sets', {
+            game_in: preferences.selected_games[0], // For now, use first game
+            limit_in: 1000
+          });
+
         if (error) throw error;
-        setSets(data || []);
+        const setsResponse = browseSetsResponse as any;
+        const setsData = setsResponse?.sets || [];
+        setSets(setsData.map((s: any) => ({ set_id: s.set_id, name: s.name })));
       }
     } catch (error: any) {
       toast({
