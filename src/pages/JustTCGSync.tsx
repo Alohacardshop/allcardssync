@@ -154,32 +154,39 @@ export default function JustTCGSync() {
         });
       }
 
-      // Now fetch sets from the database for selected games
+      // Now fetch sets from the catalog_v2 database for selected games
       const setsMap: { [gameId: string]: GameSet[] } = {};
       
       if (selectedGames.length > 0) {
         for (const gameId of selectedGames) {
           try {
-            const { data: setsData, error } = await supabase
-              .from('sets')
-              .select('id, name, game, released_at, cards_count')
-              .eq('game', gameId)
-              .order('name');
+            addLog(`📋 Fetching sets for ${gameId} from catalog_v2...`);
+            
+            const { data: browseResult, error } = await supabase.rpc('catalog_v2_browse_sets', {
+              game_in: gameId,
+              page_in: 1,
+              limit_in: 1000 // Get all sets for the game
+            });
             
             if (error) {
               console.warn(`Failed to fetch sets for ${gameId}:`, error);
+              addLog(`⚠️ Failed to fetch sets for ${gameId}: ${error.message}`);
               setsMap[gameId] = [];
             } else {
-              setsMap[gameId] = (setsData || []).map(set => ({
-                id: set.id,
-                game: set.game,
+              const setsResponse = browseResult as { sets?: any[], total_count?: number };
+              const sets = setsResponse?.sets || [];
+              setsMap[gameId] = sets.map((set: any) => ({
+                id: set.set_id,
+                game: gameId,
                 name: set.name,
-                released_at: set.released_at,
+                released_at: set.release_date,
                 cards_count: set.cards_count
               }));
+              addLog(`📋 Found ${sets.length} sets for ${gameId}`);
             }
           } catch (e) {
             console.warn(`Error fetching sets for ${gameId}:`, e);
+            addLog(`❌ Error fetching sets for ${gameId}: ${e}`);
             setsMap[gameId] = [];
           }
         }
