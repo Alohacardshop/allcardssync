@@ -68,12 +68,11 @@ interface ApiMetadata {
 
 export default function JustTCGSync() {
   // State management
-  const [selectedGames, setSelectedGames] = useState<string[]>([]);
+  const [selectedGame, setSelectedGame] = useState<string>('');
   const [selectedSets, setSelectedSets] = useState<string[]>([]);
   const [gameSearchQuery, setGameSearchQuery] = useState('');
-  const [setSearchQueries, setSetSearchQueries] = useState<{ [gameId: string]: string }>({});
-  const [groupedSets, setGroupedSets] = useState<{ [gameId: string]: GameSet[] }>({});
-  const [setsGameFilter, setSetsGameFilter] = useState<string>('all');
+  const [setSearchQuery, setSetSearchQuery] = useState('');
+  const [gameSets, setGameSets] = useState<GameSet[]>([]);
   const [syncProgress, setSyncProgress] = useState<SyncProgress[]>([]);
   const [logs, setLogs] = useState<string[]>([]);
   const [isRunning, setIsRunning] = useState(false);
@@ -105,15 +104,10 @@ export default function JustTCGSync() {
 
   // Load/save selections from localStorage
   useEffect(() => {
-    const savedGames = localStorage.getItem('justtcg-selected-games');
+    const savedGame = localStorage.getItem('justtcg-selected-game');
     const savedSets = localStorage.getItem('justtcg-selected-sets');
-    const savedSetsGameFilter = localStorage.getItem('justtcg-sets-game-filter');
-    if (savedGames) {
-      try {
-        setSelectedGames(JSON.parse(savedGames));
-      } catch (e) {
-        console.warn('Failed to parse saved games:', e);
-      }
+    if (savedGame) {
+      setSelectedGame(savedGame);
     }
     if (savedSets) {
       try {
@@ -122,14 +116,11 @@ export default function JustTCGSync() {
         console.warn('Failed to parse saved sets:', e);
       }
     }
-    if (savedSetsGameFilter) {
-      setSetsGameFilter(savedSetsGameFilter);
-    }
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('justtcg-selected-games', JSON.stringify(selectedGames));
-  }, [selectedGames]);
+    localStorage.setItem('justtcg-selected-game', selectedGame);
+  }, [selectedGame]);
 
   useEffect(() => {
     localStorage.setItem('justtcg-selected-sets', JSON.stringify(selectedSets));
@@ -152,16 +143,16 @@ export default function JustTCGSync() {
     localStorage.setItem('justtcg-since-days', sinceDays.toString());
   }, [sinceDays]);
 
+  // Auto-load sets when game is selected
   useEffect(() => {
-    localStorage.setItem('justtcg-sets-game-filter', setsGameFilter);
-  }, [setsGameFilter]);
-
-  // Auto-load sets when games are selected
-  useEffect(() => {
-    if (selectedGames.length > 0 && games.length > 0) {
-      loadSetsFromDB(selectedGames, games);
+    if (selectedGame && games.length > 0) {
+      loadSetsFromDB([selectedGame], games);
+    } else {
+      // Clear sets when no game selected
+      setGameSets([]);
+      setSelectedSets([]);
     }
-  }, [selectedGames]);
+  }, [selectedGame]);
 
   // Fetch games
   const { data: games = [], isLoading: gamesLoading, error: gamesError } = useQuery({
@@ -202,7 +193,7 @@ export default function JustTCGSync() {
 
   // Sync sets mutation
   const syncSetsMutation = useMutation({
-    mutationFn: async (params: { mode: 'selected' | 'all-for-games' | 'all-games'; gameIds?: string[]; setIds?: string[] }) => {
+    mutationFn: async (params: { mode: 'selected' | 'all-for-game' | 'all-games'; gameId?: string; setIds?: string[] }) => {
       setIsRunning(true);
       setSyncProgress([]);
       cancelRequestedRef.current = false;
@@ -210,36 +201,24 @@ export default function JustTCGSync() {
       let setsToSync: Array<{ gameId: string; setId: string; setName: string }> = [];
       
       if (params.mode === 'selected' && params.setIds) {
-        // Get set details for selected sets
+        // Get set details for selected sets from the single game
         setsToSync = params.setIds.map(setId => {
-          for (const gameId in groupedSets) {
-            const set = groupedSets[gameId].find(s => s.id === setId);
-            if (set) {
-              return { gameId, setId, setName: set.name };
-            }
+          const set = gameSets.find(s => s.id === setId);
+          if (set) {
+            return { gameId: selectedGame, setId, setName: set.name };
           }
-          return { gameId: 'unknown', setId, setName: setId };
+          return { gameId: selectedGame || 'unknown', setId, setName: setId };
         });
-      } else if (params.mode === 'all-for-games' && params.gameIds) {
-        // Get all sets for selected games
-        for (const gameId of params.gameIds) {
-          if (groupedSets[gameId]) {
-            setsToSync.push(...groupedSets[gameId].map(set => ({
-              gameId,
-              setId: set.id,
-              setName: set.name
-            })));
-          }
-        }
+      } else if (params.mode === 'all-for-game' && params.gameId) {
+        // Get all sets for the selected game
+        setsToSync = gameSets.map(set => ({
+          gameId: params.gameId!,
+          setId: set.id,
+          setName: set.name
+        }));
       } else if (params.mode === 'all-games') {
-        // Get all sets for all games
-        for (const gameId in groupedSets) {
-          setsToSync.push(...groupedSets[gameId].map(set => ({
-            gameId,
-            setId: set.id,
-            setName: set.name
-          })));
-        }
+        // This mode is not supported in single-game mode
+        throw new Error('All-games mode not supported in single-game selection');
       }
       
       // Initialize progress tracking
@@ -464,8 +443,8 @@ export default function JustTCGSync() {
       addLog(`🔍 Sets discovery completed: ${totalSets} sets`);
       
       // Reload sets data
-      if (selectedGames.length > 0) {
-        loadSetsFromDB(selectedGames, games);
+      if (selectedGame) {
+        loadSetsFromDB([selectedGame], games);
       }
     },
     onError: (error: any) => {
@@ -498,20 +477,21 @@ export default function JustTCGSync() {
     }
   });
 
-  // Load sets from database
-  const loadSetsFromDB = async (gameIds?: string[], allGames?: Game[]) => {
+  // Load sets from database for selected game
+  const loadSetsFromDB = async (gameIds: string[], allGames?: Game[]) => {
     if (!gameIds || gameIds.length === 0) {
-      addLog('⚠️ No games provided to load sets for');
+      addLog('⚠️ No game provided to load sets for');
       return;
     }
     
+    const gameId = gameIds[0]; // Only load for the first (and only) game
     setIsLoadingSets(true);
-    addLog(`📚 Loading sets for ${gameIds.length} games from database...`);
+    addLog(`📚 Loading sets for ${gameId} from database...`);
     
     try {
       const { data, error } = await supabase.functions.invoke('discover-sets', {
         body: { 
-          games: gameIds,
+          games: [gameId],
           loadFromDB: true
         }
       });
@@ -520,48 +500,28 @@ export default function JustTCGSync() {
         throw error;
       }
       
-      if (data && data.setsByGame) {
-        const newGroupedSets: { [gameId: string]: GameSet[] } = {};
+      if (data && data.setsByGame && data.setsByGame[gameId]) {
+        const sets = data.setsByGame[gameId].map((set: any) => ({
+          id: set.id,
+          game: gameId,
+          name: set.name,
+          released_at: set.released_at,
+          cards_count: set.cards_count
+        }));
         
-        // Process the returned sets
-        Object.entries(data.setsByGame).forEach(([gameId, sets]: [string, any]) => {
-          if (Array.isArray(sets)) {
-            newGroupedSets[gameId] = sets.map((set: any) => ({
-              id: set.id,
-              game: gameId,
-              name: set.name,
-              released_at: set.released_at,
-              cards_count: set.cards_count
-            }));
-          }
-        });
-        
-        setGroupedSets(newGroupedSets);
-        
-        const totalSets = Object.values(newGroupedSets).reduce((sum, sets) => sum + sets.length, 0);
-        addLog(`✅ Loaded ${totalSets} sets from database`);
-        toast.success('Sets loaded', { description: `Loaded ${totalSets} sets from database` });
+        setGameSets(sets);
+        addLog(`✅ Loaded ${sets.length} sets for ${gameId}`);
+        toast.success('Sets loaded', { description: `Loaded ${sets.length} sets for ${gameId}` });
       } else {
-        // Handle empty response with client-side fallback
-        addLog('⚠️ No sets data returned from database, initializing empty structure');
-        const emptyGroupedSets: { [gameId: string]: GameSet[] } = {};
-        gameIds.forEach(gameId => {
-          emptyGroupedSets[gameId] = [];
-        });
-        setGroupedSets(emptyGroupedSets);
+        setGameSets([]);
+        addLog('⚠️ No sets found for selected game');
       }
       
     } catch (error: any) {
       console.error('Error loading sets from DB:', error);
       addLog(`❌ Failed to load sets: ${error.message}`);
       toast.error('Failed to load sets', { description: error.message });
-      
-      // Initialize empty structure on error
-      const emptyGroupedSets: { [gameId: string]: GameSet[] } = {};
-      gameIds.forEach(gameId => {
-        emptyGroupedSets[gameId] = [];
-      });
-      setGroupedSets(emptyGroupedSets);
+      setGameSets([]);
     } finally {
       setIsLoadingSets(false);
     }
@@ -573,10 +533,9 @@ export default function JustTCGSync() {
     setLogs(prev => [...prev, `[${timestamp}] ${message}`]);
   };
 
-  const handleGameSelection = (gameId: string, checked: boolean) => {
-    setSelectedGames(prev => 
-      checked ? [...prev, gameId] : prev.filter(id => id !== gameId)
-    );
+  const handleGameSelection = (gameId: string) => {
+    setSelectedGame(gameId);
+    setSelectedSets([]); // Clear selected sets when changing games
   };
 
   const handleSetSelection = (setId: string, checked: boolean) => {
@@ -585,30 +544,13 @@ export default function JustTCGSync() {
     );
   };
 
-  const handleSelectAllSetsForGame = (gameId: string) => {
-    const sets = groupedSets[gameId] || [];
-    const setIds = sets.map(set => set.id);
-    setSelectedSets(prev => [...new Set([...prev, ...setIds])]);
+  const handleSelectAllSets = () => {
+    const setIds = gameSets.map(set => set.id);
+    setSelectedSets(setIds);
   };
 
-  const handleClearAllSetsForGame = (gameId: string) => {
-    const sets = groupedSets[gameId] || [];
-    const setIds = sets.map(set => set.id);
-    setSelectedSets(prev => prev.filter(id => !setIds.includes(id)));
-  };
-
-  const handleSelectAllShownSets = () => {
-    const shownSets = Object.entries(groupedSets)
-      .filter(([gameId]) => setsGameFilter === 'all' || gameId === setsGameFilter)
-      .flatMap(([_, sets]) => sets.map(set => set.id));
-    setSelectedSets(prev => [...new Set([...prev, ...shownSets])]);
-  };
-
-  const handleClearAllShownSets = () => {
-    const shownSets = Object.entries(groupedSets)
-      .filter(([gameId]) => setsGameFilter === 'all' || gameId === setsGameFilter)
-      .flatMap(([_, sets]) => sets.map(set => set.id));
-    setSelectedSets(prev => prev.filter(id => !shownSets.includes(id)));
+  const handleClearAllSets = () => {
+    setSelectedSets([]);
   };
 
   const handleSyncSelectedSets = () => {
@@ -619,16 +561,16 @@ export default function JustTCGSync() {
     syncSetsMutation.mutate({ mode: 'selected', setIds: selectedSets });
   };
 
-  const handleSyncAllSetsForSelectedGames = () => {
-    if (selectedGames.length === 0) {
-      toast.warning('No games selected', { description: 'Please select at least one game to sync all its sets' });
+  const handleSyncAllSetsForSelectedGame = () => {
+    if (!selectedGame) {
+      toast.warning('No game selected', { description: 'Please select a game to sync all its sets' });
       return;
     }
-    syncSetsMutation.mutate({ mode: 'all-for-games', gameIds: selectedGames });
+    syncSetsMutation.mutate({ mode: 'all-for-game', gameId: selectedGame });
   };
 
   const handleSyncAllGamesAndSets = () => {
-    syncSetsMutation.mutate({ mode: 'all-games' });
+    toast.warning('Not supported', { description: 'Use the dropdown to select a specific game instead' });
   };
 
   const handleHardStop = () => {
@@ -643,11 +585,8 @@ export default function JustTCGSync() {
     killJobsMutation.mutate();
   };
 
-  const handleSetSearchChange = (gameId: string, query: string) => {
-    setSetSearchQueries(prev => ({
-      ...prev,
-      [gameId]: query
-    }));
+  const handleSetSearchChange = (query: string) => {
+    setSetSearchQuery(query);
   };
 
   // Computed values
@@ -689,58 +628,50 @@ export default function JustTCGSync() {
       </div>
 
       <div className="grid grid-cols-1 gap-6">
-        {/* Step 1: Select Games */}
+        {/* Step 1: Select Game */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">1</div>
-              Select Games
+              Select Game
             </CardTitle>
             <CardDescription>
-              Choose which trading card games to sync. Data will be fetched from the JustTCG API.
+              Choose which trading card game to sync. Data will be fetched from the JustTCG API.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search games..."
-                value={gameSearchQuery}
-                onChange={(e) => setGameSearchQuery(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-
-            <ScrollArea className="h-64 border rounded-md p-4">
-              <div className="space-y-2">
-                {gamesLoading ? (
-                  <div className="flex items-center gap-2">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>Loading games...</span>
-                  </div>
-                ) : filteredGames.length > 0 ? (
-                  filteredGames.map((game) => (
-                    <div key={game.id} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={`game-${game.id}`}
-                        checked={selectedGames.includes(game.id)}
-                        onCheckedChange={(checked) => handleGameSelection(game.id, checked as boolean)}
-                      />
-                      <label
-                        htmlFor={`game-${game.id}`}
-                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                      >
-                        {game.name} ({game.id})
-                      </label>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Game:</label>
+              <Select value={selectedGame} onValueChange={handleGameSelection}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select a game to sync..." />
+                </SelectTrigger>
+                <SelectContent className="z-50 bg-popover">
+                  {gamesLoading ? (
+                    <div className="flex items-center gap-2 p-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Loading games...</span>
                     </div>
-                  ))
-                ) : (
-                  <div className="text-center text-muted-foreground py-4">
-                    No games found matching your search.
-                  </div>
-                )}
+                  ) : filteredGames.length > 0 ? (
+                    filteredGames.map((game) => (
+                      <SelectItem key={game.id} value={game.id}>
+                        {game.name} ({game.sets_count} sets)
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <div className="text-center text-muted-foreground py-4 px-2">
+                      No games found
+                    </div>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {selectedGame && (
+              <div className="text-sm text-muted-foreground bg-blue-50 border border-blue-200 rounded p-2">
+                ℹ️ Sets will automatically load when you select a game
               </div>
-            </ScrollArea>
+            )}
           </CardContent>
         </Card>
 
@@ -752,14 +683,14 @@ export default function JustTCGSync() {
               Pick Sets
             </CardTitle>
             <CardDescription>
-              Load sets from the database or refresh from the JustTCG API. Sets auto-load when games are selected.
+              Sets will automatically load when you select a game. You can also refresh from the JustTCG API.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex flex-wrap gap-4 items-center">
               <Button
-                onClick={() => loadSetsFromDB(selectedGames.length > 0 ? selectedGames : games.map(g => g.id), games)}
-                disabled={isLoadingSets}
+                onClick={() => selectedGame && loadSetsFromDB([selectedGame], games)}
+                disabled={isLoadingSets || !selectedGame}
                 variant="default"
               >
                 {isLoadingSets ? <Loader2 className="h-4 w-4 animate-spin" /> : <Database className="h-4 w-4" />}
@@ -767,41 +698,21 @@ export default function JustTCGSync() {
               </Button>
               
               <Button
-                onClick={() => discoverSetsMutation.mutate(selectedGames.length > 0 ? selectedGames : undefined)}
-                disabled={discoverSetsMutation.isPending}
+                onClick={() => selectedGame && discoverSetsMutation.mutate([selectedGame])}
+                disabled={discoverSetsMutation.isPending || !selectedGame}
                 variant="outline"
               >
                 {discoverSetsMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                 Refresh Sets from API
               </Button>
               
-              {Object.keys(groupedSets).length > 0 && (
+              {gameSets.length > 0 && (
                 <>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium">Game:</span>
-                    <Select value={setsGameFilter} onValueChange={setSetsGameFilter}>
-                      <SelectTrigger className="w-48">
-                        <SelectValue />
-                      </SelectTrigger>
-                       <SelectContent className="z-50">
-                         <SelectItem value="all">All games</SelectItem>
-                        {Object.keys(groupedSets).map(gameId => {
-                          const game = games.find(g => g.id === gameId);
-                          return (
-                            <SelectItem key={gameId} value={gameId}>
-                              {game?.name || gameId}
-                            </SelectItem>
-                          );
-                        })}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
-                  <Button onClick={handleSelectAllShownSets} variant="outline" size="sm">
-                    Select All Shown
+                  <Button onClick={handleSelectAllSets} variant="outline" size="sm">
+                    Select All Sets
                   </Button>
-                  <Button onClick={handleClearAllShownSets} variant="outline" size="sm">
-                    Clear All Shown
+                  <Button onClick={handleClearAllSets} variant="outline" size="sm">
+                    Clear All Sets
                   </Button>
                 </>
               )}
@@ -811,97 +722,69 @@ export default function JustTCGSync() {
               </Badge>
             </div>
 
-            {Object.keys(groupedSets).length > 0 ? (
+            {gameSets.length > 0 ? (
               <div className="space-y-4">
-                {Object.entries(groupedSets)
-                  .filter(([gameId]) => setsGameFilter === 'all' || gameId === setsGameFilter)
-                  .map(([gameId, sets]) => {
-                  const game = games.find(g => g.id === gameId);
-                  const searchQuery = setSearchQueries[gameId] || '';
-                  const filteredSets = sets.filter(set =>
-                    (set.name ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-                    (set.id ?? '').toLowerCase().includes(searchQuery.toLowerCase())
-                  );
-                  const selectedSetsInGame = sets.filter(set => selectedSets.includes(set.id)).length;
+                <div className="border rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="font-medium">
+                      {games.find(g => g.id === selectedGame)?.name || selectedGame} ({gameSets.length} sets)
+                    </h4>
+                  </div>
 
-                  return (
-                    <div key={gameId} className="border rounded-lg p-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <h4 className="font-medium">
-                          {game?.name || gameId} ({sets.length} sets)
-                        </h4>
-                        <div className="flex gap-2">
-                          <Button
-                            onClick={() => handleSelectAllSetsForGame(gameId)}
-                            variant="outline"
-                            size="sm"
-                          >
-                            Select All
-                          </Button>
-                          <Button
-                            onClick={() => handleClearAllSetsForGame(gameId)}
-                            variant="outline"
-                            size="sm"
-                          >
-                            Clear All
-                          </Button>
-                          <Badge variant="secondary">
-                            {selectedSetsInGame} selected
-                          </Badge>
-                        </div>
-                      </div>
-
-                      <div className="mb-3">
-                        <div className="relative">
-                          <Search className="absolute left-2 top-2 h-4 w-4 text-muted-foreground" />
-                          <Input
-                            placeholder="Search sets..."
-                            value={searchQuery}
-                            onChange={(e) => handleSetSearchChange(gameId, e.target.value)}
-                            className="pl-8 h-8"
-                          />
-                        </div>
-                      </div>
-
-                      <ScrollArea className="max-h-[65vh]">
-                        <div className="grid grid-cols-1 gap-1">
-                          {filteredSets.map((set) => (
-                            <div key={set.id} className="flex items-center space-x-2 py-1">
-                              <Checkbox
-                                id={`set-${set.id}`}
-                                checked={selectedSets.includes(set.id)}
-                                onCheckedChange={(checked) => handleSetSelection(set.id, checked as boolean)}
-                              />
-                              <label
-                                htmlFor={`set-${set.id}`}
-                                className="text-xs leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer flex-1"
-                              >
-                                {set.name}
-                                {set.cards_count !== undefined && (
-                                  <span className="text-muted-foreground ml-1">
-                                    ({set.cards_count} cards)
-                                  </span>
-                                )}
-                              </label>
-                            </div>
-                          ))}
-                        </div>
-                      </ScrollArea>
+                  <div className="mb-3">
+                    <div className="relative">
+                      <Search className="absolute left-2 top-2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search sets..."
+                        value={setSearchQuery}
+                        onChange={(e) => handleSetSearchChange(e.target.value)}
+                        className="pl-8 h-8"
+                      />
                     </div>
-                  );
-                })}
+                  </div>
+
+                  <ScrollArea className="max-h-[65vh]">
+                    <div className="grid grid-cols-1 gap-1">
+                      {gameSets
+                        .filter(set =>
+                          (set.name ?? '').toLowerCase().includes(setSearchQuery.toLowerCase()) ||
+                          (set.id ?? '').toLowerCase().includes(setSearchQuery.toLowerCase())
+                        )
+                        .map((set) => (
+                        <div key={set.id} className="flex items-center space-x-2 py-1">
+                          <Checkbox
+                            id={`set-${set.id}`}
+                            checked={selectedSets.includes(set.id)}
+                            onCheckedChange={(checked) => handleSetSelection(set.id, checked as boolean)}
+                          />
+                          <label
+                            htmlFor={`set-${set.id}`}
+                            className="text-xs leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer flex-1"
+                          >
+                            {set.name}
+                            {set.cards_count !== undefined && (
+                              <span className="text-muted-foreground ml-1">
+                                ({set.cards_count} cards)
+                              </span>
+                            )}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </div>
               </div>
-            ) : selectedGames.length > 0 ? (
+            ) : selectedGame ? (
               <div className="text-center text-muted-foreground py-8">
                 <Database className="mx-auto h-12 w-12 mb-4 opacity-50" />
                 <p className="text-lg font-medium mb-2">No sets loaded</p>
-                <p>Click "Load Sets from DB" or "Refresh Sets from API" to load sets for the selected games.</p>
+                <p>Click "Load Sets from DB" or "Refresh Sets from API" to load sets for {games.find(g => g.id === selectedGame)?.name}.</p>
               </div>
             ) : (
               <div className="text-center text-muted-foreground py-8">
                 <Database className="mx-auto h-12 w-12 mb-4 opacity-50" />
-                <p className="text-lg font-medium mb-2">Select games first</p>
-                <p>Choose one or more games in step 1 to load their sets.</p>
+                <p className="text-lg font-medium mb-2">Select a game first</p>
+                <p>Choose a game in step 1 to load its sets.</p>
               </div>
             )}
           </CardContent>
@@ -997,22 +880,23 @@ export default function JustTCGSync() {
                 Sync Selected Sets ({selectedSets.length})
               </Button>
               <Button
-                onClick={handleSyncAllSetsForSelectedGames}
-                disabled={isRunning || selectedGames.length === 0}
+                onClick={handleSyncAllSetsForSelectedGame}
+                disabled={isRunning || !selectedGame}
                 variant="outline"
                 className="w-full"
               >
                 <Settings className="h-4 w-4 mr-2" />
-                Sync All Sets for Selected Games
+                Sync All Sets for Selected Game
               </Button>
               <Button
                 onClick={handleSyncAllGamesAndSets}
-                disabled={isRunning}
+                disabled={true}
                 variant="destructive"
-                className="w-full"
+                className="w-full opacity-50"
+                title="Not supported in single-game mode"
               >
                 <Database className="h-4 w-4 mr-2" />
-                Sync All Games & Sets
+                Sync All Games (Disabled)
               </Button>
             </div>
 
