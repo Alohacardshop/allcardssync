@@ -70,18 +70,17 @@ async function backfillProviderId(supabase: any, apiKey: string, gameId: string)
     return { game: gameId, processed: 0, updated: 0 };
   }
   
-  console.log(`Found ${setsToBackfill.length} sets without provider_id for ${gameId}`);
-  
   // Rate limit check
   if (!checkRateLimit()) {
     throw new Error('Rate limit exceeded');
   }
-  
+
   // Fetch sets from JustTCG API
   const regionParam = region ? `&region=${encodeURIComponent(region)}` : '';
   const url = `https://api.justtcg.com/v1/sets?game=${encodeURIComponent(game)}${regionParam}`;
   
   console.log(`Fetching from JustTCG API: ${url}`);
+  console.log(`Found ${setsToBackfill.length} sets without provider_id for ${gameId}`);
   
   const response = await fetch(url, {
     headers: {
