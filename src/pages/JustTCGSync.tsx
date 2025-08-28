@@ -376,9 +376,12 @@ export default function JustTCGSync() {
             // Parse error for more details
             const parsedError = parseFunctionError(error);
             if (parsedError && typeof parsedError === 'object') {
-              errorMessage = `${parsedError.type}: ${parsedError.message}`;
-              if (parsedError.details) {
-                errorMessage += ` (${parsedError.details})`;
+              const errorObj = parsedError as any;
+              if (errorObj.type && errorObj.message) {
+                errorMessage = `${errorObj.type}: ${errorObj.message}`;
+                if (errorObj.details) {
+                  errorMessage += ` (${errorObj.details})`;
+                }
               }
             }
             
