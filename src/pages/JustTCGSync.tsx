@@ -67,6 +67,7 @@ export default function JustTCGSync() {
   const [logs, setLogs] = useState<string[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [isKillingJobs, setIsKillingJobs] = useState(false);
+  const [isLoadingSets, setIsLoadingSets] = useState(false);
   const [apiMetadata, setApiMetadata] = useState<ApiMetadata | null>(null);
 
   const cancelRequestedRef = useRef(false);
@@ -115,6 +116,69 @@ export default function JustTCGSync() {
     setLogs(prev => [...prev.slice(-99), `[${timestamp}] ${message}`]);
   };
 
+  // Load sets from database
+  const loadSetsFromDB = async (gameIds?: string[]) => {
+    setIsLoadingSets(true);
+    
+    // Get available games - use from API response or from database
+    const availableGames = gamesResponse?.data || [];
+    const gamesToLoad = gameIds && gameIds.length > 0 ? gameIds : availableGames.map(g => g.id).filter(Boolean);
+    
+    if (gamesToLoad.length === 0) {
+      addLog('📋 No games available to load sets for');
+      setIsLoadingSets(false);
+      return;
+    }
+
+    addLog(`📋 Auto-loading sets from DB for ${gamesToLoad.length} games...`);
+    
+    const setsMap: { [gameId: string]: GameSet[] } = {};
+    
+    for (const gameId of gamesToLoad) {
+      try {        
+        const { data: browseResult, error } = await supabase.rpc('catalog_v2_browse_sets', {
+          game_in: gameId,
+          page_in: 1,
+          limit_in: 1000 // Get all sets for the game
+        });
+        
+        if (error) {
+          console.warn(`Failed to fetch sets for ${gameId}:`, error);
+          addLog(`⚠️ Failed to fetch sets for ${gameId}: ${error.message}`);
+          setsMap[gameId] = [];
+        } else {
+          const setsResponse = browseResult as { sets?: any[], total_count?: number };
+          const sets = setsResponse?.sets || [];
+          setsMap[gameId] = sets.map((set: any) => ({
+            id: set.set_id,
+            game: gameId,
+            name: set.name,
+            released_at: set.release_date,
+            cards_count: set.cards_count
+          }));
+          addLog(`📋 Loaded ${sets.length} sets for ${gameId} from DB`);
+        }
+      } catch (e) {
+        console.warn(`Error fetching sets for ${gameId}:`, e);
+        addLog(`❌ Error fetching sets for ${gameId}: ${e}`);
+        setsMap[gameId] = [];
+      }
+    }
+    
+    // Preserve existing selected sets
+    setGroupedSets(setsMap);
+    
+    // Reset game filter if current filter game is no longer available
+    if (setsGameFilter !== 'all' && !setsMap[setsGameFilter]) {
+      setSetsGameFilter('all');
+      addLog(`🔄 Reset game filter to "all" (${setsGameFilter} no longer available)`);
+    }
+    
+    const totalSets = Object.values(setsMap).reduce((sum, sets) => sum + sets.length, 0);
+    addLog(`📋 Loaded ${totalSets} total sets from database`);
+    setIsLoadingSets(false);
+  };
+
   // Fetch discovered games
   const { data: gamesResponse, isLoading: gamesLoading, refetch: refetchGames } = useQuery({
     queryKey: ['discovered-games'],
@@ -147,6 +211,22 @@ export default function JustTCGSync() {
   console.log('Games array:', games);
   console.log('Games length:', games.length);
   console.log('Games metadata:', gamesMetadata);
+
+  // Auto-load sets when selected games change
+  useEffect(() => {
+    if (selectedGames.length > 0) {
+      loadSetsFromDB(selectedGames);
+    }
+  }, [selectedGames]);
+
+  // Initial load sets from DB when games are available
+  useEffect(() => {
+    const availableGames = gamesResponse?.data || [];
+    if (availableGames.length > 0 && selectedGames.length === 0 && Object.keys(groupedSets).length === 0) {
+      // On initial load, load sets for all games if no games are selected
+      loadSetsFromDB();
+    }
+  }, [gamesResponse]);
 
   // Discover sets mutation
   const discoverSetsMutation = useMutation({
@@ -688,18 +768,27 @@ export default function JustTCGSync() {
               Pick Sets
             </CardTitle>
             <CardDescription>
-              Discover and select sets for the chosen games. Sets are fetched dynamically from the JustTCG API.
+              Load sets from the database or refresh from the JustTCG API. Sets auto-load when games are selected.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex flex-wrap gap-4 items-center">
               <Button
+                onClick={() => loadSetsFromDB(selectedGames.length > 0 ? selectedGames : undefined)}
+                disabled={isLoadingSets}
+                variant="default"
+              >
+                {isLoadingSets ? <Loader2 className="h-4 w-4 animate-spin" /> : <Database className="h-4 w-4" />}
+                Load Sets from DB
+              </Button>
+              
+              <Button
                 onClick={() => discoverSetsMutation.mutate(selectedGames.length > 0 ? selectedGames : undefined)}
                 disabled={discoverSetsMutation.isPending}
                 variant="outline"
               >
-                {discoverSetsMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-                Fetch Sets
+                {discoverSetsMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                Refresh Sets from API
               </Button>
               
               {Object.keys(groupedSets).length > 0 && (
