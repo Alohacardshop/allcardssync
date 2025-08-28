@@ -57,7 +57,7 @@ async function backfillProviderId(supabase: any, apiKey: string, gameId: string)
   const { data: setsToBackfill, error: queryError } = await supabase
     .schema('catalog_v2')
     .from('sets')
-    .select('set_id, name, code, release_date')
+    .select('set_id, name, release_date')
     .eq('game', normalizedGame)
     .is('provider_id', null);
   
@@ -104,18 +104,42 @@ async function backfillProviderId(supabase: any, apiKey: string, gameId: string)
     return { game: gameId, processed: setsToBackfill.length, updated: 0 };
   }
   
-  // Match by name/code (case-insensitive)
+  // Match by name (case-insensitive, with normalization)
   let updated = 0;
   const updateRows = [];
   
+  console.log(`Attempting to match ${setsToBackfill.length} DB sets with ${apiSets.length} API sets for ${gameId}`);
+  
   for (const dbSet of setsToBackfill) {
     const match = apiSets.find((apiSet: any) => {
-      const nameMatch = apiSet.name && dbSet.name && 
-        apiSet.name.toLowerCase() === dbSet.name.toLowerCase();
-      const codeMatch = apiSet.code && dbSet.code && 
-        apiSet.code.toLowerCase() === dbSet.code.toLowerCase();
-      return nameMatch || codeMatch;
+      if (!apiSet.name || !dbSet.name) return false;
+      
+      const apiName = apiSet.name.toLowerCase().trim();
+      const dbName = dbSet.name.toLowerCase().trim();
+      
+      // Direct name match
+      if (apiName === dbName) return true;
+      
+      // Normalized match (remove common prefixes/suffixes)
+      const normalizeSetName = (name: string) => {
+        return name
+          .replace(/^(sv\d+[a-z]?:?\s*)/i, '') // Remove SV5a: prefix
+          .replace(/\s*\(.*\)$/, '') // Remove trailing parentheses
+          .replace(/\s+/g, ' ')
+          .trim();
+      };
+      
+      const normalizedApi = normalizeSetName(apiName);
+      const normalizedDb = normalizeSetName(dbName);
+      
+      return normalizedApi === normalizedDb;
     });
+    
+    if (match) {
+      console.log(`✅ Matched "${dbSet.name}" -> API set "${match.name}" (id: ${match.id})`);
+    } else {
+      console.log(`❌ No match found for "${dbSet.name}"`);
+    }
     
     if (match) {
       updateRows.push({
