@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useCatalogStats } from '@/hooks/useCatalogStats';
 
 const FUNCTIONS_BASE = `https://dmpoandoydaqxhzdjnmk.supabase.co/functions/v1`;
 
@@ -98,7 +99,6 @@ export default function GameScopedCatalogSync() {
   const [loading, setLoading] = useState(false);
   const [queueing, setQueueing] = useState(false);
   const [result, setResult] = useState<any>(null);
-  const [stats, setStats] = useState<CatalogStats | null>(null);
   const [queueStats, setQueueStats] = useState<QueueStats | null>(null);
   const [errors, setErrors] = useState<SyncError[]>([]);
   const [isActiveSync, setIsActiveSync] = useState(false);
@@ -107,57 +107,41 @@ export default function GameScopedCatalogSync() {
 
   const selectedGameOption = GAME_OPTIONS.find(g => g.value === selectedGame);
 
+  // Use the shared hook for catalog stats
+  const { data: stats, isLoading: statsLoading, mutate: refreshStats } = useCatalogStats(
+    selectedGameOption?.gameParam || ''
+  );
+
   useEffect(() => {
     if (selectedGame) {
-      loadStats();
       loadQueueStats();
       loadRecentErrors();
     }
   }, [selectedGame]);
+
+  // Update active sync status when stats or queue stats change
+  useEffect(() => {
+    if (stats || queueStats) {
+      setIsActiveSync((stats?.pending_count || 0) > 0 || (queueStats?.processing || 0) > 0);
+    }
+  }, [stats, queueStats]);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (isActiveSync && selectedGame) {
       // Auto-refresh stats during active sync
       interval = setInterval(() => {
-        loadStats();
+        refreshStats();
         loadQueueStats();
       }, 5000);
     }
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [isActiveSync, selectedGame]);
+  }, [isActiveSync, selectedGame, refreshStats]);
 
-  const loadStats = async () => {
-    if (!selectedGameOption) return;
-
-    try {
-      const { data, error } = await supabase.rpc('catalog_v2_stats', { 
-        game_in: selectedGameOption.gameParam 
-      });
-      
-      if (error) throw error;
-      
-      const row = Array.isArray(data) ? data[0] : data;
-      const newStats = {
-        sets_count: Number(row?.sets_count ?? 0),
-        cards_count: Number(row?.cards_count ?? 0),
-        pending_count: Number(row?.pending_count ?? 0),
-      };
-      
-      setStats(newStats);
-      setIsActiveSync(newStats.pending_count > 0 || (queueStats && queueStats.processing > 0));
-      
-    } catch (error: any) {
-      console.error('Error loading catalog stats:', error);
-      toast({
-        title: "Error",
-        description: `Failed to load stats: ${error.message}`,
-        variant: "destructive",
-      });
-    }
-  };
+  // Remove the old loadStats function since we're using the hook now
+  // const loadStats = async () => { ... }
 
   const loadQueueStats = async () => {
     if (!selectedGameOption) return;
@@ -263,7 +247,7 @@ export default function GameScopedCatalogSync() {
             description: "Sync operation completed",
           });
         }
-        await loadStats();
+        await refreshStats();
         await loadRecentErrors();
       } else {
         toast({
@@ -301,7 +285,7 @@ export default function GameScopedCatalogSync() {
         description: `Queued ${data ?? 0} pending sets for processing`,
       });
       
-      await loadStats();
+      await refreshStats();
       await loadQueueStats();
       setIsActiveSync(true);
     } catch (error: any) {
@@ -342,7 +326,7 @@ export default function GameScopedCatalogSync() {
             description: `Processed set ${data.setId} in ${data.durationMs}ms`,
           });
         }
-        await loadStats();
+        await refreshStats();
         await loadQueueStats();
       } else {
         toast({

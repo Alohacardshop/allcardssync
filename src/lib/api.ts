@@ -110,11 +110,18 @@ export async function checkHealth(): Promise<HealthStatus> {
   }, 'health check');
 }
 
-// Get catalog stats for a game
+// Get catalog stats for a game (accepts GameMode for backward compatibility)
 export async function getCatalogStats(mode: GameMode): Promise<CatalogStats> {
   return apiCall(async () => {
+    // Normalize the game slug consistently
+    const g = mode.game?.toLowerCase() || ''
+    const normalizedGame = 
+      g === 'pokemon_japan' ? 'pokemon-japan' :
+      g === 'mtg' ? 'magic-the-gathering' :
+      g
+
     const { data, error } = await supabase.rpc('catalog_v2_stats', { 
-      game_in: mode.game 
+      game_in: normalizedGame 
     });
     
     if (error) throw error;
@@ -126,6 +133,31 @@ export async function getCatalogStats(mode: GameMode): Promise<CatalogStats> {
       pending_count: Number(row?.pending_count ?? 0),
     };
   }, `catalog stats for ${mode.label}`);
+}
+
+// Get catalog stats by game string (new simplified API)
+export async function getCatalogStatsByGame(game: string): Promise<CatalogStats> {
+  return apiCall(async () => {
+    // Normalize the game slug consistently
+    const g = game?.toLowerCase() || ''
+    const normalizedGame = 
+      g === 'pokemon_japan' ? 'pokemon-japan' :
+      g === 'mtg' ? 'magic-the-gathering' :
+      g
+
+    const { data, error } = await supabase.rpc('catalog_v2_stats', { 
+      game_in: normalizedGame 
+    });
+    
+    if (error) throw error;
+    
+    const row = Array.isArray(data) ? data[0] : data;
+    return {
+      sets_count: Number(row?.sets_count ?? 0),
+      cards_count: Number(row?.cards_count ?? 0),
+      pending_count: Number(row?.pending_count ?? 0),
+    };
+  }, `catalog stats for game ${game}`);
 }
 
 // Get queue stats by mode

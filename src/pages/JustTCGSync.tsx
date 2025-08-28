@@ -45,6 +45,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { getCatalogSyncStatus, parseFunctionError } from '@/lib/fns';
 import { Navigation } from '@/components/Navigation';
+import { useCatalogStats } from '@/hooks/useCatalogStats';
 
 interface Game {
   id: string;
@@ -158,42 +159,19 @@ export default function JustTCGSync() {
     localStorage.setItem('justtcg-since-days', sinceDays.toString());
   }, [sinceDays]);
 
-  // Fetch overall stats and queue stats
-  const { data: overallStats } = useQuery({
-    queryKey: ['catalog-stats-overall'],
-    queryFn: async () => {
-      // Get stats for all games
-      const gameIds = ['pokemon', 'pokemon-japan', 'mtg'];
-      const results = await Promise.all(
-        gameIds.map(async (gameId) => {
-          try {
-            const { data, error } = await supabase.rpc('catalog_v2_stats', { game_in: gameId });
-            if (error) throw error;
-            // RPC returns an array, get the first element
-            const statsData = Array.isArray(data) ? data[0] : data;
-            return { game: gameId, ...statsData };
-          } catch {
-            return { game: gameId, sets_count: 0, cards_count: 0, pending_count: 0 };
-          }
-        })
-      );
-      return results;
-    },
-    staleTime: 2 * 60 * 1000, // 2 minutes
-  });
+  // Use shared hook for overall stats
+  const { data: pokemonStats, isLoading: pokemonLoading } = useCatalogStats('pokemon');
+  const { data: japanStats, isLoading: japanLoading } = useCatalogStats('pokemon-japan');
+  const { data: mtgStats, isLoading: mtgLoading } = useCatalogStats('mtg');
+  
+  // Combine for overall stats with consistent format
+  const overallStats = [
+    { game: 'pokemon', ...pokemonStats },
+    { game: 'pokemon-japan', ...japanStats },
+    { game: 'mtg', ...mtgStats }
+  ];
 
-  const { data: selectedGameStats } = useQuery({
-    queryKey: ['catalog-stats-selected', selectedGame],
-    queryFn: async () => {
-      if (!selectedGame) return null;
-      const { data, error } = await supabase.rpc('catalog_v2_stats', { game_in: selectedGame });
-      if (error) throw error;
-      // RPC returns an array, get the first element
-      return Array.isArray(data) ? data[0] : data;
-    },
-    enabled: !!selectedGame,
-    staleTime: 2 * 60 * 1000, // 2 minutes
-  });
+  const { data: selectedGameStats, isLoading: selectedGameLoading } = useCatalogStats(selectedGame || '');
 
   const { data: queueStats } = useQuery({
     queryKey: ['queue-stats'],
@@ -1220,7 +1198,7 @@ export default function JustTCGSync() {
                         </div>
                       </div>
                     </div>
-                  )) || (
+                  )).filter(Boolean) || (
                     <div className="col-span-3 text-center py-4 text-muted-foreground">
                       <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
                       Loading overall statistics...
@@ -1253,12 +1231,12 @@ export default function JustTCGSync() {
                         </div>
                       </div>
                     </div>
-                  ) : (
+                  ) : selectedGameLoading ? (
                     <div className="text-center py-4 text-muted-foreground">
                       <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
                       Loading selected game statistics...
                     </div>
-                  )}
+                  ) : null}
                 </div>
               )}
 
