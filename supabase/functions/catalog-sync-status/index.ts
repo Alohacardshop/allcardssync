@@ -16,8 +16,19 @@ serve(async (req) => {
 
   try {
     const url = new URL(req.url);
-    const game = url.searchParams.get('game');
-    const limit = Number(url.searchParams.get('limit') ?? 50);
+    let game = url.searchParams.get('game');
+    let limit = Number(url.searchParams.get('limit') ?? 50);
+
+    // Fallback: Try to parse JSON body if query params are missing
+    if (!game && req.method === 'POST') {
+      try {
+        const body = await req.json();
+        game = body.game;
+        limit = body.limit || 50;
+      } catch (e) {
+        // Ignore JSON parse errors, stick with query params
+      }
+    }
 
     // Validate game
     if (!game) {

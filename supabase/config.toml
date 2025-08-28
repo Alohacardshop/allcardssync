@@ -1,5 +1,8 @@
 project_id = "dmpoandoydaqxhzdjnmk"
 
+[functions.catalog-cron-proxy]
+verify_jwt = false
+
 [functions.discover-games]
 verify_jwt = false
 
