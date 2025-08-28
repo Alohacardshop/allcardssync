@@ -337,7 +337,10 @@ export default function JustTCGSync() {
 
   // Process queue function
   const handleProcessQueue = async () => {
-    if (isProcessingQueue) return;
+    if (isProcessingQueue) {
+      addLog('⏳ Queue processing already in progress...');
+      return;
+    }
     
     setIsProcessingQueue(true);
     addLog('🔄 Starting queue processing...');
@@ -346,56 +349,76 @@ export default function JustTCGSync() {
       // Process each supported game's queue
       const games = ['mtg', 'pokemon', 'pokemon-japan'];
       let totalProcessed = 0;
+      let totalErrors = 0;
       
       for (const game of games) {
         addLog(`📋 Processing ${game} queue...`);
+        let gameProcessed = 0;
         
         // Keep processing until queue is empty or we hit an error
         while (true) {
           try {
+            console.log(`Draining ${game} queue...`);
+            const session = await supabase.auth.getSession();
+            
+            if (!session.data.session?.access_token) {
+              throw new Error('No authentication session available');
+            }
+
             const response = await fetch(`https://dmpoandoydaqxhzdjnmk.supabase.co/functions/v1/catalog-sync/drain?mode=${game}`, {
               method: 'POST',
               headers: {
-                'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+                'Authorization': `Bearer ${session.data.session.access_token}`,
                 'Content-Type': 'application/json'
               }
             });
             
             if (!response.ok) {
               const errorText = await response.text();
+              console.error(`Queue drain failed for ${game}:`, response.status, errorText);
               throw new Error(`HTTP ${response.status}: ${errorText}`);
             }
             
             const result = await response.json();
+            console.log(`Queue drain result for ${game}:`, result);
             
             if (result?.status === 'idle') {
-              addLog(`✅ ${game} queue empty`);
+              addLog(`✅ ${game} queue empty (processed ${gameProcessed} items)`);
               break;
             }
             
             if (result?.status === 'done') {
               totalProcessed++;
+              gameProcessed++;
               addLog(`✅ Processed ${result.setId} from ${game} queue`);
             } else if (result?.status === 'error') {
+              totalErrors++;
               addLog(`❌ Queue item ${result.setId} failed: ${result.error}`);
             }
             
             // Small delay between queue drains
-            await new Promise(resolve => setTimeout(resolve, 500));
+            await new Promise(resolve => setTimeout(resolve, 1000));
             
           } catch (drainError: any) {
+            console.error(`Queue drain error for ${game}:`, drainError);
             addLog(`❌ Queue drain failed for ${game}: ${drainError.message}`);
             break;
           }
         }
       }
       
-      addLog(`🎉 Queue processing completed. ${totalProcessed} sets processed.`);
-      toast.success('Queue processed', { 
-        description: `${totalProcessed} sets were processed from the queue`
-      });
+      if (totalProcessed > 0 || totalErrors > 0) {
+        addLog(`🎉 Queue processing completed. ${totalProcessed} sets processed, ${totalErrors} errors.`);
+        toast.success('Queue processed', { 
+          description: `${totalProcessed} sets processed${totalErrors > 0 ? `, ${totalErrors} errors` : ''}`
+        });
+      } else {
+        addLog(`📭 All queues are empty`);
+        toast.info('Queue empty', { description: 'No items found in any game queues' });
+      }
       
     } catch (error: any) {
+      console.error('Queue processing failed:', error);
       addLog(`💥 Queue processing failed: ${error.message}`);
       toast.error('Queue processing failed', { description: error.message });
     } finally {
@@ -614,15 +637,26 @@ export default function JustTCGSync() {
       const successCount = syncProgress.filter(p => p.status === 'done').length;
       const errorCount = syncProgress.filter(p => p.status === 'error').length;
 
+      // Check for queued items and trigger auto-processing
+      const queuedCount = data.results.filter(r => r.status === 'queued').length;
+      
       if (data?.cancelled) {
         addLog(`🛑 Sync cancelled by user. ${successCount} completed, ${errorCount} marked as cancelled/errors.`);
         toast.warning('Sync cancelled', { 
           description: `${successCount} sets completed before stop${errorCount > 0 ? `, ${errorCount} cancelled/failed` : ''}`
         });
       } else {
-        addLog(`🎉 Sync completed: ${successCount} successful, ${errorCount} failed`);
+        if (queuedCount > 0) {
+          addLog(`📥 Queued ${queuedCount} sets for async processing`);
+          if (autoProcessQueue) {
+            addLog(`🔄 Auto-processing queue in 2 seconds...`);
+            setTimeout(() => handleProcessQueue(), 2000);
+          }
+        }
+        
+        addLog(`🎉 Sync completed: ${successCount} successful, ${errorCount} failed${queuedCount > 0 ? `, ${queuedCount} queued` : ''}`);
         toast.success('Sync completed', { 
-          description: `${successCount} sets synced successfully${errorCount > 0 ? `, ${errorCount} failed` : ''}`
+          description: `${successCount} sets synced successfully${errorCount > 0 ? `, ${errorCount} failed` : ''}${queuedCount > 0 ? `, ${queuedCount} queued` : ''}`
         });
       }
     },
