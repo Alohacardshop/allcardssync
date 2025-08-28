@@ -145,18 +145,25 @@ const JustTCGSync = () => {
     });
   }, [savePreferences]);
 
-  // Load games
+  // Load games from JustTCG discover API
   const loadGames = useCallback(async () => {
     setIsLoadingGames(true);
     try {
-      const { data, error } = await supabase
-        .from('justtcg_games')
-        .select('*')
-        .eq('active', true)
-        .order('name');
-
+      const { data, error } = await supabase.functions.invoke('discover-games');
+      
       if (error) throw error;
-      setGames(data || []);
+      
+      // Map API response to our GameData format
+      const gamesArray = data?.data || [];
+      const formattedGames = gamesArray
+        .filter((game: any) => game.cards_count > 0) // Only show games with cards
+        .map((game: any) => ({
+          id: game.id === 'undefined' ? 'gundam-card-game' : game.id, // Fix undefined ID
+          name: game.name,
+          active: true
+        }));
+
+      setGames(formattedGames);
     } catch (error: any) {
       toast({
         title: "Error loading games",
