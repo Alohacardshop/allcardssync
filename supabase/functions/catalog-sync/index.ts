@@ -65,9 +65,27 @@ export async function syncCatalogGeneric(params: { game: string; setIds?: string
       .in('set_id', params.setIds);
     
     if (dbSets?.length) {
-      // Use provider_id from DB, fallback to set_id if provider_id is null
+      // Check for missing provider_id and abort if found
+      const missingProviderIds = dbSets.filter(dbSet => !dbSet.provider_id);
+      if (missingProviderIds.length > 0) {
+        const missingSetIds = missingProviderIds.map(s => s.set_id);
+        log('WARN', 'catalog-sync:missing-provider-ids', { 
+          gameSlug: inputGame, 
+          missingSetIds 
+        });
+        return {
+          success: false,
+          status: 'error',
+          message: `Missing provider_id for sets: ${missingSetIds.join(', ')}. Run 'Backfill Provider IDs' first.`,
+          sets: 0,
+          cards: 0,
+          variants: 0
+        };
+      }
+      
+      // Use provider_id from DB
       targetSets = dbSets.map(dbSet => ({
-        id: dbSet.provider_id || dbSet.set_id,
+        id: dbSet.provider_id,
         name: dbSet.name,
         dbSetId: dbSet.set_id
       }));
