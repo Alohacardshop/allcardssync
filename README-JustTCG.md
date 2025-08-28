@@ -53,6 +53,13 @@ const CONFIG = {
 
 Synchronizes entire game catalogs with optimized performance.
 
+### Status Check: `GET /catalog-sync-status`
+
+**IMPORTANT**: This endpoint expects query string parameters, not JSON body:
+- `?game=pokemon&limit=50`
+- Include JWT Authorization header for authentication
+- Use `getCatalogSyncStatus()` helper from `src/lib/fns.ts` in UI code
+
 **Parameters:**
 - `game` (query): `magic-the-gathering`, `pokemon`, or `pokemon-japan`
 
@@ -144,7 +151,15 @@ curl -X POST "/functions/v1/catalog-snapshots"
    - Performance metrics
    - Configuration display
 
-## Automation
+## Automation & Cron Jobs
+
+### Secure Cron Proxy
+
+All automated jobs now use `/catalog-cron-proxy` to prevent 401 unauthorized errors:
+- **Security**: Validates `x-cron-token` header before execution
+- **Authentication**: Uses service role JWT for internal function calls  
+- **Scheduling**: Runs every 10 minutes for each game mode (mtg, pokemon, pokemon-japan)
+- **Reliability**: Prevents direct function calls without proper authorization
 
 ### Nightly Snapshots (Cron)
 
