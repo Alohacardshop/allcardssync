@@ -688,7 +688,7 @@ export default function JustTCGSync() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6">
         {/* Step 1: Select Games */}
         <Card>
           <CardHeader>
@@ -863,7 +863,7 @@ export default function JustTCGSync() {
                         </div>
                       </div>
 
-                      <ScrollArea className="h-32">
+                      <ScrollArea className="max-h-[65vh]">
                         <div className="grid grid-cols-1 gap-1">
                           {filteredSets.map((set) => (
                             <div key={set.id} className="flex items-center space-x-2 py-1">
