@@ -6,6 +6,21 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Normalize game slugs for JustTCG API
+function normalizeGameSlug(game: string): string {
+  switch (game) {
+    case 'pokemon-japan':
+      return 'pokemon_japan';
+    case 'pokemon':
+      return 'pokemon';
+    case 'mtg':
+    case 'magic-the-gathering':
+      return 'magic-the-gathering';
+    default:
+      return game;
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -139,8 +154,20 @@ serve(async (req) => {
       let offset = 0;
       const limit = 100; // Adjust as needed
 
+      // Use original game slug for internal communication
+      const gameSlug = game;
+
       while (true) {
-        const url = `${supabaseUrl}/functions/v1/justtcg-cards?game=${encodeURIComponent(game)}&set=${encodeURIComponent(setId)}&limit=${limit}&offset=${offset}&since=${encodeURIComponent(since)}`;
+        const url = `${supabaseUrl}/functions/v1/justtcg-cards?game=${encodeURIComponent(gameSlug)}&set=${encodeURIComponent(setId)}&limit=${limit}&offset=${offset}&since=${encodeURIComponent(since)}`;
+        
+        logStructured('INFO', 'Fetching cards batch', {
+          operation: 'fetch_cards',
+          game: gameSlug,
+          setId,
+          offset,
+          limit
+        });
+
         const response = await fetch(url, {
           headers: {
             ...corsHeaders,
@@ -367,6 +394,13 @@ serve(async (req) => {
 
       // Fetch all sets for the game
       const url = `${supabaseUrl}/functions/v1/justtcg-sets?game=${encodeURIComponent(game)}`;
+      
+      logStructured('INFO', 'Fetching sets for game', {
+        operation: 'fetch_sets',
+        game,
+        url
+      });
+
       const response = await fetch(url, {
         headers: {
           ...corsHeaders,

@@ -8,6 +8,21 @@ const corsHeaders = {
 
 const JUSTTCG_BASE = "https://api.justtcg.com/v1";
 
+// Normalize game slugs for JustTCG API
+function normalizeGameSlug(game: string): string {
+  switch (game) {
+    case 'pokemon-japan':
+      return 'pokemon_japan';
+    case 'pokemon':
+      return 'pokemon';
+    case 'mtg':
+    case 'magic-the-gathering':
+      return 'magic-the-gathering';
+    default:
+      return game;
+  }
+}
+
 async function getApiKey() {
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL')!,
@@ -60,11 +75,16 @@ serve(async (req) => {
     const offset = parseInt(url.searchParams.get("offset") || '0');
     const since = url.searchParams.get("since") || '';
 
+    // Normalize game slug for JustTCG API
+    const normalizedGame = normalizeGameSlug(game);
+    
+    console.log(`Fetching cards for game: ${game} (normalized to: ${normalizedGame}), set: ${set}`);
+
     const apiKey = await getApiKey();
     
     // Build API URL
     const apiUrl = new URL(`${JUSTTCG_BASE}/cards`);
-    apiUrl.searchParams.set('game', game);
+    apiUrl.searchParams.set('game', normalizedGame);
     if (set) apiUrl.searchParams.set('set', set);
     apiUrl.searchParams.set('limit', limit.toString());
     apiUrl.searchParams.set('offset', offset.toString());

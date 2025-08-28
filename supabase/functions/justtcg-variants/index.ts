@@ -70,20 +70,34 @@ serve(async (req) => {
   try {
     const url = new URL(req.url);
     const game = url.searchParams.get("game") || 'pokemon';
+    const cardId = url.searchParams.get("cardId");
     const limit = parseInt(url.searchParams.get("limit") || '100');
     const offset = parseInt(url.searchParams.get("offset") || '0');
+
+    if (!cardId) {
+      return new Response(
+        JSON.stringify({ error: "cardId parameter is required" }),
+        { 
+          status: 400, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
 
     // Normalize game slug for JustTCG API
     const normalizedGame = normalizeGameSlug(game);
     
-    console.log(`Fetching sets for game: ${game} (normalized to: ${normalizedGame})`);
+    console.log(`Fetching variants for game: ${game} (normalized to: ${normalizedGame}), cardId: ${cardId}`);
 
     const apiKey = await getApiKey();
     
-    // Fetch sets from JustTCG API
-    const apiUrl = `${JUSTTCG_BASE}/sets?game=${encodeURIComponent(normalizedGame)}&limit=${limit}&offset=${offset}`;
+    // Build API URL for card variants
+    const apiUrl = new URL(`${JUSTTCG_BASE}/cards/${encodeURIComponent(cardId)}/variants`);
+    apiUrl.searchParams.set('game', normalizedGame);
+    apiUrl.searchParams.set('limit', limit.toString());
+    apiUrl.searchParams.set('offset', offset.toString());
     
-    const response = await fetchWithRetry(apiUrl, {
+    const response = await fetchWithRetry(apiUrl.toString(), {
       method: 'GET',
       headers: {
         'x-api-key': apiKey,
@@ -118,7 +132,7 @@ serve(async (req) => {
       }
     );
   } catch (error: any) {
-    console.error('Error fetching sets:', error);
+    console.error('Error fetching variants:', error);
     return new Response(
       JSON.stringify({ 
         error: error.message || 'Unknown error',
