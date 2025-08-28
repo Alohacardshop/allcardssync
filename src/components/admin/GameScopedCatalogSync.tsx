@@ -17,7 +17,8 @@ import {
   Activity,
   Clock,
   Search,
-  FileText
+  FileText,
+  Zap
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -104,6 +105,7 @@ export default function GameScopedCatalogSync() {
   const [isActiveSync, setIsActiveSync] = useState(false);
   const [auditResult, setAuditResult] = useState<AuditResult | null>(null);
   const [auditing, setAuditing] = useState(false);
+  const [resyncingPending, setResyncingPending] = useState(false);
 
   const selectedGameOption = GAME_OPTIONS.find(g => g.value === selectedGame);
 
@@ -457,7 +459,52 @@ export default function GameScopedCatalogSync() {
     callSync({ setId: error.set_id });
   };
 
-  const isDisabled = loading || queueing || auditing;
+  const resyncPending = async () => {
+    if (!selectedGameOption) {
+      toast({
+        title: "Error", 
+        description: "Please select a game first",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setResyncingPending(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('resync-pending', {
+        body: { game: selectedGameOption.gameParam }
+      });
+
+      if (error) throw error;
+
+      const result = data as any;
+      if (result.ok) {
+        toast({
+          title: "Success",
+          description: `Re-sync dispatched for ${result.count} pending sets`,
+        });
+        // Refresh stats after successful resync
+        await refreshStats();
+        await loadRecentErrors();
+      } else {
+        toast({
+          title: "Resync Failed",
+          description: result.error || 'Unknown error occurred',
+          variant: "destructive",
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: `Failed to resync pending sets: ${error.message}`,
+        variant: "destructive",
+      });
+    } finally {
+      setResyncingPending(false);
+    }
+  };
+
+  const isDisabled = loading || queueing || auditing || resyncingPending;
 
   return (
     <Card>
@@ -591,6 +638,20 @@ export default function GameScopedCatalogSync() {
                   <Database className="h-4 w-4" />
                 )}
                 Queue Pending Sets ({stats.pending_count})
+              </Button>
+
+              <Button
+                variant="outline"
+                onClick={resyncPending}
+                disabled={isDisabled || stats.pending_count === 0}
+                className="flex items-center gap-2"
+              >
+                {resyncingPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Zap className="h-4 w-4" />
+                )}
+                Re-sync Pending Sets ({stats.pending_count})
               </Button>
 
               <Button
