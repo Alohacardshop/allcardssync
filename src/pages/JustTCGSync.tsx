@@ -305,6 +305,25 @@ export default function JustTCGSync() {
     }
   });
 
+  // Helper function to normalize game names to supported values
+  const normalizeGameId = (gameId: string): string => {
+    const normalized = gameId.toLowerCase().trim();
+    if (normalized.includes('pokemon') && normalized.includes('japan')) {
+      return 'pokemon-japan';
+    } else if (normalized.includes('pokemon')) {
+      return 'pokemon';
+    } else if (normalized.includes('mtg') || normalized.includes('magic')) {
+      return 'mtg';
+    }
+    return normalized; // Return as-is if no mapping found
+  };
+
+  // Helper function to check if game is supported
+  const isSupportedGame = (gameId: string): boolean => {
+    const normalized = normalizeGameId(gameId);
+    return ['mtg', 'pokemon', 'pokemon-japan'].includes(normalized);
+  };
+
   // Sync sets mutation
   const syncSetsMutation = useMutation({
     mutationFn: async (params: { mode: 'selected' | 'all-for-games' | 'all-games'; gameIds?: string[]; setIds?: string[] }) => {
@@ -384,10 +403,17 @@ export default function JustTCGSync() {
         ));
         
         try {
-          addLog(`⚡ Syncing ${setName} (${gameId})...`);
+          const normalizedGameId = normalizeGameId(gameId);
+          
+          // Check if game is supported
+          if (!isSupportedGame(gameId)) {
+            throw new Error(`Unsupported game: ${gameId}. Only MTG, Pokémon, and Pokémon Japan are supported.`);
+          }
+          
+          addLog(`⚡ Syncing ${setName} (${normalizedGameId})...`);
           
           const { data: result, error } = await supabase.functions.invoke('catalog-sync', {
-            body: { game: gameId, setId }
+            body: { game: normalizedGameId, setId }
           });
           
           if (error) {
@@ -405,14 +431,31 @@ export default function JustTCGSync() {
           addLog(`✅ ${setName}: ${result.cardsProcessed || 0} cards, ${result.variantsProcessed || 0} variants`);
           
         } catch (error: any) {
+          let errorMessage = error.message;
+          
+          // Try to parse more detailed error from response
+          if (error.message && error.message.includes('Sync failed:')) {
+            const match = error.message.match(/Sync failed: (.+)/);
+            if (match) {
+              try {
+                const errorData = JSON.parse(match[1]);
+                if (errorData.error) {
+                  errorMessage = errorData.error;
+                }
+              } catch (e) {
+                // Keep original error message if parsing fails
+              }
+            }
+          }
+          
           // Update progress to error
           setSyncProgress(prev => prev.map(p => 
             p.gameId === gameId && p.setId === setId 
-              ? { ...p, status: 'error', message: error.message }
+              ? { ...p, status: 'error', message: errorMessage }
               : p
           ));
           
-          addLog(`❌ ${setName} failed: ${error.message}`);
+          addLog(`❌ ${setName} failed: ${errorMessage}`);
         }
         
         // Small delay between requests
@@ -517,6 +560,22 @@ export default function JustTCGSync() {
       toast.warning('No sets selected', { description: 'Please select at least one set to sync' });
       return;
     }
+    
+    // Check if all selected sets are from supported games
+    const unsupportedSets = selectedSets.filter(setId => {
+      const gameId = Object.keys(groupedSets).find(gId => 
+        groupedSets[gId].some(set => set.id === setId)
+      );
+      return gameId && !isSupportedGame(gameId);
+    });
+    
+    if (unsupportedSets.length > 0) {
+      toast.error('Unsupported games selected', { 
+        description: `${unsupportedSets.length} sets are from unsupported games. Only MTG, Pokémon, and Pokémon Japan are supported.` 
+      });
+      return;
+    }
+    
     syncSetsMutation.mutate({ mode: 'selected', setIds: selectedSets });
   };
 
@@ -525,6 +584,21 @@ export default function JustTCGSync() {
       toast.warning('No games selected', { description: 'Please select at least one game' });
       return;
     }
+    
+    // Check if all selected games are supported
+    const unsupportedGames = selectedGames.filter(gameId => !isSupportedGame(gameId));
+    if (unsupportedGames.length > 0) {
+      const unsupportedNames = unsupportedGames.map(gId => {
+        const game = games.find(g => g.id === gId);
+        return game?.name || gId;
+      }).join(', ');
+      
+      toast.error('Unsupported games selected', { 
+        description: `Selected games not supported: ${unsupportedNames}. Only MTG, Pokémon, and Pokémon Japan are supported.` 
+      });
+      return;
+    }
+    
     syncSetsMutation.mutate({ mode: 'all-for-games', gameIds: selectedGames });
   };
 
