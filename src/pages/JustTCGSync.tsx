@@ -149,13 +149,15 @@ export default function JustTCGSync() {
         } else {
           const setsResponse = browseResult as { sets?: any[], total_count?: number };
           const sets = setsResponse?.sets || [];
-          setsMap[gameId] = sets.map((set: any) => ({
-            id: set.set_id,
-            game: gameId,
-            name: set.name,
-            released_at: set.release_date,
-            cards_count: Number(set.cards_count ?? 0)
-          }));
+          setsMap[gameId] = sets
+            .map((set: any) => ({
+              id: String(set.set_id || ''),
+              game: gameId,
+              name: String(set.name || ''),
+              released_at: set.release_date,
+              cards_count: Number(set.cards_count ?? 0)
+            }))
+            .filter(set => set.id && set.name); // Filter out sets without ID or name
           addLog(`📋 Loaded ${sets.length} sets for ${gameId} from DB`);
         }
       } catch (e) {
@@ -834,8 +836,8 @@ export default function JustTCGSync() {
                   const game = games.find(g => g.id === gameId);
                   const searchQuery = setSearchQueries[gameId] || '';
                   const filteredSets = sets.filter(set =>
-                    set.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                    set.id.toLowerCase().includes(searchQuery.toLowerCase())
+                    (set.name ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    (set.id ?? '').toLowerCase().includes(searchQuery.toLowerCase())
                   );
                   const selectedSetsInGame = sets.filter(set => selectedSets.includes(set.id)).length;
 
