@@ -62,3 +62,6 @@ verify_jwt = false
 
 [functions.catalog-health]
 verify_jwt = false
+
+[functions.backfill-provider-ids]
+verify_jwt = false
