@@ -70,6 +70,11 @@ export default function JustTCGSync() {
   const [isKillingJobs, setIsKillingJobs] = useState(false);
   const [isLoadingSets, setIsLoadingSets] = useState(false);
   const [apiMetadata, setApiMetadata] = useState<ApiMetadata | null>(null);
+  
+  // Cooldown settings
+  const [skipRecentlysynced, setSkipRecentlysynced] = useState(true);
+  const [cooldownHours, setCooldownHours] = useState(12);
+  const [forceSync, setForceSync] = useState(false);
 
   const cancelRequestedRef = useRef(false);
 
@@ -431,7 +436,12 @@ export default function JustTCGSync() {
           try {
             const { data: result, error } = await Promise.race([
               supabase.functions.invoke('catalog-sync', {
-                body: { game: normalizedGameId, setId }
+                body: { 
+                  game: normalizedGameId, 
+                  setId,
+                  cooldownHours: skipRecentlysynced ? cooldownHours : 0,
+                  forceSync: forceSync
+                }
               }),
               timeoutPromise
             ]) as any;
@@ -439,16 +449,31 @@ export default function JustTCGSync() {
             if (error) {
               throw new Error(`Sync failed: ${error.message}`);
             }
-          results.push(result);
-          
-          // Update progress to done
-          setSyncProgress(prev => prev.map(p => 
-            p.gameId === gameId && p.setId === setId 
-              ? { ...p, status: 'done', message: `${result.cardsProcessed || 0} cards, ${result.variantsProcessed || 0} variants` }
-              : p
-          ));
-          
-          addLog(`✅ ${setName}: ${result.cardsProcessed || 0} cards, ${result.variantsProcessed || 0} variants`);
+            
+            // Handle cooldown skip
+            if (result?.status === 'skipped_cooldown') {
+              setSyncProgress(prev => prev.map(p => 
+                p.gameId === gameId && p.setId === setId 
+                  ? { ...p, status: 'done', message: `Skipped: ${result.message}` }
+                  : p
+              ));
+              
+              addLog(`⏭️ ${setName}: ${result.message}`);
+              results.push(result);
+              
+            } else {
+              // Normal successful sync
+              results.push(result);
+              
+              // Update progress to done
+              setSyncProgress(prev => prev.map(p => 
+                p.gameId === gameId && p.setId === setId 
+                  ? { ...p, status: 'done', message: `${result.cardsProcessed || 0} cards, ${result.variantsProcessed || 0} variants` }
+                  : p
+              ));
+              
+              addLog(`✅ ${setName}: ${result.cardsProcessed || 0} cards, ${result.variantsProcessed || 0} variants`);
+            }
           
           } catch (syncError: any) {
             throw syncError;
@@ -1051,6 +1076,56 @@ export default function JustTCGSync() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
+            {/* Cooldown Settings */}
+            <div className="border rounded-lg p-4 bg-muted/30">
+              <h4 className="font-medium mb-3 flex items-center gap-2">
+                <Clock className="h-4 w-4" />
+                Cooldown Settings
+              </h4>
+              <div className="flex flex-wrap items-center gap-4">
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="skip-recent"
+                    checked={skipRecentlysynced}
+                    onCheckedChange={(checked) => setSkipRecentlysynced(checked === true)}
+                  />
+                  <label htmlFor="skip-recent" className="text-sm font-medium">
+                    Skip recently synced sets
+                  </label>
+                </div>
+                
+                {skipRecentlysynced && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm">Cooldown:</span>
+                    <Select value={cooldownHours.toString()} onValueChange={(v) => setCooldownHours(parseInt(v))}>
+                      <SelectTrigger className="w-24">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1">1h</SelectItem>
+                        <SelectItem value="6">6h</SelectItem>
+                        <SelectItem value="12">12h</SelectItem>
+                        <SelectItem value="24">24h</SelectItem>
+                        <SelectItem value="72">3d</SelectItem>
+                        <SelectItem value="168">1w</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="force-sync"
+                    checked={forceSync}
+                    onCheckedChange={(checked) => setForceSync(checked === true)}
+                  />
+                  <label htmlFor="force-sync" className="text-sm font-medium">
+                    Force resync (ignore cooldown)
+                  </label>
+                </div>
+              </div>
+            </div>
+
             {/* Sync Buttons */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <Button

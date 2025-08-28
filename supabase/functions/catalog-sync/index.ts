@@ -948,6 +948,53 @@ serve(async (req) => {
     // If setId is provided, sync just that set
     if (setId) {
       const turboMode = url.searchParams.get("turbo") === "true";
+      const cooldownHours = parseInt(url.searchParams.get("cooldownHours") || "12");
+      const forceSyncParam = url.searchParams.get("forceSync") === "true";
+      
+      // Check cooldown unless force sync is enabled
+      if (!forceSyncParam && cooldownHours > 0) {
+        const cooldownThreshold = new Date(Date.now() - cooldownHours * 60 * 60 * 1000);
+        
+        const { data: existingSet, error: setCheckError } = await supabaseClient
+          .from('catalog_v2.sets')
+          .select('set_id, name, last_seen_at')
+          .eq('game', game)
+          .eq('set_id', setId)
+          .maybeSingle();
+          
+        if (setCheckError) {
+          requestTracker.error('Cooldown check failed', setCheckError);
+        } else if (existingSet?.last_seen_at) {
+          const lastSeen = new Date(existingSet.last_seen_at);
+          if (lastSeen > cooldownThreshold) {
+            const hoursAgo = Math.round((Date.now() - lastSeen.getTime()) / (1000 * 60 * 60));
+            requestTracker.log('Set sync skipped due to cooldown', {
+              status: 'skipped_cooldown',
+              mode: 'single_set',
+              setId,
+              lastSeenAt: existingSet.last_seen_at,
+              hoursAgo,
+              cooldownHours
+            });
+            return new Response(
+              JSON.stringify({ 
+                mode,
+                game,
+                setId,
+                status: 'skipped_cooldown',
+                message: `Set "${existingSet.name}" was synced ${hoursAgo} hours ago (within ${cooldownHours}h cooldown). Use forceSync=true to override.`,
+                lastSeenAt: existingSet.last_seen_at,
+                setsProcessed: 0,
+                cardsProcessed: 0,
+                variantsProcessed: 0,
+                skipped: { sets: 1, cards: 0 }
+              }), 
+              { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+        }
+      }
+      
       try {
         const result = await syncSet(game, setId, turboMode);
         requestTracker.log('Single set sync completed', {
