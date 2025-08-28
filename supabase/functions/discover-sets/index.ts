@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { toJustTCGParams, normalizeGameSlug } from '../_shared/slug.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -116,21 +117,6 @@ async function discoverSetsForGame(supabase: any, apiKey: string, gameId: string
   }
 
   return { gameId, setsCount: sets.length }
-}
-
-// Helper functions for parameter mapping
-function toJustTCGParams(gameIn: string): { game: string; region?: string } {
-  const g = normalizeGameSlug(gameIn);
-  if (g === 'pokemon-japan') return { game: 'pokemon', region: 'japan' };
-  return { game: g, region: undefined };
-}
-
-function normalizeGameSlug(g?: string): string {
-  if (!g) return '';
-  const x = g.toLowerCase().replace(/\s+/g, '-');
-  if (x === 'pokemon_japan') return 'pokemon-japan';
-  if (x === 'mtg') return 'magic-the-gathering';
-  return x;
 }
 
 serve(async (req) => {
