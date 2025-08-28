@@ -746,6 +746,51 @@ export type Database = {
           },
         ]
       }
+      user_sync_preferences: {
+        Row: {
+          created_at: string
+          force_resync: boolean
+          id: string
+          last_used_at: string
+          only_new_sets: boolean
+          selected_games: string[]
+          selected_sets: string[]
+          sets_game_filter: string
+          since_days: number
+          skip_recently_updated: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          force_resync?: boolean
+          id?: string
+          last_used_at?: string
+          only_new_sets?: boolean
+          selected_games?: string[]
+          selected_sets?: string[]
+          sets_game_filter?: string
+          since_days?: number
+          skip_recently_updated?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          force_resync?: boolean
+          id?: string
+          last_used_at?: string
+          only_new_sets?: boolean
+          selected_games?: string[]
+          selected_sets?: string[]
+          sets_game_filter?: string
+          since_days?: number
+          skip_recently_updated?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       game_catalog_stats: {
