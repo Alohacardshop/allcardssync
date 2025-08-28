@@ -14,6 +14,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { debounce } from 'lodash';
 
+function normalizeGameSlug(g: string) {
+  if (g === 'pokemon_japan') return 'pokemon-japan';
+  if (g === 'mtg') return 'magic-the-gathering';
+  return g;
+}
+
 interface GameData {
   id: string;
   name: string;
@@ -237,12 +243,20 @@ const JustTCGSync = () => {
     const startTime = Date.now();
 
     try {
+      const normalized = normalizeGameSlug(preferences.selected_games[0]);
+      if (normalized !== preferences.selected_games[0]) {
+        toast({ 
+          title: 'Normalized game', 
+          description: `${preferences.selected_games[0]} → ${normalized}` 
+        });
+      }
+      
       const cooldownHours = preferences.skip_recently_updated ? 12 : 0;
       
       const { data, error } = await supabase.functions.invoke('catalog-sync', {
         body: {
           setId,
-          game: preferences.selected_games[0],
+          game: normalized,
           cooldownHours,
           forceSync: preferences.force_resync
         }

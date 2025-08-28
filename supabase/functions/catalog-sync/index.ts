@@ -1,25 +1,117 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { fetchWithRetry } from '../_shared/http.ts';
+import { logStructured as log } from '../_shared/log.ts';
+import { normalizeGameSlug, toJustTCGParams, mapSet, mapCard, mapVariant } from '../_shared/justtcg.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+const SUPA_URL = Deno.env.get('SUPABASE_URL')!;
+const SUPA_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const BASE = 'https://api.justtcg.com/v1';
+
+async function rpcChunk<T>(sb: ReturnType<typeof createClient>, fn: string, rows: T[], size = 800) {
+  for (let i = 0; i < rows.length; i += size) {
+    const chunk = rows.slice(i, i + size);
+    const { error } = await sb.rpc(fn, { rows: chunk });
+    if (error) throw new Error(`${fn} failed: ${error.message}`);
+  }
 }
 
-// Normalize game slugs for JustTCG API
-function normalizeGameSlug(game: string): string {
-  switch (game) {
-    case 'pokemon_japan':
-    case 'pokemon-japan':
-      return 'pokemon-japan';  // JustTCG API expects hyphen
-    case 'pokemon':
-      return 'pokemon';
-    case 'mtg':
-    case 'magic-the-gathering':
-      return 'magic-the-gathering';
-    default:
-      return game;
+async function fetchJSON(url: string, headers: Record<string,string>) {
+  const res = await fetchWithRetry(url, { headers }, { retries: 4, baseDelayMs: 600, jitter: true });
+  if (!res.ok) {
+    const body = await res.text().catch(()=>'');
+    throw new Error(`HTTP ${res.status} ${res.statusText} for ${url} :: ${body}`);
   }
+  return res.json();
+}
+
+export async function syncCatalogGeneric(params: { game: string; setIds?: string[]; since?: string }) {
+  const supabase = createClient(SUPA_URL, SUPA_KEY);
+  const inputGame = normalizeGameSlug(params.game);
+  const { game, region } = toJustTCGParams(inputGame);
+  const headers = { 'X-API-Key': Deno.env.get('JUSTTCG_API_KEY')! };
+  const qRegion = region ? `&region=${encodeURIComponent(region)}` : '';
+
+  log('INFO', 'catalog-sync:start', { game: inputGame, mappedGame: game, region });
+
+  // 1) Fetch sets from JustTCG
+  const setsUrl = `${BASE}/sets?game=${encodeURIComponent(game)}${qRegion}`;
+  const setsResp = await fetchJSON(setsUrl, headers);
+  const sets = (setsResp?.data ?? []) as any[];
+  const setRows = sets.map(s => mapSet(inputGame, s));
+  await rpcChunk(supabase, 'catalog_v2_upsert_sets', setRows);
+  log('INFO', 'catalog-sync:upserted-sets', { count: setRows.length });
+
+  // If specific setIds provided, filter
+  const targetSetIds = params.setIds?.length ? new Set(params.setIds) : null;
+  const targetSets = targetSetIds ? sets.filter(s => targetSetIds.has(s.id)) : sets;
+
+  // 2) Per-set fan-out for cards (idempotent via RPC upserts)
+  let totalCards = 0;
+  let totalVariants = 0;
+
+  for (const s of targetSets) {
+    const setId = s.id;
+    log('INFO', 'catalog-sync:set-start', { setId });
+
+    // page through cards if needed; assume JustTCG supports limit/offset
+    let offset = 0; 
+    const limit = 200;
+    let setCards = 0;
+    let setVariants = 0;
+    
+    while (true) {
+      const cardsUrl = `${BASE}/cards?game=${encodeURIComponent(game)}${qRegion}&set=${encodeURIComponent(setId)}&limit=${limit}&offset=${offset}`;
+      const cardsResp = await fetchJSON(cardsUrl, headers);
+      const cards = (cardsResp?.data ?? []) as any[];
+      if (!cards.length) break;
+
+      // Map & write cards
+      const cardRows = cards.map(c => mapCard(inputGame, c));
+      await rpcChunk(supabase, 'catalog_v2_upsert_cards', cardRows);
+
+      // Flatten variants and write
+      const variantRows = cards.flatMap(c => (c.variants ?? []).map((v: any) => mapVariant(inputGame, { ...v, cardId: c.id, setId: c.setId })));
+      if (variantRows.length) {
+        await rpcChunk(supabase, 'catalog_v2_upsert_variants', variantRows);
+      }
+
+      setCards += cards.length;
+      setVariants += variantRows.length;
+      log('INFO', 'catalog-sync:set-page', { setId, offset, count: cards.length, totalCards: setCards });
+      offset += limit;
+      if (cards.length < limit) break;
+    }
+    
+    totalCards += setCards;
+    totalVariants += setVariants;
+    log('INFO', 'catalog-sync:set-complete', { setId, cards: setCards, variants: setVariants });
+    
+    // Update last_synced_at for this set
+    await supabase
+      .schema('catalog_v2')
+      .from('sets')
+      .update({ 
+        last_synced_at: new Date().toISOString(),
+        last_sync_status: 'success'
+      })
+      .eq('game', inputGame)
+      .eq('set_id', setId);
+  }
+
+  log('INFO', 'catalog-sync:complete', { game: inputGame, totalCards, totalVariants });
+  return { 
+    ok: true, 
+    game: inputGame, 
+    cardsProcessed: totalCards, 
+    variantsProcessed: totalVariants,
+    setsProcessed: targetSets.length
+  };
 }
 
 serve(async (req) => {
@@ -29,7 +121,7 @@ serve(async (req) => {
 
   try {
     const url = new URL(req.url);
-    let setId, game, since, queueOnly, turbo, cooldownHours, forceSync;
+    let setId, game, setIds, since, queueOnly, turbo, cooldownHours, forceSync;
     
     // Handle both GET (query params) and POST (JSON body) requests
     if (req.method === 'GET') {
@@ -44,6 +136,7 @@ serve(async (req) => {
       // Handle POST request with JSON body
       const body = await req.json();
       setId = body.setId || url.searchParams.get("setId");
+      setIds = body.setIds || [];
       game = body.game || url.searchParams.get("game") || "pokemon";
       since = body.since || url.searchParams.get("since") || "";
       queueOnly = body.queueOnly || url.searchParams.get("queueOnly") === "true";
@@ -55,565 +148,72 @@ serve(async (req) => {
     // Normalize game slug for consistency
     game = normalizeGameSlug(game);
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    
-    const supabaseClient = createClient(supabaseUrl, supabaseServiceKey)
+    const supabase = createClient(SUPA_URL, SUPA_KEY);
 
-    // Log the request
-    logStructured('INFO', 'Catalog sync request started', {
-      operation: 'catalog_sync_request',
-      game,
-      setId,
-      since,
-      queueOnly,
-      turbo,
-      cooldownHours: cooldownHours.toString(),
-      forceSync
-    });
+    // Prepare setIds array - either single setId or multiple setIds
+    const targetSetIds = setIds?.length ? setIds : (setId ? [setId] : []);
 
-    const startTime = Date.now();
-
-    try {
-      // Check cooldown if not forcing sync
-      if (!forceSync && cooldownHours > 0 && setId && !queueOnly) {
-        const cooldownThreshold = new Date(Date.now() - cooldownHours * 60 * 60 * 1000);
-        
-        const { data: existingSet, error: setCheckError } = await supabaseClient
+    // Check cooldown if not forcing sync and we have specific sets
+    if (!forceSync && cooldownHours > 0 && targetSetIds.length > 0 && !queueOnly) {
+      const cooldownThreshold = new Date(Date.now() - cooldownHours * 60 * 60 * 1000);
+      
+      for (const checkSetId of targetSetIds) {
+        const { data: existingSet } = await supabase
           .schema('catalog_v2').from('sets')
           .select('set_id, name, last_synced_at, last_seen_at')
           .eq('game', game)
-          .eq('set_id', setId)
+          .eq('set_id', checkSetId)
           .single();
 
-        if (setCheckError) {
-          logStructured('ERROR', 'Cooldown check failed', {
-            operation: 'catalog_sync_request',
-            game,
-            setId,
-            since,
-            durationMs: Date.now() - startTime,
-            error: setCheckError.message
-          });
-          // Continue with sync despite error
-        } else if (existingSet) {
-          // Use last_synced_at if available, otherwise fall back to last_seen_at
+        if (existingSet) {
           const lastUpdate = existingSet.last_synced_at || existingSet.last_seen_at;
           if (lastUpdate && new Date(lastUpdate) > cooldownThreshold) {
             const message = `Set "${existingSet.name}" was last synced ${Math.round((Date.now() - new Date(lastUpdate).getTime()) / (1000 * 60))} minutes ago. Skipping due to ${cooldownHours}h cooldown.`;
             
-            logStructured('INFO', 'Set skipped due to cooldown', {
-              operation: 'catalog_sync_request',
-              game,
-              setId,
-              since,
-              status: 'skipped_cooldown',
-              lastSyncedAt: existingSet.last_synced_at,
-              lastSeenAt: existingSet.last_seen_at,
-              cooldownHours,
-              durationMs: Date.now() - startTime
+            log('INFO', 'Set skipped due to cooldown', {
+              game, setId: checkSetId, status: 'skipped_cooldown'
             });
 
             return new Response(
               JSON.stringify({ 
                 status: 'skipped_cooldown', 
                 message,
-                setId,
-                setName: existingSet.name,
-                lastSyncedAt: existingSet.last_synced_at,
-                lastSeenAt: existingSet.last_seen_at
+                setId: checkSetId,
+                setName: existingSet.name
               }),
               { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
             );
           }
         }
       }
-    } catch (cooldownError) {
-      logStructured('ERROR', 'Cooldown check failed', {
-        operation: 'catalog_sync_request',
-        game,
-        setId,
-        since,
-        durationMs: Date.now() - startTime,
-        error: cooldownError.message
-      });
-      // Continue with sync despite cooldown check failure
     }
 
-    // Function to queue sets for sync
-    async function queueSets(game: string, sets: string[], mode: string = 'normal') {
-      let queued = 0;
-      for (const set_id of sets) {
-        const { error } = await supabaseClient
-          .from('sync_queue')
-          .insert({
-            game: game,
-            set_id: set_id,
-            mode: mode,
-            status: 'queued'
-          });
-
-        if (error) {
-          logStructured('ERROR', 'Failed to queue set', {
-            operation: 'queue_sets',
-            game,
-            set_id,
-            error: error.message
-          });
-        } else {
-          queued++;
-        }
-      }
-      return queued;
-    }
-
-    // Function to fetch cards for a set
-    async function fetchCards(game: string, setId: string, since: string = ""): Promise<any[]> {
-      let allCards: any[] = [];
-      let offset = 0;
-      const limit = 100; // Adjust as needed
-
-      // Use original game slug for internal communication
-      const gameSlug = game;
-
-      while (true) {
-        const url = `${supabaseUrl}/functions/v1/justtcg-cards?game=${encodeURIComponent(gameSlug)}&set=${encodeURIComponent(setId)}&limit=${limit}&offset=${offset}&since=${encodeURIComponent(since)}`;
-        
-        logStructured('INFO', 'Fetching cards batch', {
-          operation: 'fetch_cards',
-          game: gameSlug,
-          setId,
-          offset,
-          limit
-        });
-
-        const response = await fetch(url, {
-          headers: {
-            ...corsHeaders,
-            'apikey': supabaseServiceKey,
-            'Authorization': `Bearer ${supabaseServiceKey}`
-          }
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          logStructured('ERROR', 'Failed to fetch cards', {
-            operation: 'fetch_cards',
-            game,
-            setId,
-            since,
-            status: response.status,
-            error: errorText
-          });
-          throw new Error(`Failed to fetch cards: ${response.status} - ${errorText}`);
-        }
-
-        const { data, error } = await response.json();
-
-        if (error) {
-          logStructured('ERROR', 'Failed to parse cards', {
-            operation: 'fetch_cards',
-            game,
-            setId,
-            since,
-            error: error.message
-          });
-          throw new Error(`Failed to parse cards: ${error.message}`);
-        }
-
-        if (!data || data.length === 0) {
-          break; // No more cards
-        }
-
-        allCards = allCards.concat(data);
-        offset += limit;
-
-        if (data.length < limit) {
-          break; // Last page
-        }
-      }
-
-      return allCards;
-    }
-
-    // Function to fetch variants for a card
-    async function fetchVariants(game: string, cardId: string): Promise<any[]> {
-      const url = `${supabaseUrl}/functions/v1/justtcg-variants?game=${encodeURIComponent(game)}&cardId=${encodeURIComponent(cardId)}`;
-      const response = await fetch(url, {
-        headers: {
-          ...corsHeaders,
-          'apikey': supabaseServiceKey,
-          'Authorization': `Bearer ${supabaseServiceKey}`
-        }
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        logStructured('ERROR', 'Failed to fetch variants', {
-          operation: 'fetch_variants',
-          game,
-          cardId,
-          status: response.status,
-          error: errorText
-        });
-        throw new Error(`Failed to fetch variants: ${response.status} - ${errorText}`);
-      }
-
-      const { data, error } = await response.json();
-
-      if (error) {
-        logStructured('ERROR', 'Failed to parse variants', {
-          operation: 'fetch_variants',
-          game,
-          cardId,
-          error: error.message
-        });
-        throw new Error(`Failed to parse variants: ${error.message}`);
-      }
-
-      return data || [];
-    }
-
-    // Function to upsert sets via RPC
-    async function upsertSets(sets: any[]): Promise<void> {
-      if (sets.length === 0) return;
-
-      const { error } = await supabaseClient
-        .rpc('catalog_v2_upsert_sets', { rows: sets });
-
-      if (error) {
-        logStructured('ERROR', 'Failed to upsert sets', {
-          operation: 'upsert_sets',
-          error: error.message
-        });
-        throw new Error(`Failed to upsert sets: ${error.message}`);
-      }
-    }
-
-    // Function to upsert cards via RPC in chunks
-    async function upsertCards(cards: any[]): Promise<void> {
-      if (cards.length === 0) return;
-      const chunkSize = 400;
-      for (let i = 0; i < cards.length; i += chunkSize) {
-        const batch = cards.slice(i, i + chunkSize);
-        const { error } = await supabaseClient
-          .rpc('catalog_v2_upsert_cards', { rows: batch });
-        if (error) {
-          logStructured('ERROR', 'Failed to upsert cards', {
-            operation: 'upsert_cards',
-            error: error.message
-          });
-          throw new Error(`Failed to upsert cards: ${error.message}`);
-        }
-      }
-    }
-
-    // Function to upsert variants via RPC in chunks
-    async function upsertVariants(variants: any[]): Promise<void> {
-      if (variants.length === 0) return;
-      const chunkSize = 400;
-      for (let i = 0; i < variants.length; i += chunkSize) {
-        const batch = variants.slice(i, i + chunkSize);
-        const { error } = await supabaseClient
-          .rpc('catalog_v2_upsert_variants', { rows: batch });
-        if (error) {
-          logStructured('ERROR', 'Failed to upsert variants', {
-            operation: 'upsert_variants',
-            error: error.message
-          });
-          throw new Error(`Failed to upsert variants: ${error.message}`);
-        }
-      }
-    }
-
-    // Main sync logic
-    async function syncSet(game: string, setId: string, since: string = ""): Promise<any> {
-      let cardsProcessed = 0;
-      let variantsProcessed = 0;
-      const errors: string[] = [];
-      const warnings: string[] = [];
-
-      try {
-        // 1. Fetch cards
-        const cards = await fetchCards(game, setId, since);
-        logStructured('INFO', 'Fetched cards', {
-          operation: 'sync_set',
-          game,
-          setId,
-          count: cards.length
-        });
-        cardsProcessed = cards.length;
-
-        // 2. Upsert cards
-        await upsertCards(cards);
-        logStructured('INFO', 'Upserted cards', {
-          operation: 'sync_set',
-          game,
-          setId,
-          count: cards.length
-        });
-
-        // 3. Fetch and upsert variants (concurrently)
-        const variantPromises = cards.map(async (card) => {
-          try {
-            const variants = await fetchVariants(game, card.card_id);
-            await upsertVariants(variants);
-            variantsProcessed += variants.length;
-            return variants.length;
-          } catch (variantError: any) {
-            errors.push(`Failed to process variants for card ${card.card_id}: ${variantError.message}`);
-            return 0;
-          }
-        });
-
-        await Promise.all(variantPromises);
-        logStructured('INFO', 'Upserted variants', {
-          operation: 'sync_set',
-          game,
-          setId,
-          count: variantsProcessed
-        });
-
-      } catch (syncError: any) {
-        errors.push(`Sync failed: ${syncError.message}`);
-        logStructured('ERROR', 'Sync failed', {
-          operation: 'sync_set',
-          game,
-          setId,
-          error: syncError.message
-        });
-      }
-
-      return {
-        cardsProcessed,
-        variantsProcessed,
-        errors,
-        warnings
-      };
-    }
-
-    // Orchestrate the sync process
-    let result: any = {};
-    if (setId) {
-      // Sync a single set
-      logStructured('INFO', 'Syncing single set', {
-        operation: 'sync',
-        game,
-        setId
-      });
-      result = await syncSet(game, setId, since);
-    } else {
-      // Queue all sets for a game
-      logStructured('INFO', 'Queueing all sets for game', {
-        operation: 'sync',
-        game
-      });
-
-      // Fetch all sets for the game
-      const url = `${supabaseUrl}/functions/v1/justtcg-sets?game=${encodeURIComponent(game)}`;
-      
-      logStructured('INFO', 'Fetching sets for game', {
-        operation: 'fetch_sets',
-        game,
-        url
-      });
-
-      const response = await fetch(url, {
-        headers: {
-          ...corsHeaders,
-          'apikey': supabaseServiceKey,
-          'Authorization': `Bearer ${supabaseServiceKey}`
-        }
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        logStructured('ERROR', 'Failed to fetch sets', {
-          operation: 'queue_all',
-          game,
-          status: response.status,
-          error: errorText
-        });
-        throw new Error(`Failed to fetch sets: ${response.status} - ${errorText}`);
-      }
-
-      const { data: sets, error: setsError } = await response.json();
-
-      if (setsError) {
-        logStructured('ERROR', 'Failed to parse sets', {
-          operation: 'queue_all',
-          game,
-          error: setsError.message
-        });
-        throw new Error(`Failed to parse sets: ${setsError.message}`);
-      }
-
-      if (!sets || sets.length === 0) {
-        logStructured('WARN', 'No sets found for game', {
-          operation: 'queue_all',
-          game
-        });
-        return new Response(
-          JSON.stringify({ status: 'no_sets', message: `No sets found for game: ${game}` }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      // Queue the sets
-      const setIds = sets.map((set: any) => set.id);
-      const queuedCount = await queueSets(game, setIds);
-
-      logStructured('INFO', 'Queued sets for sync', {
-        operation: 'queue_all',
-        game,
-        queued: queuedCount,
-        total: sets.length
-      });
-
-      result = {
-        setsQueued: queuedCount,
-        totalSets: sets.length
-      };
-    }
-
-    // For single set sync, update last_synced_at after successful sync
-    if (setId && !queueOnly) {
-      const { data: syncedSets, errors, warnings } = result;
-      
-      if (syncedSets && syncedSets.length > 0) {
-        try {
-          const { error: updateError } = await supabaseClient
-            .schema('catalog_v2').from('sets')
-            .update({
-              last_synced_at: new Date().toISOString(),
-              last_sync_status: 'success',
-              last_sync_message: `Synced ${result.cardsProcessed} cards, ${result.variantsProcessed} variants`
-            })
-            .eq('game', game)
-            .eq('set_id', setId);
-
-          if (updateError) {
-            logStructured('WARN', 'Failed to update sync timestamp', {
-              operation: 'catalog_sync_request',
-              game,
-              setId,
-              error: updateError.message
-            });
-          }
-        } catch (timestampError) {
-          logStructured('WARN', 'Failed to update sync timestamp', {
-            operation: 'catalog_sync_request',
-            game,
-            setId,
-            error: timestampError.message
-          });
-        }
-      }
-
-      logStructured('INFO', 'Single set sync completed', {
-        operation: 'catalog_sync_request',
-        game,
-        setId,
-        since,
-        status: errors.length > 0 ? 'completed_with_errors' : 'success',
-        mode: 'single_set',
-        setsProcessed: result.setsProcessed,
-        cardsProcessed: result.cardsProcessed,
-        variantsProcessed: result.variantsProcessed,
-        skipped: {
-          sets: result.skippedSets || 0,
-          cards: result.skippedCards || 0
-        },
-        errors,
-        warnings,
-        durationMs: Date.now() - startTime
-      });
-
-      return new Response(
-        JSON.stringify({
-          status: errors.length > 0 ? 'completed_with_errors' : 'success',
-          message: `Sync completed for ${game} set: ${setId}`,
-          setsProcessed: result.setsProcessed,
-          cardsProcessed: result.cardsProcessed,
-          variantsProcessed: result.variantsProcessed,
-          errors,
-          warnings
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Respond based on the operation
-    if (setId) {
-      logStructured('INFO', 'Sync completed', {
-        operation: 'catalog_sync',
-        game,
-        setId,
-        since,
-        status: 'completed',
-        mode: 'single_set',
-        setsProcessed: result.setsProcessed,
-        cardsProcessed: result.cardsProcessed,
-        variantsProcessed: result.variantsProcessed,
-        errors: result.errors,
-        warnings: result.warnings,
-        durationMs: Date.now() - startTime
-      });
-
-      return new Response(
-        JSON.stringify({
-          status: 'completed',
-          message: `Sync completed for ${game} set: ${setId}`,
-          setsProcessed: result.setsProcessed,
-          cardsProcessed: result.cardsProcessed,
-          variantsProcessed: result.variantsProcessed,
-          errors: result.errors,
-          warnings: result.warnings
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    } else {
-      logStructured('INFO', 'Queueing completed', {
-        operation: 'catalog_sync',
-        game,
-        status: 'queued',
-        setsQueued: result.setsQueued,
-        totalSets: result.totalSets,
-        durationMs: Date.now() - startTime
-      });
-
-      return new Response(
-        JSON.stringify({
-          status: 'queued',
-          message: `Queued ${result.setsQueued} sets for game: ${game}`,
-          setsQueued: result.setsQueued,
-          totalSets: result.totalSets
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-  } catch (error: any) {
-    logStructured('ERROR', 'Sync failed', {
-      operation: 'catalog_sync',
-      error: error.message,
-      stack: error.stack
+    // Execute the sync
+    const result = await syncCatalogGeneric({ 
+      game, 
+      setIds: targetSetIds.length ? targetSetIds : undefined, 
+      since 
     });
 
     return new Response(
-      JSON.stringify({ error: error.message }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify({ 
+        status: 'success',
+        ...result
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+
+  } catch (error: any) {
+    log('ERROR', 'catalog-sync failed', { error: error.message });
+    return new Response(
+      JSON.stringify({ 
+        status: 'error', 
+        message: error.message 
+      }),
+      { 
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      }
     );
   }
 });
-
-// Helper function for structured logging
-function logStructured(level: 'INFO' | 'ERROR' | 'WARN', message: string, context: Record<string, any> = {}) {
-  const logEntry = {
-    timestamp: new Date().toISOString(),
-    level,
-    message,
-    ...context
-  };
-  console.log(JSON.stringify(logEntry));
-}
