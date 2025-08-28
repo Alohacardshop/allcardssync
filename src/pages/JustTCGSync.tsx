@@ -89,6 +89,8 @@ export default function JustTCGSync() {
   const [isLoadingSets, setIsLoadingSets] = useState(false);
   const [apiMetadata, setApiMetadata] = useState<ApiMetadata | null>(null);
   
+  const FUNCTIONS_BASE = 'https://dmpoandoydaqxhzdjnmk.supabase.co/functions/v1';
+  
   // Pokemon Japan controls
   const [pokemonJapanSetId, setPokemonJapanSetId] = useState('');
   const [isRunningJapanSync, setIsRunningJapanSync] = useState(false);
@@ -358,13 +360,36 @@ export default function JustTCGSync() {
               cooldownHours: skipRecentlyUpdated ? sinceDays * 24 : 0
             };
             
-            // Inline processing - call the function directly
-            const { data: result, error } = await Promise.race([
-              supabase.functions.invoke('catalog-sync', {
-                body: requestPayload
-              }),
-              timeoutPromise
-            ]) as any;
+            let result: any;
+            let error: any = null;
+            
+            if (normalizedGameId === 'pokemon-japan') {
+              // Inform the user we're routing to the dedicated JP sync
+              toast.warning('Using Pokémon Japan dedicated sync', { 
+                description: 'Routing to the Japan-specific edge function.' 
+              });
+              const url = `${FUNCTIONS_BASE}/catalog-sync-pokemon-japan?setId=${encodeURIComponent(setId)}`;
+              const response = await Promise.race([
+                fetch(url, { method: 'POST' }),
+                timeoutPromise
+              ]) as Response;
+              const json = await response.json();
+              if (!response.ok) {
+                error = { message: json?.error || 'Japan sync failed' };
+              } else {
+                result = json;
+              }
+            } else {
+              // Inline processing - call the generic function directly
+              const raced: any = await Promise.race([
+                supabase.functions.invoke('catalog-sync', {
+                  body: requestPayload
+                }),
+                timeoutPromise
+              ]);
+              result = raced?.data;
+              error = raced?.error || null;
+            }
             
             if (error) {
               throw new Error(`Sync failed: ${error.message}`);
@@ -399,11 +424,11 @@ export default function JustTCGSync() {
               // Update progress to done
               setSyncProgress(prev => prev.map(p => 
                 p.gameId === gameId && p.setId === setId 
-                  ? { ...p, status: 'done', message: `${result?.cardsProcessed || 0} cards, ${result?.variantsProcessed || 0} variants` }
+                  ? { ...p, status: 'done', message: `${(result?.cardsProcessed ?? result?.cards ?? 0)} cards, ${(result?.variantsProcessed ?? 0)} variants` }
                   : p
               ));
               
-              addLog(`✅ ${setName}: ${result?.cardsProcessed || 0} cards, ${result?.variantsProcessed || 0} variants`);
+              addLog(`✅ ${setName}: ${(result?.cardsProcessed ?? result?.cards ?? 0)} cards, ${(result?.variantsProcessed ?? 0)} variants`);
             }
           
           } catch (syncError: any) {
@@ -501,10 +526,11 @@ export default function JustTCGSync() {
       return data;
     },
     onSuccess: (data) => {
+      const queued = data?.queued_sets ?? data?.setsQueued ?? 0;
       toast.success('Pokemon Japan orchestrator started', { 
-        description: `Queued ${data.setsQueued || 0} sets for processing`
+        description: `Queued ${queued} sets for processing`
       });
-      addLog(`🇯🇵 Japan orchestrator: Queued ${data.setsQueued || 0} sets`);
+      addLog(`🇯🇵 Japan orchestrator: Queued ${queued} sets`);
       // Refresh stats
       queryClient.invalidateQueries({ queryKey: ['catalog-stats-overall'] });
       queryClient.invalidateQueries({ queryKey: ['queue-stats'] });
@@ -518,17 +544,16 @@ export default function JustTCGSync() {
 
   const runSingleJapanSetMutation = useMutation({
     mutationFn: async (setId: string) => {
-      const { data, error } = await supabase.functions.invoke('catalog-sync-pokemon-japan', {
-        body: { setId }
-      });
-      if (error) throw error;
+      const res = await fetch(`${FUNCTIONS_BASE}/catalog-sync-pokemon-japan?setId=${encodeURIComponent(setId)}`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Japan set sync failed');
       return data;
     },
     onSuccess: (data) => {
       toast.success('Pokemon Japan set sync completed', { 
-        description: `Processed ${data.cardsProcessed || 0} cards`
+        description: `Processed ${(data?.cards ?? data?.cardsProcessed ?? 0)} cards`
       });
-      addLog(`🇯🇵 Japan set sync: ${data.cardsProcessed || 0} cards processed`);
+      addLog(`🇯🇵 Japan set sync: ${(data?.cards ?? data?.cardsProcessed ?? 0)} cards processed`);
       setPokemonJapanSetId('');
       // Refresh stats
       queryClient.invalidateQueries({ queryKey: ['catalog-stats-overall'] });

@@ -52,6 +52,9 @@ serve(async (req) => {
       forceSync = body.forceSync || url.searchParams.get("forceSync") === "true";
     }
 
+    // Normalize game slug for consistency
+    game = normalizeGameSlug(game);
+
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     
@@ -77,7 +80,7 @@ serve(async (req) => {
         const cooldownThreshold = new Date(Date.now() - cooldownHours * 60 * 60 * 1000);
         
         const { data: existingSet, error: setCheckError } = await supabaseClient
-          .from('catalog_v2.sets')
+          .schema('catalog_v2').from('sets')
           .select('set_id, name, last_synced_at, last_seen_at')
           .eq('game', game)
           .eq('set_id', setId)
@@ -271,57 +274,55 @@ serve(async (req) => {
       return data || [];
     }
 
-    // Function to upsert sets
+    // Function to upsert sets via RPC
     async function upsertSets(sets: any[]): Promise<void> {
       if (sets.length === 0) return;
 
-      const { data, error } = await supabaseClient
-        .from('catalog_v2.sets')
-        .upsert(sets, { onConflict: 'game, set_id' });
+      const { error } = await supabaseClient
+        .rpc('catalog_v2_upsert_sets', { rows: sets });
 
       if (error) {
         logStructured('ERROR', 'Failed to upsert sets', {
           operation: 'upsert_sets',
-          error: error.message,
-          sets
+          error: error.message
         });
         throw new Error(`Failed to upsert sets: ${error.message}`);
       }
     }
 
-    // Function to upsert cards
+    // Function to upsert cards via RPC in chunks
     async function upsertCards(cards: any[]): Promise<void> {
       if (cards.length === 0) return;
-
-      const { data, error } = await supabaseClient
-        .from('catalog_v2.cards')
-        .upsert(cards, { onConflict: 'game, card_id' });
-
-      if (error) {
-        logStructured('ERROR', 'Failed to upsert cards', {
-          operation: 'upsert_cards',
-          error: error.message,
-          cards
-        });
-        throw new Error(`Failed to upsert cards: ${error.message}`);
+      const chunkSize = 400;
+      for (let i = 0; i < cards.length; i += chunkSize) {
+        const batch = cards.slice(i, i + chunkSize);
+        const { error } = await supabaseClient
+          .rpc('catalog_v2_upsert_cards', { rows: batch });
+        if (error) {
+          logStructured('ERROR', 'Failed to upsert cards', {
+            operation: 'upsert_cards',
+            error: error.message
+          });
+          throw new Error(`Failed to upsert cards: ${error.message}`);
+        }
       }
     }
 
-    // Function to upsert variants
+    // Function to upsert variants via RPC in chunks
     async function upsertVariants(variants: any[]): Promise<void> {
       if (variants.length === 0) return;
-
-      const { data, error } = await supabaseClient
-        .from('catalog_v2.variants')
-        .upsert(variants, { onConflict: 'game, variant_id' });
-
-      if (error) {
-        logStructured('ERROR', 'Failed to upsert variants', {
-          operation: 'upsert_variants',
-          error: error.message,
-          variants
-        });
-        throw new Error(`Failed to upsert variants: ${error.message}`);
+      const chunkSize = 400;
+      for (let i = 0; i < variants.length; i += chunkSize) {
+        const batch = variants.slice(i, i + chunkSize);
+        const { error } = await supabaseClient
+          .rpc('catalog_v2_upsert_variants', { rows: batch });
+        if (error) {
+          logStructured('ERROR', 'Failed to upsert variants', {
+            operation: 'upsert_variants',
+            error: error.message
+          });
+          throw new Error(`Failed to upsert variants: ${error.message}`);
+        }
       }
     }
 
@@ -482,7 +483,7 @@ serve(async (req) => {
       if (syncedSets && syncedSets.length > 0) {
         try {
           const { error: updateError } = await supabaseClient
-            .from('catalog_v2.sets')
+            .schema('catalog_v2').from('sets')
             .update({
               last_synced_at: new Date().toISOString(),
               last_sync_status: 'success',
