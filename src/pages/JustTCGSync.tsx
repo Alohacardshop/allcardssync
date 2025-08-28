@@ -517,22 +517,27 @@ export default function JustTCGSync() {
                 <div className="flex items-center gap-4 mb-4">
                   <div className="flex-1">
                     <label className="text-sm font-medium">Select Game</label>
-                    <Select value={selectedGame} onValueChange={setSelectedGame}>
+                    
+                    {/* Search input moved outside Select */}
+                    <div className="relative mb-2">
+                      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        placeholder="Search games..."
+                        value={gameSearchQuery}
+                        onChange={(e) => setGameSearchQuery(e.target.value)}
+                        className="pl-10"
+                      />
+                    </div>
+                    
+                    <Select 
+                      value={selectedGame} 
+                      onValueChange={setSelectedGame}
+                      disabled={gamesLoading || filteredGames.length === 0}
+                    >
                       <SelectTrigger>
-                        <SelectValue placeholder="Choose a game to sync..." />
+                        <SelectValue placeholder={gamesLoading ? "Loading games..." : "Choose a game to sync..."} />
                       </SelectTrigger>
-                      <SelectContent>
-                        <div className="p-2">
-                          <div className="relative">
-                            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                            <Input
-                              placeholder="Search games..."
-                              value={gameSearchQuery}
-                              onChange={(e) => setGameSearchQuery(e.target.value)}
-                              className="pl-10"
-                            />
-                          </div>
-                        </div>
+                      <SelectContent className="z-[9999] bg-background">
                         {gamesLoading ? (
                           <div className="p-4 text-center">
                             <Loader2 className="h-4 w-4 animate-spin mx-auto" />
