@@ -15,12 +15,36 @@ const GAME_MAP = new Map<string, string>([
   ['mtg', 'magic-the-gathering'],
   ['magic-the-gathering', 'magic-the-gathering'],
   ['pokemon', 'pokemon'],
-  ['pokemon-japan', 'pokemon-japan'],
+  ['pokemon-japan', 'pokemon'], // JustTCG uses pokemon + region=japan
 ]);
 
 function normalizeGame(game: string): string {
   const key = game.trim().toLowerCase();
   return GAME_MAP.get(key) ?? key;
+}
+
+function getRegionParam(game: string): string {
+  return game === 'pokemon-japan' ? 'japan' : '';
+}
+
+function buildApiUrl(baseUrl: string, game: string, additionalParams: Record<string, string> = {}): string {
+  const apiGame = normalizeGame(game);
+  const region = getRegionParam(game);
+  
+  const url = new URL(baseUrl);
+  url.searchParams.set('game', apiGame);
+  
+  if (region) {
+    url.searchParams.set('region', region);
+  }
+  
+  for (const [key, value] of Object.entries(additionalParams)) {
+    if (value) {
+      url.searchParams.set(key, value);
+    }
+  }
+  
+  return url.toString();
 }
 const FUNCTIONS_BASE = (Deno.env.get("SUPABASE_FUNCTIONS_URL") ||
   Deno.env.get("SUPABASE_URL")!.replace(".supabase.co", ".functions.supabase.co")).replace(/\/+$/, "");
@@ -294,6 +318,75 @@ async function queueSelfForSet(game: string, setId: string) {
   if (error) throw error;
 }
 
+// Helper function to resolve set ID from JustTCG sets endpoint
+async function resolveSetId(game: string, setName: string, headers: HeadersInit): Promise<string | null> {
+  try {
+    const setsUrl = buildApiUrl(`${JUSTTCG_BASE}/sets`, game, { limit: '1000' });
+    
+    logStructured('INFO', 'Attempting set ID resolution', {
+      operation: 'resolve_set_id',
+      game,
+      setName,
+      setsUrl
+    });
+    
+    const response = await fetchJsonWithRetry(setsUrl, headers, 3, 1000, {
+      operation: 'resolve_set_id',
+      game,
+      setName
+    });
+    
+    const sets = response?.data || [];
+    
+    // Try exact name match first
+    let matchedSet = sets.find((s: any) => s.name === setName);
+    
+    // If no exact match, try case-insensitive
+    if (!matchedSet) {
+      matchedSet = sets.find((s: any) => s.name?.toLowerCase() === setName.toLowerCase());
+    }
+    
+    // If still no match, try partial match
+    if (!matchedSet) {
+      matchedSet = sets.find((s: any) => 
+        s.name?.toLowerCase().includes(setName.toLowerCase()) ||
+        setName.toLowerCase().includes(s.name?.toLowerCase())
+      );
+    }
+    
+    if (matchedSet) {
+      const resolvedId = matchedSet.code || matchedSet.id;
+      logStructured('INFO', 'Set ID resolved successfully', {
+        operation: 'resolve_set_id',
+        game,
+        originalSetName: setName,
+        matchedSetName: matchedSet.name,
+        resolvedSetId: resolvedId,
+        matchType: matchedSet.name === setName ? 'exact' : 
+                  matchedSet.name?.toLowerCase() === setName.toLowerCase() ? 'case_insensitive' : 'partial'
+      });
+      return resolvedId;
+    }
+    
+    logStructured('WARN', 'No matching set found for resolution', {
+      operation: 'resolve_set_id',
+      game,
+      setName,
+      availableSets: sets.slice(0, 5).map((s: any) => ({ name: s.name, code: s.code, id: s.id }))
+    });
+    
+    return null;
+  } catch (error: any) {
+    logStructured('ERROR', 'Set ID resolution failed', {
+      operation: 'resolve_set_id',
+      game,
+      setName,
+      error: error.message
+    });
+    return null;
+  }
+}
+
 // Game-specific sync logic with turbo mode support
 async function syncSet(game: string, setId: string, turboMode = false) {
   const tracker = new PerformanceTracker({
@@ -309,11 +402,10 @@ async function syncSet(game: string, setId: string, turboMode = false) {
     logStructured('INFO', 'Starting set sync', {
       operation: 'sync_set',
       game,
-      setId
+      setId,
+      apiGame: normalizeGame(game),
+      region: getRegionParam(game)
     });
-    
-    // Normalize game parameter for JustTCG API
-    const apiGame = normalizeGame(game);
     
     let allCards: any[] = [];
     let limit = turboMode ? 250 : 100; // Larger pages in turbo mode
@@ -321,8 +413,9 @@ async function syncSet(game: string, setId: string, turboMode = false) {
     let hasMore = true;
     let pageCount = 0;
     
-    // Fetch all cards for this set, with slug fallback
+    // Fetch all cards for this set, with improved fallback logic
     let attemptedSlugFallback = false;
+    let attemptedSetResolution = false;
     let currentSetId = setId;
     
     while (hasMore) {
@@ -336,7 +429,11 @@ async function syncSet(game: string, setId: string, turboMode = false) {
         limit
       });
 
-      const url = `${JUSTTCG_BASE}/cards?game=${encodeURIComponent(apiGame)}&set=${encodeURIComponent(currentSetId)}&limit=${limit}&offset=${offset}`;
+      const url = buildApiUrl(`${JUSTTCG_BASE}/cards`, game, {
+        set: currentSetId,
+        limit: limit.toString(),
+        offset: offset.toString()
+      });
       
       logStructured('INFO', 'Fetching cards page', {
         operation: 'fetch_cards_page',
@@ -344,7 +441,8 @@ async function syncSet(game: string, setId: string, turboMode = false) {
         setId: currentSetId,
         originalSetId: setId,
         page: pageCount,
-        url
+        url,
+        region: getRegionParam(game)
       });
       
       const response = await fetchJsonWithRetry(url, headers, 6, 500, {
@@ -356,33 +454,61 @@ async function syncSet(game: string, setId: string, turboMode = false) {
       
       const cards = response?.data || [];
       
-      // If no cards found on first page and we haven't tried slug fallback yet
-      if (cards.length === 0 && pageCount === 1 && !attemptedSlugFallback) {
-        const slugifiedSetId = setId.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
-        
-        if (slugifiedSetId !== setId) {
-          logStructured('INFO', 'No cards found with original setId, trying slug fallback', {
-            operation: 'slug_fallback',
-            originalSetId: setId,
-            slugifiedSetId,
-            game
-          });
+      // Enhanced fallback logic for first page with no cards
+      if (cards.length === 0 && pageCount === 1) {
+        // First try slug fallback
+        if (!attemptedSlugFallback) {
+          const slugifiedSetId = setId.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
           
-          attemptedSlugFallback = true;
-          currentSetId = slugifiedSetId;
-          pageCount = 0; // Reset page count for new attempt
-          continue; // Retry with slugified setId
+          if (slugifiedSetId !== setId) {
+            logStructured('INFO', 'No cards found with original setId, trying slug fallback', {
+              operation: 'slug_fallback',
+              originalSetId: setId,
+              slugifiedSetId,
+              game
+            });
+            
+            attemptedSlugFallback = true;
+            currentSetId = slugifiedSetId;
+            pageCount = 0; // Reset page count for new attempt
+            continue; // Retry with slugified setId
+          }
+        }
+        
+        // Then try set resolution from JustTCG sets endpoint
+        if (!attemptedSetResolution) {
+          const resolvedSetId = await resolveSetId(game, setId, headers);
+          
+          if (resolvedSetId && resolvedSetId !== currentSetId) {
+            logStructured('INFO', 'Attempting set resolution fallback', {
+              operation: 'set_resolution_fallback',
+              originalSetId: setId,
+              currentSetId,
+              resolvedSetId,
+              game
+            });
+            
+            attemptedSetResolution = true;
+            currentSetId = resolvedSetId;
+            pageCount = 0; // Reset page count for new attempt
+            continue; // Retry with resolved setId
+          }
+          
+          attemptedSetResolution = true;
         }
       }
       
       if (cards.length === 0) {
         hasMore = false;
-        logStructured('INFO', 'No more cards found, ending pagination', {
+        logStructured('INFO', `No more cards found, ending pagination ${attemptedSlugFallback ? '(after slug fallback)' : ''} ${attemptedSetResolution ? '(after set resolution)' : ''}`, {
           operation: 'pagination_end',
           game,
           setId: currentSetId,
+          originalSetId: setId,
           totalCards: allCards.length,
-          pageCount
+          pageCount,
+          attemptedSlugFallback,
+          attemptedSetResolution
         });
         break;
       }
@@ -793,12 +919,11 @@ serve(async (req) => {
     }
 
     // Otherwise, orchestrate: fetch all sets and queue them
-    const apiGame = normalizeGame(game);
-    
     logStructured('INFO', 'Starting orchestration sync', {
       operation: 'orchestration_start',
       game,
-      apiGame,
+      apiGame: normalizeGame(game),
+      region: getRegionParam(game),
       since
     });
     
@@ -812,7 +937,18 @@ serve(async (req) => {
     
     while (hasMore) {
       pageCount++;
-      const setsUrl = `${JUSTTCG_BASE}/sets?game=${encodeURIComponent(apiGame)}&limit=${limit}&offset=${offset}`;
+      const setsUrl = buildApiUrl(`${JUSTTCG_BASE}/sets`, game, {
+        limit: limit.toString(),
+        offset: offset.toString()
+      });
+      
+      logStructured('INFO', 'Fetching sets page', {
+        operation: 'fetch_sets_page',
+        game,
+        page: pageCount,
+        url: setsUrl,
+        region: getRegionParam(game)
+      });
       
       const setsResponse = await fetchJsonWithRetry(setsUrl, headers, 6, 500, {
         operation: 'fetch_sets_page',
