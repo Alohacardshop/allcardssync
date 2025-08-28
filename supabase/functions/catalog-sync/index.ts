@@ -209,7 +209,16 @@ async function fetchJsonWithRetry(url: string, headers: HeadersInit = {}, tries 
   for (let i = 0; i < tries; i++) {
     const attemptStart = Date.now();
     try {
-      const res = await fetch(url, { headers });
+      // Add 15 second timeout to prevent hanging requests
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+      
+      const res = await fetch(url, { 
+        headers,
+        signal: controller.signal 
+      });
+      clearTimeout(timeoutId);
+      
       const durationMs = Date.now() - attemptStart;
       
       if (!res.ok) {
@@ -242,11 +251,15 @@ async function fetchJsonWithRetry(url: string, headers: HeadersInit = {}, tries 
       const durationMs = Date.now() - attemptStart;
       lastError = e;
       
-      logStructured('ERROR', `Request failed on attempt ${i + 1}`, {
+      // Check if it's an abort/timeout error
+      const isTimeout = e.name === 'AbortError' || e.message?.includes('timeout');
+      
+      logStructured('ERROR', `Request failed on attempt ${i + 1}${isTimeout ? ' (timeout)' : ''}`, {
         ...context,
         url,
         attempt: i + 1,
         error: e?.message || e,
+        timeout: isTimeout,
         durationMs
       });
       
@@ -418,7 +431,7 @@ async function syncSet(game: string, setId: string, turboMode = false) {
     let attemptedSetResolution = false;
     let currentSetId = setId;
     
-    while (hasMore) {
+    while (hasMore && pageCount < 100) { // Hard cap at 100 pages to prevent infinite loops
       pageCount++;
       const pageTracker = new PerformanceTracker({
         operation: 'sync_set_page',
@@ -496,6 +509,42 @@ async function syncSet(game: string, setId: string, turboMode = false) {
           
           attemptedSetResolution = true;
         }
+        
+        // Special check for pokemon-japan: detect wrong-region cards
+        if (cards.length === 0 && pageCount === 1 && game === 'pokemon-japan') {
+          // Try the same setId with regular pokemon API to see if this is an English-only set
+          try {
+            const englishUrl = buildApiUrl(`${JUSTTCG_BASE}/cards`, 'pokemon', {
+              set: setId,
+              limit: '1',
+              offset: '0'
+            });
+            
+            const englishResponse = await fetchJsonWithRetry(englishUrl, headers, 3, 500, {
+              operation: 'wrong_region_check',
+              game: 'pokemon',
+              setId,
+              page: 1
+            });
+            
+            const englishCards = englishResponse?.data || [];
+            if (englishCards.length > 0) {
+              logStructured('ERROR', 'English-only set detected in pokemon-japan sync', {
+                operation: 'wrong_region_error',
+                originalGame: game,
+                setId,
+                message: 'This appears to be an English-only set. Use pokemon game mode instead of pokemon-japan.',
+                englishCardsFound: englishCards.length
+              });
+              throw new Error(`Set "${setId}" appears to be English-only. Use pokemon game mode instead of pokemon-japan.`);
+            }
+          } catch (regionCheckError) {
+            // If the region check itself fails, just continue with the original error
+            if (regionCheckError.message?.includes('English-only')) {
+              throw regionCheckError; // Re-throw if it's our custom error
+            }
+          }
+        }
       }
       
       if (cards.length === 0) {
@@ -510,6 +559,19 @@ async function syncSet(game: string, setId: string, turboMode = false) {
           attemptedSlugFallback,
           attemptedSetResolution
         });
+        break;
+      }
+      
+      // Check if we hit the page cap
+      if (pageCount >= 100) {
+        logStructured('WARN', 'Hit maximum page limit, stopping pagination', {
+          operation: 'page_cap_reached',
+          game,
+          setId: currentSetId,
+          totalCards: allCards.length,
+          pageCount: 100
+        });
+        hasMore = false;
         break;
       }
       

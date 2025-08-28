@@ -411,15 +411,34 @@ export default function JustTCGSync() {
             throw new Error(`Unsupported game: ${gameId}. Only MTG, Pokémon, and Pokémon Japan are supported.`);
           }
           
+          // Check for UX warning: English-only set selected for pokemon-japan
+          if (normalizedGameId === 'pokemon-japan' && setName && !setName.match(/japanese|japan|日本/i)) {
+            addLog(`⚠️ Warning: "${setName}" might be English-only but selected for pokemon-japan`);
+            toast.warning('Possible English-only set', { 
+              description: `"${setName}" might be English-only. Consider using regular Pokemon instead.` 
+            });
+          }
+          
           addLog(`⚡ Syncing ${setName} (${normalizedGameId})...`);
           
-          const { data: result, error } = await supabase.functions.invoke('catalog-sync', {
-            body: { game: normalizedGameId, setId }
+          // Add client-side watchdog timeout (90 seconds)
+          const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => {
+              reject(new Error('Request timed out after 90 seconds'));
+            }, 90000);
           });
           
-          if (error) {
-            throw new Error(`Sync failed: ${error.message}`);
-          }
+          try {
+            const { data: result, error } = await Promise.race([
+              supabase.functions.invoke('catalog-sync', {
+                body: { game: normalizedGameId, setId }
+              }),
+              timeoutPromise
+            ]) as any;
+            
+            if (error) {
+              throw new Error(`Sync failed: ${error.message}`);
+            }
           results.push(result);
           
           // Update progress to done
@@ -431,8 +450,17 @@ export default function JustTCGSync() {
           
           addLog(`✅ ${setName}: ${result.cardsProcessed || 0} cards, ${result.variantsProcessed || 0} variants`);
           
+          } catch (syncError: any) {
+            throw syncError;
+          }
+          
         } catch (error: any) {
           let errorMessage = error.message;
+          
+          // Check for timeout/abort error
+          if (errorMessage?.includes('timed out after 90 seconds')) {
+            addLog(`⏱️ Timeout: ${setName} took longer than 90 seconds`);
+          }
           
           // Try to parse more detailed error from response
           if (error.message && error.message.includes('Sync failed:')) {
@@ -506,10 +534,16 @@ export default function JustTCGSync() {
     }
   };
 
-  // Handle set selection
+  // Handle set selection with deduplication
   const handleSetSelection = (setId: string, checked: boolean) => {
     if (checked) {
-      setSelectedSets(prev => [...prev, setId]);
+      setSelectedSets(prev => {
+        // Deduplicate to prevent accidental duplicate invocations
+        if (prev.includes(setId)) {
+          return prev;
+        }
+        return [...prev, setId];
+      });
     } else {
       setSelectedSets(prev => prev.filter(id => id !== setId));
     }
@@ -529,6 +563,7 @@ export default function JustTCGSync() {
   const handleSelectAllSetsForGame = (gameId: string) => {
     const gameSets = groupedSets[gameId] || [];
     const gameSetIds = gameSets.map(set => set.id);
+    // Deduplicate using Set to prevent duplicate invocations
     setSelectedSets(prev => [...new Set([...prev, ...gameSetIds])]);
   };
 
@@ -544,6 +579,7 @@ export default function JustTCGSync() {
       setsGameFilter in groupedSets ? { [setsGameFilter]: groupedSets[setsGameFilter] } : {};
     
     const allShownSetIds = Object.values(filteredGameSets).flat().map(set => set.id);
+    // Deduplicate using Set to prevent duplicate invocations
     setSelectedSets(prev => [...new Set([...prev, ...allShownSetIds])]);
   };
 
@@ -557,13 +593,16 @@ export default function JustTCGSync() {
 
   // Sync button handlers
   const handleSyncSelectedSets = () => {
-    if (selectedSets.length === 0) {
+    // Deduplicate selected sets before proceeding
+    const uniqueSelectedSets = [...new Set(selectedSets)];
+    
+    if (uniqueSelectedSets.length === 0) {
       toast.warning('No sets selected', { description: 'Please select at least one set to sync' });
       return;
     }
     
     // Check if all selected sets are from supported games
-    const unsupportedSets = selectedSets.filter(setId => {
+    const unsupportedSets = uniqueSelectedSets.filter(setId => {
       const gameId = Object.keys(groupedSets).find(gId => 
         groupedSets[gId].some(set => set.id === setId)
       );
@@ -577,7 +616,25 @@ export default function JustTCGSync() {
       return;
     }
     
-    syncSetsMutation.mutate({ mode: 'selected', setIds: selectedSets });
+    // Additional UX warning for pokemon-japan with potentially English sets
+    const pokemonJapanSets = uniqueSelectedSets.filter(setId => {
+      const gameId = Object.keys(groupedSets).find(gId => 
+        groupedSets[gId].some(set => set.id === setId)
+      );
+      if (gameId === 'pokemon-japan') {
+        const set = groupedSets[gameId].find(s => s.id === setId);
+        return set && !set.name.match(/japanese|japan|日本/i);
+      }
+      return false;
+    });
+    
+    if (pokemonJapanSets.length > 0) {
+      toast.warning('Possible English-only sets', {
+        description: `${pokemonJapanSets.length} selected sets for pokemon-japan might be English-only`
+      });
+    }
+    
+    syncSetsMutation.mutate({ mode: 'selected', setIds: uniqueSelectedSets });
   };
 
   const handleSyncAllSetsForSelectedGames = () => {
