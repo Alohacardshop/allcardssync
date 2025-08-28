@@ -117,12 +117,12 @@ export default function JustTCGSync() {
   };
 
   // Load sets from database
-  const loadSetsFromDB = async (gameIds?: string[]) => {
+  const loadSetsFromDB = async (gameIds?: string[], gamesData?: Game[]) => {
     setIsLoadingSets(true);
     
-    // Get available games - use from API response or from database
-    const availableGames = gamesResponse?.data || [];
-    const gamesToLoad = gameIds && gameIds.length > 0 ? gameIds : availableGames.map(g => g.id).filter(Boolean);
+    // Get available games from the passed parameter or use selected games
+    const availableGamesData = gamesData || [];
+    const gamesToLoad = gameIds && gameIds.length > 0 ? gameIds : availableGamesData.map(g => g.id).filter(Boolean);
     
     if (gamesToLoad.length === 0) {
       addLog('📋 No games available to load sets for');
@@ -215,18 +215,17 @@ export default function JustTCGSync() {
   // Auto-load sets when selected games change
   useEffect(() => {
     if (selectedGames.length > 0) {
-      loadSetsFromDB(selectedGames);
+      loadSetsFromDB(selectedGames, games);
     }
-  }, [selectedGames]);
+  }, [selectedGames, games]);
 
   // Initial load sets from DB when games are available
   useEffect(() => {
-    const availableGames = gamesResponse?.data || [];
-    if (availableGames.length > 0 && selectedGames.length === 0 && Object.keys(groupedSets).length === 0) {
+    if (games.length > 0 && selectedGames.length === 0 && Object.keys(groupedSets).length === 0) {
       // On initial load, load sets for all games if no games are selected
-      loadSetsFromDB();
+      loadSetsFromDB(undefined, games);
     }
-  }, [gamesResponse]);
+  }, [games]);
 
   // Discover sets mutation
   const discoverSetsMutation = useMutation({
@@ -774,7 +773,7 @@ export default function JustTCGSync() {
           <CardContent className="space-y-4">
             <div className="flex flex-wrap gap-4 items-center">
               <Button
-                onClick={() => loadSetsFromDB(selectedGames.length > 0 ? selectedGames : undefined)}
+                onClick={() => loadSetsFromDB(selectedGames.length > 0 ? selectedGames : undefined, games)}
                 disabled={isLoadingSets}
                 variant="default"
               >
