@@ -66,6 +66,7 @@ export default function JustTCGSync() {
   const [syncProgress, setSyncProgress] = useState<SyncProgress[]>([]);
   const [logs, setLogs] = useState<string[]>([]);
   const [isRunning, setIsRunning] = useState(false);
+  const [isKillingJobs, setIsKillingJobs] = useState(false);
   const [apiMetadata, setApiMetadata] = useState<ApiMetadata | null>(null);
 
   const cancelRequestedRef = useRef(false);
@@ -455,6 +456,69 @@ export default function JustTCGSync() {
     toast.warning('Stopping sync...', { description: 'Current set will finish, then syncing will halt.' });
   };
 
+  const handleKillAllJobs = async () => {
+    setIsKillingJobs(true);
+    addLog('🚨 Attempting to kill all running sync jobs...');
+    
+    try {
+      // First, get all running jobs from all games
+      const games = ['mtg', 'pokemon', 'pokemon-japan'];
+      let totalKilled = 0;
+      
+      for (const game of games) {
+        try {
+          // Get status for this game
+          const { data: jobs, error: statusError } = await supabase.functions.invoke('catalog-sync-status', {
+            body: { game, limit: 100 }
+          });
+          
+          if (statusError) {
+            addLog(`⚠️ Failed to get job status for ${game}: ${statusError.message}`);
+            continue;
+          }
+          
+          // Cancel all queued/running jobs
+          const activeJobs = (jobs || []).filter((job: any) => 
+            job.status === 'queued' || job.status === 'running'
+          );
+          
+          for (const job of activeJobs) {
+            try {
+              const { error: cancelError } = await supabase.functions.invoke('catalog-sync-cancel', {
+                body: { job_id: job.id }
+              });
+              
+              if (cancelError) {
+                addLog(`❌ Failed to cancel job ${job.id}: ${cancelError.message}`);
+              } else {
+                addLog(`✅ Cancelled job ${job.id} (${job.game}/${job.set_name || job.set_id})`);
+                totalKilled++;
+              }
+            } catch (e: any) {
+              addLog(`❌ Error cancelling job ${job.id}: ${e.message}`);
+            }
+          }
+        } catch (e: any) {
+          addLog(`❌ Error processing ${game} jobs: ${e.message}`);
+        }
+      }
+      
+      if (totalKilled > 0) {
+        addLog(`🎯 Successfully killed ${totalKilled} running jobs`);
+        toast.success('Jobs cancelled', { description: `${totalKilled} running jobs were cancelled` });
+      } else {
+        addLog('ℹ️ No running jobs found to cancel');
+        toast.info('No active jobs', { description: 'No running sync jobs were found' });
+      }
+      
+    } catch (error: any) {
+      addLog(`💥 Failed to kill jobs: ${error.message}`);
+      toast.error('Failed to kill jobs', { description: error.message });
+    } finally {
+      setIsKillingJobs(false);
+    }
+  };
+
   // Filter games by search query
   const filteredGames = games.filter(game => 
     game.name.toLowerCase().includes(gameSearchQuery.toLowerCase()) ||
@@ -785,11 +849,21 @@ export default function JustTCGSync() {
               </Button>
             </div>
 
-            {isRunning && (
-              <div className="flex items-center justify-end">
-                <Button variant="destructive" onClick={handleHardStop}>
-                  <AlertCircle className="h-4 w-4 mr-2" />
-                  Hard Stop Now
+            {(isRunning || isKillingJobs) && (
+              <div className="flex items-center justify-end gap-2">
+                {isRunning && (
+                  <Button variant="destructive" onClick={handleHardStop}>
+                    <AlertCircle className="h-4 w-4 mr-2" />
+                    Hard Stop Now
+                  </Button>
+                )}
+                <Button 
+                  variant="destructive" 
+                  onClick={handleKillAllJobs}
+                  disabled={isKillingJobs}
+                >
+                  {isKillingJobs ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <AlertCircle className="h-4 w-4 mr-2" />}
+                  Kill All Jobs
                 </Button>
               </div>
             )}
