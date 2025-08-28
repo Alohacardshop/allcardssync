@@ -945,11 +945,24 @@ serve(async (req) => {
     // Determine mode for response (legacy support)
     const mode = game;
     
+    // Log request parameters at function start for debugging
+    logStructured('INFO', 'Catalog sync request started', {
+      operation: 'catalog_sync_request',
+      game,
+      setId: setId || 'orchestration',
+      since,
+      queueOnly: url.searchParams.get("queueOnly") === "true",
+      turbo: url.searchParams.get("turbo") === "true",
+      cooldownHours: url.searchParams.get("cooldownHours") || "12",
+      forceSync: url.searchParams.get("forceSync") === "true"
+    });
+    
     // If setId is provided, sync just that set
     if (setId) {
       const turboMode = url.searchParams.get("turbo") === "true";
       const cooldownHours = parseInt(url.searchParams.get("cooldownHours") || "12");
       const forceSyncParam = url.searchParams.get("forceSync") === "true";
+      const queueOnly = url.searchParams.get("queueOnly") === "true";
       
       // Check cooldown unless force sync is enabled
       if (!forceSyncParam && cooldownHours > 0) {
@@ -992,6 +1005,54 @@ serve(async (req) => {
               { headers: { ...corsHeaders, "Content-Type": "application/json" } }
             );
           }
+        }
+      }
+      
+      // Handle queue-only mode - enqueue the job and return immediately
+      if (queueOnly) {
+        try {
+          const { error: queueError } = await supabaseClient.rpc('catalog_v2_queue_set_by_mode', {
+            mode_in: game,
+            game_in: game,
+            set_id_in: setId
+          });
+
+          if (queueError) {
+            throw queueError;
+          }
+
+          requestTracker.log('Set queued successfully', {
+            status: 'queued',
+            mode: 'queue_only',
+            setId
+          });
+
+          return new Response(
+            JSON.stringify({ 
+              mode,
+              game,
+              setId,
+              status: 'queued',
+              message: `Set "${setId}" has been queued for processing`,
+              setsProcessed: 0,
+              cardsProcessed: 0,
+              variantsProcessed: 0,
+              queued: true
+            }), 
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        } catch (queueError: any) {
+          requestTracker.error('Failed to queue set', queueError);
+          return new Response(
+            JSON.stringify({ 
+              mode,
+              game,
+              setId,
+              error: queueError.message,
+              status: 'queue_error'
+            }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
         }
       }
       

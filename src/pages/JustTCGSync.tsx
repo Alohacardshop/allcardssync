@@ -75,6 +75,11 @@ export default function JustTCGSync() {
   const [skipRecentlysynced, setSkipRecentlysynced] = useState(true);
   const [cooldownHours, setCooldownHours] = useState(12);
   const [forceSync, setForceSync] = useState(false);
+  
+  // Async queue settings
+  const [useAsyncQueue, setUseAsyncQueue] = useState(true);
+  const [autoProcessQueue, setAutoProcessQueue] = useState(false);
+  const [isProcessingQueue, setIsProcessingQueue] = useState(false);
 
   const cancelRequestedRef = useRef(false);
 
@@ -330,6 +335,74 @@ export default function JustTCGSync() {
     return ['mtg', 'pokemon', 'pokemon-japan'].includes(normalized);
   };
 
+  // Process queue function
+  const handleProcessQueue = async () => {
+    if (isProcessingQueue) return;
+    
+    setIsProcessingQueue(true);
+    addLog('🔄 Starting queue processing...');
+    
+    try {
+      // Process each supported game's queue
+      const games = ['mtg', 'pokemon', 'pokemon-japan'];
+      let totalProcessed = 0;
+      
+      for (const game of games) {
+        addLog(`📋 Processing ${game} queue...`);
+        
+        // Keep processing until queue is empty or we hit an error
+        while (true) {
+          try {
+            const response = await fetch(`https://dmpoandoydaqxhzdjnmk.supabase.co/functions/v1/catalog-sync/drain?mode=${game}`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+                'Content-Type': 'application/json'
+              }
+            });
+            
+            if (!response.ok) {
+              const errorText = await response.text();
+              throw new Error(`HTTP ${response.status}: ${errorText}`);
+            }
+            
+            const result = await response.json();
+            
+            if (result?.status === 'idle') {
+              addLog(`✅ ${game} queue empty`);
+              break;
+            }
+            
+            if (result?.status === 'done') {
+              totalProcessed++;
+              addLog(`✅ Processed ${result.setId} from ${game} queue`);
+            } else if (result?.status === 'error') {
+              addLog(`❌ Queue item ${result.setId} failed: ${result.error}`);
+            }
+            
+            // Small delay between queue drains
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+          } catch (drainError: any) {
+            addLog(`❌ Queue drain failed for ${game}: ${drainError.message}`);
+            break;
+          }
+        }
+      }
+      
+      addLog(`🎉 Queue processing completed. ${totalProcessed} sets processed.`);
+      toast.success('Queue processed', { 
+        description: `${totalProcessed} sets were processed from the queue`
+      });
+      
+    } catch (error: any) {
+      addLog(`💥 Queue processing failed: ${error.message}`);
+      toast.error('Queue processing failed', { description: error.message });
+    } finally {
+      setIsProcessingQueue(false);
+    }
+  };
+
   // Sync sets mutation
   const syncSetsMutation = useMutation({
     mutationFn: async (params: { mode: 'selected' | 'all-for-games' | 'all-games'; gameIds?: string[]; setIds?: string[] }) => {
@@ -436,21 +509,27 @@ export default function JustTCGSync() {
           try {
             const { data: result, error } = await Promise.race([
               supabase.functions.invoke('catalog-sync', {
-                body: { 
+                body: useAsyncQueue ? { 
+                  game: normalizedGameId, 
+                  setId,
+                  queueOnly: true,
+                  cooldownHours: skipRecentlysynced ? cooldownHours : 0,
+                  forceSync: forceSync
+                } : { 
                   game: normalizedGameId, 
                   setId,
                   cooldownHours: skipRecentlysynced ? cooldownHours : 0,
                   forceSync: forceSync
                 }
               }),
-              timeoutPromise
+              useAsyncQueue ? Promise.resolve({ data: null, error: null }) : timeoutPromise // No timeout for queue mode
             ]) as any;
             
             if (error) {
               throw new Error(`Sync failed: ${error.message}`);
             }
             
-            // Handle cooldown skip
+            // Handle different result statuses
             if (result?.status === 'skipped_cooldown') {
               setSyncProgress(prev => prev.map(p => 
                 p.gameId === gameId && p.setId === setId 
@@ -459,6 +538,17 @@ export default function JustTCGSync() {
               ));
               
               addLog(`⏭️ ${setName}: ${result.message}`);
+              results.push(result);
+              
+            } else if (result?.status === 'queued') {
+              // Handle queued status for async mode
+              setSyncProgress(prev => prev.map(p => 
+                p.gameId === gameId && p.setId === setId 
+                  ? { ...p, status: 'done', message: `Queued for processing` }
+                  : p
+              ));
+              
+              addLog(`📥 ${setName}: Queued for async processing`);
               results.push(result);
               
             } else {
@@ -1124,6 +1214,57 @@ export default function JustTCGSync() {
                   </label>
                 </div>
               </div>
+            </div>
+
+            {/* Async Queue Settings */}
+            <div className="border rounded-lg p-4 bg-muted/30">
+              <h4 className="font-medium mb-3 flex items-center gap-2">
+                <Activity className="h-4 w-4" />
+                Processing Mode
+              </h4>
+              <div className="flex flex-wrap items-center gap-4">
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="use-async-queue"
+                    checked={useAsyncQueue}
+                    onCheckedChange={(checked) => setUseAsyncQueue(checked === true)}
+                  />
+                  <label htmlFor="use-async-queue" className="text-sm font-medium">
+                    Use async queue (recommended)
+                  </label>
+                </div>
+                
+                {useAsyncQueue && (
+                  <>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="auto-process-queue"
+                        checked={autoProcessQueue}
+                        onCheckedChange={(checked) => setAutoProcessQueue(checked === true)}
+                      />
+                      <label htmlFor="auto-process-queue" className="text-sm font-medium">
+                        Auto-drain queue
+                      </label>
+                    </div>
+                    
+                    <Button
+                      onClick={() => handleProcessQueue()}
+                      disabled={isProcessingQueue}
+                      variant="outline"
+                      size="sm"
+                    >
+                      {isProcessingQueue ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Activity className="h-4 w-4 mr-2" />}
+                      Process Queue
+                    </Button>
+                  </>
+                )}
+              </div>
+              
+              {!useAsyncQueue && (
+                <div className="mt-2 text-xs text-muted-foreground bg-yellow-50 border border-yellow-200 rounded p-2">
+                  ⚠️ Inline mode: Sets sync immediately but may timeout on large sets. Use async queue for reliable processing.
+                </div>
+              )}
             </div>
 
             {/* Sync Buttons */}
