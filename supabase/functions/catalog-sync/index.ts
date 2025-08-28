@@ -1099,7 +1099,6 @@ serve(async (req) => {
     });
     
     // Fetch sets with pagination
-    const turboMode = url.searchParams.get("turbo") === "true";
     let allSets: any[] = [];
     let limit = turboMode ? 250 : 100; // Larger pages in turbo mode
     let offset = 0;
