@@ -9,8 +9,9 @@ const corsHeaders = {
 // Normalize game slugs for JustTCG API
 function normalizeGameSlug(game: string): string {
   switch (game) {
+    case 'pokemon_japan':
     case 'pokemon-japan':
-      return 'pokemon_japan';
+      return 'pokemon-japan';  // JustTCG API expects hyphen
     case 'pokemon':
       return 'pokemon';
     case 'mtg':
