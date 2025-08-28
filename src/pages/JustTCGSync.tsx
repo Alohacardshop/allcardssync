@@ -611,8 +611,8 @@ export default function JustTCGSync() {
 
   // Filter games by search query
   const filteredGames = games.filter(game => 
-    game.name.toLowerCase().includes(gameSearchQuery.toLowerCase()) ||
-    game.id.toLowerCase().includes(gameSearchQuery.toLowerCase())
+    game.name?.toLowerCase().includes(gameSearchQuery.toLowerCase()) ||
+    game.id?.toLowerCase().includes(gameSearchQuery.toLowerCase())
   );
 
   // Calculate progress
