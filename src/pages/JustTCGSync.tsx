@@ -543,7 +543,7 @@ export default function JustTCGSync() {
 
       const duration = Date.now() - startTime;
       const results = data?.results || [];
-      const gameResult = results.find((r: any) => r.game === normalizedGame) || {};
+      const gameResult = results.find((r: any) => (r.gameSlug || r.game) === normalizedGame) || {};
 
       addLog(`✅ Backfill complete: ${gameResult.updated || 0}/${gameResult.processed || 0} provider IDs updated (${duration}ms)`);
 
@@ -559,6 +559,45 @@ export default function JustTCGSync() {
     } catch (error: any) {
       addLog(`❌ Backfill failed: ${error.message}`);
       toast.error("Backfill Failed", {
+        description: error.message,
+      });
+    } finally {
+      setIsBackfilling(false);
+    }
+  };
+
+  // Backfill provider IDs with force=true (override incorrect IDs)
+  const handleBackfillProviderIdsForce = async () => {
+    if (!selectedGame) return;
+
+    setIsBackfilling(true);
+    const startTime = Date.now();
+
+    try {
+      const normalizedGame = normalizeGameSlug(selectedGame);
+      addLog(`🛠️ Starting FORCE provider ID backfill for ${normalizedGame}...`);
+
+      const { data, error } = await supabase.functions.invoke('backfill-provider-ids', {
+        body: { games: [normalizedGame], force: true }
+      });
+
+      if (error) throw error;
+
+      const duration = Date.now() - startTime;
+      const results = data?.results || [];
+      const gameResult = results.find((r: any) => (r.gameSlug || r.game) === normalizedGame) || {};
+
+      addLog(`✅ FORCE backfill complete: ${gameResult.updated || 0}/${gameResult.processed || 0} provider IDs updated (${duration}ms)`);
+
+      toast.success("Force Backfill Complete", {
+        description: `${gameResult.updated || 0}/${gameResult.processed || 0} provider IDs updated (${duration}ms)`,
+      });
+
+      await loadSetsFromDBForGame(selectedGame);
+      queryClient.invalidateQueries({ queryKey: ['catalog_v2_stats', normalizedGame] });
+    } catch (error: any) {
+      addLog(`❌ Force backfill failed: ${error.message}`);
+      toast.error("Force Backfill Failed", {
         description: error.message,
       });
     } finally {
@@ -755,6 +794,21 @@ export default function JustTCGSync() {
                           <RefreshCw className="h-3 w-3 mr-1" />
                         )}
                         {isBackfilling ? 'Backfilling...' : 'Backfill Provider IDs'}
+                      </Button>
+
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={handleBackfillProviderIdsForce}
+                        disabled={!selectedGame || isBackfilling}
+                        title="Force override incorrect provider IDs"
+                      >
+                        {isBackfilling ? (
+                          <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                        ) : (
+                          <RefreshCw className="h-3 w-3 mr-1" />
+                        )}
+                        {isBackfilling ? 'Backfilling...' : 'Backfill Provider IDs (Force)'}
                       </Button>
 
                       <Button

@@ -22,19 +22,24 @@ function getApiKey(): string {
 }
 
 // Core backfill logic for a single game
-async function backfillProviderId(supabase: any, apiKey: string, game: string) {
+async function backfillProviderId(supabase: any, apiKey: string, game: string, force = false) {
   const gameSlug = normalizeGameSlug(game);
   const apiGame = toApiGame(gameSlug);
   
-  log.info('backfill.start', { gameSlug, apiGame });
+  log.info('backfill.start', { gameSlug, apiGame, force });
   
   try {
     // Query Supabase for sets missing provider_id
-    const { data: dbSets, error: dbError } = await supabase
-      .from('catalog_v2.sets')
-      .select('set_id, name, provider_id')
-      .eq('game', gameSlug)
-      .is('provider_id', null);
+    const { data: dbSets, error: dbError } = force
+      ? await supabase
+          .from('catalog_v2.sets')
+          .select('set_id, name, provider_id')
+          .eq('game', gameSlug)
+      : await supabase
+          .from('catalog_v2.sets')
+          .select('set_id, name, provider_id')
+          .eq('game', gameSlug)
+          .is('provider_id', null);
 
     if (dbError) {
       throw new Error(`Failed to query database: ${dbError.message}`);
@@ -244,12 +249,17 @@ serve(async (req) => {
 
     // Parse request to get games to process
     let gamesToProcess: string[] = [];
+    let force = false;
     
     if (req.method === 'GET') {
       const url = new URL(req.url);
       const game = url.searchParams.get('game');
+      const f = url.searchParams.get('force');
       if (game) {
         gamesToProcess = [game];
+      }
+      if (f && (f === 'true' || f === '1' || f === 'yes')) {
+        force = true;
       }
     } else if (req.method === 'POST') {
       try {
@@ -259,8 +269,11 @@ serve(async (req) => {
         } else if (body.game) {
           gamesToProcess = [body.game];
         }
+        if (typeof body.force === 'boolean') {
+          force = body.force;
+        }
       } catch (error) {
-        log.warn('backfill.parse_error', { error: error.message });
+        log.warn('backfill.parse_error', { error: (error as any).message });
       }
     }
 
@@ -269,7 +282,7 @@ serve(async (req) => {
       gamesToProcess = ['pokemon', 'pokemon-japan', 'magic-the-gathering'];
     }
 
-    log.info('backfill.request', { games: gamesToProcess });
+    log.info('backfill.request', { games: gamesToProcess, force });
 
     // Process each game
     const results = [];
@@ -278,7 +291,7 @@ serve(async (req) => {
 
     for (const game of gamesToProcess) {
       try {
-        const result = await backfillProviderId(supabase, apiKey, game);
+        const result = await backfillProviderId(supabase, apiKey, game, force);
         results.push(result);
         totalProcessed += result.processed;
         totalUpdated += result.updated;
