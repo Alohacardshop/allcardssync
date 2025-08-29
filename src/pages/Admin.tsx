@@ -17,7 +17,7 @@ import { useLocalStorageString } from '@/hooks/useLocalStorage';
 
 import AuditReconcile from '@/components/admin/AuditReconcile';
 import DataTab from '@/components/admin/DataTab';
-import { SystemHealthCard } from '@/components/admin/SystemHealthCard';
+import SystemHealthCard from '@/components/admin/SystemHealthCard';
 import CatalogTab from '@/components/admin/CatalogTab';
 
 import { GAME_MODES, type HealthStatus } from '@/lib/api';

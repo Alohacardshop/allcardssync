@@ -31,7 +31,7 @@ interface SetsListProps {
   onViewCards: (setId: string, setName: string) => void;
 }
 
-export function SetsList({ game, gameName, onViewCards }: SetsListProps) {
+function SetsList({ game, gameName, onViewCards }: SetsListProps) {
   const { toast } = useToast();
   const [search, setSearch] = useState('');
   const [syncingSet, setSyncingSet] = useState<string | null>(null);

@@ -11,7 +11,7 @@ interface SystemHealthCardProps {
   onHealthUpdate?: (status: HealthStatus | null) => void;
 }
 
-export function SystemHealthCard({ onHealthUpdate }: SystemHealthCardProps) {
+function SystemHealthCard({ onHealthUpdate }: SystemHealthCardProps) {
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [lastCheck, setLastCheck] = useState<Date | null>(null);

@@ -30,7 +30,7 @@ interface CardsViewProps {
   onBack?: () => void;
 }
 
-export function CardsView({ game, gameName, setId, setName, onBack }: CardsViewProps) {
+function CardsView({ game, gameName, setId, setName, onBack }: CardsViewProps) {
   const [search, setSearch] = useState('');
   
   const { data: cards, totalCount, isLoading, refetch } = useCatalogCards(game, {
