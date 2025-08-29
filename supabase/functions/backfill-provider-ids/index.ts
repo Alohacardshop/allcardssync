@@ -1,42 +1,24 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { normalizeGameSlug, toJustTCGParams } from '../_shared/slug.ts';
+import { normalizeGameSlug, toJustTCGParams, safeSlug } from '../_shared/slug.ts';
+import { fetchWithRetry } from '../_shared/http.ts';
+import { logStructured } from '../_shared/log.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-interface TokenBucket {
-  tokens: number;
-  lastRefill: number;
-  capacity: number;
-  refillRate: number;
-}
-
-// Rate limiter: 500 requests per minute
-const rateLimiter: TokenBucket = {
-  tokens: 500,
-  lastRefill: Date.now(),
-  capacity: 500,
-  refillRate: 500 / 60, // tokens per second
-};
-
-function checkRateLimit(): boolean {
-  const now = Date.now();
-  const timePassed = (now - rateLimiter.lastRefill) / 1000;
-  
-  rateLimiter.tokens = Math.min(
-    rateLimiter.capacity,
-    rateLimiter.tokens + (timePassed * rateLimiter.refillRate)
-  );
-  rateLimiter.lastRefill = now;
-  
-  if (rateLimiter.tokens >= 1) {
-    rateLimiter.tokens -= 1;
-    return true;
-  }
-  return false;
+// Normalize name for matching
+function normalizeName(s: string = ''): string {
+  return s
+    .normalize('NFKD')
+    .replace(/Pok[eé]mon/gi, 'pokemon')
+    .replace(/^[A-Z]{1,3}\d+[a-z]?:\s*/i, '') // strip leading set code like "SV5a: "
+    .replace(/\(.*?\)|\[.*?\]/g, '') // drop () or [] suffixes
+    .replace(/[^a-z0-9]+/gi, ' ')
+    .trim()
+    .toLowerCase();
 }
 
 async function getApiKey(): Promise<string> {
@@ -47,147 +29,157 @@ async function getApiKey(): Promise<string> {
   return apiKey;
 }
 
-async function backfillProviderId(supabase: any, apiKey: string, gameId: string): Promise<{ game: string; processed: number; updated: number }> {
-  const normalizedGame = normalizeGameSlug(gameId);
+async function backfillProviderId(supabase: any, apiKey: string, gameSlug: string): Promise<{ gameSlug: string; dbMissingCount: number; apiCount: number; matched: number; unmatched: number; processed: number; updated: number }> {
+  const normalizedGame = normalizeGameSlug(gameSlug);
   const { game, region } = toJustTCGParams(normalizedGame);
   
-  console.log(`Backfilling provider_ids for game: ${gameId} (normalized: ${normalizedGame}, api: ${game}${region ? `, region: ${region}` : ''})`);
+  logStructured('INFO', 'backfill.start', { gameSlug: normalizedGame, gameParam: game, region });
   
-  // Get sets without provider_id  
-  console.log(`Querying catalog_v2.sets WHERE game='${normalizedGame}' AND provider_id IS NULL`);
+  // Get sets without provider_id - use strict game matching
   const { data: setsToBackfill, error: queryError } = await supabase
     .schema('catalog_v2')
     .from('sets')
-    .select('set_id, name, release_date')
-    .or(`game.eq.${normalizedGame},game.eq.${game}`)
+    .select('set_id, name, code, provider_id, release_date')
+    .eq('game', normalizedGame)
     .is('provider_id', null);
   
-  console.log(`Query result: found ${setsToBackfill?.length || 0} sets, error: ${queryError?.message || 'none'}`);
-  
   if (queryError) {
-    console.error('Database query error details:', queryError);
     throw new Error(`Failed to query sets: ${queryError.message}`);
   }
   
-  if (!setsToBackfill?.length) {
-    console.log(`No sets found without provider_id for ${gameId}`);
-    return { game: gameId, processed: 0, updated: 0 };
-  }
+  const dbMissingCount = setsToBackfill?.length || 0;
   
-  // Rate limit check
-  if (!checkRateLimit()) {
-    throw new Error('Rate limit exceeded');
+  if (!dbMissingCount) {
+    logStructured('INFO', 'backfill.done', { gameSlug: normalizedGame, matched: 0, unmatched: 0 });
+    return { gameSlug: normalizedGame, dbMissingCount: 0, apiCount: 0, matched: 0, unmatched: 0, processed: 0, updated: 0 };
   }
 
-  // Fetch sets from JustTCG API
+  // Fetch sets from JustTCG API with retries
   const regionParam = region ? `&region=${encodeURIComponent(region)}` : '';
   const url = `https://api.justtcg.com/v1/sets?game=${encodeURIComponent(game)}${regionParam}`;
   
-  console.log(`Fetching from JustTCG API: ${url}`);
-  console.log(`Found ${setsToBackfill.length} sets without provider_id for ${gameId}`);
-  
-  const response = await fetch(url, {
+  const response = await fetchWithRetry(url, {
     headers: {
       'x-api-key': apiKey,
-      'Accept': 'application/json',
-      'Content-Type': 'application/json'
+      'Accept': 'application/json'
     }
-  });
+  }, { retries: 4, baseDelayMs: 600, jitter: true });
 
   if (!response.ok) {
-    throw new Error(`JustTCG API error: ${response.status} ${response.statusText}`);
+    const body = await response.text().catch(() => '');
+    throw new Error(`JustTCG API ${response.status} ${response.statusText}: ${body}`);
   }
 
   const raw = await response.json();
   const apiSets = Array.isArray(raw?.data) ? raw.data : Array.isArray(raw) ? raw : [];
+  const apiCount = apiSets.length;
   
-  console.log(`Retrieved ${apiSets.length} sets from API for ${gameId}`);
-  
-  if (!apiSets.length) {
-    return { game: gameId, processed: setsToBackfill.length, updated: 0 };
+  if (!apiCount) {
+    logStructured('INFO', 'backfill.done', { gameSlug: normalizedGame, matched: 0, unmatched: dbMissingCount });
+    return { gameSlug: normalizedGame, dbMissingCount, apiCount: 0, matched: 0, unmatched: dbMissingCount, processed: dbMissingCount, updated: 0 };
   }
   
-  // Match by name (case-insensitive, with normalization)
-  let updated = 0;
-  const updateRows = [];
+  // Build API-side indexes for O(1) lookups
+  const codeMap = new Map<string, any>();
+  const nameMap = new Map<string, any>();
+  const slugMap = new Map<string, any>();
   
-  console.log(`Attempting to match ${setsToBackfill.length} DB sets with ${apiSets.length} API sets for ${gameId}`);
-  
-  for (const dbSet of setsToBackfill) {
-    const match = apiSets.find((apiSet: any) => {
-      if (!apiSet.name || !dbSet.name) return false;
-      
-      const apiName = apiSet.name.toLowerCase().trim();
-      const dbName = dbSet.name.toLowerCase().trim();
-      
-      // Direct name match
-      if (apiName === dbName) return true;
-      
-      // Normalized match (remove common prefixes/suffixes)
-      const normalizeSetName = (name: string) => {
-        return name
-          .replace(/^(sv\d+[a-z]?:?\s*)/i, '') // Remove SV5a: prefix
-          .replace(/\s*\(.*\)$/, '') // Remove trailing parentheses
-          .replace(/\s+/g, ' ')
-          .trim();
-      };
-      
-      const normalizedApi = normalizeSetName(apiName);
-      const normalizedDb = normalizeSetName(dbName);
-      
-      return normalizedApi === normalizedDb;
-    });
-    
-    if (match) {
-      console.log(`✅ Matched "${dbSet.name}" -> API set "${match.name}" (id: ${match.id})`);
-    } else {
-      console.log(`❌ No match found for "${dbSet.name}"`);
+  for (const apiSet of apiSets) {
+    if (apiSet.code) {
+      const codeKey = apiSet.code.trim().toLowerCase();
+      if (codeKey && !codeMap.has(codeKey)) {
+        codeMap.set(codeKey, apiSet);
+      }
     }
     
-    if (match) {
+    if (apiSet.name) {
+      const nameKey = normalizeName(apiSet.name);
+      if (nameKey && !nameMap.has(nameKey)) {
+        nameMap.set(nameKey, apiSet);
+      }
+      
+      const slugKey = safeSlug(apiSet.name);
+      if (slugKey && !slugMap.has(slugKey)) {
+        slugMap.set(slugKey, apiSet);
+      }
+    }
+  }
+  
+  // Match DB rows to API sets in priority order
+  const updateRows = [];
+  let matched = 0;
+  
+  for (const dbSet of setsToBackfill) {
+    let apiMatch = null;
+    
+    // 1. Code match (highest priority)
+    if (dbSet.set_id && dbSet.set_id.trim()) {
+      const dbCodeKey = dbSet.set_id.trim().toLowerCase();
+      apiMatch = codeMap.get(dbCodeKey);
+    }
+    
+    // 2. Name match
+    if (!apiMatch && dbSet.name) {
+      const dbNameKey = normalizeName(dbSet.name);
+      apiMatch = nameMap.get(dbNameKey);
+    }
+    
+    // 3. Slug match
+    if (!apiMatch && dbSet.name) {
+      const dbSlugKey = safeSlug(dbSet.name);
+      apiMatch = slugMap.get(dbSlugKey);
+    }
+    
+    if (apiMatch) {
       updateRows.push({
         provider: 'justtcg',
         set_id: dbSet.set_id,
-        provider_id: match.id,
+        provider_id: apiMatch.id,
         game: normalizedGame,
-        name: dbSet.name,
-        series: match.series,
-        printed_total: match.printedTotal,
-        total: match.total,
-        release_date: match.releaseDate ? new Date(match.releaseDate).toISOString().split('T')[0] : dbSet.release_date,
-        images: match.images || null,
-        data: match,
-        updated_from_source_at: new Date().toISOString()
+        name: apiMatch.name,
+        series: apiMatch.series ?? null,
+        printed_total: apiMatch.printedTotal ?? null,
+        total: apiMatch.total ?? null,
+        release_date: apiMatch.releasedAt || apiMatch.releaseDate || dbSet.release_date || null,
+        images: apiMatch.images || null,
+        data: apiMatch
       });
-      updated++;
+      matched++;
     }
   }
   
+  // Perform chunked upserts
   if (updateRows.length > 0) {
-    console.log(`Updating ${updateRows.length} sets with provider_id for ${gameId}`);
-    
-    const { error: upsertError } = await supabase.rpc('catalog_v2_upsert_sets', {
-      rows: updateRows
-    });
-    
-    if (upsertError) {
-      throw new Error(`Failed to update sets: ${upsertError.message}`);
+    const chunkSize = 800;
+    for (let i = 0; i < updateRows.length; i += chunkSize) {
+      const chunk = updateRows.slice(i, i + chunkSize);
+      const { error: upsertError } = await supabase.rpc('catalog_v2_upsert_sets', { rows: chunk });
+      if (upsertError) {
+        throw new Error(`Failed to upsert sets chunk: ${upsertError.message}`);
+      }
     }
   }
   
-  console.log(`Backfill complete for ${gameId}: ${updated}/${setsToBackfill.length} sets updated`);
-  return { game: gameId, processed: setsToBackfill.length, updated };
+  const unmatched = dbMissingCount - matched;
+  logStructured('INFO', 'backfill.done', { gameSlug: normalizedGame, matched, unmatched });
+  
+  return { 
+    gameSlug: normalizedGame, 
+    dbMissingCount, 
+    apiCount, 
+    matched, 
+    unmatched, 
+    processed: dbMissingCount, 
+    updated: matched 
+  };
 }
 
 serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    console.log(`[${new Date().toISOString()}] Backfill provider IDs request received`);
-    
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -207,30 +199,30 @@ serve(async (req) => {
       }
     }
     
-    console.log(`Processing games: ${gamesToProcess.join(', ')}`);
-    
     const results = [];
     let totalProcessed = 0;
     let totalUpdated = 0;
     
     // Process each game sequentially to respect rate limits
-    for (const gameId of gamesToProcess) {
+    for (const gameSlug of gamesToProcess) {
       try {
-        const result = await backfillProviderId(supabase, apiKey, gameId);
+        const result = await backfillProviderId(supabase, apiKey, gameSlug);
         results.push(result);
         totalProcessed += result.processed;
         totalUpdated += result.updated;
-        
-        console.log(`✅ ${gameId}: ${result.updated}/${result.processed} sets updated`);
         
         // Small delay between games
         if (gamesToProcess.length > 1) {
           await new Promise(resolve => setTimeout(resolve, 100));
         }
       } catch (error: any) {
-        console.error(`❌ Error processing ${gameId}:`, error.message);
+        logStructured('ERROR', 'backfill.error', { gameSlug, error: error.message });
         results.push({ 
-          game: gameId, 
+          gameSlug, 
+          dbMissingCount: 0,
+          apiCount: 0,
+          matched: 0,
+          unmatched: 0,
           processed: 0, 
           updated: 0, 
           error: error.message 
@@ -248,14 +240,12 @@ serve(async (req) => {
       }
     };
 
-    console.log(`Backfill completed: ${results.length} games, ${totalUpdated}/${totalProcessed} sets updated`);
-
     return new Response(JSON.stringify(responseData), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
     
   } catch (error: any) {
-    console.error('Backfill provider IDs error:', error);
+    logStructured('ERROR', 'backfill.fatal', { error: error.message });
     return new Response(
       JSON.stringify({ error: error.message }),
       { 

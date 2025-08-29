@@ -69,7 +69,7 @@ export async function syncCatalogGeneric(params: { game: string; setIds?: string
       const missingProviderIds = dbSets.filter(dbSet => !dbSet.provider_id);
       if (missingProviderIds.length > 0) {
         const missingSetIds = missingProviderIds.map(s => s.set_id);
-        log('WARN', 'catalog-sync:missing-provider-ids', { 
+        log('WARN', 'sync.skip.noProvider', { 
           gameSlug: inputGame, 
           missingSetIds 
         });

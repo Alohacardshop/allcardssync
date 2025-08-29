@@ -376,17 +376,16 @@ const JustTCGSync = () => {
       if (error) throw error;
 
       const duration = Date.now() - startTime;
-      const summary = data?.summary || {};
       const results = data?.results || [];
-      const gameResult = results.find((r: any) => r.game === normalizedGame) || {};
+      const gameResult = results.find((r: any) => r.gameSlug === normalizedGame || r.game === normalizedGame) || {};
 
       toast({
         title: "Backfill Complete",
-        description: `${gameResult.updated || 0}/${gameResult.processed || 0} provider IDs updated (${duration}ms)`,
+        description: `${gameResult.matched || gameResult.updated || 0}/${gameResult.dbMissingCount || gameResult.processed || 0} provider IDs updated (API: ${gameResult.apiCount || 0})`,
       });
 
       // Reload sets to reflect the updated provider_ids
-      loadSets();
+      await loadSets();
     } catch (error: any) {
       toast({
         title: "Backfill Failed",
