@@ -1,51 +1,12 @@
 import { supabase } from "@/integrations/supabase/client";
 
 /**
- * Get catalog sync status using query string parameters (not JSON body)
- * This is the correct way to call the catalog-sync-status function
+ * Get catalog sync status - DEPRECATED
+ * TODO: Replace with API call to alohacardshopcarddatabase
  */
 export async function getCatalogSyncStatus(game: string, limit: number = 50) {
-  try {
-    // Get current user session for JWT token
-    const { data: { session } } = await supabase.auth.getSession();
-    
-    if (!session?.access_token) {
-      throw new Error('No authentication token available');
-    }
-
-    // Use fetch with query parameters instead of supabase.functions.invoke with body
-    const url = `https://dmpoandoydaqxhzdjnmk.supabase.co/functions/v1/catalog-sync-status?game=${encodeURIComponent(game)}&limit=${limit}`;
-    
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${session.access_token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      let errorMessage = `HTTP ${response.status}`;
-      
-      try {
-        const errorData = JSON.parse(errorText);
-        if (errorData.error) {
-          errorMessage = errorData.error;
-        }
-      } catch (e) {
-        errorMessage = errorText || errorMessage;
-      }
-      
-      throw new Error(errorMessage);
-    }
-
-    const data = await response.json();
-    return { data, error: null };
-    
-  } catch (error: any) {
-    return { data: null, error };
-  }
+  // Catalog sync functionality moved to external service
+  throw new Error('Catalog sync functionality moved to Alohacardshop/alohacardshopcarddatabase');
 }
 
 /**

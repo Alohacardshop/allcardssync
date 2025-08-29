@@ -105,45 +105,17 @@ export default function PokemonOneTimeBackfill() {
       setStartTime(Date.now()); // Reset start time
       setProgress(prev => ({ ...prev, currentSet: "Starting..." }));
 
-      // Use proper Supabase client instead of direct fetch
+      // TODO: Replace with API call to alohacardshopcarddatabase
+      // Legacy catalog sync function removed
       const params = incremental ? { since: getRecentDate() } : {};
       
-      const { data, error } = await supabase.functions.invoke('catalog-sync-pokemon', {
-        body: params
-      });
+      // const { data, error } = await supabase.functions.invoke('catalog-sync-pokemon', {
+      //   body: params
+      // });
       
-      setResult({ 
-        ok: !error, 
-        data, 
-        error: error?.message, 
-        at: new Date().toISOString() 
-      });
+      throw new Error('Catalog sync functionality moved to external service');
       
-      if (error) {
-        toast.error(`Backfill failed: ${error.message}`);
-        return;
-      }
-
-      // Start polling for progress
-      if (data?.queued_sets) {
-        pollProgress(data.queued_sets);
-      }
-
-      // Only mark as fully done for full backfill
-      if (!incremental) {
-        const { error: settingError } = await supabase
-          .from("system_settings")
-          .upsert({ key_name: SETTING_KEY, key_value: "true" }, { onConflict: "key_name" });
-        
-        if (settingError) {
-          toast.error("Backfill ok, but failed to save completion flag.");
-        } else {
-          setDone(true);
-          toast.success("Pokémon catalog backfilled and locked.");
-        }
-      } else {
-        toast.success(`Incremental sync started for ${data?.queued_sets || 0} sets`);
-      }
+      // Unreachable code - removed
     } catch (e: any) {
       console.error("Backfill error:", e);
       toast.error(`Backfill error: ${e?.message || "Unknown error"}`);

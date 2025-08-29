@@ -46,26 +46,19 @@ function SetsList({ game, gameName, onViewCards }: SetsListProps) {
   const syncSet = async (setId: string, setName: string) => {
     setSyncingSet(setId);
     try {
-      // Use catalog-sync-justtcg for individual set sync
-      const { data, error } = await supabase.functions.invoke('catalog-sync-justtcg', {
-        body: { 
-          game,
-          set: setName,
-          force: true
-        }
-      });
+      // TODO: Replace with API call to alohacardshopcarddatabase
+      // Legacy catalog sync function removed
+      // const { data, error } = await supabase.functions.invoke('catalog-sync-justtcg', {
+      //   body: { 
+      //     game,
+      //     set: setName,
+      //     force: true
+      //   }
+      // });
       
-      if (error) throw error;
+      throw new Error('Catalog sync functionality moved to external service');
       
-      toast({
-        title: "Set Sync Started",
-        description: `Syncing ${setName} in the background`,
-      });
-      
-      // Refresh the sets list after a delay
-      setTimeout(() => {
-        refetch();
-      }, 2000);
+      // Unreachable code - removed
       
     } catch (error: any) {
       toast({

@@ -12,12 +12,17 @@ The JustTCG integration provides:
 
 ## Architecture
 
-### Edge Functions
+### Edge Functions - DEPRECATED
 
-1. **`catalog-sync-justtcg`** - Full game synchronization
-2. **`catalog-refresh`** - Flexible refresh with analytics sorting
-3. **`catalog-snapshots`** - Historical price tracking
-4. **`_lib/justtcg.ts`** - Shared utilities and rate limiting
+**MIGRATION NOTICE**: Catalog syncing functionality has been moved to Alohacardshop/alohacardshopcarddatabase.
+
+The following functions have been removed:
+1. ~~**`catalog-sync-justtcg`** - Full game synchronization~~ (Removed)
+2. ~~**`catalog-refresh`** - Flexible refresh with analytics sorting~~ (Removed)  
+3. ~~**`catalog-snapshots`** - Historical price tracking~~ (Removed)
+4. ~~**`_lib/justtcg.ts`** - Shared utilities and rate limiting~~ (May be kept for future use)
+
+All catalog operations are now handled by the external TCG database service.
 
 ### Database Tables
 
@@ -47,15 +52,17 @@ const CONFIG = {
 }
 ```
 
-## API Endpoints
+## API Endpoints - DEPRECATED
 
-### Full Sync: `POST /catalog-sync-justtcg`
+**MIGRATION NOTICE**: These endpoints have been removed. Catalog operations are now handled by Alohacardshop/alohacardshopcarddatabase.
 
-Synchronizes entire game catalogs with optimized performance.
+### ~~Full Sync: `POST /catalog-sync-justtcg`~~ (Removed)
 
-### Status Check: `GET /catalog-sync-status`
+~~Synchronizes entire game catalogs with optimized performance.~~
 
-**IMPORTANT**: This endpoint expects query string parameters, not JSON body:
+### ~~Status Check: `GET /catalog-sync-status`~~ (Removed)
+
+~~**IMPORTANT**: This endpoint expects query string parameters, not JSON body:~~
 - `?game=pokemon&limit=50`
 - Include JWT Authorization header for authentication
 - Use `getCatalogSyncStatus()` helper from `src/lib/fns.ts` in UI code
@@ -69,10 +76,13 @@ Synchronizes entire game catalogs with optimized performance.
 - Smart skipping based on `lastUpdated` timestamps
 - Chunked database writes (200-1000 records)
 
-**Example:**
+**Example (DEPRECATED):**
 ```bash
-curl -X POST "/functions/v1/catalog-sync-justtcg?game=magic-the-gathering"
+# These endpoints no longer exist
+# curl -X POST "/functions/v1/catalog-sync-justtcg?game=magic-the-gathering"
 ```
+
+**Migration Note**: Use the new external TCG database API instead.
 
 ### Flexible Refresh: `POST /catalog-refresh`
 
