@@ -52,63 +52,41 @@ serve(async (req) => {
 
     const normalizedGame = normalizeGameSlug(game)
 
-    // Query sets from catalog_v2.sets table
-    const { data: setsData, error: setsError } = await supabaseClient
-      .schema('catalog_v2')
-      .from('sets')
-      .select(`
-        set_id,
-        name,
-        release_date,
-        total,
-        printed_total
-      `)
-      .eq('game', normalizedGame)
-      .order('release_date', { ascending: false, nullsLast: true })
+    // Fetch sets via public RPC to avoid cross-schema REST limitations
+    const { data: rpcData, error: rpcError } = await supabaseClient
+      .rpc('catalog_v2_browse_sets', {
+        game_in: normalizedGame,
+        page_in: 1,
+        limit_in: 1000,
+      });
 
-    if (setsError) {
-      console.error('Database error fetching sets:', setsError)
+    if (rpcError) {
+      console.error('RPC error fetching sets:', rpcError);
       return new Response(
         JSON.stringify({ error: 'Failed to fetch sets' }),
-        { 
-          status: 500, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         }
-      )
+      );
     }
 
-    // Get card counts for each set
-    const setsWithCounts = await Promise.all(
-      (setsData || []).map(async (set) => {
-        const { count, error: countError } = await supabaseClient
-          .schema('catalog_v2')
-          .from('cards')
-          .select('*', { count: 'exact', head: true })
-          .eq('game', normalizedGame)
-          .eq('set_id', set.set_id)
-
-        if (countError) {
-          console.warn(`Failed to get card count for set ${set.set_id}:`, countError)
-        }
-
-        return {
-          id: set.set_id,
-          name: set.name,
-          released_at: set.release_date,
-          total: set.total || set.printed_total,
-          cards_count: count || 0
-        }
-      })
-    )
+    const setsArray = (rpcData?.sets ?? []).map((set: any) => ({
+      id: set.set_id,
+      name: set.name,
+      released_at: set.release_date,
+      total: set.total,
+      cards_count: set.cards_count ?? 0,
+    }));
 
     return new Response(
       JSON.stringify({
         game: normalizedGame,
-        sets: setsWithCounts,
-        total_sets: setsWithCounts.length
+        sets: setsArray,
+        total_sets: setsArray.length,
       }),
-      { 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
     )
 
