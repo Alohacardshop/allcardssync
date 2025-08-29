@@ -30,17 +30,13 @@ async function backfillProviderId(supabase: any, apiKey: string, game: string, f
     
     try {
       // Query Supabase for sets missing provider_id or all sets if force=true
-      const query = supabase
-        .schema('catalog_v2')
-        .from('sets')
-        .select('set_id, name, provider_id')
-        .eq('game', gameSlug);
+      const { data: dbSets, error: dbError } = await supabase
+        .rpc('catalog_v2_get_sets_for_backfill', {
+          game_in: gameSlug,
+          force_in: force,
+        });
       
-      const { data: dbSets, error: dbError } = force 
-        ? await query  // Get all sets when force=true
-        : await query.is('provider_id', null);  // Only null provider_id when force=false
-      
-      log.info('backfill.query_result', { gameSlug, force, dbSetsCount: dbSets?.length || 0 });
+      log.info('backfill.query_result', { gameSlug, force, candidatesCount: dbSets?.length || 0 });
 
     if (dbError) {
       throw new Error(`Failed to query database: ${dbError.message}`);

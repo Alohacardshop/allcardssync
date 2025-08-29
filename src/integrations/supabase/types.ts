@@ -906,6 +906,14 @@ export type Database = {
           step: string
         }[]
       }
+      catalog_v2_get_sets_for_backfill: {
+        Args: { force_in?: boolean; game_in: string }
+        Returns: {
+          name: string
+          provider_id: string
+          set_id: string
+        }[]
+      }
       catalog_v2_get_stale_sets: {
         Args: { game_in: string; since_timestamp: string }
         Returns: {

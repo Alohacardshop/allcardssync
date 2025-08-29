@@ -412,7 +412,7 @@ const JustTCGSync = () => {
       const normalizedGame = normalizeGameSlug(selectedGame);
       
       const { data, error } = await supabase.functions.invoke('backfill-provider-ids', {
-        body: { games: [normalizedGame] }
+        body: { games: [normalizedGame], force: preferences.force_resync }
       });
 
       if (error) throw error;
