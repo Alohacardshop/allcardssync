@@ -426,7 +426,7 @@ const JustTCGSync = () => {
 
       toast({
         title: "Backfill Complete",
-        description: `${gameResult.matched || gameResult.updated || 0}/${gameResult.dbMissingCount || gameResult.processed || 0} provider IDs updated (API: ${gameResult.apiCount || 0})`,
+        description: `${gameResult.updated || 0}/${gameResult.dbMissingCount || gameResult.processed || 0} provider IDs updated${gameResult.conflicts > 0 ? ` (${gameResult.conflicts} conflicts)` : ''} (API: ${gameResult.apiCount || 0})`,
       });
 
       // Reload sets to reflect the updated provider_ids

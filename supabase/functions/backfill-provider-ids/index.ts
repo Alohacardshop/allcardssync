@@ -184,20 +184,86 @@ async function backfillProviderId(supabase: any, apiKey: string, game: string, f
       }
     }
 
-    // Batch update the matched sets
+    // Batch update the matched sets, handling conflicts gracefully
+    let updated = 0;
+    let conflicts = 0;
+    
     if (updates.length > 0) {
-      const chunkSize = 100;
+      const chunkSize = 50; // Smaller chunks for better error handling
+      
       for (let i = 0; i < updates.length; i += chunkSize) {
         const chunk = updates.slice(i, i + chunkSize);
-        const { error: upsertError } = await supabase.rpc('catalog_v2_upsert_sets', {
-          rows: chunk
-        });
         
-        if (upsertError) {
-          throw new Error(`Failed to update sets: ${upsertError.message}`);
+        try {
+          const { error: upsertError } = await supabase.rpc('catalog_v2_upsert_sets', {
+            rows: chunk
+          });
+          
+          if (upsertError) {
+            if (upsertError.message.includes('sets_provider_unique')) {
+              // Handle conflicts individually
+              log.info('backfill.handling_conflicts', { gameSlug, chunkSize: chunk.length });
+              
+              for (const update of chunk) {
+                try {
+                  const { error: individualError } = await supabase.rpc('catalog_v2_upsert_sets', {
+                    rows: [update]
+                  });
+                  
+                  if (individualError) {
+                    if (individualError.message.includes('sets_provider_unique')) {
+                      conflicts++;
+                      log.info('backfill.conflict_skipped', { 
+                        gameSlug, 
+                        setId: update.set_id,
+                        name: update.name, 
+                        providerId: update.provider_id 
+                      });
+                    } else {
+                      throw individualError;
+                    }
+                  } else {
+                    updated++;
+                  }
+                } catch (error: any) {
+                  conflicts++;
+                  log.warn('backfill.individual_error', { 
+                    gameSlug, 
+                    setId: update.set_id, 
+                    error: error.message 
+                  });
+                }
+              }
+            } else {
+              throw upsertError;
+            }
+          } else {
+            updated += chunk.length;
+          }
+        } catch (error: any) {
+          log.error('backfill.chunk_error', { 
+            gameSlug, 
+            chunkSize: chunk.length, 
+            error: error.message 
+          });
+          conflicts += chunk.length;
         }
+        
+        log.info('backfill.batch_processed', { 
+          gameSlug, 
+          batchNum: Math.floor(i / chunkSize) + 1,
+          totalBatches: Math.ceil(updates.length / chunkSize),
+          updated, 
+          conflicts 
+        });
       }
-      log.info('backfill.updated', { gameSlug, count: updates.length });
+      
+      log.info('backfill.update_complete', { 
+        gameSlug, 
+        attempted: updates.length, 
+        updated, 
+        conflicts 
+      });
     }
 
     const unmatched = dbSets.length - matched;
@@ -216,7 +282,8 @@ async function backfillProviderId(supabase: any, apiKey: string, game: string, f
       matched,
       unmatched,
       processed: dbSets.length,
-      updated: matched
+      updated,
+      conflicts
     };
 
   } catch (error: any) {
