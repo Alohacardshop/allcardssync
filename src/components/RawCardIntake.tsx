@@ -5,17 +5,20 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, Search, Plus } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
+import { Loader2, Search, Plus, AlertCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { searchCardsByNameNumber, searchCatalogV2, getReferencePriceByTcgplayerId, type JustTCGCard } from '@/lib/justtcg-types';
-import { USE_V2_POKEMON, USE_V2_POKEMON_JAPAN, USE_V2_MTG } from '@/lib/catalogEnv';
-
-const FUNCTIONS_BASE = "https://dmpoandoydaqxhzdjnmk.supabase.co/functions/v1";
-import { normalizeStr, normalizeNumber, includesLoose, similarityScore } from '@/lib/cardSearch';
-import type { GameKey, JObjectCard, Printing } from '@/lib/types';
+import { toast } from 'sonner';
+import type { GameKey, Printing } from '@/lib/types';
 import { GAME_OPTIONS } from '@/lib/types';
-import { LRUCache } from '@/lib/lruCache';
+
+interface CatalogCard {
+  id: string;
+  name: string;
+  number?: string;
+  set?: { name: string };
+  images?: { small?: string };
+  tcgplayer_product_id?: number;
+}
 
 interface RawCardIntakeProps {
   defaultGame?: GameKey;
@@ -23,7 +26,7 @@ interface RawCardIntakeProps {
   defaultConditions?: string;
   autoSaveToBatch?: boolean;
   onPick?: (payload: {
-    card: JustTCGCard;
+    card: CatalogCard;
     chosenVariant?: {
       condition: string;
       printing: Printing;
@@ -37,7 +40,7 @@ const PRINTINGS: Printing[] = ['Normal', 'Foil'];
 
 export function RawCardIntake({
   defaultGame = 'pokemon',
-  defaultPrinting = 'Normal',
+  defaultPrinting = 'Normal',  
   defaultConditions = 'NM,LP',
   autoSaveToBatch = false,
   onPick,
@@ -48,159 +51,65 @@ export function RawCardIntake({
   const [number, setNumber] = useState('');
   const [printing, setPrinting] = useState<Printing>(defaultPrinting);
   const [conditionCsv, setConditionCsv] = useState(defaultConditions);
-  const [suggestions, setSuggestions] = useState<JustTCGCard[]>([]);
+  const [suggestions, setSuggestions] = useState<CatalogCard[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [picked, setPicked] = useState<JustTCGCard | null>(null);
+  const [picked, setPicked] = useState<CatalogCard | null>(null);
   const [chosenVariant, setChosenVariant] = useState<any>(null);
-  const [referencePrice, setReferencePrice] = useState<number | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [saving, setSaving] = useState(false);
-  const [syncSetId, setSyncSetId] = useState('');
 
-  const { toast } = useToast();
   const debounceRef = useRef<NodeJS.Timeout>();
-  const cacheRef = useRef(new LRUCache<string, JustTCGCard[]>(200));
-  const abortControllerRef = useRef<AbortController>();
 
-  const normalizedName = useMemo(() => normalizeStr(name), [name]);
-  const normalizedNumber = useMemo(() => normalizeNumber(number), [number]);
-
-  const buildSearchKey = (g: string, n: string, num?: string) =>
-    `${g}|${n.trim().toLowerCase()}|${(num||'').trim().toLowerCase()}`;
-
-  // Clear suggestions when inputs change to avoid stale results
+  // Clear suggestions when inputs change
   useEffect(() => {
     setSuggestions([]);
     setError(null);
   }, [name, number, game]);
 
   const doSearch = async () => {
-    // guard: min length 3
-    if (!normalizedName || normalizedName.length < 3) {
-      toast({ title: 'Invalid Search', description: 'Enter at least 3 characters', variant: 'destructive' });
+    if (!name || name.length < 3) {
+      toast.error('Enter at least 3 characters');
       return;
     }
 
-    // coalesce triggers in quick succession
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
-      // abort previous request if any
-      if (abortControllerRef.current) abortControllerRef.current.abort();
-      const controller = new AbortController();
-      abortControllerRef.current = controller;
-
-      const cacheKey = buildSearchKey(game, normalizedName, normalizedNumber.num);
-
-      // LRU cache first
-      const cached = cacheRef.current.get(cacheKey);
-      if (cached) {
-        setSuggestions(cached.slice(0, 5));
-        setError(null);
-        return;
-      }
-
       setLoading(true);
       setError(null);
+      
       try {
-        let results: JustTCGCard[] = [];
+        // Search local catalog only
+        const gameParam = game === 'pokemon_japan' ? 'pokemon-japan' : game;
         
-        // Try local catalog v2 search first for supported games
-        let useLocalCatalog = false;
-        let catalogGame = '';
-        
-        if (game === 'pokemon' && USE_V2_POKEMON) {
-          useLocalCatalog = true;
-          catalogGame = 'pokemon';
-        } else if (game === 'pokemon_japan' && USE_V2_POKEMON_JAPAN) {
-          useLocalCatalog = true;
-          catalogGame = 'pokemon_japan';
-        } else if (game === 'mtg' && USE_V2_MTG) {
-          useLocalCatalog = true;
-          catalogGame = 'mtg';
-        }
-        
-        if (useLocalCatalog) {
-          const local = await searchCatalogV2(catalogGame as any, normalizedName, normalizedNumber.num, 5);
-          if (local.length > 0) {
-            results = local.map(c => ({
-              id: c.id,
-              name: c.name,
-              number: c.number,
-              set: c.set?.name,
-              images: c.images,
-              tcgplayerId: c.tcgplayer_product_id ?? undefined
-            }));
-            
-            if (controller.signal.aborted) return;
-            
-            cacheRef.current.set(cacheKey, results);
-            setSuggestions(results);
-            return;
-          }
-        }
-        
-        // Fallback to JustTCG remote search
-        const data = await searchCardsByNameNumber({
-          name: normalizedName,
-          game,
-          number: normalizedNumber.num,
-          limit: 5,
+        const { data, error: searchError } = await supabase.rpc('catalog_v2_browse_cards', {
+          game_in: gameParam,
+          search_in: name,
+          limit_in: 5
         });
 
-        if (controller.signal.aborted) return;
+        if (searchError) throw searchError;
 
-        results = Array.isArray(data) ? data.slice(0, 5) : [];
-        cacheRef.current.set(cacheKey, results);
-        setSuggestions(results);
+        const results = (data as any)?.cards || [];
+        setSuggestions(results.map((c: any) => ({
+          id: c.card_id,
+          name: c.name,
+          number: c.number,
+          set: { name: c.set_id },
+          tcgplayer_product_id: null
+        })));
+
       } catch (err: any) {
-        if (err?.name === 'AbortError') return;
         const message = err?.message || 'Failed to search cards';
         setError(message);
-        if (message.includes('429')) {
-          toast({ title: 'Rate Limit', description: 'Please wait a moment before searching again', variant: 'destructive' });
-        } else {
-          toast({ title: 'Search Error', description: message, variant: 'destructive' });
-        }
+        toast.error('Search Error', { description: message });
       } finally {
         setLoading(false);
       }
     }, 450);
   };
 
-  const findBestVariant = (card: JObjectCard) => {
-    const preferences = conditionCsv.split(',').map(s => s.trim()).filter(Boolean);
-    const variants = card.variants || [];
-
-    // Condition mapping
-    const conditionMap: Record<string, string> = {
-      'SEALED': 'S',
-      'NEAR MINT': 'NM',
-      'LIGHTLY PLAYED': 'LP',
-      'MODERATELY PLAYED': 'MP',
-      'HEAVILY PLAYED': 'HP',
-      'DAMAGED': 'DMG',
-    };
-
-    const normalizeCondition = (cond: string) => {
-      const upper = normalizeStr(cond).toUpperCase();
-      return conditionMap[upper] || upper;
-    };
-
-    // Find best matching variant
-    for (const prefCond of preferences) {
-      const variant = variants.find(v => 
-        v.printing === printing && 
-        normalizeCondition(String(v.condition)) === normalizeCondition(prefCond)
-      );
-      if (variant) return variant;
-    }
-
-    // Fallback to any variant with matching printing
-    return variants.find(v => v.printing === printing) || variants[0];
-  };
-
-  const generateSKU = (card: JustTCGCard, variant: any, game: GameKey): string => {
+  const generateSKU = (card: CatalogCard, variant: any, game: GameKey): string => {
     const gameAbbr = game === 'pokemon' ? 'PKM' : game === 'pokemon_japan' ? 'PKJ' : 'MTG';
     const conditionAbbr = String(variant?.condition || 'NM').replace(/[^A-Z]/g, '').substring(0, 2) || 'NM';
     const randomSuffix = Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -218,11 +127,7 @@ export function RawCardIntake({
 
   const addToBatch = async () => {
     if (!picked || !chosenVariant) {
-      toast({
-        title: 'No Card Selected',
-        description: 'Please select a card first',
-        variant: 'destructive',
-      });
+      toast.error('No Card Selected', { description: 'Please select a card first' });
       return;
     }
 
@@ -236,25 +141,23 @@ export function RawCardIntake({
           sku,
           subject: picked.name,
           card_number: String(picked.number || ''),
-          year: '', // JustTCG doesn't provide year directly
-          brand_title: picked.set || '',
+          year: '',
+          brand_title: picked.set?.name || '',
           category: mapGameToCategory(game),
           variant: chosenVariant.printing,
           quantity,
           price: chosenVariant.price || null,
-          cost: null, // Cost not available from JustTCG
+          cost: null,
         });
 
       if (error) throw error;
 
-      // Dispatch event for real-time updates
       window.dispatchEvent(new CustomEvent('intake:item-added', {
         detail: { sku, name: picked.name, quantity }
       }));
 
-      toast({
-        title: 'Added to Batch',
-        description: `${picked.name} (${quantity}x) added with SKU: ${sku}`,
+      toast.success('Added to Batch', {
+        description: `${picked.name} (${quantity}x) added with SKU: ${sku}`
       });
 
       onBatchAdd?.({ card: picked, variant: chosenVariant, sku, quantity });
@@ -268,49 +171,21 @@ export function RawCardIntake({
       setSuggestions([]);
 
     } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: error.message || 'Failed to add item to batch',
-        variant: 'destructive',
+      toast.error('Error', {
+        description: error.message || 'Failed to add item to batch'
       });
     } finally {
       setSaving(false);
     }
   };
 
-  const handleSuggestionClick = async (card: JustTCGCard) => {
+  const handleSuggestionClick = async (card: CatalogCard) => {
     setPicked(card);
-    
-    // Get reference price if tcgplayerId exists
-    let variant = null;
-    let price = null;
-    
-    if (card.tcgplayerId) {
-      try {
-        const variants = await getReferencePriceByTcgplayerId(card.tcgplayerId, {
-          condition: conditionCsv.split(',')[0]?.trim() || 'NM',
-          printing: printing === 'Foil' ? 'Foil' : 'Normal'
-        });
-        
-        if (variants.length > 0) {
-          variant = variants[0];
-          price = variant.price;
-          setReferencePrice(price || null);
-        }
-      } catch (error) {
-        console.error('Failed to get reference price:', error);
-        toast({
-          title: 'Price Lookup Failed',  
-          description: 'Could not fetch reference price',
-          variant: 'destructive',
-        });
-      }
-    }
     
     const chosenVar = {
       condition: conditionCsv.split(',')[0]?.trim() || 'NM',
       printing: printing,
-      price: price
+      price: null
     };
     
     setChosenVariant(chosenVar);
@@ -322,7 +197,6 @@ export function RawCardIntake({
 
     onPick?.(payload);
 
-    // Auto-save if enabled
     if (autoSaveToBatch && chosenVar) {
       setTimeout(addToBatch, 100);
     }
@@ -333,10 +207,17 @@ export function RawCardIntake({
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Search className="h-5 w-5" />
-          Raw Card Intake
+          Card Intake
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            Card search now uses local catalog data only. External sync functionality has been removed.
+          </AlertDescription>
+        </Alert>
+
         {/* Game Selection */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
@@ -356,7 +237,7 @@ export function RawCardIntake({
           </div>
 
           <div>
-            <Label htmlFor="printing">Printing</Label>
+            <Label htmlFor="printing">Printing</Label>  
             <Select value={printing} onValueChange={(value: Printing) => setPrinting(value)}>
               <SelectTrigger>
                 <SelectValue />
@@ -431,93 +312,32 @@ export function RawCardIntake({
             </Button>
           </div>
           
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3" role="region" aria-live="polite">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
             {suggestions.map((card, index) => (
               <Button
                 key={card.id || `card-${index}`}
                 variant="outline"
                 className="h-auto p-3 text-left flex flex-col items-start"
                 onClick={() => handleSuggestionClick(card)}
-                aria-label={`Select ${card.name}`}
               >
-                <div className="w-full h-32 bg-muted rounded mb-2 flex items-center justify-center text-xs text-muted-foreground overflow-hidden">
-                  {card.images?.small ? (
-                    <img 
-                      src={card.images.small} 
-                      alt={card.name} 
-                      className="w-full h-full object-cover rounded"
-                      onError={(e) => {
-                        e.currentTarget.style.display = 'none';
-                        e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                      }}
-                    />
-                  ) : null}
-                  <div className={`${card.images?.small ? 'hidden' : ''} flex items-center justify-center w-full h-full`}>
-                    {card.name?.substring(0, 20)}...
-                  </div>
+                <div className="w-full h-32 bg-muted rounded mb-2 flex items-center justify-center text-xs text-muted-foreground">
+                  {card.name?.substring(0, 20)}...
                 </div>
                 <div className="text-sm font-medium truncate w-full">{card.name}</div>
                 <div className="text-xs text-muted-foreground">
-                  TCG ID: {card.tcgplayerId}
+                  {card.set?.name} • {card.number}
                 </div>
               </Button>
             ))}
           </div>
 
-          {!loading && suggestions.length === 0 && normalizedName && normalizedName.length >= 3 && (
-            <>
-              {((game === 'pokemon' && USE_V2_POKEMON) || 
-                (game === 'pokemon_japan' && USE_V2_POKEMON_JAPAN) || 
-                (game === 'mtg' && USE_V2_MTG)) ? (
-                <div className="rounded border p-3 text-sm space-y-2">
-                  <div>No local results. If a new set just dropped, you can sync it now.</div>
-                  <div className="flex items-center gap-2">
-                    <Input 
-                      className="text-sm" 
-                      placeholder="Set Name (e.g. Base Set)" 
-                      value={syncSetId} 
-                      onChange={(e) => setSyncSetId(e.target.value)} 
-                    />
-                    <Button 
-                      size="sm"
-                      onClick={async () => {
-                        try {
-                          // Use unified catalog-sync endpoint
-                          const gameParam = game === 'pokemon_japan' ? 'pokemon-japan' : game === 'mtg' ? 'mtg' : 'pokemon';
-                          const url = new URL(`${FUNCTIONS_BASE}/catalog-sync`);
-                          url.searchParams.set('game', gameParam);
-                          if (syncSetId) {
-                            if (game === 'pokemon') {
-                              url.searchParams.set('setId', syncSetId);
-                            } else {
-                              url.searchParams.set('set', syncSetId);
-                            }
-                          }
-                          await fetch(url.toString(), { method: 'POST' });
-                          toast({ title: 'Sync started', description: 'Refreshing search results...' });
-                          await doSearch();
-                        } catch (error) {
-                          toast({ title: 'Sync failed', description: 'Could not sync the set', variant: 'destructive' });
-                        }
-                      }}
-                      disabled={!syncSetId.trim()}
-                    >
-                      Sync set
-                    </Button>
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    Tip: leave Set Name blank and ask an admin to run a broader sync from the Admin page.
-                  </div>
-                </div>
-              ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  No matches found for "{name}"
-                </div>
-              )}
-            </>
+          {!loading && suggestions.length === 0 && name && name.length >= 3 && (
+            <div className="text-center py-8 text-muted-foreground">
+              No matches found for "{name}"
+            </div>
           )}
 
-          {!loading && suggestions.length === 0 && normalizedName && normalizedName.length < 3 && (
+          {!loading && suggestions.length === 0 && name && name.length < 3 && (
             <div className="text-center py-8 text-muted-foreground">
               Enter card name (3+ characters) to search
             </div>
@@ -531,12 +351,13 @@ export function RawCardIntake({
               <CardTitle className="text-lg">Selected Card</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <ChosenPricePanel 
-                card={picked} 
-                printing={printing} 
-                conditionCsv={conditionCsv}
-                referencePrice={referencePrice}
-              />
+              <div className="space-y-2">
+                <div><span className="text-muted-foreground">Name:</span> {picked.name}</div>
+                <div><span className="text-muted-foreground">Set:</span> {picked.set?.name || '—'}</div>
+                <div><span className="text-muted-foreground">Number:</span> {picked.number || '—'}</div>
+                <div><span className="text-muted-foreground">Printing:</span> {printing}</div>
+                <div><span className="text-muted-foreground">Condition:</span> {conditionCsv.split(',')[0]?.trim() || 'NM'}</div>
+              </div>
               
               {/* Quantity and Add to Batch */}
               <div className="flex items-center gap-4 pt-4 border-t">
@@ -571,43 +392,5 @@ export function RawCardIntake({
         )}
       </CardContent>
     </Card>
-  );
-}
-
-function ChosenPricePanel({ 
-  card, 
-  printing, 
-  conditionCsv,
-  referencePrice 
-}: { 
-  card: JustTCGCard; 
-  printing: Printing; 
-  conditionCsv: string;
-  referencePrice?: number | null;
-}) {
-  const condition = conditionCsv.split(',')[0]?.trim() || 'NM';
-
-  return (
-    <div className="space-y-2">
-      <div><span className="text-muted-foreground">Name:</span> {card.name}</div>
-      <div><span className="text-muted-foreground">TCG Player ID:</span> {card.tcgplayerId || '—'}</div>
-      <div><span className="text-muted-foreground">Printing:</span> {printing}</div>
-      <div><span className="text-muted-foreground">Condition:</span> {condition}</div>
-      <div><span className="text-muted-foreground">Reference Price:</span> {
-        referencePrice != null ? `$${Number(referencePrice).toFixed(2)}` : '—'
-      }</div>
-      <div className="mt-4 pt-4 border-t">
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <Label htmlFor="our-price">Our Price</Label>
-            <Input id="our-price" placeholder="$0.00" />
-          </div>
-          <div>
-            <Label htmlFor="our-cost">Our Cost</Label>
-            <Input id="our-cost" placeholder="$0.00" />
-          </div>
-        </div>
-      </div>
-    </div>
   );
 }

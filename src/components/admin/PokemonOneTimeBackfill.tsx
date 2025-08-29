@@ -6,7 +6,6 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, CheckCircle, AlertCircle, Database, Calendar, RefreshCw } from "lucide-react";
-import PokemonSyncErrors from "./PokemonSyncErrors";
 
 const SETTING_KEY = "POKEMON_V2_BACKFILL_DONE";
 
@@ -353,8 +352,12 @@ export default function PokemonOneTimeBackfill() {
           </details>
         )}
 
-        {/* Embedded Sync Errors - Auto-refresh while active */}
-        <PokemonSyncErrors autoRefresh={isActiveSync} />
+        {/* Embedded component placeholder */}
+        <div className="mt-4 p-4 border border-dashed border-muted-foreground/25 rounded-lg">
+          <p className="text-sm text-muted-foreground text-center">
+            Sync error tracking will be implemented for external TCG database service.
+          </p>
+        </div>
       </CardContent>
     </Card>
   );

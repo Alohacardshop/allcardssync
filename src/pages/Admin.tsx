@@ -19,7 +19,8 @@ import AuditReconcile from '@/components/admin/AuditReconcile';
 import DataTab from '@/components/admin/DataTab';
 import SystemHealthCard from '@/components/admin/SystemHealthCard';
 import CatalogTab from '@/components/admin/CatalogTab';
-import { ModernSyncDashboard } from '@/components/admin/ModernSyncDashboard';
+import TCGDatabaseSettings from '@/components/admin/TCGDatabaseSettings';
+
 
 import { GAME_MODES, type HealthStatus } from '@/lib/api';
 
@@ -583,11 +584,10 @@ const Admin = () => {
 
       {/* Main Admin Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="audit">Audit & Reconcile</TabsTrigger>
           <TabsTrigger value="data">Data</TabsTrigger>
           <TabsTrigger value="catalog">Catalog</TabsTrigger>
-          <TabsTrigger value="sync">JustTCG Sync</TabsTrigger>
           <TabsTrigger value="config">Configuration</TabsTrigger>
         </TabsList>
 
@@ -601,11 +601,9 @@ const Admin = () => {
 
         <TabsContent value="catalog" className="space-y-6">
           <CatalogTab />
+          <TCGDatabaseSettings />
         </TabsContent>
 
-        <TabsContent value="sync" className="space-y-6">
-          <ModernSyncDashboard />
-        </TabsContent>
 
 
         <TabsContent value="config" className="space-y-6">

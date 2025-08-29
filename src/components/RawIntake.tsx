@@ -5,9 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { GAME_OPTIONS, GameKey, JObjectCard } from "@/lib/types";
-import { searchCardsByNameNumber } from "@/lib/justtcg-types";
-import { LRUCache } from '@/lib/lruCache';
+import { GAME_OPTIONS, GameKey } from "@/lib/types";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { AlertCircle } from "lucide-react";
 
 interface RawTradeInForm {
   game: string;
@@ -20,8 +20,8 @@ interface RawTradeInForm {
   printing?: string;
   rarity?: string;
   quantity: number;
-  price_each?: string; // keep as string for input; convert on save
-  cost_each?: string; // keep as string for input; convert on save
+  price_each?: string;
+  cost_each?: string;
   sku?: string;
   product_id?: number;
 }
@@ -55,9 +55,6 @@ export default function RawIntake() {
   
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  
-  const debounceRef = useRef<NodeJS.Timeout>();
-  const searchCache = useRef(new LRUCache<string, any[]>(200));
 
   const autoSku = useMemo(() => {
     const condMap: Record<string, string> = {
@@ -91,68 +88,50 @@ export default function RawIntake() {
 
   useEffect(() => {
     setForm((f) => ({ ...f, sku: autoSku }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoSku]);
-
-  // build cache key
-  const buildKey = (g: string, n: string, num?: string) =>
-    `${g}|${n.trim().toLowerCase()}|${(num||'').trim().toLowerCase()}`;
-
-  // Clear suggestions when inputs change to avoid stale results
-  useEffect(() => {
-    setSuggestions([]);
-  }, [form.name, form.card_number, form.game]);
 
   const doSearch = async () => {
     const rawName = (form.name || "").trim();
-    const inputCard = (form.card_number || "").trim();
     if (rawName.length < 3) {
       toast.error('Please enter at least 3 characters for the card name');
       return;
     }
 
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(async () => {
+    setLoading(true);
+    try {
+      // Search local catalog only
       const gameMap: Record<string, string> = {
         'Pokémon': 'pokemon',
-        'Pokémon Japan': 'pokemon',
-        'Magic: The Gathering': 'magic-the-gathering'
+        'Pokémon Japan': 'pokemon-japan',
+        'Magic: The Gathering': 'mtg'
       };
       const gameParam = gameMap[form.game] || 'pokemon';
-      const cacheKey = buildKey(gameParam, rawName, inputCard);
+      
+      const { data, error } = await supabase.rpc('catalog_v2_browse_cards', {
+        game_in: gameParam,
+        search_in: rawName,
+        limit_in: 5
+      });
 
-      const cached = searchCache.current.get(cacheKey);
-      if (cached) { setSuggestions(cached); return; }
+      if (error) throw error;
 
-      setLoading(true);
-      try {
-        const response = await searchCardsByNameNumber({
-          name: rawName,
-          number: inputCard || undefined,
-          game: gameParam,
-          limit: 5
-        });
-        const results = Array.isArray(response) ? response : [];
-        searchCache.current.set(cacheKey, results);
-        setSuggestions(results);
-      } catch (e: any) {
-        console.error('JustTCG API search error:', e);
-        setSuggestions([]);
-        if (e?.message?.includes('429')) toast.error('Rate limit reached. Please wait a moment.');
-        else toast.error('Failed to search cards. Please try again.');
-      } finally {
-        setLoading(false);
-      }
-    }, 450);
+      const results = (data as any)?.cards || [];
+      setSuggestions(results);
+    } catch (e: any) {
+      console.error('Catalog search error:', e);
+      setSuggestions([]);
+      toast.error('Failed to search cards. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const applySuggestion = (s: any) => {
     setForm((f) => ({
       ...f,
       name: s.name || f.name,
-      set: s.set || f.set,
+      set: s.set_id || f.set,
       card_number: String(s.number || f.card_number),
-      // Keep existing form values for fields not provided by API
       condition: f.condition,
       language: f.language,
       printing: f.printing,
@@ -160,7 +139,7 @@ export default function RawIntake() {
       price_each: f.price_each,
       cost_each: f.cost_each,
       sku: f.sku,
-      product_id: s.tcgplayerId ? Number(s.tcgplayerId) : undefined,
+      product_id: undefined,
     }));
   };
 
@@ -184,13 +163,12 @@ export default function RawIntake() {
     } as const;
 
     try {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("intake_items")
         .insert(insertPayload)
         .select("*")
         .single();
       if (error) throw error;
-      // Notify listeners (e.g., batch queue) that an item was added
       window.dispatchEvent(new CustomEvent('intake:item-added', { detail: data }));
       toast.success(`Added to batch (Lot ${data?.lot_number || ''})`);
     } catch (e) {
@@ -221,7 +199,7 @@ export default function RawIntake() {
     } as const;
 
     try {
-      const { error } = await (supabase as any).from("trade_ins").insert(payload);
+      const { error } = await supabase.from("trade_ins").insert(payload);
       if (error) throw error;
       toast.success("Raw trade-in saved");
       setForm((f) => ({ ...f, name: "", price_each: "", quantity: 1, sku: autoSku }));
@@ -233,6 +211,13 @@ export default function RawIntake() {
 
   return (
     <div>
+      <Alert className="mb-4">
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>
+          Card search now uses local catalog data only. External sync functionality has been removed.
+        </AlertDescription>
+      </Alert>
+
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="sm:col-span-2">
           <Label>Game</Label>
@@ -277,10 +262,6 @@ export default function RawIntake() {
             onKeyDown={(e) => e.key === 'Enter' && doSearch()}
             placeholder="e.g., 201/197 or 201" 
           />
-        </div>
-        <div>
-          <Label htmlFor="product_id">Product ID</Label>
-          <Input id="product_id" value={form.product_id ? String(form.product_id) : ""} placeholder="Select a suggestion to set Product ID" disabled />
         </div>
         <div>
           <Label htmlFor="condition">Condition</Label>
@@ -351,14 +332,10 @@ export default function RawIntake() {
         ) : suggestions.length > 0 ? (
           <ul className="mt-2 space-y-2">
             {suggestions.map((s, i) => (
-              <li key={`${s.id || s.tcgplayerId}-${i}`} className="flex items-center gap-3 border rounded-md p-2">
-                <div className="w-12 h-16 bg-muted rounded flex items-center justify-center text-xs text-muted-foreground">
-                  IMG
-                </div>
+              <li key={`${s.card_id}-${i}`} className="flex items-center gap-3 border rounded-md p-2">
                 <div className="flex-1 text-sm">
                   <div className="font-medium">{s.name}</div>
-                  <div className="text-muted-foreground">{[s.set, s.number].filter(Boolean).join(" • ")}</div>
-                  {s.tcgplayerId && <div className="text-xs text-muted-foreground">TCG ID: {s.tcgplayerId}</div>}
+                  <div className="text-muted-foreground">{[s.set_id, s.number].filter(Boolean).join(" • ")}</div>
                 </div>
                 <Button size="sm" variant="secondary" onClick={() => applySuggestion(s)}>Use</Button>
               </li>
