@@ -823,6 +823,10 @@ export type Database = {
       }
     }
     Functions: {
+      atomic_catalog_swap: {
+        Args: { game_name: string }
+        Returns: undefined
+      }
       catalog_v2_browse_cards: {
         Args: {
           filter_japanese?: boolean
