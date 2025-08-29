@@ -991,11 +991,23 @@ export type Database = {
         Args: { rows: Json }
         Returns: undefined
       }
+      catalog_v2_upsert_cards_new: {
+        Args: { rows: Json }
+        Returns: undefined
+      }
       catalog_v2_upsert_sets: {
         Args: { rows: Json }
         Returns: undefined
       }
+      catalog_v2_upsert_sets_new: {
+        Args: { rows: Json }
+        Returns: undefined
+      }
       catalog_v2_upsert_variants: {
+        Args: { rows: Json }
+        Returns: undefined
+      }
+      catalog_v2_upsert_variants_new: {
         Args: { rows: Json }
         Returns: undefined
       }
