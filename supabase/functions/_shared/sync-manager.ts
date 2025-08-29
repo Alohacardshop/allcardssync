@@ -34,9 +34,93 @@ export interface SyncResult {
 
 export class SyncManager {
   private supabase: any;
+  private config: Map<string, any> = new Map();
 
   constructor(supabaseUrl: string, supabaseKey: string) {
     this.supabase = createClient(supabaseUrl, supabaseKey);
+  }
+
+  // Load configuration values
+  async loadConfig(): Promise<void> {
+    const { data } = await this.supabase
+      .from('sync_v3.config')
+      .select('key, value');
+    
+    if (data) {
+      data.forEach((item: any) => {
+        this.config.set(item.key, JSON.parse(item.value));
+      });
+    }
+  }
+
+  // Get configuration value with fallback
+  getConfig(key: string, defaultValue?: any): any {
+    return this.config.get(key) ?? defaultValue;
+  }
+
+  // Record performance metrics
+  async recordMetric(jobId: string, metricType: string, data: Record<string, any>): Promise<void> {
+    await this.supabase.rpc('sync_v3.record_metric', {
+      job_uuid: jobId,
+      metric_type_name: metricType,
+      metric_data: data
+    });
+  }
+
+  // Record structured errors
+  async recordError(
+    jobId: string, 
+    errorCode: string, 
+    category: string, 
+    message: string, 
+    stackTrace?: string, 
+    context?: Record<string, any>
+  ): Promise<void> {
+    await this.supabase.rpc('sync_v3.record_error', {
+      job_uuid: jobId,
+      error_code_val: errorCode,
+      error_category_val: category,
+      error_msg: message,
+      stack_trace_val: stackTrace,
+      error_context: context || {}
+    });
+  }
+
+  // Send webhook notifications
+  async sendWebhook(event: string, data: Record<string, any>): Promise<void> {
+    const { data: webhooks } = await this.supabase
+      .from('sync_v3.webhooks')
+      .select('*')
+      .eq('enabled', true)
+      .contains('events', [event]);
+
+    if (webhooks) {
+      const timeout = this.getConfig('webhook_timeout_seconds', 10) * 1000;
+      
+      for (const webhook of webhooks) {
+        try {
+          const controller = new AbortController();
+          setTimeout(() => controller.abort(), timeout);
+
+          await fetch(webhook.url, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...webhook.headers
+            },
+            body: JSON.stringify({
+              event,
+              data,
+              timestamp: new Date().toISOString(),
+              webhook_id: webhook.id
+            }),
+            signal: controller.signal
+          });
+        } catch (error) {
+          console.error(`Webhook failed for ${webhook.name}:`, error);
+        }
+      }
+    }
   }
 
   async createJob(
