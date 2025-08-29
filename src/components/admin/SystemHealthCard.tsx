@@ -150,3 +150,5 @@ export function SystemHealthCard({ onHealthUpdate }: SystemHealthCardProps) {
     </Card>
   );
 }
+
+export default SystemHealthCard;

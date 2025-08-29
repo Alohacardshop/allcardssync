@@ -131,9 +131,8 @@ const CatalogTab = () => {
         </TabsContent>
 
         <TabsContent value="browse" className="space-y-6">
-          <div className="grid gap-6 md:grid-cols-2">
-            <SetsList />
-            <CardsView />
+          <div className="text-center py-8 text-muted-foreground">
+            Browse functionality will be implemented to show catalog sets and cards data.
           </div>
         </TabsContent>
 

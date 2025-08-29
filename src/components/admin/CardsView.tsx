@@ -191,3 +191,5 @@ export function CardsView({ game, gameName, setId, setName, onBack }: CardsViewP
     </Card>
   );
 }
+
+export default CardsView;

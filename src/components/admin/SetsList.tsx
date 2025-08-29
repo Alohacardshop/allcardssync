@@ -233,3 +233,5 @@ export function SetsList({ game, gameName, onViewCards }: SetsListProps) {
     </Card>
   );
 }
+
+export default SetsList;

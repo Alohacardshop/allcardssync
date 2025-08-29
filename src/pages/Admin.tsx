@@ -18,7 +18,7 @@ import { useLocalStorageString } from '@/hooks/useLocalStorage';
 import AuditReconcile from '@/components/admin/AuditReconcile';
 import DataTab from '@/components/admin/DataTab';
 import { SystemHealthCard } from '@/components/admin/SystemHealthCard';
-import { CatalogTab } from '@/components/admin/CatalogTab';
+import CatalogTab from '@/components/admin/CatalogTab';
 
 import { GAME_MODES, type HealthStatus } from '@/lib/api';
 
@@ -598,7 +598,7 @@ const Admin = () => {
         </TabsContent>
 
         <TabsContent value="catalog" className="space-y-6">
-          <CatalogTab selectedMode={GAME_MODES.find(m => m.value === selectedMode) || GAME_MODES[0]} />
+          <CatalogTab />
         </TabsContent>
 
 

@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import {
@@ -92,22 +91,17 @@ serve(async (req) => {
             const apiSetsForGuardrail: any[] = [];
 
             for await (const { items, cursor } of pageSets(apiKey, game)) {
+              // Map to simplified schema - only the fields that exist
               const rows = items.map((s: SetDTO) => ({
                 provider: provider,
                 set_id: `${provider}-${s.id}`,
                 provider_id: s.id,
                 game: game,
                 name: s.name,
-                code: s.code || null,
-                series: s.series || null,
-                printed_total: s.printedTotal || null,
-                total: s.total || null,
-                release_date: s.releaseDate || null,
-                images: s.images || null,
-                data: s.data || s
+                code: s.code || null
               }));
 
-              // Use existing RPC for batch upsert (to live catalog_v2.sets)
+              // Use existing simplified RPC for batch upsert
               const { error } = await sb.rpc('catalog_v2_upsert_sets', { rows });
               if (error) throw new Error(`Failed to upsert sets: ${error.message}`);
 
@@ -130,35 +124,56 @@ serve(async (req) => {
               });
             }
 
-            // Run guardrail pass
+            // Run guardrail pass on live sets (exact-only matching)
             push({ 
               type: "GUARDRAIL", 
               game, 
               message: "🛡️ Running guardrails on sets" 
             });
 
-            const { data: guardrailResult, error: guardrailError } = await sb.rpc(
-              'catalog_v2_guardrail_sets_new', 
-              { 
-                game_in: game, 
-                api_sets: apiSetsForGuardrail 
-              }
-            );
+            try {
+              let rolledBack = 0;
+              let notFound = 0;
 
-            if (guardrailError) {
+              // Check for name mismatches and null provider_id if normalized names differ
+              for (const apiSet of apiSetsForGuardrail) {
+                const { data: dbSets } = await sb
+                  .from('catalog_v2.sets')
+                  .select('name, provider_id')
+                  .eq('game', game)
+                  .eq('provider_id', apiSet.provider_id)
+                  .maybeSingle();
+
+                if (dbSets) {
+                  const dbNameNorm = normalizeName(dbSets.name);
+                  const apiNameNorm = normalizeName(apiSet.name);
+                  
+                  if (dbNameNorm !== apiNameNorm) {
+                    // Null provider_id for mismatched names (exact-only guardrail)
+                    await sb
+                      .from('catalog_v2.sets')
+                      .update({ provider_id: null })
+                      .eq('game', game)
+                      .eq('provider_id', apiSet.provider_id);
+                    rolledBack++;
+                  }
+                } else {
+                  notFound++;
+                }
+              }
+
+              push({ 
+                type: "GUARDRAIL_RESULT", 
+                game, 
+                rolled_back: rolledBack, 
+                not_found: notFound,
+                message: `🛡️ Guardrail: ${rolledBack} mismatched names nulled, ${notFound} API sets not found in DB`
+              });
+            } catch (guardrailError: any) {
               push({ 
                 type: "WARNING", 
                 game, 
                 message: `⚠️ Guardrail check failed: ${guardrailError.message}` 
-              });
-            } else if (guardrailResult?.length > 0) {
-              const { rolled_back, not_found } = guardrailResult[0];
-              push({ 
-                type: "GUARDRAIL_RESULT", 
-                game, 
-                rolled_back, 
-                not_found,
-                message: `🛡️ Guardrail: ${rolled_back} mismatched names nulled, ${not_found} API sets not found in DB`
               });
             }
 
@@ -176,6 +191,7 @@ serve(async (req) => {
             for (const setId of setProviderIds) {
               let setCards = 0;
               for await (const { items, cursor } of pageCards(apiKey, game, setId)) {
+                // Map to simplified schema - only the fields that exist
                 const rows = items.map((c: CardDTO) => ({
                   provider: provider,
                   card_id: `${provider}-${c.id}`,
@@ -183,14 +199,7 @@ serve(async (req) => {
                   game: game,
                   set_provider_id: c.setId,
                   name: c.name,
-                  number: c.number || null,
-                  rarity: c.rarity || null,
-                  supertype: c.supertype || null,
-                  subtypes: c.subtypes || null,
-                  images: c.images || null,
-                  tcgplayer_product_id: c.tcgplayerProductId || null,
-                  tcgplayer_url: c.tcgplayerUrl || null,
-                  data: c.data || c
+                  number: c.number || null
                 }));
 
                 const { error } = await sb.rpc('catalog_v2_upsert_cards', { rows });
@@ -227,23 +236,14 @@ serve(async (req) => {
             for (const cardId of cardProviderIds) {
               let cardVariants = 0;
               for await (const { items, cursor } of pageVariants(apiKey, game, cardId)) {
+                // Map to simplified schema - only the fields that exist
                 const rows = items.map((v: VariantDTO) => ({
                   provider: provider,
                   variant_id: v.id ? `${provider}-${v.id}` : null,
                   provider_id: v.id || null,
                   card_id: `${provider}-${v.cardId}`,
                   game: game,
-                  language: v.language || null,
-                  printing: v.printing || null,
-                  condition: v.condition || null,
-                  sku: v.sku || null,
-                  price: v.price || null,
-                  market_price: v.marketPrice || null,
-                  low_price: v.lowPrice || null,
-                  mid_price: v.midPrice || null,
-                  high_price: v.highPrice || null,
-                  currency: v.currency || 'USD',
-                  data: v.data || v
+                  sku: v.sku || null
                 }));
 
                 const { error } = await sb.rpc('catalog_v2_upsert_variants', { rows });

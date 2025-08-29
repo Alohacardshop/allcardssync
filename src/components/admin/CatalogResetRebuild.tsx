@@ -27,7 +27,11 @@ const GAME_OPTIONS = [
   { id: 'mtg', name: 'Magic: The Gathering' },
 ];
 
-export const CatalogResetRebuild = () => {
+interface CatalogResetRebuildProps {
+  onLogsUpdate: (logs: LogEntry[]) => void;
+}
+
+export const CatalogResetRebuild = ({ onLogsUpdate }: CatalogResetRebuildProps) => {
   const { toast } = useToast();
   const [selectedGames, setSelectedGames] = useState<string[]>([]);
   const [sequentialMode, setSequentialMode] = useState(false);
@@ -62,6 +66,7 @@ export const CatalogResetRebuild = () => {
 
     setIsRunning(true);
     setLogs([]);
+    onLogsUpdate([]); // Clear parent's unified viewer
 
     try {
       const response = await fetch(`https://dmpoandoydaqxhzdjnmk.supabase.co/functions/v1/catalog-rebuild-stream`, {
@@ -101,7 +106,11 @@ export const CatalogResetRebuild = () => {
             if (line.startsWith('data: ')) {
               try {
                 const logEntry = JSON.parse(line.slice(6));
-                setLogs(prev => [...prev, logEntry]);
+                setLogs(prev => {
+                  const newLogs = [...prev, logEntry];
+                  onLogsUpdate(newLogs); // Update parent's unified viewer
+                  return newLogs;
+                });
                 
                 // Show important events as toasts
                 if (logEntry.type === 'ERROR') {
@@ -314,3 +323,5 @@ export const CatalogResetRebuild = () => {
     </Card>
   );
 };
+
+export default CatalogResetRebuild;
