@@ -1,6 +1,24 @@
 project_id = "dmpoandoydaqxhzdjnmk"
 
-[functions.catalog-cron-proxy]
+[functions.catalog-sync]
+verify_jwt = false
+
+[functions.catalog-sync-pokemon]
+verify_jwt = false
+
+[functions.catalog-sync-justtcg]
+verify_jwt = false
+
+[functions.catalog-search]
+verify_jwt = false
+
+[functions.catalog-rebuild-stream]
+verify_jwt = false
+
+[functions.catalog-health]
+verify_jwt = false
+
+[functions.sync-errors]
 verify_jwt = false
 
 [functions.discover-games]
@@ -9,58 +27,7 @@ verify_jwt = false
 [functions.discover-sets]
 verify_jwt = false
 
-[functions.justtcg-import]
-verify_jwt = false
-
-[functions.justtcg]
-verify_jwt = false
-
-[functions.catalog-sync]
-verify_jwt = false
-
-[functions.catalog-sync-pokemon]
-verify_jwt = false
-
-[functions.catalog-sync-pokemon-japan]
-verify_jwt = false
-
-[functions.catalog-sync-justtcg]
-verify_jwt = false
-
-[functions.catalog-refresh]
-verify_jwt = false
-
-[functions.catalog-search]
-verify_jwt = false
-
-[functions.catalog-snapshots]
-verify_jwt = false
-
-[functions.sync-errors]
-verify_jwt = false
-
-[functions.catalog-sync-status]
-verify_jwt = false
-
-[functions.catalog-sync-retry]
-verify_jwt = false
-
-[functions.catalog-sync-cancel]
-verify_jwt = false
-
-[functions.catalog-audit]
-verify_jwt = false
-
-[functions.catalog-audit]
-verify_jwt = false
-
-[functions.catalog-reset]
-verify_jwt = false
-
-[functions.catalog-rebuild-stream]
-verify_jwt = false
-
-[functions.catalog-health]
+[functions.daily-set-discovery]
 verify_jwt = false
 
 [functions.backfill-provider-ids]

@@ -14,6 +14,7 @@ interface LogEntry {
   error?: string;
   rolled_back?: number;
   not_found?: number;
+  message?: string;
 }
 
 const GAME_OPTIONS = [
@@ -155,6 +156,11 @@ export const CatalogResetRebuild = () => {
   };
 
   const formatLogMessage = (log: LogEntry) => {
+    // Use message if provided, otherwise fall back to type-based formatting
+    if (log.message) {
+      return log.message;
+    }
+
     switch (log.type) {
       case 'START':
         return `Starting rebuild for ${Array.isArray(log.game) ? log.game.join(', ') : 'games'}`;

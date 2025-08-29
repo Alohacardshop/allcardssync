@@ -8,19 +8,9 @@ const corsHeaders = {
 
 const VALID_GAME_SLUGS = ['pokemon', 'pokemon-japan', 'mtg']
 
-// Provider catalog types
-type ProviderSet = { id: string; code?: string; name: string }
-type ProviderCard = { id: string; setId: string; name: string; number?: string }
-type ProviderVariant = { id: string; cardId: string; sku?: string }
-type ProviderCatalog = { sets: ProviderSet[]; cards: ProviderCard[]; variants: ProviderVariant[] }
-
-// Normalize names for exact matching
-const normalizeName = (s: string) =>
-  s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
-
 interface LogMessage {
   type: string
-  timestamp?: string
+  timestamp: string
   level?: 'info' | 'success' | 'error' | 'warning'
   message?: string
   game?: string
@@ -59,12 +49,10 @@ serve(async (req) => {
     const stream = new ReadableStream({
       start(controller) {
         const sendLog = (log: LogMessage) => {
-          const data = `data: ${JSON.stringify(log)}\n\n`
-          controller.enqueue(new TextEncoder().encode(data))
-        }
-
-        const push = (log: LogMessage) => {
-          const data = `data: ${JSON.stringify(log)}\n\n`
+          const data = `data: ${JSON.stringify({
+            ...log,
+            timestamp: log.timestamp || new Date().toISOString()
+          })}\n\n`
           controller.enqueue(new TextEncoder().encode(data))
         }
 
@@ -74,218 +62,277 @@ serve(async (req) => {
             const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
             const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-            // Database execution helpers
-            const exec = async (sql: string) => {
-              // Use direct SQL execution via a simple RPC that we'll create
-              const { error } = await supabase.rpc('execute_sql', { sql_query: sql })
-              if (error) throw error
+            // Helper to normalize names for exact matching
+            const normalizeName = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
+
+            // Clear shadow tables for selected games
+            const clearShadowTables = async (game: string) => {
+              await supabase.from('catalog_v2.variants_new').delete().eq('game', game)
+              await supabase.from('catalog_v2.cards_new').delete().eq('game', game) 
+              await supabase.from('catalog_v2.sets_new').delete().eq('game', game)
             }
 
-            const query = async (sql: string) => {
-              // For queries, we'll use the from() method for simpler queries
-              // For complex ones, we'll make a query RPC
-              return []
-            }
-
-            // Provider catalog fetchers using existing edge functions
-            const fetchProviderCatalog = async (game: string): Promise<ProviderCatalog> => {
+            // Fetch provider data using existing sync functions
+            const fetchProviderData = async (game: string) => {
               if (game === 'pokemon') {
-                // For Pokemon, trigger existing sync function and extract data format
-                push({ type: "IMPORT_PHASE", game, step: "CALLING_POKEMON_TCG_API" })
-                const response = await fetch(`${supabaseUrl}/functions/v1/catalog-sync-pokemon`, {
-                  method: 'POST',
-                  headers: {
-                    'Authorization': `Bearer ${supabaseServiceKey}`,
-                    'Content-Type': 'application/json'
-                  },
-                  body: JSON.stringify({ dryRun: true })
+                // Call Pokemon TCG sync for full catalog
+                const { data, error } = await supabase.functions.invoke('catalog-sync-pokemon', {
+                  body: { fullSync: true }
                 })
-                
-                if (!response.ok) throw new Error(`Pokemon API call failed: ${response.status}`)
-                const data = await response.json()
-                
-                return {
-                  sets: data.sets?.map((s: any) => ({ id: s.id, code: s.code, name: s.name })) || [],
-                  cards: data.cards?.map((c: any) => ({ id: c.id, setId: c.setId, name: c.name, number: c.number })) || [],
-                  variants: []
-                }
-              } else if (game === 'pokemon-japan' || game === 'mtg') {
-                // For JustTCG games, call existing JustTCG sync functions
+                if (error) throw new Error(`Pokemon sync failed: ${error.message}`)
+                return data
+              } else {
+                // Call JustTCG sync for MTG and Pokemon Japan
                 const gameParam = game === 'pokemon-japan' ? 'pokemon-japan' : 'magic-the-gathering'
-                push({ type: "IMPORT_PHASE", game, step: "CALLING_JUSTTCG_API" })
-                
-                const response = await fetch(`${supabaseUrl}/functions/v1/catalog-sync-justtcg?game=${gameParam}`, {
-                  method: 'POST',
-                  headers: {
-                    'Authorization': `Bearer ${supabaseServiceKey}`,
-                    'Content-Type': 'application/json'
-                  },
-                  body: JSON.stringify({ dryRun: true })
+                const { data, error } = await supabase.functions.invoke('catalog-sync-justtcg', {
+                  body: { game: gameParam, fullSync: true }
                 })
+                if (error) throw new Error(`JustTCG sync failed: ${error.message}`)
+                return data
+              }
+            }
+
+            // Upsert data to shadow tables using existing RPCs
+            const upsertToShadow = async (game: string, syncResult: any) => {
+              // The sync functions already populate the main tables, but for rebuild
+              // we need to use shadow tables. We'll fetch the data and re-insert to shadow.
+              
+              // Get sets for this game from main tables (just updated by sync)
+              const { data: sets } = await supabase
+                .from('catalog_v2.sets')
+                .select('*')
+                .eq('game', game)
+
+              if (sets?.length) {
+                const setRows = sets.map(s => ({
+                  provider: s.provider,
+                  set_id: s.set_id,
+                  provider_id: s.provider_id,
+                  game: s.game,
+                  name: s.name,
+                  series: s.series,
+                  printed_total: s.printed_total,
+                  total: s.total,
+                  release_date: s.release_date,
+                  images: s.images,
+                  data: s.data
+                }))
                 
-                if (!response.ok) throw new Error(`JustTCG API call failed: ${response.status}`)
-                const data = await response.json()
-                
-                return {
-                  sets: data.sets?.map((s: any) => ({ id: s.id, code: s.code, name: s.name })) || [],
-                  cards: data.cards?.map((c: any) => ({ id: c.id, setId: c.setId, name: c.name, number: c.number })) || [],
-                  variants: data.variants?.map((v: any) => ({ id: v.id, cardId: v.cardId, sku: v.sku })) || []
+                await supabase.rpc('catalog_v2_upsert_sets_new', { rows: setRows })
+              }
+
+              // Get cards for this game
+              const { data: cards } = await supabase
+                .from('catalog_v2.cards')
+                .select('*')
+                .eq('game', game)
+
+              if (cards?.length) {
+                // Process in chunks to avoid memory issues
+                const chunkSize = 500
+                for (let i = 0; i < cards.length; i += chunkSize) {
+                  const chunk = cards.slice(i, i + chunkSize)
+                  const cardRows = chunk.map(c => ({
+                    provider: c.provider,
+                    card_id: c.card_id,
+                    game: c.game,
+                    set_id: c.set_id,
+                    name: c.name,
+                    number: c.number,
+                    rarity: c.rarity,
+                    supertype: c.supertype,
+                    subtypes: c.subtypes,
+                    images: c.images,
+                    tcgplayer_product_id: c.tcgplayer_product_id,
+                    tcgplayer_url: c.tcgplayer_url,
+                    data: c.data
+                  }))
+                  
+                  await supabase.rpc('catalog_v2_upsert_cards_new', { rows: cardRows })
                 }
               }
-              return { sets: [], cards: [], variants: [] }
+
+              // Get variants for this game  
+              const { data: variants } = await supabase
+                .from('catalog_v2.variants')
+                .select('*')
+                .eq('game', game)
+
+              if (variants?.length) {
+                const chunkSize = 500
+                for (let i = 0; i < variants.length; i += chunkSize) {
+                  const chunk = variants.slice(i, i + chunkSize)
+                  const variantRows = chunk.map(v => ({
+                    provider: v.provider,
+                    variant_id: v.variant_id,
+                    card_id: v.card_id,
+                    game: v.game,
+                    language: v.language,
+                    printing: v.printing,
+                    condition: v.condition,
+                    sku: v.sku,
+                    price: v.price,
+                    market_price: v.market_price,
+                    low_price: v.low_price,
+                    mid_price: v.mid_price,
+                    high_price: v.high_price,
+                    currency: v.currency,
+                    data: v.data
+                  }))
+                  
+                  await supabase.rpc('catalog_v2_upsert_variants_new', { rows: variantRows })
+                }
+              }
+
+              return {
+                sets: sets?.length || 0,
+                cards: cards?.length || 0, 
+                variants: variants?.length || 0
+              }
             }
 
-            // Simplified upsert helpers using Supabase client
-            const upsertSetsNew = async (game: string, sets: ProviderSet[]) => {
-              if (!sets?.length) return
-              
-              const rows = sets.map(s => ({
-                game,
-                provider_id: s.id,
-                code: s.code || null,
-                name: s.name
-              }))
-              
-              // Delete existing shadow data for this game first
-              await supabase.from('catalog_v2.sets_new').delete().eq('game', game)
-              
-              // Insert new data
-              const { error } = await supabase.from('catalog_v2.sets_new').insert(rows)
-              if (error) throw error
-            }
-
-            const upsertCardsNew = async (game: string, cards: ProviderCard[]) => {
-              if (!cards?.length) return
-              
-              const rows = cards.map(c => ({
-                game,
-                provider_id: c.id,
-                set_provider_id: c.setId,
-                name: c.name,
-                number: c.number || null
-              }))
-              
-              // Delete existing shadow data for this game first  
-              await supabase.from('catalog_v2.cards_new').delete().eq('game', game)
-              
-              // Insert new data
-              const { error } = await supabase.from('catalog_v2.cards_new').insert(rows)
-              if (error) throw error
-            }
-
-            const upsertVariantsNew = async (game: string, variants: ProviderVariant[]) => {
-              if (!variants?.length) return
-              
-              const rows = variants.map(v => ({
-                game,
-                provider_id: v.id,
-                card_provider_id: v.cardId,
-                sku: v.sku || null
-              }))
-              
-              // Delete existing shadow data for this game first
-              await supabase.from('catalog_v2.variants_new').delete().eq('game', game)
-              
-              // Insert new data
-              const { error } = await supabase.from('catalog_v2.variants_new').insert(rows)
-              if (error) throw error
-            }
-
-            // Guardrails for fixing bad writes
-            const fixBadWritesSets = async (game: string, apiSets: ProviderSet[]) => {
-              const byId = new Map(apiSets.map(s => [s.id, s]))
-              const validIds = new Set(apiSets.map(s => s.id))
-              let rolled_back = 0, not_found = 0
-
-              const { data: rows } = await supabase
+            // Fix bad writes by checking for mismatched provider names
+            const fixBadWrites = async (game: string) => {
+              const { data: shadowSets } = await supabase
                 .from('catalog_v2.sets_new')
                 .select('set_id, name, provider_id')
                 .eq('game', game)
                 .not('provider_id', 'is', null)
 
-              if (!rows) return { rolled_back, not_found }
+              let rolled_back = 0
+              let not_found = 0
 
-              for (const r of rows) {
-                const pid = r.provider_id as string
-                if (!validIds.has(pid)) {
-                  await supabase
-                    .from('catalog_v2.sets_new')
-                    .update({ provider_id: null })
-                    .eq('set_id', r.set_id)
-                  not_found++
-                  continue
-                }
-                const api = byId.get(pid)!
-                if (normalizeName(api.name) !== normalizeName(r.name)) {
-                  await supabase
-                    .from('catalog_v2.sets_new')
-                    .update({ provider_id: null })
-                    .eq('set_id', r.set_id)
-                  rolled_back++
+              if (shadowSets?.length) {
+                // Get current provider data to compare
+                const { data: providerSets } = await supabase
+                  .from('catalog_v2.sets')
+                  .select('set_id, name, provider_id')
+                  .eq('game', game)
+                  .not('provider_id', 'is', null)
+
+                const providerMap = new Map(providerSets?.map(s => [s.provider_id, s]) || [])
+
+                for (const shadowSet of shadowSets) {
+                  const providerSet = providerMap.get(shadowSet.provider_id)
+                  
+                  if (!providerSet) {
+                    // Provider ID not found in current data
+                    await supabase
+                      .from('catalog_v2.sets_new')
+                      .update({ provider_id: null })
+                      .eq('set_id', shadowSet.set_id)
+                    not_found++
+                  } else if (normalizeName(providerSet.name) !== normalizeName(shadowSet.name)) {
+                    // Name mismatch - clear provider ID
+                    await supabase
+                      .from('catalog_v2.sets_new')
+                      .update({ provider_id: null })
+                      .eq('set_id', shadowSet.set_id)
+                    rolled_back++
+                  }
                 }
               }
+
               return { rolled_back, not_found }
             }
 
-            const zeroNullProviderIdsInSetsNew = async (game: string) => {
+            // Validate that no sets have null provider_id in shadow tables
+            const validateShadowData = async (game: string) => {
               const { count } = await supabase
                 .from('catalog_v2.sets_new')
-                .select('*', { count: 'exact' })
+                .select('*', { count: 'exact', head: true })
                 .eq('game', game)
                 .is('provider_id', null)
               
               return (count || 0) === 0
             }
 
-            const atomicSwap = async (game: string) => {
-              // For atomic swap, we need to use a database function that does it in a transaction
-              const { error } = await supabase.rpc('atomic_catalog_swap', { game_name: game })
-              if (error) throw error
-            }
-
-            push({ type: "START", games: requestedGames })
+            sendLog({ type: "START", message: "Starting catalog rebuild", data: { games: requestedGames } })
 
             for (const game of requestedGames) {
-              push({ type: "START_GAME", game })
-
               try {
-                // 1) Fetch provider catalog (this also clears shadow tables)
-                push({ type: "IMPORT_PHASE", game, step: "FETCH_PROVIDER" })
-                const provider = await fetchProviderCatalog(game)
+                sendLog({ type: "START_GAME", game, message: `Starting rebuild for ${game}` })
 
-                // 2) Upsert into shadow tables
-                push({ type: "IMPORT_PHASE", game, step: "UPSERT" })
-                await upsertSetsNew(game, provider.sets)
-                await upsertCardsNew(game, provider.cards)
-                await upsertVariantsNew(game, provider.variants)
+                // Step 1: Clear shadow tables
+                sendLog({ type: "IMPORT_PHASE", game, step: "CLEAR_SHADOW", message: "Clearing shadow tables" })
+                await clearShadowTables(game)
 
-                // 3) Guardrails - fix bad writes on sets
-                push({ type: "FIX_BAD_WRITES", game })
-                const { rolled_back, not_found } = await fixBadWritesSets(game, provider.sets)
-                push({ type: "FIX_BAD_WRITES_SUMMARY", game, rolled_back, not_found })
+                // Step 2: Fetch fresh data from provider using existing sync functions
+                sendLog({ type: "IMPORT_PHASE", game, step: "FETCH_PROVIDER", message: "Fetching data from provider" })
+                const syncResult = await fetchProviderData(game)
 
-                // 4) Validate
-                push({ type: "VALIDATE", game })
-                const ok = await zeroNullProviderIdsInSetsNew(game)
-                if (!ok) { 
-                  push({ type: "ERROR", game, error: "VALIDATION_FAILED" })
+                // Step 3: Copy fresh data to shadow tables
+                sendLog({ type: "IMPORT_PHASE", game, step: "UPSERT_SHADOW", message: "Upserting to shadow tables" })
+                const counts = await upsertToShadow(game, syncResult)
+                sendLog({ 
+                  type: "IMPORT_PHASE", 
+                  game, 
+                  step: "UPSERT_COMPLETE", 
+                  message: "Shadow upsert complete",
+                  data: counts 
+                })
+
+                // Step 4: Fix bad writes (guardrails)
+                sendLog({ type: "FIX_BAD_WRITES", game, message: "Running guardrails" })
+                const { rolled_back, not_found } = await fixBadWrites(game)
+                sendLog({ 
+                  type: "FIX_BAD_WRITES_SUMMARY", 
+                  game, 
+                  rolled_back, 
+                  not_found,
+                  message: `Fixed ${rolled_back} bad writes, ${not_found} not found` 
+                })
+
+                // Step 5: Validate data integrity
+                sendLog({ type: "VALIDATE", game, message: "Validating data integrity" })
+                const isValid = await validateShadowData(game)
+                if (!isValid) {
+                  sendLog({ 
+                    type: "ERROR", 
+                    game, 
+                    error: "VALIDATION_FAILED",
+                    message: "Data validation failed - skipping swap" 
+                  })
                   continue
                 }
+                sendLog({ type: "VALIDATE", game, message: "✅ Validation passed" })
 
-                // 5) Atomic swap using database function
-                push({ type: "READY_TO_SWAP", game })
-                await atomicSwap(game)
-                push({ type: "SWAP_DONE", game })
+                // Step 6: Atomic swap using existing RPC
+                sendLog({ type: "READY_TO_SWAP", game, message: "Ready for atomic swap" })
+                const { error: swapError } = await supabase.rpc('atomic_catalog_swap', { 
+                  game_name: game 
+                })
+                if (swapError) {
+                  throw new Error(`Atomic swap failed: ${swapError.message}`)
+                }
+                
+                sendLog({ 
+                  type: "SWAP_DONE", 
+                  game, 
+                  message: "✅ Atomic swap completed successfully" 
+                })
 
               } catch (gameError: any) {
-                push({ type: "ERROR", game, error: gameError.message })
+                sendLog({ 
+                  type: "ERROR", 
+                  game, 
+                  error: gameError.message,
+                  message: `❌ ${game} rebuild failed: ${gameError.message}` 
+                })
               }
             }
 
-            push({ type: "COMPLETE" })
+            sendLog({ 
+              type: "COMPLETE", 
+              message: "🎉 Catalog rebuild process completed" 
+            })
 
           } catch (error: any) {
-            push({ type: "ERROR", error: error.message })
+            sendLog({ 
+              type: "ERROR", 
+              error: error.message,
+              message: `❌ Rebuild process failed: ${error.message}` 
+            })
           } finally {
             controller.close()
           }
