@@ -131,24 +131,37 @@ export type Database = {
         Row: {
           brand_title: string | null
           card_number: string | null
+          catalog_snapshot: Json | null
           category: string | null
           cost: number | null
           created_at: string
           deleted_at: string | null
           deleted_reason: string | null
           grade: string | null
+          grading_data: Json | null
           id: string
+          image_urls: Json | null
+          intake_batch_id: string | null
+          label_snapshot: Json | null
+          lot_id: string | null
           lot_number: string
+          original_filename: string | null
           price: number | null
+          pricing_snapshot: Json | null
           printed_at: string | null
+          processing_notes: string | null
           psa_cert: string | null
           pushed_at: string | null
           quantity: number
           shopify_inventory_item_id: string | null
           shopify_location_gid: string | null
           shopify_product_id: string | null
+          shopify_snapshot: Json | null
           shopify_variant_id: string | null
           sku: string | null
+          source_payload: Json | null
+          source_provider: string | null
+          source_row_number: number | null
           store_key: string | null
           subject: string | null
           updated_at: string
@@ -158,24 +171,37 @@ export type Database = {
         Insert: {
           brand_title?: string | null
           card_number?: string | null
+          catalog_snapshot?: Json | null
           category?: string | null
           cost?: number | null
           created_at?: string
           deleted_at?: string | null
           deleted_reason?: string | null
           grade?: string | null
+          grading_data?: Json | null
           id?: string
+          image_urls?: Json | null
+          intake_batch_id?: string | null
+          label_snapshot?: Json | null
+          lot_id?: string | null
           lot_number?: string
+          original_filename?: string | null
           price?: number | null
+          pricing_snapshot?: Json | null
           printed_at?: string | null
+          processing_notes?: string | null
           psa_cert?: string | null
           pushed_at?: string | null
           quantity?: number
           shopify_inventory_item_id?: string | null
           shopify_location_gid?: string | null
           shopify_product_id?: string | null
+          shopify_snapshot?: Json | null
           shopify_variant_id?: string | null
           sku?: string | null
+          source_payload?: Json | null
+          source_provider?: string | null
+          source_row_number?: number | null
           store_key?: string | null
           subject?: string | null
           updated_at?: string
@@ -185,31 +211,138 @@ export type Database = {
         Update: {
           brand_title?: string | null
           card_number?: string | null
+          catalog_snapshot?: Json | null
           category?: string | null
           cost?: number | null
           created_at?: string
           deleted_at?: string | null
           deleted_reason?: string | null
           grade?: string | null
+          grading_data?: Json | null
           id?: string
+          image_urls?: Json | null
+          intake_batch_id?: string | null
+          label_snapshot?: Json | null
+          lot_id?: string | null
           lot_number?: string
+          original_filename?: string | null
           price?: number | null
+          pricing_snapshot?: Json | null
           printed_at?: string | null
+          processing_notes?: string | null
           psa_cert?: string | null
           pushed_at?: string | null
           quantity?: number
           shopify_inventory_item_id?: string | null
           shopify_location_gid?: string | null
           shopify_product_id?: string | null
+          shopify_snapshot?: Json | null
           shopify_variant_id?: string | null
           sku?: string | null
+          source_payload?: Json | null
+          source_provider?: string | null
+          source_row_number?: number | null
           store_key?: string | null
           subject?: string | null
           updated_at?: string
           variant?: string | null
           year?: string | null
         }
+        Relationships: [
+          {
+            foreignKeyName: "intake_items_lot_id_fkey"
+            columns: ["lot_id"]
+            isOneToOne: false
+            referencedRelation: "intake_lots"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      intake_lots: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          lot_number: string
+          lot_type: string
+          notes: string | null
+          processing_data: Json | null
+          shopify_location_gid: string | null
+          status: string | null
+          store_key: string | null
+          total_items: number | null
+          total_value: number | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          lot_number?: string
+          lot_type?: string
+          notes?: string | null
+          processing_data?: Json | null
+          shopify_location_gid?: string | null
+          status?: string | null
+          store_key?: string | null
+          total_items?: number | null
+          total_value?: number | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          lot_number?: string
+          lot_type?: string
+          notes?: string | null
+          processing_data?: Json | null
+          shopify_location_gid?: string | null
+          status?: string | null
+          store_key?: string | null
+          total_items?: number | null
+          total_value?: number | null
+          updated_at?: string
+        }
         Relationships: []
+      }
+      item_snapshots: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          intake_item_id: string
+          metadata: Json | null
+          snapshot_data: Json
+          snapshot_type: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          intake_item_id: string
+          metadata?: Json | null
+          snapshot_data: Json
+          snapshot_type: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          intake_item_id?: string
+          metadata?: Json | null
+          snapshot_data?: Json
+          snapshot_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "item_snapshots_intake_item_id_fkey"
+            columns: ["intake_item_id"]
+            isOneToOne: false
+            referencedRelation: "intake_items"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       justtcg_analytics_snapshots: {
         Row: {
