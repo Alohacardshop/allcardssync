@@ -1124,6 +1124,10 @@ export type Database = {
         Args: { input_game: string }
         Returns: string
       }
+      secure_get_secret: {
+        Args: { secret_name: string }
+        Returns: string
+      }
       set_limit: {
         Args: { "": number }
         Returns: number
