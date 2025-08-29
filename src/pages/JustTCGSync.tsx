@@ -442,13 +442,13 @@ export default function JustTCGSync() {
     setIsLoadingSets(true);
     try {
       // Prefer Edge Function that returns live card counts from catalog_v2.cards
-      const res = await fetch(`${FUNCTIONS_BASE}/api-catalog-sets?game=${encodeURIComponent(game)}`);
-      if (!res.ok) {
-        const body = await res.text().catch(() => '');
-        throw new Error(`api-catalog-sets failed: ${res.status} ${body}`);
+      const { data: edgeData, error: edgeError } = await supabase.functions.invoke('api-catalog-sets', {
+        body: { game }
+      });
+      if (edgeError) {
+        throw new Error(`api-catalog-sets failed: ${edgeError.message}`);
       }
-      const json = await res.json();
-      const sets = (json.sets || []).map((s: any) => ({
+      const sets = (edgeData?.sets || []).map((s: any) => ({
         id: s.id,
         name: s.name,
         game,
