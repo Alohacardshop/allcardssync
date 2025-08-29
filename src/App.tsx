@@ -13,7 +13,7 @@ import Auth from "./pages/Auth";
 import PrintLogs from "./pages/PrintLogs";
 import ShopifyMapping from "./pages/ShopifyMapping";
 import BulkImport from "./pages/BulkImport";
-import JustTCGSync from "./pages/JustTCGSync";
+import JustTCGSync from "./components/admin/JustTCGSync";
 import { supabase } from "@/integrations/supabase/client";
 
 const queryClient = new QueryClient();
