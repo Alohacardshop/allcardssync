@@ -9,3 +9,7 @@ verify_jwt = false
 
 [functions.justtcg-health]  
 verify_jwt = false
+
+# Premium API monitoring (public for dashboard widgets)
+[functions.api-usage-monitor]
+verify_jwt = false
