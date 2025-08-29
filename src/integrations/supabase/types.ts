@@ -871,6 +871,10 @@ export type Database = {
         }
         Returns: Json
       }
+      catalog_v2_clear_shadow_for_game: {
+        Args: { game_in: string }
+        Returns: undefined
+      }
       catalog_v2_clear_sync_errors: {
         Args: { before_in?: string; game_in: string }
         Returns: number
@@ -898,6 +902,13 @@ export type Database = {
           id: string
           mode: string
           set_id: string
+        }[]
+      }
+      catalog_v2_get_pending_sets_for_game: {
+        Args: { game_in: string }
+        Returns: {
+          name: string
+          provider_id: string
         }[]
       }
       catalog_v2_get_recent_sync_errors: {
@@ -978,6 +989,10 @@ export type Database = {
           processing: number
           queued: number
         }[]
+      }
+      catalog_v2_sets_new_null_provider_count: {
+        Args: { game_in: string }
+        Returns: number
       }
       catalog_v2_stats: {
         Args: { game_in: string }

@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, AlertTriangle, RefreshCw } from "lucide-react";
+import { Loader2, AlertTriangle, RefreshCw, Zap } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -11,10 +11,14 @@ interface LogEntry {
   type: string;
   game?: string;
   step?: string;
+  set_id?: string;
+  set_name?: string;
   error?: string;
   rolled_back?: number;
   not_found?: number;
   message?: string;
+  total_sets?: number;
+  completed_sets?: number;
 }
 
 const GAME_OPTIONS = [
@@ -26,6 +30,7 @@ const GAME_OPTIONS = [
 export const CatalogResetRebuild = () => {
   const { toast } = useToast();
   const [selectedGames, setSelectedGames] = useState<string[]>([]);
+  const [sequentialMode, setSequentialMode] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
 
@@ -65,7 +70,10 @@ export const CatalogResetRebuild = () => {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
         },
-        body: JSON.stringify({ games: selectedGames }),
+        body: JSON.stringify({ 
+          games: selectedGames, 
+          sequential: sequentialMode 
+        }),
       });
 
       if (!response.ok) {
@@ -135,6 +143,9 @@ export const CatalogResetRebuild = () => {
       case 'START_GAME':
       case 'SWAP_DONE':
         return <RefreshCw className="h-4 w-4 text-primary" />;
+      case 'IMPORT_SET_START':
+      case 'IMPORT_SET_DONE':
+        return <Zap className="h-4 w-4 text-secondary" />;
       default:
         return <div className="h-4 w-4 rounded-full bg-muted" />;
     }
@@ -165,9 +176,13 @@ export const CatalogResetRebuild = () => {
       case 'START':
         return `Starting rebuild for ${Array.isArray(log.game) ? log.game.join(', ') : 'games'}`;
       case 'START_GAME':
-        return `Starting ${log.game}`;
+        return `🎯 Starting ${log.game}`;
       case 'IMPORT_PHASE':
         return `${log.game}: ${log.step?.replace(/_/g, ' ').toLowerCase()}`;
+      case 'IMPORT_SET_START':
+        return `📦 ${log.game}: Starting set ${log.set_name} (${log.completed_sets || 0 + 1}/${log.total_sets || 0})`;
+      case 'IMPORT_SET_DONE':
+        return `✅ ${log.game}: Completed set ${log.set_name} (${log.completed_sets || 0}/${log.total_sets || 0})`;
       case 'FIX_BAD_WRITES':
         return `${log.game}: Fixing bad writes`;
       case 'FIX_BAD_WRITES_SUMMARY':
@@ -177,11 +192,11 @@ export const CatalogResetRebuild = () => {
       case 'READY_TO_SWAP':
         return `${log.game}: Ready for atomic swap`;
       case 'SWAP_DONE':
-        return `${log.game}: ✅ Atomic swap completed`;
+        return `🎉 ${log.game}: Atomic swap completed`;
       case 'ERROR':
         return `❌ ${log.game ? `${log.game}: ` : ''}${log.error}`;
       case 'COMPLETE':
-        return '🎉 Rebuild completed successfully';
+        return '🎉 All games rebuilt successfully';
       default:
         return JSON.stringify(log);
     }
@@ -235,6 +250,28 @@ export const CatalogResetRebuild = () => {
               </div>
             ))}
           </div>
+        </div>
+
+        {/* Processing Mode */}
+        <div>
+          <h4 className="text-sm font-medium mb-3">Processing Mode</h4>
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="sequential"
+              checked={sequentialMode}
+              onCheckedChange={(checked) => setSequentialMode(!!checked)}
+              disabled={isRunning}
+            />
+            <label htmlFor="sequential" className="text-sm font-medium">
+              Sequential (one-by-one) processing
+            </label>
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">
+            {sequentialMode 
+              ? "Process each set individually with detailed progress tracking (recommended)" 
+              : "Bulk process all data simultaneously (faster but less visibility)"
+            }
+          </p>
         </div>
 
         {/* Action Button */}
