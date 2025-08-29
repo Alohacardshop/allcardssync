@@ -1059,6 +1059,10 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: string
       }
+      get_decrypted_secret: {
+        Args: { secret_name: string }
+        Returns: string
+      }
       get_recent_sync_jobs: {
         Args: { limit_count?: number }
         Returns: {
