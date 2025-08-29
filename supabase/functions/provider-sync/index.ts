@@ -6,6 +6,7 @@ import {
   pageCards, 
   pageVariants, 
   normalizeName,
+  fetchGames,
   type GameSlug,
   type SetDTO,
   type CardDTO,
@@ -19,7 +20,7 @@ const corsHeaders = {
 
 type RequestBody = { 
   provider: "justtcg"; 
-  games: GameSlug[];
+  games: GameSlug[] | "ALL";
   mode?: "live" | "shadow";  // default to "live" for direct catalog updates
 };
 
@@ -40,10 +41,24 @@ serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({})) as RequestBody;
-    const { provider, games, mode = "live" } = body;
+    let { provider, games, mode = "live" } = body;
 
-    if (provider !== "justtcg" || !games?.length) {
-      return new Response("Bad Request: provider must be 'justtcg' and games array required", { 
+    if (provider !== "justtcg") {
+      return new Response("Bad Request: provider must be 'justtcg'", { 
+        status: 400, 
+        headers: corsHeaders 
+      });
+    }
+
+    // Handle "ALL" games mode
+    if (games === "ALL") {
+      const apiKey = await getJustTCGApiKey();
+      const allGames = await fetchGames(apiKey);
+      games = allGames.filter(g => g.active !== false).map(g => g.id as GameSlug);
+    }
+
+    if (!games?.length) {
+      return new Response("Bad Request: games array required or no active games found", { 
         status: 400, 
         headers: corsHeaders 
       });
@@ -347,10 +362,14 @@ async function getAllSetProviderIds(sb: any, game: string): Promise<string[]> {
 async function getAllCardProviderIds(sb: any, game: string): Promise<string[]> {
   const { data, error } = await sb
     .from("catalog_v2.cards")
-    .select("provider_id")
+    .select("card_id")
     .eq("game", game)
-    .not("provider_id", "is", null);
+    .not("card_id", "is", null);
     
   if (error) throw new Error(`Failed to get card provider IDs: ${error.message}`);
-  return (data ?? []).map((r: any) => r.provider_id).filter(Boolean);
+  
+  // Extract provider ID from card_id (format: "provider-providerid")
+  return (data ?? [])
+    .map((r: any) => r.card_id?.split('-').slice(1).join('-'))
+    .filter(Boolean);
 }
