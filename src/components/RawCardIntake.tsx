@@ -81,6 +81,7 @@ export function RawCardIntake({
       setError(null);
       
       try {
+        // TODO: Replace with API call to alohacardshopcarddatabase
         // Search local catalog only
         const gameParam = game === 'pokemon_japan' ? 'pokemon-japan' : game;
         
@@ -89,6 +90,7 @@ export function RawCardIntake({
           search_in: name,
           limit_in: 5
         });
+        // TODO: Replace above with API call to external catalog service
 
         if (searchError) throw searchError;
 
@@ -241,6 +243,7 @@ export function RawCardIntake({
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
             Card search now uses local catalog data only. External sync functionality has been removed.
+            {/* TODO: Update message when external catalog API is integrated */}
           </AlertDescription>
         </Alert>
 

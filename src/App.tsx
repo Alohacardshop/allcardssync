@@ -18,6 +18,7 @@ import ShopifyInspect from "./pages/ShopifyInspect";
 import BulkImport from "./pages/BulkImport";
 
 import { supabase } from "@/integrations/supabase/client";
+import { CatalogMigrationPlaceholder } from "@/components/CatalogMigrationPlaceholder";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -101,6 +102,7 @@ const App = () => (
               <Route path="/labels" element={<ProtectedRoute><LabelDesigner /></ProtectedRoute>} />
               <Route path="/bulk-import" element={<ProtectedRoute><BulkImport /></ProtectedRoute>} />
               <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
+              <Route path="/admin/catalog" element={<ProtectedRoute><div className="p-8"><CatalogMigrationPlaceholder /></div></ProtectedRoute>} />
               <Route path="/shopify-inspect" element={<ProtectedRoute><ShopifyInspect /></ProtectedRoute>} />
               <Route path="/shopify-mapping" element={<ProtectedRoute><ShopifyMapping /></ProtectedRoute>} />
               

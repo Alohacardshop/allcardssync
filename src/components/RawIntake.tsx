@@ -101,6 +101,7 @@ export default function RawIntake() {
 
     setLoading(true);
     try {
+      // TODO: Replace with API call to alohacardshopcarddatabase
       // Search local catalog only
       const gameMap: Record<string, string> = {
         'Pokémon': 'pokemon',
@@ -239,6 +240,7 @@ export default function RawIntake() {
         <AlertCircle className="h-4 w-4" />
         <AlertDescription>
           Card search now uses local catalog data only. External sync functionality has been removed.
+          {/* TODO: Update message when external catalog API is integrated */}
         </AlertDescription>
       </Alert>
 
