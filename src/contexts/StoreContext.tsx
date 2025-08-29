@@ -101,6 +101,7 @@ export function StoreProvider({ children }: StoreProviderProps) {
         const { data } = await supabase
           .from("shopify_stores")
           .select("key, name, vendor")
+          .eq("vendor", "Aloha Card Shop")  // Safety filter to only show Aloha Card Shop stores
           .order("name");
         
         setAvailableStores(data || []);
