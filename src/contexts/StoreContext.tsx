@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
 
 interface Store {
   key: string;
@@ -118,6 +119,7 @@ export function StoreProvider({ children }: StoreProviderProps) {
     const loadLocations = async () => {
       if (!selectedStore) {
         setAvailableLocations([]);
+        setSelectedLocation(null);
         return;
       }
 
@@ -130,15 +132,34 @@ export function StoreProvider({ children }: StoreProviderProps) {
         if (error) throw error;
         
         if (data?.ok && data?.locations) {
-          setAvailableLocations(data.locations.map((loc: any) => ({
+          const locations = data.locations.map((loc: any) => ({
             id: String(loc.id),
             name: loc.name,
             gid: `gid://shopify/Location/${loc.id}`
-          })));
+          }));
+          setAvailableLocations(locations);
+          
+          // Clear selected location if it's not available in new locations
+          if (selectedLocation && !locations.some(loc => loc.gid === selectedLocation)) {
+            setSelectedLocation(null);
+          }
+        } else {
+          throw new Error(data?.error || "Failed to load locations");
         }
       } catch (error) {
         console.error("Error loading locations:", error);
         setAvailableLocations([]);
+        setSelectedLocation(null);
+        
+        // Show user-friendly error message
+        const errorMessage = error instanceof Error ? error.message : "Failed to load locations";
+        toast({
+          title: "Failed to load locations", 
+          description: errorMessage.includes("configuration not found") 
+            ? "Please configure Shopify credentials in Admin > Shopify Config"
+            : errorMessage,
+          variant: "destructive",
+        });
       } finally {
         setLoadingLocations(false);
       }

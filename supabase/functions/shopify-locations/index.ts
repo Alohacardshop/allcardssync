@@ -19,15 +19,31 @@ Deno.serve(async (req) => {
       throw new Error("Supabase environment not configured");
     }
 
-    const { storeKey } = await req.json();
-    if (!storeKey) throw new Error("Missing storeKey");
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Get store-specific secrets
-    const SHOPIFY_STORE_DOMAIN = Deno.env.get(`SHOPIFY_STORE_DOMAIN_${storeKey.toUpperCase()}`);
-    const SHOPIFY_ADMIN_ACCESS_TOKEN = Deno.env.get(`SHOPIFY_ADMIN_ACCESS_TOKEN_${storeKey.toUpperCase()}`);
+    const { storeKey } = await req.json();
+    if (!storeKey) throw new Error("Missing storeKey parameter");
+
+    const storeKeyUpper = storeKey.toUpperCase();
+
+    // Get store-specific credentials from system_settings table
+    const { data: domainData } = await supabase
+      .from("system_settings")
+      .select("key_value")
+      .eq("key_name", `SHOPIFY_${storeKeyUpper}_STORE_DOMAIN`)
+      .single();
+
+    const { data: tokenData } = await supabase
+      .from("system_settings")
+      .select("key_value")
+      .eq("key_name", `SHOPIFY_${storeKeyUpper}_ACCESS_TOKEN`)
+      .single();
+
+    const SHOPIFY_STORE_DOMAIN = domainData?.key_value;
+    const SHOPIFY_ADMIN_ACCESS_TOKEN = tokenData?.key_value;
 
     if (!SHOPIFY_STORE_DOMAIN || !SHOPIFY_ADMIN_ACCESS_TOKEN) {
-      throw new Error(`Shopify configuration not found for store: ${storeKey}`);
+      throw new Error(`Shopify configuration not found for store '${storeKey}'. Please configure credentials in Admin > Shopify Config.`);
     }
 
     // Fetch locations from Shopify
