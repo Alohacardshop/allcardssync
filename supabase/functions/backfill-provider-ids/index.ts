@@ -37,9 +37,8 @@ async function backfillProviderId(supabase: any, apiKey: string, gameSlug: strin
   
   // Get sets without provider_id - use strict game matching
   const { data: setsToBackfill, error: queryError } = await supabase
-    .schema('catalog_v2')
-    .from('sets')
-    .select('set_id, name, code, provider_id, release_date')
+    .from('catalog_v2.sets')
+    .select('set_id, name, provider_id, release_date')
     .eq('game', normalizedGame)
     .is('provider_id', null);
   

@@ -58,8 +58,7 @@ export async function syncCatalogGeneric(params: { game: string; setIds?: string
   if (params.setIds?.length) {
     // Query DB to get provider_id for the requested setIds
     const { data: dbSets } = await supabase
-      .schema('catalog_v2')
-      .from('sets')
+      .from('catalog_v2.sets')
       .select('set_id, provider_id, name')
       .eq('game', inputGame)
       .in('set_id', params.setIds);
@@ -183,8 +182,7 @@ export async function syncCatalogGeneric(params: { game: string; setIds?: string
     
     // Update last_synced_at using our local set_id
     await supabase
-      .schema('catalog_v2')
-      .from('sets')
+      .from('catalog_v2.sets')
       .update({ last_synced_at: new Date().toISOString() })
       .eq('game', inputGame)
       .eq('set_id', dbSetId);
@@ -238,7 +236,7 @@ serve(async (req) => {
       
       for (const checkSetId of targetSetIds) {
         const { data: existingSet } = await supabase
-          .schema('catalog_v2').from('sets')
+          .from('catalog_v2.sets')
           .select('set_id, name, last_synced_at, last_seen_at')
           .eq('game', game)
           .eq('set_id', checkSetId)

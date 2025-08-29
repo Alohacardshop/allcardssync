@@ -375,9 +375,12 @@ const JustTCGSync = () => {
 
       if (error) throw error;
 
-      const duration = Date.now() - startTime;
       const results = data?.results || [];
       const gameResult = results.find((r: any) => r.gameSlug === normalizedGame || r.game === normalizedGame) || {};
+
+      if (gameResult.error) {
+        throw new Error(gameResult.error);
+      }
 
       toast({
         title: "Backfill Complete",
