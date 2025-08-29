@@ -5,6 +5,7 @@ A modern inventory management and label printing system for trading card games.
 ## Features
 
 - **Card Catalog Management**: Comprehensive database with MTG, Pokémon (English & Japanese), and other TCG support
+- **Modern Sync System**: Advanced sync_v3 with performance optimization, real-time monitoring, and error tracking
 - **Inventory Tracking**: Raw intake, PSA submissions, and product management
 - **Label Design & Print**: Visual label designer with real-time preview and print management
 - **Shopify Integration**: Two-way sync for inventory and order management
@@ -35,6 +36,20 @@ npm install
 npm run dev
 ```
 
+### Environment Configuration
+
+Add the required secrets via the Supabase dashboard:
+
+1. **JustTCG API Key** (`JUSTTCG_API_KEY`):
+   - Required for card catalog synchronization
+   - Obtain from [JustTCG API Dashboard](https://api.justtcg.com)
+   - Used by sync-games-v2, sync-sets-v2, and sync-cards-v2 functions
+
+2. **Optional Configuration**:
+   - `SYNC_BATCH_SIZE`: Default batch size for card processing (default: 100)
+   - `SYNC_RATE_LIMIT_MS`: Rate limiting between API calls (default: 100ms)
+   - `SYNC_MAX_RETRIES`: Maximum retry attempts for failed requests (default: 3)
+
 ### Database Architecture
 
 The system uses the `catalog_v2` schema for card data with normalized game slugs:
@@ -53,55 +68,52 @@ bash scripts/smoke.sh
 This tests:
 - Card search API
 - Catalog stats query
-- Sync job queueing
-- Status endpoint
+- Modern sync system (sync_v3.jobs)
+- JustTCG API connectivity
+- Health monitoring endpoints
 
-## Ingestion & Progress
+## Modern Sync System (sync_v3)
 
-### Queue All Pending
+### Architecture Overview
 
-The admin interface provides a "Queue All Pending" button that:
-1. Fetches all sets for the selected game from external APIs
-2. Creates import job entries in `catalog_v2.import_jobs`
-3. Queues individual set sync jobs
-4. Provides real-time progress tracking
+The new sync system uses the `sync_v3` schema with advanced features:
 
-### Import Jobs System
+1. **Performance Optimization**: Configurable batch sizes, connection pooling, smart pagination
+2. **Real-time Monitoring**: Live progress tracking, performance metrics, error categorization  
+3. **Advanced Features**: Scheduled syncs, webhook notifications, data validation
+4. **Admin Tools**: Configuration management, analytics dashboard, health monitoring
 
-Import jobs are tracked in `catalog_v2.import_jobs` with the following lifecycle:
+### Sync Jobs Lifecycle
 
-- **queued**: Job created, waiting to process
-- **running**: Currently fetching and processing cards
-- **succeeded**: Completed successfully with card counts
-- **failed**: Failed with error message
-- **cancelled**: Manually cancelled
+Jobs are tracked in `sync_v3.jobs` with the following states:
 
-### Status API
+- **pending**: Job created, waiting to process
+- **running**: Currently fetching and processing data
+- **completed**: Finished successfully with metrics
+- **failed**: Failed with detailed error information
+- **cancelled**: Manually cancelled by admin
 
-The `catalog-sync-status` endpoint provides:
-```json
-{
-  "id": "uuid",
-  "source": "justtcg",
-  "game": "mtg",
-  "set_id": "set-code",
-  "set_code": "display-code",
-  "total": 100,
-  "inserted": 95,
-  "status": "succeeded",
-  "error": null,
-  "started_at": "2024-01-01T10:00:00Z",
-  "finished_at": "2024-01-01T10:05:00Z",
-  "created_at": "2024-01-01T09:59:00Z",
-  "updated_at": "2024-01-01T10:05:00Z"
-}
-```
+### API Endpoints
+
+- `sync-games-v2`: Sync game catalog from JustTCG API
+- `sync-sets-v2`: Sync sets for a specific game
+- `sync-cards-v2`: Sync cards for a specific set
+- `health-monitor`: System health checks and monitoring
+- `sync-scheduler`: Automated scheduling system
+
+### Real-time Features
+
+- **Live Updates**: Real-time job progress via Supabase realtime
+- **Performance Metrics**: Cards/second, API response times, memory usage
+- **Error Tracking**: Detailed error logs with categorization and retry logic
+- **Health Monitoring**: Automated system health checks with alerting
 
 ### Security Model
 
-- **import_jobs**: Read-only for authenticated users, writes restricted to service role
-- Edge Functions use service role to bypass RLS for job management
-- Admin interface polls status endpoint every 5 seconds during active syncs
+- **sync_v3.jobs**: Admin-only write access, read access for authenticated users
+- **sync_v3.config**: Admin-only configuration management
+- **sync_v3.metrics**: Performance data accessible to staff and admins
+- Edge Functions use service role with proper RLS policies
 
 ## Key Concepts
 
@@ -149,8 +161,20 @@ const { data } = await sb.from('catalog_v2_cards').select()
 
 ## Rollback Plan
 
-If issues arise with the import jobs system:
-- `DROP TABLE catalog_v2.import_jobs;` (if needed)
-- Remove `catalog-sync-status` function directory
-- Revert Admin UI changes (button + table)
-- No change to `catalog_v2.stats()` or existing data
+If issues arise with the modern sync system:
+
+### Database Rollback
+```sql
+-- Drop sync_v3 schema if needed
+DROP SCHEMA IF EXISTS sync_v3 CASCADE;
+```
+
+### Edge Functions Rollback
+- Remove `sync-games-v2`, `sync-sets-v2`, `sync-cards-v2` function directories
+- Remove `health-monitor` and `sync-scheduler` function directories
+- Revert to previous sync functions if needed
+
+### UI Rollback
+- Revert `ModernSyncDashboard` component changes
+- Remove `SyncConfiguration` and `SyncAnalytics` components
+- No change to `catalog_v2` data (preserved)

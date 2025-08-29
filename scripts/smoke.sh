@@ -21,12 +21,28 @@ echo "📊 Stats (mtg):"
 psql "$SUPABASE_DB_URL" -c "select * from catalog_v2.stats('mtg');" 2>/dev/null || echo "Failed to connect to database"
 echo ""
 
-echo "🚀 Queue all (mtg):"
-curl -s -X POST "http://localhost:54321/functions/v1/catalog-sync-justtcg?game=magic-the-gathering" 2>/dev/null | jq -r '.queued_sets // "Failed"' || echo "Failed to queue sync"
+echo "🔄 Modern Sync System:"
+psql "$SUPABASE_DB_URL" -c "select count(*) as total_jobs from sync_v3.jobs;" 2>/dev/null || echo "Failed to connect to sync_v3.jobs table"
 echo ""
 
-echo "📋 Status (mtg):"
-curl -s "http://localhost:54321/functions/v1/catalog-sync-status?game=mtg&limit=5" | jq . 2>/dev/null || echo "Failed to get status"
+echo "🎮 Sync Games (v2):"
+curl -s -X POST "http://localhost:54321/functions/v1/sync-games-v2" 2>/dev/null | jq -r '.job_id // "Failed"' || echo "Failed to test sync-games-v2"
 echo ""
 
-echo "==== Smoke tests completed ===="
+echo "🃏 Sync Sets (v2):"
+curl -s -X POST "http://localhost:54321/functions/v1/sync-sets-v2" -H "Content-Type: application/json" -d '{"game":"mtg"}' 2>/dev/null | jq -r '.job_id // "Failed"' || echo "Failed to test sync-sets-v2"
+echo ""
+
+echo "🏥 Health Monitor:"
+curl -s "http://localhost:54321/functions/v1/health-monitor" 2>/dev/null | jq -r '.status // "Failed"' || echo "Failed to test health-monitor"
+echo ""
+
+echo "🔧 JustTCG API Connectivity:"
+curl -s "http://localhost:54321/functions/v1/justtcg-health" 2>/dev/null | jq -r '.status // "API connectivity test failed"' || echo "JustTCG API health check failed"
+echo ""
+
+echo "📈 Sync Configuration:"
+psql "$SUPABASE_DB_URL" -c "select key, value from sync_v3.config limit 3;" 2>/dev/null || echo "Failed to test sync configuration"
+echo ""
+
+echo "==== Modern sync system smoke tests completed ===="
