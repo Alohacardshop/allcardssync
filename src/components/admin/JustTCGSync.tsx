@@ -424,9 +424,20 @@ const JustTCGSync = () => {
         throw new Error(gameResult.error);
       }
 
+      let description = `${gameResult.updated || 0}/${gameResult.dbMissingCount || gameResult.processed || 0} provider IDs updated (API: ${gameResult.apiCount || 0})`;
+      
+      const details = [];
+      if (gameResult.conflicts > 0) details.push(`${gameResult.conflicts} conflicts`);
+      if (gameResult.out_of_scope > 0) details.push(`${gameResult.out_of_scope} out-of-scope`);
+      if (gameResult.rolled_back > 0) details.push(`${gameResult.rolled_back} bad writes fixed`);
+      
+      if (details.length > 0) {
+        description += ` (${details.join(', ')})`;
+      }
+
       toast({
-        title: "Backfill Complete",
-        description: `${gameResult.updated || 0}/${gameResult.dbMissingCount || gameResult.processed || 0} provider IDs updated${gameResult.conflicts > 0 ? ` (${gameResult.conflicts} conflicts)` : ''} (API: ${gameResult.apiCount || 0})`,
+        title: "Backfill Complete", 
+        description,
       });
 
       // Reload sets to reflect the updated provider_ids
@@ -517,6 +528,11 @@ const JustTCGSync = () => {
                     <Label htmlFor={`game-${game.id}`} className="cursor-pointer">
                       {game.name}
                     </Label>
+                    {preferences.selected_games.includes(game.id) && (
+                      <Badge variant="secondary" className="text-xs">
+                        {normalizeGameSlug(game.id)}
+                      </Badge>
+                    )}
                   </div>
                 ))
               )}
