@@ -827,6 +827,10 @@ export type Database = {
         Args: { game_name: string }
         Returns: undefined
       }
+      cancel_sync_job: {
+        Args: { job_id: string }
+        Returns: undefined
+      }
       catalog_v2_browse_cards: {
         Args: {
           filter_japanese?: boolean
@@ -1054,6 +1058,28 @@ export type Database = {
       generate_lot_number: {
         Args: Record<PropertyKey, never>
         Returns: string
+      }
+      get_recent_sync_jobs: {
+        Args: { limit_count?: number }
+        Returns: {
+          completed_at: string
+          created_at: string
+          error_message: string
+          estimated_completion_at: string
+          game: string
+          id: string
+          items_per_second: number
+          job_type: string
+          metrics: Json
+          processed_items: number
+          progress_percentage: number
+          results: Json
+          set_id: string
+          source: string
+          started_at: string
+          status: string
+          total_items: number
+        }[]
       }
       gtrgm_compress: {
         Args: { "": unknown }
