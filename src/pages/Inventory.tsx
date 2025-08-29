@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Link } from "react-router-dom";
 import { Navigation } from "@/components/Navigation";
 import { toast } from "sonner";
+import { useStore } from "@/contexts/StoreContext";
 
 // Simple SEO helpers without extra deps
 function useSEO(opts: { title: string; description?: string; canonical?: string }) {
@@ -81,6 +82,7 @@ type ItemRow = {
 };
 
 export default function Inventory() {
+  const { selectedStore, selectedLocation } = useStore();
   useSEO({
     title: "Card Inventory | Aloha",
     description: "View all cards in inventory with lot numbers, IDs, status, price, and more.",
@@ -115,6 +117,14 @@ export default function Inventory() {
           .from("intake_items")
           .select("*", { count: "exact" })
           .order(sortKey as string, { ascending: sortAsc });
+
+        // Filter by store and location if selected
+        if (selectedStore) {
+          query = query.eq("store_key", selectedStore);
+        }
+        if (selectedLocation) {
+          query = query.eq("shopify_location_gid", selectedLocation);
+        }
 
         if (search.trim()) {
           const term = `%${search.trim()}%`;
@@ -197,7 +207,7 @@ export default function Inventory() {
     };
 
     fetchData();
-  }, [page, search, printed, pushed, lotFilter, sortKey, sortAsc, typeFilter, conditionFilter, setFilter, categoryFilter, yearFilter, priceRange]);
+  }, [page, search, printed, pushed, lotFilter, sortKey, sortAsc, typeFilter, conditionFilter, setFilter, categoryFilter, yearFilter, priceRange, selectedStore, selectedLocation]);
 
   const toggleSort = (key: keyof ItemRow) => {
     if (sortKey === key) setSortAsc((v) => !v);

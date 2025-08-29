@@ -145,9 +145,11 @@ export type Database = {
           pushed_at: string | null
           quantity: number
           shopify_inventory_item_id: string | null
+          shopify_location_gid: string | null
           shopify_product_id: string | null
           shopify_variant_id: string | null
           sku: string | null
+          store_key: string | null
           subject: string | null
           updated_at: string
           variant: string | null
@@ -170,9 +172,11 @@ export type Database = {
           pushed_at?: string | null
           quantity?: number
           shopify_inventory_item_id?: string | null
+          shopify_location_gid?: string | null
           shopify_product_id?: string | null
           shopify_variant_id?: string | null
           sku?: string | null
+          store_key?: string | null
           subject?: string | null
           updated_at?: string
           variant?: string | null
@@ -195,9 +199,11 @@ export type Database = {
           pushed_at?: string | null
           quantity?: number
           shopify_inventory_item_id?: string | null
+          shopify_location_gid?: string | null
           shopify_product_id?: string | null
           shopify_variant_id?: string | null
           sku?: string | null
+          store_key?: string | null
           subject?: string | null
           updated_at?: string
           variant?: string | null
@@ -1146,6 +1152,10 @@ export type Database = {
       show_trgm: {
         Args: { "": string }
         Returns: string[]
+      }
+      user_can_access_store_location: {
+        Args: { _location_gid?: string; _store_key: string; _user_id: string }
+        Returns: boolean
       }
     }
     Enums: {

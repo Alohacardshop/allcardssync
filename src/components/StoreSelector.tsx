@@ -1,59 +1,32 @@
 
-import { useState, useEffect } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { supabase } from "@/integrations/supabase/client";
-
-interface Store {
-  key: string;
-  name: string;
-  vendor: string;
-}
+import { useStore } from "@/contexts/StoreContext";
+import { Store } from "lucide-react";
 
 interface StoreSelectorProps {
-  selectedStore: string | null;
-  onStoreChange: (storeKey: string) => void;
+  className?: string;
 }
 
-export function StoreSelector({ selectedStore, onStoreChange }: StoreSelectorProps) {
-  const [stores, setStores] = useState<Store[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const loadStores = async () => {
-      try {
-        const { data, error } = await supabase
-          .from("shopify_stores")
-          .select("key, name, vendor")
-          .order("name");
-        
-        if (error) throw error;
-        setStores(data || []);
-      } catch (e) {
-        console.error("Failed to load stores:", e);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadStores();
-  }, []);
-
-  if (loading) {
-    return <div className="text-sm text-muted-foreground">Loading stores...</div>;
-  }
+export function StoreSelector({ className }: StoreSelectorProps) {
+  const { selectedStore, setSelectedStore, availableStores } = useStore();
 
   return (
-    <Select value={selectedStore || ""} onValueChange={onStoreChange}>
-      <SelectTrigger className="w-[200px]">
-        <SelectValue placeholder="Select store" />
-      </SelectTrigger>
-      <SelectContent>
-        {stores.map((store) => (
-          <SelectItem key={store.key} value={store.key}>
-            {store.name}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <div className={className}>
+      <Select value={selectedStore || ""} onValueChange={setSelectedStore}>
+        <SelectTrigger className="w-[200px]">
+          <div className="flex items-center gap-2">
+            <Store className="h-4 w-4" />
+            <SelectValue placeholder="Select store" />
+          </div>
+        </SelectTrigger>
+        <SelectContent>
+          {availableStores.map((store) => (
+            <SelectItem key={store.key} value={store.key}>
+              {store.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
   );
 }

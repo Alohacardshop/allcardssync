@@ -34,11 +34,7 @@ interface Location {
   gid: string;
 }
 
-interface UserAssignmentManagerProps {
-  selectedStore: string | null;
-}
-
-export function UserAssignmentManager({ selectedStore }: UserAssignmentManagerProps) {
+export function UserAssignmentManager() {
   const [assignments, setAssignments] = useState<UserAssignment[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);

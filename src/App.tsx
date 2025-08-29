@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { StoreProvider } from "@/contexts/StoreContext";
 import Index from "./pages/Index";
 import Inventory from "./pages/Inventory";
 import LabelDesigner from "./pages/LabelDesigner";
@@ -13,6 +14,7 @@ import NotFound from "./pages/NotFound";
 import Auth from "./pages/Auth";
 import PrintLogs from "./pages/PrintLogs";
 import ShopifyMapping from "./pages/ShopifyMapping";
+import ShopifyInspect from "./pages/ShopifyInspect";
 import BulkImport from "./pages/BulkImport";
 
 import { supabase } from "@/integrations/supabase/client";
@@ -88,23 +90,25 @@ const App = () => (
   <ErrorBoundary>
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <Routes>
-            <Route path="/auth" element={<Auth />} />
-            <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
-            <Route path="/inventory" element={<ProtectedRoute><Inventory /></ProtectedRoute>} />
-            <Route path="/labels" element={<ProtectedRoute><LabelDesigner /></ProtectedRoute>} />
-            <Route path="/bulk-import" element={<ProtectedRoute><BulkImport /></ProtectedRoute>} />
-            <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
-            <Route path="/shopify-mapping" element={<ProtectedRoute><ShopifyMapping /></ProtectedRoute>} />
-            <Route path="/print-logs" element={<ProtectedRoute><PrintLogs /></ProtectedRoute>} />
-            
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
+        <StoreProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <Routes>
+              <Route path="/auth" element={<Auth />} />
+              <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
+              <Route path="/inventory" element={<ProtectedRoute><Inventory /></ProtectedRoute>} />
+              <Route path="/labels" element={<ProtectedRoute><LabelDesigner /></ProtectedRoute>} />
+              <Route path="/bulk-import" element={<ProtectedRoute><BulkImport /></ProtectedRoute>} />
+              <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
+              <Route path="/shopify-inspect" element={<ProtectedRoute><ShopifyInspect /></ProtectedRoute>} />
+              <Route path="/shopify-mapping" element={<ProtectedRoute><ShopifyMapping /></ProtectedRoute>} />
+              
+              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </BrowserRouter>
+        </StoreProvider>
       </TooltipProvider>
     </QueryClientProvider>
   </ErrorBoundary>

@@ -3,7 +3,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Navigation } from "@/components/Navigation";
-import { Database, Settings, Users, BarChart3, CheckCircle, AlertTriangle } from "lucide-react";
+import { Database, Settings, Users, BarChart3, CheckCircle, AlertTriangle, ExternalLink } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { cleanupAuthState } from "@/lib/auth";
 import { SystemHealthCard } from "@/components/admin/SystemHealthCard";
@@ -81,13 +81,14 @@ const Admin = () => {
         <SystemStats />
 
         <Tabs defaultValue="inventory" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-6">
+          <TabsList className="grid w-full grid-cols-7">
             <TabsTrigger value="inventory">Inventory</TabsTrigger>
             <TabsTrigger value="catalog">Catalog</TabsTrigger>
             <TabsTrigger value="settings">Settings</TabsTrigger>
             <TabsTrigger value="system">System</TabsTrigger>
             <TabsTrigger value="users">Users</TabsTrigger>
             <TabsTrigger value="integrations">Integrations</TabsTrigger>
+            <TabsTrigger value="shopify-inspect">Inspect Shopify</TabsTrigger>
           </TabsList>
 
           <TabsContent value="inventory" className="space-y-4">
@@ -137,7 +138,7 @@ const Admin = () => {
           </TabsContent>
 
           <TabsContent value="users" className="space-y-4">
-            <UserAssignmentManager selectedStore="" />
+            <UserAssignmentManager />
           </TabsContent>
 
           <TabsContent value="integrations" className="space-y-4">
@@ -175,6 +176,29 @@ const Admin = () => {
                   <p className="text-sm text-muted-foreground mt-2">
                     Ready for external TCG database connection
                   </p>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+          <TabsContent value="shopify-inspect" className="space-y-4">
+            <div className="grid gap-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Shopify Store Inspector</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Inspect Shopify store configuration and validate API connections.
+                  </p>
+                  <a 
+                    href="/shopify-inspect" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 text-primary hover:underline"
+                  >
+                    Open Shopify Inspector
+                    <ExternalLink className="h-4 w-4" />
+                  </a>
                 </CardContent>
               </Card>
             </div>
