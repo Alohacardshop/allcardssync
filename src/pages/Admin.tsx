@@ -11,6 +11,7 @@ import { SystemStats } from "@/components/SystemStats";
 import CatalogTab from "@/components/admin/CatalogTab";
 import TCGDatabaseSettings from "@/components/admin/TCGDatabaseSettings";
 import { UserAssignmentManager } from "@/components/UserAssignmentManager";
+import { ShopifyConfig } from "@/components/admin/ShopifyConfig";
 import { checkSystemHealth } from "@/lib/api";
 
 const Admin = () => {
@@ -81,13 +82,14 @@ const Admin = () => {
         <SystemStats />
 
         <Tabs defaultValue="inventory" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-7">
+          <TabsList className="grid w-full grid-cols-8">
             <TabsTrigger value="inventory">Inventory</TabsTrigger>
             <TabsTrigger value="catalog">Catalog</TabsTrigger>
             <TabsTrigger value="settings">Settings</TabsTrigger>
             <TabsTrigger value="system">System</TabsTrigger>
             <TabsTrigger value="users">Users</TabsTrigger>
             <TabsTrigger value="integrations">Integrations</TabsTrigger>
+            <TabsTrigger value="shopify-config">Shopify Config</TabsTrigger>
             <TabsTrigger value="shopify-inspect">Inspect Shopify</TabsTrigger>
           </TabsList>
 
@@ -180,6 +182,11 @@ const Admin = () => {
               </Card>
             </div>
           </TabsContent>
+          
+          <TabsContent value="shopify-config" className="space-y-4">
+            <ShopifyConfig />
+          </TabsContent>
+          
           <TabsContent value="shopify-inspect" className="space-y-4">
             <div className="grid gap-4">
               <Card>
