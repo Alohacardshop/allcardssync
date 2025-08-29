@@ -53,10 +53,12 @@ interface SetData {
 export const ModernSyncDashboard = () => {
   const { toast } = useToast()
   const [jobs, setJobs] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState<any>({ games: false, sets: false, cards: false, health: false })
   const [availableGames, setAvailableGames] = useState<any[]>([])
   const [availableSets, setAvailableSets] = useState<any[]>([])
+  const [selectedGame, setSelectedGame] = useState<string>('')
   const [selectedSet, setSelectedSet] = useState<string>('')
+  const [systemHealth, setSystemHealth] = useState<any>({})
   const [recentActivity, setRecentActivity] = useState<string[]>([])
 
   useEffect(() => {
@@ -76,7 +78,7 @@ export const ModernSyncDashboard = () => {
 
   const loadJobs = async () => {
     try {
-      setLoading(true)
+      setLoading(prev => ({ ...prev, jobs: true }))
       // Use RPC function when available, for now use mock data
       const mockJobs = [
         {
@@ -105,7 +107,7 @@ export const ModernSyncDashboard = () => {
     } catch (error) {
       console.error('Failed to load jobs:', error)
     } finally {
-      setLoading(false)
+      setLoading(prev => ({ ...prev, jobs: false }))
     }
   }
 
@@ -186,12 +188,6 @@ export const ModernSyncDashboard = () => {
   }
 
   useEffect(() => {
-    fetchSystemHealth();
-    fetchAvailableGames();
-    loadRecentActivity();
-  }, []);
-
-  useEffect(() => {
     if (selectedGame) {
       fetchAvailableSets();
     } else {
@@ -263,16 +259,6 @@ export const ModernSyncDashboard = () => {
     } catch (error) {
       console.error('Error fetching sets:', error);
     }
-  };
-
-  const loadRecentActivity = () => {
-    // Mock recent activity for now
-    setRecentActivity([
-      "✅ Games sync completed - 5 games processed",
-      "🎴 Sets sync started for Pokemon", 
-      "⚡ API health check passed",
-      "🃏 Cards sync completed for Base Set"
-    ]);
   };
 
   const syncGames = async () => {
@@ -439,7 +425,7 @@ export const ModernSyncDashboard = () => {
             <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
               <Button 
                 onClick={() => triggerSync('games')} 
-                disabled={loading}
+                disabled={loading.games}
                 className="justify-start h-auto p-4"
               >
                 <div className="text-left">
@@ -463,7 +449,7 @@ export const ModernSyncDashboard = () => {
                 </Select>
                 <Button 
                   onClick={() => triggerSync('sets')} 
-                  disabled={loading || !selectedGame}
+                  disabled={loading.sets || !selectedGame}
                   variant="outline"
                   className="w-full justify-start h-auto p-4"
                 >
@@ -476,7 +462,7 @@ export const ModernSyncDashboard = () => {
               
               <Button 
                 onClick={() => checkSystemHealth()} 
-                disabled={loading}
+                disabled={loading.health}
                 variant="outline"
                 className="justify-start h-auto p-4"
               >
@@ -501,7 +487,7 @@ export const ModernSyncDashboard = () => {
                 variant="outline" 
                 size="sm" 
                 onClick={loadJobs}
-                disabled={loading}
+                disabled={loading.jobs}
               >
                 <RotateCcw className="h-4 w-4 mr-2" />
                 Refresh
@@ -509,7 +495,7 @@ export const ModernSyncDashboard = () => {
             </div>
           </CardHeader>
           <CardContent>
-            {loading ? (
+            {loading.jobs ? (
               <div className="space-y-3">
                 {[1, 2, 3].map(i => (
                   <div key={i} className="animate-pulse">
