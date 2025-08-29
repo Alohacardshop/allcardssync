@@ -362,6 +362,10 @@ export default function JustTCGSync() {
       // Refresh overall stats
       queryClient.invalidateQueries({ queryKey: ['catalog-stats-overall'] });
       queryClient.invalidateQueries({ queryKey: ['catalog-stats-selected'] });
+      // Reload sets to reflect new card counts
+      if (selectedGame) {
+        loadSetsFromDBForGame(selectedGame);
+      }
     },
     onError: (error: any) => {
       console.error('Sync error:', error);
@@ -432,32 +436,53 @@ export default function JustTCGSync() {
     }
   }, [selectedGame]);
 
-  // Load sets from the DB using the RPC (selected game only)
+  // Load sets for selected game using API counts (falls back to RPC)
   const loadSetsFromDBForGame = async (gameId: string) => {
     const game = normalizeGameSlug(gameId);
     setIsLoadingSets(true);
     try {
-      const { data: browse, error } = await supabase.rpc('catalog_v2_browse_sets', {
-        game_in: game,
-        page_in: 1,
-        limit_in: 1000
-      });
-      if (error) throw error;
-
-      const setsResp = (browse as any) || {};
-      const sets = (setsResp.sets || []).map((s: any) => ({
-        id: s.set_id,                 // note: set_id from RPC
+      // Prefer Edge Function that returns live card counts from catalog_v2.cards
+      const res = await fetch(`${FUNCTIONS_BASE}/api-catalog-sets?game=${encodeURIComponent(game)}`);
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        throw new Error(`api-catalog-sets failed: ${res.status} ${body}`);
+      }
+      const json = await res.json();
+      const sets = (json.sets || []).map((s: any) => ({
+        id: s.id,
         name: s.name,
         game,
-        released_at: s.release_date,
+        released_at: s.released_at,
         cards_count: s.cards_count ?? 0,
       }));
 
       setGameSets(sets);
-      addLog(`📋 Loaded ${sets.length} sets for ${game}`);
-    } catch (e: any) {
-      addLog(`❌ Failed to load sets for ${game}: ${e.message || e}`);
-      setGameSets([]);
+      addLog(`📋 Loaded ${sets.length} sets for ${game} (API counts)`);
+    } catch (apiErr: any) {
+      // Fallback to DB RPC if API unavailable
+      try {
+        const { data: browse, error } = await supabase.rpc('catalog_v2_browse_sets', {
+          game_in: game,
+          page_in: 1,
+          limit_in: 1000
+        });
+        if (error) throw error;
+
+        const setsResp = (browse as any) || {};
+        const sets = (setsResp.sets || []).map((s: any) => ({
+          id: s.set_id,
+          name: s.name,
+          game,
+          released_at: s.release_date,
+          cards_count: s.cards_count ?? 0,
+        }));
+
+        setGameSets(sets);
+        addLog(`📋 Loaded ${sets.length} sets for ${game} (DB RPC fallback)`);
+      } catch (e: any) {
+        addLog(`❌ Failed to load sets for ${game}: ${e.message || e}`);
+        setGameSets([]);
+      }
     } finally {
       setIsLoadingSets(false);
     }
