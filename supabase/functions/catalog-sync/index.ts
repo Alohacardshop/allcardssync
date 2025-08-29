@@ -183,7 +183,7 @@ export async function syncCatalogGeneric(params: { game: string; setIds?: string
     // Update last_synced_at using our local set_id
     await supabase
       .from('catalog_v2.sets')
-      .update({ last_synced_at: new Date().toISOString() })
+      .update({ last_seen_at: new Date().toISOString() })
       .eq('game', inputGame)
       .eq('set_id', dbSetId);
   }
@@ -237,13 +237,13 @@ serve(async (req) => {
       for (const checkSetId of targetSetIds) {
         const { data: existingSet } = await supabase
           .from('catalog_v2.sets')
-          .select('set_id, name, last_synced_at, last_seen_at')
+          .select('set_id, name, last_seen_at')
           .eq('game', game)
           .eq('set_id', checkSetId)
           .maybeSingle();
 
         if (existingSet) {
-          const lastUpdate = existingSet.last_synced_at || existingSet.last_seen_at;
+          const lastUpdate = existingSet.last_seen_at;
           if (lastUpdate && new Date(lastUpdate) > cooldownThreshold) {
             const message = `Set "${existingSet.name}" was last synced ${Math.round((Date.now() - new Date(lastUpdate).getTime()) / (1000 * 60))} minutes ago. Skipping due to ${cooldownHours}h cooldown.`;
             
