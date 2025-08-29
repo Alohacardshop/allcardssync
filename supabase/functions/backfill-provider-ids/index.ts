@@ -32,11 +32,13 @@ async function backfillProviderId(supabase: any, apiKey: string, game: string, f
     // Query Supabase for sets missing provider_id
     const { data: dbSets, error: dbError } = force
       ? await supabase
-          .from('catalog_v2.sets')
+          .schema('catalog_v2')
+          .from('sets')
           .select('set_id, name, provider_id')
           .eq('game', gameSlug)
       : await supabase
-          .from('catalog_v2.sets')
+          .schema('catalog_v2')
+          .from('sets')
           .select('set_id, name, provider_id')
           .eq('game', gameSlug)
           .is('provider_id', null);

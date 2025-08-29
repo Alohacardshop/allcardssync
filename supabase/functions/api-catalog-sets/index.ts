@@ -54,7 +54,8 @@ serve(async (req) => {
 
     // Query sets from catalog_v2.sets table
     const { data: setsData, error: setsError } = await supabaseClient
-      .from('catalog_v2.sets')
+      .schema('catalog_v2')
+      .from('sets')
       .select(`
         set_id,
         name,
@@ -80,7 +81,8 @@ serve(async (req) => {
     const setsWithCounts = await Promise.all(
       (setsData || []).map(async (set) => {
         const { count, error: countError } = await supabaseClient
-          .from('catalog_v2.cards')
+          .schema('catalog_v2')
+          .from('cards')
           .select('*', { count: 'exact', head: true })
           .eq('game', normalizedGame)
           .eq('set_id', set.set_id)
