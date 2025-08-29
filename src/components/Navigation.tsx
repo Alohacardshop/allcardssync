@@ -71,8 +71,7 @@ export function Navigation({ showMobileMenu = true }: NavigationProps) {
 
   if (isAdmin) {
     navItems.push(
-      { to: "/admin", label: "Admin", icon: Settings },
-      { to: "/justtcg-sync", label: "JustTCG Sync", icon: Database }
+      { to: "/admin", label: "Admin", icon: Settings }
     );
   }
 

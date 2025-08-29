@@ -241,15 +241,6 @@ const DataTab: React.FC<DataTabProps> = ({ selectedMode }) => {
 
   return (
     <div className="space-y-6">
-      {/* JustTCG Sync Notice */}
-      <Alert>
-        <Info className="h-4 w-4" />
-        <AlertDescription>
-          For JustTCG synchronization operations, please use the dedicated{' '}
-          <a href="/justtcg-sync" className="underline font-medium">JustTCG Sync page</a>.
-          This browser provides catalog data viewing and auditing capabilities.
-        </AlertDescription>
-      </Alert>
 
       {/* Card Count Summary */}
       <Card>

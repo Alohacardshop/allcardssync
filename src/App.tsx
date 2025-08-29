@@ -13,7 +13,7 @@ import Auth from "./pages/Auth";
 import PrintLogs from "./pages/PrintLogs";
 import ShopifyMapping from "./pages/ShopifyMapping";
 import BulkImport from "./pages/BulkImport";
-import JustTCGSync from "./components/admin/JustTCGSync";
+
 import { supabase } from "@/integrations/supabase/client";
 
 const queryClient = new QueryClient();
@@ -82,7 +82,7 @@ const App = () => (
           <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
           <Route path="/shopify-mapping" element={<ProtectedRoute><ShopifyMapping /></ProtectedRoute>} />
           <Route path="/print-logs" element={<ProtectedRoute><PrintLogs /></ProtectedRoute>} />
-          <Route path="/justtcg-sync" element={<ProtectedRoute><JustTCGSync /></ProtectedRoute>} />
+          
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

@@ -18,6 +18,7 @@ import { useLocalStorageString } from '@/hooks/useLocalStorage';
 import AuditReconcile from '@/components/admin/AuditReconcile';
 import DataTab from '@/components/admin/DataTab';
 import { SystemHealthCard } from '@/components/admin/SystemHealthCard';
+import { CatalogTab } from '@/components/admin/CatalogTab';
 
 import { GAME_MODES, type HealthStatus } from '@/lib/api';
 
@@ -547,8 +548,8 @@ const Admin = () => {
         storeName={saveResultsStore}
       />
 
-      {/* Mode Selector Bar - Only show on audit and data tabs */}
-      {(activeTab === 'audit' || activeTab === 'data') && (
+      {/* Mode Selector Bar - Only show on audit, data, and catalog tabs */}
+      {(activeTab === 'audit' || activeTab === 'data' || activeTab === 'catalog') && (
         <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
           <div className="flex items-center gap-4">
             <Label htmlFor="global-mode-select" className="font-medium">Mode:</Label>
@@ -581,9 +582,10 @@ const Admin = () => {
 
       {/* Main Admin Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="audit">Audit & Reconcile</TabsTrigger>
           <TabsTrigger value="data">Data</TabsTrigger>
+          <TabsTrigger value="catalog">Catalog</TabsTrigger>
           <TabsTrigger value="config">Configuration</TabsTrigger>
         </TabsList>
 
@@ -593,6 +595,10 @@ const Admin = () => {
 
         <TabsContent value="data" className="space-y-6">
           <DataTab selectedMode={GAME_MODES.find(m => m.value === selectedMode) || GAME_MODES[0]} />
+        </TabsContent>
+
+        <TabsContent value="catalog" className="space-y-6">
+          <CatalogTab selectedMode={GAME_MODES.find(m => m.value === selectedMode) || GAME_MODES[0]} />
         </TabsContent>
 
 
