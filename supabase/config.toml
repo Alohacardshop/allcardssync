@@ -36,3 +36,6 @@ verify_jwt = false
 
 [functions.provider-sync]
 verify_jwt = false
+
+[functions.justtcg-games]
+verify_jwt = false

@@ -1,9 +1,8 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { PlayCircle, StopCircle } from "lucide-react";
+import { PlayCircle, StopCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 interface LogMessage {
@@ -21,6 +20,12 @@ interface LogMessage {
   variants?: number;
 }
 
+interface GameOption {
+  value: string;
+  label: string;
+  active: boolean;
+}
+
 interface ProviderSyncButtonProps {
   onLogsUpdate: (logs: LogMessage[]) => void;
   disabled?: boolean;
@@ -28,14 +33,58 @@ interface ProviderSyncButtonProps {
 
 const ProviderSyncButton: React.FC<ProviderSyncButtonProps> = ({ onLogsUpdate, disabled }) => {
   const [isRunning, setIsRunning] = useState(false);
-  const [selectedGames, setSelectedGames] = useState<string[]>(['pokemon', 'pokemon-japan', 'mtg']);
+  const [selectedGames, setSelectedGames] = useState<string[]>([]);
   const [abortController, setAbortController] = useState<AbortController | null>(null);
+  const [availableGames, setAvailableGames] = useState<GameOption[]>([]);
+  const [isLoadingGames, setIsLoadingGames] = useState(true);
 
-  const availableGames = [
-    { value: 'pokemon', label: 'Pokémon' },
-    { value: 'pokemon-japan', label: 'Pokémon Japan' },
-    { value: 'mtg', label: 'Magic: The Gathering' }
-  ];
+  // Fetch available games from JustTCG API
+  useEffect(() => {
+    const fetchAvailableGames = async () => {
+      try {
+        setIsLoadingGames(true);
+        const response = await fetch('https://dmpoandoydaqxhzdjnmk.supabase.co/functions/v1/justtcg-games');
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        setAvailableGames(data.games || []);
+        
+        // Auto-select popular games by default
+        const defaultGames = data.games
+          ?.filter((g: GameOption) => ['pokemon', 'pokemon-japan', 'mtg'].includes(g.value))
+          ?.map((g: GameOption) => g.value) || [];
+        setSelectedGames(defaultGames);
+        
+        if (data.fallback) {
+          toast.warning('Using fallback games list - JustTCG API unavailable');
+        }
+      } catch (error: any) {
+        console.error('Failed to fetch games:', error);
+        
+        // Fallback games
+        const fallbackGames = [
+          { value: 'pokemon', label: 'Pokémon', active: true },
+          { value: 'pokemon-japan', label: 'Pokémon Japan', active: true },
+          { value: 'mtg', label: 'Magic: The Gathering', active: true },
+          { value: 'lorcana', label: 'Lorcana', active: true },
+          { value: 'one-piece', label: 'One Piece', active: true },
+          { value: 'dragon-ball-super', label: 'Dragon Ball Super', active: true },
+          { value: 'flesh-and-blood', label: 'Flesh and Blood', active: true }
+        ];
+        
+        setAvailableGames(fallbackGames);
+        setSelectedGames(['pokemon', 'pokemon-japan', 'mtg']);
+        toast.error('Failed to fetch games from API, using fallback list');
+      } finally {
+        setIsLoadingGames(false);
+      }
+    };
+
+    fetchAvailableGames();
+  }, []);
 
   const handleGameSelection = (game: string) => {
     setSelectedGames(prev => 
@@ -136,29 +185,38 @@ const ProviderSyncButton: React.FC<ProviderSyncButtonProps> = ({ onLogsUpdate, d
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <label className="text-sm font-medium">Select Games to Sync:</label>
-        <div className="flex flex-wrap gap-2">
-          {availableGames.map(game => (
-            <Badge
-              key={game.value}
-              variant={selectedGames.includes(game.value) ? 'default' : 'outline'}
-              className="cursor-pointer"
-              onClick={() => handleGameSelection(game.value)}
-            >
-              {game.label}
-            </Badge>
-          ))}
+        <label className="text-sm font-medium">
+          Select Games to Sync:
+          {isLoadingGames && (
+            <Loader2 className="ml-2 h-3 w-3 animate-spin inline" />
+          )}
+        </label>
+        <div className="flex flex-wrap gap-2 min-h-[2rem]">
+          {isLoadingGames ? (
+            <div className="text-sm text-muted-foreground">Loading available games...</div>
+          ) : (
+            availableGames.map(game => (
+              <Badge
+                key={game.value}
+                variant={selectedGames.includes(game.value) ? 'default' : 'outline'}
+                className="cursor-pointer"
+                onClick={() => handleGameSelection(game.value)}
+              >
+                {game.label}
+              </Badge>
+            ))
+          )}
         </div>
       </div>
 
       <div className="flex gap-2">
         <Button
           onClick={startProviderSync}
-          disabled={disabled || isRunning || selectedGames.length === 0}
+          disabled={disabled || isRunning || selectedGames.length === 0 || isLoadingGames}
           className="flex items-center gap-2"
         >
           <PlayCircle className="w-4 h-4" />
-          {isRunning ? 'Syncing...' : 'Start Provider Sync'}
+          {isRunning ? 'Syncing...' : isLoadingGames ? 'Loading...' : 'Start Provider Sync'}
         </Button>
 
         {isRunning && (

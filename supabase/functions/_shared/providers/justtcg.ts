@@ -2,7 +2,15 @@
 // deno-lint-ignore-file no-explicit-any
 const BASE = "https://api.justtcg.com/v1";
 
-export type GameSlug = "pokemon" | "pokemon-japan" | "mtg" | "magic-the-gathering";
+export type GameSlug = "pokemon" | "pokemon-japan" | "mtg" | "magic-the-gathering" | "lorcana" | "one-piece" | "dragon-ball-super" | "flesh-and-blood" | string;
+
+export type GameDTO = {
+  id: string;
+  name: string;
+  active?: boolean;
+  data?: any;
+};
+
 export type Cursor = { offset?: number; since?: string; etag?: string };
 
 export function normalizeGameSlug(game: string): string {
@@ -15,6 +23,19 @@ export function normalizeGameSlug(game: string): string {
     case "mtg":
     case "magic-the-gathering":
       return "magic-the-gathering";
+    case "lorcana":
+      return "lorcana";
+    case "one-piece":
+    case "one_piece":
+      return "one-piece";
+    case "dragon-ball-super":
+    case "dragon_ball_super":
+    case "dbs":
+      return "dragon-ball-super";
+    case "flesh-and-blood":
+    case "flesh_and_blood":
+    case "fab":
+      return "flesh-and-blood";
     default:
       return game;
   }
@@ -164,6 +185,23 @@ export async function* pageVariants(apiKey: string, game: GameSlug, cardId: stri
     
     if (items.length < limit) break;
   }
+}
+
+export async function fetchGames(apiKey: string): Promise<GameDTO[]> {
+  const url = `${BASE}/games`;
+  const res = await fetchWithRetry(url, { 
+    headers: { 
+      "X-API-Key": apiKey, 
+      "Content-Type": "application/json" 
+    } 
+  });
+  
+  if (!res.ok) throw new Error(`Games API error: ${res.status} ${res.statusText}`);
+  
+  const json = await res.json();
+  const games: GameDTO[] = json?.data ?? json?.games ?? json ?? [];
+  
+  return games.filter(g => g.active !== false); // Only return active games
 }
 
 export const normalizeName = (s: string) =>
