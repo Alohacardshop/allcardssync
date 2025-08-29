@@ -26,22 +26,21 @@ async function backfillProviderId(supabase: any, apiKey: string, game: string, f
   const gameSlug = normalizeGameSlug(game);
   const apiGame = toApiGame(gameSlug);
   
-  log.info('backfill.start', { gameSlug, apiGame, force });
-  
-  try {
-    // Query Supabase for sets missing provider_id
-    const { data: dbSets, error: dbError } = force
-      ? await supabase
-          .schema('catalog_v2')
-          .from('sets')
-          .select('set_id, name, provider_id')
-          .eq('game', gameSlug)
-      : await supabase
-          .schema('catalog_v2')
-          .from('sets')
-          .select('set_id, name, provider_id')
-          .eq('game', gameSlug)
-          .is('provider_id', null);
+    log.info('backfill.start', { gameSlug, apiGame, force });
+    
+    try {
+      // Query Supabase for sets missing provider_id or all sets if force=true
+      const query = supabase
+        .schema('catalog_v2')
+        .from('sets')
+        .select('set_id, name, provider_id')
+        .eq('game', gameSlug);
+      
+      const { data: dbSets, error: dbError } = force 
+        ? await query  // Get all sets when force=true
+        : await query.is('provider_id', null);  // Only null provider_id when force=false
+      
+      log.info('backfill.query_result', { gameSlug, force, dbSetsCount: dbSets?.length || 0 });
 
     if (dbError) {
       throw new Error(`Failed to query database: ${dbError.message}`);
