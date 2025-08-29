@@ -9,15 +9,16 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, Play, Square, RotateCcw, Clock, CheckCircle2, AlertCircle, Info, RefreshCw } from "lucide-react";
+import { Loader2, Play, Square, RotateCcw, Clock, CheckCircle2, AlertCircle, Info, RefreshCw, Database, Search } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { debounce } from 'lodash';
 
 function normalizeGameSlug(g: string) {
-  if (g === 'pokemon_japan') return 'pokemon-japan';
-  if (g === 'mtg') return 'magic-the-gathering';
-  return g;
+  const x = g.toLowerCase().replace(/\s+/g, '-');
+  if (x === 'pokemon_japan') return 'pokemon-japan';
+  if (x === 'mtg') return 'magic-the-gathering';
+  return x;
 }
 
 interface GameData {
@@ -49,6 +50,7 @@ const JustTCGSync = () => {
   const [isLoadingSets, setIsLoadingSets] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isBackfilling, setIsBackfilling] = useState(false);
+  const [isDiscovering, setIsDiscovering] = useState(false);
   const [syncResults, setSyncResults] = useState<any[]>([]);
 
   // User preferences state
@@ -351,6 +353,47 @@ const JustTCGSync = () => {
     }
   };
 
+  // Handle discover sets
+  const handleDiscoverSets = async () => {
+    if (!preferences.selected_games.length) {
+      toast({
+        title: "No game selected",
+        description: "Please select a game first",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsDiscovering(true);
+
+    try {
+      const selectedGame = preferences.selected_games[0];
+      const normalizedGame = normalizeGameSlug(selectedGame);
+      
+      const { data, error } = await supabase.functions.invoke('discover-sets', {
+        body: { game: normalizedGame }
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Sets Discovery Complete",
+        description: `${data.fetched || 0} sets fetched, ${data.upserted || 0} upserted for ${normalizedGame}`,
+      });
+
+      // Reload sets to reflect the new discoveries
+      await loadSets();
+    } catch (error: any) {
+      toast({
+        title: "Discovery Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsDiscovering(false);
+    }
+  };
+
   // Handle backfill provider IDs
   const handleBackfillProviderIds = async () => {
     if (!preferences.selected_games.length) {
@@ -363,24 +406,19 @@ const JustTCGSync = () => {
     }
 
     setIsBackfilling(true);
-    const startTime = Date.now();
 
     try {
       const selectedGame = preferences.selected_games[0];
       const normalizedGame = normalizeGameSlug(selectedGame);
       
-      console.log('Calling backfill-provider-ids with game:', normalizedGame);
-      
       const { data, error } = await supabase.functions.invoke('backfill-provider-ids', {
         body: { games: [normalizedGame] }
       });
-      
-      console.log('Backfill response:', { data, error });
 
       if (error) throw error;
 
       const results = data?.results || [];
-      const gameResult = results.find((r: any) => r.gameSlug === normalizedGame || r.game === normalizedGame) || {};
+      const gameResult = results.find((r: any) => r.gameSlug === normalizedGame) || {};
 
       if (gameResult.error) {
         throw new Error(gameResult.error);
@@ -417,6 +455,24 @@ const JustTCGSync = () => {
           {/* Action Buttons */}
           <div className="flex gap-2 mb-4">
             <Button
+              onClick={handleDiscoverSets}
+              disabled={!preferences.selected_games.length || isDiscovering}
+              variant="outline"
+              size="sm"
+            >
+              {isDiscovering ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Discovering...
+                </>
+              ) : (
+                <>
+                  <Search className="mr-2 h-4 w-4" />
+                  Discover Sets (API)
+                </>
+              )}
+            </Button>
+            <Button
               onClick={handleBackfillProviderIds}
               disabled={!preferences.selected_games.length || isBackfilling}
               variant="outline"
@@ -429,7 +485,7 @@ const JustTCGSync = () => {
                 </>
               ) : (
                 <>
-                  <RefreshCw className="mr-2 h-4 w-4" />
+                  <Database className="mr-2 h-4 w-4" />
                   Backfill Provider IDs
                 </>
               )}
