@@ -18,12 +18,23 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_ANON_KEY') ?? ''
     )
 
+    // Parse game from query string or JSON body
     const url = new URL(req.url)
-    const game = url.searchParams.get('game')
+    let game = url.searchParams.get('game')
+    
+    // If no query param, try to parse from JSON body
+    if (!game && req.method === 'POST') {
+      try {
+        const body = await req.json()
+        game = body.game
+      } catch {
+        // Ignore JSON parse errors, fallback to query param requirement
+      }
+    }
     
     if (!game) {
       return new Response(
-        JSON.stringify({ error: 'Game parameter is required' }),
+        JSON.stringify({ error: 'Game parameter is required (in query string or JSON body)' }),
         { 
           status: 400, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }

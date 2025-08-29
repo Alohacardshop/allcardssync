@@ -303,6 +303,12 @@ export default function JustTCGSync() {
           ));
 
           addLog(`✅ Completed sync for ${game.name}`);
+          
+          // Auto-refresh sets list to show updated card counts
+          if (selectedGame === game.id) {
+            setTimeout(() => loadSetsFromDBForGame(game.id), 1000);
+          }
+          
           return syncData;
 
         } catch (error: any) {
@@ -446,6 +452,9 @@ export default function JustTCGSync() {
         body: { game }
       });
       if (edgeError) {
+        toast.error("API Error", {
+          description: `Failed to fetch live counts: ${edgeError.message}. Using fallback.`
+        });
         throw new Error(`api-catalog-sets failed: ${edgeError.message}`);
       }
       const sets = (edgeData?.sets || []).map((s: any) => ({
@@ -595,6 +604,41 @@ export default function JustTCGSync() {
       setSelectedSets(prev => [...prev, setId]);
     } else {
       setSelectedSets(prev => prev.filter(id => id !== setId));
+    }
+  };
+
+  // Verify card count for a specific set
+  const verifySetCardCount = async (setId: string, setName: string) => {
+    const game = normalizeGameSlug(selectedGame || '');
+    try {
+      // Use RPC function to get card count for the set
+      const { data, error } = await supabase.rpc('catalog_v2_browse_cards', {
+        game_in: game,
+        set_id_in: setId,
+        page_in: 1,
+        limit_in: 1
+      });
+
+      if (error) throw error;
+
+      const result = data as any;
+      const count = result?.total_count || 0;
+      const message = `${setName}: ${count} cards in database`;
+      addLog(`🔍 ${message}`);
+      toast.success("Card Count Verification", {
+        description: message
+      });
+
+      if (count === 0) {
+        toast.error("Warning", {
+          description: `${setName} has 0 cards in database despite being synced. This may indicate a sync issue.`
+        });
+      }
+    } catch (error: any) {
+      addLog(`❌ Failed to verify ${setName}: ${error.message}`);
+      toast.error("Verification Failed", {
+        description: `Could not verify card count for ${setName}: ${error.message}`
+      });
     }
   };
 
@@ -757,8 +801,22 @@ export default function JustTCGSync() {
                                 <div className="font-medium">{set.name}</div>
                                 <div className="text-xs text-muted-foreground">{set.id}</div>
                               </div>
-                              <div className="text-xs text-muted-foreground">
-                                {set.cards_count || 0} cards
+                              <div className="flex items-center gap-2">
+                                <div className="text-xs text-muted-foreground">
+                                  {set.cards_count || 0} cards
+                                </div>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    verifySetCardCount(set.id, set.name);
+                                  }}
+                                  title="Verify card count"
+                                >
+                                  🔍
+                                </Button>
                               </div>
                             </label>
                           </div>

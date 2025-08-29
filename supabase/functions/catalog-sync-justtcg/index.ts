@@ -49,6 +49,7 @@ async function upsertCards(rows: any[]) {
     const chunk = rows.slice(i, i + chunkSize);
     const { error } = await supabaseClient.rpc("catalog_v2_upsert_cards", { rows: chunk as any });
     if (error) throw error;
+    console.log(`Upserted ${chunk.length} cards (batch ${Math.floor(i/chunkSize) + 1})`);
   }
 }
 
@@ -60,6 +61,7 @@ async function upsertVariants(rows: any[]) {
     const chunk = rows.slice(i, i + chunkSize);
     const { error } = await supabaseClient.rpc("catalog_v2_upsert_variants", { rows: chunk as any });
     if (error) throw error;
+    console.log(`Upserted ${chunk.length} variants (batch ${Math.floor(i/chunkSize) + 1})`);
   }
 }
 
