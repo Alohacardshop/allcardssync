@@ -1,3 +1,4 @@
+
 project_id = "dmpoandoydaqxhzdjnmk"
 
 [functions.catalog-sync]
@@ -31,4 +32,7 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.backfill-provider-ids]
+verify_jwt = false
+
+[functions.provider-sync]
 verify_jwt = false

@@ -937,6 +937,13 @@ export type Database = {
           set_id: string
         }[]
       }
+      catalog_v2_guardrail_sets_new: {
+        Args: { api_sets: Json; game_in: string }
+        Returns: {
+          not_found: number
+          rolled_back: number
+        }[]
+      }
       catalog_v2_log_error: {
         Args: { payload: Json }
         Returns: undefined
