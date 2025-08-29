@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { GAME_OPTIONS, GameKey } from "@/lib/types";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
+import { useStore } from "@/contexts/StoreContext";
 
 interface RawTradeInForm {
   game: string;
@@ -55,6 +56,7 @@ export default function RawIntake() {
   
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const { selectedStore, selectedLocation } = useStore();
 
   const autoSku = useMemo(() => {
     const condMap: Record<string, string> = {
@@ -160,6 +162,28 @@ export default function RawIntake() {
       price: form.price_each ? Number(form.price_each) : null,
       cost: form.cost_each ? Number(form.cost_each) : null,
       sku: form.sku || autoSku,
+      // New comprehensive data capture fields
+      source_provider: 'manual',
+      source_payload: JSON.parse(JSON.stringify({
+        manual_entry: form,
+        entry_time: new Date().toISOString()
+      })),
+      catalog_snapshot: {
+        name: form.name,
+        set: form.set,
+        number: form.card_number,
+        condition: form.condition,
+        category: form.printing ? `Raw ${form.printing}` : 'Raw',
+        game: form.game
+      },
+      pricing_snapshot: {
+        price: form.price_each ? Number(form.price_each) : null,
+        cost: form.cost_each ? Number(form.cost_each) : null,
+        captured_at: new Date().toISOString()
+      },
+      processing_notes: `Manual entry for ${form.name}`,
+      store_key: selectedStore || null,
+      shopify_location_gid: selectedLocation || null
     } as const;
 
     try {

@@ -8,6 +8,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Upload, FileText, Download } from "lucide-react";
+import { useStore } from "@/contexts/StoreContext";
+import { v4 as uuidv4 } from 'uuid';
 
 interface TCGPlayerItem {
   quantity: number;
@@ -29,6 +31,8 @@ export const TCGPlayerBulkImport = () => {
   const [items, setItems] = useState<TCGPlayerItem[]>([]);
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState(0);
+  const { selectedStore, selectedLocation } = useStore();
+  const batchId = uuidv4(); // Generate a unique batch ID for this import session
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const uploadedFile = event.target.files?.[0];
@@ -153,7 +157,33 @@ export const TCGPlayerBulkImport = () => {
         category: 'Pokemon', // Default category
         price: item.priceEach,
         cost: item.priceEach * 0.7, // Assume 70% cost ratio
-        quantity: item.quantity
+        quantity: item.quantity,
+        // New comprehensive data capture fields
+        source_provider: 'tcgplayer',
+        source_payload: JSON.parse(JSON.stringify({
+          tcgplayer_data: item,
+          csv_row: items.indexOf(item) + 1,
+          original_filename: file?.name
+        })),
+        catalog_snapshot: {
+          name: item.name,
+          set: item.set,
+          number: item.cardNumber,
+          condition: item.condition,
+          foil: item.foil,
+          language: item.language
+        },
+        pricing_snapshot: {
+          price: item.priceEach,
+          total_price: item.totalPrice,
+          captured_at: new Date().toISOString()
+        },
+        intake_batch_id: batchId,
+        original_filename: file?.name,
+        source_row_number: items.indexOf(item) + 1,
+        processing_notes: `TCGPlayer bulk import from ${file?.name}`,
+        store_key: selectedStore || null,
+        shopify_location_gid: selectedLocation || null
       });
 
     if (error) throw error;

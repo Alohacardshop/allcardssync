@@ -10,6 +10,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { GameKey, Printing } from '@/lib/types';
 import { GAME_OPTIONS } from '@/lib/types';
+import { useStore } from '@/contexts/StoreContext';
 
 interface CatalogCard {
   id: string;
@@ -57,6 +58,7 @@ export function RawCardIntake({
   const [picked, setPicked] = useState<CatalogCard | null>(null);
   const [chosenVariant, setChosenVariant] = useState<any>(null);
   const [quantity, setQuantity] = useState(1);
+  const { selectedStore, selectedLocation } = useStore();
   const [saving, setSaving] = useState(false);
 
   const debounceRef = useRef<NodeJS.Timeout>();
@@ -127,55 +129,79 @@ export function RawCardIntake({
 
   const addToBatch = async () => {
     if (!picked || !chosenVariant) {
-      toast.error('No Card Selected', { description: 'Please select a card first' });
+      toast.error("Please select a card and variant first");
       return;
     }
 
-    setSaving(true);
     try {
-      const sku = generateSKU(picked, chosenVariant, game);
-      
       const { error } = await supabase
         .from('intake_items')
         .insert({
-          sku,
-          subject: picked.name,
-          card_number: String(picked.number || ''),
-          year: '',
-          brand_title: picked.set?.name || '',
           category: mapGameToCategory(game),
+          brand_title: picked.name,
           variant: chosenVariant.printing,
-          quantity,
-          price: chosenVariant.price || null,
-          cost: null,
+          grade: chosenVariant.condition,
+          price: chosenVariant.price,
+          sku: generateSKU(picked, chosenVariant, game),
+          quantity: quantity,
+          // New comprehensive data capture fields
+          source_provider: 'raw_search',
+          source_payload: JSON.parse(JSON.stringify({
+            search_query: {
+              game,
+              name: name,
+              number: number,
+              printing,
+              conditions: conditionCsv
+            },
+            search_results: suggestions.slice(0, 5).map(s => ({
+              id: s.id,
+              name: s.name,
+              number: s.number,
+              set: s.set?.name
+            })),
+            selected_card: {
+              id: picked.id,
+              name: picked.name,
+              number: picked.number,
+              set: picked.set?.name
+            },
+            selected_variant: chosenVariant
+          })),
+          catalog_snapshot: {
+            card_id: picked.id,
+            tcgplayer_id: picked.tcgplayer_product_id,
+            name: picked.name,
+            set: picked.set?.name,
+            number: picked.number
+          },
+          pricing_snapshot: {
+            price: chosenVariant.price,
+            condition: chosenVariant.condition,
+            printing: chosenVariant.printing,
+            captured_at: new Date().toISOString()
+          },
+          processing_notes: `Raw card intake search for "${name}" in ${game}`,
+          store_key: selectedStore || null,
+          shopify_location_gid: selectedLocation || null
         });
 
       if (error) throw error;
 
-      window.dispatchEvent(new CustomEvent('intake:item-added', {
-        detail: { sku, name: picked.name, quantity }
-      }));
-
-      toast.success('Added to Batch', {
-        description: `${picked.name} (${quantity}x) added with SKU: ${sku}`
-      });
-
-      onBatchAdd?.({ card: picked, variant: chosenVariant, sku, quantity });
-
-      // Clear selection
+      toast.success(`Added ${quantity}x ${picked.name} to batch`);
+      
+      // Reset selection but keep search results
       setPicked(null);
       setChosenVariant(null);
       setQuantity(1);
-      setName('');
-      setNumber('');
-      setSuggestions([]);
-
-    } catch (error: any) {
-      toast.error('Error', {
-        description: error.message || 'Failed to add item to batch'
-      });
-    } finally {
-      setSaving(false);
+      
+      // Call onBatchAdd if provided
+      if (onBatchAdd) {
+        onBatchAdd({});
+      }
+    } catch (error) {
+      console.error('Error adding to batch:', error);
+      toast.error('Failed to add item to batch');
     }
   };
 

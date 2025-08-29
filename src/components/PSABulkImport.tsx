@@ -8,6 +8,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Upload, FileText, Download } from "lucide-react";
+import { useStore } from "@/contexts/StoreContext";
+import { v4 as uuidv4 } from 'uuid';
 
 interface PSAImportItem {
   psaCert: string;
@@ -28,6 +30,8 @@ export const PSABulkImport = () => {
   const [items, setItems] = useState<PSAImportItem[]>([]);
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState(0);
+  const { selectedStore, selectedLocation } = useStore();
+  const batchId = uuidv4(); // Generate a unique batch ID for this import session
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const uploadedFile = event.target.files?.[0];
@@ -81,7 +85,31 @@ export const PSABulkImport = () => {
         year: item.data?.year,
         grade: item.data?.grade,
         category: item.data?.category,
-        price: 0 // Default price, can be updated later
+        price: 0, // Default price, can be updated later
+        // New comprehensive data capture fields
+        source_provider: 'psa',
+        source_payload: {
+          psa_cert: item.psaCert,
+          csv_row: items.indexOf(item) + 1,
+          original_filename: file?.name
+        },
+        grading_data: {
+          psa_cert: item.psaCert,
+          grade: item.data?.grade,
+          grading_company: 'PSA',
+          cert_url: `https://www.psacard.com/cert/${item.psaCert}`
+        },
+        catalog_snapshot: item.data,
+        pricing_snapshot: {
+          price: 0,
+          captured_at: new Date().toISOString()
+        },
+        intake_batch_id: batchId,
+        original_filename: file?.name,
+        source_row_number: items.indexOf(item) + 1,
+        processing_notes: `PSA bulk import from ${file?.name}`,
+        store_key: selectedStore || null,
+        shopify_location_gid: selectedLocation || null
       });
 
     if (error) throw error;
