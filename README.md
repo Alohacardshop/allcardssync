@@ -40,10 +40,15 @@ npm run dev
 
 Add the required secrets via the Supabase dashboard:
 
-1. **JustTCG API Key** (`JUSTTCG_API_KEY`):
-   - Required for card catalog synchronization
+## Environment Setup
+
+### Required API Keys
+
+**MIGRATION NOTICE**: Catalog syncing functionality has been moved to [Alohacardshop/alohacardshopcarddatabase](https://github.com/Alohacardshop/alohacardshopcarddatabase).
+
+1. **JustTCG API Key** (`JUSTTCG_API_KEY`):  
+   - Now used only for analytics snapshots
    - Obtain from [JustTCG API Dashboard](https://api.justtcg.com)
-   - Used by sync-games-v2, sync-sets-v2, and sync-cards-v2 functions
 
 2. **Optional Configuration**:
    - `SYNC_BATCH_SIZE`: Default batch size for card processing (default: 100)
@@ -52,7 +57,7 @@ Add the required secrets via the Supabase dashboard:
 
 ### Database Architecture
 
-The system uses the `catalog_v2` schema for card data with normalized game slugs:
+**MIGRATION NOTICE**: Card catalog data has been moved to [Alohacardshop/alohacardshopcarddatabase](https://github.com/Alohacardshop/alohacardshopcarddatabase).
 - `mtg` (Magic: The Gathering)
 - `pokemon` (Pokémon English)
 - `pokemon-japan` (Pokémon Japanese)
@@ -69,7 +74,7 @@ This tests:
 - Card search API
 - Catalog stats query
 - Modern sync system (sync_v3.jobs)
-- JustTCG API connectivity
+- JustTCG API connectivity (for analytics only)
 - Health monitoring endpoints
 
 ## Modern Sync System (sync_v3)
@@ -95,7 +100,7 @@ Jobs are tracked in `sync_v3.jobs` with the following states:
 
 ### API Endpoints
 
-- `sync-games-v2`: Sync game catalog from JustTCG API
+- `catalog-snapshots`: Analytics price tracking (JustTCG)
 - `sync-sets-v2`: Sync sets for a specific game
 - `sync-cards-v2`: Sync cards for a specific set
 - `health-monitor`: System health checks and monitoring
@@ -119,10 +124,16 @@ Jobs are tracked in `sync_v3.jobs` with the following states:
 
 ### Catalog Synchronization
 
-The system syncs card data into the `catalog_v2` schema with three main entities:
-- **Sets**: Game releases with metadata
-- **Cards**: Individual card data with images and identifiers  
-- **Variants**: Different printings, conditions, and pricing
+## Catalog System — MIGRATED
+
+**MIGRATION NOTICE**: The catalog system has been moved to [Alohacardshop/alohacardshopcarddatabase](https://github.com/Alohacardshop/alohacardshopcarddatabase).
+
+The following functionality has been removed from this repository:
+- Card catalog synchronization 
+- Set and card data management
+- Catalog browsing and search functionality
+
+For catalog operations, please use the external TCG database service.
 
 ### Print System
 
@@ -143,13 +154,17 @@ Role-based access control with RLS policies:
 
 ### Database Query Guidelines
 
-Always use schema-qualified queries for catalog data:
-```typescript
-// ✅ Correct
-const { data } = await sb.schema('catalog_v2').from('cards').select()
+**MIGRATION NOTICE**: Catalog queries should now use the external TCG database API.
 
-// ❌ Incorrect
-const { data } = await sb.from('catalog_v2_cards').select()
+```typescript
+// ✅ Future: Use external API
+const response = await fetch('https://external-tcg-api.com/cards', {
+  headers: { 'Authorization': `Bearer ${API_KEY}` }
+});
+const data = await response.json();
+
+// ❌ Removed: Local catalog queries
+// const { data } = await sb.from('catalog_v2_cards').select()
 ```
 
 ## Contributing
@@ -159,22 +174,14 @@ const { data } = await sb.from('catalog_v2_cards').select()
 3. Test edge functions locally before deployment
 4. Update this README for significant changes
 
-## Rollback Plan
+### Rollback Plan
 
-If issues arise with the modern sync system:
+If issues arise with the system:
 
 ### Database Rollback
-```sql
--- Drop sync_v3 schema if needed
-DROP SCHEMA IF EXISTS sync_v3 CASCADE;
-```
-
-### Edge Functions Rollback
-- Remove `sync-games-v2`, `sync-sets-v2`, `sync-cards-v2` function directories
-- Remove `health-monitor` and `sync-scheduler` function directories
-- Revert to previous sync functions if needed
+- Catalog functionality has been permanently migrated to external service
+- Contact [Alohacardshop/alohacardshopcarddatabase](https://github.com/Alohacardshop/alohacardshopcarddatabase) for catalog issues
 
 ### UI Rollback
-- Revert `ModernSyncDashboard` component changes
-- Remove `SyncConfiguration` and `SyncAnalytics` components
-- No change to `catalog_v2` data (preserved)
+- Remove catalog-related UI components if needed
+- Inventory and label printing functionality remains intact

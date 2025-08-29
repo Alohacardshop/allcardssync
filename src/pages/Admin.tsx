@@ -51,7 +51,7 @@ const Admin = () => {
       <div className="border-b">
         <div className="flex h-16 items-center px-4">
           <div className="flex items-center space-x-4">
-            <h1 className="text-xl font-semibold">JustTCG Admin</h1>
+            <h1 className="text-xl font-semibold">Analytics Admin</h1>
           </div>
           <div className="ml-auto">
             <Navigation />

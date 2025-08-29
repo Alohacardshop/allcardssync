@@ -60,7 +60,7 @@ const BulkImport = () => {
 
           <Card>
             <CardHeader>
-              <CardTitle>Raw Card Intake (JustTCG)</CardTitle>
+              <CardTitle>Raw Card Intake</CardTitle>
               <p className="text-sm text-muted-foreground">
                 Search and select individual cards with intelligent pricing
               </p>

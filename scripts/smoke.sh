@@ -18,7 +18,8 @@ curl -s "http://localhost:54321/functions/v1/catalog-search?game=mtg&name=Bolt&l
 echo ""
 
 echo "📊 Stats (mtg):"
-psql "$SUPABASE_DB_URL" -c "select * from catalog_v2.stats('mtg');" 2>/dev/null || echo "Failed to connect to database"
+# Catalog functionality moved to external service
+echo "ℹ️  Catalog functionality moved to Alohacardshop/alohacardshopcarddatabase"
 echo ""
 
 echo "🔄 Modern Sync System:"
@@ -37,7 +38,7 @@ echo "🏥 Health Monitor:"
 curl -s "http://localhost:54321/functions/v1/health-monitor" 2>/dev/null | jq -r '.status // "Failed"' || echo "Failed to test health-monitor"
 echo ""
 
-echo "🔧 JustTCG API Connectivity:"
+echo "🔧 JustTCG API Connectivity (Analytics Only):"
 curl -s "http://localhost:54321/functions/v1/justtcg-health" 2>/dev/null | jq -r '.status // "API connectivity test failed"' || echo "JustTCG API health check failed"
 echo ""
 
