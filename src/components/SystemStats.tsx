@@ -16,7 +16,7 @@ export function SystemStats() {
     : '0';
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-sm font-medium">Total Items</CardTitle>
@@ -69,7 +69,7 @@ export function SystemStats() {
         </CardContent>
       </Card>
 
-      <Card className="col-span-2">
+      <Card className="col-span-1 sm:col-span-2 lg:col-span-2">
         <CardHeader>
           <CardTitle className="text-sm font-medium">Category Breakdown</CardTitle>
         </CardHeader>
@@ -84,7 +84,7 @@ export function SystemStats() {
         </CardContent>
       </Card>
 
-      <Card className="col-span-2">
+      <Card className="col-span-1 sm:col-span-2 lg:col-span-2">
         <CardHeader>
           <CardTitle className="text-sm font-medium">Grade Distribution</CardTitle>
         </CardHeader>

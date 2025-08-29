@@ -61,9 +61,9 @@ const Admin = () => {
       </div>
 
       <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
-        <div className="flex items-center justify-between space-y-2">
-          <h2 className="text-3xl font-bold tracking-tight">Admin Dashboard</h2>
-          <div className="flex items-center space-x-2">
+        <div className="flex flex-col space-y-2 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
+          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">Admin Dashboard</h2>
+          <div className="flex items-center space-x-2 flex-wrap gap-2">
             <Badge variant="secondary">Admin</Badge>
             {healthStatus?.database ? (
               <Badge variant="default" className="bg-green-600">
@@ -82,16 +82,18 @@ const Admin = () => {
         <SystemStats />
 
         <Tabs defaultValue="inventory" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-8">
-            <TabsTrigger value="inventory">Inventory</TabsTrigger>
-            <TabsTrigger value="catalog">Catalog</TabsTrigger>
-            <TabsTrigger value="settings">Settings</TabsTrigger>
-            <TabsTrigger value="system">System</TabsTrigger>
-            <TabsTrigger value="users">Users</TabsTrigger>
-            <TabsTrigger value="integrations">Integrations</TabsTrigger>
-            <TabsTrigger value="shopify-config">Shopify Config</TabsTrigger>
-            <TabsTrigger value="shopify-inspect">Inspect Shopify</TabsTrigger>
-          </TabsList>
+          <div className="w-full overflow-x-auto">
+            <TabsList className="inline-flex h-10 items-center justify-start rounded-md bg-muted p-1 text-muted-foreground w-max">
+              <TabsTrigger value="inventory" className="whitespace-nowrap">Inventory</TabsTrigger>
+              <TabsTrigger value="catalog" className="whitespace-nowrap">Catalog</TabsTrigger>
+              <TabsTrigger value="settings" className="whitespace-nowrap">Settings</TabsTrigger>
+              <TabsTrigger value="system" className="whitespace-nowrap">System</TabsTrigger>
+              <TabsTrigger value="users" className="whitespace-nowrap">Users</TabsTrigger>
+              <TabsTrigger value="integrations" className="whitespace-nowrap">Integrations</TabsTrigger>
+              <TabsTrigger value="shopify-config" className="whitespace-nowrap">Shopify Config</TabsTrigger>
+              <TabsTrigger value="shopify-inspect" className="whitespace-nowrap">Inspect Shopify</TabsTrigger>
+            </TabsList>
+          </div>
 
           <TabsContent value="inventory" className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
