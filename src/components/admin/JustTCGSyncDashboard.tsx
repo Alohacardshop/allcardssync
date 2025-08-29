@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { Database, RefreshCw, Play, Loader2, Calendar, CheckCircle, XCircle, Clock, AlertCircle } from 'lucide-react'
+import { Database, RefreshCw, Play, Loader2, Calendar, CheckCircle, XCircle, Clock, AlertCircle, Filter, Pause, RotateCcw, TrendingUp } from 'lucide-react'
 import { format } from 'date-fns'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
+import { Input } from '@/components/ui/input'
 import { useToast } from '@/hooks/use-toast'
 import { supabase } from '@/integrations/supabase/client'
 
@@ -15,7 +16,7 @@ interface SyncJob {
   job_type: 'games' | 'sets' | 'cards'
   game_slug?: string
   set_id?: string
-  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | 'partial'
   progress: { current: number; total: number }
   error_message?: string
   created_at: string
@@ -30,6 +31,15 @@ interface GameSet {
   sync_status: 'pending' | 'synced' | 'failed' | 'partial'
   card_count: number
   last_synced_at?: string
+}
+
+interface SyncStats {
+  totalJobs: number
+  completedJobs: number
+  failedJobs: number
+  totalCardsToday: number
+  apiCallsToday: number
+  processingRate: number
 }
 
 const GAMES = [
@@ -49,6 +59,8 @@ const getStatusBadgeVariant = (status: string) => {
       return 'destructive' // red
     case 'partial':
       return 'outline' // orange-ish
+    case 'cancelled':
+      return 'secondary'
     default:
       return 'outline'
   }
@@ -65,8 +77,31 @@ const getStatusIcon = (status: string) => {
       return XCircle
     case 'partial':
       return AlertCircle
+    case 'cancelled':
+      return Pause
     default:
       return Clock
+  }
+}
+
+// Estimate completion time based on progress and processing rate
+const getEstimatedCompletion = (job: SyncJob): string | null => {
+  if (job.status !== 'running' || !job.progress?.total || job.progress.current === 0) {
+    return null
+  }
+  
+  const processingRate = job.metadata?.processing_rate || 0
+  if (processingRate <= 0) return null
+  
+  const remaining = job.progress.total - job.progress.current
+  const estimatedSeconds = remaining / processingRate
+  
+  if (estimatedSeconds < 60) {
+    return `${Math.round(estimatedSeconds)}s`
+  } else if (estimatedSeconds < 3600) {
+    return `${Math.round(estimatedSeconds / 60)}m`
+  } else {
+    return `${Math.round(estimatedSeconds / 3600)}h`
   }
 }
 
@@ -78,28 +113,214 @@ export default function JustTCGSyncDashboard() {
   const [selectedSet, setSelectedSet] = useState<string>('')
   const [gameSets, setGameSets] = useState<GameSet[]>([])
   const [recentJobs, setRecentJobs] = useState<SyncJob[]>([])
+  const [syncStats, setSyncStats] = useState<SyncStats>({
+    totalJobs: 0,
+    completedJobs: 0,
+    failedJobs: 0,
+    totalCardsToday: 0,
+    apiCallsToday: 0,
+    processingRate: 0
+  })
   
   // Loading states
   const [syncingGames, setSyncingGames] = useState(false)
   const [syncingSets, setSyncingSets] = useState(false)
   const [syncingCards, setSyncingCards] = useState(false)
   const [loadingSets, setLoadingSets] = useState(false)
+  const [performingBulkAction, setPerformingBulkAction] = useState(false)
+  
+  // Filtering states
+  const [jobStatusFilter, setJobStatusFilter] = useState<string>('all')
+  const [jobTypeFilter, setJobTypeFilter] = useState<string>('all')
+  const [searchFilter, setSearchFilter] = useState<string>('')
   
   // Counts
   const [pendingSetsCount, setPendingSetsCount] = useState(0)
 
-  // Fetch recent jobs - using mock data for now since we need to create the proper RPC function
+  // Fetch recent jobs with filtering
   const fetchRecentJobs = useCallback(async () => {
     try {
       // For now, we'll use mock data. This should be replaced with proper RPC call once created
       const mockJobs: SyncJob[] = []
-      setRecentJobs(mockJobs)
+      
+      // Filter jobs based on current filters
+      const filteredJobs = mockJobs.filter(job => {
+        const statusMatch = jobStatusFilter === 'all' || job.status === jobStatusFilter
+        const typeMatch = jobTypeFilter === 'all' || job.job_type === jobTypeFilter
+        const searchMatch = searchFilter === '' || 
+          job.game_slug?.toLowerCase().includes(searchFilter.toLowerCase()) ||
+          job.set_id?.toLowerCase().includes(searchFilter.toLowerCase())
+        return statusMatch && typeMatch && searchMatch
+      })
+      
+      setRecentJobs(filteredJobs)
+      
+      // Calculate sync stats from jobs (mock data for now)
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      
+      const todayJobs = filteredJobs.filter(job => 
+        new Date(job.created_at) >= today
+      )
+      
+      const completedToday = todayJobs.filter(job => job.status === 'completed')
+      const failedToday = todayJobs.filter(job => job.status === 'failed')
+      
+      const totalCardsToday = completedToday.reduce((sum, job) => {
+        return sum + (job.metadata?.totalProcessed || job.metadata?.newCards || 0)
+      }, 0)
+      
+      const totalApiCalls = todayJobs.reduce((sum, job) => {
+        return sum + (job.metadata?.api_calls || 0)
+      }, 0)
+      
+      const avgProcessingRate = completedToday.reduce((sum, job) => {
+        return sum + (job.metadata?.processing_rate || 0)
+      }, 0) / (completedToday.length || 1)
+      
+      setSyncStats({
+        totalJobs: todayJobs.length,
+        completedJobs: completedToday.length,
+        failedJobs: failedToday.length,
+        totalCardsToday,
+        apiCallsToday: totalApiCalls,
+        processingRate: avgProcessingRate
+      })
     } catch (error) {
       console.error('Error fetching recent jobs:', error)
     }
-  }, [])
+  }, [jobStatusFilter, jobTypeFilter, searchFilter])
 
-  // Fetch sets for selected game
+  // Resume a failed job
+  const resumeJob = async (job: SyncJob) => {
+    if (!job.metadata?.can_resume) {
+      toast({
+        title: 'Cannot Resume',
+        description: 'This job cannot be resumed',
+        variant: 'destructive'
+      })
+      return
+    }
+
+    try {
+      let resumeParams: any = {}
+      
+      if (job.job_type === 'cards') {
+        resumeParams = {
+          game: job.game_slug,
+          setId: job.set_id,
+          forceResync: true // Force to continue from where it left off
+        }
+        
+        const { error } = await supabase.functions.invoke('sync-cards', {
+          body: resumeParams
+        })
+        
+        if (error) throw error
+        
+        toast({
+          title: 'Job Resumed',
+          description: 'Cards sync resumed from previous position'
+        })
+      } else if (job.job_type === 'sets') {
+        resumeParams = { game: job.game_slug }
+        
+        const { error } = await supabase.functions.invoke('sync-sets', {
+          body: resumeParams
+        })
+        
+        if (error) throw error
+        
+        toast({
+          title: 'Job Resumed',
+          description: 'Sets sync resumed'
+        })
+      }
+      
+      fetchRecentJobs()
+    } catch (error) {
+      console.error('Error resuming job:', error)
+      toast({
+        title: 'Resume Failed',
+        description: 'Failed to resume sync job',
+        variant: 'destructive'
+      })
+    }
+  }
+
+  // Bulk actions
+  const cancelAllRunningJobs = async () => {
+    setPerformingBulkAction(true)
+    try {
+      // This would require implementing a cancel endpoint
+      toast({
+        title: 'Bulk Cancel',
+        description: 'Cancel all running jobs feature coming soon'
+      })
+    } catch (error) {
+      console.error('Error cancelling jobs:', error)
+      toast({
+        title: 'Bulk Cancel Failed',
+        description: 'Failed to cancel running jobs',
+        variant: 'destructive'
+      })
+    } finally {
+      setPerformingBulkAction(false)
+    }
+  }
+
+  const retryAllFailedJobs = async () => {
+    setPerformingBulkAction(true)
+    try {
+      const failedJobs = recentJobs.filter(job => 
+        job.status === 'failed' || job.status === 'partial'
+      )
+      
+      let retriedCount = 0
+      
+      for (const job of failedJobs.slice(0, 5)) { // Limit to 5 to prevent overwhelming
+        try {
+          if (job.job_type === 'games') {
+            await supabase.functions.invoke('sync-games')
+          } else if (job.job_type === 'sets' && job.game_slug) {
+            await supabase.functions.invoke('sync-sets', {
+              body: { game: job.game_slug }
+            })
+          } else if (job.job_type === 'cards' && job.game_slug && job.set_id) {
+            await supabase.functions.invoke('sync-cards', {
+              body: {
+                game: job.game_slug,
+                setId: job.set_id,
+                forceResync: true
+              }
+            })
+          }
+          retriedCount++
+          
+          // Small delay between retries
+          await new Promise(resolve => setTimeout(resolve, 2000))
+        } catch (error) {
+          console.error(`Failed to retry job ${job.id}:`, error)
+        }
+      }
+      
+      toast({
+        title: 'Bulk Retry Complete',
+        description: `Retried ${retriedCount} failed jobs`
+      })
+      
+      fetchRecentJobs()
+    } catch (error) {
+      console.error('Error retrying jobs:', error)
+      toast({
+        title: 'Bulk Retry Failed',
+        description: 'Failed to retry failed jobs',
+        variant: 'destructive'
+      })
+    } finally {
+      setPerformingBulkAction(false)
+    }
+  }
   const fetchGameSets = useCallback(async (game: string) => {
     if (!game) return
     
@@ -287,6 +508,75 @@ export default function JustTCGSyncDashboard() {
         </Button>
       </div>
 
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        {/* Sync Statistics Cards */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Jobs Today</CardTitle>
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{syncStats.totalJobs}</div>
+            <p className="text-xs text-muted-foreground">
+              {syncStats.completedJobs} completed, {syncStats.failedJobs} failed
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Cards Synced</CardTitle>
+            <Database className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{syncStats.totalCardsToday.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground">
+              {syncStats.processingRate > 0 && `${syncStats.processingRate.toFixed(1)}/sec avg`}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">API Calls</CardTitle>
+            <RefreshCw className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{syncStats.apiCallsToday}</div>
+            <p className="text-xs text-muted-foreground">
+              To JustTCG API today
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Bulk Actions Card */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Bulk Actions</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={cancelAllRunningJobs}
+              disabled={performingBulkAction || !recentJobs.some(job => job.status === 'running')}
+            >
+              {performingBulkAction && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+              Cancel Running
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={retryAllFailedJobs}
+              disabled={performingBulkAction || !recentJobs.some(job => job.status === 'failed' || job.status === 'partial')}
+            >
+              {performingBulkAction && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+              Retry Failed
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+
       <div className="grid gap-6 md:grid-cols-2">
         {/* Games Sync Section */}
         <Card>
@@ -463,19 +753,57 @@ export default function JustTCGSyncDashboard() {
         </Card>
       )}
 
-      {/* Recent Jobs Section */}
+      {/* Recent Jobs Section with Filtering */}
       <Card>
         <CardHeader>
-          <CardTitle>Recent Sync Jobs</CardTitle>
-          <CardDescription>
-            Last 10 synchronization jobs with real-time updates
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Recent Sync Jobs</CardTitle>
+              <CardDescription>
+                Real-time job monitoring with filtering and bulk actions
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <Filter className="h-4 w-4 text-muted-foreground" />
+              <Select value={jobStatusFilter} onValueChange={setJobStatusFilter}>
+                <SelectTrigger className="w-32">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent className="bg-background border shadow-md z-50">
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="running">Running</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="failed">Failed</SelectItem>
+                  <SelectItem value="partial">Partial</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={jobTypeFilter} onValueChange={setJobTypeFilter}>
+                <SelectTrigger className="w-32">
+                  <SelectValue placeholder="Type" />
+                </SelectTrigger>
+                <SelectContent className="bg-background border shadow-md z-50">
+                  <SelectItem value="all">All Types</SelectItem>
+                  <SelectItem value="games">Games</SelectItem>
+                  <SelectItem value="sets">Sets</SelectItem>
+                  <SelectItem value="cards">Cards</SelectItem>
+                </SelectContent>
+              </Select>
+              <Input
+                placeholder="Search..."
+                value={searchFilter}
+                onChange={(e) => setSearchFilter(e.target.value)}
+                className="w-32"
+              />
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
             {recentJobs.map((job) => {
               const StatusIcon = getStatusIcon(job.status)
               const progress = job.progress?.total > 0 ? (job.progress.current / job.progress.total) * 100 : 0
+              const estimatedCompletion = getEstimatedCompletion(job)
+              const canResume = job.status === 'failed' || job.status === 'partial'
               
               return (
                 <div key={job.id} className="border rounded-lg p-4 space-y-2">
@@ -489,8 +817,21 @@ export default function JustTCGSyncDashboard() {
                         {job.job_type} {job.game_slug && `• ${job.game_slug}`} {job.set_id && `• ${job.set_id}`}
                       </span>
                     </div>
-                    <div className="text-sm text-muted-foreground">
-                      {format(new Date(job.created_at), 'MMM d, HH:mm')}
+                    <div className="flex items-center gap-2">
+                      {canResume && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => resumeJob(job)}
+                          className="h-7"
+                        >
+                          <RotateCcw className="h-3 w-3 mr-1" />
+                          Resume
+                        </Button>
+                      )}
+                      <div className="text-sm text-muted-foreground">
+                        {format(new Date(job.created_at), 'MMM d, HH:mm')}
+                      </div>
                     </div>
                   </div>
                   
@@ -498,7 +839,12 @@ export default function JustTCGSyncDashboard() {
                     <div className="space-y-1">
                       <div className="flex justify-between text-sm">
                         <span>Progress</span>
-                        <span>{job.progress.current}/{job.progress.total}</span>
+                        <div className="flex items-center gap-2">
+                          <span>{job.progress.current}/{job.progress.total}</span>
+                          {estimatedCompletion && (
+                            <span className="text-muted-foreground">• ETA: {estimatedCompletion}</span>
+                          )}
+                        </div>
                       </div>
                       <Progress value={progress} className="h-2" />
                     </div>
@@ -506,13 +852,30 @@ export default function JustTCGSyncDashboard() {
                   
                   {job.error_message && (
                     <div className="text-sm text-destructive bg-destructive/10 p-2 rounded">
-                      {job.error_message}
+                      <div className="font-medium">Error:</div>
+                      <div>{job.error_message}</div>
+                      {job.metadata?.error_suggestions && (
+                        <div className="mt-1 text-xs">
+                          <strong>Suggestion:</strong> {job.metadata.error_suggestions}
+                        </div>
+                      )}
                     </div>
                   )}
                   
-                  {job.metadata && (
-                    <div className="text-sm text-muted-foreground">
-                      {JSON.stringify(job.metadata, null, 2)}
+                  {job.metadata && job.status === 'completed' && (
+                    <div className="text-sm text-muted-foreground grid grid-cols-2 gap-2">
+                      {job.metadata.processing_rate && (
+                        <div>Rate: {job.metadata.processing_rate.toFixed(1)}/sec</div>
+                      )}
+                      {job.metadata.total_duration_ms && (
+                        <div>Duration: {(job.metadata.total_duration_ms / 1000).toFixed(1)}s</div>
+                      )}
+                      {job.metadata.api_calls && (
+                        <div>API calls: {job.metadata.api_calls}</div>
+                      )}
+                      {job.metadata.newCards && (
+                        <div>New cards: {job.metadata.newCards}</div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -521,7 +884,7 @@ export default function JustTCGSyncDashboard() {
             
             {recentJobs.length === 0 && (
               <div className="text-center text-muted-foreground py-8">
-                No recent sync jobs found
+                No sync jobs found matching current filters
               </div>
             )}
           </div>
