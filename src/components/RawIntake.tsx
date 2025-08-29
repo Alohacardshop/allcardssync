@@ -110,18 +110,11 @@ export default function RawIntake() {
       };
       const gameParam = gameMap[form.game] || 'pokemon';
       
-      const { data, error } = await supabase.rpc('catalog_v2_browse_cards', {
-        game_in: gameParam,
-        search_in: rawName,
-        limit_in: 5
-      });
-
-      if (error) throw error;
-
-      const results = (data as any)?.cards || [];
-      setSuggestions(results);
-    } catch (e: any) {
-      console.error('Catalog search error:', e);
+      // TODO: Replace with API call to alohacardshopcarddatabase  
+      // Legacy catalog browse function removed
+      throw new Error('Catalog search functionality moved to external service');
+    } catch (error) {
+      console.error('Catalog search error:', error);
       setSuggestions([]);
       toast.error('Failed to search cards. Please try again.');
     } finally {

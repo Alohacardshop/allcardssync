@@ -82,26 +82,8 @@ export function RawCardIntake({
       
       try {
         // TODO: Replace with API call to alohacardshopcarddatabase
-        // Search local catalog only
-        const gameParam = game === 'pokemon_japan' ? 'pokemon-japan' : game;
-        
-        const { data, error: searchError } = await supabase.rpc('catalog_v2_browse_cards', {
-          game_in: gameParam,
-          search_in: name,
-          limit_in: 5
-        });
-        // TODO: Replace above with API call to external catalog service
-
-        if (searchError) throw searchError;
-
-        const results = (data as any)?.cards || [];
-        setSuggestions(results.map((c: any) => ({
-          id: c.card_id,
-          name: c.name,
-          number: c.number,
-          set: { name: c.set_id },
-          tcgplayer_product_id: null
-        })));
+        // Legacy catalog browse function removed
+        throw new Error('Catalog search functionality moved to external service');
 
       } catch (err: any) {
         const message = err?.message || 'Failed to search cards';
