@@ -22,14 +22,16 @@ export function getLabelDesignerSettings(): LabelDesignerSettings {
     const barcodeMode = localStorage.getItem('barcode-mode') || 'barcode';
     const showGuides = localStorage.getItem('labelDesigner_showGuides') === 'true';
 
-    console.log('Label Designer Settings loaded:', {
-      includeTitle,
-      includeSku,
-      includePrice,
-      includeLot,
-      includeCondition,
-      barcodeMode
-    });
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Label Designer Settings loaded:', {
+        includeTitle,
+        includeSku,
+        includePrice,
+        includeLot,
+        includeCondition,
+        barcodeMode
+      });
+    }
 
     return {
       fieldConfig: {
@@ -43,7 +45,9 @@ export function getLabelDesignerSettings(): LabelDesignerSettings {
       showGuides
     };
   } catch (error) {
-    console.error('Error reading label designer settings:', error);
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Error reading label designer settings:', error);
+    }
     
     // Return sensible defaults if localStorage fails
     return {

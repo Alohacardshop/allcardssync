@@ -14,6 +14,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      audit_log: {
+        Row: {
+          action: string
+          created_at: string | null
+          id: string
+          new_data: Json | null
+          old_data: Json | null
+          record_id: string | null
+          table_name: string
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string | null
+          id?: string
+          new_data?: Json | null
+          old_data?: Json | null
+          record_id?: string | null
+          table_name: string
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string | null
+          id?: string
+          new_data?: Json | null
+          old_data?: Json | null
+          record_id?: string | null
+          table_name?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       categories: {
         Row: {
           created_at: string | null
@@ -827,10 +860,6 @@ export type Database = {
         Args: { game_name: string }
         Returns: undefined
       }
-      cancel_sync_job: {
-        Args: { job_id: string }
-        Returns: undefined
-      }
       catalog_v2_browse_cards: {
         Args: {
           filter_japanese?: boolean
@@ -1063,28 +1092,6 @@ export type Database = {
         Args: { secret_name: string }
         Returns: string
       }
-      get_recent_sync_jobs: {
-        Args: { limit_count?: number }
-        Returns: {
-          completed_at: string
-          created_at: string
-          error_message: string
-          estimated_completion_at: string
-          game: string
-          id: string
-          items_per_second: number
-          job_type: string
-          metrics: Json
-          processed_items: number
-          progress_percentage: number
-          results: Json
-          set_id: string
-          source: string
-          started_at: string
-          status: string
-          total_items: number
-        }[]
-      }
       gtrgm_compress: {
         Args: { "": unknown }
         Returns: unknown
@@ -1115,10 +1122,6 @@ export type Database = {
       http_post_async: {
         Args: { body: Json; headers: Json; url: string }
         Returns: number
-      }
-      manage_justtcg_cron_jobs: {
-        Args: { action: string }
-        Returns: string
       }
       normalize_game_slug: {
         Args: { input_game: string }

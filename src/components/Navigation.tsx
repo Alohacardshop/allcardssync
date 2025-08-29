@@ -7,7 +7,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Home, Package, Tags, Settings, Users, FileText, Menu, LogOut, Upload, Database } from "lucide-react";
+import { Home, Package, Tags, Settings, FileText, Menu, LogOut, Upload, BarChart3 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { cleanupAuthState } from "@/lib/auth";
 import { useEffect, useState } from "react";
@@ -22,26 +22,40 @@ export function Navigation({ showMobileMenu = true }: NavigationProps) {
 
   useEffect(() => {
     const checkAdminStatus = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        const { data } = await supabase.rpc("has_role", { 
-          _user_id: session.user.id, 
-          _role: "admin" as any 
-        });
-        setIsAdmin(Boolean(data));
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          const { data } = await supabase.rpc("has_role", { 
+            _user_id: session.user.id, 
+            _role: "admin" as any 
+          });
+          setIsAdmin(Boolean(data));
+        }
+      } catch (error) {
+        if (process.env.NODE_ENV === 'development') {
+          console.error("Role check failed", error);
+        }
+        setIsAdmin(false);
       }
     };
 
     checkAdminStatus();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (session?.user) {
-        const { data } = await supabase.rpc("has_role", { 
-          _user_id: session.user.id, 
-          _role: "admin" as any 
-        });
-        setIsAdmin(Boolean(data));
-      } else {
+      try {
+        if (session?.user) {
+          const { data } = await supabase.rpc("has_role", { 
+            _user_id: session.user.id, 
+            _role: "admin" as any 
+          });
+          setIsAdmin(Boolean(data));
+        } else {
+          setIsAdmin(false);
+        }
+      } catch (error) {
+        if (process.env.NODE_ENV === 'development') {
+          console.error("Role check failed in auth state change", error);
+        }
         setIsAdmin(false);
       }
     });
@@ -63,9 +77,9 @@ export function Navigation({ showMobileMenu = true }: NavigationProps) {
   const navItems = [
     { to: "/", label: "Dashboard", icon: Home },
     { to: "/inventory", label: "Inventory", icon: Package },
-    { to: "/labels", label: "Label Designer", icon: Tags },
-    { to: "/bulk-import", label: "Bulk Import", icon: Upload },
-    { to: "/shopify-mapping", label: "Shopify Mapping", icon: FileText },
+    { to: "/labels", label: "Labels", icon: Tags },
+    { to: "/bulk-import", label: "Import", icon: Upload },
+    { to: "/shopify-mapping", label: "Shopify", icon: FileText },
     { to: "/print-logs", label: "Print Logs", icon: FileText },
   ];
 

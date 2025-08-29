@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useEffect, useState } from "react";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import Index from "./pages/Index";
 import Inventory from "./pages/Inventory";
 import LabelDesigner from "./pages/LabelDesigner";
@@ -16,7 +17,21 @@ import BulkImport from "./pages/BulkImport";
 
 import { supabase } from "@/integrations/supabase/client";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1 * 60 * 1000, // 1 minute
+      refetchOnWindowFocus: false,
+      retry: (failureCount, error: any) => {
+        // Don't retry on auth errors
+        if (error?.message?.includes('auth') || error?.status === 401) {
+          return false;
+        }
+        return failureCount < 3;
+      },
+    },
+  },
+});
 
 function ProtectedRoute({ children }: { children: JSX.Element }) {
   const [checking, setChecking] = useState(true);
@@ -45,7 +60,9 @@ function ProtectedRoute({ children }: { children: JSX.Element }) {
           const isAdmin = (admin.data as boolean) === true;
           setAllowed(isAdmin);
         } catch (e) {
-          console.error("Role check failed", e);
+          if (process.env.NODE_ENV === 'development') {
+            console.error("Role check failed", e);
+          }
           setAllowed(false);
         } finally {
           setChecking(false);
@@ -68,27 +85,29 @@ function ProtectedRoute({ children }: { children: JSX.Element }) {
 }
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/auth" element={<Auth />} />
-          <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
-          <Route path="/inventory" element={<ProtectedRoute><Inventory /></ProtectedRoute>} />
-          <Route path="/labels" element={<ProtectedRoute><LabelDesigner /></ProtectedRoute>} />
-          <Route path="/bulk-import" element={<ProtectedRoute><BulkImport /></ProtectedRoute>} />
-          <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
-          <Route path="/shopify-mapping" element={<ProtectedRoute><ShopifyMapping /></ProtectedRoute>} />
-          <Route path="/print-logs" element={<ProtectedRoute><PrintLogs /></ProtectedRoute>} />
-          
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
+  <ErrorBoundary>
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <Routes>
+            <Route path="/auth" element={<Auth />} />
+            <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
+            <Route path="/inventory" element={<ProtectedRoute><Inventory /></ProtectedRoute>} />
+            <Route path="/labels" element={<ProtectedRoute><LabelDesigner /></ProtectedRoute>} />
+            <Route path="/bulk-import" element={<ProtectedRoute><BulkImport /></ProtectedRoute>} />
+            <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
+            <Route path="/shopify-mapping" element={<ProtectedRoute><ShopifyMapping /></ProtectedRoute>} />
+            <Route path="/print-logs" element={<ProtectedRoute><PrintLogs /></ProtectedRoute>} />
+            
+            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </TooltipProvider>
+    </QueryClientProvider>
+  </ErrorBoundary>
 );
 
 export default App;
