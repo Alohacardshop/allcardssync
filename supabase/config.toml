@@ -1,41 +1,11 @@
 
 project_id = "dmpoandoydaqxhzdjnmk"
 
-[functions.catalog-sync]
-verify_jwt = false
-
-[functions.catalog-sync-pokemon]
-verify_jwt = false
-
-[functions.catalog-sync-justtcg]
-verify_jwt = false
-
-[functions.catalog-search]
-verify_jwt = false
-
-[functions.catalog-rebuild-stream]
-verify_jwt = false
+# SECURITY: All functions now require JWT authentication
+# Only public functions like health checks remain without JWT
 
 [functions.catalog-health]
 verify_jwt = false
 
-[functions.sync-errors]
-verify_jwt = false
-
-[functions.discover-games]
-verify_jwt = false
-
-[functions.discover-sets]
-verify_jwt = false
-
-[functions.daily-set-discovery]
-verify_jwt = false
-
-[functions.backfill-provider-ids]
-verify_jwt = false
-
-[functions.provider-sync]
-verify_jwt = false
-
-[functions.justtcg-games]
+[functions.justtcg-health]  
 verify_jwt = false
