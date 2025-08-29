@@ -10,7 +10,7 @@ import { SystemHealthCard } from "@/components/admin/SystemHealthCard";
 import { SystemStats } from "@/components/SystemStats";
 import CatalogTab from "@/components/admin/CatalogTab";
 import TCGDatabaseSettings from "@/components/admin/TCGDatabaseSettings";
-import UserAssignmentManager from "@/components/UserAssignmentManager";
+import { UserAssignmentManager } from "@/components/UserAssignmentManager";
 import { checkSystemHealth } from "@/lib/api";
 
 const Admin = () => {

@@ -6,7 +6,7 @@ import { AlertCircle } from "lucide-react";
 import CatalogResetRebuild from './CatalogResetRebuild';
 import CardsView from './CardsView';
 import SetsList from './SetsList';
-import SystemHealthCard from './SystemHealthCard';
+import { SystemHealthCard } from './SystemHealthCard';
 
 const CatalogTab = () => {
   return (
