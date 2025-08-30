@@ -6,6 +6,80 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// PSA Public API helper functions
+async function fetchPSACardData(cert: string, apiToken: string) {
+  console.log(`Fetching PSA card data for cert: ${cert}`);
+  const response = await fetch(`https://api.psacard.com/publicapi/cert/GetByCertNumber/${cert}`, {
+    headers: {
+      'Authorization': `Bearer ${apiToken}`,
+      'Accept': 'application/json',
+    },
+  });
+
+  console.log(`PSA API card data response status: ${response.status}`);
+  
+  if (!response.ok) {
+    console.log(`PSA API card data failed: ${response.status} ${response.statusText}`);
+    return null;
+  }
+
+  const data = await response.json();
+  console.log("PSA API card data response:", JSON.stringify(data, null, 2));
+  
+  if (!data?.IsValidRequest || !data?.PSACert) {
+    console.log("PSA API returned invalid or empty card data");
+    return null;
+  }
+
+  return data.PSACert;
+}
+
+async function fetchPSAImages(cert: string, apiToken: string) {
+  console.log(`Fetching PSA images for cert: ${cert}`);
+  const response = await fetch(`https://api.psacard.com/publicapi/cert/GetImagesByCertNumber/${cert}`, {
+    headers: {
+      'Authorization': `Bearer ${apiToken}`,
+      'Accept': 'application/json',
+    },
+  });
+
+  console.log(`PSA API images response status: ${response.status}`);
+  
+  if (!response.ok) {
+    console.log(`PSA API images failed: ${response.status} ${response.statusText}`);
+    return null;
+  }
+
+  const data = await response.json();
+  console.log("PSA API images response:", JSON.stringify(data, null, 2));
+  
+  if (!data?.IsValidRequest || !data?.PSACertImages || !Array.isArray(data.PSACertImages)) {
+    console.log("PSA API returned invalid or empty image data");
+    return null;
+  }
+
+  return data.PSACertImages;
+}
+
+function mapPSACardData(psaCard: any) {
+  return {
+    cert: psaCard.CertNumber?.toString(),
+    certNumber: psaCard.CertNumber?.toString(),
+    subject: psaCard.Subject,
+    cardName: psaCard.Subject,
+    year: psaCard.Year?.toString(),
+    brandTitle: psaCard.Brand,
+    category: psaCard.Category,
+    grade: psaCard.CardGrade ? `PSA ${psaCard.CardGrade}` : undefined,
+    cardNumber: psaCard.CardNumber,
+    title: `${psaCard.Year || ''} ${psaCard.Brand || ''} ${psaCard.Subject || ''}`.trim() || `PSA Cert ${psaCard.CertNumber}`,
+    // Legacy fields for backwards compatibility
+    player: psaCard.Subject,
+    set: psaCard.Brand,
+    game: psaCard.Category
+  };
+}
+
 function extract(html: string, regex: RegExp): string | undefined {
   const m = html.match(regex);
   return m?.[1]?.trim();
@@ -28,7 +102,7 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  console.log("PSA scrape function called with method:", req.method);
+  console.log("PSA function called with method:", req.method);
 
   try {
     const body = await req.json();
@@ -43,214 +117,177 @@ serve(async (req) => {
       });
     }
 
-    const url = `https://www.psacard.com/cert/${encodeURIComponent(cert)}/psa`;
-    console.log("PSA URL to scrape:", url);
-    
-    // Get Firecrawl API key from system_settings table
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    console.log("Getting Firecrawl API key from system settings...");
-    const { data: apiKeySetting, error: keyError } = await supabase.functions.invoke('get-system-setting', {
+    // Step 1: Try PSA Public API first
+    console.log("Attempting PSA Public API...");
+    
+    // Get PSA API token
+    const { data: apiTokenSetting, error: tokenError } = await supabase.functions.invoke('get-system-setting', {
       body: { 
-        keyName: 'FIRECRAWL_API_KEY',
-        fallbackSecretName: 'FIRECRAWL_API_KEY'
+        keyName: 'PSA_PUBLIC_API_TOKEN',
+        fallbackSecretName: 'PSA_PUBLIC_API_TOKEN'
       }
     });
 
-    if (keyError) {
-      console.error("Error getting API key:", keyError);
-      return new Response(
-        JSON.stringify({
-          ok: false,
-          error: "Failed to retrieve API key: " + JSON.stringify(keyError),
-        }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    let psaApiResult = null;
+    let imageUrl = null;
+    let imageUrls = [];
+    let source = 'scrape'; // Default fallback
 
-    const apiKey = apiKeySetting?.value;
-    console.log("API key retrieved:", apiKey ? "✅ Found" : "❌ Not found");
+    if (!tokenError && apiTokenSetting?.value) {
+      console.log("PSA API token found, attempting API calls...");
+      const apiToken = apiTokenSetting.value;
 
-    if (!apiKey) {
-      console.error("FIRECRAWL_API_KEY not found in system settings");
-      return new Response(
-        JSON.stringify({
-          ok: false,
-          error: "FIRECRAWL_API_KEY is not configured in system settings",
-        }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+      try {
+        // Fetch card data and images in parallel
+        const [psaCard, psaImages] = await Promise.all([
+          fetchPSACardData(cert, apiToken),
+          fetchPSAImages(cert, apiToken)
+        ]);
 
-    console.log("Making Firecrawl API request...");
+        if (psaCard) {
+          console.log("PSA API card data retrieved successfully");
+          psaApiResult = mapPSACardData(psaCard);
+          source = 'psa_api';
 
-    // Use Firecrawl Scrape API to fetch the page HTML
-    const fcResp = await fetch("https://api.firecrawl.dev/v1/scrape", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        url,
-        formats: ["html", "markdown"],
-      }),
-    });
-
-    console.log("Firecrawl API response status:", fcResp.status);
-    console.log("Firecrawl API response headers:", Object.fromEntries(fcResp.headers.entries()));
-
-    if (!fcResp.ok) {
-      const bodyText = await fcResp.text().catch(() => "Could not read response body");
-      console.error("Firecrawl API error response body:", bodyText);
-      
-      let errorJson: any = null;
-      try { 
-        errorJson = JSON.parse(bodyText); 
-      } catch (e) {
-        console.log("Could not parse error response as JSON");
+          // Process images if available
+          if (psaImages && psaImages.length > 0) {
+            console.log(`Found ${psaImages.length} images from PSA API`);
+            imageUrls = psaImages.map((img: any) => img.ImageURL).filter(Boolean);
+            
+            // Prefer front image, fallback to first available
+            const frontImage = psaImages.find((img: any) => img.ImageType?.toLowerCase().includes('front'));
+            imageUrl = frontImage?.ImageURL || psaImages[0]?.ImageURL || null;
+            
+            console.log(`Selected primary image: ${imageUrl}`);
+          } else {
+            console.log("No images found from PSA API, will try scraping for og:image");
+          }
+        }
+      } catch (apiError) {
+        console.error("PSA API error:", apiError);
+        // Will fall back to scraping
       }
+    } else {
+      console.log("PSA API token not found, skipping API calls");
+    }
+
+    // Step 2: If PSA API failed or didn't return image, fall back to scraping
+    let scrapedResult = null;
+    if (!psaApiResult || !imageUrl) {
+      console.log("Falling back to Firecrawl scraping...");
       
-      const bodySnippet = bodyText.slice(0, 500);
-      return new Response(
-        JSON.stringify({
-          ok: false,
-          error: `Firecrawl request failed (${fcResp.status})`,
-          status: fcResp.status,
-          bodySnippet,
-          errorJson,
-        }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+      const url = `https://www.psacard.com/cert/${encodeURIComponent(cert)}/psa`;
+      console.log("PSA URL to scrape:", url);
 
-    const fcJson = (await fcResp.json().catch(() => null)) as any;
-    // Firecrawl typically returns: { success: boolean, data: { html?: string, markdown?: string, ... } }
-    const data = fcJson?.data || {};
-    const html: string = data.html || data.content || "";
-    const markdown: string = data.markdown || "";
+      console.log("Getting Firecrawl API key from system settings...");
+      const { data: apiKeySetting, error: keyError } = await supabase.functions.invoke('get-system-setting', {
+        body: { 
+          keyName: 'FIRECRAWL_API_KEY',
+          fallbackSecretName: 'FIRECRAWL_API_KEY'
+        }
+      });
 
-    if (!html && !markdown) {
-      return new Response(
-        JSON.stringify({
-          ok: false,
-          error: "No content returned from Firecrawl",
-        }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+      if (keyError || !apiKeySetting?.value) {
+        console.error("FIRECRAWL_API_KEY not found, cannot scrape");
+        if (!psaApiResult) {
+          return new Response(
+            JSON.stringify({
+              ok: false,
+              error: "Both PSA API and Firecrawl scraping failed. FIRECRAWL_API_KEY not configured.",
+            }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      } else {
+        const apiKey = apiKeySetting.value;
+        console.log("Firecrawl API key found, attempting scrape...");
 
-    const source = html || markdown;
+        try {
 
-    // Attempt JSON-LD extraction first
-    const ld = html ? safeJsonLd(html) : null;
-    let title: string | undefined;
-    let player: string | undefined;
-    let setName: string | undefined;
-    let year: string | undefined;
-    let grade: string | undefined;
+          console.log("Making Firecrawl API request...");
 
-    if (ld) {
-      title = ld.name || ld.headline || ld.title;
-      const desc: string | undefined = ld.description;
-      if (desc) {
-        const yearM = desc.match(/\b(19|20)\d{2}\b/);
-        if (yearM) year = yearM[0];
-        const gradeM = desc.match(/PSA\s*([0-9]+(?:\.[0-9])?)/i);
-        if (gradeM) grade = `PSA ${gradeM[1]}`;
+          const fcResp = await fetch("https://api.firecrawl.dev/v1/scrape", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${apiKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              url,
+              formats: ["html", "markdown"],
+            }),
+          });
+
+          console.log("Firecrawl API response status:", fcResp.status);
+
+          if (fcResp.ok) {
+            const fcJson = await fcResp.json();
+            const data = fcJson?.data || {};
+            const html: string = data.html || data.content || "";
+            const markdown: string = data.markdown || "";
+
+            if (html || markdown) {
+              const htmlContent = html || markdown;
+              scrapedResult = await extractDataFromHTML(htmlContent, cert);
+              
+              // If we don't have an image yet, try to extract it from scraped content
+              if (!imageUrl && html) {
+                imageUrl = extractImageFromHTML(html);
+                if (imageUrl && !imageUrls.includes(imageUrl)) {
+                  imageUrls.push(imageUrl);
+                }
+              }
+              
+              if (!psaApiResult) {
+                source = 'scrape';
+              }
+            }
+          } else {
+            console.log(`Firecrawl failed with status: ${fcResp.status}`);
+          }
+        } catch (scrapeError) {
+          console.error("Firecrawl scraping error:", scrapeError);
+        }
       }
     }
 
-    // Fallbacks: regex scan of the HTML/Markdown
-    const text = source;
-
-    // Core fields
-    grade =
-      grade ||
-      extract(text, />\s*Grade\s*<[^>]*>[\s\S]*?<[^>]*>\s*([^<]{1,40})\s*</i) ||
-      extract(text, /PSA\s*([0-9]+(?:\.[0-9])?)/i);
-    year =
-      year ||
-      extract(text, />\s*Year\s*<[^>]*>[\s\S]*?<[^>]*>\s*(\d{4})\s*</i) ||
-      extract(text, /\b(19|20)\d{2}\b/);
-    setName = setName || extract(text, />\s*Set\s*<[^>]*>[\s\S]*?<[^>]*>\s*([^<]{1,120})\s*</i);
-
-    // Name fields
-    const cardName: string | undefined =
-      extract(text, />\s*Card\s*Name\s*<[^>]*>[\s\S]*?<[^>]*>\s*([^<]{1,120})\s*</i) ||
-      extract(text, />\s*Player\s*<[^>]*>[\s\S]*?<[^>]*>\s*([^<]{1,120})\s*</i) ||
-      player;
-
-    // Game/Sport
-    const game: string | undefined =
-      extract(
-        text,
-        />\s*(?:Sport|Game|Category)\s*<[^>]*>[\s\S]*?<[^>]*>\s*([^<]{1,80})\s*</i
-      ) || extract(text, /(?:Sport|Game|Category):\s*([A-Za-z][A-Za-z0-9\s\-\/&]+)/i);
-
-    // Card number
-    const cardNumber: string | undefined =
-      extract(
-        text,
-        />\s*(?:Card\s*(?:#|No\.?|Number))\s*<[^>]*>[\s\S]*?<[^>]*>\s*([^<]{1,40})\s*</i
-      ) || extract(text, /(?:Card\s*(?:#|No\.?|Number))[:\s]*([A-Za-z0-9\-\.]{1,20})/i);
-
-    // Additional PSA fields
-    const brandTitle: string | undefined =
-      extract(
-        text,
-        />\s*Brand\/?\s*Title\s*<[^>]*>[\s\S]*?<[^>]*>\s*([^<]{1,160})\s*</i
-      ) || extract(text, /(?:Brand\/?\s*Title)[:\s]*([^\n<]{1,160})/i);
-
-    const subject: string | undefined =
-      extract(text, />\s*Subject\s*<[^>]*>[\s\S]*?<[^>]*>\s*([^<]{1,160})\s*</i) ||
-      extract(text, /Subject[:\s]*([^\n<]{1,160})/i);
-
-    const category: string | undefined =
-      extract(text, />\s*Category\s*<[^>]*>[\s\S]*?<[^>]*>\s*([^<]{1,80})\s*</i) ||
-      extract(text, /Category[:\s]*([A-Za-z][A-Za-z0-9\s\-\/&]+)/i);
-
-    const varietyPedigree: string | undefined =
-      extract(
-        text,
-        />\s*Variety\/?\s*Pedigree\s*<[^>]*>[\s\S]*?<[^>]*>\s*([^<]{1,160})\s*</i
-      ) || extract(text, /Variety\/?\s*Pedigree[:\s]*([^\n<]{1,160})/i);
-
-    // Title: try HTML title tag or build from parts
-    title = title || extract(text, /<title>\s*([^<]+?)\s*<\/title>/i);
-    if (!title) {
-      const parts = [year, cardName, setName].filter(Boolean).join(" ");
-      title = parts || `PSA Cert ${cert}`;
+    // Step 3: Combine results and return
+    const finalResult = psaApiResult || scrapedResult;
+    
+    if (!finalResult) {
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          error: "Failed to retrieve PSA data from both API and scraping methods",
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     const result = {
       ok: true,
-      url,
-      cert: String(cert),
-      certNumber: String(cert),
-      title,
-      cardName: cardName || undefined,
-      year: year || undefined,
-      game: game || undefined,
-      cardNumber: cardNumber || undefined,
-      grade: grade || undefined,
-      category: category || undefined,
-      brandTitle: brandTitle || undefined,
-      subject: subject || undefined,
-      varietyPedigree: varietyPedigree || undefined,
-      // Back-compat fields
-      player: player || cardName || undefined,
-      set: setName || undefined,
+      url: `https://www.psacard.com/cert/${encodeURIComponent(cert)}/psa`,
+      ...finalResult,
+      imageUrl,
+      imageUrls,
+      source,
+      // Metadata
+      apiSuccess: !!psaApiResult,
+      scrapeSuccess: !!scrapedResult
     };
 
+    console.log("Final result:", JSON.stringify(result, null, 2));
     return new Response(JSON.stringify(result), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
+
   } catch (error) {
-    console.error("psa-scrape (firecrawl) error", error);
+    console.error("PSA function error:", error);
     return new Response(
       JSON.stringify({ ok: false, error: (error as Error).message }),
       {
@@ -260,3 +297,134 @@ serve(async (req) => {
     );
   }
 });
+
+function extractImageFromHTML(html: string): string | null {
+  // Try og:image first
+  const ogImageMatch = html.match(/<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/i);
+  if (ogImageMatch) {
+    console.log("Found og:image:", ogImageMatch[1]);
+    return ogImageMatch[1];
+  }
+
+  // Try JSON-LD image
+  const jsonLdMatch = html.match(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/i);
+  if (jsonLdMatch) {
+    try {
+      const jsonLd = JSON.parse(jsonLdMatch[1].trim());
+      if (jsonLd.image) {
+        const imageUrl = typeof jsonLd.image === 'string' ? jsonLd.image : jsonLd.image.url || jsonLd.image[0];
+        if (imageUrl) {
+          console.log("Found JSON-LD image:", imageUrl);
+          return imageUrl;
+        }
+      }
+    } catch (e) {
+      console.log("Could not parse JSON-LD for image");
+    }
+  }
+
+  console.log("No image found in HTML");
+  return null;
+}
+
+async function extractDataFromHTML(htmlContent: string, cert: string) {
+
+  // Attempt JSON-LD extraction first
+  const ld = safeJsonLd(htmlContent);
+  let title: string | undefined;
+  let player: string | undefined;
+  let setName: string | undefined;
+  let year: string | undefined;
+  let grade: string | undefined;
+
+  if (ld) {
+    title = ld.name || ld.headline || ld.title;
+    const desc: string | undefined = ld.description;
+    if (desc) {
+      const yearM = desc.match(/\b(19|20)\d{2}\b/);
+      if (yearM) year = yearM[0];
+      const gradeM = desc.match(/PSA\s*([0-9]+(?:\.[0-9])?)/i);
+      if (gradeM) grade = `PSA ${gradeM[1]}`;
+    }
+  }
+
+  // Fallbacks: regex scan of the HTML content
+  const text = htmlContent;
+
+  // Core fields
+  grade =
+    grade ||
+    extract(text, />\s*Grade\s*<[^>]*>[\s\S]*?<[^>]*>\s*([^<]{1,40})\s*</i) ||
+    extract(text, /PSA\s*([0-9]+(?:\.[0-9])?)/i);
+  year =
+    year ||
+    extract(text, />\s*Year\s*<[^>]*>[\s\S]*?<[^>]*>\s*(\d{4})\s*</i) ||
+    extract(text, /\b(19|20)\d{2}\b/);
+  setName = setName || extract(text, />\s*Set\s*<[^>]*>[\s\S]*?<[^>]*>\s*([^<]{1,120})\s*</i);
+
+  // Name fields
+  const cardName: string | undefined =
+    extract(text, />\s*Card\s*Name\s*<[^>]*>[\s\S]*?<[^>]*>\s*([^<]{1,120})\s*</i) ||
+    extract(text, />\s*Player\s*<[^>]*>[\s\S]*?<[^>]*>\s*([^<]{1,120})\s*</i) ||
+    player;
+
+  // Game/Sport
+  const game: string | undefined =
+    extract(
+      text,
+      />\s*(?:Sport|Game|Category)\s*<[^>]*>[\s\S]*?<[^>]*>\s*([^<]{1,80})\s*</i
+    ) || extract(text, /(?:Sport|Game|Category):\s*([A-Za-z][A-Za-z0-9\s\-\/&]+)/i);
+
+  // Card number
+  const cardNumber: string | undefined =
+    extract(
+      text,
+      />\s*(?:Card\s*(?:#|No\.?|Number))\s*<[^>]*>[\s\S]*?<[^>]*>\s*([^<]{1,40})\s*</i
+    ) || extract(text, /(?:Card\s*(?:#|No\.?|Number))[:\s]*([A-Za-z0-9\-\.]{1,20})/i);
+
+  // Additional PSA fields
+  const brandTitle: string | undefined =
+    extract(
+      text,
+      />\s*Brand\/?\s*Title\s*<[^>]*>[\s\S]*?<[^>]*>\s*([^<]{1,160})\s*</i
+    ) || extract(text, /(?:Brand\/?\s*Title)[:\s]*([^\n<]{1,160})/i);
+
+  const subject: string | undefined =
+    extract(text, />\s*Subject\s*<[^>]*>[\s\S]*?<[^>]*>\s*([^<]{1,160})\s*</i) ||
+    extract(text, /Subject[:\s]*([^\n<]{1,160})/i);
+
+  const category: string | undefined =
+    extract(text, />\s*Category\s*<[^>]*>[\s\S]*?<[^>]*>\s*([^<]{1,80})\s*</i) ||
+    extract(text, /Category[:\s]*([A-Za-z][A-Za-z0-9\s\-\/&]+)/i);
+
+  const varietyPedigree: string | undefined =
+    extract(
+      text,
+      />\s*Variety\/?\s*Pedigree\s*<[^>]*>[\s\S]*?<[^>]*>\s*([^<]{1,160})\s*</i
+    ) || extract(text, /Variety\/?\s*Pedigree[:\s]*([^\n<]{1,160})/i);
+
+  // Title: try HTML title tag or build from parts
+  title = title || extract(text, /<title>\s*([^<]+?)\s*<\/title>/i);
+  if (!title) {
+    const parts = [year, cardName, setName].filter(Boolean).join(" ");
+    title = parts || `PSA Cert ${cert}`;
+  }
+
+  return {
+    cert: String(cert),
+    certNumber: String(cert),
+    title,
+    cardName: cardName || undefined,
+    year: year || undefined,
+    game: game || undefined,
+    cardNumber: cardNumber || undefined,
+    grade: grade || undefined,
+    category: category || undefined,
+    brandTitle: brandTitle || undefined,
+    subject: subject || undefined,
+    varietyPedigree: varietyPedigree || undefined,
+    // Back-compat fields
+    player: player || cardName || undefined,
+    set: setName || undefined,
+  };
+}

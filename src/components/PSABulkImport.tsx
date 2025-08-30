@@ -22,6 +22,9 @@ interface PSAImportItem {
     brandTitle?: string;
     subject?: string;
     category?: string;
+    imageUrl?: string;
+    imageUrls?: string[];
+    source?: string;
   };
 }
 
@@ -88,6 +91,8 @@ export const PSABulkImport = () => {
         price: 0, // Default price, can be updated later
         // Set product weight: 3 oz for graded cards (PSA)
         product_weight: 3.0,
+        // Store image URLs if available
+        image_urls: item.data?.imageUrls ? JSON.stringify(item.data.imageUrls) : null,
         // New comprehensive data capture fields
         source_provider: 'psa',
         source_payload: {
@@ -155,7 +160,10 @@ export const PSABulkImport = () => {
               grade: psaData.grade,
               brandTitle: psaData.brandTitle || psaData.setName,
               subject: psaData.subject,
-              category: psaData.category
+              category: psaData.category,
+              imageUrl: psaData.imageUrl,
+              imageUrls: psaData.imageUrls || [],
+              source: psaData.source
             }
           };
 
@@ -285,8 +293,10 @@ export const PSABulkImport = () => {
                 <TableRow>
                   <TableHead>PSA Certificate</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Image</TableHead>
                   <TableHead>Title</TableHead>
                   <TableHead>Grade</TableHead>
+                  <TableHead>Source</TableHead>
                   <TableHead>Error</TableHead>
                 </TableRow>
               </TableHeader>
@@ -304,8 +314,29 @@ export const PSABulkImport = () => {
                         {item.status}
                       </span>
                     </TableCell>
+                    <TableCell>
+                      {item.data?.imageUrl ? (
+                        <img 
+                          src={item.data.imageUrl} 
+                          alt="PSA Card"
+                          className="w-12 h-16 object-cover rounded border"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                          }}
+                        />
+                      ) : '-'}
+                    </TableCell>
                     <TableCell>{item.data?.title || '-'}</TableCell>
                     <TableCell>{item.data?.grade || '-'}</TableCell>
+                    <TableCell>
+                      <span className={`px-2 py-1 rounded text-xs ${
+                        item.data?.source === 'psa_api' ? 'bg-green-100 text-green-800' :
+                        item.data?.source === 'scrape' ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-gray-100 text-gray-800'
+                      }`}>
+                        {item.data?.source || '-'}
+                      </span>
+                    </TableCell>
                     <TableCell className="text-red-600 text-sm">{item.error || '-'}</TableCell>
                   </TableRow>
                 ))}
