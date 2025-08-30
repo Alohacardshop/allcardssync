@@ -147,10 +147,10 @@ export const PSABulkImport = () => {
           updatedItems[i] = {
             ...item,
             data: {
-              title: psaData.title,
+              title: psaData.brandTitle || psaData.subject,
               year: psaData.year,
               grade: psaData.grade,
-              brandTitle: psaData.brandTitle || psaData.setName,
+              brandTitle: psaData.brandTitle,
               subject: psaData.subject,
               category: psaData.category,
               imageUrl: psaData.imageUrl,

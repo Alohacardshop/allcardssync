@@ -43,6 +43,12 @@ export const GradedCardIntake = () => {
       return;
     }
 
+    // Validate certificate number format (8-9 digits)
+    if (!/^\d{8,9}$/.test(psaCert.trim())) {
+      toast.error("PSA certificate numbers must be 8-9 digits");
+      return;
+    }
+
     const controller = new AbortController();
     setAbortController(controller);
     setFetching(true);
@@ -55,73 +61,40 @@ export const GradedCardIntake = () => {
         console.log('PSA data received successfully:', JSON.stringify(data, null, 2));
         setCardData(data);
         
-        // Enhanced field mapping with better fallbacks
-        const extractYear = (text: string) => {
-          const yearMatch = text?.match(/\b(19|20)\d{2}\b/);
-          return yearMatch ? yearMatch[0] : "";
-        };
-
-        const extractGrade = (data: any) => {
-          if (data.gradeNumeric !== undefined && data.gradeNumeric !== null) {
-            return String(data.gradeNumeric);
-          }
-          if (data.grade) {
-            const numericGrade = String(data.grade).match(/\d+(\.\d+)?/);
-            return numericGrade ? numericGrade[0] : "";
-          }
-          if (data.gradeDisplay) {
-            const numericGrade = String(data.gradeDisplay).match(/\d+(\.\d+)?/);
-            return numericGrade ? numericGrade[0] : "";
-          }
-          return "";
-        };
-
-        // Prioritize CloudFront images
-        const getBestImage = (data: any) => {
-          if (data.imageUrls?.length > 0) {
-            const cloudFrontImage = data.imageUrls.find((url: string) => 
-              url.includes('cloudfront.net') || url.includes('d1htnxwo4o0jhw.cloudfront.net')
-            );
-            return cloudFrontImage || data.imageUrls[0];
-          }
-          return data.imageUrl || null;
-        };
-
         const newFormData = {
-          brandTitle: data.brandTitle || data.title || "",
-          subject: data.subject || data.cardName || "",
-          category: data.category || data.gameRaw || "",
+          brandTitle: data.brandTitle || "",
+          subject: data.subject || "",
+          category: data.category || "",
           variant: data.varietyPedigree || "",
           cardNumber: data.cardNumber || "",
-          year: data.year || extractYear(data.title || data.brandTitle || ""),
-          grade: extractGrade(data),
-          game: data.game || (data.gameRaw?.toLowerCase().includes('pokemon') ? 'pokemon' : 
-                data.gameRaw?.toLowerCase().includes('magic') ? 'mtg' : 
-                data.game || ""),
-          certNumber: data.certNumber || psaCert,
-          price: data.psaEstimate || "",
+          year: data.year || "",
+          grade: data.grade || "",
+          game: data.category?.toLowerCase().includes('pokemon') ? 'pokemon' : 
+                data.category?.toLowerCase().includes('magic') ? 'mtg' : "",
+          certNumber: data.certNumber || psaCert.trim(),
+          price: "",
           cost: "",
           quantity: 1,
-          psaEstimate: data.psaEstimate || ""
+          psaEstimate: ""
         };
-
-        // Update card data with best image
-        const bestImage = getBestImage(data);
-        if (bestImage && bestImage !== data.imageUrl) {
-          setCardData({...data, imageUrl: bestImage});
-        }
 
         setFormData(newFormData);
 
         // Count populated fields (excluding always-populated ones like certNumber, quantity)
         const populatedCount = Object.entries(newFormData).filter(([key, value]) => 
-          value && value !== "" && key !== 'certNumber' && key !== 'quantity' && key !== 'cost'
+          value && value !== "" && key !== 'certNumber' && key !== 'quantity' && key !== 'cost' && key !== 'price' && key !== 'psaEstimate'
         ).length;
         setPopulatedFieldsCount(populatedCount);
 
-        toast.success(`Fetched via web scraping - ${populatedCount} fields populated`);
+        if (data.isValid) {
+          toast.success(`PSA certificate verified - ${populatedCount} fields populated`);
+        } else {
+          toast.warning(`PSA certificate found but invalid - ${populatedCount} fields populated`);
+        }
       } else {
-        throw new Error('Invalid response from PSA scraping service');
+        const errorMsg = data?.error || 'Invalid response from PSA scraping service';
+        console.error('PSA fetch failed:', errorMsg);
+        toast.error(`PSA fetch failed: ${errorMsg}`);
       }
     } catch (error) {
       console.error('PSA fetch error:', error);

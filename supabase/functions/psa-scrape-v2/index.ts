@@ -1,3 +1,5 @@
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+
 // Firecrawl-only PSA scraper with strict CORS, OPTIONS handling, ping, and diagnostics.
 
 const ORIGIN_WHITELIST = new Set<string>([
@@ -25,6 +27,29 @@ const json200 = (req: Request, obj: unknown) =>
 
 type FirecrawlResult = { data?: any; html?: string; markdown?: string; content?: string } | any;
 
+interface PSACertificateData {
+  certNumber: string;
+  isValid: boolean;
+  grade?: string;
+  year?: string;
+  brandTitle?: string;
+  subject?: string;
+  cardNumber?: string;
+  varietyPedigree?: string;
+  category?: string;
+  imageUrl?: string;
+  imageUrls?: string[];
+  psaUrl: string;
+  rawHtml?: string;
+  rawMarkdown?: string;
+  firecrawlResponse?: any;
+}
+
+// Initialize Supabase client
+const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
 export default async function handler(req: Request) {
   const started = Date.now();
   const hdrs = corsHeadersFor(req);
@@ -41,9 +66,41 @@ export default async function handler(req: Request) {
   }
 
   const cert = String(body?.cert ?? "").trim();
-  if (!/^\d{5,}$/.test(cert)) return json200(req, { ok:false, error:"Missing or invalid cert parameter (digits)" });
+  if (!/^\d{8,9}$/.test(cert)) return json200(req, { ok:false, error:"Invalid certificate number (must be 8-9 digits)" });
 
   const psaUrl = `https://www.psacard.com/cert/${cert}/psa`;
+  
+  // Check if we have a recent cached result (within 24 hours)
+  const { data: existingCert } = await supabase
+    .from('psa_certificates')
+    .select('*')
+    .eq('cert_number', cert)
+    .gte('scraped_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()) // 24 hours ago
+    .single();
+
+  if (existingCert) {
+    return json200(req, {
+      ok: true,
+      source: "database_cache",
+      url: psaUrl,
+      certNumber: existingCert.cert_number,
+      isValid: existingCert.is_valid,
+      grade: existingCert.grade,
+      year: existingCert.year,
+      brandTitle: existingCert.brand,
+      subject: existingCert.subject,
+      cardNumber: existingCert.card_number,
+      varietyPedigree: existingCert.variety_pedigree,
+      category: existingCert.category,
+      imageUrl: existingCert.image_url,
+      imageUrls: existingCert.image_urls,
+      diagnostics: {
+        totalMs: Date.now() - started,
+        cached: true,
+        cacheAge: Date.now() - new Date(existingCert.scraped_at).getTime()
+      }
+    });
+  }
 
   // Firecrawl key (env first)
   const tKey = Date.now();
@@ -57,6 +114,10 @@ export default async function handler(req: Request) {
     });
   }
 
+  // Log the request
+  const requestStart = Date.now();
+  const clientIP = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || 'unknown';
+
   // Firecrawl call
   const tFc = Date.now();
   const ctrl = new AbortController();
@@ -68,6 +129,8 @@ export default async function handler(req: Request) {
 
   let firecrawlStatus: number | null = null;
   let payload: FirecrawlResult | null = null;
+  let success = false;
+  let errorMessage = "";
 
   try {
     const resp = await fetch("https://api.firecrawl.dev/v1/scrape", {
@@ -78,11 +141,23 @@ export default async function handler(req: Request) {
     });
     firecrawlStatus = resp.status;
     payload = await resp.json();
+    success = true;
   } catch (e:any) {
     clearTimeout(timer);
+    errorMessage = `Firecrawl fetch error: ${e?.name || "Error"}: ${e?.message || String(e)}`;
+    
+    // Log the failed request
+    await supabase.from('psa_request_log').insert({
+      ip_address: clientIP,
+      cert_number: cert,
+      success: false,
+      response_time_ms: Date.now() - requestStart,
+      error_message: errorMessage
+    });
+
     return json200(req, {
       ok:false,
-      error:`Firecrawl fetch error: ${e?.name || "Error"}: ${e?.message || String(e)}`,
+      error: errorMessage,
       diagnostics:{ hadApiKey:true, firecrawlStatus, firecrawlMs: Date.now()-tFc, settingsMs, totalMs: Date.now()-started }
     });
   } finally {
@@ -95,9 +170,20 @@ export default async function handler(req: Request) {
   const markdown: string = data?.markdown || payload?.markdown || "";
 
   if (!html && !markdown) {
+    errorMessage = "No html/markdown returned from Firecrawl";
+    
+    // Log the failed request
+    await supabase.from('psa_request_log').insert({
+      ip_address: clientIP,
+      cert_number: cert,
+      success: false,
+      response_time_ms: Date.now() - requestStart,
+      error_message: errorMessage
+    });
+
     return json200(req, {
       ok:false,
-      error:"No html/markdown returned from Firecrawl",
+      error: errorMessage,
       diagnostics:{ hadApiKey:true, firecrawlStatus, firecrawlMs, settingsMs, totalMs: Date.now()-started }
     });
   }
@@ -105,14 +191,25 @@ export default async function handler(req: Request) {
   const text = (html || markdown).replace(/\s+/g, " ").trim();
   const pick = (re: RegExp) => (text.match(re)?.[1] || "").trim() || null;
 
-  const norm = {
+  // Enhanced parsing with better patterns
+  const isValid = text.includes('PSA Certification Verification') && 
+                 !text.includes('not found') && 
+                 !text.includes('No results found');
+
+  const norm: PSACertificateData = {
     certNumber: cert,
-    grade:           pick(/Item Grade[:\s]*([A-Z0-9\s.+/-]+)/i),
-    year:            pick(/Year[:\s]*([0-9]{4})/i),
-    brandTitle:      pick(/Brand\/Title[:\s]*([A-Z0-9\s\-&'!:\/.]+)/i),
-    subject:         pick(/Subject[:\s]*([A-Z0-9\s\-&'!:\/.]+)/i),
-    cardNumber:      pick(/Card Number[:\s]*([A-Z0-9\-]+)\b/i),
-    varietyPedigree: pick(/Variety\/Pedigree[:\s]*([A-Z0-9\s\-&'!:\/.]+)/i),
+    isValid,
+    grade: pick(/Item Grade[:\s]*([A-Z0-9\s.+/-]+)/i),
+    year: pick(/Year[:\s]*([0-9]{4})/i),
+    brandTitle: pick(/Brand\/Title[:\s]*([^\n\r]+)/i),
+    subject: pick(/Subject[:\s]*([^\n\r]+)/i),
+    cardNumber: pick(/Card Number[:\s]*([A-Z0-9\-#]+)/i),
+    varietyPedigree: pick(/Variety\/Pedigree[:\s]*([^\n\r]+)/i),
+    category: pick(/Category[:\s]*([^\n\r]+)/i),
+    psaUrl,
+    rawHtml: html,
+    rawMarkdown: markdown,
+    firecrawlResponse: payload
   };
 
   const imgs: string[] = [];
@@ -126,13 +223,51 @@ export default async function handler(req: Request) {
     }
   }
 
+  norm.imageUrl = imgs[0] ?? null;
+  norm.imageUrls = imgs;
+
+  // Save to database
+  const { error: dbError } = await supabase
+    .from('psa_certificates')
+    .upsert({
+      cert_number: cert,
+      is_valid: norm.isValid,
+      grade: norm.grade,
+      year: norm.year,
+      brand: norm.brandTitle,
+      subject: norm.subject,
+      card_number: norm.cardNumber,
+      variety_pedigree: norm.varietyPedigree,
+      category: norm.category,
+      psa_url: norm.psaUrl,
+      image_url: norm.imageUrl,
+      image_urls: norm.imageUrls,
+      raw_html: norm.rawHtml,
+      raw_markdown: norm.rawMarkdown,
+      firecrawl_response: norm.firecrawlResponse,
+      scraped_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }, {
+      onConflict: 'cert_number'
+    });
+
+  if (dbError) {
+    console.error("Database save error:", dbError);
+  }
+
+  // Log the successful request
+  await supabase.from('psa_request_log').insert({
+    ip_address: clientIP,
+    cert_number: cert,
+    success: true,
+    response_time_ms: Date.now() - requestStart
+  });
+
   return json200(req, {
     ok: true,
     source: data?.extract && html ? "firecrawl_structured" : "firecrawl_html",
     url: psaUrl,
     ...norm,
-    imageUrl: imgs[0] ?? null,
-    imageUrls: imgs,
     diagnostics: {
       hadApiKey: true,
       firecrawlStatus,
@@ -142,6 +277,7 @@ export default async function handler(req: Request) {
       proxyMode,
       formats,
       usedCache: typeof (data?.cached ?? data?.meta?.cached) === "boolean" ? (data.cached ?? data.meta.cached) : undefined,
+      dbSaved: !dbError
     },
   });
 }

@@ -152,6 +152,9 @@ export type Database = {
           processing_notes: string | null
           product_weight: number | null
           psa_cert: string | null
+          psa_cert_number: string | null
+          psa_last_check: string | null
+          psa_verified: boolean | null
           pushed_at: string | null
           quantity: number
           shopify_inventory_item_id: string | null
@@ -193,6 +196,9 @@ export type Database = {
           processing_notes?: string | null
           product_weight?: number | null
           psa_cert?: string | null
+          psa_cert_number?: string | null
+          psa_last_check?: string | null
+          psa_verified?: boolean | null
           pushed_at?: string | null
           quantity?: number
           shopify_inventory_item_id?: string | null
@@ -234,6 +240,9 @@ export type Database = {
           processing_notes?: string | null
           product_weight?: number | null
           psa_cert?: string | null
+          psa_cert_number?: string | null
+          psa_last_check?: string | null
+          psa_verified?: boolean | null
           pushed_at?: string | null
           quantity?: number
           shopify_inventory_item_id?: string | null
@@ -654,6 +663,102 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      psa_certificates: {
+        Row: {
+          brand: string | null
+          card_number: string | null
+          category: string | null
+          cert_number: string
+          created_at: string | null
+          firecrawl_response: Json | null
+          grade: string | null
+          id: string
+          image_url: string | null
+          image_urls: Json | null
+          is_valid: boolean
+          psa_url: string | null
+          raw_html: string | null
+          raw_markdown: string | null
+          scraped_at: string
+          subject: string | null
+          updated_at: string | null
+          variety_pedigree: string | null
+          year: string | null
+        }
+        Insert: {
+          brand?: string | null
+          card_number?: string | null
+          category?: string | null
+          cert_number: string
+          created_at?: string | null
+          firecrawl_response?: Json | null
+          grade?: string | null
+          id?: string
+          image_url?: string | null
+          image_urls?: Json | null
+          is_valid?: boolean
+          psa_url?: string | null
+          raw_html?: string | null
+          raw_markdown?: string | null
+          scraped_at?: string
+          subject?: string | null
+          updated_at?: string | null
+          variety_pedigree?: string | null
+          year?: string | null
+        }
+        Update: {
+          brand?: string | null
+          card_number?: string | null
+          category?: string | null
+          cert_number?: string
+          created_at?: string | null
+          firecrawl_response?: Json | null
+          grade?: string | null
+          id?: string
+          image_url?: string | null
+          image_urls?: Json | null
+          is_valid?: boolean
+          psa_url?: string | null
+          raw_html?: string | null
+          raw_markdown?: string | null
+          scraped_at?: string
+          subject?: string | null
+          updated_at?: string | null
+          variety_pedigree?: string | null
+          year?: string | null
+        }
+        Relationships: []
+      }
+      psa_request_log: {
+        Row: {
+          cert_number: string | null
+          created_at: string | null
+          error_message: string | null
+          id: string
+          ip_address: string | null
+          response_time_ms: number | null
+          success: boolean | null
+        }
+        Insert: {
+          cert_number?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          ip_address?: string | null
+          response_time_ms?: number | null
+          success?: boolean | null
+        }
+        Update: {
+          cert_number?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          ip_address?: string | null
+          response_time_ms?: number | null
+          success?: boolean | null
+        }
+        Relationships: []
       }
       sets: {
         Row: {
