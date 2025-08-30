@@ -24,6 +24,50 @@ function buildTitleFromParts(
     .trim();
 }
 
+// Helper to extract grading company and grade from various sources
+function extractGrading(item: any): { company?: string; grade?: string } {
+  // Check item.grade first (e.g., "PSA 10", "BGS 9.5", "CGC 8")
+  if (item.grade) {
+    const gradeMatch = item.grade.match(/^(PSA|BGS|CGC|SGC)\s*(\d+(?:\.\d+)?)/i);
+    if (gradeMatch) {
+      return { company: gradeMatch[1].toUpperCase(), grade: gradeMatch[2] };
+    }
+  }
+  
+  // If we have psa_cert, assume PSA
+  if (item.psa_cert) {
+    // Try to extract grade from other fields or assume it's PSA
+    const gradeFromGradeField = item.grade?.match(/(\d+(?:\.\d+)?)/);
+    return { 
+      company: "PSA", 
+      grade: gradeFromGradeField ? gradeFromGradeField[1] : undefined 
+    };
+  }
+  
+  // Check if grading_data exists with company/grade
+  if (item.grading_data?.company && item.grading_data?.grade) {
+    return { 
+      company: item.grading_data.company.toUpperCase(), 
+      grade: String(item.grading_data.grade) 
+    };
+  }
+  
+  return {};
+}
+
+// Helper to normalize game tag from category
+function normalizeGameTag(category?: string | null): string {
+  if (!category) return "TCG";
+  
+  const normalized = category.toLowerCase();
+  if (normalized.includes("pokemon")) return "Pokemon";
+  if (normalized.includes("magic") || normalized.includes("mtg")) return "Magic: The Gathering";
+  if (normalized.includes("yugioh") || normalized.includes("yu-gi-oh")) return "Yu-Gi-Oh!";
+  
+  // Capitalize first letter
+  return category.charAt(0).toUpperCase() + category.slice(1);
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -117,25 +161,59 @@ Deno.serve(async (req) => {
         body = product.tcgplayer_data?.description || title;
         imageUrl = product.tcgplayer_data?.imageUrl || null;
         handle = `product-${productId}`;
-        tags = [setName, gameName, item.category, "single", "raw", item.lot_number].filter(Boolean);
+        // Build tags for raw singles - no lot number, add condition and printing
+        const gameTag = normalizeGameTag(item.category);
+        tags = [setName, gameName, gameTag, "single", "raw", condition];
+        
+        // Add printing info if available and not "Normal"
+        if (printing && printing.toLowerCase() !== "normal" && printing.toLowerCase() !== "nm") {
+          tags.push(printing);
+        }
+        
+        // Remove empty/null tags
+        tags = tags.filter(Boolean);
         
         // Extract image URL from tcgplayer_data if available
         if (product.tcgplayer_data?.imageUrl) {
           imageUrl = product.tcgplayer_data.imageUrl;
         }
       } else {
-        // Fallback if product not found
+        // Fallback if product not found - no lot number
+        const gameTag = normalizeGameTag(item.category);
         title = item.sku;
         body = title;
         handle = `product-${productId}`;
-        tags = [item.category, "single", "raw", item.lot_number].filter(Boolean);
+        tags = [gameTag, "single", "raw", condition].filter(Boolean);
       }
     } else {
-      // Original logic for graded cards
+      // Logic for graded cards - build tags with game and grading info
+      const gameTag = normalizeGameTag(item.category);
+      const { company: gradeCompany, grade: gradeValue } = extractGrading(item);
+      
       title = buildTitleFromParts(item.year, item.brand_title, item.card_number, item.subject, item.variant) || item.sku || item.lot_number;
       body = title;
       handle = item.sku || item.psa_cert || item.lot_number || "";
-      tags = [item.category, item.grade, item.year, "graded", item.lot_number].filter(Boolean);
+      
+      // Build tags for graded cards - no lot number, add grading details
+      tags = [gameTag, "graded"];
+      
+      // Add year if available
+      if (item.year) {
+        tags.push(item.year);
+      }
+      
+      // Add grading company and grade if available
+      if (gradeCompany) {
+        tags.push(gradeCompany);
+        
+        if (gradeValue) {
+          tags.push(gradeValue);
+          tags.push(`${gradeCompany} ${gradeValue}`); // Combined tag like "PSA 10"
+        }
+      }
+      
+      // Remove empty/null tags
+      tags = tags.filter(Boolean);
     }
     
     const price = item.price != null ? Number(item.price) : 0;
@@ -249,7 +327,7 @@ Deno.serve(async (req) => {
               option1: condition,
               price: String(price),
               sku,
-              barcode: sku || item.lot_number,
+               barcode: sku,
               inventory_management: "shopify",
               requires_shipping: true,
               weight: weight,
@@ -269,7 +347,7 @@ Deno.serve(async (req) => {
               id: Number(shopifyVariantId),
               price: String(price),
               sku,
-              barcode: sku || item.lot_number,
+               barcode: sku,
               weight: weight,
               weight_unit: "oz",
             },
@@ -290,7 +368,7 @@ Deno.serve(async (req) => {
               option1: condition,
               price: String(price),
               sku,
-              barcode: sku || item.lot_number,
+              barcode: sku,
               inventory_management: "shopify",
               requires_shipping: true,
               weight: weight,
@@ -396,7 +474,7 @@ Deno.serve(async (req) => {
               id: Number(shopifyVariantId), 
               price: String(price), 
               sku,
-              barcode: item.psa_cert || sku || item.lot_number
+               barcode: item.psa_cert || sku,
             } 
           }),
         });
@@ -416,7 +494,7 @@ Deno.serve(async (req) => {
                 {
                   price: String(price ?? 0),
                   sku,
-                  barcode: item.psa_cert || sku || item.lot_number,
+                  barcode: item.psa_cert || sku,
                   inventory_management: "shopify",
                   requires_shipping: true,
                   weight: weight,
