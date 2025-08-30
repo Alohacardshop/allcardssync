@@ -121,64 +121,13 @@ serve(async (req) => {
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Step 1: Try PSA Public API first
-    console.log("Attempting PSA Public API...");
+    // Step 1: Primary method - Use Firecrawl scraping first
+    console.log("Attempting Firecrawl scraping as primary method...");
     
-    // Get PSA API token
-    const { data: apiTokenSetting, error: tokenError } = await supabase.functions.invoke('get-system-setting', {
-      body: { 
-        keyName: 'PSA_PUBLIC_API_TOKEN',
-        fallbackSecretName: 'PSA_PUBLIC_API_TOKEN'
-      }
-    });
-
-    let psaApiResult = null;
+    let scrapedResult = null;
     let imageUrl = null;
     let imageUrls = [];
-    let source = 'scrape'; // Default fallback
-
-    if (!tokenError && apiTokenSetting?.value) {
-      console.log("PSA API token found, attempting API calls...");
-      const apiToken = apiTokenSetting.value;
-
-      try {
-        // Fetch card data and images in parallel
-        const [psaCard, psaImages] = await Promise.all([
-          fetchPSACardData(cert, apiToken),
-          fetchPSAImages(cert, apiToken)
-        ]);
-
-        if (psaCard) {
-          console.log("PSA API card data retrieved successfully");
-          psaApiResult = mapPSACardData(psaCard);
-          source = 'psa_api';
-
-          // Process images if available
-          if (psaImages && psaImages.length > 0) {
-            console.log(`Found ${psaImages.length} images from PSA API`);
-            imageUrls = psaImages.map((img: any) => img.ImageURL).filter(Boolean);
-            
-            // Prefer front image, fallback to first available
-            const frontImage = psaImages.find((img: any) => img.ImageType?.toLowerCase().includes('front'));
-            imageUrl = frontImage?.ImageURL || psaImages[0]?.ImageURL || null;
-            
-            console.log(`Selected primary image: ${imageUrl}`);
-          } else {
-            console.log("No images found from PSA API, will try scraping for og:image");
-          }
-        }
-      } catch (apiError) {
-        console.error("PSA API error:", apiError);
-        // Will fall back to scraping
-      }
-    } else {
-      console.log("PSA API token not found, skipping API calls");
-    }
-
-    // Step 2: If PSA API failed or didn't return image, fall back to scraping
-    let scrapedResult = null;
-    if (!psaApiResult || !imageUrl) {
-      console.log("Falling back to Firecrawl scraping...");
+    let source = 'scrape';
       
       const url = `https://www.psacard.com/cert/${encodeURIComponent(cert)}/psa`;
       console.log("PSA URL to scrape:", url);
@@ -192,22 +141,12 @@ serve(async (req) => {
       });
 
       if (keyError || !apiKeySetting?.value) {
-        console.error("FIRECRAWL_API_KEY not found, cannot scrape");
-        if (!psaApiResult) {
-          return new Response(
-            JSON.stringify({
-              ok: false,
-              error: "Both PSA API and Firecrawl scraping failed. FIRECRAWL_API_KEY not configured.",
-            }),
-            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
+        console.error("FIRECRAWL_API_KEY not found, will try PSA API as fallback");
       } else {
         const apiKey = apiKeySetting.value;
         console.log("Firecrawl API key found, attempting scrape...");
 
         try {
-
           console.log("Making Firecrawl API request...");
 
           const fcResp = await fetch("https://api.firecrawl.dev/v1/scrape", {
@@ -234,17 +173,15 @@ serve(async (req) => {
               const htmlContent = html || markdown;
               scrapedResult = await extractDataFromHTML(htmlContent, cert);
               
-              // If we don't have an image yet, try to extract it from scraped content
-              if (!imageUrl && html) {
+              // Extract image from scraped content
+              if (html) {
                 imageUrl = extractImageFromHTML(html);
-                if (imageUrl && !imageUrls.includes(imageUrl)) {
+                if (imageUrl) {
                   imageUrls.push(imageUrl);
                 }
               }
               
-              if (!psaApiResult) {
-                source = 'scrape';
-              }
+              console.log("Firecrawl scraping successful");
             }
           } else {
             console.log(`Firecrawl failed with status: ${fcResp.status}`);
@@ -253,10 +190,59 @@ serve(async (req) => {
           console.error("Firecrawl scraping error:", scrapeError);
         }
       }
+
+    // Step 2: If Firecrawl failed, fall back to PSA API
+    let psaApiResult = null;
+    if (!scrapedResult) {
+      console.log("Firecrawl failed, falling back to PSA API...");
+      
+      // Get PSA API token
+      const { data: apiTokenSetting, error: tokenError } = await supabase.functions.invoke('get-system-setting', {
+        body: { 
+          keyName: 'PSA_PUBLIC_API_TOKEN',
+          fallbackSecretName: 'PSA_PUBLIC_API_TOKEN'
+        }
+      });
+
+      if (!tokenError && apiTokenSetting?.value) {
+        console.log("PSA API token found, attempting API calls...");
+        const apiToken = apiTokenSetting.value;
+
+        try {
+          // Fetch card data and images in parallel
+          const [psaCard, psaImages] = await Promise.all([
+            fetchPSACardData(cert, apiToken),
+            fetchPSAImages(cert, apiToken)
+          ]);
+
+          if (psaCard) {
+            console.log("PSA API card data retrieved successfully");
+            psaApiResult = mapPSACardData(psaCard);
+            source = 'psa_api';
+
+            // Process images if available and we don't have one from scraping
+            if (psaImages && psaImages.length > 0 && !imageUrl) {
+              console.log(`Found ${psaImages.length} images from PSA API`);
+              const apiImageUrls = psaImages.map((img: any) => img.ImageURL).filter(Boolean);
+              imageUrls.push(...apiImageUrls);
+              
+              // Prefer front image, fallback to first available
+              const frontImage = psaImages.find((img: any) => img.ImageType?.toLowerCase().includes('front'));
+              imageUrl = frontImage?.ImageURL || psaImages[0]?.ImageURL || null;
+              
+              console.log(`Selected primary image from API: ${imageUrl}`);
+            }
+          }
+        } catch (apiError) {
+          console.error("PSA API error:", apiError);
+        }
+      } else {
+        console.log("PSA API token not found, skipping API calls");
+      }
     }
 
     // Step 3: Combine results and return
-    const finalResult = psaApiResult || scrapedResult;
+    const finalResult = scrapedResult || psaApiResult;
     
     if (!finalResult) {
       return new Response(
