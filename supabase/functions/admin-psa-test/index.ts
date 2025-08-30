@@ -141,8 +141,8 @@ Deno.serve(async (req) => {
     }
 
     // Test GetImagesByCertNumber endpoint
+    let imageStart = Date.now();
     try {
-      const imageStart = Date.now();
       const imageResponse = await fetch(`https://api.psacard.com/publicapi/cert/GetImagesByCertNumber/${cert}`, {
         headers: {
           'Authorization': `bearer ${apiToken}`,

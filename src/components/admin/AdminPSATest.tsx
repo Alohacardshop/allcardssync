@@ -55,7 +55,29 @@ export function AdminPSATest() {
       });
 
       if (error) throw error;
-      setResult(data);
+      
+      // Transform the response to match our interface
+      const results = data.results;
+      const transformedResult: PSATestResult = {
+        success: true,
+        cert: results.cert,
+        card_data: results.api_responses?.card_data,
+        image_data: results.api_responses?.image_data,
+        summary: results.normalized_data?.card ? {
+          grade: results.normalized_data.card.grade?.toString(),
+          year: results.normalized_data.card.year?.toString(),
+          subject: results.normalized_data.card.subject,
+          brand_set: results.normalized_data.card.brandTitle,
+          population_higher: results.normalized_data.card.popHigher,
+          population_same: results.normalized_data.card.totalPopulation,
+          source: 'PSA Public API'
+        } : undefined,
+        images: results.normalized_data?.images?.map((img: any) => img.url),
+        timing: results.timing,
+        errors: results.errors?.length > 0 ? results.errors : undefined
+      };
+      
+      setResult(transformedResult);
     } catch (error: any) {
       toast({
         title: "Test Failed",
