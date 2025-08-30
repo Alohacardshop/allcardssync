@@ -185,7 +185,58 @@ serve(async (req) => {
     const body = await req.json();
     console.log("Request:", JSON.stringify(body, null, 2));
     
-    const { cert } = body;
+    const { cert, mode } = body;
+    
+    // Handle API connection test
+    if (mode === "ping" || cert === "test") {
+      console.log("Ping mode - checking Firecrawl API key availability");
+      
+      // Get Supabase client
+      const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+      const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+      // Check for Firecrawl API key
+      let apiKey = Deno.env.get("FIRECRAWL_API_KEY");
+      
+      if (!apiKey) {
+        try {
+          const { data: apiKeySetting } = await supabase.functions.invoke('get-system-setting', {
+            body: { 
+              keyName: 'FIRECRAWL_API_KEY',
+              fallbackSecretName: 'FIRECRAWL_API_KEY'
+            }
+          });
+          
+          if (apiKeySetting?.value) {
+            apiKey = apiKeySetting.value;
+          }
+        } catch (settingsError) {
+          console.error("Failed to get system settings:", settingsError);
+        }
+      }
+
+      if (!apiKey) {
+        return new Response(JSON.stringify({ 
+          ok: false, 
+          error: "Firecrawl API key not configured. Please add FIRECRAWL_API_KEY to system settings.",
+          diagnostic: "api_key_missing"
+        }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      return new Response(JSON.stringify({ 
+        ok: true, 
+        message: "Firecrawl API key is configured",
+        diagnostic: "api_key_found"
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    
     if (!cert) {
       console.log("Missing cert parameter");
       return new Response(JSON.stringify({ ok: false, error: "Missing cert parameter" }), {
@@ -424,7 +475,7 @@ serve(async (req) => {
       ...cardData,
       imageUrl,
       imageUrls,
-      source: 'firecrawl_structured',
+      source: extractData && Object.keys(extractData).length > 0 ? 'firecrawl_structured' : 'firecrawl_html',
       scrapeSuccess: true
     };
 

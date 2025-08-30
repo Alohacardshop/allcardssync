@@ -17,3 +17,6 @@ verify_jwt = false
 # Admin functions require JWT and role verification
 [functions.admin-psa-test]
 verify_jwt = true
+
+[functions.psa-scrape]
+verify_jwt = true

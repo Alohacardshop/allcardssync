@@ -8,8 +8,9 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { supabase } from "@/integrations/supabase/client";
-import { Copy, ChevronDown, ChevronRight, AlertTriangle, CheckCircle, Clock, Image } from "lucide-react";
+import { Copy, ChevronDown, ChevronRight, AlertTriangle, CheckCircle, Clock, Image, Settings, Zap } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { Switch } from "@/components/ui/switch";
 
 interface PSATestResult {
   success: boolean;
@@ -40,7 +41,43 @@ export function AdminPSATest() {
   const [result, setResult] = useState<PSATestResult | null>(null);
   const [showCardData, setShowCardData] = useState(false);
   const [showImageData, setShowImageData] = useState(false);
+  const [useOfficialAPI, setUseOfficialAPI] = useState(false);
+  const [checkingAPI, setCheckingAPI] = useState(false);
   const { toast } = useToast();
+
+  const checkFirecrawlAPI = async () => {
+    setCheckingAPI(true);
+    try {
+      console.log("Checking Firecrawl API connection...");
+      const { data, error } = await supabase.functions.invoke('psa-scrape', {
+        body: { cert: "test", mode: "ping" }
+      });
+
+      if (error) throw error;
+
+      if (data.ok) {
+        toast({
+          title: "API Connected ✓",
+          description: "Firecrawl API is properly configured and accessible",
+        });
+      } else {
+        toast({
+          title: "API Issue",
+          description: data.error || "Firecrawl API returned an error",
+          variant: "destructive"
+        });
+      }
+    } catch (error: any) {
+      console.error("Firecrawl API check error:", error);
+      toast({
+        title: "API Check Failed",
+        description: error.message || "Failed to check Firecrawl API",
+        variant: "destructive"
+      });
+    } finally {
+      setCheckingAPI(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,10 +87,12 @@ export function AdminPSATest() {
     setResult(null);
 
     const startTime = Date.now();
+    const apiType = useOfficialAPI ? "Official PSA API" : "Firecrawl Scraper";
 
     try {
-      console.log("Testing PSA scraper with Firecrawl...");
-      const { data, error } = await supabase.functions.invoke('psa-scrape', {
+      console.log(`Testing PSA with ${apiType}...`);
+      const functionName = useOfficialAPI ? 'admin-psa-test' : 'psa-scrape';
+      const { data, error } = await supabase.functions.invoke(functionName, {
         body: { cert: cert.trim() }
       });
 
@@ -64,42 +103,71 @@ export function AdminPSATest() {
       console.log("PSA scrape response:", data);
       
       // Transform the response to match our interface
-      const transformedResult: PSATestResult = {
-        success: data.ok || false,
-        cert: data.cert || cert.trim(),
-        card_data: data, // The entire response is the card data
-        summary: data.ok ? {
-          grade: data.gradeDisplay || data.grade,
-          year: data.year,
-          subject: data.subject || data.cardName,
-          brand_set: data.brandTitle || data.set,
-          source: data.source === 'firecrawl_structured' ? 'Firecrawl Structured' : 'Firecrawl HTML'
-        } : undefined,
-        images: data.imageUrls || (data.imageUrl ? [data.imageUrl] : []),
-        timing: {
-          total_ms: totalTime
-        },
-        errors: !data.ok ? [data.error || "Unknown error"] : undefined
-      };
+      let transformedResult: PSATestResult;
+      
+      if (useOfficialAPI) {
+        // Handle Official PSA API response
+        const results = data.results;
+        transformedResult = {
+          success: true,
+          cert: results.cert,
+          card_data: results.api_responses?.card_data,
+          image_data: results.api_responses?.image_data,
+          summary: results.normalized_data?.card ? {
+            grade: results.normalized_data.card.grade?.toString(),
+            year: results.normalized_data.card.year?.toString(),
+            subject: results.normalized_data.card.subject,
+            brand_set: results.normalized_data.card.brandTitle,
+            population_higher: results.normalized_data.card.popHigher,
+            population_same: results.normalized_data.card.totalPopulation,
+            source: 'PSA Public API'
+          } : undefined,
+          images: results.normalized_data?.images?.map((img: any) => img.url),
+          timing: results.timing,
+          errors: results.errors?.length > 0 ? results.errors : undefined
+        };
+      } else {
+        // Handle Firecrawl Scraper response
+        transformedResult = {
+          success: data.ok || false,
+          cert: data.cert || cert.trim(),
+          card_data: data, // The entire response is the card data
+          summary: data.ok ? {
+            grade: data.gradeDisplay || data.grade,
+            year: data.year,
+            subject: data.subject || data.cardName,
+            brand_set: data.brandTitle || data.set,
+            source: data.source === 'firecrawl_structured' ? 'Firecrawl Structured' : 
+                   data.source === 'firecrawl_html' ? 'Firecrawl HTML' : 'Firecrawl'
+          } : undefined,
+          images: data.imageUrls || (data.imageUrl ? [data.imageUrl] : []),
+          timing: {
+            total_ms: totalTime
+          },
+          errors: !data.ok ? [data.error || "Unknown error"] : undefined
+        };
+      }
       
       setResult(transformedResult);
 
-      if (data.ok) {
+      if (transformedResult.success) {
+        const sourceType = useOfficialAPI ? 'PSA Public API' : 
+          (data.source === 'firecrawl_structured' ? 'Firecrawl structured extraction' : 'Firecrawl HTML parsing');
         toast({
           title: "Success!",
-          description: `PSA data extracted successfully using ${data.source === 'firecrawl_structured' ? 'Firecrawl structured extraction' : 'Firecrawl HTML parsing'}`,
+          description: `PSA data extracted successfully using ${sourceType}`,
         });
       }
     } catch (error: any) {
       console.error("PSA test error:", error);
       toast({
         title: "Test Failed",
-        description: error.message || "Failed to test PSA scraper",
+        description: error.message || `Failed to test ${apiType}`,
         variant: "destructive"
       });
       setResult({
         success: false,
-        errors: [error.message || "Failed to test PSA scraper"]
+        errors: [error.message || `Failed to test ${apiType}`]
       });
     } finally {
       setLoading(false);
@@ -124,9 +192,45 @@ export function AdminPSATest() {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>PSA API Test</CardTitle>
+          <CardTitle className="flex items-center justify-between">
+            PSA API Test
+            <div className="flex items-center gap-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={checkFirecrawlAPI}
+                disabled={checkingAPI}
+              >
+                {checkingAPI ? <LoadingSpinner size="sm" text="" /> : <Settings className="h-4 w-4 mr-2" />}
+                Check Firecrawl API
+              </Button>
+            </div>
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* API Source Toggle */}
+          <div className="flex items-center justify-between p-3 border rounded-lg">
+            <div className="flex items-center space-x-3">
+              <Zap className="h-4 w-4" />
+              <Label htmlFor="api-toggle" className="text-sm font-medium">
+                {useOfficialAPI ? "Official PSA API" : "Firecrawl Scraper"}
+              </Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Label htmlFor="api-toggle" className="text-xs text-muted-foreground">
+                Scraper
+              </Label>
+              <Switch
+                id="api-toggle"
+                checked={useOfficialAPI}
+                onCheckedChange={setUseOfficialAPI}
+              />
+              <Label htmlFor="api-toggle" className="text-xs text-muted-foreground">
+                Official
+              </Label>
+            </div>
+          </div>
+
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="cert">PSA Certificate Number</Label>
@@ -136,7 +240,7 @@ export function AdminPSATest() {
                   value={cert}
                   onChange={(e) => setCert(e.target.value)}
                   onKeyPress={handleKeyPress}
-                  placeholder="Enter PSA certificate number (e.g., 12345678)"
+                  placeholder="Enter PSA certificate number (e.g., 118372000)"
                   disabled={loading}
                 />
                 <Button type="submit" disabled={loading || !cert.trim()}>
@@ -231,7 +335,7 @@ export function AdminPSATest() {
                       <img
                         key={index}
                         src={url}
-                        alt={`PSA Certificate ${index + 1}`}
+                         alt={`PSA Certificate ${index + 1}`}
                         className="h-24 w-auto rounded border"
                         onError={(e) => {
                           e.currentTarget.style.display = 'none';
