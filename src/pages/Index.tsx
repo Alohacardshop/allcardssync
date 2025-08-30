@@ -31,6 +31,9 @@ import {
 import { SystemStats } from "@/components/SystemStats";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { Navigation } from "@/components/Navigation";
+import { GradedCardIntake } from "@/components/GradedCardIntake";
+import { RawCardIntake } from "@/components/RawCardIntake";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface IntakeItem {
   id: string;
@@ -224,16 +227,10 @@ export default function Index() {
         <div className="flex items-center justify-between">
           <h1 className="text-3xl font-bold">Dashboard</h1>
           <div className="flex gap-2">
-            <Link to="/bulk-import#graded">
+            <Link to="/bulk-import">
               <Button variant="outline" size="sm">
                 <Plus className="h-4 w-4 mr-2" />
-                Add Graded
-              </Button>
-            </Link>
-            <Link to="/bulk-import#raw">
-              <Button variant="outline" size="sm">
-                <Plus className="h-4 w-4 mr-2" />
-                Add Raw
+                Bulk Import
               </Button>
             </Link>
             {selectedItems.size > 0 && (
@@ -311,6 +308,31 @@ export default function Index() {
         
         <SystemStats />
 
+        {/* Single Card Entry Forms */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Single Card Entry</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Add individual graded or raw cards to inventory
+            </p>
+          </CardHeader>
+          <CardContent>
+            <Tabs defaultValue="graded" className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="graded">Graded Card</TabsTrigger>
+                <TabsTrigger value="raw">Raw Card</TabsTrigger>
+              </TabsList>
+              <TabsContent value="graded" className="mt-6">
+                <GradedCardIntake />
+              </TabsContent>
+              <TabsContent value="raw" className="mt-6">
+                <RawCardIntake />
+              </TabsContent>
+            </Tabs>
+          </CardContent>
+        </Card>
+
+        {/* Recent Inventory Items */}
         <Card>
         <CardHeader>
           <div className="flex items-center justify-between">

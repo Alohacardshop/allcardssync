@@ -6,10 +6,21 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Navigation } from "@/components/Navigation";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Search, Package, DollarSign, Calendar, Eye, History } from "lucide-react";
+import { Search, Package, DollarSign, Calendar, Eye, History, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 
 interface IntakeLot {
@@ -67,7 +78,32 @@ export default function Batches() {
   const [selectedLot, setSelectedLot] = useState<IntakeLot | null>(null);
   const [lotItems, setLotItems] = useState<IntakeItem[]>([]);
   const [loadingItems, setLoadingItems] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [deletingBatch, setDeletingBatch] = useState<string | null>(null);
   const { toast } = useToast();
+
+  // Check if user is admin
+  useEffect(() => {
+    const checkAdminStatus = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data, error } = await supabase
+            .from('user_roles')
+            .select('role')
+            .eq('user_id', user.id)
+            .eq('role', 'admin')
+            .single();
+          
+          setIsAdmin(!!data && !error);
+        }
+      } catch (error) {
+        console.error('Error checking admin status:', error);
+      }
+    };
+
+    checkAdminStatus();
+  }, []);
 
   const fetchLots = async () => {
     try {
@@ -117,6 +153,50 @@ export default function Batches() {
   useEffect(() => {
     fetchLots();
   }, []);
+
+  const handleDeleteBatch = async (lotId: string, lotNumber: string) => {
+    if (!isAdmin) {
+      toast({
+        title: "Access Denied",
+        description: "Admin role required to delete batches",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setDeletingBatch(lotId);
+    try {
+      const { data, error } = await supabase.rpc('admin_delete_batch', {
+        lot_id_in: lotId,
+        reason_in: `Batch ${lotNumber} deleted via admin interface`
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Batch Deleted",
+        description: `Batch ${lotNumber} and ${data} items have been deleted`,
+      });
+
+      // Refresh the lots list
+      await fetchLots();
+      
+      // Close the modal if it was open
+      if (selectedLot?.id === lotId) {
+        setSelectedLot(null);
+      }
+
+    } catch (error) {
+      console.error('Error deleting batch:', error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to delete batch",
+        variant: "destructive",
+      });
+    } finally {
+      setDeletingBatch(null);
+    }
+  };
 
   const filteredLots = lots.filter(lot => {
     const matchesSearch = searchTerm === "" || 
@@ -291,13 +371,47 @@ export default function Batches() {
                       </TableCell>
                       <TableCell>{format(new Date(lot.created_at), 'MMM d, yyyy')}</TableCell>
                       <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleViewLot(lot)}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
+                        <div className="flex gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleViewLot(lot)}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          {isAdmin && lot.status !== 'deleted' && (
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  disabled={deletingBatch === lot.id}
+                                >
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Delete Batch</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Are you sure you want to delete batch "{lot.lot_number}"? 
+                                    This will soft-delete all {lot.total_items || 0} items in this batch. 
+                                    This action cannot be undone.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => handleDeleteBatch(lot.id, lot.lot_number)}
+                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                  >
+                                    Delete Batch
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}

@@ -998,6 +998,10 @@ export type Database = {
       }
     }
     Functions: {
+      admin_delete_batch: {
+        Args: { lot_id_in: string; reason_in?: string }
+        Returns: number
+      }
       atomic_catalog_swap: {
         Args: { game_name: string }
         Returns: undefined
