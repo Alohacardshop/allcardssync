@@ -451,6 +451,7 @@ const Index = () => {
       if (error) throw error;
       const d: any = data;
       if (!d?.ok) throw new Error(d?.error || "Unknown PSA error");
+      
       setItem((prev) => ({
         ...prev,
         title: [d.year || prev.year, (d.brandTitle || prev.brandTitle || "").replace(/&amp;/g, "&"), (d.cardNumber || prev.cardNumber) ? `#${String(d.cardNumber || prev.cardNumber).replace(/^#/, "")}` : undefined, (d.subject || prev.subject || "").replace(/&amp;/g, "&"), (d.variant || d.varietyPedigree || prev.variant || "").replace(/&amp;/g, "&")].filter(Boolean).join(" ").trim(),
@@ -467,7 +468,10 @@ const Index = () => {
         labelType: d.labelType || prev.labelType,
         cardNumber: d.cardNumber || prev.cardNumber,
       }));
-      toast.success("PSA details fetched");
+      
+      // Show success message with data source info
+      const sourceMsg = d.source === 'psa_api' ? 'PSA API' : d.source === 'scrape' ? 'web scraping' : 'unknown source';
+      toast.success(`PSA details fetched successfully from ${sourceMsg}`);
     } catch (e) {
       console.error(e);
       toast.error("Failed to fetch PSA details");
