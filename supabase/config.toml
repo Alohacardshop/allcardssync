@@ -13,3 +13,7 @@ verify_jwt = false
 # Premium API monitoring (public for dashboard widgets)
 [functions.api-usage-monitor]
 verify_jwt = false
+
+# Admin functions require JWT and role verification
+[functions.admin-psa-test]
+verify_jwt = true
