@@ -80,6 +80,7 @@ const Index = () => {
   });
   const [batch, setBatch] = useState<CardItem[]>([]);
   const [lookupCert, setLookupCert] = useState("");
+  const [isLoadingPsa, setIsLoadingPsa] = useState(false);
 
   // PrintNode state
   const [printers, setPrinters] = useState<any[]>([]);
@@ -442,6 +443,7 @@ const Index = () => {
       toast.error("Enter PSA number in SKU or PSA Cert");
       return;
     }
+    setIsLoadingPsa(true);
     try {
       const { data, error } = await supabase.functions.invoke("psa-scrape", { body: { cert } });
       if (error) throw error;
@@ -467,6 +469,8 @@ const Index = () => {
     } catch (e) {
       console.error(e);
       toast.error("Failed to fetch PSA details");
+    } finally {
+      setIsLoadingPsa(false);
     }
   };
 
@@ -1028,9 +1032,24 @@ const Index = () => {
                   id="psa-lookup"
                   value={lookupCert}
                   onChange={(e) => setLookupCert(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && fetchPsa(lookupCert)}
                   placeholder="Enter PSA Cert # to fetch details"
+                  disabled={isLoadingPsa}
                 />
-                <Button variant="outline" onClick={() => fetchPsa(lookupCert)}>Fetch PSA</Button>
+                <Button 
+                  variant="outline" 
+                  onClick={() => fetchPsa(lookupCert)}
+                  disabled={isLoadingPsa}
+                >
+                  {isLoadingPsa ? (
+                    <div className="flex items-center gap-2">
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                      Fetching...
+                    </div>
+                  ) : (
+                    "Fetch PSA"
+                  )}
+                </Button>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>

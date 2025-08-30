@@ -245,8 +245,17 @@ export const PSABulkImport = () => {
                   disabled={importing}
                   className="flex items-center gap-2"
                 >
-                  <Upload className="h-4 w-4" />
-                  {importing ? 'Importing...' : 'Start Import'}
+                  {importing ? (
+                    <>
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                      Importing...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-4 w-4" />
+                      Start Import
+                    </>
+                  )}
                 </Button>
               </div>
 
