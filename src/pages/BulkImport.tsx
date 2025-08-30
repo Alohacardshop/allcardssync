@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Navigation } from "@/components/Navigation";
 import { StoreLocationSelector } from "@/components/StoreLocationSelector";
 import { PSABulkImport } from "@/components/PSABulkImport";
+import { GradedCardIntake } from "@/components/GradedCardIntake";
 import { TCGPlayerBulkImport } from "@/components/TCGPlayerBulkImport";
 import { RawCardIntake } from "@/components/RawCardIntake";
 import { useToast } from "@/hooks/use-toast";
@@ -40,9 +41,21 @@ const BulkImport = () => {
         <div className="grid gap-8">
           <Card>
             <CardHeader>
-              <CardTitle>Graded Cards (PSA)</CardTitle>
+              <CardTitle>Single Graded Card Intake</CardTitle>
               <p className="text-sm text-muted-foreground">
-                Import PSA certificate numbers and automatically fetch card details
+                Enter a single PSA certificate number to add one card to inventory
+              </p>
+            </CardHeader>
+            <CardContent>
+              <GradedCardIntake />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Bulk PSA Import</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Upload a CSV file with multiple PSA certificate numbers for bulk import
               </p>
             </CardHeader>
             <CardContent>
