@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { Loader2, Award, ChevronDown, ChevronUp, AlertCircle } from "lucide-react";
 import { useStore } from "@/contexts/StoreContext";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { invokePSAScrape } from "@/lib/psaService";
+import { invokePSAScrapeV2 } from "@/lib/psaServiceV2";
 
 export const GradedCardIntake = () => {
   const [psaCert, setPsaCert] = useState("");
@@ -49,7 +49,7 @@ export const GradedCardIntake = () => {
     
     try {
       // Use the centralized PSA service with timeout
-      const data = await invokePSAScrape({ cert: psaCert.trim() }, 25000);
+      const data = await invokePSAScrapeV2({ cert: psaCert.trim() }, 25000);
 
       if (data && data.ok) {
         console.log('PSA data received successfully:', JSON.stringify(data, null, 2));

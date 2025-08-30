@@ -17,3 +17,7 @@ verify_jwt = false
 # PSA scraping function (public - scrapes public pages)
 [functions.psa-scrape]
 verify_jwt = false
+
+# PSA scraping function v2 (public - Firecrawl-only with strict CORS)
+[functions.psa-scrape-v2]
+verify_jwt = false

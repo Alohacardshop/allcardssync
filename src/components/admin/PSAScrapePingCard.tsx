@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { invokePSAScrape } from "@/lib/psaService";
+import { invokePSAScrapeV2 } from "@/lib/psaServiceV2";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 
@@ -10,7 +10,7 @@ export function PSAScrapePingCard() {
   async function onPing() {
     setLoading(true);
     try {
-      const data = await invokePSAScrape({ mode: "ping" }, 5000);
+      const data = await invokePSAScrapeV2({ mode: "ping" }, 5000);
       setOut(data);
     } catch (e: any) {
       setOut({ ok: false, error: e?.message || String(e) });
@@ -23,9 +23,9 @@ export function PSAScrapePingCard() {
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle className="text-lg font-semibold">psa-scrape Reachability</CardTitle>
+          <CardTitle className="text-lg font-semibold">psa-scrape-v2 Reachability</CardTitle>
           <Button variant="outline" onClick={onPing} disabled={loading}>
-            {loading ? "Pinging…" : "Ping psa-scrape"}
+            {loading ? "Pinging…" : "Ping psa-scrape-v2"}
           </Button>
         </div>
       </CardHeader>

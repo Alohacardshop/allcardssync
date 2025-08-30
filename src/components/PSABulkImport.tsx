@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import { Upload, FileText, Download } from "lucide-react";
 import { useStore } from "@/contexts/StoreContext";
 import { v4 as uuidv4 } from 'uuid';
-import { invokePSAScrape } from "@/lib/psaService";
+import { invokePSAScrapeV2 } from "@/lib/psaServiceV2";
 
 interface PSAImportItem {
   psaCert: string;
@@ -66,7 +66,7 @@ export const PSABulkImport = () => {
   };
 
   const scrapePSAData = async (psaCert: string) => {
-    return await invokePSAScrape({ cert: psaCert }, 25000); // 25s timeout to outlive function's 18s
+    return await invokePSAScrapeV2({ cert: psaCert }, 25000); // 25s timeout to outlive function's 18s
   };
 
   const insertIntakeItem = async (item: PSAImportItem) => {
