@@ -9,6 +9,7 @@ import { GAME_OPTIONS, GameKey } from "@/lib/types";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
 import { useStore } from "@/contexts/StoreContext";
+import { StoreLocationSelector } from "./StoreLocationSelector";
 
 interface RawTradeInForm {
   game: string;
@@ -56,7 +57,7 @@ export default function RawIntake() {
   
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const { selectedStore, selectedLocation } = useStore();
+  const { selectedStore, selectedLocation, availableStores, availableLocations } = useStore();
 
   const autoSku = useMemo(() => {
     const condMap: Record<string, string> = {
@@ -144,6 +145,12 @@ export default function RawIntake() {
       toast.error("Name is required to add to batch");
       return;
     }
+
+    if (!selectedStore || !selectedLocation) {
+      toast.error("Please select a store and location first");
+      return;
+    }
+
     const insertPayload = {
       year: null,
       brand_title: form.set || form.game || null,
@@ -176,8 +183,8 @@ export default function RawIntake() {
         captured_at: new Date().toISOString()
       },
       processing_notes: `Manual entry for ${form.name}`,
-      store_key: selectedStore || null,
-      shopify_location_gid: selectedLocation || null
+      store_key: selectedStore,
+      shopify_location_gid: selectedLocation
     } as const;
 
     try {
@@ -227,149 +234,173 @@ export default function RawIntake() {
     }
   };
 
+  const showLocationSelector = availableStores.length > 1 || availableLocations.length > 1;
+
   return (
-    <div>
-      <Alert className="mb-4">
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription>
-          Card search now uses local catalog data only. External sync functionality has been removed.
-          {/* TODO: Update message when external catalog API is integrated */}
-        </AlertDescription>
-      </Alert>
+    <div className="space-y-6">
+      {/* Store/Location Selector */}
+      {showLocationSelector && (
+        <StoreLocationSelector />
+      )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="sm:col-span-2">
-          <Label>Game</Label>
-          <Select value={form.game} onValueChange={(v) => setForm((f) => ({ ...f, game: v }))}>
-            <SelectTrigger>
-              <SelectValue placeholder="Select game" />
-            </SelectTrigger>
-            <SelectContent className="z-50">
-              {GAME_OPTIONS.map(option => (
-                <SelectItem key={option.value} value={option.label}>
-                  {option.label}
-                </SelectItem>
+      <div>
+        <Alert className="mb-4">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            Card search now uses local catalog data only. External sync functionality has been removed.
+            {/* TODO: Update message when external catalog API is integrated */}
+          </AlertDescription>
+        </Alert>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="sm:col-span-2">
+            <Label>Game</Label>
+            <Select value={form.game} onValueChange={(v) => setForm((f) => ({ ...f, game: v }))}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select game" />
+              </SelectTrigger>
+              <SelectContent className="z-50">
+                {GAME_OPTIONS.map(option => (
+                  <SelectItem key={option.value} value={option.label}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <Label htmlFor="name">Name</Label>
+            <Input 
+              id="name" 
+              value={form.name} 
+              onChange={(e) => setForm({ ...form, name: e.target.value })} 
+              onKeyDown={(e) => e.key === 'Enter' && doSearch()}
+              placeholder="Card name (e.g., Charizard)" 
+            />
+          </div>
+          <div>
+            <Label htmlFor="set">Set</Label>
+            <Input id="set" value={form.set} onChange={(e) => setForm({ ...form, set: e.target.value })} placeholder="e.g., Base Set" />
+          </div>
+          <div>
+            <Label htmlFor="set_code">Set Code</Label>
+            <Input id="set_code" value={form.set_code} onChange={(e) => setForm({ ...form, set_code: e.target.value })} placeholder="e.g., BS" />
+          </div>
+          <div>
+            <Label htmlFor="card_number">Card #</Label>
+            <Input 
+              id="card_number" 
+              value={form.card_number} 
+              onChange={(e) => setForm({ ...form, card_number: e.target.value })} 
+              onKeyDown={(e) => e.key === 'Enter' && doSearch()}
+              placeholder="e.g., 201/197 or 201" 
+            />
+          </div>
+          <div>
+            <Label htmlFor="condition">Condition</Label>
+            <Select value={form.condition} onValueChange={(v) => setForm({ ...form, condition: v })}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select condition" />
+              </SelectTrigger>
+              <SelectContent className="z-50">
+                <SelectItem value="Near Mint">Near Mint (NM)</SelectItem>
+                <SelectItem value="Lightly Played">Lightly Played (LP)</SelectItem>
+                <SelectItem value="Moderately Played">Moderately Played (MP)</SelectItem>
+                <SelectItem value="Heavily Played">Heavily Played (HP)</SelectItem>
+                <SelectItem value="Damaged">Damaged</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label htmlFor="printing">Printing</Label>
+            <Select value={form.printing} onValueChange={(v) => setForm({ ...form, printing: v })}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select print" />
+              </SelectTrigger>
+              <SelectContent className="z-50">
+                <SelectItem value="Unlimited">Unlimited</SelectItem>
+                <SelectItem value="1st Edition">1st Edition</SelectItem>
+                <SelectItem value="Shadowless">Shadowless</SelectItem>
+                <SelectItem value="Holo">Holo</SelectItem>
+                <SelectItem value="Reverse Holo">Reverse Holo</SelectItem>
+                <SelectItem value="Non-Holo">Non-Holo</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label htmlFor="language">Language</Label>
+            <Input id="language" value={form.language} onChange={(e) => setForm({ ...form, language: e.target.value })} placeholder="e.g., English" />
+          </div>
+          <div>
+            <Label htmlFor="quantity">Quantity</Label>
+            <Input id="quantity" type="number" min={1} value={form.quantity} onChange={(e) => setForm({ ...form, quantity: Number(e.target.value || 1) })} />
+          </div>
+          <div>
+            <Label htmlFor="price_each">Price Each</Label>
+            <Input id="price_each" value={form.price_each} onChange={(e) => setForm({ ...form, price_each: e.target.value })} placeholder="$" />
+          </div>
+          <div>
+            <Label htmlFor="cost_each">Cost Each</Label>
+            <Input id="cost_each" value={form.cost_each} onChange={(e) => setForm({ ...form, cost_each: e.target.value })} placeholder="$" />
+          </div>
+          <div>
+            <Label htmlFor="sku">SKU</Label>
+            <Input id="sku" value={form.sku || autoSku} onChange={(e) => setForm({ ...form, sku: e.target.value })} placeholder={autoSku} />
+          </div>
+        </div>
+
+        <div className="mt-4">
+          <div className="flex items-center justify-between mb-2">
+            <Label>Suggestions</Label>
+            <Button 
+              size="sm" 
+              onClick={doSearch}
+              disabled={loading}
+            >
+              {loading ? 'Searching...' : 'Search'}
+            </Button>
+          </div>
+          {loading ? (
+            <div className="text-sm text-muted-foreground mt-2">Searching…</div>
+          ) : suggestions.length > 0 ? (
+            <ul className="mt-2 space-y-2">
+              {suggestions.map((s, i) => (
+                <li key={`${s.card_id}-${i}`} className="flex items-center gap-3 border rounded-md p-2">
+                  <div className="flex-1 text-sm">
+                    <div className="font-medium">{s.name}</div>
+                    <div className="text-muted-foreground">{[s.set_id, s.number].filter(Boolean).join(" • ")}</div>
+                  </div>
+                  <Button size="sm" variant="secondary" onClick={() => applySuggestion(s)}>Use</Button>
+                </li>
               ))}
-            </SelectContent>
-          </Select>
+            </ul>
+          ) : ((form.name || '').trim().length >= 3 ? (
+            <div className="text-sm text-muted-foreground mt-2">No matches found. Try different search terms.</div>
+          ) : (
+            <div className="text-sm text-muted-foreground mt-2">Enter card name (3+ characters) to search</div>
+          ))}
         </div>
 
-        <div>
-          <Label htmlFor="name">Name</Label>
-          <Input 
-            id="name" 
-            value={form.name} 
-            onChange={(e) => setForm({ ...form, name: e.target.value })} 
-            onKeyDown={(e) => e.key === 'Enter' && doSearch()}
-            placeholder="Card name (e.g., Charizard)" 
-          />
-        </div>
-        <div>
-          <Label htmlFor="set">Set</Label>
-          <Input id="set" value={form.set} onChange={(e) => setForm({ ...form, set: e.target.value })} placeholder="e.g., Base Set" />
-        </div>
-        <div>
-          <Label htmlFor="set_code">Set Code</Label>
-          <Input id="set_code" value={form.set_code} onChange={(e) => setForm({ ...form, set_code: e.target.value })} placeholder="e.g., BS" />
-        </div>
-        <div>
-          <Label htmlFor="card_number">Card #</Label>
-          <Input 
-            id="card_number" 
-            value={form.card_number} 
-            onChange={(e) => setForm({ ...form, card_number: e.target.value })} 
-            onKeyDown={(e) => e.key === 'Enter' && doSearch()}
-            placeholder="e.g., 201/197 or 201" 
-          />
-        </div>
-        <div>
-          <Label htmlFor="condition">Condition</Label>
-          <Select value={form.condition} onValueChange={(v) => setForm({ ...form, condition: v })}>
-            <SelectTrigger>
-              <SelectValue placeholder="Select condition" />
-            </SelectTrigger>
-            <SelectContent className="z-50">
-              <SelectItem value="Near Mint">Near Mint (NM)</SelectItem>
-              <SelectItem value="Lightly Played">Lightly Played (LP)</SelectItem>
-              <SelectItem value="Moderately Played">Moderately Played (MP)</SelectItem>
-              <SelectItem value="Heavily Played">Heavily Played (HP)</SelectItem>
-              <SelectItem value="Damaged">Damaged</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div>
-          <Label htmlFor="printing">Printing</Label>
-          <Select value={form.printing} onValueChange={(v) => setForm({ ...form, printing: v })}>
-            <SelectTrigger>
-              <SelectValue placeholder="Select print" />
-            </SelectTrigger>
-            <SelectContent className="z-50">
-              <SelectItem value="Unlimited">Unlimited</SelectItem>
-              <SelectItem value="1st Edition">1st Edition</SelectItem>
-              <SelectItem value="Shadowless">Shadowless</SelectItem>
-              <SelectItem value="Holo">Holo</SelectItem>
-              <SelectItem value="Reverse Holo">Reverse Holo</SelectItem>
-              <SelectItem value="Non-Holo">Non-Holo</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div>
-          <Label htmlFor="language">Language</Label>
-          <Input id="language" value={form.language} onChange={(e) => setForm({ ...form, language: e.target.value })} placeholder="e.g., English" />
-        </div>
-        <div>
-          <Label htmlFor="quantity">Quantity</Label>
-          <Input id="quantity" type="number" min={1} value={form.quantity} onChange={(e) => setForm({ ...form, quantity: Number(e.target.value || 1) })} />
-        </div>
-        <div>
-          <Label htmlFor="price_each">Price Each</Label>
-          <Input id="price_each" value={form.price_each} onChange={(e) => setForm({ ...form, price_each: e.target.value })} placeholder="$" />
-        </div>
-        <div>
-          <Label htmlFor="cost_each">Cost Each</Label>
-          <Input id="cost_each" value={form.cost_each} onChange={(e) => setForm({ ...form, cost_each: e.target.value })} placeholder="$" />
-        </div>
-        <div>
-          <Label htmlFor="sku">SKU</Label>
-          <Input id="sku" value={form.sku || autoSku} onChange={(e) => setForm({ ...form, sku: e.target.value })} placeholder={autoSku} />
-        </div>
-      </div>
-
-      <div className="mt-4">
-        <div className="flex items-center justify-between mb-2">
-          <Label>Suggestions</Label>
+        <div className="mt-5 flex flex-wrap gap-3">
           <Button 
-            size="sm" 
-            onClick={doSearch}
-            disabled={loading}
+            onClick={addToBatch}
+            disabled={!selectedStore || !selectedLocation}
           >
-            {loading ? 'Searching...' : 'Search'}
+            Add to Batch
           </Button>
+          <Button variant="secondary" onClick={() => setForm((f) => ({ ...f, name: "", price_each: "", cost_each: "", quantity: 1, sku: autoSku, product_id: undefined }))}>Clear</Button>
         </div>
-        {loading ? (
-          <div className="text-sm text-muted-foreground mt-2">Searching…</div>
-        ) : suggestions.length > 0 ? (
-          <ul className="mt-2 space-y-2">
-            {suggestions.map((s, i) => (
-              <li key={`${s.card_id}-${i}`} className="flex items-center gap-3 border rounded-md p-2">
-                <div className="flex-1 text-sm">
-                  <div className="font-medium">{s.name}</div>
-                  <div className="text-muted-foreground">{[s.set_id, s.number].filter(Boolean).join(" • ")}</div>
-                </div>
-                <Button size="sm" variant="secondary" onClick={() => applySuggestion(s)}>Use</Button>
-              </li>
-            ))}
-          </ul>
-        ) : ((form.name || '').trim().length >= 3 ? (
-          <div className="text-sm text-muted-foreground mt-2">No matches found. Try different search terms.</div>
-        ) : (
-          <div className="text-sm text-muted-foreground mt-2">Enter card name (3+ characters) to search</div>
-        ))}
-      </div>
 
-      <div className="mt-5 flex flex-wrap gap-3">
-        <Button onClick={addToBatch}>Add to Batch</Button>
-        <Button variant="secondary" onClick={() => setForm((f) => ({ ...f, name: "", price_each: "", cost_each: "", quantity: 1, sku: autoSku, product_id: undefined }))}>Clear</Button>
+        {/* Store/Location Status */}
+        {(!selectedStore || !selectedLocation) && (
+          <Alert className="mt-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Please select a store and location above before adding items to batch.
+            </AlertDescription>
+          </Alert>
+        )}
       </div>
     </div>
   );

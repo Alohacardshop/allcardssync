@@ -1278,6 +1278,10 @@ export type Database = {
         Args: { template_id: string; template_type_param: string }
         Returns: undefined
       }
+      set_user_default_location: {
+        Args: { _location_gid: string; _store_key: string }
+        Returns: undefined
+      }
       show_limit: {
         Args: Record<PropertyKey, never>
         Returns: number
