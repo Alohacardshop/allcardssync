@@ -279,11 +279,74 @@ serve(async (req) => {
   console.log('🔍 Starting data extraction...');
   const text = (html || markdown).replace(/\s+/g, ' ').trim();
   
-  const pick = (re: RegExp) => {
-    const match = text.match(re);
-    const result = match ? match[1].trim() : null;
-    console.log('🔍 Extract pattern:', re.toString(), '→', result);
-    return result;
+  // Enhanced extraction function that cleans HTML properly
+  const extractCleanValue = (patterns: RegExp[], fallbackPatterns: RegExp[] = []): string | null => {
+    // Try main patterns first
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match && match[1]) {
+        let value = match[1].trim();
+        
+        // Clean HTML tags and entities
+        value = value.replace(/<[^>]*>/g, ''); // Remove HTML tags
+        value = value.replace(/&amp;/g, '&'); // Decode HTML entities
+        value = value.replace(/&lt;/g, '<');
+        value = value.replace(/&gt;/g, '>');
+        value = value.replace(/&quot;/g, '"');
+        value = value.replace(/&#39;/g, "'");
+        value = value.replace(/&nbsp;/g, ' ');
+        
+        // Remove extra whitespace and clean up
+        value = value.replace(/\s+/g, ' ').trim();
+        
+        // Skip if result is empty or just whitespace
+        if (value && value.length > 0) {
+          console.log('🔍 Extract success:', pattern.toString(), '→', value);
+          return value;
+        }
+      }
+    }
+    
+    // Try fallback patterns if main patterns failed
+    for (const pattern of fallbackPatterns) {
+      const match = text.match(pattern);
+      if (match && match[1]) {
+        let value = match[1].trim();
+        value = value.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+        if (value && value.length > 0) {
+          console.log('🔍 Extract fallback success:', pattern.toString(), '→', value);
+          return value;
+        }
+      }
+    }
+    
+    console.log('🔍 Extract failed for patterns:', patterns.map(p => p.toString()));
+    return null;
+  };
+
+  // Specific extractor for grade (handles PSA 1-10, POOR, FAIR, etc.)
+  const extractGrade = (): string | null => {
+    return extractCleanValue([
+      /Item Grade[:\s]*([A-Z0-9\s.+/-]+)/i,
+      /Grade[:\s]*([A-Z0-9\s.+/-]+)/i,
+      />([A-Z0-9\s.+/-]+)<\/dd>/i
+    ]);
+  };
+
+  // Specific extractor for year (4-digit year)
+  const extractYear = (): string | null => {
+    return extractCleanValue([
+      /Year[:\s]*([0-9]{4})/i,
+      />([0-9]{4})<\/dd>/i
+    ]);
+  };
+
+  // Specific extractor for card number (alphanumeric with hyphens)
+  const extractCardNumber = (): string | null => {
+    return extractCleanValue([
+      /Card Number[:\s]*([A-Z0-9\-#\/\s]+)/i,
+      />([A-Z0-9\-#\/\s]+)<\/dd>/i
+    ]);
   };
 
   // Enhanced parsing with better patterns
@@ -296,13 +359,31 @@ serve(async (req) => {
   const certData: PSACertificateData = {
     certNumber: cert,
     isValid,
-    grade: pick(/Item Grade[:\s]*([A-Z0-9\s.+/-]+)/i),
-    year: pick(/Year[:\s]*([0-9]{4})/i),
-    brandTitle: pick(/Brand\/Title[:\s]*([^\n\r]+)/i),
-    subject: pick(/Subject[:\s]*([^\n\r]+)/i),
-    cardNumber: pick(/Card Number[:\s]*([A-Z0-9\-#]+)/i),
-    varietyPedigree: pick(/Variety\/Pedigree[:\s]*([^\n\r]+)/i),
-    category: pick(/Category[:\s]*([^\n\r]+)/i),
+    grade: extractGrade(),
+    year: extractYear(),
+    brandTitle: extractCleanValue([
+      /Brand\/Title[:\s]*([^\n\r<>]+)/i,
+      /Brand[:\s]*([^\n\r<>]+)/i,
+      />([^<>]*(?:POKEMON|MAGIC|YUGIOH|DRAGON BALL)[^<>]*)<\/dd>/i
+    ], [
+      /POKEMON[^<>]*DRI[^<>]*EN[^<>]*DESTINED[^<>]*RIVALS/i,
+      /POKEMON[^<>]+/i
+    ]),
+    subject: extractCleanValue([
+      /Subject[:\s]*([^\n\r<>]+)/i,
+      />([^<>]*(?:MEWTWO|CHARIZARD|PIKACHU)[^<>]*)<\/dd>/i,
+      />([^<>]*(?:'S|EX|GX|V|VMAX)[^<>]*)<\/dd>/i
+    ]),
+    cardNumber: extractCardNumber(),
+    varietyPedigree: extractCleanValue([
+      /Variety\/Pedigree[:\s]*([^\n\r<>]+)/i,
+      /Pedigree[:\s]*([^\n\r<>]+)/i,
+      />([^<>]*(?:RARE|HOLO|SPECIAL|ILLUSTRATION)[^<>]*)<\/dd>/i
+    ]),
+    category: extractCleanValue([
+      /Category[:\s]*([^\n\r<>]+)/i,
+      />([^<>]*(?:TCG|CARDS|GAMING)[^<>]*)<\/dd>/i
+    ]),
     psaUrl
   };
 
