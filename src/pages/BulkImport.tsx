@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Navigation } from "@/components/Navigation";
+import { StoreLocationSelector } from "@/components/StoreLocationSelector";
 import { PSABulkImport } from "@/components/PSABulkImport";
 import { TCGPlayerBulkImport } from "@/components/TCGPlayerBulkImport";
 import { RawCardIntake } from "@/components/RawCardIntake";
@@ -32,6 +33,9 @@ const BulkImport = () => {
           <h1 className="text-3xl font-bold">Bulk Import</h1>
           <p className="text-muted-foreground mt-2">Import large quantities of cards from CSV files</p>
         </div>
+        
+        {/* Store & Location Selector */}
+        <StoreLocationSelector />
         
         <div className="grid gap-8">
           <Card>

@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import RawIntake from "@/components/RawIntake";
 import { Link } from "react-router-dom";
 import { Navigation } from "@/components/Navigation";
+import { StoreLocationSelector } from "@/components/StoreLocationSelector";
 import { cleanupAuthState } from "@/lib/auth";
 import { printNodeService } from "@/lib/printNodeService";
 import jsPDF from 'jspdf';
@@ -895,6 +896,11 @@ const Index = () => {
       </div>
 
       <main className="container mx-auto px-6 pb-24">
+        {/* Store & Location Selector */}
+        <section className="mt-8">
+          <StoreLocationSelector />
+        </section>
+        
         <section className="grid md:grid-cols-2 gap-6 mt-8">
           <Card className="shadow-aloha">
             <CardHeader>

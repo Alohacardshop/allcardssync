@@ -11,7 +11,6 @@ import { toast } from 'sonner';
 import type { GameKey, Printing } from '@/lib/types';
 import { GAME_OPTIONS } from '@/lib/types';
 import { useStore } from '@/contexts/StoreContext';
-import { StoreLocationSelector } from './StoreLocationSelector';
 
 interface CatalogCard {
   id: string;
@@ -222,15 +221,8 @@ export function RawCardIntake({
     }
   };
 
-  const showLocationSelector = availableStores.length > 1 || availableLocations.length > 1;
-
   return (
     <div className="space-y-6">
-      {/* Store/Location Selector */}
-      {showLocationSelector && (
-        <StoreLocationSelector />
-      )}
-
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">

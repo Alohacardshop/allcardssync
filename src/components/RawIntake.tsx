@@ -9,7 +9,6 @@ import { GAME_OPTIONS, GameKey } from "@/lib/types";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
 import { useStore } from "@/contexts/StoreContext";
-import { StoreLocationSelector } from "./StoreLocationSelector";
 
 interface RawTradeInForm {
   game: string;
@@ -235,15 +234,8 @@ export default function RawIntake() {
     }
   };
 
-  const showLocationSelector = availableStores.length > 1 || availableLocations.length > 1;
-
   return (
     <div className="space-y-6">
-      {/* Store/Location Selector */}
-      {showLocationSelector && (
-        <StoreLocationSelector />
-      )}
-
       <div>
         <Alert className="mb-4">
           <AlertCircle className="h-4 w-4" />

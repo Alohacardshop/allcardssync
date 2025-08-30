@@ -121,6 +121,11 @@ export const PSABulkImport = () => {
       return;
     }
 
+    if (!selectedStore || !selectedLocation) {
+      toast.error("Please select a store and location before importing");
+      return;
+    }
+
     setImporting(true);
     setProgress(0);
 
