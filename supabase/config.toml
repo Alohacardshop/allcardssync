@@ -14,6 +14,6 @@ verify_jwt = false
 [functions.api-usage-monitor]
 verify_jwt = false
 
-# Admin functions require JWT and role verification
+# PSA scraping function (public - scrapes public pages)
 [functions.psa-scrape]
-verify_jwt = true
+verify_jwt = false
