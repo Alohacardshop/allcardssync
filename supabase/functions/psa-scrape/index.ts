@@ -241,9 +241,54 @@ serve(async (req) => {
       });
     }
 
-    console.log("Making Firecrawl request...");
+    console.log("Making Firecrawl structured extraction request...");
     
-    // Make Firecrawl request with shorter timeout
+    // Enhanced Firecrawl request with structured extraction
+    const firecrawlConfig = {
+      url: psaUrl,
+      formats: ["extract"],
+      extract: {
+        schema: {
+          type: "object",
+          required: ["certification_number"],
+          properties: {
+            certification_number: { type: "string" },
+            cert_number: { type: "string" },
+            item_grade: { type: "string" },
+            label_type: { type: "string" },
+            reverse_cert_barcode: { type: "string" },
+            year: { type: "string" },
+            brand_title: { type: "string" },
+            subject: { type: "string" },
+            card_number: { type: "string" },
+            category: { type: "string" },
+            variety_pedigree: { type: "string" },
+            psa_estimate: { type: "string" },
+            image_url: { type: "string", format: "uri" }
+          }
+        },
+        instructions: "Extract PSA certification data from the page. Clean and normalize all values. For certification_number, extract digits only. For year, extract the 4-digit year. For grades, keep exact text like 'GEM MT 10'. For image_url, prefer the main card image.",
+        selectors: {
+          certification_number: "//*[self::th or self::div][contains(normalize-space(.), 'Cert Number')]/following::*[self::td or self::div or self::span][1] | //*[contains(@class,'cert') and contains(@class,'number')][1]",
+          cert_number: "//*[self::th or self::div][contains(normalize-space(.), 'Cert Number')]/following::*[self::td or self::div or self::span][1]",
+          item_grade: "//*[self::th or self::div][contains(normalize-space(.), 'Item Grade')]/following::*[self::td or self::div or self::span][1]",
+          label_type: "//*[self::th or self::div][contains(normalize-space(.), 'Label Type')]/following::*[self::td or self::div or self::span][1]",
+          reverse_cert_barcode: "//*[self::th or self::div][contains(normalize-space(.), 'Reverse Cert/Barcode')]/following::*[self::td or self::div or self::span][1]",
+          year: "//*[self::th or self::div][contains(normalize-space(.), 'Year')]/following::*[self::td or self::div or self::span][1]",
+          brand_title: "//*[self::th or self::div][contains(normalize-space(.), 'Brand/Title')]/following::*[self::td or self::div or self::span][1]",
+          subject: "//*[self::th or self::div][contains(normalize-space(.), 'Subject')]/following::*[self::td or self::div or self::span][1]",
+          card_number: "//*[self::th or self::div][contains(normalize-space(.), 'Card Number')]/following::*[self::td or self::div or self::span][1]",
+          category: "//*[self::th or self::div][contains(normalize-space(.), 'Category')]/following::*[self::td or self::div or self::span][1]",
+          variety_pedigree: "//*[self::th or self::div][contains(normalize-space(.), 'Variety/Pedigree')]/following::*[self::td or self::div or self::span][1]",
+          psa_estimate: "//*[self::th or self::div][contains(normalize-space(.), 'PSA Estimate')]/following::*[self::td or self::div or self::span][1]",
+          image_url: "((//meta[translate(@property,'OGIMAE','ogimae')='og:image']/@content)[1] | (//picture//img[contains(@src,'http')][1]/@src) | (//img[contains(@src,'http') and (contains(@alt,'card') or contains(@class,'card') or contains(@class,'product') or contains(@class,'main'))][1]/@src))[1]"
+        }
+      },
+      timeout: 15000,
+      waitFor: 3000
+    };
+
+    // Make Firecrawl request with timeout
     const scrapeResponse = await Promise.race([
       fetch("https://api.firecrawl.dev/v1/scrape", {
         method: "POST",
@@ -251,16 +296,10 @@ serve(async (req) => {
           "Authorization": `Bearer ${apiKey}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          url: psaUrl,
-          formats: ["html"],
-          onlyMainContent: false,
-          waitFor: 2000, // Wait 2 seconds for page to load
-          timeout: 10000 // 10 second timeout for scraping
-        }),
+        body: JSON.stringify(firecrawlConfig),
       }),
       new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("Firecrawl request timeout after 15 seconds")), 15000)
+        setTimeout(() => reject(new Error("Firecrawl request timeout after 20 seconds")), 20000)
       )
     ]) as Response;
 
@@ -281,28 +320,102 @@ serve(async (req) => {
     const scrapeData = await scrapeResponse.json();
     console.log("Firecrawl response received, data keys:", Object.keys(scrapeData || {}));
     
+    // Get structured data from Firecrawl
+    const extractData = scrapeData?.data?.extract;
     const html = scrapeData?.data?.html || "";
+    
+    console.log("Firecrawl extracted data:", JSON.stringify(extractData, null, 2));
 
-    if (!html) {
-      console.error("No HTML content received from Firecrawl");
-      console.log("Scrape response:", JSON.stringify(scrapeData, null, 2));
+    let cardData;
+    let imageUrl = null;
+
+    if (extractData && Object.keys(extractData).length > 0) {
+      // Use Firecrawl structured extraction
+      console.log("Using Firecrawl structured extraction");
+      
+      // Clean and normalize the extracted data
+      const cleanValue = (value: any): string | undefined => {
+        if (!value || typeof value !== 'string') return undefined;
+        return value.trim() || undefined;
+      };
+
+      const certNumber = cleanValue(extractData.certification_number) || cleanValue(extractData.cert_number) || cert;
+      const grade = cleanValue(extractData.item_grade);
+      const year = cleanValue(extractData.year);
+      const brandTitle = cleanValue(extractData.brand_title);
+      const subject = cleanValue(extractData.subject);
+      const cardNumber = cleanValue(extractData.card_number);
+      const category = cleanValue(extractData.category);
+      const varietyPedigree = cleanValue(extractData.variety_pedigree);
+      const labelType = cleanValue(extractData.label_type);
+      const reverseCert = cleanValue(extractData.reverse_cert_barcode);
+      const psaEstimate = cleanValue(extractData.psa_estimate);
+      
+      imageUrl = cleanValue(extractData.image_url);
+
+      // Build title from available components
+      const titleParts = [year, brandTitle, subject].filter(Boolean);
+      const title = titleParts.length > 0 ? titleParts.join(" ") : `PSA Cert ${cert}`;
+
+      // Normalize game from category
+      let game = (category || '').toLowerCase();
+      if (game.includes('tcg')) game = 'pokemon';
+      if (game.includes('pokemon')) game = 'pokemon';
+      if (game.includes('magic') || game.includes('mtg')) game = 'mtg';
+      if (game.includes('baseball')) game = 'baseball';
+      if (game.includes('football')) game = 'football';
+      if (game.includes('basketball')) game = 'basketball';
+
+      // Parse grade numeric value
+      let gradeNumeric = null;
+      let normalizedGrade = grade;
+      if (grade) {
+        const numMatch = grade.match(/(\d+(?:\.\d+)?)/);
+        if (numMatch) {
+          gradeNumeric = parseFloat(numMatch[1]);
+          normalizedGrade = `PSA ${gradeNumeric}`;
+        }
+      }
+
+      cardData = {
+        cert: String(cert),
+        certNumber: String(certNumber),
+        title,
+        cardName: subject,
+        year,
+        game: game || 'tcg',
+        cardNumber,
+        grade: normalizedGrade,
+        gradeNumeric,
+        gradeDisplay: grade,
+        category,
+        brandTitle,
+        subject,
+        varietyPedigree,
+        labelType,
+        reverseCert,
+        psaEstimate,
+        // Legacy compatibility
+        player: subject,
+        set: brandTitle,
+      };
+
+    } else if (html) {
+      // Fallback to HTML parsing
+      console.log("Falling back to HTML parsing");
+      cardData = extractCardData(html, cert);
+      imageUrl = extractImage(html);
+    } else {
+      console.error("No structured data or HTML content received from Firecrawl");
       return new Response(JSON.stringify({ 
         ok: false, 
-        error: "No HTML content received from PSA page scraping" 
+        error: "No data received from PSA page scraping" 
       }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    console.log("HTML content received, length:", html.length);
-    console.log("HTML preview:", html.substring(0, 200));
-    
-    // Extract card data
-    const cardData = extractCardData(html, cert);
-    
-    // Extract image
-    const imageUrl = extractImage(html);
     const imageUrls = imageUrl ? [imageUrl] : [];
 
     const result = {
@@ -311,7 +424,7 @@ serve(async (req) => {
       ...cardData,
       imageUrl,
       imageUrls,
-      source: 'scrape',
+      source: 'firecrawl_structured',
       scrapeSuccess: true
     };
 
