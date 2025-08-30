@@ -186,7 +186,7 @@ export const GradedCardIntake = () => {
 
     setSubmitting(true);
     try {
-      const { error } = await supabase
+      const { data: insertedItem, error } = await supabase
         .from('intake_items')
         .insert({
           psa_cert: formData.certNumber,
@@ -223,11 +223,14 @@ export const GradedCardIntake = () => {
           processing_notes: `Single graded card intake - PSA cert ${formData.certNumber}`,
           store_key: selectedStore,
           shopify_location_gid: selectedLocation
-        });
+        })
+        .select('lot_number')
+        .single();
 
       if (error) throw error;
 
-      toast.success("Graded card added to inventory successfully");
+      const batchNumber = insertedItem?.lot_number || 'Unknown';
+      toast.success(`Graded card added to batch ${batchNumber} successfully`);
       
       // Reset form
       setPsaCert("");
