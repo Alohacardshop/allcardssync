@@ -24,9 +24,12 @@ export const GradedCardIntake = () => {
     cardNumber: "",
     year: "",
     grade: "",
+    gradeDisplay: "",
+    game: "",
     certNumber: "",
     price: "",
-    quantity: 1
+    quantity: 1,
+    psaEstimate: ""
   });
 
   const handleFetchPSA = async () => {
@@ -54,9 +57,12 @@ export const GradedCardIntake = () => {
           cardNumber: data.cardNumber || "",
           year: data.year || "",
           grade: data.grade || "",
+          gradeDisplay: data.gradeDisplay || data.grade || "",
+          game: data.game || "",
           certNumber: data.certNumber || psaCert,
-          price: "",
-          quantity: 1
+          price: data.psaEstimate || "",
+          quantity: 1,
+          psaEstimate: data.psaEstimate || ""
         });
         toast.success("PSA data fetched successfully");
       } else {
@@ -136,9 +142,12 @@ export const GradedCardIntake = () => {
         cardNumber: "",
         year: "",
         grade: "",
+        gradeDisplay: "",
+        game: "",
         certNumber: "",
         price: "",
-        quantity: 1
+        quantity: 1,
+        psaEstimate: ""
       });
 
     } catch (error) {
@@ -208,10 +217,10 @@ export const GradedCardIntake = () => {
         {/* Form Fields Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <Label htmlFor="brand-title">Brand / Title / Game</Label>
+            <Label htmlFor="brand-title">Brand / Title</Label>
             <Input
               id="brand-title"
-              placeholder="e.g., POKEMON JAPANESE SWORD & SH"
+              placeholder="e.g., POKEMON JAPANESE SV1a-TRIPLET BEAT"
               value={formData.brandTitle}
               onChange={(e) => updateFormField('brandTitle', e.target.value)}
             />
@@ -221,9 +230,19 @@ export const GradedCardIntake = () => {
             <Label htmlFor="subject">Subject</Label>
             <Input
               id="subject"
-              placeholder="e.g., FA/GENGAR VMAX"
+              placeholder="e.g., MAGIKARP"
               value={formData.subject}
               onChange={(e) => updateFormField('subject', e.target.value)}
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="game">Game / Sport</Label>
+            <Input
+              id="game"
+              placeholder="e.g., pokemon, mtg, baseball"
+              value={formData.game}
+              onChange={(e) => updateFormField('game', e.target.value)}
             />
           </div>
 
@@ -238,10 +257,10 @@ export const GradedCardIntake = () => {
           </div>
 
           <div>
-            <Label htmlFor="variant">Variant</Label>
+            <Label htmlFor="variant">Variant / Pedigree</Label>
             <Input
               id="variant"
-              placeholder="e.g., GENGAR VMAX HIGH-CLS.DK."
+              placeholder="e.g., ART RARE"
               value={formData.variant}
               onChange={(e) => updateFormField('variant', e.target.value)}
             />
@@ -251,7 +270,7 @@ export const GradedCardIntake = () => {
             <Label htmlFor="card-number">Card Number</Label>
             <Input
               id="card-number"
-              placeholder="e.g., 020"
+              placeholder="e.g., 080"
               value={formData.cardNumber}
               onChange={(e) => updateFormField('cardNumber', e.target.value)}
             />
@@ -261,19 +280,19 @@ export const GradedCardIntake = () => {
             <Label htmlFor="year">Year</Label>
             <Input
               id="year"
-              placeholder="e.g., 1999"
+              placeholder="e.g., 2023"
               value={formData.year}
               onChange={(e) => updateFormField('year', e.target.value)}
             />
           </div>
 
           <div>
-            <Label htmlFor="grade">Item Grade</Label>
+            <Label htmlFor="grade-display">Grade Display</Label>
             <Input
-              id="grade"
-              placeholder="e.g., PSA 10"
-              value={formData.grade}
-              onChange={(e) => updateFormField('grade', e.target.value)}
+              id="grade-display"
+              placeholder="e.g., GEM MT 10"
+              value={formData.gradeDisplay}
+              onChange={(e) => updateFormField('gradeDisplay', e.target.value)}
             />
           </div>
 
@@ -297,6 +316,11 @@ export const GradedCardIntake = () => {
               value={formData.price}
               onChange={(e) => updateFormField('price', e.target.value)}
             />
+            {formData.psaEstimate && (
+              <p className="text-xs text-muted-foreground mt-1">
+                PSA Estimate: ${formData.psaEstimate}
+              </p>
+            )}
           </div>
 
           <div>

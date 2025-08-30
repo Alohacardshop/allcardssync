@@ -285,7 +285,26 @@ serve(async (req) => {
 });
 
 function extractImageFromHTML(html: string): string | null {
-  // Try og:image first
+  // Try PSA specific image patterns first
+  const psaImagePatterns = [
+    // PSA card images with specific patterns
+    /<img[^>]+src=["']([^"']*psacard\.com[^"']*card[^"']*\.(?:jpg|jpeg|png|webp)[^"']*)["']/i,
+    /<img[^>]+src=["']([^"']*psacard\.cloud[^"']*\.(?:jpg|jpeg|png|webp)[^"']*)["']/i,
+    /<img[^>]+src=["']([^"']*\.(?:jpg|jpeg|png|webp)[^"']*)[^>]*class=["'][^"']*card[^"']*["']/i,
+    // Generic card image patterns
+    /<img[^>]+src=["']([^"']*card[^"']*image[^"']*\.(?:jpg|jpeg|png|webp)[^"']*)["']/i,
+    /<img[^>]+src=["']([^"']*cert[^"']*image[^"']*\.(?:jpg|jpeg|png|webp)[^"']*)["']/i
+  ];
+
+  for (const pattern of psaImagePatterns) {
+    const match = html.match(pattern);
+    if (match) {
+      console.log("Found PSA card image:", match[1]);
+      return match[1];
+    }
+  }
+
+  // Try og:image
   const ogImageMatch = html.match(/<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/i);
   if (ogImageMatch) {
     console.log("Found og:image:", ogImageMatch[1]);
@@ -309,8 +328,75 @@ function extractImageFromHTML(html: string): string | null {
     }
   }
 
+  // Look for any high quality images
+  const genericImagePatterns = [
+    /<img[^>]+src=["']([^"']*\.(?:jpg|jpeg|png|webp)[^"']*)[^>]*(?:width=["'][5-9]\d{2,}["']|height=["'][5-9]\d{2,}["'])/i,
+    /<img[^>]+(?:width=["'][5-9]\d{2,}["']|height=["'][5-9]\d{2,}["'])[^>]*src=["']([^"']*\.(?:jpg|jpeg|png|webp)[^"']*)["']/i
+  ];
+
+  for (const pattern of genericImagePatterns) {
+    const match = html.match(pattern);
+    if (match) {
+      console.log("Found high-res image:", match[1]);
+      return match[1];
+    }
+  }
+
   console.log("No image found in HTML");
   return null;
+}
+
+// Helper functions for normalization
+function normalizeGrade(gradeText: string): { psa: string; numeric: number | null; display: string } {
+  if (!gradeText) return { psa: '', numeric: null, display: '' };
+  
+  // Extract numeric grade
+  const numericMatch = gradeText.match(/(\d+(?:\.\d+)?)/);
+  const numeric = numericMatch ? parseFloat(numericMatch[1]) : null;
+  
+  // Create PSA format
+  const psa = numeric ? `PSA ${numeric}` : gradeText;
+  
+  // Create display format (preserve original descriptive text)
+  let display = gradeText;
+  if (gradeText.match(/GEM\s*MT/i) && numeric) {
+    display = `GEM MT ${numeric}`;
+  } else if (gradeText.match(/MINT/i) && numeric) {
+    display = `MINT ${numeric}`;
+  } else if (numeric && !gradeText.includes('PSA')) {
+    display = `PSA ${numeric}`;
+  }
+  
+  return { psa, numeric, display };
+}
+
+function normalizeGame(gameText: string): string {
+  if (!gameText) return '';
+  
+  const game = gameText.toLowerCase().trim();
+  
+  // Pokemon variants
+  if (game.includes('pokemon') || game.includes('pokémon')) {
+    if (game.includes('japan')) return 'pokemon-japan';
+    return 'pokemon';
+  }
+  
+  // Magic variants
+  if (game.includes('magic') || game.includes('mtg')) {
+    return 'mtg';
+  }
+  
+  // Sports cards
+  if (game.includes('baseball')) return 'baseball';
+  if (game.includes('football')) return 'football';
+  if (game.includes('basketball')) return 'basketball';
+  if (game.includes('hockey')) return 'hockey';
+  if (game.includes('soccer')) return 'soccer';
+  
+  // TCG fallback
+  if (game.includes('tcg')) return 'tcg';
+  
+  return game;
 }
 
 async function extractDataFromHTML(htmlContent: string, cert: string) {
@@ -322,6 +408,7 @@ async function extractDataFromHTML(htmlContent: string, cert: string) {
   let setName: string | undefined;
   let year: string | undefined;
   let grade: string | undefined;
+  let psaEstimate: string | undefined;
 
   if (ld) {
     title = ld.name || ld.headline || ld.title;
@@ -337,16 +424,25 @@ async function extractDataFromHTML(htmlContent: string, cert: string) {
   // Fallbacks: regex scan of the HTML content
   const text = htmlContent;
 
-  // Core fields
+  // Core fields with enhanced extraction
   grade =
     grade ||
-    extract(text, />\s*Grade\s*<[^>]*>[\s\S]*?<[^>]*>\s*([^<]{1,40})\s*</i) ||
+    extract(text, />\s*(?:Item\s*)?Grade\s*<[^>]*>[\s\S]*?<[^>]*>\s*([^<]{1,40})\s*</i) ||
+    extract(text, /Grade[:\s]*(GEM\s*MT\s*\d+|MINT\s*\d+|PSA\s*\d+(?:\.\d+)?|\d+(?:\.\d+)?)/i) ||
     extract(text, /PSA\s*([0-9]+(?:\.[0-9])?)/i);
+    
   year =
     year ||
     extract(text, />\s*Year\s*<[^>]*>[\s\S]*?<[^>]*>\s*(\d{4})\s*</i) ||
     extract(text, /\b(19|20)\d{2}\b/);
+    
   setName = setName || extract(text, />\s*Set\s*<[^>]*>[\s\S]*?<[^>]*>\s*([^<]{1,120})\s*</i);
+  
+  // PSA Estimate extraction
+  psaEstimate = 
+    extract(text, />\s*PSA\s*Price\s*Guide\s*<[^>]*>[\s\S]*?<[^>]*>\s*\$?([^<]{1,20})\s*</i) ||
+    extract(text, /PSA\s*(?:Price\s*)?(?:Guide|Estimate)[:\s]*\$?([0-9,]+(?:\.[0-9]{2})?)/i) ||
+    extract(text, /Estimated?\s*Value[:\s]*\$?([0-9,]+(?:\.[0-9]{2})?)/i);
 
   // Name fields
   const cardName: string | undefined =
@@ -354,12 +450,13 @@ async function extractDataFromHTML(htmlContent: string, cert: string) {
     extract(text, />\s*Player\s*<[^>]*>[\s\S]*?<[^>]*>\s*([^<]{1,120})\s*</i) ||
     player;
 
-  // Game/Sport
+  // Game/Sport with enhanced detection
   const game: string | undefined =
     extract(
       text,
       />\s*(?:Sport|Game|Category)\s*<[^>]*>[\s\S]*?<[^>]*>\s*([^<]{1,80})\s*</i
-    ) || extract(text, /(?:Sport|Game|Category):\s*([A-Za-z][A-Za-z0-9\s\-\/&]+)/i);
+    ) || extract(text, /(?:Sport|Game|Category):\s*([A-Za-z][A-Za-z0-9\s\-\/&]+)/i) ||
+    extract(text, /Brand\/?\s*Title[^>]*>[\s\S]*?([A-Za-z]+(?:\s+[A-Za-z]+)*)/i);
 
   // Card number
   const cardNumber: string | undefined =
@@ -396,19 +493,27 @@ async function extractDataFromHTML(htmlContent: string, cert: string) {
     title = parts || `PSA Cert ${cert}`;
   }
 
+  // Normalize grade and game
+  const normalizedGrade = normalizeGrade(grade || '');
+  const normalizedGame = normalizeGame(game || brandTitle || category || '');
+
   return {
     cert: String(cert),
     certNumber: String(cert),
     title,
     cardName: cardName || undefined,
     year: year || undefined,
-    game: game || undefined,
+    game: normalizedGame || game || undefined,
+    gameRaw: game || undefined,
     cardNumber: cardNumber || undefined,
-    grade: grade || undefined,
+    grade: normalizedGrade.psa || grade || undefined,
+    gradeNumeric: normalizedGrade.numeric,
+    gradeDisplay: normalizedGrade.display || grade || undefined,
     category: category || undefined,
     brandTitle: brandTitle || undefined,
     subject: subject || undefined,
     varietyPedigree: varietyPedigree || undefined,
+    psaEstimate: psaEstimate || undefined,
     // Back-compat fields
     player: player || cardName || undefined,
     set: setName || undefined,
