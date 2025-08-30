@@ -9,56 +9,78 @@ const corsHeaders = {
 // PSA Public API helper functions
 async function fetchPSACardData(cert: string, apiToken: string) {
   console.log(`Fetching PSA card data for cert: ${cert}`);
-  const response = await fetch(`https://api.psacard.com/publicapi/cert/GetByCertNumber/${cert}`, {
-    headers: {
-      'Authorization': `Bearer ${apiToken}`,
-      'Accept': 'application/json',
-    },
-  });
-
-  console.log(`PSA API card data response status: ${response.status}`);
   
-  if (!response.ok) {
-    console.log(`PSA API card data failed: ${response.status} ${response.statusText}`);
+  try {
+    const response = await Promise.race([
+      fetch(`https://api.psacard.com/publicapi/cert/GetByCertNumber/${cert}`, {
+        headers: {
+          'Authorization': `Bearer ${apiToken}`,
+          'Accept': 'application/json',
+        },
+      }),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error("PSA card data API timeout")), 15000)
+      )
+    ]) as Response;
+
+    console.log(`PSA API card data response status: ${response.status}`);
+    
+    if (!response.ok) {
+      console.log(`PSA API card data failed: ${response.status} ${response.statusText}`);
+      return null;
+    }
+
+    const data = await response.json();
+    console.log("PSA API card data response:", JSON.stringify(data, null, 2));
+    
+    if (!data?.IsValidRequest || !data?.PSACert) {
+      console.log("PSA API returned invalid or empty card data");
+      return null;
+    }
+
+    return data.PSACert;
+  } catch (error) {
+    console.error("Error fetching PSA card data:", error);
     return null;
   }
-
-  const data = await response.json();
-  console.log("PSA API card data response:", JSON.stringify(data, null, 2));
-  
-  if (!data?.IsValidRequest || !data?.PSACert) {
-    console.log("PSA API returned invalid or empty card data");
-    return null;
-  }
-
-  return data.PSACert;
 }
 
 async function fetchPSAImages(cert: string, apiToken: string) {
   console.log(`Fetching PSA images for cert: ${cert}`);
-  const response = await fetch(`https://api.psacard.com/publicapi/cert/GetImagesByCertNumber/${cert}`, {
-    headers: {
-      'Authorization': `Bearer ${apiToken}`,
-      'Accept': 'application/json',
-    },
-  });
-
-  console.log(`PSA API images response status: ${response.status}`);
   
-  if (!response.ok) {
-    console.log(`PSA API images failed: ${response.status} ${response.statusText}`);
+  try {
+    const response = await Promise.race([
+      fetch(`https://api.psacard.com/publicapi/cert/GetImagesByCertNumber/${cert}`, {
+        headers: {
+          'Authorization': `Bearer ${apiToken}`,
+          'Accept': 'application/json',
+        },
+      }),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error("PSA images API timeout")), 15000)
+      )
+    ]) as Response;
+
+    console.log(`PSA API images response status: ${response.status}`);
+    
+    if (!response.ok) {
+      console.log(`PSA API images failed: ${response.status} ${response.statusText}`);
+      return null;
+    }
+
+    const data = await response.json();
+    console.log("PSA API images response:", JSON.stringify(data, null, 2));
+    
+    if (!data?.IsValidRequest || !data?.PSACertImages || !Array.isArray(data.PSACertImages)) {
+      console.log("PSA API returned invalid or empty image data");
+      return null;
+    }
+
+    return data.PSACertImages;
+  } catch (error) {
+    console.error("Error fetching PSA images:", error);
     return null;
   }
-
-  const data = await response.json();
-  console.log("PSA API images response:", JSON.stringify(data, null, 2));
-  
-  if (!data?.IsValidRequest || !data?.PSACertImages || !Array.isArray(data.PSACertImages)) {
-    console.log("PSA API returned invalid or empty image data");
-    return null;
-  }
-
-  return data.PSACertImages;
 }
 
 function mapPSACardData(psaCard: any) {
@@ -149,17 +171,23 @@ serve(async (req) => {
         try {
           console.log("Making Firecrawl API request...");
 
-          const fcResp = await fetch("https://api.firecrawl.dev/v1/scrape", {
-            method: "POST",
-            headers: {
-              "Authorization": `Bearer ${apiKey}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              url,
-              formats: ["html", "markdown"],
+          // Add timeout to Firecrawl request
+          const fcResp = await Promise.race([
+            fetch("https://api.firecrawl.dev/v1/scrape", {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${apiKey}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                url,
+                formats: ["html", "markdown"],
+              }),
             }),
-          });
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error("Firecrawl timeout after 30 seconds")), 30000)
+            )
+          ]) as Response;
 
           console.log("Firecrawl API response status:", fcResp.status);
 
@@ -209,11 +237,16 @@ serve(async (req) => {
         const apiToken = apiTokenSetting.value;
 
         try {
-          // Fetch card data and images in parallel
-          const [psaCard, psaImages] = await Promise.all([
-            fetchPSACardData(cert, apiToken),
-            fetchPSAImages(cert, apiToken)
-          ]);
+          // Add timeout to PSA API calls
+          const [psaCard, psaImages] = await Promise.race([
+            Promise.all([
+              fetchPSACardData(cert, apiToken),
+              fetchPSAImages(cert, apiToken)
+            ]),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error("PSA API timeout after 30 seconds")), 30000)
+            )
+          ]) as [any, any];
 
           if (psaCard) {
             console.log("PSA API card data retrieved successfully");
