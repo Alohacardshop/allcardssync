@@ -1,3 +1,4 @@
+
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
@@ -171,14 +172,14 @@ export function StoreProvider({ children }: StoreProviderProps) {
   const contextValue: StoreContextType = {
     selectedStore,
     setSelectedStore,
+    // Show all stores to admins, or only assigned stores to regular users
     availableStores: isAdmin ? availableStores : availableStores.filter(store => 
       userAssignments.some(assignment => assignment.store_key === store.key)
     ),
     selectedLocation,
     setSelectedLocation,
-    availableLocations: isAdmin ? availableLocations : availableLocations.filter(location => 
-      userAssignments.some(assignment => assignment.location_gid === location.gid)
-    ),
+    // Show all locations to admins, or all locations to users (they can set defaults for any)
+    availableLocations,
     loadingLocations,
     isAdmin,
     userAssignments,
