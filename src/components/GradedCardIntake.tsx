@@ -51,8 +51,8 @@ export const GradedCardIntake = () => {
 
       const timeoutPromise = new Promise((_, reject) => {
         const timeout = setTimeout(() => {
-          reject(new Error('Request timed out after 30 seconds'));
-        }, 30000);
+          reject(new Error('Request timed out after 15 seconds'));
+        }, 15000);
         
         controller.signal.addEventListener('abort', () => {
           clearTimeout(timeout);
@@ -74,7 +74,9 @@ export const GradedCardIntake = () => {
           variant: data.varietyPedigree || "",
           cardNumber: data.cardNumber || "",
           year: data.year || "",
-          grade: data.grade ? data.grade.toString().replace(/\D/g, '') : "",
+          grade: (data.gradeNumeric !== undefined && data.gradeNumeric !== null)
+            ? String(data.gradeNumeric)
+            : (data.grade ? String(data.grade).replace(/\D/g, '') : ""),
           game: data.game || "",
           certNumber: data.certNumber || psaCert,
           price: data.psaEstimate || "",
@@ -137,7 +139,7 @@ export const GradedCardIntake = () => {
           quantity: formData.quantity,
           product_weight: 3.0, // 3 oz for graded cards
           // Store image URLs if available
-          image_urls: cardData?.imageUrls ? JSON.stringify(cardData.imageUrls) : null,
+          image_urls: cardData?.imageUrls ?? null,
           // Comprehensive data capture
           source_provider: 'psa',
           source_payload: {
