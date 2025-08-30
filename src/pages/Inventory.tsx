@@ -11,6 +11,9 @@ import { Link } from "react-router-dom";
 import { Navigation } from "@/components/Navigation";
 import { toast } from "sonner";
 import { AllLocationsSelector } from "@/components/AllLocationsSelector";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { RefreshCw, AlertTriangle } from "lucide-react";
 
 // Simple SEO helpers without extra deps
 function useSEO(opts: { title: string; description?: string; canonical?: string }) {
@@ -90,6 +93,7 @@ export default function Inventory() {
 
   const [items, setItems] = useState<ItemRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
@@ -107,12 +111,63 @@ export default function Inventory() {
   const [yearFilter, setYearFilter] = useState("");
   const [priceRange, setPriceRange] = useState({ min: "", max: "" });
 
+  // Diagnostic state
+  const [diagnostics, setDiagnostics] = useState<{
+    user: any;
+    roles: string[];
+    locations: string[];
+    itemCount: number;
+  } | null>(null);
+
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / pageSize)), [total]);
+
+  // Fetch diagnostics on mount
+  useEffect(() => {
+    const fetchDiagnostics = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        const roles: string[] = [];
+        if (user) {
+          const { data: roleData } = await supabase
+            .from('user_roles')
+            .select('role')
+            .eq('user_id', user.id);
+          roles.push(...(roleData?.map(r => r.role) || []));
+        }
+
+        const { data: locationData } = await supabase
+          .from('user_shopify_assignments')
+          .select('location_gid')
+          .eq('user_id', user?.id || '');
+
+        const { count: itemCount } = await supabase
+          .from('intake_items')
+          .select('*', { count: 'exact', head: true })
+          .is('deleted_at', null);
+
+        setDiagnostics({
+          user,
+          roles,
+          locations: locationData?.map(l => l.location_gid) || [],
+          itemCount: itemCount || 0
+        });
+      } catch (err) {
+        console.error('Diagnostics error:', err);
+      }
+    };
+
+    fetchDiagnostics();
+  }, []);
 
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
+      setError(null);
+      
       try {
+        console.log('Loading intake items from DB');
+        
         let query = supabase
           .from("intake_items")
           .select("*", { count: "exact" })
@@ -193,11 +248,21 @@ export default function Inventory() {
         const from = (page - 1) * pageSize;
         const to = from + pageSize - 1;
         const { data, error, count } = await query.range(from, to);
-        if (error) throw error;
+        
+        if (error) {
+          console.error('Inventory fetch error:', error);
+          throw new Error(`Database error: ${error.message}`);
+        }
+        
         setItems((data as ItemRow[]) || []);
         setTotal(count || 0);
-      } catch (e) {
-        console.error(e);
+        console.log(`Loaded ${(data || []).length} items out of ${count || 0} total`);
+        
+      } catch (e: any) {
+        console.error('Fetch error:', e);
+        setError(e.message || 'Failed to load inventory');
+        setItems([]);
+        setTotal(0);
       } finally {
         setLoading(false);
       }
@@ -275,11 +340,49 @@ export default function Inventory() {
         <Card className="shadow-aloha">
           <CardHeader>
             <div className="flex items-center justify-between">
-              <CardTitle>Inventory List</CardTitle>
-              <Button variant="outline" onClick={clearAllFilters}>
-                Clear All Filters
-              </Button>
+              <div className="flex items-center gap-4">
+                <CardTitle>Inventory List</CardTitle>
+                {loading && <RefreshCw className="h-4 w-4 animate-spin" />}
+                {!loading && total > 0 && (
+                  <span className="text-sm text-muted-foreground">
+                    {items.length} of {total} items
+                  </span>
+                )}
+              </div>
+              <div className="flex gap-2">
+                {error && (
+                  <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Retry
+                  </Button>
+                )}
+                <Button variant="outline" onClick={clearAllFilters}>
+                  Clear All Filters
+                </Button>
+              </div>
             </div>
+            
+            {/* Diagnostics Panel */}
+            {diagnostics && (process.env.NODE_ENV === 'development' || diagnostics.itemCount === 0) && (
+              <div className="mt-4 p-3 bg-muted/50 rounded-lg">
+                <div className="text-sm space-y-1">
+                  <div><strong>Auth:</strong> {diagnostics.user ? `✅ ${diagnostics.user.email}` : '❌ Not logged in'}</div>
+                  <div><strong>Roles:</strong> {diagnostics.roles.length > 0 ? diagnostics.roles.join(', ') : 'None'}</div>
+                  <div><strong>Locations:</strong> {diagnostics.locations.length > 0 ? `${diagnostics.locations.length} assigned` : 'None'}</div>
+                  <div><strong>Total Items:</strong> {diagnostics.itemCount}</div>
+                </div>
+              </div>
+            )}
+
+            {/* Error Alert */}
+            {error && (
+              <Alert className="mt-4" variant="destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>
+                  {error}. Try refreshing the page or contact support if the issue persists.
+                </AlertDescription>
+              </Alert>
+            )}
           </CardHeader>
           <CardContent>
             {/* Primary Filters Row */}
@@ -525,82 +628,110 @@ export default function Inventory() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {items.map((it) => {
-                    const title = buildTitleFromParts(it.year, it.brand_title, it.card_number, it.subject, it.variant);
-                    const isGraded = !!it.psa_cert;
-                    return (
-                    <TableRow key={it.id}>
-                      <TableCell className="font-medium">
-                        <button
-                          onClick={() => {
-                            setPage(1);
-                            setLotFilter(it.lot_number);
-                          }}
-                          className="text-primary hover:underline cursor-pointer"
-                        >
-                          {it.lot_number}
-                        </button>
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{it.id}</TableCell>
-                      <TableCell className="max-w-xs">
-                        <div className="truncate" title={title || "—"}>
-                          {title || "—"}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={isGraded ? "default" : "secondary"}>
-                          {isGraded ? "Graded" : "Raw"}
-                        </Badge>
-                        {isGraded && it.psa_cert && (
-                          <div className="text-xs text-muted-foreground mt-1">
-                            PSA {it.psa_cert}
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell>{it.grade || "—"}</TableCell>
-                      <TableCell>{it.brand_title || "—"}</TableCell>
-                      <TableCell>{it.sku || "—"}</TableCell>
-                      <TableCell>{it.price != null ? `$${Number(it.price).toLocaleString()}` : "—"}</TableCell>
-                      <TableCell>{it.cost != null ? `$${Number(it.cost).toLocaleString()}` : "—"}</TableCell>
-                      <TableCell>{it.quantity != null ? Number(it.quantity) : "—"}</TableCell>
-                      <TableCell>
-                        {it.printed_at ? <Badge variant="secondary">Printed</Badge> : <Badge>Unprinted</Badge>}
-                      </TableCell>
-                      <TableCell>
-                        {it.pushed_at ? <Badge variant="secondary">Pushed</Badge> : <Badge>Unpushed</Badge>}
-                      </TableCell>
-                      <TableCell>{new Date(it.created_at).toLocaleString()}</TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex gap-2 justify-end">
-                          <Link
-                            to="/labels"
-                            state={{
-                              title,
-                              sku: (it.psa_cert || it.sku || it.id) + (it.grade ? `-${it.grade.replace(/\s+/g, '')}` : ''),
-                              price: it.price?.toString(),
-                              lot: it.lot_number,
-                              condition: it.grade || "Near Mint",
-                              barcode: it.sku || it.id
-                            }}
-                          >
-                            <Button size="sm" variant="secondary">
-                              Print
-                            </Button>
-                          </Link>
-                          <Button size="sm" variant="destructive" onClick={() => handleDeleteRow(it)}>
-                            Delete
-                          </Button>
-                        </div>
-                      </TableCell>
+                  {loading ? (
+                    // Show skeleton rows while loading
+                    Array.from({ length: 5 }).map((_, i) => (
+                      <TableRow key={i}>
+                        <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-48" /></TableCell>
+                        <TableCell><Skeleton className="h-6 w-16" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-12" /></TableCell>
+                        <TableCell><Skeleton className="h-6 w-16" /></TableCell>
+                        <TableCell><Skeleton className="h-6 w-16" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                        <TableCell><Skeleton className="h-8 w-20" /></TableCell>
                       </TableRow>
-                    );
-                  })}
-                  {items.length === 0 && (
+                    ))
+                  ) : items.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={12} className="text-center text-muted-foreground">
-                        {loading ? "Loading…" : "No items found"}
+                      <TableCell colSpan={14} className="text-center py-8">
+                        <div className="flex flex-col items-center gap-2">
+                          <p className="text-muted-foreground">No items found</p>
+                          {(search || lotFilter || selectedLocationGid || printed !== "all" || pushed !== "all" || typeFilter !== "all" || conditionFilter || setFilter || categoryFilter || yearFilter || priceRange.min || priceRange.max) && (
+                            <Button variant="outline" size="sm" onClick={clearAllFilters}>
+                              Clear filters to see all items
+                            </Button>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
+                  ) : (
+                    items.map((it) => {
+                      const title = buildTitleFromParts(it.year, it.brand_title, it.card_number, it.subject, it.variant);
+                      const isGraded = !!it.psa_cert;
+                      return (
+                      <TableRow key={it.id}>
+                        <TableCell className="font-medium">
+                          <button
+                            onClick={() => {
+                              setPage(1);
+                              setLotFilter(it.lot_number);
+                            }}
+                            className="text-primary hover:underline cursor-pointer"
+                          >
+                            {it.lot_number}
+                          </button>
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{it.id}</TableCell>
+                        <TableCell className="max-w-xs">
+                          <div className="truncate" title={title || "—"}>
+                            {title || "—"}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={isGraded ? "default" : "secondary"}>
+                            {isGraded ? "Graded" : "Raw"}
+                          </Badge>
+                          {isGraded && it.psa_cert && (
+                            <div className="text-xs text-muted-foreground mt-1">
+                              PSA {it.psa_cert}
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell>{it.grade || "—"}</TableCell>
+                        <TableCell>{it.brand_title || "—"}</TableCell>
+                        <TableCell>{it.sku || "—"}</TableCell>
+                        <TableCell>{it.price != null ? `$${Number(it.price).toLocaleString()}` : "—"}</TableCell>
+                        <TableCell>{it.cost != null ? `$${Number(it.cost).toLocaleString()}` : "—"}</TableCell>
+                        <TableCell>{it.quantity != null ? Number(it.quantity) : "—"}</TableCell>
+                        <TableCell>
+                          {it.printed_at ? <Badge variant="secondary">Printed</Badge> : <Badge>Unprinted</Badge>}
+                        </TableCell>
+                        <TableCell>
+                          {it.pushed_at ? <Badge variant="secondary">Pushed</Badge> : <Badge>Unpushed</Badge>}
+                        </TableCell>
+                        <TableCell>{new Date(it.created_at).toLocaleString()}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex gap-2 justify-end">
+                            <Link
+                              to="/labels"
+                              state={{
+                                title,
+                                sku: (it.psa_cert || it.sku || it.id) + (it.grade ? `-${it.grade.replace(/\s+/g, '')}` : ''),
+                                price: it.price?.toString(),
+                                lot: it.lot_number,
+                                condition: it.grade || "Near Mint",
+                                barcode: it.sku || it.id
+                              }}
+                            >
+                              <Button size="sm" variant="secondary">
+                                Print
+                              </Button>
+                            </Link>
+                            <Button size="sm" variant="destructive" onClick={() => handleDeleteRow(it)}>
+                              Delete
+                            </Button>
+                          </div>
+                        </TableCell>
+                        </TableRow>
+                      );
+                    })
                   )}
                 </TableBody>
               </Table>
