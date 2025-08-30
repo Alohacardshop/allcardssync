@@ -13,6 +13,7 @@ export const GradedCardIntake = () => {
   const [fetching, setFetching] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [cardData, setCardData] = useState<any>(null);
+  const [abortController, setAbortController] = useState<AbortController | null>(null);
   const { selectedStore, selectedLocation } = useStore();
 
   // Form fields that can be edited after fetching
@@ -38,7 +39,10 @@ export const GradedCardIntake = () => {
       return;
     }
 
+    const controller = new AbortController();
+    setAbortController(controller);
     setFetching(true);
+    
     try {
       const { data, error } = await supabase.functions.invoke('psa-scrape', {
         body: { cert: psaCert.trim() }
@@ -69,10 +73,24 @@ export const GradedCardIntake = () => {
         throw new Error(data?.error || 'Failed to fetch PSA data');
       }
     } catch (error) {
-      console.error('PSA fetch error:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to fetch PSA data');
+      if (controller.signal.aborted) {
+        toast.info("PSA fetch cancelled");
+      } else {
+        console.error('PSA fetch error:', error);
+        toast.error(error instanceof Error ? error.message : 'Failed to fetch PSA data');
+      }
     } finally {
       setFetching(false);
+      setAbortController(null);
+    }
+  };
+
+  const handleStopFetch = () => {
+    if (abortController) {
+      abortController.abort();
+      setAbortController(null);
+      setFetching(false);
+      toast.info("PSA fetch cancelled");
     }
   };
 
@@ -182,23 +200,37 @@ export const GradedCardIntake = () => {
               value={psaCert}
               onChange={(e) => setPsaCert(e.target.value)}
               disabled={fetching}
-              onKeyDown={(e) => e.key === 'Enter' && handleFetchPSA()}
+              onKeyDown={(e) => e.key === 'Enter' && !fetching && handleFetchPSA()}
             />
           </div>
-          <Button 
-            onClick={handleFetchPSA} 
-            disabled={fetching || !psaCert.trim()}
-            className="px-8"
-          >
-            {fetching ? (
-              <>
+          
+          {!fetching ? (
+            <Button 
+              onClick={handleFetchPSA} 
+              disabled={!psaCert.trim()}
+              className="px-8"
+            >
+              Fetch PSA
+            </Button>
+          ) : (
+            <div className="flex gap-2">
+              <Button 
+                variant="outline"
+                disabled
+                className="px-8"
+              >
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
                 Fetching...
-              </>
-            ) : (
-              'Fetch PSA'
-            )}
-          </Button>
+              </Button>
+              <Button 
+                variant="destructive"
+                onClick={handleStopFetch}
+                className="px-4"
+              >
+                Stop
+              </Button>
+            </div>
+          )}
         </div>
 
         {/* Card Image Preview */}
