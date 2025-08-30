@@ -183,38 +183,56 @@ serve(async (req) => {
       });
     }
 
-    const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-
     // Build PSA URL
     const psaUrl = `https://www.psacard.com/cert/${encodeURIComponent(cert)}/psa`;
     console.log("PSA URL:", psaUrl);
 
-    // Get Firecrawl API key
-    console.log("Getting Firecrawl API key...");
-    const { data: apiKeySetting, error: keyError } = await supabase.functions.invoke('get-system-setting', {
-      body: { 
-        keyName: 'FIRECRAWL_API_KEY',
-        fallbackSecretName: 'FIRECRAWL_API_KEY'
-      }
-    });
+    // Get Supabase client
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    if (keyError || !apiKeySetting?.value) {
-      console.error("Firecrawl API key not found");
+    // Check for Firecrawl API key
+    console.log("Checking for Firecrawl API key...");
+    let apiKey = Deno.env.get("FIRECRAWL_API_KEY");
+    
+    if (!apiKey) {
+      console.log("Firecrawl API key not in env, checking system settings...");
+      try {
+        const { data: apiKeySetting, error: keyError } = await supabase.functions.invoke('get-system-setting', {
+          body: { 
+            keyName: 'FIRECRAWL_API_KEY',
+            fallbackSecretName: 'FIRECRAWL_API_KEY'
+          }
+        });
+        
+        if (keyError) {
+          console.error("System setting error:", keyError);
+        } else if (apiKeySetting?.value) {
+          apiKey = apiKeySetting.value;
+          console.log("Found Firecrawl API key in system settings");
+        }
+      } catch (settingsError) {
+        console.error("Failed to get system settings:", settingsError);
+      }
+    } else {
+      console.log("Found Firecrawl API key in environment");
+    }
+
+    if (!apiKey) {
+      console.error("No Firecrawl API key found");
       return new Response(JSON.stringify({ 
         ok: false, 
-        error: "Firecrawl API key not configured" 
+        error: "Firecrawl API key not configured. Please add FIRECRAWL_API_KEY to system settings." 
       }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const apiKey = apiKeySetting.value;
-    console.log("Firecrawl API key found, scraping PSA page...");
-
-    // Scrape PSA page with Firecrawl
+    console.log("Making Firecrawl request...");
+    
+    // Make Firecrawl request with shorter timeout
     const scrapeResponse = await Promise.race([
       fetch("https://api.firecrawl.dev/v1/scrape", {
         method: "POST",
@@ -225,20 +243,24 @@ serve(async (req) => {
         body: JSON.stringify({
           url: psaUrl,
           formats: ["html"],
+          onlyMainContent: false,
+          waitFor: 2000, // Wait 2 seconds for page to load
+          timeout: 10000 // 10 second timeout for scraping
         }),
       }),
       new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("Firecrawl timeout")), 20000)
+        setTimeout(() => reject(new Error("Firecrawl request timeout after 15 seconds")), 15000)
       )
     ]) as Response;
 
     console.log("Firecrawl response status:", scrapeResponse.status);
 
     if (!scrapeResponse.ok) {
-      console.error("Firecrawl failed:", scrapeResponse.status, scrapeResponse.statusText);
+      const errorText = await scrapeResponse.text().catch(() => "Unknown error");
+      console.error("Firecrawl failed:", scrapeResponse.status, errorText);
       return new Response(JSON.stringify({ 
         ok: false, 
-        error: "Failed to scrape PSA page" 
+        error: `Firecrawl request failed: ${scrapeResponse.status} - ${errorText}` 
       }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -246,20 +268,24 @@ serve(async (req) => {
     }
 
     const scrapeData = await scrapeResponse.json();
+    console.log("Firecrawl response received, data keys:", Object.keys(scrapeData || {}));
+    
     const html = scrapeData?.data?.html || "";
 
     if (!html) {
       console.error("No HTML content received from Firecrawl");
+      console.log("Scrape response:", JSON.stringify(scrapeData, null, 2));
       return new Response(JSON.stringify({ 
         ok: false, 
-        error: "No content received from PSA page" 
+        error: "No HTML content received from PSA page scraping" 
       }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    console.log("HTML received, extracting card data...");
+    console.log("HTML content received, length:", html.length);
+    console.log("HTML preview:", html.substring(0, 200));
     
     // Extract card data
     const cardData = extractCardData(html, cert);
@@ -278,7 +304,7 @@ serve(async (req) => {
       scrapeSuccess: true
     };
 
-    console.log("PSA scrape complete:", JSON.stringify(result, null, 2));
+    console.log("PSA scrape complete, extracted fields:", Object.keys(cardData));
     return new Response(JSON.stringify(result), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -287,7 +313,10 @@ serve(async (req) => {
   } catch (error) {
     console.error("PSA scraper error:", error);
     return new Response(
-      JSON.stringify({ ok: false, error: (error as Error).message }),
+      JSON.stringify({ 
+        ok: false, 
+        error: `PSA scraper failed: ${(error as Error).message}` 
+      }),
       {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
