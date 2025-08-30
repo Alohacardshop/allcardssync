@@ -6,28 +6,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-interface PSAApiCardResponse {
-  ID: number;
-  CertNumber: string;
-  Year?: string;
-  Brand?: string;
-  Subject?: string;
-  SpecNumber?: string;
-  CategoryName?: string;
-  GradeNumeric?: number;
-  GradeDisplay?: string;
-  LabelType?: string;
-  VarietyPedigree?: string;
-}
-
-interface PSAApiImageResponse {
-  CertNumber: string;
-  ImageUrls: string[];
-}
-
 interface NormalizedResult {
   ok: boolean;
-  source: "psa_api" | "scrape";
+  source: "scrape";
   url: string;
   certNumber: string;
   grade?: string;
@@ -37,13 +18,9 @@ interface NormalizedResult {
   cardNumber?: string;
   varietyPedigree?: string;
   labelType?: string;
-  specNumber?: string;
   categoryName?: string;
   imageUrl?: string | null;
   imageUrls: string[];
-  apiSuccess: boolean;
-  scrapeSuccess: boolean;
-  error?: string;
 }
 
 serve(async (req) => {
@@ -92,192 +69,112 @@ serve(async (req) => {
     log.info('Processing PSA certificate', { cert: certStr });
 
     const psaUrl = `https://www.psacard.com/cert/${certStr}/psa`;
-    let apiSuccess = false;
-    let scrapeSuccess = false;
-    let finalSource: "psa_api" | "scrape" = "scrape";
 
     // Initialize result structure
     let result: Partial<NormalizedResult> = {
       certNumber: certStr,
-      imageUrls: [],
-      apiSuccess: false,
-      scrapeSuccess: false
+      imageUrls: []
     };
 
-    // Step 1: Try PSA API first
-    log.info('Attempting PSA API fetch');
+    // Get Firecrawl API key
+    log.info('Getting Firecrawl API key for scraping');
     
-    try {
-      // Get PSA API token from system settings
-      const tokenResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/get-system-setting`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`,
-        },
-        body: JSON.stringify({
-          keyName: 'PSA_PUBLIC_API_TOKEN',
-          fallbackSecretName: 'PSA_PUBLIC_API_TOKEN'
-        })
-      });
+    const firecrawlResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/get-system-setting`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`,
+      },
+      body: JSON.stringify({
+        keyName: 'FIRECRAWL_API_KEY',
+        fallbackSecretName: 'FIRECRAWL_API_KEY'
+      })
+    });
 
-      let psaToken = null;
-      if (tokenResponse.ok) {
-        const tokenData = await tokenResponse.json();
-        psaToken = tokenData.value;
-        log.info('PSA API token retrieved');
-      } else {
-        log.warn('PSA API token not found, skipping API');
-      }
-
-      if (psaToken) {
-        // Fetch card data and images in parallel
-        const [cardResponse, imageResponse] = await Promise.all([
-          fetch(`https://api.psacard.com/publicapi/cert/GetByCertNumber/${certStr}`, {
-            headers: { 'Authorization': `Bearer ${psaToken}` }
-          }),
-          fetch(`https://api.psacard.com/publicapi/cert/GetImagesByCertNumber/${certStr}`, {
-            headers: { 'Authorization': `Bearer ${psaToken}` }
-          })
-        ]);
-
-        if (cardResponse.ok) {
-          const cardData: PSAApiCardResponse = await cardResponse.json();
-          log.info('PSA API card data retrieved', { cert: certStr, hasData: !!cardData });
-
-          // Normalize PSA API data
-          result.grade = cardData.GradeDisplay || (cardData.GradeNumeric ? String(cardData.GradeNumeric) : undefined);
-          result.year = cardData.Year;
-          result.brandTitle = cardData.Brand;
-          result.subject = cardData.Subject;
-          result.cardNumber = cardData.SpecNumber;
-          result.varietyPedigree = cardData.VarietyPedigree;
-          result.labelType = cardData.LabelType;
-          result.specNumber = cardData.SpecNumber;
-          result.categoryName = cardData.CategoryName;
-
-          apiSuccess = true;
-          log.info('PSA API data normalized', { fields: Object.keys(result).filter(k => result[k]) });
-        }
-
-        if (imageResponse.ok) {
-          const imageData: PSAApiImageResponse = await imageResponse.json();
-          if (imageData.ImageUrls?.length > 0) {
-            result.imageUrls = imageData.ImageUrls;
-            result.imageUrl = imageData.ImageUrls[0];
-            log.info('PSA API images retrieved', { count: imageData.ImageUrls.length });
-          }
-        }
-
-        // Check if we got substantial data from PSA API
-        const hasSubstantialData = !!(result.grade || result.brandTitle || result.subject);
-        if (hasSubstantialData) {
-          finalSource = "psa_api";
-          log.info('PSA API provided substantial data, using as primary source');
-        }
-      }
-    } catch (error) {
-      log.error('PSA API error', { error: error.message });
+    let firecrawlApiKey = null;
+    if (firecrawlResponse.ok) {
+      const firecrawlData = await firecrawlResponse.json();
+      firecrawlApiKey = firecrawlData.value;
+      log.info('Firecrawl API key retrieved');
+    } else {
+      log.error('Firecrawl API key not found');
+      return new Response(
+        JSON.stringify({ ok: false, error: 'Firecrawl API key not configured' }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
-    // Step 2: Firecrawl fallback (if PSA API didn't provide complete data)
-    if (!apiSuccess || !result.grade || !result.brandTitle) {
-      log.info('Falling back to Firecrawl scraping');
+    // Scrape PSA page with Firecrawl
+    log.info('Scraping PSA page with Firecrawl', { url: psaUrl });
+    
+    const scrapeResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${firecrawlApiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        url: psaUrl,
+        formats: ["html", "markdown"]
+      })
+    });
 
-      try {
-        // Get Firecrawl API key
-        const firecrawlResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/get-system-setting`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`,
-          },
-          body: JSON.stringify({
-            keyName: 'FIRECRAWL_API_KEY',
-            fallbackSecretName: 'FIRECRAWL_API_KEY'
-          })
-        });
-
-        let firecrawlApiKey = null;
-        if (firecrawlResponse.ok) {
-          const firecrawlData = await firecrawlResponse.json();
-          firecrawlApiKey = firecrawlData.value;
-          log.info('Firecrawl API key retrieved');
-        } else {
-          log.error('Firecrawl API key not found');
-          throw new Error('Firecrawl API key not configured');
-        }
-
-        // Scrape PSA page
-        const scrapeResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${firecrawlApiKey}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            url: psaUrl,
-            formats: ["html", "markdown"]
-          })
-        });
-
-        if (scrapeResponse.ok) {
-          const scrapeData = await scrapeResponse.json();
-          log.info('Firecrawl response received', { 
-            hasData: !!scrapeData.data,
-            hasHtml: !!(scrapeData.data?.html || scrapeData.html),
-            hasMarkdown: !!(scrapeData.data?.markdown || scrapeData.markdown)
-          });
-
-          // Extract HTML content (handle both response formats)
-          const html = scrapeData.data?.html || scrapeData.html || '';
-          const markdown = scrapeData.data?.markdown || scrapeData.markdown || '';
-
-          if (html || markdown) {
-            const content = html || markdown;
-            
-            // Parse HTML/markdown for PSA data
-            const extractedData = extractPSAData(content, certStr);
-            
-            // Fill in missing fields from scraping
-            if (extractedData.grade && !result.grade) result.grade = extractedData.grade;
-            if (extractedData.year && !result.year) result.year = extractedData.year;
-            if (extractedData.brandTitle && !result.brandTitle) result.brandTitle = extractedData.brandTitle;
-            if (extractedData.subject && !result.subject) result.subject = extractedData.subject;
-            if (extractedData.cardNumber && !result.cardNumber) result.cardNumber = extractedData.cardNumber;
-            if (extractedData.varietyPedigree && !result.varietyPedigree) result.varietyPedigree = extractedData.varietyPedigree;
-            if (extractedData.labelType && !result.labelType) result.labelType = extractedData.labelType;
-            if (extractedData.categoryName && !result.categoryName) result.categoryName = extractedData.categoryName;
-
-            // Images from scraping (if not already from API)
-            if (extractedData.imageUrls.length > 0 && result.imageUrls.length === 0) {
-              result.imageUrls = extractedData.imageUrls;
-              result.imageUrl = extractedData.imageUrls[0];
-            }
-
-            scrapeSuccess = true;
-            
-            // If scraping filled significant missing data, update source
-            if (!apiSuccess || extractedData.grade || extractedData.brandTitle) {
-              finalSource = "scrape";
-            }
-
-            log.info('Firecrawl data extracted and merged', { 
-              extractedFields: Object.keys(extractedData).filter(k => extractedData[k]) 
-            });
-          }
-        } else {
-          log.error('Firecrawl API error', { status: scrapeResponse.status });
-        }
-      } catch (error) {
-        log.error('Firecrawl scraping failed', { error: error.message });
-      }
+    if (!scrapeResponse.ok) {
+      log.error('Firecrawl API error', { status: scrapeResponse.status });
+      return new Response(
+        JSON.stringify({ ok: false, error: `Firecrawl request failed: ${scrapeResponse.status}` }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
+
+    const scrapeData = await scrapeResponse.json();
+    log.info('Firecrawl response received', { 
+      hasData: !!scrapeData.data,
+      hasHtml: !!(scrapeData.data?.html || scrapeData.html || scrapeData.data?.content),
+      hasMarkdown: !!(scrapeData.data?.markdown || scrapeData.markdown)
+    });
+
+    // Extract HTML content (handle multiple response formats)
+    const html = scrapeData.data?.html || scrapeData.html || scrapeData.data?.content || '';
+    const markdown = scrapeData.data?.markdown || scrapeData.markdown || '';
+
+    if (!html && !markdown) {
+      log.error('No content received from Firecrawl');
+      return new Response(
+        JSON.stringify({ ok: false, error: 'No data received from PSA page scraping' }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const content = html || markdown;
+    
+    // Parse HTML/markdown for PSA data
+    const extractedData = extractPSAData(content, certStr);
+    
+    // Fill in fields from scraping
+    result.grade = extractedData.grade;
+    result.year = extractedData.year;
+    result.brandTitle = extractedData.brandTitle;
+    result.subject = extractedData.subject;
+    result.cardNumber = extractedData.cardNumber;
+    result.varietyPedigree = extractedData.varietyPedigree;
+    result.labelType = extractedData.labelType;
+    result.categoryName = extractedData.categoryName;
+
+    // Images from scraping
+    if (extractedData.imageUrls.length > 0) {
+      result.imageUrls = extractedData.imageUrls;
+      result.imageUrl = extractedData.imageUrls[0];
+    }
+
+    log.info('PSA data extracted via Firecrawl', { 
+      extractedFields: Object.keys(extractedData).filter(k => extractedData[k]) 
+    });
 
     // Build final response
     const finalResult: NormalizedResult = {
       ok: true,
-      source: finalSource,
+      source: "scrape",
       url: psaUrl,
       certNumber: certStr,
       grade: result.grade,
@@ -287,19 +184,13 @@ serve(async (req) => {
       cardNumber: result.cardNumber,
       varietyPedigree: result.varietyPedigree,
       labelType: result.labelType,
-      specNumber: result.specNumber,
       categoryName: result.categoryName,
       imageUrl: result.imageUrl || null,
-      imageUrls: result.imageUrls || [],
-      apiSuccess,
-      scrapeSuccess
+      imageUrls: result.imageUrls || []
     };
 
-    log.info('PSA scrape completed successfully', { 
+    log.info('PSA scrape completed successfully via Firecrawl', { 
       cert: certStr, 
-      source: finalSource, 
-      apiSuccess, 
-      scrapeSuccess,
       hasGrade: !!finalResult.grade,
       hasBrandTitle: !!finalResult.brandTitle,
       hasSubject: !!finalResult.subject,

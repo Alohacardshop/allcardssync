@@ -94,11 +94,12 @@ export const PSABulkImport = () => {
         // Store image URLs if available
         image_urls: item.data?.imageUrls ? JSON.stringify(item.data.imageUrls) : null,
         // New comprehensive data capture fields
-        source_provider: 'psa',
+        source_provider: 'scrape',
         source_payload: {
           psa_cert: item.psaCert,
           csv_row: items.indexOf(item) + 1,
-          original_filename: file?.name
+          original_filename: file?.name,
+          scraped_fields: Object.keys(item.data || {}).filter(k => item.data[k])
         },
         grading_data: {
           psa_cert: item.psaCert,
@@ -172,9 +173,8 @@ export const PSABulkImport = () => {
           
           updatedItems[i] = { ...updatedItems[i], status: 'success' };
           
-          // Show per-item success toast with source
-          const sourceText = psaData.source === 'psa_api' ? 'PSA API' : 'web scraping';
-          toast.success(`${item.psaCert}: Fetched from ${sourceText}`);
+          // Show per-item success toast
+          toast.success(`${item.psaCert}: Fetched via web scraping`);
         } else {
           throw new Error(psaData?.error || 'Failed to scrape PSA data');
         }
@@ -200,15 +200,7 @@ export const PSABulkImport = () => {
     const successful = updatedItems.filter(item => item.status === 'success').length;
     const failed = updatedItems.filter(item => item.status === 'error').length;
     
-    // Count by source
-    const psaApiCount = updatedItems.filter(item => 
-      item.status === 'success' && item.data?.source === 'psa_api'
-    ).length;
-    const scrapeCount = updatedItems.filter(item => 
-      item.status === 'success' && item.data?.source === 'scrape'
-    ).length;
-    
-    toast.success(`Import completed: ${successful} successful (${psaApiCount} PSA API, ${scrapeCount} web scraping), ${failed} failed`);
+    toast.success(`Import completed: ${successful} imported via web scraping, ${failed} failed`);
   };
 
   const downloadTemplate = () => {
@@ -341,12 +333,8 @@ export const PSABulkImport = () => {
                     <TableCell>{item.data?.title || '-'}</TableCell>
                     <TableCell>{item.data?.grade || '-'}</TableCell>
                     <TableCell>
-                      <span className={`px-2 py-1 rounded text-xs ${
-                        item.data?.source === 'psa_api' ? 'bg-green-100 text-green-800' :
-                        item.data?.source === 'scrape' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
-                        {item.data?.source || '-'}
+                      <span className="px-2 py-1 rounded text-xs bg-blue-100 text-blue-800">
+                        {item.data?.source || 'scrape'}
                       </span>
                     </TableCell>
                     <TableCell className="text-red-600 text-sm">{item.error || '-'}</TableCell>

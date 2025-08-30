@@ -12,7 +12,7 @@ import CatalogTab from "@/components/admin/CatalogTab";
 import TCGDatabaseSettings from "@/components/admin/TCGDatabaseSettings";
 import { UserAssignmentManager } from "@/components/UserAssignmentManager";
 import { ShopifyConfig } from "@/components/admin/ShopifyConfig";
-import { AdminPSATest } from "@/components/admin/AdminPSATest";
+
 import { checkSystemHealth } from "@/lib/api";
 
 const Admin = () => {
@@ -91,7 +91,6 @@ const Admin = () => {
               <TabsTrigger value="system" className="whitespace-nowrap">System</TabsTrigger>
               <TabsTrigger value="users" className="whitespace-nowrap">Users</TabsTrigger>
               <TabsTrigger value="integrations" className="whitespace-nowrap">Integrations</TabsTrigger>
-              <TabsTrigger value="psa" className="whitespace-nowrap">PSA Tools</TabsTrigger>
               <TabsTrigger value="shopify-config" className="whitespace-nowrap">Shopify Config</TabsTrigger>
               <TabsTrigger value="shopify-inspect" className="whitespace-nowrap">Inspect Shopify</TabsTrigger>
             </TabsList>
@@ -187,10 +186,6 @@ const Admin = () => {
             </div>
           </TabsContent>
 
-          <TabsContent value="psa" className="space-y-4">
-            <AdminPSATest />
-          </TabsContent>
-          
           <TabsContent value="shopify-config" className="space-y-4">
             <ShopifyConfig />
           </TabsContent>
