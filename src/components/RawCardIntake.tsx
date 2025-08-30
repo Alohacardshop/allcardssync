@@ -58,6 +58,7 @@ export function RawCardIntake({
   const [picked, setPicked] = useState<CatalogCard | null>(null);
   const [chosenVariant, setChosenVariant] = useState<any>(null);
   const [quantity, setQuantity] = useState(1);
+  const [cost, setCost] = useState("");
   const { selectedStore, selectedLocation, availableStores, availableLocations } = useStore();
   const [saving, setSaving] = useState(false);
 
@@ -133,6 +134,7 @@ export function RawCardIntake({
           grade: chosenVariant.condition,
           // Let the database trigger handle defaulting to 99999 if null
           price: chosenVariant.price || null,
+          cost: cost ? parseFloat(cost) : null,
           sku: generateSKU(picked, chosenVariant, game),
           quantity: quantity,
           // Set product weight: 1 oz for raw cards (no grading)
@@ -187,6 +189,7 @@ export function RawCardIntake({
       setPicked(null);
       setChosenVariant(null);
       setQuantity(1);
+      setCost("");
       
       // Call onBatchAdd if provided
       if (onBatchAdd) {
@@ -388,8 +391,21 @@ export function RawCardIntake({
                   )}
                 </div>
                 
-                {/* Quantity and Add to Batch */}
+                {/* Cost, Quantity and Add to Batch */}
                 <div className="flex items-center gap-4 pt-4 border-t">
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="cost">Cost each ($):</Label>
+                    <Input
+                      id="cost"
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={cost}
+                      onChange={(e) => setCost(e.target.value)}
+                      className="w-24"
+                    />
+                  </div>
+
                   <div className="flex items-center gap-2">
                     <Label htmlFor="quantity">Quantity:</Label>
                     <Input

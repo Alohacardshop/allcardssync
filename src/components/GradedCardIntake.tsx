@@ -24,10 +24,10 @@ export const GradedCardIntake = () => {
     cardNumber: "",
     year: "",
     grade: "",
-    gradeDisplay: "",
     game: "",
     certNumber: "",
     price: "",
+    cost: "",
     quantity: 1,
     psaEstimate: ""
   });
@@ -56,11 +56,11 @@ export const GradedCardIntake = () => {
           variant: data.varietyPedigree || "",
           cardNumber: data.cardNumber || "",
           year: data.year || "",
-          grade: data.grade || "",
-          gradeDisplay: data.gradeDisplay || data.grade || "",
+          grade: data.grade ? data.grade.toString().replace(/\D/g, '') : "",
           game: data.game || "",
           certNumber: data.certNumber || psaCert,
           price: data.psaEstimate || "",
+          cost: "",
           quantity: 1,
           psaEstimate: data.psaEstimate || ""
         });
@@ -101,6 +101,7 @@ export const GradedCardIntake = () => {
           card_number: formData.cardNumber,
           variant: formData.variant,
           price: formData.price ? parseFloat(formData.price) : 0,
+          cost: formData.cost ? parseFloat(formData.cost) : null,
           quantity: formData.quantity,
           product_weight: 3.0, // 3 oz for graded cards
           // Store image URLs if available
@@ -142,10 +143,10 @@ export const GradedCardIntake = () => {
         cardNumber: "",
         year: "",
         grade: "",
-        gradeDisplay: "",
         game: "",
         certNumber: "",
         price: "",
+        cost: "",
         quantity: 1,
         psaEstimate: ""
       });
@@ -287,12 +288,16 @@ export const GradedCardIntake = () => {
           </div>
 
           <div>
-            <Label htmlFor="grade-display">Grade Display</Label>
+            <Label htmlFor="grade">Grade (Number only)</Label>
             <Input
-              id="grade-display"
-              placeholder="e.g., GEM MT 10"
-              value={formData.gradeDisplay}
-              onChange={(e) => updateFormField('gradeDisplay', e.target.value)}
+              id="grade"
+              type="number"
+              min="1"
+              max="10"
+              step="0.5"
+              placeholder="e.g., 10"
+              value={formData.grade}
+              onChange={(e) => updateFormField('grade', e.target.value)}
             />
           </div>
 
@@ -321,6 +326,18 @@ export const GradedCardIntake = () => {
                 PSA Estimate: ${formData.psaEstimate}
               </p>
             )}
+          </div>
+
+          <div>
+            <Label htmlFor="cost">Cost ($)</Label>
+            <Input
+              id="cost"
+              type="number"
+              step="0.01"
+              placeholder="0.00"
+              value={formData.cost}
+              onChange={(e) => updateFormField('cost', e.target.value)}
+            />
           </div>
 
           <div>
