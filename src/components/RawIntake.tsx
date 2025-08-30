@@ -160,6 +160,7 @@ export default function RawIntake() {
       card_number: form.card_number || null,
       grade: null,
       psa_cert: null,
+      // Let the database trigger handle defaulting to 99999 if null
       price: form.price_each ? Number(form.price_each) : null,
       cost: form.cost_each ? Number(form.cost_each) : null,
       sku: form.sku || autoSku,
@@ -338,7 +339,12 @@ export default function RawIntake() {
           </div>
           <div>
             <Label htmlFor="price_each">Price Each</Label>
-            <Input id="price_each" value={form.price_each} onChange={(e) => setForm({ ...form, price_each: e.target.value })} placeholder="$" />
+            <Input 
+              id="price_each" 
+              value={form.price_each} 
+              onChange={(e) => setForm({ ...form, price_each: e.target.value })} 
+              placeholder="Leave blank for $99,999 default" 
+            />
           </div>
           <div>
             <Label htmlFor="cost_each">Cost Each</Label>

@@ -1,568 +1,183 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
-
-function buildTitleFromParts(
-  year?: string | null,
-  brandTitle?: string | null,
-  cardNumber?: string | null,
-  subject?: string | null,
-  variant?: string | null
-) {
-  return [
-    year,
-    (brandTitle || "").replace(/&amp;/g, "&"),
-    cardNumber ? `#${String(cardNumber).replace(/^#/, "")}` : undefined,
-    (subject || "").replace(/&amp;/g, "&"),
-    (variant || "").replace(/&amp;/g, "&"),
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .trim();
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Helper to extract grading company and grade from various sources
-function extractGrading(item: any): { company?: string; grade?: string } {
-  // Check item.grade first (e.g., "PSA 10", "BGS 9.5", "CGC 8")
-  if (item.grade) {
-    const gradeMatch = item.grade.match(/^(PSA|BGS|CGC|SGC)\s*(\d+(?:\.\d+)?)/i);
-    if (gradeMatch) {
-      return { company: gradeMatch[1].toUpperCase(), grade: gradeMatch[2] };
-    }
-  }
-  
-  // If we have psa_cert, assume PSA
-  if (item.psa_cert) {
-    // Try to extract grade from other fields or assume it's PSA
-    const gradeFromGradeField = item.grade?.match(/(\d+(?:\.\d+)?)/);
-    return { 
-      company: "PSA", 
-      grade: gradeFromGradeField ? gradeFromGradeField[1] : undefined 
-    };
-  }
-  
-  // Check if grading_data exists with company/grade
-  if (item.grading_data?.company && item.grading_data?.grade) {
-    return { 
-      company: item.grading_data.company.toUpperCase(), 
-      grade: String(item.grading_data.grade) 
-    };
-  }
-  
-  return {};
-}
-
-// Helper to normalize game tag from category
-function normalizeGameTag(category?: string | null): string {
-  if (!category) return "TCG";
-  
-  const normalized = category.toLowerCase();
-  if (normalized.includes("pokemon")) return "Pokemon";
-  if (normalized.includes("magic") || normalized.includes("mtg")) return "Magic: The Gathering";
-  if (normalized.includes("yugioh") || normalized.includes("yu-gi-oh")) return "Yu-Gi-Oh!";
-  
-  // Capitalize first letter
-  return category.charAt(0).toUpperCase() + category.slice(1);
-}
-
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
+serve(async (req) => {
+  // Handle CORS preflight requests
+  if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const { items, storeKey } = await req.json();
+    console.log(`Processing ${items.length} items for store ${storeKey}`);
 
-    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-      throw new Error("Supabase environment not configured");
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Get Shopify credentials
+    const { data: storeConfig } = await supabase
+      .from('shopify_stores')
+      .select('*')
+      .eq('key', storeKey)
+      .single();
+
+    if (!storeConfig) {
+      throw new Error(`Store configuration not found for key: ${storeKey}`);
     }
 
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-
-    // Get Shopify settings from system_settings table
-    const { data: domainSetting } = await supabase.functions.invoke('get-system-setting', {
-      body: { 
-        keyName: 'SHOPIFY_STORE_DOMAIN',
-        fallbackSecretName: 'SHOPIFY_STORE_DOMAIN'
-      }
-    });
-
-    const { data: tokenSetting } = await supabase.functions.invoke('get-system-setting', {
-      body: { 
-        keyName: 'SHOPIFY_ADMIN_ACCESS_TOKEN',
-        fallbackSecretName: 'SHOPIFY_ADMIN_ACCESS_TOKEN'
-      }
-    });
-
-    const SHOPIFY_STORE_DOMAIN = domainSetting?.value;
-    const SHOPIFY_ADMIN_ACCESS_TOKEN = tokenSetting?.value;
-
-    if (!SHOPIFY_STORE_DOMAIN || !SHOPIFY_ADMIN_ACCESS_TOKEN) {
-      throw new Error("Shopify environment not configured");
-    }
-
-    const { itemId } = await req.json();
-    if (!itemId) throw new Error("Missing itemId");
-
-    // Load the intake item
-    const { data: item, error: itemErr } = await supabase
-      .from("intake_items")
-      .select("*")
-      .eq("id", itemId)
-      .maybeSingle();
-
-    if (itemErr) throw itemErr;
-    if (!item) throw new Error("Item not found");
-
-    // Check if this is a raw single by parsing SKU
-    const isRawSingle = item.sku && /^\d+/.test(item.sku) && !item.grade;
-    
-    let title: string;
-    let body: string;
-    let imageUrl: string | null = null;
-    let handle: string;
-    let tags: string[] = [];
-    let weight = 1; // Default 1 oz
-    let condition = "NM"; // Default condition
-    let productId: string | null = null;
-    
-    if (isRawSingle && item.sku) {
-      // Parse SKU for raw singles: productId + printing + condition
-      const skuParts = item.sku.split(/[-_\s]+/);
-      productId = skuParts[0];
-      const printing = skuParts[1] || "";
-      condition = skuParts[2] || "NM";
-      
-      // Fetch product details from database
-      const { data: product } = await supabase
-        .from("products")
-        .select(`
-          name,
-          tcgplayer_data,
-          group_id,
-          groups (
-            name,
-            category_id,
-            categories (name)
-          )
-        `)
-        .eq("id", productId)
-        .maybeSingle();
-        
-      if (product) {
-        const gameName = product.groups?.categories?.name || "TCG";
-        const setName = product.groups?.name || "";
-        
-        title = [product.name, gameName, setName].filter(Boolean).join(" - ");
-        body = product.tcgplayer_data?.description || title;
-        imageUrl = product.tcgplayer_data?.imageUrl || null;
-        handle = `product-${productId}`;
-        // Build tags for raw singles - no lot number, add condition and printing
-        const gameTag = normalizeGameTag(item.category);
-        tags = [setName, gameName, gameTag, "single", "raw", condition];
-        
-        // Add printing info if available and not "Normal"
-        if (printing && printing.toLowerCase() !== "normal" && printing.toLowerCase() !== "nm") {
-          tags.push(printing);
-        }
-        
-        // Remove empty/null tags
-        tags = tags.filter(Boolean);
-        
-        // Extract image URL from tcgplayer_data if available
-        if (product.tcgplayer_data?.imageUrl) {
-          imageUrl = product.tcgplayer_data.imageUrl;
-        }
-      } else {
-        // Fallback if product not found - no lot number
-        const gameTag = normalizeGameTag(item.category);
-        title = item.sku;
-        body = title;
-        handle = `product-${productId}`;
-        tags = [gameTag, "single", "raw", condition].filter(Boolean);
-      }
-    } else {
-      // Logic for graded cards - build tags with game and grading info
-      const gameTag = normalizeGameTag(item.category);
-      const { company: gradeCompany, grade: gradeValue } = extractGrading(item);
-      
-      title = buildTitleFromParts(item.year, item.brand_title, item.card_number, item.subject, item.variant) || item.sku || item.lot_number;
-      body = title;
-      handle = item.sku || item.psa_cert || item.lot_number || "";
-      
-      // Build tags for graded cards - no lot number, add grading details
-      tags = [gameTag, "graded"];
-      
-      // Add year if available
-      if (item.year) {
-        tags.push(item.year);
-      }
-      
-      // Add grading company and grade if available
-      if (gradeCompany) {
-        tags.push(gradeCompany);
-        
-        if (gradeValue) {
-          tags.push(gradeValue);
-          tags.push(`${gradeCompany} ${gradeValue}`); // Combined tag like "PSA 10"
-        }
-      }
-      
-      // Remove empty/null tags
-      tags = tags.filter(Boolean);
-    }
-    
-    const price = item.price != null ? Number(item.price) : 0;
-    const sku = item.sku || item.psa_cert || item.lot_number;
-    const quantity = item.quantity ?? 1;
-
-    // Helper: Shopify REST Admin API request
-    const api = async (path: string, init?: RequestInit) => {
-      const url = `https://${SHOPIFY_STORE_DOMAIN}/admin/api/2024-07${path}`;
-      const res = await fetch(url, {
-        ...init,
-        headers: {
-          "X-Shopify-Access-Token": SHOPIFY_ADMIN_ACCESS_TOKEN,
-          "Content-Type": "application/json",
-          ...(init?.headers || {}),
-        },
-      });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`Shopify ${path} ${res.status}: ${text}`);
-      }
-      return res.json();
+    const shopifyUrl = `https://${storeConfig.shop_domain}/admin/api/2023-10/`;
+    const headers = {
+      'X-Shopify-Access-Token': storeConfig.access_token,
+      'Content-Type': 'application/json',
     };
 
-    // Helper: Shopify GraphQL Admin API request
-    const gql = async (query: string, variables?: Record<string, unknown>) => {
-      const res = await fetch(`https://${SHOPIFY_STORE_DOMAIN}/admin/api/2024-07/graphql.json`, {
-        method: "POST",
-        headers: {
-          "X-Shopify-Access-Token": SHOPIFY_ADMIN_ACCESS_TOKEN,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ query, variables }),
-      });
-      const json = await res.json();
-      if (!res.ok || json.errors) {
-        throw new Error(`Shopify GraphQL error: ${JSON.stringify(json.errors || json)}`);
-      }
-      return json.data;
-    };
+    const results = [];
+    let successCount = 0;
+    let errorCount = 0;
 
-    const gidToId = (gid: string | null | undefined) => gid ? gid.split("/").pop() || "" : "";
-
-    let shopifyProductId = item.shopify_product_id as string | null;
-    let shopifyVariantId = item.shopify_variant_id as string | null;
-    let shopifyInventoryItemId = item.shopify_inventory_item_id as string | null;
-
-    if (isRawSingle) {
-    // For raw singles, handle product/variant differently based on condition
-      // First, look for existing product by handle
+    for (const item of items) {
       try {
-        const productData = await gql(
-          `query($handle: String!) {
-            product(handle: $handle) {
-              id
-              tags
-              variants(first: 10) {
-                edges {
-                  node {
-                    id
-                    inventoryItem { id }
-                    sku
-                    option1
-                    barcode
-                  }
-                }
-              }
-            }
-          }`,
-          { handle }
-        );
+        console.log(`Processing item: ${item.subject || item.brand_title}`);
         
-        if (productData?.product) {
-          shopifyProductId = gidToId(productData.product.id);
-          
-          // Look for existing variant with this condition
-          const existingVariant = productData.product.variants.edges.find(
-            (edge: any) => edge.node.option1 === condition
-          );
-          
-          if (existingVariant) {
-            shopifyVariantId = gidToId(existingVariant.node.id);
-            shopifyInventoryItemId = gidToId(existingVariant.node.inventoryItem?.id);
+        // Create product payload
+        const productData = {
+          product: {
+            title: item.subject || item.brand_title || 'Untitled Item',
+            body_html: item.processing_notes || '',
+            vendor: item.brand_title || 'Unknown',
+            product_type: item.category || 'Trading Card',
+            tags: [
+              item.category,
+              item.variant,
+              item.grade,
+              `lot-${item.lot_number}`,
+              'intake'
+            ].filter(Boolean).join(','),
+            variants: [{
+              title: 'Default Title',
+              price: (item.price || 99999).toString(),
+              sku: item.sku || `intake-${item.id}`,
+              inventory_quantity: item.quantity || 1,
+              inventory_management: 'shopify',
+              inventory_policy: 'deny'
+            }],
+            status: 'draft'
           }
-          
-          // Merge tags with existing product tags
-          const existingTags = productData.product.tags || [];
-          const newTags = [...new Set([...existingTags, ...tags])];
-          
-          // Update product tags
-          await api(`/products/${shopifyProductId}.json`, {
-            method: "PUT",
-            body: JSON.stringify({
-              product: {
-                id: Number(shopifyProductId),
-                tags: newTags.join(", "),
-              },
-            }),
-          });
-        }
-      } catch (e) {
-        console.warn("Product lookup by handle failed:", e);
-      }
-      
-      if (shopifyProductId && !shopifyVariantId) {
-        // Product exists but variant for this condition doesn't - create variant
-        const newVariant = await api(`/products/${shopifyProductId}/variants.json`, {
-          method: "POST",
-          body: JSON.stringify({
-            variant: {
-              option1: condition,
-              price: String(price),
-              sku,
-               barcode: sku,
-              inventory_management: "shopify",
-              requires_shipping: true,
-              weight: weight,
-              weight_unit: "oz",
-            },
-          }),
-        });
-        
-        shopifyVariantId = String(newVariant.variant.id);
-        shopifyInventoryItemId = String(newVariant.variant.inventory_item_id);
-      } else if (shopifyVariantId) {
-        // Update existing variant
-        await api(`/variants/${shopifyVariantId}.json`, {
-          method: "PUT",
-          body: JSON.stringify({
-            variant: {
-              id: Number(shopifyVariantId),
-              price: String(price),
-              sku,
-               barcode: sku,
-              weight: weight,
-              weight_unit: "oz",
-            },
-          }),
-        });
-      } else {
-        // Create new product with first variant
-        const productPayload: any = {
-          title,
-          body_html: body,
-          handle,
-          status: "active",
-          tags: tags.join(", "),
-          product_type: "Trading Card",
-          options: [{ name: "Condition" }],
-          variants: [
-            {
-              option1: condition,
-              price: String(price),
-              sku,
-              barcode: sku,
-              inventory_management: "shopify",
-              requires_shipping: true,
-              weight: weight,
-              weight_unit: "oz",
-            },
-          ],
         };
-        
-        // Add image if available
-        if (imageUrl) {
-          productPayload.images = [{ src: imageUrl }];
+
+        // Create product in Shopify
+        const productResponse = await fetch(`${shopifyUrl}products.json`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(productData),
+        });
+
+        if (!productResponse.ok) {
+          const errorText = await productResponse.text();
+          throw new Error(`Shopify API error: ${productResponse.status} - ${errorText}`);
         }
-        
-        const created = await api(`/products.json`, {
-          method: "POST",
-          body: JSON.stringify({ product: productPayload }),
-        });
 
-        const prod = created.product;
-        const variant = prod.variants?.[0];
-        shopifyProductId = String(prod.id);
-        shopifyVariantId = String(variant.id);
-        shopifyInventoryItemId = String(variant.inventory_item_id);
-      }
-    } else {
-      // Original logic for graded cards - lookup by PSA cert (barcode) first, then SKU
-      if (!(shopifyVariantId && shopifyProductId && shopifyInventoryItemId)) {
-        try {
-          // Try PSA cert as barcode first
-          if (item.psa_cert) {
-            const data = await gql(
-              `query($q: String!) {
-                productVariants(first: 1, query: $q) {
-                  edges { node { id product { id tags } inventoryItem { id } } }
+        const productResult = await productResponse.json();
+        const productId = productResult.product.id;
+        const variantId = productResult.product.variants[0].id;
+        const inventoryItemId = productResult.product.variants[0].inventory_item_id;
+
+        console.log(`Created product ${productId} with variant ${variantId}`);
+
+        // Update inventory item cost if cost is provided
+        if (item.cost && inventoryItemId) {
+          try {
+            const costUpdateResponse = await fetch(`${shopifyUrl}inventory_items/${inventoryItemId}.json`, {
+              method: 'PUT',
+              headers,
+              body: JSON.stringify({
+                inventory_item: {
+                  id: inventoryItemId,
+                  cost: item.cost.toString()
                 }
-              }`,
-              { q: `barcode:"${String(item.psa_cert).replace(/"/g, '\\"')}"` }
-            );
-            const edge = data?.productVariants?.edges?.[0];
-            if (edge?.node) {
-              shopifyProductId = gidToId(edge.node.product?.id);
-              shopifyVariantId = gidToId(edge.node.id);
-              shopifyInventoryItemId = gidToId(edge.node.inventoryItem?.id);
-              
-              // Merge tags for existing graded product
-              const existingTags = edge.node.product?.tags || [];
-              const newTags = [...new Set([...existingTags, ...tags])];
-              
-              await api(`/products/${shopifyProductId}.json`, {
-                method: "PUT",
-                body: JSON.stringify({
-                  product: {
-                    id: Number(shopifyProductId),
-                    tags: newTags.join(", "),
-                  },
-                }),
-              });
+              }),
+            });
+
+            if (costUpdateResponse.ok) {
+              console.log(`Updated cost for inventory item ${inventoryItemId}: $${item.cost}`);
+            } else {
+              const costErrorText = await costUpdateResponse.text();
+              console.warn(`Failed to update cost for inventory item ${inventoryItemId}: ${costErrorText}`);
             }
+          } catch (costError) {
+            console.warn(`Error updating cost for item ${item.id}:`, costError);
+            // Don't fail the import if cost update fails
           }
-          
-          // Fallback to SKU lookup if PSA cert didn't work
-          if (!shopifyVariantId) {
-            const data = await gql(
-              `query($q: String!) {
-                productVariants(first: 1, query: $q) {
-                  edges { node { id product { id tags } inventoryItem { id } } }
-                }
-              }`,
-              { q: `sku:"${String(sku).replace(/"/g, '\\"')}"` }
-            );
-            const edge = data?.productVariants?.edges?.[0];
-            if (edge?.node) {
-              shopifyProductId = gidToId(edge.node.product?.id);
-              shopifyVariantId = gidToId(edge.node.id);
-              shopifyInventoryItemId = gidToId(edge.node.inventoryItem?.id);
-              
-              // Merge tags for existing graded product
-              const existingTags = edge.node.product?.tags || [];
-              const newTags = [...new Set([...existingTags, ...tags])];
-              
-              await api(`/products/${shopifyProductId}.json`, {
-                method: "PUT",
-                body: JSON.stringify({
-                  product: {
-                    id: Number(shopifyProductId),
-                    tags: newTags.join(", "),
-                  },
-                }),
-              });
-            }
-          }
-        } catch (e) {
-          console.warn("Graded card lookup via GraphQL failed; will create product", e);
         }
-      }
 
-      if (shopifyVariantId && shopifyProductId && shopifyInventoryItemId) {
-        // Update existing variant
-        await api(`/variants/${shopifyVariantId}.json`, {
-          method: "PUT",
-          body: JSON.stringify({ 
-            variant: { 
-              id: Number(shopifyVariantId), 
-              price: String(price), 
-              sku,
-               barcode: item.psa_cert || sku,
-            } 
-          }),
-        });
-      } else {
-        // Create product + variant for graded cards
-        const created = await api(`/products.json`, {
-          method: "POST",
-          body: JSON.stringify({
-            product: {
-              title,
-              body_html: body,
-              handle,
-              status: "active",
-              tags: tags.join(", "),
-              product_type: "Graded Card",
-              variants: [
-                {
-                  price: String(price ?? 0),
-                  sku,
-                  barcode: item.psa_cert || sku,
-                  inventory_management: "shopify",
-                  requires_shipping: true,
-                  weight: weight,
-                  weight_unit: "oz",
-                },
-              ],
-            },
-          }),
+        // Update intake item with Shopify IDs
+        await supabase
+          .from('intake_items')
+          .update({
+            pushed_at: new Date().toISOString(),
+            shopify_product_id: productId.toString(),
+            shopify_variant_id: variantId.toString()
+          })
+          .eq('id', item.id);
+
+        results.push({
+          item_id: item.id,
+          success: true,
+          shopify_product_id: productId,
+          shopify_variant_id: variantId
         });
 
-        const prod = created.product;
-        const variant = prod.variants?.[0];
-        shopifyProductId = String(prod.id);
-        shopifyVariantId = String(variant.id);
-        shopifyInventoryItemId = String(variant.inventory_item_id);
+        successCount++;
+      } catch (error) {
+        console.error(`Error processing item ${item.id}:`, error);
+        
+        results.push({
+          item_id: item.id,
+          success: false,
+          error: error.message
+        });
+
+        errorCount++;
       }
     }
 
-    // Persist Shopify IDs
-    await supabase
-      .from("intake_items")
-      .update({
-        shopify_product_id: shopifyProductId,
-        shopify_variant_id: shopifyVariantId,
-        shopify_inventory_item_id: shopifyInventoryItemId,
-      })
-      .eq("id", itemId);
-
-    // Find the "Aloha Card Shop" location or use first available
-    const locs = await api(`/locations.json`);
-    let targetLocation = locs.locations?.find((loc: any) => 
-      loc.name?.toLowerCase().includes('aloha card shop')
-    );
-    
-    // If Aloha Card Shop not found, use the first location as fallback
-    if (!targetLocation) {
-      targetLocation = locs.locations?.[0];
-    }
-    
-    const locationId = String(targetLocation?.id);
-    if (!locationId) throw new Error("No Shopify locations found");
-
-    // Set inventory to our quantity
-    await api(`/inventory_levels/set.json`, {
-      method: "POST",
-      body: JSON.stringify({
-        location_id: Number(locationId),
-        inventory_item_id: Number(shopifyInventoryItemId!),
-        available: Number(quantity ?? 1),
-      }),
-    });
-
-    // Mark as pushed
-    const { error: upErr } = await supabase
-      .from("intake_items")
-      .update({ pushed_at: new Date().toISOString() })
-      .eq("id", itemId);
-    if (upErr) throw upErr;
+    console.log(`Import completed: ${successCount} success, ${errorCount} errors`);
 
     return new Response(
-      JSON.stringify({ ok: true, productId: shopifyProductId, variantId: shopifyVariantId, inventoryItemId: shopifyInventoryItemId }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      JSON.stringify({
+        success: true,
+        results,
+        summary: {
+          total: items.length,
+          successful: successCount,
+          failed: errorCount
+        }
+      }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      }
     );
-  } catch (e) {
-    console.error("shopify-import error", e);
-    return new Response(JSON.stringify({ ok: false, error: String(e) }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+
+  } catch (error) {
+    console.error('Shopify import error:', error);
+    
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: error.message
+      }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 500,
+      }
+    );
   }
 });

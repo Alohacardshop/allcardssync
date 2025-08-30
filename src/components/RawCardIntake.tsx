@@ -1,4 +1,3 @@
-
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -133,7 +132,8 @@ export function RawCardIntake({
           brand_title: picked.name,
           variant: chosenVariant.printing,
           grade: chosenVariant.condition,
-          price: chosenVariant.price,
+          // Let the database trigger handle defaulting to 99999 if null
+          price: chosenVariant.price || null,
           sku: generateSKU(picked, chosenVariant, game),
           quantity: quantity,
           // New comprehensive data capture fields
