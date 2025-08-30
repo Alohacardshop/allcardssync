@@ -7,6 +7,7 @@ import { Database, Settings, Users, BarChart3, CheckCircle, AlertTriangle, Exter
 import { supabase } from "@/integrations/supabase/client";
 import { cleanupAuthState } from "@/lib/auth";
 import { SystemHealthCard } from "@/components/admin/SystemHealthCard";
+import { PSAScrapePingCard } from "@/components/admin/PSAScrapePingCard";
 import { SystemStats } from "@/components/SystemStats";
 import CatalogTab from "@/components/admin/CatalogTab";
 import TCGDatabaseSettings from "@/components/admin/TCGDatabaseSettings";
@@ -139,7 +140,10 @@ const Admin = () => {
           </TabsContent>
 
           <TabsContent value="system" className="space-y-4">
-            <SystemHealthCard />
+            <div className="space-y-6">
+              <SystemHealthCard />
+              <PSAScrapePingCard />
+            </div>
           </TabsContent>
 
           <TabsContent value="users" className="space-y-4">
