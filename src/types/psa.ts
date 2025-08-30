@@ -8,6 +8,7 @@ export interface PSACertificateData {
   cardNumber?: string;
   varietyPedigree?: string;
   category?: string;
+  gameSport?: string;
   imageUrl?: string;
   imageUrls?: string[];
   psaUrl: string;

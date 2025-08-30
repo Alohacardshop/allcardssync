@@ -68,6 +68,16 @@ export function PSACertificateDisplay({ psaData, className }: PSACertificateDisp
             </div>
           )}
           
+          {psaData.gameSport && (
+            <div className="flex items-center gap-2">
+              <Trophy className="h-4 w-4 text-muted-foreground" />
+              <div>
+                <span className="text-muted-foreground">Game: </span>
+                <span className="font-medium capitalize">{psaData.gameSport}</span>
+              </div>
+            </div>
+          )}
+          
           {psaData.subject && (
             <div className="flex items-center gap-2">
               <User className="h-4 w-4 text-muted-foreground" />

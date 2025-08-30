@@ -324,13 +324,81 @@ serve(async (req) => {
     return null;
   };
 
-  // Specific extractor for grade (handles PSA 1-10, POOR, FAIR, etc.)
-  const extractGrade = (): string | null => {
+  // Improved brand extractor - looks for actual Pokemon content
+  const extractBrand = (): string | null => {
+    // Look for Pokemon card titles in the content
+    const pokemonPatterns = [
+      /POKEMON[^<>]*DRI[^<>]*EN[^<>]*DESTINED[^<>]*RIVALS/i,
+      /POKEMON[^<>]*SCARLET[^<>]*VIOLET/i,
+      /POKEMON[^<>]*BRILLIANT[^<>]*STARS/i,
+      /POKEMON[^<>]*FUSION[^<>]*STRIKE/i,
+      /POKEMON[^<>]*EVOLVING[^<>]*SKIES/i,
+      /POKEMON[^<>]*CELEBRATIONS/i,
+      /POKEMON[^<>]*CHILLING[^<>]*REIGN/i,
+      /POKEMON[^<>]*BATTLE[^<>]*STYLES/i,
+      /POKEMON[^<>]*SHINING[^<>]*FATES/i,
+      /POKEMON[^<>]*VIVID[^<>]*VOLTAGE/i,
+      /POKEMON[^<>]*CHAMPIONS[^<>]*PATH/i,
+      /POKEMON[^<>]*DARKNESS[^<>]*ABLAZE/i,
+      /POKEMON[^<>]*REBEL[^<>]*CLASH/i,
+      /POKEMON[^<>]*SWORD[^<>]*SHIELD/i,
+      /POKEMON\s+[\w\s&'-]+/i
+    ];
+    
+    for (const pattern of pokemonPatterns) {
+      const match = text.match(pattern);
+      if (match) {
+        let brand = match[0].trim();
+        brand = brand.replace(/\s+/g, ' ');
+        console.log('🔍 Pokemon brand found:', brand);
+        return brand;
+      }
+    }
+    
+    // Fallback to generic extraction
     return extractCleanValue([
-      /Item Grade[:\s]*([A-Z0-9\s.+/-]+)/i,
-      /Grade[:\s]*([A-Z0-9\s.+/-]+)/i,
-      />([A-Z0-9\s.+/-]+)<\/dd>/i
+      /Brand\/Title[:\s]*([^\n\r<>]+)/i,
+      /Brand[:\s]*([^\n\r<>]+)/i
     ]);
+  };
+
+  // Improved grade extractor - looks for PSA grade patterns
+  const extractGrade = (): string | null => {
+    // Look for PSA grade patterns (PSA 1-10)
+    const gradePatterns = [
+      /PSA\s+(\d{1,2})/i,
+      /Grade\s+(\d{1,2})/i,
+      /Item\s+Grade[:\s]*(\d{1,2})/i,
+      /"grade"[:\s]*"?(\d{1,2})"?/i
+    ];
+    
+    for (const pattern of gradePatterns) {
+      const match = text.match(pattern);
+      if (match && match[1]) {
+        const grade = parseInt(match[1]);
+        if (grade >= 1 && grade <= 10) {
+          console.log('🔍 PSA Grade found:', grade.toString());
+          return grade.toString();
+        }
+      }
+    }
+    
+    // Look for text grades
+    const textGradePatterns = [
+      /Grade[:\s]*(POOR|FAIR|GOOD|VG|EX|NM|MINT)/i,
+      /Item\s+Grade[:\s]*(POOR|FAIR|GOOD|VG|EX|NM|MINT)/i
+    ];
+    
+    for (const pattern of textGradePatterns) {
+      const match = text.match(pattern);
+      if (match && match[1]) {
+        console.log('🔍 Text grade found:', match[1]);
+        return match[1].toUpperCase();
+      }
+    }
+    
+    console.log('🔍 No valid grade found');
+    return null;
   };
 
   // Specific extractor for year (4-digit year)
@@ -349,6 +417,33 @@ serve(async (req) => {
     ]);
   };
 
+  // Game/Sport extractor - auto-detects from brand
+  const extractGameSport = (brand: string | null): string | null => {
+    if (!brand) return null;
+    
+    const brandLower = brand.toLowerCase();
+    
+    if (brandLower.includes('pokemon')) {
+      console.log('🔍 Game detected: pokemon');
+      return 'pokemon';
+    }
+    if (brandLower.includes('magic') || brandLower.includes('mtg')) {
+      console.log('🔍 Game detected: magic');
+      return 'magic';
+    }
+    if (brandLower.includes('yugioh') || brandLower.includes('yu-gi-oh')) {
+      console.log('🔍 Game detected: yugioh');
+      return 'yugioh';
+    }
+    if (brandLower.includes('dragon ball')) {
+      console.log('🔍 Game detected: dragon ball');
+      return 'dragon ball';
+    }
+    
+    console.log('🔍 Game not detected from brand:', brand);
+    return null;
+  };
+
   // Enhanced parsing with better patterns
   const isValid = text.includes('PSA Certification Verification') && 
                  !text.includes('not found') && 
@@ -356,19 +451,16 @@ serve(async (req) => {
 
   console.log('✅ Certificate validity check:', isValid);
 
+  const brandTitle = extractBrand();
+  const grade = extractGrade();
+  const gameSport = extractGameSport(brandTitle);
+
   const certData: PSACertificateData = {
     certNumber: cert,
     isValid,
-    grade: extractGrade(),
+    grade,
     year: extractYear(),
-    brandTitle: extractCleanValue([
-      /Brand\/Title[:\s]*([^\n\r<>]+)/i,
-      /Brand[:\s]*([^\n\r<>]+)/i,
-      />([^<>]*(?:POKEMON|MAGIC|YUGIOH|DRAGON BALL)[^<>]*)<\/dd>/i
-    ], [
-      /POKEMON[^<>]*DRI[^<>]*EN[^<>]*DESTINED[^<>]*RIVALS/i,
-      /POKEMON[^<>]+/i
-    ]),
+    brandTitle,
     subject: extractCleanValue([
       /Subject[:\s]*([^\n\r<>]+)/i,
       />([^<>]*(?:MEWTWO|CHARIZARD|PIKACHU)[^<>]*)<\/dd>/i,
@@ -384,6 +476,7 @@ serve(async (req) => {
       /Category[:\s]*([^\n\r<>]+)/i,
       />([^<>]*(?:TCG|CARDS|GAMING)[^<>]*)<\/dd>/i
     ]),
+    gameSport,
     psaUrl
   };
 
