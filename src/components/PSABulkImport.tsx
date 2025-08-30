@@ -171,6 +171,10 @@ export const PSABulkImport = () => {
           await insertIntakeItem(updatedItems[i]);
           
           updatedItems[i] = { ...updatedItems[i], status: 'success' };
+          
+          // Show per-item success toast with source
+          const sourceText = psaData.source === 'psa_api' ? 'PSA API' : 'web scraping';
+          toast.success(`${item.psaCert}: Fetched from ${sourceText}`);
         } else {
           throw new Error(psaData?.error || 'Failed to scrape PSA data');
         }
@@ -196,7 +200,15 @@ export const PSABulkImport = () => {
     const successful = updatedItems.filter(item => item.status === 'success').length;
     const failed = updatedItems.filter(item => item.status === 'error').length;
     
-    toast.success(`Import completed: ${successful} successful, ${failed} failed`);
+    // Count by source
+    const psaApiCount = updatedItems.filter(item => 
+      item.status === 'success' && item.data?.source === 'psa_api'
+    ).length;
+    const scrapeCount = updatedItems.filter(item => 
+      item.status === 'success' && item.data?.source === 'scrape'
+    ).length;
+    
+    toast.success(`Import completed: ${successful} successful (${psaApiCount} PSA API, ${scrapeCount} web scraping), ${failed} failed`);
   };
 
   const downloadTemplate = () => {

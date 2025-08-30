@@ -144,7 +144,8 @@ export const GradedCardIntake = () => {
         ).length;
         setPopulatedFieldsCount(populatedCount);
 
-        toast.success(`PSA data fetched - ${populatedCount} fields populated`);
+        const sourceText = data.source === 'psa_api' ? 'PSA API' : 'web scraping';
+        toast.success(`Fetched from ${sourceText} - ${populatedCount} fields populated`);
       } else {
         console.log('PSA data error or no data:', data);
         throw new Error(data?.error || 'Failed to fetch PSA data');
@@ -203,11 +204,13 @@ export const GradedCardIntake = () => {
           product_weight: 3.0, // 3 oz for graded cards
           // Store image URLs if available
           image_urls: cardData?.imageUrls ?? null,
-          // Comprehensive data capture
-          source_provider: 'psa',
+          // Comprehensive data capture with source tracking
+          source_provider: cardData?.source || 'psa',
           source_payload: {
             psa_cert: formData.certNumber,
-            fetch_source: cardData?.source
+            fetch_source: cardData?.source,
+            api_success: cardData?.apiSuccess,
+            scrape_success: cardData?.scrapeSuccess
           },
           grading_data: {
             psa_cert: formData.certNumber,

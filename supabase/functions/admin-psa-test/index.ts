@@ -1,5 +1,6 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { log } from '../_shared/log.ts';
+import { log } from "../_shared/log.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -7,11 +8,20 @@ const corsHeaders = {
 };
 
 interface PSAApiResponse {
-  GetByCertNumberResult?: any;
-  GetImagesByCertNumberResult?: any;
+  ID?: number;
+  CertNumber?: string;
+  Year?: string;
+  Brand?: string;
+  Subject?: string;
+  SpecNumber?: string;
+  CategoryName?: string;
+  GradeNumeric?: number;
+  GradeDisplay?: string;
+  LabelType?: string;
+  VarietyPedigree?: string;
 }
 
-Deno.serve(async (req) => {
+serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -24,182 +34,193 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Verify admin role
-    const authHeader = req.headers.get('Authorization');
+    // Verify user authentication and admin role
+    const authHeader = req.headers.get('authorization');
     if (!authHeader) {
-      return new Response(JSON.stringify({ error: 'Missing authorization header' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
+      return new Response(
+        JSON.stringify({ ok: false, error: 'Missing authorization header' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
-    const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
-    
+    const { data: { user }, error: userError } = await supabase.auth.getUser(
+      authHeader.replace('Bearer ', '')
+    );
+
     if (userError || !user) {
-      return new Response(JSON.stringify({ error: 'Invalid token' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
+      return new Response(
+        JSON.stringify({ ok: false, error: 'Invalid authentication' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
-    // Check if user has admin role
-    const { data: roleData, error: roleError } = await supabase
-      .rpc('has_role', { _user_id: user.id, _role: 'admin' });
+    // Check admin role
+    const { data: hasAdminRole } = await supabase.rpc('has_role', {
+      _user_id: user.id,
+      _role: 'admin'
+    });
 
-    if (roleError || !roleData) {
-      return new Response(JSON.stringify({ error: 'Admin access required' }), {
-        status: 403,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
+    if (!hasAdminRole) {
+      return new Response(
+        JSON.stringify({ ok: false, error: 'Admin role required' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     // Parse request body
-    const body = await req.json();
-    const { cert } = body;
-
+    const { cert } = await req.json();
+    
     if (!cert) {
-      return new Response(JSON.stringify({ error: 'Certificate number required' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
+      return new Response(
+        JSON.stringify({ ok: false, error: 'Certificate number is required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
-    log.info('Testing PSA API for admin', { cert, user_id: user.id });
-
-    // Get PSA API token
-    const { data: settingsData } = await supabase
-      .from('system_settings')
-      .select('key_value')
-      .eq('key_name', 'PSA_PUBLIC_API_TOKEN')
-      .single();
-
-    const apiToken = settingsData?.key_value;
-    if (!apiToken) {
-      return new Response(JSON.stringify({ 
-        error: 'PSA API token not configured',
-        suggestion: 'Please configure PSA_PUBLIC_API_TOKEN in system settings'
-      }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
-    }
+    const certStr = String(cert).trim();
+    log.info('Admin PSA test started', { cert: certStr, userId: user.id });
 
     const startTime = Date.now();
-    const results: any = {
-      cert,
-      timestamp: new Date().toISOString(),
-      timing: {},
-      api_responses: {},
-      normalized_data: {},
-      errors: []
+    const timings = {
+      total: 0,
+      tokenRetrieval: 0,
+      psaCardApi: 0,
+      psaImageApi: 0
     };
 
-    // Test GetByCertNumber endpoint
+    let psaCardData: PSAApiResponse | null = null;
+    let psaImageData: any = null;
+    let errors: string[] = [];
+
     try {
-      const cardStart = Date.now();
-      const cardResponse = await fetch(`https://api.psacard.com/publicapi/cert/GetByCertNumber/${cert}`, {
-        headers: {
-          'Authorization': `bearer ${apiToken}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      results.timing.card_api_ms = Date.now() - cardStart;
-      results.api_responses.card_status = cardResponse.status;
-      
-      if (cardResponse.ok) {
-        const cardData = await cardResponse.json();
-        results.api_responses.card_data = cardData;
-        
-        // Normalize card data
-        const psaCard = cardData.GetByCertNumberResult;
-        if (psaCard) {
-          results.normalized_data.card = {
-            cert: psaCard.CertNumber || cert,
-            grade: psaCard.NumericGrade,
-            gradeLabel: psaCard.GradingService,
-            year: psaCard.Year,
-            brandTitle: psaCard.Brand,
-            subject: psaCard.Subject,
-            variety: psaCard.Variety,
-            cardNumber: psaCard.CardNumber,
-            labelType: psaCard.LabelType,
-            specNumber: psaCard.SpecNumber,
-            categoryName: psaCard.CategoryName,
-            totalPopulation: psaCard.TotalPopulation,
-            popHigher: psaCard.PopHigher
-          };
-        }
+      // Get PSA API token
+      const tokenStart = Date.now();
+      const { data: tokenSettings } = await supabase
+        .from('system_settings')
+        .select('key_value')
+        .eq('key_name', 'PSA_PUBLIC_API_TOKEN')
+        .single();
+
+      const psaToken = tokenSettings?.key_value;
+      timings.tokenRetrieval = Date.now() - tokenStart;
+
+      if (!psaToken) {
+        errors.push('PSA_PUBLIC_API_TOKEN not found in system settings');
       } else {
-        const errorText = await cardResponse.text();
-        results.errors.push(`Card API error: ${cardResponse.status} - ${errorText}`);
+        // Test PSA Card API
+        const cardStart = Date.now();
+        try {
+          const cardResponse = await fetch(
+            `https://api.psacard.com/publicapi/cert/GetByCertNumber/${certStr}`,
+            {
+              headers: {
+                'Authorization': `Bearer ${psaToken}`,
+                'Content-Type': 'application/json'
+              }
+            }
+          );
+
+          timings.psaCardApi = Date.now() - cardStart;
+
+          if (cardResponse.ok) {
+            psaCardData = await cardResponse.json();
+            log.info('PSA Card API success', { cert: certStr, hasData: !!psaCardData });
+          } else {
+            errors.push(`PSA Card API error: ${cardResponse.status} ${cardResponse.statusText}`);
+          }
+        } catch (error) {
+          timings.psaCardApi = Date.now() - cardStart;
+          errors.push(`PSA Card API exception: ${error.message}`);
+        }
+
+        // Test PSA Image API
+        const imageStart = Date.now();
+        try {
+          const imageResponse = await fetch(
+            `https://api.psacard.com/publicapi/cert/GetImagesByCertNumber/${certStr}`,
+            {
+              headers: {
+                'Authorization': `Bearer ${psaToken}`,
+                'Content-Type': 'application/json'
+              }
+            }
+          );
+
+          timings.psaImageApi = Date.now() - imageStart;
+
+          if (imageResponse.ok) {
+            psaImageData = await imageResponse.json();
+            log.info('PSA Image API success', { cert: certStr, imageCount: psaImageData?.ImageUrls?.length || 0 });
+          } else {
+            errors.push(`PSA Image API error: ${imageResponse.status} ${imageResponse.statusText}`);
+          }
+        } catch (error) {
+          timings.psaImageApi = Date.now() - imageStart;
+          errors.push(`PSA Image API exception: ${error.message}`);
+        }
       }
     } catch (error) {
-      results.errors.push(`Card API fetch error: ${error.message}`);
-      results.timing.card_api_ms = Date.now() - startTime;
+      errors.push(`System error: ${error.message}`);
     }
 
-    // Test GetImagesByCertNumber endpoint
-    let imageStart = Date.now();
-    try {
-      const imageResponse = await fetch(`https://api.psacard.com/publicapi/cert/GetImagesByCertNumber/${cert}`, {
-        headers: {
-          'Authorization': `bearer ${apiToken}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      results.timing.image_api_ms = Date.now() - imageStart;
-      results.api_responses.image_status = imageResponse.status;
-      
-      if (imageResponse.ok) {
-        const imageData = await imageResponse.json();
-        results.api_responses.image_data = imageData;
-        
-        // Normalize image data
-        const images = imageData.GetImagesByCertNumberResult;
-        if (images && Array.isArray(images)) {
-          results.normalized_data.images = images.map((img: any) => ({
-            url: img.ImageURL,
-            type: img.ImageType
-          }));
-        }
-      } else {
-        const errorText = await imageResponse.text();
-        results.errors.push(`Image API error: ${imageResponse.status} - ${errorText}`);
-      }
-    } catch (error) {
-      results.errors.push(`Image API fetch error: ${error.message}`);
-      results.timing.image_api_ms = Date.now() - imageStart;
-    }
+    timings.total = Date.now() - startTime;
 
-    results.timing.total_ms = Date.now() - startTime;
+    // Normalize the data similar to how psa-scrape does it
+    const normalized = {
+      certNumber: certStr,
+      grade: psaCardData?.GradeDisplay || (psaCardData?.GradeNumeric ? String(psaCardData.GradeNumeric) : null),
+      year: psaCardData?.Year || null,
+      brandTitle: psaCardData?.Brand || null,
+      subject: psaCardData?.Subject || null,
+      cardNumber: psaCardData?.SpecNumber || null,
+      varietyPedigree: psaCardData?.VarietyPedigree || null,
+      labelType: psaCardData?.LabelType || null,
+      categoryName: psaCardData?.CategoryName || null,
+      imageUrls: psaImageData?.ImageUrls || [],
+      imageUrl: psaImageData?.ImageUrls?.[0] || null
+    };
 
-    log.info('PSA API test completed', {
-      cert,
-      total_ms: results.timing.total_ms,
-      has_card_data: !!results.normalized_data.card,
-      has_images: !!(results.normalized_data.images?.length),
-      error_count: results.errors.length
-    });
-
-    return new Response(JSON.stringify({
+    const response = {
       ok: true,
-      results
-    }), {
-      status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      cert: certStr,
+      timings,
+      errors,
+      raw: {
+        cardData: psaCardData,
+        imageData: psaImageData
+      },
+      normalized,
+      summary: {
+        tokenFound: !!psaToken,
+        cardApiSuccess: !!psaCardData,
+        imageApiSuccess: !!psaImageData,
+        totalFields: Object.values(normalized).filter(v => v !== null && v !== undefined).length,
+        imageCount: normalized.imageUrls.length,
+        hasErrors: errors.length > 0
+      }
+    };
+
+    log.info('Admin PSA test completed', { 
+      cert: certStr, 
+      success: response.summary.cardApiSuccess,
+      totalTime: timings.total,
+      errors: errors.length
     });
+
+    return new Response(
+      JSON.stringify(response),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
 
   } catch (error) {
     log.error('Admin PSA test error', { error: error.message });
-    return new Response(JSON.stringify({ 
-      error: 'Internal server error',
-      details: error.message 
-    }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    });
+    
+    return new Response(
+      JSON.stringify({ 
+        ok: false, 
+        error: `Server error: ${error.message}` 
+      }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
   }
 });
