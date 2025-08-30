@@ -23,6 +23,7 @@ import { LabelPreviewCanvas } from "@/components/LabelPreviewCanvas";
 import { buildTitleFromParts, buildLabelDataFromItem } from '@/lib/labelData';
 import { getLabelDesignerSettings } from '@/lib/labelDesignerSettings';
 import PDFLabelPreview from "@/components/PDFLabelPreview";
+import { useStore } from "@/contexts/StoreContext";
 
 // Helper function to format price as money
 const formatMoney = (price?: string): string => {
@@ -57,6 +58,7 @@ type CardItem = {
 };
 
 const Index = () => {
+  const { selectedStore } = useStore();
   const [item, setItem] = useState<CardItem>({
     title: "",
     set: "",
@@ -781,14 +783,38 @@ const Index = () => {
   // handlePrintRow is now defined above in the generateLabelPDF section
   const handlePushRow = async (b: CardItem) => {
     if (!b.id) return;
+    
+    if (!selectedStore) {
+      toast.error("Please select a store first");
+      return;
+    }
+
     try {
-      const { error } = await supabase.functions.invoke("shopify-import", { body: { itemId: b.id } });
+      // Fetch the full item data from the database
+      const { data: itemData, error: fetchError } = await supabase
+        .from("intake_items")
+        .select("*")
+        .eq("id", b.id)
+        .single();
+
+      if (fetchError || !itemData) {
+        throw new Error("Failed to fetch item data");
+      }
+
+      // Call shopify-import with the correct payload structure
+      const { error } = await supabase.functions.invoke("shopify-import", { 
+        body: { 
+          items: [itemData], 
+          storeKey: selectedStore 
+        } 
+      });
+      
       if (error) throw error;
       await markPushed([b.id]);
       toast.success(`Pushed Lot ${b.lot || ""} to Shopify`);
     } catch (e) {
       console.error(e);
-      toast.error("Failed to push");
+      toast.error(`Failed to push: ${e instanceof Error ? e.message : 'Unknown error'}`);
     }
   };
 
@@ -836,15 +862,38 @@ const Index = () => {
       toast.info("Nothing to push");
       return;
     }
+
+    if (!selectedStore) {
+      toast.error("Please select a store first");
+      return;
+    }
+
     setPushingAll(true);
     try {
-      // Import each item to Shopify first
-      await Promise.all(ids.map((id) => supabase.functions.invoke("shopify-import", { body: { itemId: id } })));
+      // Fetch all item data from the database
+      const { data: itemsData, error: fetchError } = await supabase
+        .from("intake_items")
+        .select("*")
+        .in("id", ids);
+
+      if (fetchError || !itemsData) {
+        throw new Error("Failed to fetch items data");
+      }
+
+      // Call shopify-import with the correct payload structure
+      const { error } = await supabase.functions.invoke("shopify-import", { 
+        body: { 
+          items: itemsData, 
+          storeKey: selectedStore 
+        } 
+      });
+
+      if (error) throw error;
       await markPushed(ids);
       toast.success("Pushed all to Shopify");
     } catch (e) {
       console.error(e);
-      toast.error("Failed to push all");
+      toast.error(`Failed to push all: ${e instanceof Error ? e.message : 'Unknown error'}`);
     } finally {
       setPushingAll(false);
     }
@@ -856,11 +905,33 @@ const Index = () => {
     if (ids.length === 0) { toast.info('Nothing to process'); return; }
     if (!printNodeConnected || !selectedPrinterId) { toast.error('PrintNode not connected or no printer selected'); return; }
 
+    if (!selectedStore) {
+      toast.error("Please select a store first");
+      return;
+    }
+
     if (!acquireGlobalLock()) return;
     setPushPrintAllRunning(true);
     try {
-      // Push stays first
-      await Promise.all(ids.map((id) => supabase.functions.invoke("shopify-import", { body: { itemId: id } })));
+      // Fetch all item data from the database
+      const { data: itemsData, error: fetchError } = await supabase
+        .from("intake_items")
+        .select("*")
+        .in("id", ids);
+
+      if (fetchError || !itemsData) {
+        throw new Error("Failed to fetch items data");
+      }
+
+      // Push first with correct payload structure
+      const { error } = await supabase.functions.invoke("shopify-import", { 
+        body: { 
+          items: itemsData, 
+          storeKey: selectedStore 
+        } 
+      });
+
+      if (error) throw error;
       await markPushed(ids);
 
       // Then print
@@ -868,7 +939,7 @@ const Index = () => {
       if (ok) await markPrinted(ids);
     } catch (e) {
       console.error(e);
-      toast.error('Failed to push and print all');
+      toast.error(`Failed to push and print all: ${e instanceof Error ? e.message : 'Unknown error'}`);
     } finally {
       setPushPrintAllRunning(false);
       releaseGlobalLock();
@@ -991,10 +1062,10 @@ const Index = () => {
                   <Button variant="outline" onClick={handlePrintAll} disabled={jobInFlight || printingAll || batch.length === 0}>
                     {printingAll ? "Printing…" : "Print All"}
                   </Button>
-                  <Button variant="outline" onClick={handlePushAll} disabled={pushingAll || batch.length === 0}>
+                  <Button variant="outline" onClick={handlePushAll} disabled={pushingAll || batch.length === 0 || !selectedStore}>
                     {pushingAll ? "Pushing…" : "Push All"}
                   </Button>
-                  <Button onClick={handlePushAndPrintAll} disabled={jobInFlight || pushPrintAllRunning || batch.length === 0}>
+                  <Button onClick={handlePushAndPrintAll} disabled={jobInFlight || pushPrintAllRunning || batch.length === 0 || !selectedStore}>
                     {pushPrintAllRunning ? "Processing…" : "Push & Print All"}
                   </Button>
                 </div>
@@ -1075,7 +1146,7 @@ const Index = () => {
                                           </div>
                                       </DialogContent>
                                    </Dialog>
-                                   <Button size="sm" onClick={() => handlePushRow(b)}>Push</Button>
+                                   <Button size="sm" onClick={() => handlePushRow(b)} disabled={!selectedStore}>Push</Button>
                                    <Button size="sm" variant="outline" onClick={() => startEditRow(b)}>Edit</Button>
                                    <Button size="sm" variant="destructive" onClick={() => handleDeleteRow(b)}>Delete</Button>
                                 </>
