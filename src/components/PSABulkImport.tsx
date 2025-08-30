@@ -64,7 +64,7 @@ export const PSABulkImport = () => {
   const scrapePSAData = async (psaCert: string) => {
     try {
       const { data, error } = await supabase.functions.invoke('psa-scrape', {
-        body: { certificateNumber: psaCert }
+        body: { cert: psaCert }
       });
 
       if (error) throw error;
