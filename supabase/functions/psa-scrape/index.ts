@@ -32,93 +32,103 @@ function extractImage(html: string): string | null {
 // Extract card data from PSA HTML page
 function extractCardData(html: string, cert: string) {
   console.log("Extracting PSA card data from HTML...");
-  console.log("HTML sample:", html.substring(0, 500));
+  console.log("HTML length:", html.length);
+  console.log("HTML sample:", html.substring(0, 1000));
 
-  // Extract the certificate number and main title
-  let certMatch = html.match(/#(\d+)/);
-  const certNumber = certMatch?.[1] || cert;
+  // Extract fields from the "Item Information" section table structure
+  const extractTableField = (fieldName: string): string | undefined => {
+    // Try multiple patterns for table-based extraction
+    const patterns = [
+      new RegExp(`${fieldName}[^>]*>\\s*([^<\\n]+)`, 'i'),
+      new RegExp(`<td[^>]*>\\s*${fieldName}\\s*</td>\\s*<td[^>]*>\\s*([^<]+)`, 'i'),
+      new RegExp(`${fieldName}\\s*</(?:td|th)>\\s*<(?:td|th)[^>]*>\\s*([^<]+)`, 'i'),
+      new RegExp(`${fieldName}\\s+([^\\n<]+)`, 'i')
+    ];
+    
+    for (const pattern of patterns) {
+      const match = html.match(pattern);
+      if (match && match[1]) {
+        const value = match[1].trim();
+        if (value && value !== fieldName) {
+          console.log(`Found ${fieldName}:`, value);
+          return value;
+        }
+      }
+    }
+    return undefined;
+  };
 
-  // Extract the full card description (this contains most of the info)
-  const descriptionMatch = html.match(/#\d+\s*([^<]+?)(?:\s*<|$)/);
-  const fullDescription = descriptionMatch?.[1]?.trim() || '';
-  console.log("Full description found:", fullDescription);
+  // Extract main fields from PSA page
+  const certNumber = extractTableField('Cert Number') || cert;
+  const grade = extractTableField('Item Grade') || extractTableField('Grade');
+  const year = extractTableField('Year');
+  const brandTitle = extractTableField('Brand/Title') || extractTableField('Brand');
+  const subject = extractTableField('Subject');
+  const cardNumber = extractTableField('Card Number');
+  const category = extractTableField('Category');
+  const varietyPedigree = extractTableField('Variety/Pedigree') || extractTableField('Variety');
+  
+  // Extract PSA Estimate
+  const psaEstimate = extractTableField('PSA Estimate') || 
+    extractValue(html, /PSA Estimate\s*\$?([0-9,]+(?:\.[0-9]{2})?)/i);
 
-  // Parse the description for components (e.g., "2023 POKEMON JAPANESE SV1A-TRIPLET BEAT #080 MAGIKARP ART RARE")
-  let year, brand, cardName, cardNumber, rarity, variety;
+  // Extract label type
+  const labelType = extractTableField('Label Type');
+  
+  // Extract reverse cert/barcode
+  const reverseCert = extractTableField('Reverse Cert/Barcode');
+
+  // Also try to extract from the main card title/description at the top
+  const titleMatch = html.match(/#(\d+)\s*([^<\n]+?)(?:\s*<|$)/);
+  let fullDescription = '';
+  if (titleMatch) {
+    fullDescription = titleMatch[2]?.trim() || '';
+    console.log("Found title description:", fullDescription);
+  }
+
+  // Parse additional info from description if fields are missing
+  let parsedYear, parsedBrand, parsedCardName, parsedCardNumber, parsedRarity;
   
   if (fullDescription) {
     // Extract year (4 digits at start)
     const yearMatch = fullDescription.match(/^(\d{4})\s+/);
-    if (yearMatch) year = yearMatch[1];
+    if (yearMatch) parsedYear = yearMatch[1];
     
     // Extract card number (# followed by alphanumeric)
     const numberMatch = fullDescription.match(/#(\w+)/);
-    if (numberMatch) cardNumber = numberMatch[1];
+    if (numberMatch) parsedCardNumber = numberMatch[1];
     
-    // Extract rarity/variety (words at the end like "ART RARE", "HOLO", etc.)
+    // Extract rarity/variety (words at the end)
     const rarityMatch = fullDescription.match(/\s+((?:ART\s+)?(?:RARE|HOLO|COMMON|UNCOMMON|PROMO|ULTRA\s+RARE|SECRET\s+RARE).*?)$/i);
-    if (rarityMatch) {
-      rarity = rarityMatch[1].trim();
-      // Check if it's a variety like "ART RARE"
-      if (rarity.includes('ART')) variety = rarity;
-    }
+    if (rarityMatch) parsedRarity = rarityMatch[1].trim();
     
-    // Extract card name (usually the last recognizable word before rarity)
+    // Extract card name and brand
     let workingDesc = fullDescription;
     if (yearMatch) workingDesc = workingDesc.replace(yearMatch[0], '').trim();
     if (numberMatch) workingDesc = workingDesc.replace(numberMatch[0], '').trim();
     if (rarityMatch) workingDesc = workingDesc.replace(rarityMatch[0], '').trim();
     
-    // The remaining should be brand + card name
     const parts = workingDesc.split(' ');
     if (parts.length >= 2) {
-      // Last word is likely the card name, everything else is brand
-      cardName = parts[parts.length - 1];
-      brand = parts.slice(0, -1).join(' ');
-    } else {
-      cardName = workingDesc;
+      parsedCardName = parts[parts.length - 1];
+      parsedBrand = parts.slice(0, -1).join(' ');
     }
   }
 
-  // Extract structured data from HTML tables/sections
-  const grade = extractValue(html, /Item Grade\s*([^<\n]+)/i) ||
-    extractValue(html, /<td[^>]*>\s*Item Grade\s*<\/td>\s*<td[^>]*>\s*([^<]+)/i) ||
-    extractValue(html, /Grade[^>]*>\s*([^<]+)/i);
+  // Use extracted values with fallbacks
+  const finalYear = year || parsedYear;
+  const finalBrand = brandTitle || parsedBrand;
+  const finalSubject = subject || parsedCardName;
+  const finalCardNumber = cardNumber || parsedCardNumber;
+  const finalVariety = varietyPedigree || parsedRarity;
 
-  const psaEstimate = extractValue(html, /PSA Estimate\s*\$?([0-9,]+(?:\.[0-9]{2})?)/i) ||
-    extractValue(html, /<td[^>]*>\s*PSA Estimate\s*<\/td>\s*<td[^>]*>\s*\$?([0-9,]+(?:\.[0-9]{2})?)/i);
-
-  const extractedYear = extractValue(html, /Year\s*(\d{4})/i) ||
-    extractValue(html, /<td[^>]*>\s*Year\s*<\/td>\s*<td[^>]*>\s*(\d{4})/i);
-
-  const extractedBrand = extractValue(html, /Brand\/Title\s*([^<\n]+)/i) ||
-    extractValue(html, /<td[^>]*>\s*Brand\/Title\s*<\/td>\s*<td[^>]*>\s*([^<]+)/i);
-
-  const subject = extractValue(html, /Subject\s*([^<\n]+)/i) ||
-    extractValue(html, /<td[^>]*>\s*Subject\s*<\/td>\s*<td[^>]*>\s*([^<]+)/i);
-
-  const extractedCardNumber = extractValue(html, /Card Number\s*([^<\n]+)/i) ||
-    extractValue(html, /<td[^>]*>\s*Card Number\s*<\/td>\s*<td[^>]*>\s*([^<]+)/i);
-
-  const category = extractValue(html, /Category\s*([^<\n]+)/i) ||
-    extractValue(html, /<td[^>]*>\s*Category\s*<\/td>\s*<td[^>]*>\s*([^<]+)/i);
-
-  const varietyPedigree = extractValue(html, /Variety\/Pedigree\s*([^<\n]+)/i) ||
-    extractValue(html, /<td[^>]*>\s*Variety\/Pedigree\s*<\/td>\s*<td[^>]*>\s*([^<]+)/i);
-
-  // Use parsed values or fall back to extracted values
-  const finalYear = year || extractedYear;
-  const finalBrand = brand || extractedBrand;
-  const finalCardName = cardName || subject;
-  const finalCardNumber = cardNumber || extractedCardNumber;
-
-  // Build final title
-  const titleParts = [finalYear, finalBrand, finalCardName].filter(Boolean);
+  // Build title
+  const titleParts = [finalYear, finalBrand, finalSubject].filter(Boolean);
   const title = titleParts.length > 0 ? titleParts.join(" ") : fullDescription || `PSA Cert ${cert}`;
 
   // Normalize game from category
   let game = (category || '').toLowerCase();
-  if (game.includes('tcg')) game = 'tcg';
+  if (game.includes('tcg')) game = 'pokemon'; // TCG CARDS typically means Pokemon
   if (game.includes('pokemon')) game = 'pokemon';
   if (game.includes('magic') || game.includes('mtg')) game = 'mtg';
   if (game.includes('baseball')) game = 'baseball';
@@ -138,9 +148,9 @@ function extractCardData(html: string, cert: string) {
 
   const extractedData = {
     cert: String(cert),
-    certNumber: String(cert),
+    certNumber: String(certNumber || cert),
     title,
-    cardName: finalCardName,
+    cardName: finalSubject,
     year: finalYear,
     game: game || 'tcg',
     cardNumber: finalCardNumber,
@@ -149,12 +159,13 @@ function extractCardData(html: string, cert: string) {
     gradeDisplay: grade,
     category,
     brandTitle: finalBrand,
-    subject: finalCardName,
-    varietyPedigree: varietyPedigree || variety,
-    rarity,
+    subject: finalSubject,
+    varietyPedigree: finalVariety,
+    labelType,
+    reverseCert,
     psaEstimate,
     // Legacy compatibility
-    player: finalCardName,
+    player: finalSubject,
     set: finalBrand,
   };
 
