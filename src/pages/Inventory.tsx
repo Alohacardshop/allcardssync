@@ -10,7 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Link } from "react-router-dom";
 import { Navigation } from "@/components/Navigation";
 import { toast } from "sonner";
-import { useStore } from "@/contexts/StoreContext";
+import { AllLocationsSelector } from "@/components/AllLocationsSelector";
 
 // Simple SEO helpers without extra deps
 function useSEO(opts: { title: string; description?: string; canonical?: string }) {
@@ -82,7 +82,7 @@ type ItemRow = {
 };
 
 export default function Inventory() {
-  const { selectedStore, selectedLocation } = useStore();
+  const [selectedLocationGid, setSelectedLocationGid] = useState<string | null>(null);
   useSEO({
     title: "Card Inventory | Aloha",
     description: "View all cards in inventory with lot numbers, IDs, status, price, and more.",
@@ -118,12 +118,9 @@ export default function Inventory() {
           .select("*", { count: "exact" })
           .order(sortKey as string, { ascending: sortAsc });
 
-        // Filter by store and location if selected
-        if (selectedStore) {
-          query = query.eq("store_key", selectedStore);
-        }
-        if (selectedLocation) {
-          query = query.eq("shopify_location_gid", selectedLocation);
+        // Filter by location if selected
+        if (selectedLocationGid) {
+          query = query.eq("shopify_location_gid", selectedLocationGid);
         }
 
         if (search.trim()) {
@@ -207,7 +204,7 @@ export default function Inventory() {
     };
 
     fetchData();
-  }, [page, search, printed, pushed, lotFilter, sortKey, sortAsc, typeFilter, conditionFilter, setFilter, categoryFilter, yearFilter, priceRange, selectedStore, selectedLocation]);
+  }, [page, search, printed, pushed, lotFilter, sortKey, sortAsc, typeFilter, conditionFilter, setFilter, categoryFilter, yearFilter, priceRange, selectedLocationGid]);
 
   const toggleSort = (key: keyof ItemRow) => {
     if (sortKey === key) setSortAsc((v) => !v);
@@ -245,6 +242,7 @@ export default function Inventory() {
     setCategoryFilter("");
     setYearFilter("");
     setPriceRange({ min: "", max: "" });
+    setSelectedLocationGid(null);
     setPage(1);
   };
 
@@ -311,6 +309,17 @@ export default function Inventory() {
                 />
               </div>
               <div>
+                <Label>Location Filter</Label>
+                <AllLocationsSelector
+                  value={selectedLocationGid}
+                  onValueChange={(locationGid) => {
+                    setPage(1);
+                    setSelectedLocationGid(locationGid);
+                  }}
+                  placeholder="All locations"
+                />
+              </div>
+              <div>
                 <Label>Card Type</Label>
                 <Select value={typeFilter} onValueChange={(value: "all" | "graded" | "raw") => {
                   setPage(1);
@@ -326,6 +335,10 @@ export default function Inventory() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+
+            {/* Secondary Filters Row */}
+            <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
               <div>
                 <Label htmlFor="condition-filter">Condition/Grade</Label>
                 <Input
@@ -338,10 +351,6 @@ export default function Inventory() {
                   placeholder="GEM MT 10, Near Mint, etc."
                 />
               </div>
-            </div>
-
-            {/* Secondary Filters Row */}
-            <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
               <div>
                 <Label htmlFor="set-filter">Set/Brand</Label>
                 <Input
@@ -401,8 +410,12 @@ export default function Inventory() {
                   />
                 </div>
               </div>
+            </div>
+
+            {/* Sort Controls Row */}
+            <div className="grid gap-4 mb-4">
               <div>
-                <Label>Sort</Label>
+                <Label>Sort Options</Label>
                 <div className="flex gap-1 mt-2 flex-wrap">
                   <Button size="sm" variant="outline" onClick={() => toggleSort("created_at")}>
                     Date {sortKey === "created_at" ? (sortAsc ? "↑" : "↓") : ""}
