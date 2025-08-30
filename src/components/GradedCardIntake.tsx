@@ -44,9 +44,23 @@ export const GradedCardIntake = () => {
     setFetching(true);
     
     try {
-      const { data, error } = await supabase.functions.invoke('psa-scrape', {
+      // Race the function call with a timeout and abort signal
+      const fetchPromise = supabase.functions.invoke('psa-scrape', {
         body: { cert: psaCert.trim() }
       });
+
+      const timeoutPromise = new Promise((_, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error('Request timed out after 30 seconds'));
+        }, 30000);
+        
+        controller.signal.addEventListener('abort', () => {
+          clearTimeout(timeout);
+          reject(new Error('Request cancelled'));
+        });
+      });
+
+      const { data, error } = await Promise.race([fetchPromise, timeoutPromise]) as any;
 
       if (error) throw error;
 
@@ -73,7 +87,7 @@ export const GradedCardIntake = () => {
         throw new Error(data?.error || 'Failed to fetch PSA data');
       }
     } catch (error) {
-      if (controller.signal.aborted) {
+      if (error?.message?.includes('cancelled') || error?.message?.includes('timed out')) {
         toast.info("PSA fetch cancelled");
       } else {
         console.error('PSA fetch error:', error);
