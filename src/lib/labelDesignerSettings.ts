@@ -17,7 +17,7 @@ export function getLabelDesignerSettings(): LabelDesignerSettings {
     const includeTitle = localStorage.getItem('field-title') !== 'false';
     const includeSku = localStorage.getItem('field-sku') !== 'false';
     const includePrice = localStorage.getItem('field-price') !== 'false';
-    const includeLot = localStorage.getItem('field-lot') !== 'false';
+    const includeLot = false; // Lot numbers disabled
     const includeCondition = localStorage.getItem('field-condition') !== 'false';
     const barcodeMode = localStorage.getItem('barcode-mode') || 'barcode';
     const showGuides = localStorage.getItem('labelDesigner_showGuides') === 'true';
@@ -55,7 +55,7 @@ export function getLabelDesignerSettings(): LabelDesignerSettings {
         includeTitle: true,
         includeSku: true,
         includePrice: true,
-        includeLot: true,
+        includeLot: false,
         includeCondition: true,
         barcodeMode: 'barcode'
       },

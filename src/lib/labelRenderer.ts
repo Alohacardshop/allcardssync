@@ -254,13 +254,6 @@ export const renderLabelToCanvas = (
     });
   }
 
-  // Add lot number support if included
-  if (fieldConfig.includeLot && labelData.lot) {
-    ctx.font = '10px Arial';
-    ctx.fillStyle = '#666666';
-    ctx.textAlign = 'right';
-    ctx.fillText(`Lot: ${labelData.lot}`, LABEL_WIDTH - padding - 5, padding + 15);
-  }
 };
 
 export const generateLabelPDF = async (

@@ -41,7 +41,6 @@ serve(async (req: Request) => {
       "DIRECTION 1",
       "CLS",
       `TEXT 10,8,"FONT001",0,1,1,"${sanitize(title)}"`,
-      `TEXT 10,45,"FONT001",0,1,1,"${sanitize(lot_number || "")}"`,
       `TEXT 300,45,"FONT001",0,1,1,"${formatPrice(price)}"`,
       `BARCODE 10,70,"128",${BAR_H},1,0,${NARROW},${WIDE},"${sanitize(barcode)}"`,
       "PRINT 1,1"

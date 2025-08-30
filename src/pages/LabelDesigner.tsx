@@ -42,7 +42,7 @@ function useSEO(opts: { title: string; description?: string; canonical?: string 
 export default function LabelDesigner() {
   useSEO({ 
     title: "Label Designer 2x1 in | Aloha", 
-    description: "Design and print 2x1 inch labels with barcode, lot, SKU, price, and more using TSPL for Rollo printers." 
+    description: "Design and print 2x1 inch labels with barcode, SKU, price, and condition using TSPL for Rollo printers." 
   });
 
   const location = useLocation();
@@ -98,7 +98,7 @@ export default function LabelDesigner() {
     includeTitle: includeTitle === 'true',
     includeSku: includeSku === 'true',
     includePrice: includePrice === 'true',
-    includeLot: includeLot === 'true',
+    includeLot: false, // Lot numbers removed
     includeCondition: includeCondition === 'true',
     barcodeMode: barcodeMode as 'qr' | 'barcode' | 'none'
   };
@@ -125,7 +125,7 @@ export default function LabelDesigner() {
         setIncludeTitle(config.includeTitle ? 'true' : 'false');
         setIncludeSku(config.includeSku ? 'true' : 'false'); 
         setIncludePrice(config.includePrice ? 'true' : 'false');
-        setIncludeLot(config.includeLot ? 'true' : 'false');
+        setIncludeLot('false'); // Force lot to false
         setIncludeCondition(config.includeCondition ? 'true' : 'false');
         setBarcodeMode(config.barcodeMode || 'barcode');
       }
@@ -224,7 +224,7 @@ export default function LabelDesigner() {
         includeTitle: true,
         includeSku: true,
         includePrice: true,
-        includeLot: true,
+        includeLot: false, // Force lot to false
         includeCondition: true,
         barcodeMode: 'qr' as const
       } : fieldConfig;
@@ -298,7 +298,7 @@ export default function LabelDesigner() {
         <div className="container mx-auto px-6 py-4 flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-foreground">Label Designer</h1>
-            <p className="text-muted-foreground mt-1">Design and print 2x1 inch labels with barcode, lot, SKU, price, and more.</p>
+            <p className="text-muted-foreground mt-1">Design and print 2x1 inch labels with barcode, SKU, price, and condition.</p>
           </div>
           <Navigation />
         </div>

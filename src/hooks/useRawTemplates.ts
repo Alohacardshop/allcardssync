@@ -19,7 +19,7 @@ export function useRawTemplates() {
       includeTitle: true,
       includeSku: true,
       includePrice: true,
-      includeLot: true,
+      includeLot: false,
       includeCondition: true,
       barcodeMode: 'barcode' as const
     };
