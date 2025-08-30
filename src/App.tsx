@@ -8,6 +8,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { StoreProvider } from "@/contexts/StoreContext";
 import Index from "./pages/Index";
 import Inventory from "./pages/Inventory";
+import Batches from "./pages/Batches";
 import LabelDesigner from "./pages/LabelDesigner";
 import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
@@ -99,12 +100,14 @@ const App = () => (
               <Route path="/auth" element={<Auth />} />
               <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
               <Route path="/inventory" element={<ProtectedRoute><Inventory /></ProtectedRoute>} />
+              <Route path="/batches" element={<ProtectedRoute><Batches /></ProtectedRoute>} />
               <Route path="/labels" element={<ProtectedRoute><LabelDesigner /></ProtectedRoute>} />
               <Route path="/bulk-import" element={<ProtectedRoute><BulkImport /></ProtectedRoute>} />
               <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
               <Route path="/admin/catalog" element={<ProtectedRoute><div className="p-8"><CatalogMigrationPlaceholder /></div></ProtectedRoute>} />
               <Route path="/shopify-inspect" element={<ProtectedRoute><ShopifyInspect /></ProtectedRoute>} />
               <Route path="/shopify-mapping" element={<ProtectedRoute><ShopifyMapping /></ProtectedRoute>} />
+              <Route path="/print-logs" element={<ProtectedRoute><PrintLogs /></ProtectedRoute>} />
               
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
