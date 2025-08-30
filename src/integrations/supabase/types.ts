@@ -150,6 +150,7 @@ export type Database = {
           pricing_snapshot: Json | null
           printed_at: string | null
           processing_notes: string | null
+          product_weight: number | null
           psa_cert: string | null
           pushed_at: string | null
           quantity: number
@@ -190,6 +191,7 @@ export type Database = {
           pricing_snapshot?: Json | null
           printed_at?: string | null
           processing_notes?: string | null
+          product_weight?: number | null
           psa_cert?: string | null
           pushed_at?: string | null
           quantity?: number
@@ -230,6 +232,7 @@ export type Database = {
           pricing_snapshot?: Json | null
           printed_at?: string | null
           processing_notes?: string | null
+          product_weight?: number | null
           psa_cert?: string | null
           pushed_at?: string | null
           quantity?: number

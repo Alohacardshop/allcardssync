@@ -183,6 +183,8 @@ export const TCGPlayerBulkImport = () => {
         source_row_number: items.indexOf(item) + 1,
         processing_notes: `TCGPlayer bulk import from ${file?.name}`,
         store_key: selectedStore || null,
+        // Set product weight: 1 oz for raw cards (no grading)
+        product_weight: 1.0,
         shopify_location_gid: selectedLocation || null
       });
 

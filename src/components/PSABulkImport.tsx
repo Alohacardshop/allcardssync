@@ -86,6 +86,8 @@ export const PSABulkImport = () => {
         grade: item.data?.grade,
         category: item.data?.category,
         price: 0, // Default price, can be updated later
+        // Set product weight: 3 oz for graded cards (PSA)
+        product_weight: 3.0,
         // New comprehensive data capture fields
         source_provider: 'psa',
         source_payload: {

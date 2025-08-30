@@ -368,6 +368,8 @@ const Index = () => {
       cost: item.cost ? Number(item.cost) : null,
       sku: item.sku || item.psaCert || null,
       quantity: typeof item.quantity === 'number' ? item.quantity : Number(item.quantity) || 1,
+      // Set product weight: 3 oz for graded cards (PSA)
+      product_weight: 3.0,
     };
 
     try {

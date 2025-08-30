@@ -184,7 +184,9 @@ export default function RawIntake() {
       },
       processing_notes: `Manual entry for ${form.name}`,
       store_key: selectedStore,
-      shopify_location_gid: selectedLocation
+      shopify_location_gid: selectedLocation,
+      // Set product weight: 1 oz for raw cards (no grading)
+      product_weight: 1.0
     } as const;
 
     try {

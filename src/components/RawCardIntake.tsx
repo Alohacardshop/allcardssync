@@ -135,6 +135,8 @@ export function RawCardIntake({
           price: chosenVariant.price || null,
           sku: generateSKU(picked, chosenVariant, game),
           quantity: quantity,
+          // Set product weight: 1 oz for raw cards (no grading)
+          product_weight: 1.0,
           // New comprehensive data capture fields
           source_provider: 'raw_search',
           source_payload: JSON.parse(JSON.stringify({
