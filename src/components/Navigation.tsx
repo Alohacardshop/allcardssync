@@ -11,8 +11,6 @@ import { Home, Package, Tags, Settings, FileText, Menu, LogOut, Upload, BarChart
 import { supabase } from "@/integrations/supabase/client";
 import { cleanupAuthState } from "@/lib/auth";
 import { useEffect, useState } from "react";
-import { StoreSelector } from "@/components/StoreSelector";
-import { LocationSelector } from "@/components/LocationSelector";
 
 interface NavigationProps {
   showMobileMenu?: boolean;
@@ -134,12 +132,6 @@ export function Navigation({ showMobileMenu = true }: NavigationProps) {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-48">
-          {/* Store/Location selectors for mobile */}
-          <div className="lg:hidden p-2 space-y-2 border-b">
-            <StoreSelector />
-            <LocationSelector />
-          </div>
-          
           {navItems.map((item) => (
             <DropdownMenuItem key={item.to} asChild>
               <Link 
@@ -167,12 +159,6 @@ export function Navigation({ showMobileMenu = true }: NavigationProps) {
 
   return (
     <div className="flex items-center gap-4">
-      {/* Store and Location Selectors - visible on larger screens */}
-      <div className="hidden lg:flex items-center gap-3">
-        <StoreSelector />
-        <LocationSelector />
-      </div>
-      
       <DesktopNav />
       {showMobileMenu && <MobileNav />}
     </div>
