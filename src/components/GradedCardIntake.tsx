@@ -55,10 +55,12 @@ export const GradedCardIntake = () => {
 
       const timeoutPromise = new Promise((_, reject) => {
         const timeout = setTimeout(() => {
-          reject(new Error('Request timed out after 15 seconds'));
-        }, 15000);
+          console.log('PSA fetch timed out after 8 seconds');
+          reject(new Error('Request timed out after 8 seconds'));
+        }, 8000);
         
         controller.signal.addEventListener('abort', () => {
+          console.log('PSA fetch cancelled by user');
           clearTimeout(timeout);
           reject(new Error('Request cancelled'));
         });
@@ -72,6 +74,7 @@ export const GradedCardIntake = () => {
       if (error) throw error;
 
       if (data && !data.error) {
+        console.log('PSA data received successfully:', data);
         setCardData(data);
         // Populate form with fetched data
         setFormData({
@@ -93,16 +96,19 @@ export const GradedCardIntake = () => {
         });
         toast.success("PSA data fetched successfully");
       } else {
+        console.log('PSA data error or no data:', data);
         throw new Error(data?.error || 'Failed to fetch PSA data');
       }
     } catch (error) {
+      console.log('PSA fetch error occurred:', error);
       if (error?.message?.includes('cancelled') || error?.message?.includes('timed out')) {
-        toast.info("PSA fetch cancelled");
+        toast.info(error.message.includes('cancelled') ? "PSA fetch cancelled" : "PSA fetch timed out - try again");
       } else {
         console.error('PSA fetch error:', error);
         toast.error(error instanceof Error ? error.message : 'Failed to fetch PSA data');
       }
     } finally {
+      console.log('PSA fetch process completed');
       setFetching(false);
       setAbortController(null);
     }
