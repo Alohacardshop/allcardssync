@@ -5,8 +5,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Loader2, Award } from "lucide-react";
+import { Loader2, Award, ChevronDown, ChevronUp, AlertCircle } from "lucide-react";
 import { useStore } from "@/contexts/StoreContext";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 export const GradedCardIntake = () => {
   const [psaCert, setPsaCert] = useState("");
@@ -14,6 +15,8 @@ export const GradedCardIntake = () => {
   const [submitting, setSubmitting] = useState(false);
   const [cardData, setCardData] = useState<any>(null);
   const [abortController, setAbortController] = useState<AbortController | null>(null);
+  const [showRawData, setShowRawData] = useState(false);
+  const [populatedFieldsCount, setPopulatedFieldsCount] = useState(0);
   const { selectedStore, selectedLocation } = useStore();
 
   // Form fields that can be edited after fetching
@@ -76,25 +79,72 @@ export const GradedCardIntake = () => {
       if (data && !data.error) {
         console.log('PSA data received successfully:', data);
         setCardData(data);
-        // Populate form with fetched data
-        setFormData({
-          brandTitle: data.brandTitle || "",
+        
+        // Enhanced field mapping with better fallbacks
+        const extractYear = (text: string) => {
+          const yearMatch = text?.match(/\b(19|20)\d{2}\b/);
+          return yearMatch ? yearMatch[0] : "";
+        };
+
+        const extractGrade = (data: any) => {
+          if (data.gradeNumeric !== undefined && data.gradeNumeric !== null) {
+            return String(data.gradeNumeric);
+          }
+          if (data.grade) {
+            const numericGrade = String(data.grade).match(/\d+(\.\d+)?/);
+            return numericGrade ? numericGrade[0] : "";
+          }
+          if (data.gradeDisplay) {
+            const numericGrade = String(data.gradeDisplay).match(/\d+(\.\d+)?/);
+            return numericGrade ? numericGrade[0] : "";
+          }
+          return "";
+        };
+
+        // Prioritize CloudFront images
+        const getBestImage = (data: any) => {
+          if (data.imageUrls?.length > 0) {
+            const cloudFrontImage = data.imageUrls.find((url: string) => 
+              url.includes('cloudfront.net') || url.includes('d1htnxwo4o0jhw.cloudfront.net')
+            );
+            return cloudFrontImage || data.imageUrls[0];
+          }
+          return data.imageUrl || null;
+        };
+
+        const newFormData = {
+          brandTitle: data.brandTitle || data.title || "",
           subject: data.subject || data.cardName || "",
-          category: data.category || "",
+          category: data.category || data.gameRaw || "",
           variant: data.varietyPedigree || "",
           cardNumber: data.cardNumber || "",
-          year: data.year || "",
-          grade: (data.gradeNumeric !== undefined && data.gradeNumeric !== null)
-            ? String(data.gradeNumeric)
-            : (data.grade ? String(data.grade).replace(/\D/g, '') : ""),
-          game: data.game || "",
+          year: data.year || extractYear(data.title || data.brandTitle || ""),
+          grade: extractGrade(data),
+          game: data.game || (data.gameRaw?.toLowerCase().includes('pokemon') ? 'pokemon' : 
+                data.gameRaw?.toLowerCase().includes('magic') ? 'mtg' : 
+                data.game || ""),
           certNumber: data.certNumber || psaCert,
           price: data.psaEstimate || "",
           cost: "",
           quantity: 1,
           psaEstimate: data.psaEstimate || ""
-        });
-        toast.success("PSA data fetched successfully");
+        };
+
+        // Update card data with best image
+        const bestImage = getBestImage(data);
+        if (bestImage && bestImage !== data.imageUrl) {
+          setCardData({...data, imageUrl: bestImage});
+        }
+
+        setFormData(newFormData);
+
+        // Count populated fields (excluding always-populated ones like certNumber, quantity)
+        const populatedCount = Object.entries(newFormData).filter(([key, value]) => 
+          value && value !== "" && key !== 'certNumber' && key !== 'quantity' && key !== 'cost'
+        ).length;
+        setPopulatedFieldsCount(populatedCount);
+
+        toast.success(`PSA data fetched - ${populatedCount} fields populated`);
       } else {
         console.log('PSA data error or no data:', data);
         throw new Error(data?.error || 'Failed to fetch PSA data');
@@ -261,6 +311,41 @@ export const GradedCardIntake = () => {
             </div>
           )}
         </div>
+
+        {/* Fetch Results Summary */}
+        {cardData && (
+          <div className="bg-muted/50 rounded-lg p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium">
+                  {populatedFieldsCount > 0 ? `${populatedFieldsCount} fields populated` : 'Only certificate number found'}
+                </span>
+                {populatedFieldsCount === 0 && (
+                  <AlertCircle className="h-4 w-4 text-amber-500" />
+                )}
+              </div>
+              <Collapsible open={showRawData} onOpenChange={setShowRawData}>
+                <CollapsibleTrigger asChild>
+                  <Button variant="ghost" size="sm">
+                    View raw data
+                    {showRawData ? <ChevronUp className="h-4 w-4 ml-1" /> : <ChevronDown className="h-4 w-4 ml-1" />}
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-2">
+                  <pre className="text-xs bg-background p-3 rounded border overflow-auto max-h-40">
+                    {JSON.stringify(cardData, null, 2)}
+                  </pre>
+                </CollapsibleContent>
+              </Collapsible>
+            </div>
+            
+            {populatedFieldsCount === 0 && (
+              <div className="text-sm text-muted-foreground">
+                Limited data found - you may need to fill in the details manually. Try a different certificate number or check if the PSA cert exists.
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Card Image Preview */}
         {cardData?.imageUrl && (
