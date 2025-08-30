@@ -32,45 +32,98 @@ function extractImage(html: string): string | null {
 // Extract card data from PSA HTML page
 function extractCardData(html: string, cert: string) {
   console.log("Extracting PSA card data from HTML...");
+  console.log("HTML sample:", html.substring(0, 500));
 
-  // Extract the main card title/name from the page
-  const titleMatch = html.match(/#\d+\s*([^<\n]+?)(?:\s*<|$)/);
-  const cardTitle = titleMatch?.[1]?.trim();
+  // Extract the certificate number and main title
+  let certMatch = html.match(/#(\d+)/);
+  const certNumber = certMatch?.[1] || cert;
 
-  // Extract grade (GEM MT 10, MINT 9, etc.)
+  // Extract the full card description (this contains most of the info)
+  const descriptionMatch = html.match(/#\d+\s*([^<]+?)(?:\s*<|$)/);
+  const fullDescription = descriptionMatch?.[1]?.trim() || '';
+  console.log("Full description found:", fullDescription);
+
+  // Parse the description for components (e.g., "2023 POKEMON JAPANESE SV1A-TRIPLET BEAT #080 MAGIKARP ART RARE")
+  let year, brand, cardName, cardNumber, rarity, variety;
+  
+  if (fullDescription) {
+    // Extract year (4 digits at start)
+    const yearMatch = fullDescription.match(/^(\d{4})\s+/);
+    if (yearMatch) year = yearMatch[1];
+    
+    // Extract card number (# followed by alphanumeric)
+    const numberMatch = fullDescription.match(/#(\w+)/);
+    if (numberMatch) cardNumber = numberMatch[1];
+    
+    // Extract rarity/variety (words at the end like "ART RARE", "HOLO", etc.)
+    const rarityMatch = fullDescription.match(/\s+((?:ART\s+)?(?:RARE|HOLO|COMMON|UNCOMMON|PROMO|ULTRA\s+RARE|SECRET\s+RARE).*?)$/i);
+    if (rarityMatch) {
+      rarity = rarityMatch[1].trim();
+      // Check if it's a variety like "ART RARE"
+      if (rarity.includes('ART')) variety = rarity;
+    }
+    
+    // Extract card name (usually the last recognizable word before rarity)
+    let workingDesc = fullDescription;
+    if (yearMatch) workingDesc = workingDesc.replace(yearMatch[0], '').trim();
+    if (numberMatch) workingDesc = workingDesc.replace(numberMatch[0], '').trim();
+    if (rarityMatch) workingDesc = workingDesc.replace(rarityMatch[0], '').trim();
+    
+    // The remaining should be brand + card name
+    const parts = workingDesc.split(' ');
+    if (parts.length >= 2) {
+      // Last word is likely the card name, everything else is brand
+      cardName = parts[parts.length - 1];
+      brand = parts.slice(0, -1).join(' ');
+    } else {
+      cardName = workingDesc;
+    }
+  }
+
+  // Extract structured data from HTML tables/sections
   const grade = extractValue(html, /Item Grade\s*([^<\n]+)/i) ||
+    extractValue(html, /<td[^>]*>\s*Item Grade\s*<\/td>\s*<td[^>]*>\s*([^<]+)/i) ||
     extractValue(html, /Grade[^>]*>\s*([^<]+)/i);
 
-  // Extract PSA estimate
-  const psaEstimate = extractValue(html, /PSA Estimate\s*\$?([0-9,]+(?:\.[0-9]{2})?)/i);
+  const psaEstimate = extractValue(html, /PSA Estimate\s*\$?([0-9,]+(?:\.[0-9]{2})?)/i) ||
+    extractValue(html, /<td[^>]*>\s*PSA Estimate\s*<\/td>\s*<td[^>]*>\s*\$?([0-9,]+(?:\.[0-9]{2})?)/i);
 
-  // Extract year
-  const year = extractValue(html, /Year\s*(\d{4})/i);
+  const extractedYear = extractValue(html, /Year\s*(\d{4})/i) ||
+    extractValue(html, /<td[^>]*>\s*Year\s*<\/td>\s*<td[^>]*>\s*(\d{4})/i);
 
-  // Extract brand/title
-  const brandTitle = extractValue(html, /Brand\/Title\s*([^<\n]+)/i);
+  const extractedBrand = extractValue(html, /Brand\/Title\s*([^<\n]+)/i) ||
+    extractValue(html, /<td[^>]*>\s*Brand\/Title\s*<\/td>\s*<td[^>]*>\s*([^<]+)/i);
 
-  // Extract subject (card name/player)
-  const subject = extractValue(html, /Subject\s*([^<\n]+)/i);
+  const subject = extractValue(html, /Subject\s*([^<\n]+)/i) ||
+    extractValue(html, /<td[^>]*>\s*Subject\s*<\/td>\s*<td[^>]*>\s*([^<]+)/i);
 
-  // Extract card number
-  const cardNumber = extractValue(html, /Card Number\s*([^<\n]+)/i);
+  const extractedCardNumber = extractValue(html, /Card Number\s*([^<\n]+)/i) ||
+    extractValue(html, /<td[^>]*>\s*Card Number\s*<\/td>\s*<td[^>]*>\s*([^<]+)/i);
 
-  // Extract category
-  const category = extractValue(html, /Category\s*([^<\n]+)/i);
+  const category = extractValue(html, /Category\s*([^<\n]+)/i) ||
+    extractValue(html, /<td[^>]*>\s*Category\s*<\/td>\s*<td[^>]*>\s*([^<]+)/i);
 
-  // Extract variety/pedigree
-  const varietyPedigree = extractValue(html, /Variety\/Pedigree\s*([^<\n]+)/i);
+  const varietyPedigree = extractValue(html, /Variety\/Pedigree\s*([^<\n]+)/i) ||
+    extractValue(html, /<td[^>]*>\s*Variety\/Pedigree\s*<\/td>\s*<td[^>]*>\s*([^<]+)/i);
+
+  // Use parsed values or fall back to extracted values
+  const finalYear = year || extractedYear;
+  const finalBrand = brand || extractedBrand;
+  const finalCardName = cardName || subject;
+  const finalCardNumber = cardNumber || extractedCardNumber;
 
   // Build final title
-  const parts = [year, brandTitle, subject].filter(Boolean);
-  const title = parts.length > 0 ? parts.join(" ") : cardTitle || `PSA Cert ${cert}`;
+  const titleParts = [finalYear, finalBrand, finalCardName].filter(Boolean);
+  const title = titleParts.length > 0 ? titleParts.join(" ") : fullDescription || `PSA Cert ${cert}`;
 
   // Normalize game from category
-  let game = category?.toLowerCase() || '';
+  let game = (category || '').toLowerCase();
   if (game.includes('tcg')) game = 'tcg';
   if (game.includes('pokemon')) game = 'pokemon';
   if (game.includes('magic') || game.includes('mtg')) game = 'mtg';
+  if (game.includes('baseball')) game = 'baseball';
+  if (game.includes('football')) game = 'football';
+  if (game.includes('basketball')) game = 'basketball';
 
   // Normalize grade
   let normalizedGrade = grade;
@@ -83,30 +136,30 @@ function extractCardData(html: string, cert: string) {
     }
   }
 
-  console.log("Extracted data:", {
-    title, grade: normalizedGrade, year, brandTitle, subject, cardNumber, category, psaEstimate
-  });
-
-  return {
+  const extractedData = {
     cert: String(cert),
     certNumber: String(cert),
     title,
-    cardName: subject,
-    year,
-    game,
-    cardNumber,
+    cardName: finalCardName,
+    year: finalYear,
+    game: game || 'tcg',
+    cardNumber: finalCardNumber,
     grade: normalizedGrade,
     gradeNumeric,
     gradeDisplay: grade,
     category,
-    brandTitle,
-    subject,
-    varietyPedigree,
+    brandTitle: finalBrand,
+    subject: finalCardName,
+    varietyPedigree: varietyPedigree || variety,
+    rarity,
     psaEstimate,
     // Legacy compatibility
-    player: subject,
-    set: brandTitle,
+    player: finalCardName,
+    set: finalBrand,
   };
+
+  console.log("Final extracted data:", extractedData);
+  return extractedData;
 }
 
 serve(async (req) => {
