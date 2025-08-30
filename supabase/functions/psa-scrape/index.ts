@@ -411,151 +411,48 @@ function normalizeGame(gameText: string): string {
 
 async function extractDataFromHTML(htmlContent: string, cert: string) {
   console.log("Extracting data from HTML content (length:", htmlContent.length, ")");
-
-  // Attempt JSON-LD extraction first
-  const ld = safeJsonLd(htmlContent);
-  let title: string | undefined;
-  let player: string | undefined;
-  let setName: string | undefined;
-  let year: string | undefined;
-  let grade: string | undefined;
-  let psaEstimate: string | undefined;
-
-  if (ld) {
-    console.log("Found JSON-LD data:", JSON.stringify(ld, null, 2));
-    title = ld.name || ld.headline || ld.title;
-    const desc: string | undefined = ld.description;
-    if (desc) {
-      const yearM = desc.match(/\b(19|20)\d{2}\b/);
-      if (yearM) year = yearM[0];
-      const gradeM = desc.match(/PSA\s*([0-9]+(?:\.[0-9])?)/i);
-      if (gradeM) grade = `PSA ${gradeM[1]}`;
-    }
-  }
-
-  // Fallbacks: more flexible regex patterns
+  
   const text = htmlContent;
   
-  // Log a sample of the content to debug
-  console.log("HTML sample (first 1000 chars):", text.substring(0, 1000));
+  // Simple, direct extraction patterns based on PSA's actual HTML structure
+  const grade = extract(text, /Item Grade\s*([^\n<]+)/i) ||
+    extract(text, /Grade[^>]*>\s*([^<]+)/i);
+    
+  const year = extract(text, /Year\s*(\d{4})/i);
+    
+  const brandTitle = extract(text, /Brand\/Title\s*([^\n<]+)/i) ||
+    extract(text, /Brand[^>]*>\s*([^<]+)/i);
+    
+  const subject = extract(text, /Subject\s*([^\n<]+)/i);
+    
+  const cardNumber = extract(text, /Card Number\s*([^\n<]+)/i);
+    
+  const category = extract(text, /Category\s*([^\n<]+)/i);
+    
+  const varietyPedigree = extract(text, /Variety\/Pedigree\s*([^\n<]+)/i);
+    
+  const psaEstimate = extract(text, /PSA Estimate\s*\$?([0-9,]+(?:\.[0-9]{2})?)/i);
 
-  // Enhanced grade extraction with multiple patterns
-  grade = grade ||
-    // Table-based extraction
-    extract(text, /Grade[^>]*>[\s\S]*?<[^>]*>\s*([^<]+?)\s*</i) ||
-    // Label-value patterns
-    extract(text, /Grade[:\s]*((?:GEM\s*MT|MINT|PSA)?\s*\d+(?:\.\d+)?)/i) ||
-    // Direct PSA pattern
-    extract(text, /PSA\s*(\d+(?:\.\d+)?)/i) ||
-    // Grade number only
-    extract(text, /(?:Grade|graded?)[:\s]*(\d+(?:\.\d+)?)/i);
-    
-  console.log("Extracted grade:", grade);
+  // Build title from available data
+  const titleParts = [year, brandTitle, subject].filter(Boolean);
+  const title = titleParts.length > 0 ? titleParts.join(" ") : `PSA Cert ${cert}`;
 
-  // Enhanced year extraction
-  year = year ||
-    extract(text, /Year[^>]*>[\s\S]*?<[^>]*>\s*(\d{4})\s*</i) ||
-    extract(text, /\b(19\d{2}|20[0-2]\d)\b/) ||
-    extract(text, /(\d{4})\s*(?:Topps|Panini|Upper|Leaf|Score)/i);
-    
-  console.log("Extracted year:", year);
-    
-  // Enhanced set/brand extraction  
-  setName = setName || 
-    extract(text, /Set[^>]*>[\s\S]*?<[^>]*>\s*([^<]+?)\s*</i) ||
-    extract(text, /Brand[^>]*>[\s\S]*?<[^>]*>\s*([^<]+?)\s*</i);
-    
-  console.log("Extracted set:", setName);
-  
-  // PSA Estimate extraction with flexible patterns
-  psaEstimate = 
-    extract(text, /PSA\s*Price[^>]*>[\s\S]*?\$?([0-9,]+(?:\.[0-9]{2})?)/i) ||
-    extract(text, /Price\s*Guide[^>]*>[\s\S]*?\$?([0-9,]+(?:\.[0-9]{2})?)/i) ||
-    extract(text, /(?:PSA\s*)?(?:Price|Value|Estimate)[:\s]*\$?([0-9,]+(?:\.[0-9]{2})?)/i);
-    
-  console.log("Extracted PSA estimate:", psaEstimate);
-
-  // Enhanced name/subject extraction
-  const cardName: string | undefined =
-    extract(text, /Card\s*Name[^>]*>[\s\S]*?<[^>]*>\s*([^<]+?)\s*</i) ||
-    extract(text, /Player[^>]*>[\s\S]*?<[^>]*>\s*([^<]+?)\s*</i) ||
-    extract(text, /Subject[^>]*>[\s\S]*?<[^>]*>\s*([^<]+?)\s*</i) ||
-    player;
-    
-  console.log("Extracted card name:", cardName);
-
-  // Enhanced game/sport detection
-  const game: string | undefined =
-    extract(text, /Sport[^>]*>[\s\S]*?<[^>]*>\s*([^<]+?)\s*</i) ||
-    extract(text, /Game[^>]*>[\s\S]*?<[^>]*>\s*([^<]+?)\s*</i) ||
-    extract(text, /Category[^>]*>[\s\S]*?<[^>]*>\s*([^<]+?)\s*</i) ||
-    extract(text, /(?:Sport|Game|Category)[:\s]*([A-Za-z][A-Za-z0-9\s\-\/&]+)/i);
-    
-  console.log("Extracted game:", game);
-
-  // Enhanced card number extraction
-  const cardNumber: string | undefined =
-    extract(text, /Card\s*(?:#|No\.?|Number)[^>]*>[\s\S]*?<[^>]*>\s*([^<]+?)\s*</i) ||
-    extract(text, /(?:Card\s*(?:#|No\.?|Number)|#)[:\s]*([A-Za-z0-9\-\.\/]+)/i);
-    
-  console.log("Extracted card number:", cardNumber);
-
-  // Enhanced brand/title extraction
-  const brandTitle: string | undefined =
-    extract(text, /Brand[^>]*>[\s\S]*?<[^>]*>\s*([^<]+?)\s*</i) ||
-    extract(text, /Title[^>]*>[\s\S]*?<[^>]*>\s*([^<]+?)\s*</i) ||
-    extract(text, /(?:Brand|Title)[:\s]*([^\n<]+)/i);
-    
-  console.log("Extracted brand title:", brandTitle);
-
-  // Enhanced subject extraction
-  const subject: string | undefined =
-    extract(text, /Subject[^>]*>[\s\S]*?<[^>]*>\s*([^<]+?)\s*</i) ||
-    extract(text, /Subject[:\s]*([^\n<]+)/i) ||
-    cardName;
-    
-  console.log("Extracted subject:", subject);
-
-  // Enhanced category extraction
-  const category: string | undefined =
-    extract(text, /Category[^>]*>[\s\S]*?<[^>]*>\s*([^<]+?)\s*</i) ||
-    extract(text, /Category[:\s]*([A-Za-z][A-Za-z0-9\s\-\/&]+)/i) ||
-    game;
-    
-  console.log("Extracted category:", category);
-
-  // Enhanced variety/pedigree extraction
-  const varietyPedigree: string | undefined =
-    extract(text, /Variety[^>]*>[\s\S]*?<[^>]*>\s*([^<]+?)\s*</i) ||
-    extract(text, /Pedigree[^>]*>[\s\S]*?<[^>]*>\s*([^<]+?)\s*</i) ||
-    extract(text, /(?:Variety|Pedigree)[:\s]*([^\n<]+)/i);
-    
-  console.log("Extracted variety:", varietyPedigree);
-
-  // Enhanced title extraction - try multiple approaches
-  title = title || 
-    extract(text, /<title>\s*([^<]+?)\s*<\/title>/i) ||
-    extract(text, /<h1[^>]*>\s*([^<]+?)\s*<\/h1>/i) ||
-    extract(text, /og:title[^>]*content=["']([^"']+)["']/i);
-    
-  console.log("Extracted title:", title);
-  if (!title) {
-    const parts = [year, cardName, setName].filter(Boolean).join(" ");
-    title = parts || `PSA Cert ${cert}`;
-  }
+  console.log("Extracted data:", {
+    grade, year, brandTitle, subject, cardNumber, category, varietyPedigree, psaEstimate
+  });
 
   // Normalize grade and game
   const normalizedGrade = normalizeGrade(grade || '');
-  const normalizedGame = normalizeGame(game || brandTitle || category || '');
+  const normalizedGame = normalizeGame(category || '');
 
   return {
     cert: String(cert),
     certNumber: String(cert),
     title,
-    cardName: cardName || undefined,
+    cardName: subject || undefined,
     year: year || undefined,
-    game: normalizedGame || game || undefined,
-    gameRaw: game || undefined,
+    game: normalizedGame || category || undefined,
+    gameRaw: category || undefined,
     cardNumber: cardNumber || undefined,
     grade: normalizedGrade.psa || grade || undefined,
     gradeNumeric: normalizedGrade.numeric,
@@ -566,7 +463,7 @@ async function extractDataFromHTML(htmlContent: string, cert: string) {
     varietyPedigree: varietyPedigree || undefined,
     psaEstimate: psaEstimate || undefined,
     // Back-compat fields
-    player: player || cardName || undefined,
-    set: setName || undefined,
+    player: subject || undefined,
+    set: brandTitle || undefined,
   };
 }
