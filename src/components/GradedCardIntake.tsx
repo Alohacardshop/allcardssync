@@ -52,7 +52,7 @@ export const GradedCardIntake = () => {
       const data = await invokePSAScrape({ cert: psaCert.trim() }, 25000);
 
       if (data && data.ok) {
-        console.log('PSA data received successfully:', data);
+        console.log('PSA data received successfully:', JSON.stringify(data, null, 2));
         setCardData(data);
         
         // Enhanced field mapping with better fallbacks

@@ -112,7 +112,7 @@ export function PrinterPanel() {
         await printNodeService.initialize();
         // This will log which key source is being used
       } catch (initError) {
-        console.log('Key source detection failed:', initError);
+        console.log('Key source detection failed:', JSON.stringify(initError, null, 2));
       }
       
       toast.success(`Found ${formattedPrinters.length} printer(s)`);

@@ -15,8 +15,8 @@ const BulkImport = () => {
     card: any;
     chosenVariant?: { condition: string; printing: string; price?: number };
   }) => {
-    console.log('Selected card:', card);
-    console.log('Chosen variant:', chosenVariant);
+    console.log('Selected card:', JSON.stringify(card, null, 2));
+    console.log('Chosen variant:', JSON.stringify(chosenVariant, null, 2));
   };
 
   const handleBatchAdd = (item: any) => {

@@ -24,7 +24,7 @@ export function useRawTemplates() {
       barcodeMode: 'barcode' as const
     };
     
-    console.log('Creating default raw template with normalized config:', normalizedConfig);
+    console.log('Creating default raw template with normalized config:', JSON.stringify(normalizedConfig, null, 2));
     
     // Create default raw template with all fields enabled
     const result = await saveTemplate(

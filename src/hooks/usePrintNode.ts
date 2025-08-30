@@ -81,7 +81,7 @@ export function usePrintNode() {
               });
           }
         } catch (error) {
-          console.log('Could not sync printer setting to database:', error);
+          console.log('Could not sync printer setting to database:', JSON.stringify(error, null, 2));
         }
       };
       
