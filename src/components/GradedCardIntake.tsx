@@ -119,7 +119,7 @@ export const GradedCardIntake = () => {
         ).length;
         setPopulatedFieldsCount(populatedCount);
 
-        toast.success(`PSA data fetched via web scraping - ${populatedCount} fields populated`);
+        toast.success(`Fetched via web scraping - ${populatedCount} fields populated`);
       } else {
         throw new Error('Invalid response from PSA scraping service');
       }
@@ -480,12 +480,8 @@ export const GradedCardIntake = () => {
         {cardData && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <span>Data source:</span>
-            <span className={`px-2 py-1 rounded text-xs ${
-              cardData.source === 'psa_api' ? 'bg-green-100 text-green-800' :
-              cardData.source === 'scrape' ? 'bg-yellow-100 text-yellow-800' :
-              'bg-gray-100 text-gray-800'
-            }`}>
-              {cardData.source === 'psa_api' ? 'PSA API' : cardData.source === 'scrape' ? 'Web Scraping' : 'Unknown'}
+            <span className="px-2 py-1 rounded text-xs bg-blue-100 text-blue-800">
+              Web Scraping
             </span>
           </div>
         )}
