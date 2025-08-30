@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useStore } from "@/contexts/StoreContext";
 import { Package, FileText, Plus, Trash2, Archive, Eye } from "lucide-react";
+import { Link } from "react-router-dom";
 import {
   Dialog,
   DialogContent,
@@ -29,6 +30,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { SystemStats } from "@/components/SystemStats";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
+import { Navigation } from "@/components/Navigation";
 
 interface IntakeItem {
   id: string;
@@ -216,13 +218,27 @@ export default function Index() {
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Dashboard</h1>
-        <div className="flex gap-2">
-          {selectedItems.size > 0 && (
-            <>
-              <Dialog open={batchDialogOpen} onOpenChange={setBatchDialogOpen}>
+    <div className="min-h-screen bg-background">
+      <Navigation />
+      <div className="container mx-auto p-6 space-y-6">
+        <div className="flex items-center justify-between">
+          <h1 className="text-3xl font-bold">Dashboard</h1>
+          <div className="flex gap-2">
+            <Link to="/bulk-import#graded">
+              <Button variant="outline" size="sm">
+                <Plus className="h-4 w-4 mr-2" />
+                Add Graded
+              </Button>
+            </Link>
+            <Link to="/bulk-import#raw">
+              <Button variant="outline" size="sm">
+                <Plus className="h-4 w-4 mr-2" />
+                Add Raw
+              </Button>
+            </Link>
+            {selectedItems.size > 0 && (
+              <>
+                <Dialog open={batchDialogOpen} onOpenChange={setBatchDialogOpen}>
                 <DialogTrigger asChild>
                   <Button variant="outline" size="sm">
                     <Archive className="h-4 w-4 mr-2" />
@@ -288,14 +304,14 @@ export default function Index() {
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
-            </>
-          )}
+              </>
+            )}
+          </div>
         </div>
-      </div>
+        
+        <SystemStats />
 
-      <SystemStats />
-
-      <Card>
+        <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2">
@@ -393,6 +409,7 @@ export default function Index() {
           )}
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 }

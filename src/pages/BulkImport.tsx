@@ -39,7 +39,7 @@ const BulkImport = () => {
         <StoreLocationSelector />
         
         <div className="grid gap-8">
-          <Card>
+          <Card id="graded">
             <CardHeader>
               <CardTitle>Single Graded Card Intake</CardTitle>
               <p className="text-sm text-muted-foreground">
@@ -75,7 +75,7 @@ const BulkImport = () => {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card id="raw">
             <CardHeader>
               <CardTitle>Raw Card Intake</CardTitle>
               <p className="text-sm text-muted-foreground">
