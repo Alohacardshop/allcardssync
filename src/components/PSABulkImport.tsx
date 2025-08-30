@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { Upload, FileText, Download } from "lucide-react";
 import { useStore } from "@/contexts/StoreContext";
 import { v4 as uuidv4 } from 'uuid';
+import { invokePSAScrape } from "@/lib/psaService";
 
 interface PSAImportItem {
   psaCert: string;
@@ -65,17 +66,7 @@ export const PSABulkImport = () => {
   };
 
   const scrapePSAData = async (psaCert: string) => {
-    try {
-      const { data, error } = await supabase.functions.invoke('psa-scrape', {
-        body: { cert: psaCert }
-      });
-
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      console.error('PSA scrape error:', error);
-      throw error;
-    }
+    return await invokePSAScrape(psaCert, 15000); // Slightly shorter timeout for bulk operations
   };
 
   const insertIntakeItem = async (item: PSAImportItem) => {
@@ -151,7 +142,7 @@ export const PSABulkImport = () => {
         // Scrape PSA data
         const psaData = await scrapePSAData(item.psaCert);
         
-        if (psaData && !psaData.error) {
+        if (psaData && psaData.ok) {
           // Update with scraped data
           updatedItems[i] = {
             ...item,

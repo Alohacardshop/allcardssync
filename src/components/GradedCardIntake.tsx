@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { Loader2, Award, ChevronDown, ChevronUp, AlertCircle } from "lucide-react";
 import { useStore } from "@/contexts/StoreContext";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { invokePSAScrape } from "@/lib/psaService";
 
 export const GradedCardIntake = () => {
   const [psaCert, setPsaCert] = useState("");
@@ -37,46 +38,20 @@ export const GradedCardIntake = () => {
   });
 
   const handleFetchPSA = async () => {
-    console.log('handleFetchPSA called with cert:', psaCert.trim());
-    
     if (!psaCert.trim()) {
       toast.error("Please enter a PSA certificate number");
       return;
     }
 
-    console.log('Starting PSA fetch process...');
     const controller = new AbortController();
     setAbortController(controller);
     setFetching(true);
     
     try {
-      console.log('Making supabase function call to psa-scrape...');
-      // Race the function call with a timeout and abort signal
-      const fetchPromise = supabase.functions.invoke('psa-scrape', {
-        body: { cert: psaCert.trim() }
-      });
+      // Use the centralized PSA service with timeout
+      const data = await invokePSAScrape(psaCert.trim(), 20000);
 
-      const timeoutPromise = new Promise((_, reject) => {
-        const timeout = setTimeout(() => {
-          console.log('PSA fetch timed out after 30 seconds');
-          reject(new Error('Request timed out after 30 seconds'));
-        }, 30000);
-        
-        controller.signal.addEventListener('abort', () => {
-          console.log('PSA fetch cancelled by user');
-          clearTimeout(timeout);
-          reject(new Error('Request cancelled'));
-        });
-      });
-
-      console.log('Waiting for PSA response...');
-      const { data, error } = await Promise.race([fetchPromise, timeoutPromise]) as any;
-
-      console.log('PSA response received:', { data, error });
-      
-      if (error) throw error;
-
-      if (data && !data.error) {
+      if (data && data.ok) {
         console.log('PSA data received successfully:', data);
         setCardData(data);
         
@@ -146,19 +121,18 @@ export const GradedCardIntake = () => {
 
         toast.success(`PSA data fetched via web scraping - ${populatedCount} fields populated`);
       } else {
-        console.log('PSA data error or no data:', data);
-        throw new Error(data?.error || 'Failed to fetch PSA data');
+        throw new Error('Invalid response from PSA scraping service');
       }
     } catch (error) {
-      console.log('PSA fetch error occurred:', error);
-      if (error?.message?.includes('cancelled') || error?.message?.includes('timed out')) {
-        toast.info(error.message.includes('cancelled') ? "PSA fetch cancelled" : "PSA fetch timed out - try again");
+      console.error('PSA fetch error:', error);
+      if (error?.message?.includes('timed out')) {
+        toast.error("PSA fetch timed out - try again");
+      } else if (error?.message?.includes('cancelled')) {
+        toast.info("PSA fetch cancelled");
       } else {
-        console.error('PSA fetch error:', error);
         toast.error(error instanceof Error ? error.message : 'Failed to fetch PSA data');
       }
     } finally {
-      console.log('PSA fetch process completed');
       setFetching(false);
       setAbortController(null);
     }
