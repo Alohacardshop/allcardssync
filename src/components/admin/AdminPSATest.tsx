@@ -49,44 +49,57 @@ export function AdminPSATest() {
     setLoading(true);
     setResult(null);
 
+    const startTime = Date.now();
+
     try {
-      const { data, error } = await supabase.functions.invoke('admin-psa-test', {
+      console.log("Testing PSA scraper with Firecrawl...");
+      const { data, error } = await supabase.functions.invoke('psa-scrape', {
         body: { cert: cert.trim() }
       });
 
+      const totalTime = Date.now() - startTime;
+
       if (error) throw error;
       
+      console.log("PSA scrape response:", data);
+      
       // Transform the response to match our interface
-      const results = data.results;
       const transformedResult: PSATestResult = {
-        success: true,
-        cert: results.cert,
-        card_data: results.api_responses?.card_data,
-        image_data: results.api_responses?.image_data,
-        summary: results.normalized_data?.card ? {
-          grade: results.normalized_data.card.grade?.toString(),
-          year: results.normalized_data.card.year?.toString(),
-          subject: results.normalized_data.card.subject,
-          brand_set: results.normalized_data.card.brandTitle,
-          population_higher: results.normalized_data.card.popHigher,
-          population_same: results.normalized_data.card.totalPopulation,
-          source: 'PSA Public API'
+        success: data.ok || false,
+        cert: data.cert || cert.trim(),
+        card_data: data, // The entire response is the card data
+        summary: data.ok ? {
+          grade: data.gradeDisplay || data.grade,
+          year: data.year,
+          subject: data.subject || data.cardName,
+          brand_set: data.brandTitle || data.set,
+          source: data.source === 'firecrawl_structured' ? 'Firecrawl Structured' : 'Firecrawl HTML'
         } : undefined,
-        images: results.normalized_data?.images?.map((img: any) => img.url),
-        timing: results.timing,
-        errors: results.errors?.length > 0 ? results.errors : undefined
+        images: data.imageUrls || (data.imageUrl ? [data.imageUrl] : []),
+        timing: {
+          total_ms: totalTime
+        },
+        errors: !data.ok ? [data.error || "Unknown error"] : undefined
       };
       
       setResult(transformedResult);
+
+      if (data.ok) {
+        toast({
+          title: "Success!",
+          description: `PSA data extracted successfully using ${data.source === 'firecrawl_structured' ? 'Firecrawl structured extraction' : 'Firecrawl HTML parsing'}`,
+        });
+      }
     } catch (error: any) {
+      console.error("PSA test error:", error);
       toast({
         title: "Test Failed",
-        description: error.message || "Failed to test PSA API",
+        description: error.message || "Failed to test PSA scraper",
         variant: "destructive"
       });
       setResult({
         success: false,
-        errors: [error.message || "Failed to test PSA API"]
+        errors: [error.message || "Failed to test PSA scraper"]
       });
     } finally {
       setLoading(false);
