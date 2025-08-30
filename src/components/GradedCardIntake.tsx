@@ -49,7 +49,7 @@ export const GradedCardIntake = () => {
     
     try {
       // Use the centralized PSA service with timeout
-      const data = await invokePSAScrape({ cert: psaCert.trim() }, 20000);
+      const data = await invokePSAScrape({ cert: psaCert.trim() }, 25000);
 
       if (data && data.ok) {
         console.log('PSA data received successfully:', data);

@@ -10,7 +10,7 @@ export function PSAScrapePingCard() {
   async function onPing() {
     setLoading(true);
     try {
-      const data = await invokePSAScrape({ mode: "ping" }, 20000);
+      const data = await invokePSAScrape({ mode: "ping" }, 5000);
       setOut(data);
     } catch (e: any) {
       setOut({ ok: false, error: e?.message || String(e) });

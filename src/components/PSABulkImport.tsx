@@ -66,7 +66,7 @@ export const PSABulkImport = () => {
   };
 
   const scrapePSAData = async (psaCert: string) => {
-    return await invokePSAScrape({ cert: psaCert }, 15000); // Slightly shorter timeout for bulk operations
+    return await invokePSAScrape({ cert: psaCert }, 25000); // 25s timeout to outlive function's 18s
   };
 
   const insertIntakeItem = async (item: PSAImportItem) => {
