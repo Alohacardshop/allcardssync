@@ -301,7 +301,6 @@ serve(async (req) => {
       extract: {
         schema: {
           type: "object",
-          required: ["certification_number"],
           properties: {
             certification_number: { type: "string" },
             cert_number: { type: "string" },
@@ -315,24 +314,9 @@ serve(async (req) => {
             category: { type: "string" },
             variety_pedigree: { type: "string" },
             psa_estimate: { type: "string" },
-            image_url: { type: "string", format: "uri" }
-          }
-        },
-        instructions: "Extract PSA certification data from the page. Clean and normalize all values. For certification_number, extract digits only. For year, extract the 4-digit year. For grades, keep exact text like 'GEM MT 10'. For image_url, prefer the main card image.",
-        selectors: {
-          certification_number: "//*[self::th or self::div][contains(normalize-space(.), 'Cert Number')]/following::*[self::td or self::div or self::span][1] | //*[contains(@class,'cert') and contains(@class,'number')][1]",
-          cert_number: "//*[self::th or self::div][contains(normalize-space(.), 'Cert Number')]/following::*[self::td or self::div or self::span][1]",
-          item_grade: "//*[self::th or self::div][contains(normalize-space(.), 'Item Grade')]/following::*[self::td or self::div or self::span][1]",
-          label_type: "//*[self::th or self::div][contains(normalize-space(.), 'Label Type')]/following::*[self::td or self::div or self::span][1]",
-          reverse_cert_barcode: "//*[self::th or self::div][contains(normalize-space(.), 'Reverse Cert/Barcode')]/following::*[self::td or self::div or self::span][1]",
-          year: "//*[self::th or self::div][contains(normalize-space(.), 'Year')]/following::*[self::td or self::div or self::span][1]",
-          brand_title: "//*[self::th or self::div][contains(normalize-space(.), 'Brand/Title')]/following::*[self::td or self::div or self::span][1]",
-          subject: "//*[self::th or self::div][contains(normalize-space(.), 'Subject')]/following::*[self::td or self::div or self::span][1]",
-          card_number: "//*[self::th or self::div][contains(normalize-space(.), 'Card Number')]/following::*[self::td or self::div or self::span][1]",
-          category: "//*[self::th or self::div][contains(normalize-space(.), 'Category')]/following::*[self::td or self::div or self::span][1]",
-          variety_pedigree: "//*[self::th or self::div][contains(normalize-space(.), 'Variety/Pedigree')]/following::*[self::td or self::div or self::span][1]",
-          psa_estimate: "//*[self::th or self::div][contains(normalize-space(.), 'PSA Estimate')]/following::*[self::td or self::div or self::span][1]",
-          image_url: "((//meta[translate(@property,'OGIMAE','ogimae')='og:image']/@content)[1] | (//picture//img[contains(@src,'http')][1]/@src) | (//img[contains(@src,'http') and (contains(@alt,'card') or contains(@class,'card') or contains(@class,'product') or contains(@class,'main'))][1]/@src))[1]"
+            image_url: { type: "string" }
+          },
+          additionalProperties: true
         }
       },
       timeout: 15000,
