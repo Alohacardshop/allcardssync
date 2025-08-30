@@ -55,29 +55,70 @@ serve(async (req) => {
       try {
         console.log(`Processing item: ${item.subject || item.brand_title}`);
         
+        // Build full inventory title
+        const titleParts = [
+          item.year,
+          item.brand_title,
+          item.card_number,
+          item.subject,
+          item.variant
+        ].filter(Boolean);
+        const fullTitle = titleParts.join(' ');
+        
+        // Determine game from brand_title
+        const getGame = (brandTitle) => {
+          if (!brandTitle) return null;
+          const title = brandTitle.toLowerCase();
+          if (title.includes('pokemon')) return 'pokemon';
+          if (title.includes('magic') || title.includes('mtg')) return 'magic-the-gathering';
+          if (title.includes('yugioh') || title.includes('yu-gi-oh')) return 'yugioh';
+          return null;
+        };
+        
+        // Determine grading company and status
+        const getGradingInfo = (grade, psa_cert) => {
+          const company = psa_cert ? 'PSA' : 'Unknown';
+          const isGraded = grade && grade !== 'Raw' && grade !== 'Ungraded';
+          const status = isGraded ? 'graded' : 'raw';
+          return { company, status, isGraded };
+        };
+        
+        const game = getGame(item.brand_title);
+        const gradingInfo = getGradingInfo(item.grade, item.psa_cert);
+        
+        // Build comprehensive tags
+        const tags = [
+          item.category,
+          item.variant,
+          item.grade,
+          `lot-${item.lot_number}`,
+          'intake',
+          game,
+          gradingInfo.company,
+          gradingInfo.status
+        ].filter(Boolean);
+        
+        // Build SKU with PSA cert if available
+        const productSku = item.psa_cert ? `${item.sku}-${item.psa_cert}` : item.sku || `intake-${item.id}`;
+        
         // Create product payload
         const productData = {
           product: {
-            title: item.subject || item.brand_title || 'Untitled Item',
-            body_html: item.processing_notes || '',
+            title: fullTitle || item.subject || item.brand_title || 'Untitled Item',
+            body_html: fullTitle || item.subject || item.brand_title || '',
             vendor: item.brand_title || 'Unknown',
             product_type: item.category || 'Trading Card',
-            tags: [
-              item.category,
-              item.variant,
-              item.grade,
-              `lot-${item.lot_number}`,
-              'intake'
-            ].filter(Boolean).join(','),
+            tags: tags.join(','),
             variants: [{
               title: 'Default Title',
               price: (item.price || 99999).toString(),
-              sku: item.sku || `intake-${item.id}`,
+              sku: productSku,
+              barcode: item.psa_cert || productSku,
               inventory_quantity: item.quantity || 1,
               inventory_management: 'shopify',
               inventory_policy: 'deny'
             }],
-            status: 'draft'
+            status: 'active'
           }
         };
 
@@ -99,6 +140,62 @@ serve(async (req) => {
         const inventoryItemId = productResult.product.variants[0].inventory_item_id;
 
         console.log(`Created product ${productId} with variant ${variantId}`);
+
+        // Add images if available from image_urls
+        if (item.image_urls && item.image_urls.length > 0) {
+          try {
+            for (const imageUrl of item.image_urls) {
+              const imageResponse = await fetch(`${shopifyUrl}products/${productId}/images.json`, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({
+                  image: {
+                    src: imageUrl,
+                    alt: fullTitle || item.subject || 'Product Image'
+                  }
+                }),
+              });
+              
+              if (imageResponse.ok) {
+                console.log(`Added image to product ${productId}: ${imageUrl}`);
+              } else {
+                console.warn(`Failed to add image to product ${productId}: ${imageUrl}`);
+              }
+            }
+          } catch (imageError) {
+            console.warn(`Error adding images for item ${item.id}:`, imageError);
+          }
+        }
+
+        // Set sales channels (point of sale and online)
+        try {
+          const publicationsResponse = await fetch(`${shopifyUrl}products/${productId}/publications.json`);
+          if (publicationsResponse.ok) {
+            const publications = await publicationsResponse.json();
+            
+            // Enable for point of sale and online store
+            const channelsToEnable = ['point-of-sale', 'online-store'];
+            
+            for (const publication of publications.publications || []) {
+              if (channelsToEnable.includes(publication.name)) {
+                await fetch(`${shopifyUrl}products/${productId}/publications/${publication.id}.json`, {
+                  method: 'PUT',
+                  headers,
+                  body: JSON.stringify({
+                    publication: {
+                      product_id: productId,
+                      publication_id: publication.id,
+                      published: true
+                    }
+                  }),
+                });
+                console.log(`Enabled sales channel ${publication.name} for product ${productId}`);
+              }
+            }
+          }
+        } catch (channelError) {
+          console.warn(`Error setting sales channels for item ${item.id}:`, channelError);
+        }
 
         // Update inventory item cost if cost is provided
         if (item.cost && inventoryItemId) {
