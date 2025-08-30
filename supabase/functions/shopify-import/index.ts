@@ -21,20 +21,29 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Get Shopify credentials
-    const { data: storeConfig } = await supabase
-      .from('shopify_stores')
-      .select('*')
-      .eq('key', storeKey)
+    // Get Shopify credentials from system_settings
+    const domainKey = `SHOPIFY_STORE_DOMAIN_${storeKey.toUpperCase()}`;
+    const tokenKey = `SHOPIFY_ADMIN_ACCESS_TOKEN_${storeKey.toUpperCase()}`;
+    
+    const { data: domainSetting } = await supabase
+      .from('system_settings')
+      .select('key_value')
+      .eq('key_name', domainKey)
+      .single();
+      
+    const { data: tokenSetting } = await supabase
+      .from('system_settings')
+      .select('key_value')
+      .eq('key_name', tokenKey)
       .single();
 
-    if (!storeConfig) {
-      throw new Error(`Store configuration not found for key: ${storeKey}`);
+    if (!domainSetting?.key_value || !tokenSetting?.key_value) {
+      throw new Error(`Store configuration not found for ${storeKey}. Missing domain or token in system_settings.`);
     }
 
-    const shopifyUrl = `https://${storeConfig.shop_domain}/admin/api/2023-10/`;
+    const shopifyUrl = `https://${domainSetting.key_value}/admin/api/2023-10/`;
     const headers = {
-      'X-Shopify-Access-Token': storeConfig.access_token,
+      'X-Shopify-Access-Token': tokenSetting.key_value,
       'Content-Type': 'application/json',
     };
 
@@ -123,7 +132,8 @@ serve(async (req) => {
           .update({
             pushed_at: new Date().toISOString(),
             shopify_product_id: productId.toString(),
-            shopify_variant_id: variantId.toString()
+            shopify_variant_id: variantId.toString(),
+            shopify_inventory_item_id: inventoryItemId.toString()
           })
           .eq('id', item.id);
 

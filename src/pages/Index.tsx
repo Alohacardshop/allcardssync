@@ -187,98 +187,102 @@ const Index = () => {
   useEffect(() => {
     if (didInitMainRef.current) return;
     didInitMainRef.current = true;
-    const loadBatch = async () => {
-      console.log("Loading intake items from DB");
-      const { data, error } = await supabase
-        .from("intake_items")
-        .select("*")
-        .is("deleted_at", null)
-        .order("created_at", { ascending: false });
-
-      if (error) {
-        console.error("Failed to load intake_items", error);
-        toast.error("Failed to load existing batch");
-        return;
-      }
-
-      const mapped: CardItem[] =
-        (data || []).map((row: any) => ({
-          title: buildTitleFromParts(row.year, row.brand_title, row.card_number, row.subject, row.variant),
-          set: "",
-          year: row.year || "",
-          grade: row.grade || "",
-          psaCert: row.psa_cert || "",
-          price: row?.price != null ? String(row.price) : "",
-          cost: row?.cost != null ? String(row.cost) : "",
-          lot: row.lot_number || "",
-          sku: row.sku || "",
-          brandTitle: row.brand_title || "",
-          subject: row.subject || "",
-          category: row.category || "",
-          variant: row.variant || "",
-          cardNumber: row.card_number || "",
-          id: row.id,
-          printedAt: row.printed_at || null,
-          pushedAt: row.pushed_at || null,
-        })) || [];
-
-      // Only show items that have not been pushed yet in the queue
-      setBatch(mapped.filter((m) => !m.pushedAt));
-    };
-
-    const loadPrintNode = async () => {
-      try {
-        const printerList = await printNodeService.getPrinters();
-        setPrinters(printerList);
-        setPrintNodeConnected(true);
-        
-        // Auto-select saved printer or first printer if available
-        const saved = localStorage.getItem('printnode-selected-printer');
-        if (saved && printerList.find(p => p.id === parseInt(saved))) {
-          setSelectedPrinterId(parseInt(saved));
-        } else if (printerList.length > 0) {
-          setSelectedPrinterId(printerList[0].id);
-        }
-        
-        console.log(`PrintNode connected - Found ${printerList.length} printer(s)`);
-      } catch (e) {
-        console.error("PrintNode connection failed:", e);
-        setPrintNodeConnected(false);
-      }
-    };
-
-    const loadDefaultTemplates = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('label_templates')
-          .select('*')
-          .in('template_type', ['graded', 'raw'])
-          .order('is_default', { ascending: false });
-        
-        if (error) {
-          console.error('Failed to load templates:', error);
-          return;
-        }
-        
-        const templates: any = {};
-        (data || []).forEach((template: any) => {
-          // Use the first template (which will be default due to ordering) or the first one found
-          if (!templates[template.template_type]) {
-            templates[template.template_type] = template;
-          }
-        });
-        
-        setDefaultTemplates(templates);
-        console.log('Loaded templates for batch printing:', templates);
-      } catch (e) {
-        console.error('Error loading templates:', e);
-      }
-    };
-
     loadBatch();
     loadPrintNode();
     loadDefaultTemplates();
   }, []);
+
+  const loadBatch = async () => {
+    console.log("Loading intake items from DB");
+    const { data, error } = await supabase
+      .from("intake_items")
+      .select("*")
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Failed to load intake_items", error);
+      toast.error("Failed to load existing batch");
+      return;
+    }
+
+    const mapped: CardItem[] =
+      (data || []).map((row: any) => ({
+        title: buildTitleFromParts(row.year, row.brand_title, row.card_number, row.subject, row.variant),
+        set: "",
+        year: row.year || "",
+        grade: row.grade || "",
+        psaCert: row.psa_cert || "",
+        price: row?.price != null ? String(row.price) : "",
+        cost: row?.cost != null ? String(row.cost) : "",
+        lot: row.lot_number || "",
+        sku: row.sku || "",
+        brandTitle: row.brand_title || "",
+        subject: row.subject || "",
+        category: row.category || "",
+        variant: row.variant || "",
+        cardNumber: row.card_number || "",
+        id: row.id,
+        printedAt: row.printed_at || null,
+        pushedAt: row.pushed_at || null,
+      })) || [];
+
+    // Only show items that have not been pushed yet in the queue
+    setBatch(mapped.filter((m) => !m.pushedAt));
+  };
+
+  const refreshBatch = async () => {
+    await loadBatch();
+  };
+
+  const loadPrintNode = async () => {
+    try {
+      const printerList = await printNodeService.getPrinters();
+      setPrinters(printerList);
+      setPrintNodeConnected(true);
+      
+      // Auto-select saved printer or first printer if available
+      const saved = localStorage.getItem('printnode-selected-printer');
+      if (saved && printerList.find(p => p.id === parseInt(saved))) {
+        setSelectedPrinterId(parseInt(saved));
+      } else if (printerList.length > 0) {
+        setSelectedPrinterId(printerList[0].id);
+      }
+      
+      console.log(`PrintNode connected - Found ${printerList.length} printer(s)`);
+    } catch (e) {
+      console.error("PrintNode connection failed:", e);
+      setPrintNodeConnected(false);
+    }
+  };
+
+  const loadDefaultTemplates = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('label_templates')
+        .select('*')
+        .in('template_type', ['graded', 'raw'])
+        .order('is_default', { ascending: false });
+      
+      if (error) {
+        console.error('Failed to load templates:', error);
+        return;
+      }
+      
+      const templates: any = {};
+      (data || []).forEach((template: any) => {
+        // Use the first template (which will be default due to ordering) or the first one found
+        if (!templates[template.template_type]) {
+          templates[template.template_type] = template;
+        }
+      });
+      
+      setDefaultTemplates(templates);
+      console.log('Loaded templates for batch printing:', templates);
+    } catch (e) {
+      console.error('Error loading templates:', e);
+    }
+  };
 
   // Load categories and games for dropdown
   useEffect(() => {
@@ -802,7 +806,7 @@ const Index = () => {
       }
 
       // Call shopify-import with the correct payload structure
-      const { error } = await supabase.functions.invoke("shopify-import", { 
+      const { data: response, error } = await supabase.functions.invoke("shopify-import", { 
         body: { 
           items: [itemData], 
           storeKey: selectedStore 
@@ -810,8 +814,22 @@ const Index = () => {
       });
       
       if (error) throw error;
-      await markPushed([b.id]);
-      toast.success(`Pushed Lot ${b.lot || ""} to Shopify`);
+
+      // Check the response to see if the push was successful
+      if (response?.success && response?.results?.length > 0) {
+        const result = response.results[0];
+        if (result.success) {
+          // Only mark as pushed if the item was actually pushed successfully
+          // The edge function already updated pushed_at, so we just need to refresh the UI
+          toast.success(`Pushed Lot ${b.lot || ""} to Shopify`);
+          // Refresh the batch to show updated status
+          await refreshBatch();
+        } else {
+          throw new Error(result.error || "Unknown error from Shopify");
+        }
+      } else {
+        throw new Error(response?.error || "Unknown error");
+      }
     } catch (e) {
       console.error(e);
       toast.error(`Failed to push: ${e instanceof Error ? e.message : 'Unknown error'}`);
@@ -881,7 +899,7 @@ const Index = () => {
       }
 
       // Call shopify-import with the correct payload structure
-      const { error } = await supabase.functions.invoke("shopify-import", { 
+      const { data: response, error } = await supabase.functions.invoke("shopify-import", { 
         body: { 
           items: itemsData, 
           storeKey: selectedStore 
@@ -889,8 +907,26 @@ const Index = () => {
       });
 
       if (error) throw error;
-      await markPushed(ids);
-      toast.success("Pushed all to Shopify");
+
+      // Process the response to show detailed results
+      if (response?.success && response?.results) {
+        const successful = response.results.filter((r: any) => r.success);
+        const failed = response.results.filter((r: any) => !r.success);
+        
+        if (successful.length > 0) {
+          toast.success(`Successfully pushed ${successful.length} items to Shopify`);
+        }
+        
+        if (failed.length > 0) {
+          const errorDetails = failed.map((r: any) => r.error).join('; ');
+          toast.error(`Failed to push ${failed.length} items: ${errorDetails}`);
+        }
+        
+        // Refresh the batch to show updated status
+        await refreshBatch();
+      } else {
+        throw new Error(response?.error || "Unknown error");
+      }
     } catch (e) {
       console.error(e);
       toast.error(`Failed to push all: ${e instanceof Error ? e.message : 'Unknown error'}`);
