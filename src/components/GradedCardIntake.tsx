@@ -55,9 +55,9 @@ export const GradedCardIntake = () => {
 
       const timeoutPromise = new Promise((_, reject) => {
         const timeout = setTimeout(() => {
-          console.log('PSA fetch timed out after 8 seconds');
-          reject(new Error('Request timed out after 8 seconds'));
-        }, 8000);
+          console.log('PSA fetch timed out after 35 seconds');
+          reject(new Error('Request timed out after 35 seconds. PSA data may still be processing.'));
+        }, 35000);
         
         controller.signal.addEventListener('abort', () => {
           console.log('PSA fetch cancelled by user');
