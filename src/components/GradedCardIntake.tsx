@@ -34,16 +34,20 @@ export const GradedCardIntake = () => {
   });
 
   const handleFetchPSA = async () => {
+    console.log('handleFetchPSA called with cert:', psaCert.trim());
+    
     if (!psaCert.trim()) {
       toast.error("Please enter a PSA certificate number");
       return;
     }
 
+    console.log('Starting PSA fetch process...');
     const controller = new AbortController();
     setAbortController(controller);
     setFetching(true);
     
     try {
+      console.log('Making supabase function call to psa-scrape...');
       // Race the function call with a timeout and abort signal
       const fetchPromise = supabase.functions.invoke('psa-scrape', {
         body: { cert: psaCert.trim() }
@@ -60,8 +64,11 @@ export const GradedCardIntake = () => {
         });
       });
 
+      console.log('Waiting for PSA response...');
       const { data, error } = await Promise.race([fetchPromise, timeoutPromise]) as any;
 
+      console.log('PSA response received:', { data, error });
+      
       if (error) throw error;
 
       if (data && !data.error) {
