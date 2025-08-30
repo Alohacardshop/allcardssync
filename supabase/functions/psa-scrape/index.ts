@@ -202,8 +202,8 @@ serve(async (req) => {
               scrapedResult = await extractDataFromHTML(htmlContent, cert);
               
               // Extract image from scraped content
-              if (html) {
-                imageUrl = extractImageFromHTML(html);
+            if (html) {
+                imageUrl = extractImageFromHTML(html, cert);
                 if (imageUrl) {
                   imageUrls.push(imageUrl);
                 }
@@ -317,66 +317,97 @@ serve(async (req) => {
   }
 });
 
-function extractImageFromHTML(html: string): string | null {
-  // Try PSA specific image patterns first
-  const psaImagePatterns = [
-    // PSA card images with specific patterns
-    /<img[^>]+src=["']([^"']*psacard\.com[^"']*card[^"']*\.(?:jpg|jpeg|png|webp)[^"']*)["']/i,
-    /<img[^>]+src=["']([^"']*psacard\.cloud[^"']*\.(?:jpg|jpeg|png|webp)[^"']*)["']/i,
-    /<img[^>]+src=["']([^"']*\.(?:jpg|jpeg|png|webp)[^"']*)[^>]*class=["'][^"']*card[^"']*["']/i,
-    // Generic card image patterns
-    /<img[^>]+src=["']([^"']*card[^"']*image[^"']*\.(?:jpg|jpeg|png|webp)[^"']*)["']/i,
-    /<img[^>]+src=["']([^"']*cert[^"']*image[^"']*\.(?:jpg|jpeg|png|webp)[^"']*)["']/i
-  ];
+function extractImageFromHTML(html: string, cert?: string): string | null {
+  const PLACEHOLDERS = [/ErrorWagner\.png/i, /noimage/i, /placeholder/i, /blank/i];
+  const isPlaceholder = (u: string) => PLACEHOLDERS.some((re) => re.test(u));
 
-  for (const pattern of psaImagePatterns) {
-    const match = html.match(pattern);
-    if (match) {
-      console.log("Found PSA card image:", match[1]);
-      return match[1];
+  // 1) Prefer CloudFront cert-specific URLs
+  if (cert) {
+    const cfRe = new RegExp(
+      `https?:\/\/[^"']*cloudfront\\.net\/[^"']*cert\/${cert}[^"']*\\.(?:jpg|jpeg|png|webp)`,
+      'i'
+    );
+    const cfMatch = html.match(cfRe);
+    if (cfMatch) {
+      const url = cfMatch[1] || cfMatch[0];
+      if (!isPlaceholder(url)) {
+        console.log('Found CloudFront cert image:', url);
+        return url;
+      }
     }
   }
 
-  // Try og:image
-  const ogImageMatch = html.match(/<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/i);
-  if (ogImageMatch) {
-    console.log("Found og:image:", ogImageMatch[1]);
-    return ogImageMatch[1];
+  const candidates: string[] = [];
+
+  // 2) Collect from <img src|data-src|data-original>
+  const imgAttrRe = /<img[^>]+(?:src|data-src|data-original)=["']([^"']+\.(?:jpg|jpeg|png|webp)[^"']*)["'][^>]*>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = imgAttrRe.exec(html)) !== null) {
+    candidates.push(m[1]);
   }
 
-  // Try JSON-LD image
+  // 3) Collect from <source srcset>
+  const sourceSetRe = /<source[^>]+srcset=["']([^"']+)["'][^>]*>/gi;
+  let s: RegExpExecArray | null;
+  while ((s = sourceSetRe.exec(html)) !== null) {
+    const parts = s[1]
+      .split(',')
+      .map((p) => p.trim().split(' ')[0])
+      .filter(Boolean);
+    candidates.push(...parts);
+  }
+
+  // 4) og:image
+  const ogMatch = html.match(/<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/i);
+  if (ogMatch) candidates.push(ogMatch[1]);
+
+  // 5) JSON-LD image
   const jsonLdMatch = html.match(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/i);
   if (jsonLdMatch) {
     try {
       const jsonLd = JSON.parse(jsonLdMatch[1].trim());
-      if (jsonLd.image) {
-        const imageUrl = typeof jsonLd.image === 'string' ? jsonLd.image : jsonLd.image.url || jsonLd.image[0];
-        if (imageUrl) {
-          console.log("Found JSON-LD image:", imageUrl);
-          return imageUrl;
-        }
-      }
-    } catch (e) {
-      console.log("Could not parse JSON-LD for image");
+      const ldImage = typeof jsonLd?.image === 'string'
+        ? jsonLd.image
+        : jsonLd?.image?.url || (Array.isArray(jsonLd?.image) ? jsonLd.image[0] : undefined);
+      if (ldImage) candidates.push(ldImage);
+    } catch (_) {
+      // ignore
     }
   }
 
-  // Look for any high quality images
-  const genericImagePatterns = [
-    /<img[^>]+src=["']([^"']*\.(?:jpg|jpeg|png|webp)[^"']*)[^>]*(?:width=["'][5-9]\d{2,}["']|height=["'][5-9]\d{2,}["'])/i,
-    /<img[^>]+(?:width=["'][5-9]\d{2,}["']|height=["'][5-9]\d{2,}["'])[^>]*src=["']([^"']*\.(?:jpg|jpeg|png|webp)[^"']*)["']/i
+  // 6) Add legacy patterns as fallbacks
+  const legacyPatterns = [
+    /<img[^>]+src=["']([^"']*psacard\.com[^"']*card[^"']*\.(?:jpg|jpeg|png|webp)[^"']*)["']/i,
+    /<img[^>]+src=["']([^"']*psacard\.cloud[^"']*\.(?:jpg|jpeg|png|webp)[^"']*)["']/i,
+    /<img[^>]+src=["']([^"']*card[^"']*image[^"']*\.(?:jpg|jpeg|png|webp)[^"']*)["']/i,
+    /<img[^>]+src=["']([^"']*cert[^"']*image[^"']*\.(?:jpg|jpeg|png|webp)[^"']*)["']/i,
   ];
-
-  for (const pattern of genericImagePatterns) {
-    const match = html.match(pattern);
-    if (match) {
-      console.log("Found high-res image:", match[1]);
-      return match[1];
-    }
+  for (const p of legacyPatterns) {
+    const mm = html.match(p);
+    if (mm) candidates.push(mm[1]);
   }
 
-  console.log("No image found in HTML");
-  return null;
+  // Dedupe and filter placeholders
+  const uniq = Array.from(new Set(candidates)).filter((u) => !isPlaceholder(u));
+  if (uniq.length === 0) {
+    console.log('No usable image found in HTML');
+    return null;
+  }
+
+  // Ranking
+  const byPriority = (u: string) => {
+    const score = [
+      cert && /cloudfront\.net/i.test(u) && new RegExp(`/cert/${cert}(/|$)`).test(u) ? 100 : 0,
+      /cloudfront\.net/i.test(u) ? 50 : 0,
+      /\/cert\//i.test(u) ? 25 : 0,
+      /front/i.test(u) ? 10 : 0,
+    ].reduce((a, b) => a + b, 0);
+    return score;
+  };
+
+  uniq.sort((a, b) => byPriority(b) - byPriority(a));
+  console.log('Selected image candidate:', uniq[0]);
+  return uniq[0] || null;
 }
 
 // Helper functions for normalization
