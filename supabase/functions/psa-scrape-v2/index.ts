@@ -29,6 +29,7 @@ serve(async (req) => {
   console.log('🚀 PSA-SCRAPE-V2 FUNCTION STARTED');
   console.log('📝 Request method:', req.method);
   console.log('🌐 Request URL:', req.url);
+  console.log('⏰ Timestamp:', new Date().toISOString());
 
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -62,7 +63,8 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         ok: true, 
-        message: 'psa-scrape-v2 reachable', 
+        message: 'psa-scrape-v2 reachable and working', 
+        timestamp: new Date().toISOString(),
         diagnostics: { totalMs: Date.now() - started } 
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -516,15 +518,15 @@ serve(async (req) => {
       source: 'firecrawl_scrape',
       url: psaUrl,
       ...certData,
-        diagnostics: {
-          hadApiKey: true,
-          firecrawlStatus,
-          firecrawlMs,
-          totalMs,
-          formats: ['markdown'],
-          usedCache: false,
-          dbSaved: true
-        }
+      diagnostics: {
+        hadApiKey: true,
+        firecrawlStatus,
+        firecrawlMs,
+        totalMs,
+        formats: ['markdown'],
+        usedCache: false,
+        dbSaved: true
+      }
     }),
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   );
