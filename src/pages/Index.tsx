@@ -100,6 +100,20 @@ export default function Index() {
     loadItems();
   }, [selectedStore, selectedLocation]);
 
+  // Real-time update handler for intake items
+  useEffect(() => {
+    const handler = (e: any) => {
+      const row = e.detail; // full intake_items row
+      console.log('New item added to batch:', row);
+      
+      // Prepend the new item to the list for immediate feedback
+      setItems(prevItems => [row, ...prevItems.slice(0, 99)]); // Keep only 100 items
+    };
+    
+    window.addEventListener('intake:item-added', handler);
+    return () => window.removeEventListener('intake:item-added', handler);
+  }, []);
+
   const handleSelectItem = (itemId: string, checked: boolean) => {
     const newSelected = new Set(selectedItems);
     if (checked) {

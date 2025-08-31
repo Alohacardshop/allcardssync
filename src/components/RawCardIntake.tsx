@@ -125,65 +125,80 @@ export function RawCardIntake({
 
     setSaving(true);
     try {
-      const { error } = await supabase
-        .from('intake_items')
-        .insert({
-          category: mapGameToCategory(game),
-          brand_title: picked.name,
-          variant: chosenVariant.printing,
-          grade: chosenVariant.condition,
-          // Let the database trigger handle defaulting to 99999 if null
-          price: chosenVariant.price || null,
-          cost: cost ? parseFloat(cost) : null,
-          sku: generateSKU(picked, chosenVariant, game),
-          quantity: quantity,
-          // Set product weight: 1 oz for raw cards (no grading)
-          product_weight: 1.0,
-          // New comprehensive data capture fields
-          source_provider: 'raw_search',
-          source_payload: JSON.parse(JSON.stringify({
-            search_query: {
-              game,
-              name: name,
-              number: number,
-              printing,
-              conditions: conditionCsv
-            },
-            search_results: suggestions.slice(0, 5).map(s => ({
-              id: s.id,
-              name: s.name,
-              number: s.number,
-              set: s.set?.name
-            })),
-            selected_card: {
-              id: picked.id,
-              name: picked.name,
-              number: picked.number,
-              set: picked.set?.name
-            },
-            selected_variant: chosenVariant
+      // Timeout helper function
+      const withTimeout = <T,>(p: Promise<T>, ms = 12000) =>
+        Promise.race([p, new Promise<never>((_, rej) => setTimeout(() => rej(new Error('Request timed out')), ms))]);
+
+      const insertPayload = {
+        // Required/common fields
+        store_key: selectedStore,
+        shopify_location_gid: selectedLocation,
+        quantity: quantity,
+        product_weight: 1.0, // 1 oz for raw cards
+        brand_title: picked.name,
+        subject: picked.name, // Use card name as subject for raw cards
+        category: mapGameToCategory(game),
+        variant: chosenVariant.printing,
+        card_number: picked.number || "",
+        year: "", // Raw cards typically don't have year data
+        grade: chosenVariant.condition,
+        price: chosenVariant.price || null,
+        cost: cost ? parseFloat(cost) : null,
+        sku: generateSKU(picked, chosenVariant, game),
+
+        // Identity
+        unique_item_uid: crypto.randomUUID(), // NEW column (UUID)
+
+        // Raw card specific fields
+        source_provider: 'raw_search',
+        source_payload: JSON.parse(JSON.stringify({
+          search_query: {
+            game,
+            name: name,
+            number: number,
+            printing,
+            conditions: conditionCsv
+          },
+          search_results: suggestions.slice(0, 5).map(s => ({
+            id: s.id,
+            name: s.name,
+            number: s.number,
+            set: s.set?.name
           })),
-          catalog_snapshot: {
-            card_id: picked.id,
-            tcgplayer_id: picked.tcgplayer_product_id,
+          selected_card: {
+            id: picked.id,
             name: picked.name,
-            set: picked.set?.name,
-            number: picked.number
+            number: picked.number,
+            set: picked.set?.name
           },
-          pricing_snapshot: {
-            price: chosenVariant.price,
-            condition: chosenVariant.condition,
-            printing: chosenVariant.printing,
-            captured_at: new Date().toISOString()
-          },
-          processing_notes: `Raw card intake search for "${name}" in ${game}`,
-          store_key: selectedStore,
-          shopify_location_gid: selectedLocation
-        });
+          selected_variant: chosenVariant
+        })),
+        catalog_snapshot: {
+          card_id: picked.id,
+          tcgplayer_id: picked.tcgplayer_product_id,
+          name: picked.name,
+          set: picked.set?.name,
+          number: picked.number
+        },
+        pricing_snapshot: {
+          price: chosenVariant.price,
+          condition: chosenVariant.condition,
+          printing: chosenVariant.printing,
+          captured_at: new Date().toISOString()
+        },
+        processing_notes: `Raw card intake search for "${name}" in ${game}`
+      };
 
-      if (error) throw error;
+      const insertResponse: any = await withTimeout(
+        (async () => await supabase.from('intake_items').insert(insertPayload).select('*').single())()
+      );
 
-      toast.success(`Added ${quantity}x ${picked.name} to batch`);
+      if (insertResponse.error) throw insertResponse.error;
+      const data = insertResponse.data;
+
+      // Dispatch browser event for real-time updates
+      window.dispatchEvent(new CustomEvent('intake:item-added', { detail: data }));
+      toast.success(`Added to batch (Lot ${data?.lot_number ?? ''})`);
       
       // Reset selection but keep search results
       setPicked(null);
@@ -193,11 +208,15 @@ export function RawCardIntake({
       
       // Call onBatchAdd if provided
       if (onBatchAdd) {
-        onBatchAdd({});
+        onBatchAdd(data);
       }
     } catch (error) {
       console.error('Error adding to batch:', error);
-      toast.error('Failed to add item to batch');
+      if (error?.message?.includes('timed out')) {
+        toast.error('Request timed out - please try again');
+      } else {
+        toast.error('Failed to add item to batch');
+      }
     } finally {
       setSaving(false);
     }

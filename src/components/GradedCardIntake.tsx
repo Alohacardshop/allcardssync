@@ -134,52 +134,65 @@ export const GradedCardIntake = () => {
 
     setSubmitting(true);
     try {
-      const { data: insertedItem, error } = await supabase
-        .from('intake_items')
-        .insert({
+      // Timeout helper function
+      const withTimeout = <T,>(p: Promise<T>, ms = 12000) =>
+        Promise.race([p, new Promise<never>((_, rej) => setTimeout(() => rej(new Error('Request timed out')), ms))]);
+
+      const insertPayload = {
+        // Required/common fields
+        store_key: selectedStore,
+        shopify_location_gid: selectedLocation,
+        quantity: formData.quantity,
+        product_weight: 3.0, // graded default
+        brand_title: formData.brandTitle,
+        subject: formData.subject,
+        category: formData.category,
+        variant: formData.variant,
+        card_number: formData.cardNumber,
+        year: formData.year,
+        grade: formData.grade,
+        price: formData.price ? parseFloat(formData.price) : 0,
+        cost: formData.cost ? parseFloat(formData.cost) : null,
+
+        // PSA linkage + snapshots for search
+        psa_cert: formData.certNumber,
+        image_urls: cardData?.imageUrls ? JSON.stringify(cardData.imageUrls) : null,
+        source_provider: 'psa',
+        psa_snapshot: cardData, // NEW column name (JSONB)
+        grading_data: {
           psa_cert: formData.certNumber,
-          brand_title: formData.brandTitle,
-          subject: formData.subject,
-          year: formData.year,
           grade: formData.grade,
-          category: formData.category,
-          card_number: formData.cardNumber,
-          variant: formData.variant,
+          grading_company: 'PSA',
+          cert_url: `https://www.psacard.com/cert/${formData.certNumber}`
+        },
+        processing_notes: `Single graded card intake - PSA cert ${formData.certNumber}`,
+
+        // Identity
+        unique_item_uid: crypto.randomUUID(), // NEW column (UUID)
+
+        // Legacy fields for compatibility
+        catalog_snapshot: cardData,
+        pricing_snapshot: {
           price: formData.price ? parseFloat(formData.price) : 0,
-          cost: formData.cost ? parseFloat(formData.cost) : null,
-          quantity: formData.quantity,
-          product_weight: 3.0, // 3 oz for graded cards
-          // Store image URLs if available
-          image_urls: cardData?.imageUrls ?? null,
-          // Comprehensive data capture with source tracking
-          source_provider: 'scrape',
-          source_payload: {
-            psa_cert: formData.certNumber,
-            fetch_source: 'scrape',
-            scraped_fields: Object.keys(cardData || {}).filter(k => cardData[k])
-          },
-          grading_data: {
-            psa_cert: formData.certNumber,
-            grade: formData.grade,
-            grading_company: 'PSA',
-            cert_url: `https://www.psacard.com/cert/${formData.certNumber}`
-          },
-          catalog_snapshot: cardData,
-          pricing_snapshot: {
-            price: formData.price ? parseFloat(formData.price) : 0,
-            captured_at: new Date().toISOString()
-          },
-          processing_notes: `Single graded card intake - PSA cert ${formData.certNumber}`,
-          store_key: selectedStore,
-          shopify_location_gid: selectedLocation
-        })
-        .select('lot_number')
-        .single();
+          captured_at: new Date().toISOString()
+        },
+        source_payload: {
+          psa_cert: formData.certNumber,
+          fetch_source: 'scrape',
+          scraped_fields: Object.keys(cardData || {}).filter(k => cardData[k])
+        }
+      };
 
-      if (error) throw error;
+      const insertResponse: any = await withTimeout(
+        (async () => await supabase.from('intake_items').insert(insertPayload).select('*').single())()
+      );
 
-      const batchNumber = insertedItem?.lot_number || 'Unknown';
-      toast.success(`Graded card added to batch ${batchNumber} successfully`);
+      if (insertResponse.error) throw insertResponse.error;
+      const data = insertResponse.data;
+
+      // Dispatch browser event for real-time updates
+      window.dispatchEvent(new CustomEvent('intake:item-added', { detail: data }));
+      toast.success(`Added to batch (Lot ${data?.lot_number ?? ''})`);
       
       // Reset form
       setPsaCert("");
@@ -202,7 +215,11 @@ export const GradedCardIntake = () => {
 
     } catch (error) {
       console.error('Submit error:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to add card to inventory');
+      if (error?.message?.includes('timed out')) {
+        toast.error('Request timed out - please try again');
+      } else {
+        toast.error('Failed to add to batch');
+      }
     } finally {
       setSubmitting(false);
     }

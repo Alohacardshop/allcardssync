@@ -154,6 +154,7 @@ export type Database = {
           psa_cert: string | null
           psa_cert_number: string | null
           psa_last_check: string | null
+          psa_snapshot: Json | null
           psa_verified: boolean | null
           pushed_at: string | null
           quantity: number
@@ -168,6 +169,7 @@ export type Database = {
           source_row_number: number | null
           store_key: string | null
           subject: string | null
+          unique_item_uid: string
           updated_at: string
           variant: string | null
           year: string | null
@@ -198,6 +200,7 @@ export type Database = {
           psa_cert?: string | null
           psa_cert_number?: string | null
           psa_last_check?: string | null
+          psa_snapshot?: Json | null
           psa_verified?: boolean | null
           pushed_at?: string | null
           quantity?: number
@@ -212,6 +215,7 @@ export type Database = {
           source_row_number?: number | null
           store_key?: string | null
           subject?: string | null
+          unique_item_uid?: string
           updated_at?: string
           variant?: string | null
           year?: string | null
@@ -242,6 +246,7 @@ export type Database = {
           psa_cert?: string | null
           psa_cert_number?: string | null
           psa_last_check?: string | null
+          psa_snapshot?: Json | null
           psa_verified?: boolean | null
           pushed_at?: string | null
           quantity?: number
@@ -256,6 +261,7 @@ export type Database = {
           source_row_number?: number | null
           store_key?: string | null
           subject?: string | null
+          unique_item_uid?: string
           updated_at?: string
           variant?: string | null
           year?: string | null
