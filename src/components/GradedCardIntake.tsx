@@ -134,10 +134,6 @@ export const GradedCardIntake = () => {
 
     setSubmitting(true);
     try {
-      // Timeout helper function
-      const withTimeout = <T,>(p: Promise<T>, ms = 12000) =>
-        Promise.race([p, new Promise<never>((_, rej) => setTimeout(() => rej(new Error('Request timed out')), ms))]);
-
       const insertPayload = {
         // Required/common fields
         store_key: selectedStore,
@@ -183,12 +179,13 @@ export const GradedCardIntake = () => {
         }
       };
 
-      const insertResponse: any = await withTimeout(
-        (async () => await supabase.from('intake_items').insert(insertPayload).select('*').single())()
-      );
+      const { data, error } = await supabase
+        .from('intake_items')
+        .insert(insertPayload)
+        .select('*')
+        .single();
 
-      if (insertResponse.error) throw insertResponse.error;
-      const data = insertResponse.data;
+      if (error) throw error;
 
       // Dispatch browser event for real-time updates
       window.dispatchEvent(new CustomEvent('intake:item-added', { detail: data }));
