@@ -457,16 +457,45 @@ export default function Index() {
   };
 
   const formatItemTitle = (item: IntakeItem) => {
-    const parts = [];
-    
+    const parts: string[] = [];
+
+    // Year
     if (item.year) parts.push(item.year);
+
+    // Brand / Set (uppercase)
     if (item.brand_title) parts.push(item.brand_title.toUpperCase());
+
+    // Card number
     if (item.card_number) parts.push(`#${item.card_number}`);
-    if (item.subject) parts.push(item.subject.toUpperCase());
+
+    // Subject (uppercase but keep certain suffixes like "ex" lowercase)
+    if (item.subject) {
+      let subj = item.subject.toUpperCase();
+      // Preserve common lowercase suffix tokens
+      subj = subj.replace(/\bEX\b/g, "ex");
+      parts.push(subj);
+    }
+
+    // Variant / Rarity (uppercase)
     if (item.variant) parts.push(item.variant.toUpperCase());
-    if (item.grade && item.grade.includes('PSA')) parts.push(item.grade.toUpperCase());
-    
-    return parts.join(' ') || item.subject || 'Untitled Item';
+
+    // Grade -> always render as "PSA X" when grade is present
+    if (item.grade) {
+      const gradeStr = String(item.grade).trim();
+      const numMatch = gradeStr.match(/(\d+(?:\.\d+)?)/);
+      const numeric = numMatch?.[1];
+
+      if (/psa/i.test(gradeStr)) {
+        // If PSA already present, normalize to "PSA <num|text>"
+        const cleaned = gradeStr.replace(/psa/i, "").trim();
+        const cleanedNum = cleaned.match(/(\d+(?:\.\d+)?)/)?.[1];
+        parts.push(`PSA ${cleanedNum ?? cleaned.toUpperCase()}`);
+      } else {
+        parts.push(`PSA ${numeric ?? gradeStr.toUpperCase()}`);
+      }
+    }
+
+    return parts.join(" ") || item.subject || "Untitled Item";
   };
 
   const getItemType = (item: IntakeItem) => {
