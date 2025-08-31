@@ -9,6 +9,7 @@ import { Loader2, Award, ChevronDown, ChevronUp, AlertCircle } from "lucide-reac
 import { useStore } from "@/contexts/StoreContext";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { invokePSAScrapeV2 } from "@/lib/psaServiceV2";
+import { AllLocationsSelector } from "@/components/AllLocationsSelector";
 
 export const GradedCardIntake = () => {
   const [psaCert, setPsaCert] = useState("");
@@ -18,7 +19,7 @@ export const GradedCardIntake = () => {
   const [abortController, setAbortController] = useState<AbortController | null>(null);
   const [showRawData, setShowRawData] = useState(false);
   const [populatedFieldsCount, setPopulatedFieldsCount] = useState(0);
-  const { selectedStore, selectedLocation } = useStore();
+  const { selectedStore, selectedLocation, setSelectedLocation } = useStore();
 
   // Form fields that can be edited after fetching
   const [formData, setFormData] = useState({
@@ -235,6 +236,16 @@ export const GradedCardIntake = () => {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
+        {/* Location Selector */}
+        <div>
+          <Label className="text-sm font-medium mb-2 block">Shopify Location</Label>
+          <AllLocationsSelector
+            value={selectedLocation || ""}
+            onValueChange={setSelectedLocation}
+            placeholder="Select location for intake"
+            className="w-full"
+          />
+        </div>
         {/* PSA Cert Input */}
         <div className="flex gap-3 items-end">
           <div className="flex-1">
