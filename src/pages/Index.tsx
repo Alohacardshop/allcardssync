@@ -209,6 +209,27 @@ export default function Index() {
     }
   };
 
+  const handleSingleItemAction = async (itemId: string, action: 'inventory' | 'shop') => {
+    try {
+      const actionText = action === 'inventory' ? 'inventory' : 'shop';
+      
+      await supabase
+        .from('intake_items')
+        .update({ 
+          pushed_at: new Date().toISOString(),
+          processing_notes: `Sent to ${actionText}`
+        })
+        .eq('id', itemId);
+      
+      toast.success(`Item sent to ${actionText}`);
+      await loadItems();
+      
+    } catch (error) {
+      console.error('Single item action error:', error);
+      toast.error(`Failed to send item to ${action}`);
+    }
+  };
+
   const startEditing = (item: IntakeItem) => {
     setEditingItem(item.id);
     setEditForm({
@@ -782,7 +803,7 @@ export default function Index() {
                           )}
                         </div>
 
-                        <div className="flex gap-1 items-center">
+                        <div className="flex gap-1 items-center flex-wrap">
                           {item.printed_at && (
                             <Badge variant="default" className="text-xs">
                               <FileText className="h-3 w-3 mr-1" />
@@ -793,6 +814,28 @@ export default function Index() {
                             <Badge variant="secondary" className="text-xs">
                               Pushed
                             </Badge>
+                          )}
+                          {!item.pushed_at && (
+                            <>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleSingleItemAction(item.id, 'inventory')}
+                                className="h-6 px-2 text-xs"
+                              >
+                                <Package className="h-3 w-3 mr-1" />
+                                Inventory
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleSingleItemAction(item.id, 'shop')}
+                                className="h-6 px-2 text-xs"
+                              >
+                                <ShoppingCart className="h-3 w-3 mr-1" />
+                                Shop
+                              </Button>
+                            </>
                           )}
                           <Button
                             size="sm"
