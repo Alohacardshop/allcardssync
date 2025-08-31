@@ -69,8 +69,9 @@ export const GradedCardIntake = () => {
           cardNumber: data.cardNumber || "",
           year: data.year || "",
           grade: data.grade || "",
-          game: data.category?.toLowerCase().includes('pokemon') ? 'pokemon' : 
-                data.category?.toLowerCase().includes('magic') ? 'mtg' : "",
+          game: data.gameSport || 
+                (data.category?.toLowerCase().includes('pokemon') ? 'pokemon' : 
+                 data.category?.toLowerCase().includes('magic') ? 'mtg' : ""),
           certNumber: data.certNumber || psaCert.trim(),
           price: "",
           cost: "",

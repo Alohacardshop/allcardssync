@@ -23,6 +23,7 @@ interface PSAImportItem {
     brandTitle?: string;
     subject?: string;
     category?: string;
+    game?: string;
     imageUrl?: string;
     imageUrls?: string[];
     source?: string;
@@ -153,6 +154,7 @@ export const PSABulkImport = () => {
               brandTitle: psaData.brand || psaData.brandTitle,
               subject: psaData.subject,
               category: psaData.category,
+              game: psaData.gameSport,
               imageUrl: psaData.imageUrl,
               imageUrls: psaData.imageUrls || [],
               source: psaData.source
