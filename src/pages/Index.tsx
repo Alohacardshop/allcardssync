@@ -696,7 +696,7 @@ export default function Index() {
               {items.map((item) => (
                 <div
                   key={item.id}
-                  className={`flex items-center gap-4 p-3 rounded-lg border transition-colors ${
+                  className={`flex items-center gap-3 p-2 rounded-lg border transition-colors ${
                     selectedItems.has(item.id) ? 'bg-accent' : 'hover:bg-muted/50'
                   }`}
                 >
@@ -707,7 +707,7 @@ export default function Index() {
                     }
                   />
                   
-                  <div className="flex-1 grid grid-cols-1 md:grid-cols-6 gap-2">
+                  <div className="flex-1 grid grid-cols-1 md:grid-cols-5 gap-3">
                     {editingItem === item.id ? (
                       // Edit mode
                       <>
@@ -755,22 +755,19 @@ export default function Index() {
                             step="0.01"
                           />
                           {item.cost && (
-                            <p className="text-sm text-muted-foreground">
+                            <p className="text-xs text-muted-foreground">
                               Cost: {formatPrice(item.cost)}
                             </p>
                           )}
-                        </div>
-
-                        <div className="flex flex-wrap gap-1">
                           {item.grade && (
-                            <Badge variant="outline" className="text-xs">
-                              {item.grade}
-                            </Badge>
+                            <p className="text-xs text-muted-foreground">
+                              Grade: {item.grade}
+                            </p>
                           )}
                           {item.psa_cert && (
-                            <Badge variant="secondary" className="text-xs">
+                            <p className="text-xs text-muted-foreground">
                               PSA #{item.psa_cert}
-                            </Badge>
+                            </p>
                           )}
                         </div>
 
@@ -816,22 +813,19 @@ export default function Index() {
                         <div>
                           <p className="text-sm font-medium">{formatPrice(item.price)}</p>
                           {item.cost && (
-                            <p className="text-sm text-muted-foreground">
+                            <p className="text-xs text-muted-foreground">
                               Cost: {formatPrice(item.cost)}
                             </p>
                           )}
-                        </div>
-
-                        <div className="flex flex-wrap gap-1">
                           {item.grade && (
-                            <Badge variant="outline" className="text-xs">
-                              {item.grade}
-                            </Badge>
+                            <p className="text-xs text-muted-foreground">
+                              Grade: {item.grade}
+                            </p>
                           )}
                           {item.psa_cert && (
-                            <Badge variant="secondary" className="text-xs">
+                            <p className="text-xs text-muted-foreground">
                               PSA #{item.psa_cert}
-                            </Badge>
+                            </p>
                           )}
                         </div>
 
