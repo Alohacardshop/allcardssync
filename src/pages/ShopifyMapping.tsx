@@ -12,7 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
 import { Navigation } from "@/components/Navigation";
-import { StoreSelector } from "@/components/StoreSelector";
+import { useStore } from "@/contexts/StoreContext";
 import { buildTitleFromParts } from "@/lib/labelData";
 import { AlertTriangle, CheckCircle, Clock, ExternalLink, RefreshCw, Edit3, MapPin, Settings } from "lucide-react";
 
@@ -75,16 +75,15 @@ export default function ShopifyMapping() {
     description: "Manage how inventory items map to Shopify products and variants." 
   });
 
+  const { selectedStore, availableLocations } = useStore();
   const [items, setItems] = useState<MappingItem[]>([]);
   const [productGroups, setProductGroups] = useState<ProductGroup[]>([]);
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState<"all" | "mapped" | "unmapped" | "conflicts">("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [processingIds, setProcessingIds] = useState<Set<string>>(new Set());
-  const [selectedStore, setSelectedStore] = useState<string | null>(null);
   const [editingProductId, setEditingProductId] = useState<{ groupHandle: string; currentId: string | null } | null>(null);
   const [newProductId, setNewProductId] = useState("");
-  const [shopifyLocations, setShopifyLocations] = useState<Array<{ id: string; name: string }>>([]);
 
   const loadMappingData = async () => {
     setLoading(true);
@@ -187,24 +186,42 @@ export default function ShopifyMapping() {
   };
 
   const handleBulkPush = async (itemIds: string[]) => {
-    if (itemIds.length === 0) return;
+    if (itemIds.length === 0 || !selectedStore) {
+      toast.error("Please select a store first");
+      return;
+    }
     
     setProcessingIds(prev => new Set([...prev, ...itemIds]));
     
     try {
-      const promises = itemIds.map(async (itemId) => {
-        const { error } = await supabase.functions.invoke("shopify-import", { 
-          body: { itemId } 
-        });
-        if (error) throw error;
-      });
+      // Fetch full item data for the selected IDs
+      const { data: fullItems, error: fetchError } = await supabase
+        .from("intake_items")
+        .select("*")
+        .in("id", itemIds)
+        .is("deleted_at", null);
 
-      await Promise.all(promises);
+      if (fetchError) throw fetchError;
+      
+      if (!fullItems || fullItems.length === 0) {
+        throw new Error("No items found to push");
+      }
+
+      // Push to Shopify with correct payload
+      const { error } = await supabase.functions.invoke("shopify-import", { 
+        body: { 
+          items: fullItems,
+          storeKey: selectedStore 
+        }
+      });
+      
+      if (error) throw error;
+
       toast.success(`Successfully pushed ${itemIds.length} items to Shopify`);
       loadMappingData();
     } catch (e) {
       console.error(e);
-      toast.error("Some items failed to push to Shopify");
+      toast.error("Failed to push items to Shopify: " + (e instanceof Error ? e.message : "Unknown error"));
     } finally {
       setProcessingIds(prev => {
         const newSet = new Set(prev);
@@ -285,29 +302,9 @@ export default function ShopifyMapping() {
     }
   };
 
-  const loadShopifyLocations = async () => {
-    if (!selectedStore) return;
-    
-    try {
-      const { data, error } = await supabase.functions.invoke("shopify-locations", {
-        body: { storeKey: selectedStore }
-      });
-      
-      if (error) throw error;
-      setShopifyLocations(data?.locations || []);
-    } catch (e) {
-      console.error(e);
-      setShopifyLocations([]);
-    }
-  };
-
   useEffect(() => {
     loadMappingData();
   }, []);
-
-  useEffect(() => {
-    loadShopifyLocations();
-  }, [selectedStore]);
 
   const filteredGroups = productGroups.filter(group => {
     // Apply filter
@@ -343,17 +340,17 @@ export default function ShopifyMapping() {
             <Navigation />
           </div>
           
-          {/* Store Selector */}
+          {/* Store Info */}
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <Settings className="h-4 w-4" />
-              <Label htmlFor="store-select">Target Store:</Label>
+              <Label>Current Store:</Label>
             </div>
-            <StoreSelector />
-            {shopifyLocations.length > 0 && (
+            <Badge variant="outline">{selectedStore || "No store selected"}</Badge>
+            {availableLocations.length > 0 && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <MapPin className="h-4 w-4" />
-                <span>{shopifyLocations.length} location{shopifyLocations.length !== 1 ? 's' : ''} available</span>
+                <span>{availableLocations.length} location{availableLocations.length !== 1 ? 's' : ''} available</span>
               </div>
             )}
           </div>

@@ -149,7 +149,7 @@ export default function Index() {
     }
   };
 
-  const handleBatchAction = async (action: 'inventory' | 'shop' | 'complete') => {
+  const handleBatchAction = async (action: 'inventory' | 'shop' | 'complete' | 'shopify') => {
     if (selectedItems.size === 0) return;
 
     try {
@@ -180,6 +180,25 @@ export default function Index() {
             .in('id', Array.from(selectedItems));
           
           toast.success(`${selectedItems.size} items sent to shop`);
+          break;
+          
+        case 'shopify':
+          // Push to Shopify
+          if (!selectedStore) {
+            toast.error("Please select a store first");
+            return;
+          }
+
+          // Push to Shopify with correct payload
+          const { error } = await supabase.functions.invoke("shopify-import", { 
+            body: { 
+              items: selectedItemsList,
+              storeKey: selectedStore 
+            }
+          });
+          
+          if (error) throw error;
+          toast.success(`${selectedItems.size} items pushed to Shopify`);
           break;
           
         case 'complete':
@@ -662,6 +681,16 @@ export default function Index() {
                   >
                     <ShoppingCart className="h-4 w-4 mr-2" />
                     Send to Shop
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleBatchAction('shopify')}
+                    disabled={selectedItems.size === 0 || !selectedStore}
+                    title={!selectedStore ? "Select a store in your profile settings" : "Push selected items to Shopify"}
+                  >
+                    <Archive className="h-4 w-4 mr-2" />
+                    Push to Shopify ({selectedItems.size})
                   </Button>
                   <Button
                     variant="default"
