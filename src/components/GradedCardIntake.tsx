@@ -54,8 +54,8 @@ export const GradedCardIntake = () => {
     setFetching(true);
     
     try {
-      // Use the centralized PSA service with timeout
-      const data = await invokePSAScrapeV2({ cert: psaCert.trim() }, 25000);
+      // Use the centralized PSA service with extended timeout
+      const data = await invokePSAScrapeV2({ cert: psaCert.trim() }, 30000);
 
       if (data && data.ok) {
         console.log('PSA data received successfully:', JSON.stringify(data, null, 2));
