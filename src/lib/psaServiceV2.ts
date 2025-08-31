@@ -1,82 +1,70 @@
 import { supabase } from "@/integrations/supabase/client";
 
-export async function invokePSAScrapeV2(body: Record<string, any>, ms = 30000) {
-  console.info("[psa:invoke:v2] Starting PSA scrape", { 
-    cert: body.cert, 
-    msTimeout: ms, 
-    mode: body.mode 
+export async function invokePSAScrapeV2(body: Record<string, any>, ms = 45000) {
+  const SUPABASE_URL = "https://dmpoandoydaqxhzdjnmk.supabase.co";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRtcG9hbmRveWRhcXhoemRqbm1rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ0MDU5NDMsImV4cCI6MjA2OTk4MTk0M30.WoHlHO_Z4_ogeO5nt4I29j11aq09RMBtNug8a5rStgk";
+  const url = `${SUPABASE_URL}/functions/v1/psa-scrape-v2`;
+
+  console.info("[psa:invoke:v2] Direct fetch start", {
+    url,
+    msTimeout: ms,
+    preview: { cert: body?.cert, mode: body?.mode }
   });
 
-  const startTime = Date.now();
+  const started = Date.now();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), ms);
 
   try {
-    // Use Promise.race for timeout handling since Supabase client doesn't support AbortSignal directly
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => {
-        console.warn("[psa:invoke:v2] Timeout reached after", ms, "ms");
-        reject(new Error(`PSA scrape timed out after ${ms / 1000}s`));
-      }, ms);
-    });
-
-    const apiPromise = supabase.functions.invoke("psa-scrape-v2", {
-      body,
+    const resp = await fetch(url, {
+      method: 'POST',
       headers: {
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'apikey': SUPABASE_ANON_KEY,
         'Content-Type': 'application/json'
-      }
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal
     });
 
-    console.info("[psa:invoke:v2] Making API call to psa-scrape-v2");
-    const result = await Promise.race([apiPromise, timeoutPromise]);
-    const { data, error } = result as any;
-    
-    if (error) {
-      console.error("[psa:invoke:v2] Supabase function error", { 
-        name: error.name, 
-        message: error.message, 
-        status: (error as any)?.status,
-        responseTime: Date.now() - startTime
-      });
-      
-      // Handle different error types
-      if (error.message?.includes('timeout') || error.name === 'TimeoutError') {
-        throw new Error(`Request timed out after ${(Date.now() - startTime) / 1000}s`);
-      }
-      if (error.message?.includes('fetch') || error.message?.includes('network')) {
-        throw new Error('Network error - please check your connection and try again');
-      }
-      
-      throw error;
+    const rawText = await resp.text();
+    console.info("[psa:invoke:v2] Response status", {
+      status: resp.status,
+      ok: resp.ok,
+      durationMs: Date.now() - started,
+      bodySnippet: rawText?.slice(0, 400)
+    });
+
+    if (!resp.ok) {
+      throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
     }
 
-    console.info("[psa:invoke:v2] PSA scrape response received", { 
-      ok: data?.ok, 
-      source: data?.source, 
+    let data: any = null;
+    try {
+      data = rawText ? JSON.parse(rawText) : null;
+    } catch (e) {
+      console.error("[psa:invoke:v2] JSON parse error", e);
+      throw new Error('Invalid JSON returned from edge function');
+    }
+
+    console.info("[psa:invoke:v2] Parsed payload", {
+      ok: data?.ok,
+      source: data?.source,
       isValid: data?.isValid,
       grade: data?.grade,
-      responseTime: Date.now() - startTime,
-      diagnostics: data?.diagnostics 
-    });
-    
-    return data;
-  } catch (error: any) {
-    const responseTime = Date.now() - startTime;
-    
-    console.error("[psa:invoke:v2] Error occurred", { 
-      name: error.name, 
-      message: error.message,
-      responseTime,
-      timeout: ms
+      diagnostics: data?.diagnostics
     });
 
-    // Provide more specific error messages
-    if (error.message?.includes('timed out')) {
-      throw new Error(`Request timed out after ${responseTime / 1000}s. The PSA website may be slow - please try again.`);
+    return data;
+  } catch (error: any) {
+    if (error?.name === 'AbortError') {
+      console.error("[psa:invoke:v2] Timeout abort", { ms, totalMs: Date.now() - started });
+      throw new Error(`Request timed out after ${ms / 1000}s`);
     }
-    if (error.message?.includes('fetch') || error.message?.includes('network')) {
-      throw new Error('Network connection failed. Please check your internet and try again.');
-    }
-    
+    console.error("[psa:invoke:v2] Fetch error", { name: error?.name, message: error?.message });
     throw error;
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
