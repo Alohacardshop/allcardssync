@@ -88,7 +88,7 @@ export default function Index() {
       console.error("Error loading items:", error);
       toast({
         title: "Error",
-        description: "Failed to load inventory items",
+        description: "Failed to load current batch",
         variant: "destructive",
       });
     } finally {
@@ -352,7 +352,7 @@ export default function Index() {
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2">
               <Package className="h-5 w-5" />
-              Recent Inventory Items
+              Current Batch
             </CardTitle>
             <div className="flex items-center gap-2">
               <Checkbox
@@ -367,7 +367,7 @@ export default function Index() {
           {items.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               <Package className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>No inventory items found</p>
+              <p>No items in current batch</p>
             </div>
           ) : (
             <div className="space-y-2">
