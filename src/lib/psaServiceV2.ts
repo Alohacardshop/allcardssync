@@ -10,16 +10,24 @@ export async function invokePSAScrapeV2(body: Record<string, any>, ms = 30000) {
   const startTime = Date.now();
 
   try {
-    // Use Promise.race to implement proper timeout with better error handling
+    // Use Promise.race for timeout handling since Supabase client doesn't support AbortSignal directly
     const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error(`PSA scrape timed out after ${ms / 1000}s`)), ms);
+      setTimeout(() => {
+        console.warn("[psa:invoke:v2] Timeout reached after", ms, "ms");
+        reject(new Error(`PSA scrape timed out after ${ms / 1000}s`));
+      }, ms);
     });
 
     const apiPromise = supabase.functions.invoke("psa-scrape-v2", {
       body,
+      headers: {
+        'Content-Type': 'application/json'
+      }
     });
 
-    const { data, error } = await Promise.race([apiPromise, timeoutPromise]) as any;
+    console.info("[psa:invoke:v2] Making API call to psa-scrape-v2");
+    const result = await Promise.race([apiPromise, timeoutPromise]);
+    const { data, error } = result as any;
     
     if (error) {
       console.error("[psa:invoke:v2] Supabase function error", { 
@@ -33,14 +41,14 @@ export async function invokePSAScrapeV2(body: Record<string, any>, ms = 30000) {
       if (error.message?.includes('timeout') || error.name === 'TimeoutError') {
         throw new Error(`Request timed out after ${(Date.now() - startTime) / 1000}s`);
       }
-      if (error.message?.includes('fetch')) {
+      if (error.message?.includes('fetch') || error.message?.includes('network')) {
         throw new Error('Network error - please check your connection and try again');
       }
       
       throw error;
     }
 
-    console.info("[psa:invoke:v2] PSA scrape response", { 
+    console.info("[psa:invoke:v2] PSA scrape response received", { 
       ok: data?.ok, 
       source: data?.source, 
       isValid: data?.isValid,
@@ -61,14 +69,11 @@ export async function invokePSAScrapeV2(body: Record<string, any>, ms = 30000) {
     });
 
     // Provide more specific error messages
-    if (error.message?.includes('timeout') || error.name === 'TimeoutError') {
+    if (error.message?.includes('timed out')) {
       throw new Error(`Request timed out after ${responseTime / 1000}s. The PSA website may be slow - please try again.`);
     }
     if (error.message?.includes('fetch') || error.message?.includes('network')) {
       throw new Error('Network connection failed. Please check your internet and try again.');
-    }
-    if (error.message?.includes('abort')) {
-      throw new Error('Request was cancelled. Please try again.');
     }
     
     throw error;
