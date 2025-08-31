@@ -341,6 +341,89 @@ export default function Index() {
     }
   };
 
+  const handleDeleteSingleItem = async (itemId: string) => {
+    try {
+      const { error } = await supabase
+        .from("intake_items")
+        .update({ 
+          deleted_at: new Date().toISOString(),
+          deleted_reason: "Individual deletion from dashboard"
+        })
+        .eq("id", itemId);
+
+      if (error) throw error;
+
+      toast.success("Item deleted successfully");
+      await loadItems();
+    } catch (error) {
+      console.error("Error deleting item:", error);
+      toast.error("Failed to delete item");
+    }
+  };
+
+  const handleDeleteEntireBatch = async () => {
+    if (items.length === 0) {
+      toastHook({
+        title: "No items to delete",
+        description: "Current batch is empty",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const currentLotNumber = items[0]?.lot_number;
+    const lotItems = items.filter(item => item.lot_number === currentLotNumber);
+    
+    try {
+      // Try to use admin_delete_batch RPC function first
+      const lotRecord = await supabase
+        .from('intake_lots')
+        .select('id')
+        .eq('lot_number', currentLotNumber)
+        .single();
+
+      if (lotRecord.data?.id) {
+        const { error: rpcError } = await supabase.rpc('admin_delete_batch', {
+          lot_id_in: lotRecord.data.id,
+          reason_in: 'Entire batch deleted from dashboard'
+        });
+
+        if (!rpcError) {
+          toastHook({
+            title: "Batch deleted",
+            description: `${lotItems.length} items deleted from batch ${currentLotNumber}`,
+          });
+          await loadItems();
+          return;
+        }
+      }
+
+      // Fallback: individual soft delete
+      const { error } = await supabase
+        .from("intake_items")
+        .update({ 
+          deleted_at: new Date().toISOString(),
+          deleted_reason: "Entire batch deletion from dashboard"
+        })
+        .eq("lot_number", currentLotNumber);
+
+      if (error) throw error;
+
+      toastHook({
+        title: "Batch deleted",
+        description: `${lotItems.length} items deleted from batch ${currentLotNumber}`,
+      });
+      await loadItems();
+    } catch (error) {
+      console.error("Error deleting batch:", error);
+      toastHook({
+        title: "Error",
+        description: "Failed to delete batch",
+        variant: "destructive",
+      });
+    }
+  };
+
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -507,6 +590,31 @@ export default function Index() {
                     <CheckCircle className="h-4 w-4 mr-2" />
                     Complete Batch
                   </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete Entire Batch
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Delete Entire Batch</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Are you sure you want to delete the entire batch? This will delete {items.filter(item => item.lot_number === items[0]?.lot_number).length} items from batch {items[0]?.lot_number}. This action cannot be undone.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleDeleteEntireBatch}>
+                          Delete Batch
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </>
               )}
               <Checkbox
@@ -690,10 +798,35 @@ export default function Index() {
                             size="sm"
                             variant="ghost"
                             onClick={() => startEditing(item)}
-                            className="h-6 px-2 ml-auto"
+                            className="h-6 px-2"
                           >
                             <Edit3 className="h-3 w-3" />
                           </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-6 px-2 text-destructive hover:text-destructive"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Delete Item</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Are you sure you want to delete "{item.subject}"? This action cannot be undone.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => handleDeleteSingleItem(item.id)}>
+                                  Delete
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
                         </div>
                       </>
                     )}
