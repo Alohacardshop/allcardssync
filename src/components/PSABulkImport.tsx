@@ -66,7 +66,7 @@ export const PSABulkImport = () => {
   };
 
   const scrapePSAData = async (psaCert: string) => {
-    return await invokePSAScrapeV2({ cert: psaCert }, 45000); // 45s timeout
+    return await invokePSAScrapeV2({ cert: psaCert, forceRefresh: true }, 45000); // 45s timeout
   };
 
   const insertIntakeItem = async (item: PSAImportItem) => {
@@ -147,10 +147,10 @@ export const PSABulkImport = () => {
           updatedItems[i] = {
             ...item,
             data: {
-              title: psaData.brandTitle || psaData.subject,
+              title: psaData.brand || psaData.subject,
               year: psaData.year,
               grade: psaData.grade,
-              brandTitle: psaData.brandTitle,
+              brandTitle: psaData.brand || psaData.brandTitle,
               subject: psaData.subject,
               category: psaData.category,
               imageUrl: psaData.imageUrl,

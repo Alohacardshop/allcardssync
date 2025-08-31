@@ -98,7 +98,7 @@ export async function savePSAToIntakeItem(itemId: string, psaData: any) {
       psa_last_check: new Date().toISOString(),
       grade: psaData.grade,
       year: psaData.year,
-      brand_title: psaData.brandTitle,
+      brand_title: psaData.brand ?? psaData.brandTitle,
       subject: psaData.subject,
       card_number: psaData.cardNumber,
       image_urls: psaData.imageUrls ? JSON.stringify(psaData.imageUrls) : null,

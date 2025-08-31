@@ -55,14 +55,14 @@ export const GradedCardIntake = () => {
     
     try {
       // Use the centralized PSA service with extended timeout
-      const data = await invokePSAScrapeV2({ cert: psaCert.trim() }, 45000);
+      const data = await invokePSAScrapeV2({ cert: psaCert.trim(), forceRefresh: true }, 45000);
 
       if (data && data.ok) {
         console.log('PSA data received successfully:', JSON.stringify(data, null, 2));
         setCardData(data);
         
         const newFormData = {
-          brandTitle: data.brandTitle || "",
+          brandTitle: data.brand || data.brandTitle || "",
           subject: data.subject || "",
           category: data.category || "",
           variant: data.varietyPedigree || "",
