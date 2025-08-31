@@ -47,6 +47,10 @@ interface IntakeItem {
   cost?: number;
   grade?: string;
   psa_cert?: string;
+  year?: string;
+  card_number?: string;
+  variant?: string;
+  psa_cert_number?: string;
   lot_number: string;
   created_at: string;
   printed_at?: string;
@@ -452,6 +456,34 @@ export default function Index() {
     }).format(price);
   };
 
+  const formatItemTitle = (item: IntakeItem) => {
+    const parts = [];
+    
+    if (item.year) parts.push(item.year);
+    if (item.brand_title) parts.push(item.brand_title.toUpperCase());
+    if (item.card_number) parts.push(`#${item.card_number}`);
+    if (item.subject) parts.push(item.subject.toUpperCase());
+    if (item.variant) parts.push(item.variant.toUpperCase());
+    if (item.grade && item.grade.includes('PSA')) parts.push(item.grade.toUpperCase());
+    
+    return parts.join(' ') || item.subject || 'Untitled Item';
+  };
+
+  const getItemType = (item: IntakeItem) => {
+    const brandLower = item.brand_title?.toLowerCase() || '';
+    const categoryLower = item.category?.toLowerCase() || '';
+    const subjectLower = item.subject?.toLowerCase() || '';
+    
+    if (brandLower.includes('pokemon') || categoryLower.includes('pokemon') || subjectLower.includes('pokemon')) {
+      return 'Pokemon';
+    }
+    if (brandLower.includes('magic') || categoryLower.includes('magic') || brandLower.includes('mtg')) {
+      return 'Magic: The Gathering';
+    }
+    
+    return item.category || 'Trading Card';
+  };
+
   if (loading) {
     return <LoadingSpinner />;
   }
@@ -765,13 +797,13 @@ export default function Index() {
                       // View mode
                       <>
                         <div>
-                          <p className="font-medium">{item.subject}</p>
+                          <p className="font-medium">{formatItemTitle(item)}</p>
                           <p className="text-sm text-muted-foreground">{item.sku}</p>
                         </div>
                         
                         <div>
                           <p className="text-sm">{item.brand_title}</p>
-                          <p className="text-sm text-muted-foreground">{item.category}</p>
+                          <p className="text-sm text-muted-foreground">{getItemType(item)}</p>
                         </div>
 
                         <div>
