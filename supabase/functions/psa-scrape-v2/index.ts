@@ -183,8 +183,6 @@ serve(async (req) => {
     url: psaUrl,
     formats: ['markdown'],
     onlyMainContent: true,
-    parsePDF: true,
-    stealthMode: false,
     timeout: 18000,
     waitFor: 2000
   };
