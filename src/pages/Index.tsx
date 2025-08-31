@@ -8,7 +8,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useStore } from "@/contexts/StoreContext";
-import { Package, FileText, Plus, Trash2, Archive, Eye } from "lucide-react";
+import { Package, FileText, Plus, Trash2, Archive, Eye, ShoppingCart, CheckCircle, Edit3, Save, X } from "lucide-react";
+import { toast } from "sonner";
 import { Link } from "react-router-dom";
 import {
   Dialog,
@@ -56,12 +57,24 @@ interface IntakeItem {
 export default function Index() {
   const [items, setItems] = useState<IntakeItem[]>([]);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+  const [editingItem, setEditingItem] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<{
+    price: string;
+    quantity: string;
+    subject: string;
+    brand_title: string;
+  }>({
+    price: '',
+    quantity: '',
+    subject: '',
+    brand_title: ''
+  });
   const [loading, setLoading] = useState(true);
   const [batchNumber, setBatchNumber] = useState("");
   const [batchDialogOpen, setBatchDialogOpen] = useState(false);
   const [processingBatch, setProcessingBatch] = useState(false);
   const { selectedStore, selectedLocation } = useStore();
-  const { toast } = useToast();
+  const { toast: toastHook } = useToast();
 
   const loadItems = async () => {
     try {
@@ -86,7 +99,7 @@ export default function Index() {
       setItems(data || []);
     } catch (error) {
       console.error("Error loading items:", error);
-      toast({
+      toastHook({
         title: "Error",
         description: "Failed to load current batch",
         variant: "destructive",
@@ -132,9 +145,114 @@ export default function Index() {
     }
   };
 
+  const handleBatchAction = async (action: 'inventory' | 'shop' | 'complete') => {
+    if (selectedItems.size === 0) return;
+
+    try {
+      const selectedItemsList = items.filter(item => selectedItems.has(item.id));
+      
+      switch (action) {
+        case 'inventory':
+          // Update items to mark as sent to inventory
+          await supabase
+            .from('intake_items')
+            .update({ 
+              pushed_at: new Date().toISOString(),
+              processing_notes: 'Sent to inventory'
+            })
+            .in('id', Array.from(selectedItems));
+          
+          toast.success(`${selectedItems.size} items sent to inventory`);
+          break;
+          
+        case 'shop':
+          // Update items to mark as sent to shop
+          await supabase
+            .from('intake_items')
+            .update({ 
+              pushed_at: new Date().toISOString(),
+              processing_notes: 'Sent to shop'
+            })
+            .in('id', Array.from(selectedItems));
+          
+          toast.success(`${selectedItems.size} items sent to shop`);
+          break;
+          
+        case 'complete':
+          // Mark batch as completed
+          const lotNumbers = [...new Set(selectedItemsList.map(item => item.lot_number))];
+          
+          await supabase
+            .from('intake_lots')
+            .update({ status: 'completed' })
+            .in('lot_number', lotNumbers);
+            
+          await supabase
+            .from('intake_items')
+            .update({ 
+              pushed_at: new Date().toISOString(),
+              processing_notes: 'Batch completed'
+            })
+            .in('id', Array.from(selectedItems));
+          
+          toast.success(`Batch completed for ${selectedItems.size} items`);
+          break;
+      }
+      
+      // Refetch data and clear selection
+      await loadItems();
+      setSelectedItems(new Set());
+      
+    } catch (error) {
+      console.error('Batch action error:', error);
+      toast.error('Failed to process batch action');
+    }
+  };
+
+  const startEditing = (item: IntakeItem) => {
+    setEditingItem(item.id);
+    setEditForm({
+      price: item.price?.toString() || '',
+      quantity: item.quantity?.toString() || '',
+      subject: item.subject || '',
+      brand_title: item.brand_title || ''
+    });
+  };
+
+  const cancelEditing = () => {
+    setEditingItem(null);
+    setEditForm({
+      price: '',
+      quantity: '',
+      subject: '',
+      brand_title: ''
+    });
+  };
+
+  const saveEdit = async (itemId: string) => {
+    try {
+      await supabase
+        .from('intake_items')
+        .update({
+          price: parseFloat(editForm.price) || 0,
+          quantity: parseInt(editForm.quantity) || 1,
+          subject: editForm.subject,
+          brand_title: editForm.brand_title
+        })
+        .eq('id', itemId);
+      
+      toast.success('Item updated successfully');
+      setEditingItem(null);
+      await loadItems();
+    } catch (error) {
+      console.error('Save error:', error);
+      toast.error('Failed to save changes');
+    }
+  };
+
   const handleBatchItems = async () => {
     if (selectedItems.size === 0) {
-      toast({
+      toastHook({
         title: "No items selected",
         description: "Please select items to batch",
         variant: "destructive",
@@ -143,7 +261,7 @@ export default function Index() {
     }
 
     if (!batchNumber.trim()) {
-      toast({
+      toastHook({
         title: "Batch number required",
         description: "Please enter a batch number",
         variant: "destructive",
@@ -161,7 +279,7 @@ export default function Index() {
 
       if (error) throw error;
 
-      toast({
+      toastHook({
         title: "Batch created successfully",
         description: `${selectedItems.size} items added to batch ${batchNumber}`,
       });
@@ -173,7 +291,7 @@ export default function Index() {
       await loadItems();
     } catch (error) {
       console.error("Error batching items:", error);
-      toast({
+      toastHook({
         title: "Error",
         description: "Failed to create batch",
         variant: "destructive",
@@ -185,7 +303,7 @@ export default function Index() {
 
   const handleDeleteItems = async () => {
     if (selectedItems.size === 0) {
-      toast({
+      toastHook({
         title: "No items selected",
         description: "Please select items to delete",
         variant: "destructive",
@@ -205,7 +323,7 @@ export default function Index() {
 
       if (error) throw error;
 
-      toast({
+      toastHook({
         title: "Items deleted",
         description: `${selectedItems.size} items have been deleted`,
       });
@@ -215,7 +333,7 @@ export default function Index() {
       await loadItems();
     } catch (error) {
       console.error("Error deleting items:", error);
-      toast({
+      toastHook({
         title: "Error", 
         description: "Failed to delete items",
         variant: "destructive",
@@ -353,8 +471,44 @@ export default function Index() {
             <CardTitle className="flex items-center gap-2">
               <Package className="h-5 w-5" />
               Current Batch
+              {items.length > 0 && items[0]?.lot_number && (
+                <Badge variant="outline" className="ml-2">
+                  {items[0].lot_number}
+                </Badge>
+              )}
             </CardTitle>
             <div className="flex items-center gap-2">
+              {items.length > 0 && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleBatchAction('inventory')}
+                    disabled={selectedItems.size === 0}
+                  >
+                    <Package className="h-4 w-4 mr-2" />
+                    Send to Inventory
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleBatchAction('shop')}
+                    disabled={selectedItems.size === 0}
+                  >
+                    <ShoppingCart className="h-4 w-4 mr-2" />
+                    Send to Shop
+                  </Button>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={() => handleBatchAction('complete')}
+                    disabled={selectedItems.size === 0}
+                  >
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                    Complete Batch
+                  </Button>
+                </>
+              )}
               <Checkbox
                 checked={selectedItems.size === items.length && items.length > 0}
                 onCheckedChange={handleSelectAll}
@@ -362,6 +516,13 @@ export default function Index() {
               <Label>Select All</Label>
             </div>
           </div>
+          {items.length > 0 && (
+            <div className="text-sm text-muted-foreground mt-2">
+              {items.length} items • {selectedItems.size} selected • 
+              Total value: ${items.filter(item => selectedItems.has(item.id))
+                .reduce((sum, item) => sum + (item.price * item.quantity), 0).toFixed(2)}
+            </div>
+          )}
         </CardHeader>
         <CardContent>
           {items.length === 0 ? (
@@ -386,58 +547,156 @@ export default function Index() {
                   />
                   
                   <div className="flex-1 grid grid-cols-1 md:grid-cols-6 gap-2">
-                    <div>
-                      <p className="font-medium">{item.subject}</p>
-                      <p className="text-sm text-muted-foreground">{item.sku}</p>
-                    </div>
-                    
-                    <div>
-                      <p className="text-sm">{item.brand_title}</p>
-                      <p className="text-sm text-muted-foreground">{item.category}</p>
-                    </div>
+                    {editingItem === item.id ? (
+                      // Edit mode
+                      <>
+                        <div>
+                          <Input
+                            value={editForm.subject}
+                            onChange={(e) => setEditForm(prev => ({...prev, subject: e.target.value}))}
+                            className="text-sm"
+                            placeholder="Subject"
+                          />
+                          <p className="text-sm text-muted-foreground">{item.sku}</p>
+                        </div>
+                        
+                        <div>
+                          <Input
+                            value={editForm.brand_title}
+                            onChange={(e) => setEditForm(prev => ({...prev, brand_title: e.target.value}))}
+                            className="text-sm"
+                            placeholder="Brand Title"
+                          />
+                          <p className="text-sm text-muted-foreground">{item.category}</p>
+                        </div>
 
-                    <div>
-                      <p className="text-sm">Qty: {item.quantity}</p>
-                      <p className="text-sm text-muted-foreground">
-                        Lot: {item.lot_number}
-                      </p>
-                    </div>
+                        <div>
+                          <Input
+                            type="number"
+                            value={editForm.quantity}
+                            onChange={(e) => setEditForm(prev => ({...prev, quantity: e.target.value}))}
+                            className="text-sm"
+                            placeholder="Quantity"
+                            min="1"
+                          />
+                          <p className="text-sm text-muted-foreground">
+                            Lot: {item.lot_number}
+                          </p>
+                        </div>
 
-                    <div>
-                      <p className="text-sm font-medium">{formatPrice(item.price)}</p>
-                      {item.cost && (
-                        <p className="text-sm text-muted-foreground">
-                          Cost: {formatPrice(item.cost)}
-                        </p>
-                      )}
-                    </div>
+                        <div>
+                          <Input
+                            type="number"
+                            value={editForm.price}
+                            onChange={(e) => setEditForm(prev => ({...prev, price: e.target.value}))}
+                            className="text-sm"
+                            placeholder="Price"
+                            step="0.01"
+                          />
+                          {item.cost && (
+                            <p className="text-sm text-muted-foreground">
+                              Cost: {formatPrice(item.cost)}
+                            </p>
+                          )}
+                        </div>
 
-                    <div className="flex flex-wrap gap-1">
-                      {item.grade && (
-                        <Badge variant="outline" className="text-xs">
-                          {item.grade}
-                        </Badge>
-                      )}
-                      {item.psa_cert && (
-                        <Badge variant="secondary" className="text-xs">
-                          PSA #{item.psa_cert}
-                        </Badge>
-                      )}
-                    </div>
+                        <div className="flex flex-wrap gap-1">
+                          {item.grade && (
+                            <Badge variant="outline" className="text-xs">
+                              {item.grade}
+                            </Badge>
+                          )}
+                          {item.psa_cert && (
+                            <Badge variant="secondary" className="text-xs">
+                              PSA #{item.psa_cert}
+                            </Badge>
+                          )}
+                        </div>
 
-                    <div className="flex gap-1">
-                      {item.printed_at && (
-                        <Badge variant="default" className="text-xs">
-                          <FileText className="h-3 w-3 mr-1" />
-                          Printed
-                        </Badge>
-                      )}
-                      {item.pushed_at && (
-                        <Badge variant="secondary" className="text-xs">
-                          Pushed
-                        </Badge>
-                      )}
-                    </div>
+                        <div className="flex gap-1 items-center">
+                          <Button
+                            size="sm"
+                            variant="default"
+                            onClick={() => saveEdit(item.id)}
+                            className="h-6 px-2"
+                          >
+                            <Save className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={cancelEditing}
+                            className="h-6 px-2"
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </>
+                    ) : (
+                      // View mode
+                      <>
+                        <div>
+                          <p className="font-medium">{item.subject}</p>
+                          <p className="text-sm text-muted-foreground">{item.sku}</p>
+                        </div>
+                        
+                        <div>
+                          <p className="text-sm">{item.brand_title}</p>
+                          <p className="text-sm text-muted-foreground">{item.category}</p>
+                        </div>
+
+                        <div>
+                          <p className="text-sm">Qty: {item.quantity}</p>
+                          <p className="text-sm text-muted-foreground">
+                            Lot: {item.lot_number}
+                          </p>
+                        </div>
+
+                        <div>
+                          <p className="text-sm font-medium">{formatPrice(item.price)}</p>
+                          {item.cost && (
+                            <p className="text-sm text-muted-foreground">
+                              Cost: {formatPrice(item.cost)}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="flex flex-wrap gap-1">
+                          {item.grade && (
+                            <Badge variant="outline" className="text-xs">
+                              {item.grade}
+                            </Badge>
+                          )}
+                          {item.psa_cert && (
+                            <Badge variant="secondary" className="text-xs">
+                              PSA #{item.psa_cert}
+                            </Badge>
+                          )}
+                        </div>
+
+                        <div className="flex gap-1 items-center">
+                          {item.printed_at && (
+                            <Badge variant="default" className="text-xs">
+                              <FileText className="h-3 w-3 mr-1" />
+                              Printed
+                            </Badge>
+                          )}
+                          {item.pushed_at && (
+                            <Badge variant="secondary" className="text-xs">
+                              Pushed
+                            </Badge>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => startEditing(item)}
+                            className="h-6 px-2 ml-auto"
+                          >
+                            <Edit3 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
               ))}
