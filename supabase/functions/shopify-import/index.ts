@@ -141,10 +141,91 @@ serve(async (req) => {
 
         console.log(`Created product ${productId} with variant ${variantId}`);
 
-        // Add images if available from image_urls
-        if (item.image_urls && item.image_urls.length > 0) {
-          try {
-            for (const imageUrl of item.image_urls) {
+        // Normalize and add images from various sources
+        const normalizeImageUrls = (item) => {
+          const imageUrls = new Set(); // Use Set to avoid duplicates
+          
+          // Helper to add valid URLs
+          const addUrl = (url) => {
+            if (url && typeof url === 'string' && (url.startsWith('http://') || url.startsWith('https://'))) {
+              imageUrls.add(url.trim());
+            }
+          };
+          
+          // Helper to parse array-like strings
+          const parseArrayString = (str) => {
+            if (!str) return [];
+            try {
+              // Try JSON parse first
+              const parsed = JSON.parse(str);
+              return Array.isArray(parsed) ? parsed : [parsed];
+            } catch {
+              // Fall back to comma/semicolon split
+              return str.split(/[,;]/).map(s => s.trim()).filter(Boolean);
+            }
+          };
+          
+          // 1. Handle image_urls field (array, JSON string, or CSV)
+          if (item.image_urls) {
+            if (Array.isArray(item.image_urls)) {
+              item.image_urls.forEach(addUrl);
+            } else if (typeof item.image_urls === 'string') {
+              parseArrayString(item.image_urls).forEach(addUrl);
+            }
+          }
+          
+          // 2. Handle single image_url field
+          if (item.image_url) {
+            addUrl(item.image_url);
+          }
+          
+          // 3. Extract from psa_snapshot
+          if (item.psa_snapshot) {
+            try {
+              const psaData = typeof item.psa_snapshot === 'string' 
+                ? JSON.parse(item.psa_snapshot) 
+                : item.psa_snapshot;
+              
+              if (psaData.imageUrl) addUrl(psaData.imageUrl);
+              if (psaData.imageUrls && Array.isArray(psaData.imageUrls)) {
+                psaData.imageUrls.forEach(addUrl);
+              }
+            } catch (error) {
+              console.warn(`Failed to parse psa_snapshot for item ${item.id}:`, error);
+            }
+          }
+          
+          // 4. Extract from catalog_snapshot  
+          if (item.catalog_snapshot) {
+            try {
+              const catalogData = typeof item.catalog_snapshot === 'string'
+                ? JSON.parse(item.catalog_snapshot)
+                : item.catalog_snapshot;
+              
+              if (catalogData.imageUrl) addUrl(catalogData.imageUrl);
+              if (catalogData.imageUrls && Array.isArray(catalogData.imageUrls)) {
+                catalogData.imageUrls.forEach(addUrl);
+              }
+              if (catalogData.image_url) addUrl(catalogData.image_url);
+            } catch (error) {
+              console.warn(`Failed to parse catalog_snapshot for item ${item.id}:`, error);
+            }
+          }
+          
+          // Return first 5 unique URLs as array
+          return Array.from(imageUrls).slice(0, 5);
+        };
+
+        const imageUrls = normalizeImageUrls(item);
+        console.log(`Found ${imageUrls.length} image URLs for item ${item.id}:`, imageUrls);
+
+        // Add images to Shopify product
+        if (imageUrls.length > 0) {
+          let imageSuccessCount = 0;
+          let imageFailCount = 0;
+          
+          for (const imageUrl of imageUrls) {
+            try {
               const imageResponse = await fetch(`${shopifyUrl}products/${productId}/images.json`, {
                 method: 'POST',
                 headers,
@@ -158,13 +239,21 @@ serve(async (req) => {
               
               if (imageResponse.ok) {
                 console.log(`Added image to product ${productId}: ${imageUrl}`);
+                imageSuccessCount++;
               } else {
-                console.warn(`Failed to add image to product ${productId}: ${imageUrl}`);
+                const errorText = await imageResponse.text();
+                console.warn(`Failed to add image to product ${productId}: ${imageUrl} - ${errorText}`);
+                imageFailCount++;
               }
+            } catch (imageError) {
+              console.warn(`Error adding image ${imageUrl} to product ${productId}:`, imageError);
+              imageFailCount++;
             }
-          } catch (imageError) {
-            console.warn(`Error adding images for item ${item.id}:`, imageError);
           }
+          
+          console.log(`Image upload completed for product ${productId}: ${imageSuccessCount} success, ${imageFailCount} failed`);
+        } else {
+          console.log(`No valid image URLs found for item ${item.id}`);
         }
 
         // Set sales channels (point of sale and online)
