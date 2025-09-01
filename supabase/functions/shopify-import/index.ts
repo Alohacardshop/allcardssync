@@ -106,8 +106,18 @@ serve(async (req) => {
           gradingInfo.status
         ].filter(Boolean);
         
-        // Build SKU with PSA cert if available
-        const productSku = item.psa_cert ? `${item.sku}-${item.psa_cert}` : item.sku || `intake-${item.id}`;
+        // Build SKU based on grading status
+        let productSku;
+        if (gradingInfo.isGraded && item.psa_cert) {
+          // For graded cards with PSA cert: PSA + cert number
+          productSku = `PSA${item.psa_cert}`;
+        } else if (gradingInfo.isGraded) {
+          // For other graded cards: company + grade + item id
+          productSku = `${gradingInfo.company}${item.grade || 'UNKNOWN'}-${item.id.slice(-8)}`;
+        } else {
+          // For raw cards: use existing SKU or fallback
+          productSku = item.sku || `intake-${item.id}`;
+        }
         
         // Create product payload
         const productData = {
