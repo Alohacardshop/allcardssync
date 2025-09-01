@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { cleanupAuthState } from "@/lib/auth";
 import { SystemHealthCard } from "@/components/admin/SystemHealthCard";
 import { PSAScrapePingCard } from "@/components/admin/PSAScrapePingCard";
+import { PSAApiSettings } from "@/components/admin/PSAApiSettings";
 import { SystemStats } from "@/components/SystemStats";
 import CatalogTab from "@/components/admin/CatalogTab";
 import TCGDatabaseSettings from "@/components/admin/TCGDatabaseSettings";
@@ -142,6 +143,7 @@ const Admin = () => {
           <TabsContent value="system" className="space-y-4">
             <div className="space-y-6">
               <SystemHealthCard />
+              <PSAApiSettings />
               <PSAScrapePingCard />
             </div>
           </TabsContent>
