@@ -87,8 +87,8 @@ export function PSAApiSettings() {
           onConflict: 'key_name'
         });
 
-      // Test with a known certificate number (you might want to change this)
-      const testCertNumber = '12345678'; // Use a valid test cert number
+      // Test with a known certificate number (user can change this in settings)
+      const testCertNumber = '120317196'; // Use the known test cert number
 
       const { data, error } = await supabase.functions.invoke('psa-scrape-v2', {
         body: { 

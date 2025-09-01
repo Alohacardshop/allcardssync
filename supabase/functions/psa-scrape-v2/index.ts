@@ -170,7 +170,7 @@ serve(async (req) => {
 
   console.log('✅ PSA API token found (length:', psaApiToken.length, ')');
 
-  // PSA API call with timeout
+  // PSA API call with timeout - matching jQuery pattern exactly
   console.log('🚀 Starting PSA API call...');
   const requestStart = Date.now();
   const ctrl = new AbortController();
@@ -190,16 +190,20 @@ serve(async (req) => {
     console.log('📡 Making PSA API request...');
     console.log('🔗 URL:', psaApiUrl);
     console.log('🔑 API Token length:', psaApiToken.length);
-    console.log('📋 Request headers:', JSON.stringify({
-      'Authorization': `Bearer ${psaApiToken.substring(0, 10)}...`,
-      'Content-Type': 'application/json'
+    console.log('📋 Request configuration:', JSON.stringify({
+      method: 'GET',
+      url: psaApiUrl,
+      crossDomain: true,
+      headers: {
+        'Authorization': `bearer ${psaApiToken.substring(0, 10)}...`
+      }
     }));
     
     const resp = await fetch(psaApiUrl, {
       method: 'GET',
+      mode: 'cors', // Enable CORS like crossDomain: true
       headers: {
-        'Authorization': `Bearer ${psaApiToken}`,
-        'Content-Type': 'application/json'
+        'Authorization': `bearer ${psaApiToken}`, // lowercase 'bearer' like in your example
       },
       signal: ctrl.signal
     });
