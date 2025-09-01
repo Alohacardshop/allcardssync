@@ -181,7 +181,7 @@ serve(async (req) => {
 
   const requestPayload = {
     url: psaUrl,
-    formats: ['markdown'],
+    formats: ['markdown', 'html'],
     onlyMainContent: true,
     timeout: 18000,
     waitFor: 2000
@@ -326,10 +326,34 @@ serve(async (req) => {
     }
   });
 
-  // Enhanced parsing with better patterns - back to regex extraction
-  const isValid = text.includes('PSA Certification Verification') && 
-                 !text.includes('not found') && 
-                 !text.includes('No results found');
+  // Enhanced validity detection - check for multiple indicators
+  const validityIndicators = [
+    'PSA Certification Verification',
+    'According to the PSA database',
+    'PSA Estimate',
+    'Item Grade',
+    /Grade[:\s]*\d+/,
+    /Brand[:\s]*[A-Z]/,
+    /\d{4}\s+[A-Z]/  // Year followed by brand pattern
+  ];
+  
+  const invalidIndicators = [
+    'not found',
+    'No results found',
+    'Invalid certification number',
+    'Certificate not found'
+  ];
+  
+  const hasValidIndicators = validityIndicators.some(indicator => {
+    if (typeof indicator === 'string') {
+      return text.includes(indicator);
+    } else {
+      return indicator.test(text);
+    }
+  });
+  
+  const hasInvalidIndicators = invalidIndicators.some(indicator => text.includes(indicator));
+  const isValid = hasValidIndicators && !hasInvalidIndicators;
 
   console.log('✅ Certificate validity check:', isValid);
 
@@ -380,47 +404,88 @@ serve(async (req) => {
     return null;
   };
 
-  // Extract fields with multiple patterns
+  // HTML table parsing fallback
+  const parseHTMLTable = (htmlContent: string): Partial<PSACertificateData> => {
+    const result: Partial<PSACertificateData> = {};
+    
+    // Look for table rows with labels and values
+    const tablePatterns = {
+      grade: /<td[^>]*>\s*(?:Item\s+)?Grade\s*<\/td>\s*<td[^>]*>\s*([^<]+)\s*<\/td>/i,
+      year: /<td[^>]*>\s*Year\s*<\/td>\s*<td[^>]*>\s*(\d{4})\s*<\/td>/i,
+      brand: /<td[^>]*>\s*(?:Brand|Brand\/Title)\s*<\/td>\s*<td[^>]*>\s*([^<]+)\s*<\/td>/i,
+      subject: /<td[^>]*>\s*Subject\s*<\/td>\s*<td[^>]*>\s*([^<]+)\s*<\/td>/i,
+      cardNumber: /<td[^>]*>\s*Card\s+Number\s*<\/td>\s*<td[^>]*>\s*([^<]+)\s*<\/td>/i,
+      varietyPedigree: /<td[^>]*>\s*Variety\/Pedigree\s*<\/td>\s*<td[^>]*>\s*([^<]+)\s*<\/td>/i,
+      category: /<td[^>]*>\s*Category\s*<\/td>\s*<td[^>]*>\s*([^<]+)\s*<\/td>/i
+    };
+    
+    for (const [field, pattern] of Object.entries(tablePatterns)) {
+      const match = htmlContent.match(pattern);
+      if (match && match[1]) {
+        const value = match[1].trim().replace(/\s+/g, ' ');
+        if (value && value.length > 0) {
+          console.log(`🎯 HTML table found ${field}:`, value);
+          result[field as keyof PSACertificateData] = value;
+        }
+      }
+    }
+    
+    return result;
+  };
+
+  // Try HTML table parsing first if available
+  let htmlTableData: Partial<PSACertificateData> = {};
+  if (html) {
+    htmlTableData = parseHTMLTable(html);
+  }
+
+  // Extract fields with multiple patterns and fallback to HTML table data
   const brand = getKnownValue('brand') || extractField('Brand', [
-    'Brand[:\\s]*([^\\n\\r]+)',
     'Brand/Title[:\\s]*([^\\n\\r]+)',
+    'Brand[:\\s]*([^\\n\\r]+)',
     '\\*{2}Brand[:\\s]*([^\\n\\r]+)',
     'POKEMON[^\\n\\r]*DRI[^\\n\\r]*EN[^\\n\\r]*DESTINED[^\\n\\r]*RIVALS'
-  ]);
+  ]) || htmlTableData.brandTitle;
 
   const grade = getKnownValue('grade') || extractField('Grade', [
-    'Grade[:\\s]*(\\d{1,2})',
+    'Item Grade[:\\s]*([^\\n\\r\\s]+)',
+    'Grade[:\\s]*([^\\n\\r\\s]+)',
     'PSA[:\\s]*(\\d{1,2})',
-    '\\*{2}Grade[:\\s]*(\\d{1,2})'
-  ]);
+    '\\*{2}Grade[:\\s]*(\\d{1,2})',
+    'GEM MT (\\d+)',
+    'MINT (\\d+)'
+  ]) || htmlTableData.grade;
 
   const subject = getKnownValue('subject') || extractField('Subject', [
     'Subject[:\\s]*([^\\n\\r]+)',
     '\\*{2}Subject[:\\s]*([^\\n\\r]+)',
     "ROCKET'S MEWTWO EX"
-  ]);
+  ]) || htmlTableData.subject;
 
   const year = getKnownValue('year') || extractField('Year', [
     'Year[:\\s]*(\\d{4})',
-    '\\*{2}Year[:\\s]*(\\d{4})'
-  ]);
+    '\\*{2}Year[:\\s]*(\\d{4})',
+    '(\\d{4})\\s+[A-Z]'  // Year followed by brand
+  ]) || htmlTableData.year;
 
   const cardNumber = getKnownValue('cardNumber') || extractField('Card Number', [
     'Card Number[:\\s]*([^\\n\\r]+)',
     '\\*{2}Card Number[:\\s]*([^\\n\\r]+)',
-    '#(\\d+)'
-  ]);
+    '#(\\d+)',
+    'Number[:\\s]*([^\\n\\r]+)'
+  ]) || htmlTableData.cardNumber;
 
   const varietyPedigree = getKnownValue('varietyPedigree') || extractField('Variety/Pedigree', [
     'Variety/Pedigree[:\\s]*([^\\n\\r]+)',
     '\\*{2}Variety/Pedigree[:\\s]*([^\\n\\r]+)',
     'SPECIAL ILLUSTRATION RARE'
-  ]);
+  ]) || htmlTableData.varietyPedigree;
 
   const category = getKnownValue('category') || extractField('Category', [
     'Category[:\\s]*([^\\n\\r]+)',
-    '\\*{2}Category[:\\s]*([^\\n\\r]+)'
-  ]);
+    '\\*{2}Category[:\\s]*([^\\n\\r]+)',
+    'TCG Cards'
+  ]) || htmlTableData.category;
 
   // Auto-detect game/sport
   const gameSport = getKnownValue('gameSport') || (brand && brand.toLowerCase().includes('pokemon') ? 'pokemon' : null);
@@ -442,23 +507,49 @@ serve(async (req) => {
 
   console.log('📊 Final extracted certificate data:', JSON.stringify(certData, null, 2));
 
-  // Extract images from the original HTML/markdown if available
+  // Enhanced image extraction from both HTML and markdown
   const imgs: string[] = [];
   const rawHtml = data?.html || '';
   const rawMarkdown = data?.markdown || '';
   
+  // Extract from HTML
   if (rawHtml) {
+    // Open Graph image
     const og = rawHtml.match(/<meta[^>]+property=['"]og:image['"][^>]+content=['"]([^'"]+)['"]/i)?.[1];
     if (og) imgs.push(og);
+    
+    // All img tags
     const tags = rawHtml.match(/<img[^>]+src=['"]([^'"]+)['"]/gi) || [];
     for (const t of tags) {
       const u = t.match(/src=['"]([^'"]+)['"]/i)?.[1];
       if (u && !imgs.includes(u)) imgs.push(u);
     }
   }
+  
+  // Extract from markdown
+  if (rawMarkdown) {
+    // Markdown image syntax ![alt](url)
+    const mdImages = rawMarkdown.match(/!\[([^\]]*)\]\(([^)]+)\)/g) || [];
+    for (const mdImg of mdImages) {
+      const url = mdImg.match(/!\[([^\]]*)\]\(([^)]+)\)/)?.[2];
+      if (url && !imgs.includes(url)) imgs.push(url);
+    }
+    
+    // Direct URLs to PSA CDN
+    const cdnUrls = rawMarkdown.match(/https:\/\/d1htnxwo4o0jhw\.cloudfront\.net\/[^\s)]+/g) || [];
+    for (const url of cdnUrls) {
+      if (!imgs.includes(url)) imgs.push(url);
+    }
+  }
 
-  certData.imageUrl = imgs[0] ?? null;
-  certData.imageUrls = imgs;
+  // Filter out non-image URLs and ensure they're valid
+  const validImages = imgs.filter(img => {
+    if (!img || typeof img !== 'string') return false;
+    return img.match(/\.(jpg|jpeg|png|gif|webp)$/i) || img.includes('cloudfront.net');
+  });
+
+  certData.imageUrl = validImages[0] || null;
+  certData.imageUrls = validImages;
 
   // Temporary hardcoded override for cert 120317196 while parser is refined
   if (cert === '120317196') {
@@ -545,7 +636,7 @@ serve(async (req) => {
         firecrawlStatus,
         firecrawlMs,
         totalMs,
-        formats: ['markdown'],
+        formats: ['markdown', 'html'],
         usedCache: false,
         dbSaved: true
       }

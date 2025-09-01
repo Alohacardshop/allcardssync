@@ -9,6 +9,78 @@ import { Loader2, Award, ChevronDown, ChevronUp, AlertCircle } from "lucide-reac
 import { useStore } from "@/contexts/StoreContext";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { invokePSAScrapeV2 } from "@/lib/psaServiceV2";
+import { normalizePSAData } from "@/lib/psaNormalization";
+
+  const handleFetchPSA = async () => {
+    if (!psaCert.trim()) {
+      toast({
+        title: "Error",
+        description: "Please enter a PSA certificate number",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsFetching(true);
+    setFetchedData(null);
+    setError(null);
+
+    try {
+      const response = await invokePSAScrapeV2({
+        cert: psaCert.trim(),
+        forceRefresh: false
+      }, 45000);
+
+      if (response?.ok) {
+        const normalizedData = normalizePSAData(response);
+        
+        setFetchedData(normalizedData);
+        
+        // Pre-populate form with normalized data
+        setFormData({
+          ...formData,
+          brand: normalizedData.brandTitle || '',
+          subject: normalizedData.subject || '',
+          grade: normalizedData.grade || '',
+          year: normalizedData.year || '',
+          card_number: normalizedData.cardNumber || '',
+          variety: normalizedData.varietyPedigree || '',
+          category: normalizedData.category || '',
+          game: normalizedData.gameSport || 'pokemon',
+        });
+
+        if (normalizedData.isValid) {
+          toast({
+            title: "Success",
+            description: "PSA data fetched successfully",
+          });
+        } else {
+          toast({
+            title: "Warning",
+            description: "PSA certificate found but may have incomplete data",
+            variant: "destructive",
+          });
+        }
+      } else {
+        setError(response?.error || 'Failed to fetch PSA data');
+        toast({
+          title: "Error", 
+          description: response?.error || "Failed to fetch PSA data",
+          variant: "destructive",
+        });
+      }
+    } catch (err: any) {
+      const errorMsg = err?.message || 'Failed to fetch PSA data';
+      setError(errorMsg);
+      toast({
+        title: "Error",
+        description: errorMsg,
+        variant: "destructive",
+      });
+    } finally {
+      setIsFetching(false);
+    }
+  };
 import { AllLocationsSelector } from "@/components/AllLocationsSelector";
 
 export const GradedCardIntake = () => {
