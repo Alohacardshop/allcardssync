@@ -16,7 +16,9 @@ import { StoreSelector } from "@/components/StoreSelector";
 import { useStore } from "@/contexts/StoreContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { RefreshCw, AlertTriangle, ShoppingCart } from "lucide-react";
+import { RefreshCw, AlertTriangle, ShoppingCart, Printer } from "lucide-react";
+import { usePrintNode } from "@/hooks/usePrintNode";
+import { generateLabelTSPL } from "@/lib/labelTemplates";
 
 // Simple SEO helpers without extra deps
 function useSEO(opts: { title: string; description?: string; canonical?: string }) {
@@ -90,6 +92,8 @@ type ItemRow = {
 export default function Inventory() {
   const { selectedStore } = useStore();
   const [selectedLocationGid, setSelectedLocationGid] = useState<string | null>(null);
+  const { selectedPrinter, printRAW, isConnected: isPrintNodeConnected } = usePrintNode();
+  
   useSEO({
     title: "Card Inventory | Aloha",
     description: "View all cards in inventory with lot numbers, IDs, status, price, and more.",
@@ -490,6 +494,123 @@ export default function Inventory() {
     handlePushToShopify([itemId]);
   };
 
+  const handlePrintLabel = async (item: ItemRow) => {
+    if (!selectedPrinter) {
+      toast.error("No printer selected. Please configure PrintNode settings.");
+      return;
+    }
+
+    try {
+      const title = buildTitleFromParts(item.year, item.brand_title, item.card_number, item.subject, item.variant);
+      const labelData = {
+        title: title || "Card",
+        sku: item.psa_cert || item.sku || item.id,
+        price: item.price ? `$${item.price}` : "$0.00",
+        lot: item.lot_number,
+        condition: item.grade || "Near Mint",
+        barcode: item.sku || item.id
+      };
+
+      const tsplCode = generateLabelTSPL('graded-card', labelData);
+      await printRAW(tsplCode, { title: `Label - ${title}` });
+      
+      // Update printed_at timestamp
+      await supabase
+        .from('intake_items')
+        .update({ printed_at: new Date().toISOString() })
+        .eq('id', item.id);
+
+      toast.success("Label printed successfully");
+      
+      // Refresh the current page data
+      window.location.reload();
+      
+    } catch (error) {
+      console.error('Print error:', error);
+      toast.error("Failed to print label: " + (error instanceof Error ? error.message : "Unknown error"));
+    }
+  };
+
+  const handlePushAndPrint = async (itemIds: string[]) => {
+    if (!selectedStore) {
+      toast.error("Please select a store first");
+      return;
+    }
+
+    if (!selectedPrinter) {
+      toast.error("No printer selected. Please configure PrintNode settings.");
+      return;
+    }
+
+    if (itemIds.length === 0) {
+      toast.error("No items selected");
+      return;
+    }
+
+    setProcessingIds(prev => new Set([...prev, ...itemIds]));
+
+    try {
+      // First push to Shopify
+      await handlePushToShopify(itemIds);
+      
+      // Then print labels for all items
+      const { data: itemsToPrint, error: fetchError } = await supabase
+        .from("intake_items")
+        .select("*")
+        .in("id", itemIds)
+        .is("deleted_at", null);
+
+      if (fetchError) throw fetchError;
+
+      if (itemsToPrint && itemsToPrint.length > 0) {
+        for (const item of itemsToPrint) {
+          const title = buildTitleFromParts(item.year, item.brand_title, item.card_number, item.subject, item.variant);
+          const labelData = {
+            title: title || "Card",
+            sku: item.psa_cert || item.sku || item.id,
+            price: item.price ? `$${item.price}` : "$0.00",
+            lot: item.lot_number,
+            condition: item.grade || "Near Mint",
+            barcode: item.sku || item.id
+          };
+
+          const tsplCode = generateLabelTSPL('graded-card', labelData);
+          await printRAW(tsplCode, { title: `Label - ${title}` });
+        }
+
+        // Update printed_at timestamp for all items
+        await supabase
+          .from('intake_items')
+          .update({ printed_at: new Date().toISOString() })
+          .in('id', itemIds);
+
+        toast.success(`Successfully pushed ${itemsToPrint.length} items to Shopify and printed labels`);
+      }
+
+    } catch (error) {
+      console.error('Push and print error:', error);
+      toast.error("Failed to push and print: " + (error instanceof Error ? error.message : "Unknown error"));
+    } finally {
+      setProcessingIds(prev => {
+        const newSet = new Set(prev);
+        itemIds.forEach(id => newSet.delete(id));
+        return newSet;
+      });
+    }
+  };
+
+  const handleBulkPushAndPrint = () => {
+    if (selectedIds.size === 0) {
+      toast.error("Please select items to push and print");
+      return;
+    }
+    handlePushAndPrint(Array.from(selectedIds));
+  };
+
+  const handleSinglePushAndPrint = (itemId: string) => {
+    handlePushAndPrint([itemId]);
+  };
+
   const handleDeleteRow = async (row: ItemRow) => {
     const reason = window.prompt("Delete reason (optional)?") || null;
     try {
@@ -590,15 +711,28 @@ export default function Inventory() {
                     Clear selection
                   </Button>
                 </div>
-                <Button
-                  size="sm"
-                  onClick={handleBulkPush}
-                  disabled={!selectedStore || processingIds.size > 0}
-                  className="flex items-center gap-2"
-                >
-                  <ShoppingCart className="h-4 w-4" />
-                  Push to Shopify ({selectedIds.size})
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    onClick={handleBulkPush}
+                    disabled={!selectedStore || processingIds.size > 0}
+                    variant="outline"
+                    className="flex items-center gap-2"
+                  >
+                    <ShoppingCart className="h-4 w-4" />
+                    Push to Shopify ({selectedIds.size})
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={handleBulkPushAndPrint}
+                    disabled={!selectedStore || !isPrintNodeConnected || processingIds.size > 0}
+                    className="flex items-center gap-2"
+                  >
+                    <ShoppingCart className="h-4 w-4" />
+                    <Printer className="h-4 w-4" />
+                    Push + Print ({selectedIds.size})
+                  </Button>
+                </div>
               </div>
             )}
             
@@ -969,32 +1103,42 @@ export default function Inventory() {
                         <TableCell className="text-right">
                           <div className="flex gap-2 justify-end">
                             {canPush && (
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleSinglePush(it.id)}
+                                  disabled={!selectedStore || isProcessing}
+                                  className="flex items-center gap-1"
+                                >
+                                  <ShoppingCart className="h-3 w-3" />
+                                  {isProcessing ? "Pushing..." : "Push"}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="default"
+                                  onClick={() => handleSinglePushAndPrint(it.id)}
+                                  disabled={!selectedStore || !isPrintNodeConnected || isProcessing}
+                                  className="flex items-center gap-1"
+                                >
+                                  <ShoppingCart className="h-3 w-3" />
+                                  <Printer className="h-3 w-3" />
+                                  {isProcessing ? "Processing..." : "Push + Print"}
+                                </Button>
+                              </>
+                            )}
+                            {!it.printed_at && (
                               <Button
                                 size="sm"
-                                variant="outline"
-                                onClick={() => handleSinglePush(it.id)}
-                                disabled={!selectedStore || isProcessing}
+                                variant="secondary"
+                                onClick={() => handlePrintLabel(it)}
+                                disabled={!isPrintNodeConnected}
                                 className="flex items-center gap-1"
                               >
-                                <ShoppingCart className="h-3 w-3" />
-                                {isProcessing ? "Pushing..." : "Push"}
-                              </Button>
-                            )}
-                            <Link
-                              to="/labels"
-                              state={{
-                                title,
-                                sku: (it.psa_cert || it.sku || it.id) + (it.grade ? `-${it.grade.replace(/\s+/g, '')}` : ''),
-                                price: it.price?.toString(),
-                                lot: it.lot_number,
-                                condition: it.grade || "Near Mint",
-                                barcode: it.sku || it.id
-                              }}
-                            >
-                              <Button size="sm" variant="secondary">
+                                <Printer className="h-3 w-3" />
                                 Print
                               </Button>
-                            </Link>
+                            )}
                             <Button size="sm" variant="destructive" onClick={() => handleDeleteRow(it)}>
                               Delete
                             </Button>

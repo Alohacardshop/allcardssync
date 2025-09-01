@@ -157,11 +157,10 @@ export default function Index() {
       
       switch (action) {
         case 'inventory':
-          // Update items to mark as sent to inventory
+          // Update items to mark as sent to inventory (without pushed_at)
           await supabase
             .from('intake_items')
             .update({ 
-              pushed_at: new Date().toISOString(),
               processing_notes: 'Sent to inventory'
             })
             .in('id', Array.from(selectedItems));
@@ -181,7 +180,6 @@ export default function Index() {
           await supabase
             .from('intake_items')
             .update({ 
-              pushed_at: new Date().toISOString(),
               processing_notes: 'Batch completed'
             })
             .in('id', Array.from(selectedItems));
@@ -205,7 +203,6 @@ export default function Index() {
       await supabase
         .from('intake_items')
         .update({ 
-          pushed_at: new Date().toISOString(),
           processing_notes: 'Sent to inventory'
         })
         .eq('id', itemId);
