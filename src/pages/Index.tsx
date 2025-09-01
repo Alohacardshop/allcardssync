@@ -145,10 +145,14 @@ const Index = () => {
   };
 
   const handleInventoryAction = async (itemIds: string[]) => {
-    if (itemIds.length === 0) return;
+    if (itemIds.length === 0) {
+      toast.error('Please select items to send to inventory');
+      return;
+    }
 
     try {
       setActionLoading(true);
+      console.log('Sending items to inventory:', itemIds);
 
       // Mark items as removed from batch
       const { error } = await supabase
@@ -160,9 +164,13 @@ const Index = () => {
         })
         .in('id', itemIds);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Inventory update error:', error);
+        throw error;
+      }
 
       toast.success(`Successfully sent ${itemIds.length} item(s) to inventory`);
+      console.log('Items successfully sent to inventory');
       
       // Clear selection and refresh
       setSelectedItems(new Set());
@@ -170,7 +178,7 @@ const Index = () => {
       await fetchData();
     } catch (error) {
       console.error('Error updating items:', error);
-      toast.error('Error sending items to inventory');
+      toast.error(`Error sending items to inventory: ${error?.message || 'Unknown error'}`);
     } finally {
       setActionLoading(false);
     }
@@ -421,15 +429,20 @@ const Index = () => {
                           >
                             {actionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Print Labels"}
                           </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleInventoryAction(Array.from(selectedItems))}
-                            disabled={actionLoading}
-                          >
-                            {actionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Archive className="h-4 w-4" />}
-                            Inventory
-                          </Button>
+                           <Button
+                             size="sm"
+                             variant="outline"
+                             onClick={() => handleInventoryAction(Array.from(selectedItems))}
+                             disabled={actionLoading}
+                             className="bg-green-50 hover:bg-green-100 border-green-200 text-green-700"
+                           >
+                             {actionLoading ? (
+                               <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                             ) : (
+                               <Archive className="h-4 w-4 mr-2" />
+                             )}
+                             Send to Inventory
+                           </Button>
                           <Button
                             size="sm"
                             variant="outline"
