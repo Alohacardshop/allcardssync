@@ -106,7 +106,7 @@ serve(async (req) => {
       .select('*')
       .eq('cert_number', cert)
       .gte('scraped_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()) // 24 hours ago
-      .single();
+      .maybeSingle();
 
     if (cacheError && cacheError.code !== 'PGRST116') {
       console.log('⚠️ Database cache check error:', cacheError);
@@ -289,43 +289,64 @@ serve(async (req) => {
   console.log('🔍 Starting data extraction from PSA API response...');
   
   // Check if the certificate is valid based on API response
-  const isValid = !!payload && !payload.error && (payload.certNumber || payload.CertNumber);
+  const isValid = !!payload && !payload.error;
   console.log('✅ Certificate validity check:', isValid);
 
-  // Extract fields directly from PSA API response
-  const extractApiField = (fieldNames: string[]): string | null => {
-    for (const fieldName of fieldNames) {
-      const value = payload[fieldName];
-      if (value && typeof value === 'string' && value.trim()) {
-        return value.trim();
+  // Build a flat, case-insensitive index of all fields in the payload
+  const flat = new Map<string, any>();
+  const norm = (k: string) => k.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const walk = (obj: any, path: string[] = []) => {
+    if (!obj || typeof obj !== 'object') return;
+    for (const [k, v] of Object.entries(obj)) {
+      const nk = norm(k);
+      const full = norm([...path, k].join('_'));
+      if (v && typeof v === 'object' && !Array.isArray(v)) {
+        walk(v, [...path, k]);
+      } else {
+        if (typeof v === 'string' || typeof v === 'number' || Array.isArray(v)) {
+          flat.set(nk, v);
+          flat.set(full, v);
+        }
+      }
+    }
+  };
+  walk(payload);
+  console.log('🧭 Flattened keys count:', flat.size);
+
+  const get = (...aliases: string[]): string | null => {
+    for (const alias of aliases) {
+      const na = norm(alias);
+      for (const [k, v] of flat.entries()) {
+        if (k === na || k.endsWith(na)) {
+          if (v == null) continue;
+          const val = Array.isArray(v) ? v[0] : v;
+          const s = String(val).trim();
+          if (s) return s;
+        }
       }
     }
     return null;
   };
 
-  // Map PSA API fields to our internal structure
-  const brand = extractApiField(['Brand', 'BrandTitle', 'brand', 'brandTitle']);
-  const grade = extractApiField(['Grade', 'ItemGrade', 'grade', 'itemGrade']);
-  const subject = extractApiField(['Subject', 'subject']);
-  const year = extractApiField(['Year', 'year']);
-  const cardNumber = extractApiField(['CardNumber', 'cardNumber', 'Number', 'number']);
-  const varietyPedigree = extractApiField(['VarietyPedigree', 'varietyPedigree', 'Variety', 'variety']);
-  const category = extractApiField(['Category', 'category']);
-  const gameSport = extractApiField(['GameSport', 'gameSport', 'Game', 'game']) || 
-                   (brand && brand.toLowerCase().includes('pokemon') ? 'pokemon' : null);
-  
-  // Handle image URLs
-  let imageUrls: string[] = [];
-  const imageUrl = extractApiField(['ImageUrl', 'imageUrl', 'Image', 'image']);
-  if (imageUrl) {
-    imageUrls.push(imageUrl);
+  // Map PSA API fields to our internal structure using robust aliasing
+  const brand = get('brandTitle', 'brand', 'title');
+  const grade = get('itemGrade', 'grade', 'psaGrade');
+  const subject = get('subject', 'cardTitle', 'player', 'name');
+  const year = get('year', 'issuedYear', 'releaseYear');
+  const cardNumber = get('cardNumber', 'number', 'cardNo', 'no');
+  const varietyPedigree = get('varietyPedigree', 'variety', 'pedigree', 'descriptor');
+  const category = get('category', 'productType', 'type');
+  const gameSport = get('gameSport', 'sport', 'game') || (brand && brand.toLowerCase().includes('pokemon') ? 'pokemon' : null);
+
+  // Collect image URLs from any fields containing "image"
+  const imageSet = new Set<string>();
+  for (const [k, v] of flat.entries()) {
+    if (k.includes('image')) {
+      if (typeof v === 'string' && v.startsWith('http')) imageSet.add(v);
+      if (Array.isArray(v)) v.filter(u => typeof u === 'string' && u.startsWith('http')).forEach(u => imageSet.add(u));
+    }
   }
-  
-  // Check for array of images
-  const imagesArray = payload.Images || payload.images || payload.ImageUrls || payload.imageUrls;
-  if (Array.isArray(imagesArray)) {
-    imageUrls = [...imageUrls, ...imagesArray.filter(url => url && typeof url === 'string')];
-  }
+  const imageUrls = Array.from(imageSet);
 
   console.log('🔍 Extracted PSA API data:');
   console.log('- Brand:', brand);
