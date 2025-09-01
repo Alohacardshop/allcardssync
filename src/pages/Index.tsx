@@ -149,7 +149,7 @@ export default function Index() {
     }
   };
 
-  const handleBatchAction = async (action: 'inventory' | 'shop' | 'complete' | 'shopify') => {
+  const handleBatchAction = async (action: 'inventory' | 'complete') => {
     if (selectedItems.size === 0) return;
 
     try {
@@ -167,38 +167,6 @@ export default function Index() {
             .in('id', Array.from(selectedItems));
           
           toast.success(`${selectedItems.size} items sent to inventory`);
-          break;
-          
-        case 'shop':
-          // Update items to mark as sent to shop
-          await supabase
-            .from('intake_items')
-            .update({ 
-              pushed_at: new Date().toISOString(),
-              processing_notes: 'Sent to shop'
-            })
-            .in('id', Array.from(selectedItems));
-          
-          toast.success(`${selectedItems.size} items sent to shop`);
-          break;
-          
-        case 'shopify':
-          // Push to Shopify
-          if (!selectedStore) {
-            toast.error("Please select a store first");
-            return;
-          }
-
-          // Push to Shopify with correct payload
-          const { error } = await supabase.functions.invoke("shopify-import", { 
-            body: { 
-              items: selectedItemsList,
-              storeKey: selectedStore 
-            }
-          });
-          
-          if (error) throw error;
-          toast.success(`${selectedItems.size} items pushed to Shopify`);
           break;
           
         case 'complete':
@@ -232,24 +200,22 @@ export default function Index() {
     }
   };
 
-  const handleSingleItemAction = async (itemId: string, action: 'inventory' | 'shop') => {
+  const handleSingleItemAction = async (itemId: string, action: 'inventory') => {
     try {
-      const actionText = action === 'inventory' ? 'inventory' : 'shop';
-      
       await supabase
         .from('intake_items')
         .update({ 
           pushed_at: new Date().toISOString(),
-          processing_notes: `Sent to ${actionText}`
+          processing_notes: 'Sent to inventory'
         })
         .eq('id', itemId);
       
-      toast.success(`Item sent to ${actionText}`);
+      toast.success('Item sent to inventory');
       await loadItems();
       
     } catch (error) {
       console.error('Single item action error:', error);
-      toast.error(`Failed to send item to ${action}`);
+      toast.error('Failed to send item to inventory');
     }
   };
 
@@ -674,25 +640,6 @@ export default function Index() {
                     Send to Inventory
                   </Button>
                   <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleBatchAction('shop')}
-                    disabled={selectedItems.size === 0}
-                  >
-                    <ShoppingCart className="h-4 w-4 mr-2" />
-                    Send to Shop
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleBatchAction('shopify')}
-                    disabled={selectedItems.size === 0 || !selectedStore}
-                    title={!selectedStore ? "Select a store in your profile settings" : "Push selected items to Shopify"}
-                  >
-                    <Archive className="h-4 w-4 mr-2" />
-                    Push to Shopify ({selectedItems.size})
-                  </Button>
-                  <Button
                     variant="default"
                     size="sm"
                     onClick={() => handleBatchAction('complete')}
@@ -909,15 +856,6 @@ export default function Index() {
                               >
                                 <Package className="h-3 w-3 mr-1" />
                                 Inventory
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleSingleItemAction(item.id, 'shop')}
-                                className="h-6 px-2 text-xs"
-                              >
-                                <ShoppingCart className="h-3 w-3 mr-1" />
-                                Shop
                               </Button>
                             </>
                           )}
