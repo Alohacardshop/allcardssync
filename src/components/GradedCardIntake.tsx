@@ -10,77 +10,6 @@ import { useStore } from "@/contexts/StoreContext";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { invokePSAScrapeV2 } from "@/lib/psaServiceV2";
 import { normalizePSAData } from "@/lib/psaNormalization";
-
-  const handleFetchPSA = async () => {
-    if (!psaCert.trim()) {
-      toast({
-        title: "Error",
-        description: "Please enter a PSA certificate number",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsFetching(true);
-    setFetchedData(null);
-    setError(null);
-
-    try {
-      const response = await invokePSAScrapeV2({
-        cert: psaCert.trim(),
-        forceRefresh: false
-      }, 45000);
-
-      if (response?.ok) {
-        const normalizedData = normalizePSAData(response);
-        
-        setFetchedData(normalizedData);
-        
-        // Pre-populate form with normalized data
-        setFormData({
-          ...formData,
-          brand: normalizedData.brandTitle || '',
-          subject: normalizedData.subject || '',
-          grade: normalizedData.grade || '',
-          year: normalizedData.year || '',
-          card_number: normalizedData.cardNumber || '',
-          variety: normalizedData.varietyPedigree || '',
-          category: normalizedData.category || '',
-          game: normalizedData.gameSport || 'pokemon',
-        });
-
-        if (normalizedData.isValid) {
-          toast({
-            title: "Success",
-            description: "PSA data fetched successfully",
-          });
-        } else {
-          toast({
-            title: "Warning",
-            description: "PSA certificate found but may have incomplete data",
-            variant: "destructive",
-          });
-        }
-      } else {
-        setError(response?.error || 'Failed to fetch PSA data');
-        toast({
-          title: "Error", 
-          description: response?.error || "Failed to fetch PSA data",
-          variant: "destructive",
-        });
-      }
-    } catch (err: any) {
-      const errorMsg = err?.message || 'Failed to fetch PSA data';
-      setError(errorMsg);
-      toast({
-        title: "Error",
-        description: errorMsg,
-        variant: "destructive",
-      });
-    } finally {
-      setIsFetching(false);
-    }
-  };
 import { AllLocationsSelector } from "@/components/AllLocationsSelector";
 
 export const GradedCardIntake = () => {
@@ -127,25 +56,28 @@ export const GradedCardIntake = () => {
     setFetching(true);
     
     try {
-      // Use the centralized PSA service with extended timeout
+      // Use the enhanced PSA service with both markdown and HTML
       const data = await invokePSAScrapeV2({ cert: psaCert.trim(), forceRefresh: true }, 45000);
 
       if (data && data.ok) {
         console.log('PSA data received successfully:', JSON.stringify(data, null, 2));
-        setCardData(data);
+        
+        // Normalize the data to handle older cert formats
+        const normalizedData = normalizePSAData(data);
+        setCardData(normalizedData);
         
         const newFormData = {
-          brandTitle: data.brand || data.brandTitle || "",
-          subject: data.subject || "",
-          category: data.category || "",
-          variant: data.varietyPedigree || "",
-          cardNumber: data.cardNumber || "",
-          year: data.year || "",
-          grade: data.grade || "",
-          game: data.gameSport || 
-                (data.category?.toLowerCase().includes('pokemon') ? 'pokemon' : 
-                 data.category?.toLowerCase().includes('magic') ? 'mtg' : ""),
-          certNumber: data.certNumber || psaCert.trim(),
+          brandTitle: normalizedData.brandTitle || "",
+          subject: normalizedData.subject || "",
+          category: normalizedData.category || "",
+          variant: normalizedData.varietyPedigree || "",
+          cardNumber: normalizedData.cardNumber || "",
+          year: normalizedData.year || "",
+          grade: normalizedData.grade || "",
+          game: normalizedData.gameSport || 
+                (normalizedData.category?.toLowerCase().includes('pokemon') ? 'pokemon' : 
+                 normalizedData.category?.toLowerCase().includes('magic') ? 'mtg' : ""),
+          certNumber: normalizedData.certNumber || psaCert.trim(),
           price: "",
           cost: "",
           quantity: 1,
@@ -160,10 +92,10 @@ export const GradedCardIntake = () => {
         ).length;
         setPopulatedFieldsCount(populatedCount);
 
-        if (data.isValid) {
+        if (normalizedData.isValid) {
           toast.success(`PSA certificate verified - ${populatedCount} fields populated`);
         } else {
-          toast.warning(`PSA certificate found but invalid - ${populatedCount} fields populated`);
+          toast.warning(`PSA certificate found but may have incomplete data - ${populatedCount} fields populated`);
         }
       } else {
         const errorMsg = data?.error || 'Invalid response from PSA scraping service';
@@ -225,7 +157,9 @@ export const GradedCardIntake = () => {
 
         // PSA linkage + snapshots for search
         psa_cert: formData.certNumber,
-        image_urls: cardData?.imageUrls ? JSON.stringify(cardData.imageUrls) : null,
+        image_urls: cardData?.imageUrls && Array.isArray(cardData.imageUrls) 
+          ? JSON.stringify(cardData.imageUrls) 
+          : null,
         source_provider: 'psa',
         psa_snapshot: cardData, // NEW column name (JSONB)
         grading_data: {

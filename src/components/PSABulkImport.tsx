@@ -11,6 +11,7 @@ import { Upload, FileText, Download } from "lucide-react";
 import { useStore } from "@/contexts/StoreContext";
 import { v4 as uuidv4 } from 'uuid';
 import { invokePSAScrapeV2 } from "@/lib/psaServiceV2";
+import { normalizePSAData } from "@/lib/psaNormalization";
 
 interface PSAImportItem {
   psaCert: string;
@@ -83,8 +84,10 @@ export const PSABulkImport = () => {
         price: 0, // Default price, can be updated later
         // Set product weight: 3 oz for graded cards (PSA)
         product_weight: 3.0,
-        // Store image URLs if available
-        image_urls: item.data?.imageUrls ? JSON.stringify(item.data.imageUrls) : null,
+        // Store image URLs with proper array handling
+        image_urls: item.data?.imageUrls && Array.isArray(item.data.imageUrls) 
+          ? JSON.stringify(item.data.imageUrls) 
+          : null,
         // New comprehensive data capture fields
         source_provider: 'scrape',
         source_payload: {
@@ -144,20 +147,23 @@ export const PSABulkImport = () => {
         const psaData = await scrapePSAData(item.psaCert);
         
         if (psaData && psaData.ok) {
-          // Update with scraped data
+          // Normalize the PSA data to handle older cert formats
+          const normalizedData = normalizePSAData(psaData);
+          
+          // Update with normalized data
           updatedItems[i] = {
             ...item,
             data: {
-              title: psaData.brand || psaData.subject,
-              year: psaData.year,
-              grade: psaData.grade,
-              brandTitle: psaData.brand || psaData.brandTitle,
-              subject: psaData.subject,
-              category: psaData.category,
-              game: psaData.gameSport,
-              imageUrl: psaData.imageUrl,
-              imageUrls: psaData.imageUrls || [],
-              source: psaData.source
+              title: normalizedData.brandTitle || normalizedData.subject,
+              year: normalizedData.year,
+              grade: normalizedData.grade,
+              brandTitle: normalizedData.brandTitle,
+              subject: normalizedData.subject,
+              category: normalizedData.category,
+              game: normalizedData.gameSport,
+              imageUrl: normalizedData.imageUrl,
+              imageUrls: normalizedData.imageUrls || [],
+              source: normalizedData.source
             }
           };
 
