@@ -173,12 +173,16 @@ export default function Inventory() {
   }, []);
 
   useEffect(() => {
+    let isCancelled = false;
+    
     const fetchData = async () => {
+      if (isCancelled) return;
+      
       setLoading(true);
       setError(null);
       
       try {
-        console.log('Loading intake items from DB');
+        console.log('Loading intake items from DB...');
         
         let query = supabase
           .from("intake_items")
@@ -217,7 +221,7 @@ export default function Inventory() {
         if (pushed === "pushed") query = query.not("pushed_at", "is", null);
         if (pushed === "unpushed") query = query.is("pushed_at", null);
 
-        // New filter logic
+        // Type filter logic
         if (typeFilter === "graded") {
           query = query.not("psa_cert", "is", null);
         } else if (typeFilter === "raw") {
@@ -266,21 +270,32 @@ export default function Inventory() {
           throw new Error(`Database error: ${error.message}`);
         }
         
-        setItems((data as ItemRow[]) || []);
-        setTotal(count || 0);
-        console.log(`Loaded ${(data || []).length} items out of ${count || 0} total`);
+        if (!isCancelled) {
+          setItems((data as ItemRow[]) || []);
+          setTotal(count || 0);
+          console.log(`Loaded ${(data || []).length} items out of ${count || 0} total`);
+        }
         
       } catch (e: any) {
-        console.error('Fetch error:', e);
-        setError(e.message || 'Failed to load inventory');
-        setItems([]);
-        setTotal(0);
+        if (!isCancelled) {
+          console.error('Fetch error:', e);
+          setError(e.message || 'Failed to load inventory');
+          setItems([]);
+          setTotal(0);
+        }
       } finally {
-        setLoading(false);
+        if (!isCancelled) {
+          setLoading(false);
+        }
       }
     };
 
-    fetchData();
+    const timeoutId = setTimeout(fetchData, 100); // Debounce rapid changes
+    
+    return () => {
+      isCancelled = true;
+      clearTimeout(timeoutId);
+    };
   }, [page, search, printed, pushed, lotFilter, sortKey, sortAsc, typeFilter, conditionFilter, setFilter, categoryFilter, yearFilter, priceRange, selectedLocationGid]);
 
   // Clear selection when page or filters change
