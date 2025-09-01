@@ -91,6 +91,9 @@ serve(async (req) => {
         const game = getGame(item.brand_title);
         const gradingInfo = getGradingInfo(item.grade, item.psa_cert);
         
+        // Determine product weight based on grading status
+        const productWeight = gradingInfo.isGraded ? 3 : 1; // 3oz for graded, 1oz for raw
+        
         // Build comprehensive tags
         const tags = [
           item.category,
@@ -121,7 +124,9 @@ serve(async (req) => {
               barcode: item.psa_cert || productSku,
               inventory_quantity: item.quantity || 1,
               inventory_management: 'shopify',
-              inventory_policy: 'deny'
+              inventory_policy: 'deny',
+              weight: productWeight,
+              weight_unit: 'oz'
             }],
             status: 'active'
           }
