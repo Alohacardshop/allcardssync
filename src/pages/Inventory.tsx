@@ -6,14 +6,17 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { Link } from "react-router-dom";
 import { Navigation } from "@/components/Navigation";
 import { toast } from "sonner";
 import { AllLocationsSelector } from "@/components/AllLocationsSelector";
+import { StoreSelector } from "@/components/StoreSelector";
+import { useStore } from "@/contexts/StoreContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { RefreshCw, AlertTriangle } from "lucide-react";
+import { RefreshCw, AlertTriangle, ShoppingCart } from "lucide-react";
 
 // Simple SEO helpers without extra deps
 function useSEO(opts: { title: string; description?: string; canonical?: string }) {
@@ -85,6 +88,7 @@ type ItemRow = {
 };
 
 export default function Inventory() {
+  const { selectedStore } = useStore();
   const [selectedLocationGid, setSelectedLocationGid] = useState<string | null>(null);
   useSEO({
     title: "Card Inventory | Aloha",
@@ -102,6 +106,10 @@ export default function Inventory() {
   const [lotFilter, setLotFilter] = useState("");
   const [sortKey, setSortKey] = useState<keyof ItemRow>("created_at");
   const [sortAsc, setSortAsc] = useState(false);
+  
+  // Selection state for bulk actions
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [processingIds, setProcessingIds] = useState<Set<string>>(new Set());
   
   // New filters
   const [typeFilter, setTypeFilter] = useState<"all" | "graded" | "raw">("all");
@@ -271,12 +279,215 @@ export default function Inventory() {
     fetchData();
   }, [page, search, printed, pushed, lotFilter, sortKey, sortAsc, typeFilter, conditionFilter, setFilter, categoryFilter, yearFilter, priceRange, selectedLocationGid]);
 
+  // Clear selection when page or filters change
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [page, search, printed, pushed, lotFilter, typeFilter, conditionFilter, setFilter, categoryFilter, yearFilter, priceRange, selectedLocationGid]);
+
   const toggleSort = (key: keyof ItemRow) => {
     if (sortKey === key) setSortAsc((v) => !v);
     else {
       setSortKey(key);
       setSortAsc(false);
     }
+  };
+
+  const handleSelectItem = (itemId: string, checked: boolean) => {
+    const newSelected = new Set(selectedIds);
+    if (checked) {
+      newSelected.add(itemId);
+    } else {
+      newSelected.delete(itemId);
+    }
+    setSelectedIds(newSelected);
+  };
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedIds(new Set(items.map(item => item.id)));
+    } else {
+      setSelectedIds(new Set());
+    }
+  };
+
+  const handlePushToShopify = async (itemIds: string[]) => {
+    if (!selectedStore) {
+      toast.error("Please select a store first");
+      return;
+    }
+
+    if (itemIds.length === 0) {
+      toast.error("No items selected");
+      return;
+    }
+
+    setProcessingIds(prev => new Set([...prev, ...itemIds]));
+
+    try {
+      // Fetch full item data for the selected IDs
+      const { data: fullItems, error: fetchError } = await supabase
+        .from("intake_items")
+        .select("*")
+        .in("id", itemIds)
+        .is("deleted_at", null);
+
+      if (fetchError) throw fetchError;
+
+      if (!fullItems || fullItems.length === 0) {
+        throw new Error("No items found to push");
+      }
+
+      // Filter out items that are already pushed
+      const unpushedItems = fullItems.filter(item => !item.pushed_at);
+      
+      if (unpushedItems.length === 0) {
+        toast.info("All selected items have already been pushed to Shopify");
+        return;
+      }
+
+      if (unpushedItems.length < fullItems.length) {
+        toast.info(`Skipping ${fullItems.length - unpushedItems.length} items that are already pushed`);
+      }
+
+      // Check for items with missing prices (will default to 99999)
+      const itemsWithMissingPrices = unpushedItems.filter(item => !item.price);
+      if (itemsWithMissingPrices.length > 0) {
+        toast.warning(`${itemsWithMissingPrices.length} items have no price and will default to $99,999`);
+      }
+
+      // Push to Shopify using the existing edge function
+      const { error } = await supabase.functions.invoke("shopify-import", {
+        body: {
+          items: unpushedItems,
+          storeKey: selectedStore
+        }
+      });
+
+      if (error) throw error;
+
+      toast.success(`Successfully pushed ${unpushedItems.length} items to Shopify`);
+      
+      // Refresh the current page data
+      const fetchData = async () => {
+        // Reuse the existing fetch logic
+        setLoading(true);
+        try {
+          let query = supabase
+            .from("intake_items")
+            .select("*", { count: "exact" })
+            .order(sortKey as string, { ascending: sortAsc });
+
+          if (selectedLocationGid) {
+            query = query.eq("shopify_location_gid", selectedLocationGid);
+          }
+
+          if (search.trim()) {
+            const term = `%${search.trim()}%`;
+            query = query.or(
+              [
+                `brand_title.ilike.${term}`,
+                `subject.ilike.${term}`,
+                `category.ilike.${term}`,
+                `variant.ilike.${term}`,
+                `card_number.ilike.${term}`,
+                `year.ilike.${term}`,
+                `psa_cert.ilike.${term}`,
+                `sku.ilike.${term}`,
+                `lot_number.ilike.${term}`,
+                `grade.ilike.${term}`,
+              ].join(",")
+            );
+          }
+
+          if (lotFilter.trim()) {
+            query = query.ilike("lot_number", `%${lotFilter.trim()}%`);
+          }
+
+          if (printed === "printed") query = query.not("printed_at", "is", null);
+          if (printed === "unprinted") query = query.is("printed_at", null);
+          if (pushed === "pushed") query = query.not("pushed_at", "is", null);
+          if (pushed === "unpushed") query = query.is("pushed_at", null);
+
+          if (typeFilter === "graded") {
+            query = query.not("psa_cert", "is", null);
+          } else if (typeFilter === "raw") {
+            query = query.is("psa_cert", null);
+          }
+
+          if (conditionFilter.trim()) {
+            query = query.ilike("grade", `%${conditionFilter.trim()}%`);
+          }
+
+          if (setFilter.trim()) {
+            query = query.ilike("brand_title", `%${setFilter.trim()}%`);
+          }
+
+          if (categoryFilter.trim()) {
+            query = query.ilike("category", `%${categoryFilter.trim()}%`);
+          }
+
+          if (yearFilter.trim()) {
+            query = query.ilike("year", `%${yearFilter.trim()}%`);
+          }
+
+          if (priceRange.min.trim()) {
+            const minPrice = parseFloat(priceRange.min);
+            if (!isNaN(minPrice)) {
+              query = query.gte("price", minPrice);
+            }
+          }
+
+          if (priceRange.max.trim()) {
+            const maxPrice = parseFloat(priceRange.max);
+            if (!isNaN(maxPrice)) {
+              query = query.lte("price", maxPrice);
+            }
+          }
+
+          query = query.is("deleted_at", null);
+
+          const from = (page - 1) * pageSize;
+          const to = from + pageSize - 1;
+          const { data, error, count } = await query.range(from, to);
+
+          if (error) throw error;
+
+          setItems((data as ItemRow[]) || []);
+          setTotal(count || 0);
+        } catch (e: any) {
+          console.error('Refresh error:', e);
+        } finally {
+          setLoading(false);
+        }
+      };
+      
+      await fetchData();
+      
+      // Clear selection
+      setSelectedIds(new Set());
+
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to push items to Shopify: " + (e instanceof Error ? e.message : "Unknown error"));
+    } finally {
+      setProcessingIds(prev => {
+        const newSet = new Set(prev);
+        itemIds.forEach(id => newSet.delete(id));
+        return newSet;
+      });
+    }
+  };
+
+  const handleBulkPush = () => {
+    if (selectedIds.size === 0) {
+      toast.error("Please select items to push");
+      return;
+    }
+    handlePushToShopify(Array.from(selectedIds));
+  };
+
+  const handleSinglePush = (itemId: string) => {
+    handlePushToShopify([itemId]);
   };
 
   const handleDeleteRow = async (row: ItemRow) => {
@@ -309,6 +520,7 @@ export default function Inventory() {
     setPriceRange({ min: "", max: "" });
     setSelectedLocationGid(null);
     setPage(1);
+    setSelectedIds(new Set()); // Clear selection on filter clear
   };
 
   useEffect(() => {
@@ -349,7 +561,8 @@ export default function Inventory() {
                   </span>
                 )}
               </div>
-              <div className="flex gap-2">
+              <div className="flex items-center gap-2">
+                <StoreSelector />
                 {error && (
                   <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
                     <RefreshCw className="h-4 w-4 mr-2" />
@@ -361,6 +574,33 @@ export default function Inventory() {
                 </Button>
               </div>
             </div>
+
+            {/* Bulk Actions Toolbar */}
+            {selectedIds.size > 0 && (
+              <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-medium">
+                    {selectedIds.size} item{selectedIds.size !== 1 ? 's' : ''} selected
+                  </span>
+                  <Button
+                    size="sm"
+                    onClick={() => setSelectedIds(new Set())}
+                    variant="ghost"
+                  >
+                    Clear selection
+                  </Button>
+                </div>
+                <Button
+                  size="sm"
+                  onClick={handleBulkPush}
+                  disabled={!selectedStore || processingIds.size > 0}
+                  className="flex items-center gap-2"
+                >
+                  <ShoppingCart className="h-4 w-4" />
+                  Push to Shopify ({selectedIds.size})
+                </Button>
+              </div>
+            )}
             
             {/* Diagnostics Panel */}
             {diagnostics && (process.env.NODE_ENV === 'development' || diagnostics.itemCount === 0) && (
@@ -611,6 +851,13 @@ export default function Inventory() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-12">
+                      <Checkbox
+                        checked={items.length > 0 && selectedIds.size === items.length}
+                        onCheckedChange={handleSelectAll}
+                        aria-label="Select all items on this page"
+                      />
+                    </TableHead>
                     <TableHead>Lot</TableHead>
                     <TableHead>UUID</TableHead>
                     <TableHead>Title</TableHead>
@@ -632,6 +879,7 @@ export default function Inventory() {
                     // Show skeleton rows while loading
                     Array.from({ length: 5 }).map((_, i) => (
                       <TableRow key={i}>
+                        <TableCell><Skeleton className="h-4 w-4" /></TableCell>
                         <TableCell><Skeleton className="h-4 w-20" /></TableCell>
                         <TableCell><Skeleton className="h-4 w-32" /></TableCell>
                         <TableCell><Skeleton className="h-4 w-48" /></TableCell>
@@ -650,7 +898,7 @@ export default function Inventory() {
                     ))
                   ) : items.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={14} className="text-center py-8">
+                      <TableCell colSpan={15} className="text-center py-8">
                         <div className="flex flex-col items-center gap-2">
                           <p className="text-muted-foreground">No items found</p>
                           {(search || lotFilter || selectedLocationGid || printed !== "all" || pushed !== "all" || typeFilter !== "all" || conditionFilter || setFilter || categoryFilter || yearFilter || priceRange.min || priceRange.max) && (
@@ -665,8 +913,19 @@ export default function Inventory() {
                     items.map((it) => {
                       const title = buildTitleFromParts(it.year, it.brand_title, it.card_number, it.subject, it.variant);
                       const isGraded = !!it.psa_cert;
+                      const isSelected = selectedIds.has(it.id);
+                      const isProcessing = processingIds.has(it.id);
+                      const canPush = !it.pushed_at && !isProcessing;
+                      
                       return (
-                      <TableRow key={it.id}>
+                      <TableRow key={it.id} className={isSelected ? "bg-muted/50" : ""}>
+                        <TableCell>
+                          <Checkbox
+                            checked={isSelected}
+                            onCheckedChange={(checked) => handleSelectItem(it.id, checked as boolean)}
+                            aria-label={`Select item ${it.lot_number}`}
+                          />
+                        </TableCell>
                         <TableCell className="font-medium">
                           <button
                             onClick={() => {
@@ -709,6 +968,18 @@ export default function Inventory() {
                         <TableCell>{new Date(it.created_at).toLocaleString()}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex gap-2 justify-end">
+                            {canPush && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleSinglePush(it.id)}
+                                disabled={!selectedStore || isProcessing}
+                                className="flex items-center gap-1"
+                              >
+                                <ShoppingCart className="h-3 w-3" />
+                                {isProcessing ? "Pushing..." : "Push"}
+                              </Button>
+                            )}
                             <Link
                               to="/labels"
                               state={{
