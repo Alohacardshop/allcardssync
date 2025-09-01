@@ -55,13 +55,18 @@ serve(async (req) => {
       try {
         console.log(`Processing item: ${item.subject || item.brand_title}`);
         
-        // Build full inventory title
+        // Build full inventory title with grade information
+        const gradeText = item.grade && item.grade !== 'Raw' && item.grade !== 'Ungraded' 
+          ? (item.psa_cert ? `PSA ${item.grade}` : `Grade ${item.grade}`) 
+          : null;
+          
         const titleParts = [
           item.year,
           item.brand_title,
           item.card_number,
           item.subject,
-          item.variant
+          item.variant,
+          gradeText
         ].filter(Boolean);
         const fullTitle = titleParts.join(' ');
         
