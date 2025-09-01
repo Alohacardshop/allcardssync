@@ -1,0 +1,213 @@
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Archive, Eye, Package } from "lucide-react";
+import { toast } from "sonner";
+
+interface IntakeItem {
+  id: string;
+  card_name?: string;
+  subject?: string;
+  brand_title?: string;
+  sku?: string;
+  set_name?: string;
+  card_number?: string;
+  quantity: number;
+  price: number;
+  lot_number: string;
+  processing_notes?: string;
+  printed_at?: string;
+  pushed_at?: string;
+  game?: string;
+  created_at: string;
+  psa_cert?: string;
+}
+
+interface CurrentBatchPanelProps {
+  onViewFullBatch?: () => void;
+}
+
+export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) => {
+  const [recentItems, setRecentItems] = useState<IntakeItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [totalCount, setTotalCount] = useState(0);
+
+  const fetchRecentItems = async () => {
+    try {
+      // Get latest active lot
+      const { data: latestLot } = await supabase
+        .from('intake_lots')
+        .select('lot_number')
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!latestLot) {
+        setRecentItems([]);
+        setTotalCount(0);
+        return;
+      }
+
+      // Get total count
+      const { count } = await supabase
+        .from('intake_items')
+        .select('id', { count: 'exact' })
+        .eq('lot_number', latestLot.lot_number)
+        .is('deleted_at', null)
+        .is('removed_from_batch_at', null);
+
+      // Get recent items (last 5)
+      const { data: items } = await supabase
+        .from('intake_items')
+        .select('*')
+        .eq('lot_number', latestLot.lot_number)
+        .is('deleted_at', null)
+        .is('removed_from_batch_at', null)
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      setRecentItems(items || []);
+      setTotalCount(count || 0);
+    } catch (error) {
+      console.error('Error fetching recent items:', error);
+      toast.error('Error loading current batch');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchRecentItems();
+
+    // Set up realtime subscription
+    const channel = supabase
+      .channel('intake-items-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'intake_items'
+        },
+        () => {
+          fetchRecentItems();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'intake_items'
+        },
+        () => {
+          fetchRecentItems();
+        }
+      )
+      .subscribe();
+
+    // Listen for custom events from intake forms
+    const handleItemAdded = () => {
+      fetchRecentItems();
+    };
+
+    window.addEventListener('intake:item-added', handleItemAdded);
+    
+    return () => {
+      supabase.removeChannel(channel);
+      window.removeEventListener('intake:item-added', handleItemAdded);
+    };
+  }, []);
+
+  if (loading) {
+    return (
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Archive className="h-5 w-5" />
+            Current Batch
+          </CardTitle>
+          <CardDescription>Loading recent batch items...</CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
+
+  if (totalCount === 0) {
+    return (
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Archive className="h-5 w-5" />
+            Current Batch
+          </CardTitle>
+          <CardDescription>No items in current batch</CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="mt-6">
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Archive className="h-5 w-5" />
+              Current Batch
+              <Badge variant="secondary" className="ml-2">
+                {totalCount} items
+              </Badge>
+            </CardTitle>
+            <CardDescription>Recent items added to the batch</CardDescription>
+          </div>
+          {onViewFullBatch && (
+            <Button variant="outline" size="sm" onClick={onViewFullBatch}>
+              <Eye className="h-4 w-4 mr-2" />
+              View Full Batch
+            </Button>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-3">
+          {recentItems.map((item) => (
+            <div key={item.id} className="flex items-center justify-between p-3 border rounded-lg bg-muted/20">
+              <div className="flex-1">
+                <div className="font-medium text-sm">
+                  {item.card_name || item.subject || item.brand_title || item.sku || 'Unknown Item'}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {item.set_name && `${item.set_name} • `}
+                  {item.card_number && `#${item.card_number} • `}
+                  Qty: {item.quantity} • ${(item.price || 0).toFixed(2)}
+                  {item.game && ` • ${item.game}`}
+                  {item.psa_cert && ` • PSA ${item.psa_cert}`}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {item.printed_at && (
+                  <Badge variant="secondary" className="text-xs">Printed</Badge>
+                )}
+                {item.pushed_at && (
+                  <Badge variant="secondary" className="text-xs">Pushed</Badge>
+                )}
+                <Package className="h-4 w-4 text-muted-foreground" />
+              </div>
+            </div>
+          ))}
+          {totalCount > recentItems.length && (
+            <div className="text-center pt-2 border-t">
+              <p className="text-sm text-muted-foreground">
+                {totalCount - recentItems.length} more items in batch
+              </p>
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+};

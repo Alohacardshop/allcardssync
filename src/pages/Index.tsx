@@ -11,6 +11,7 @@ import { useTemplates } from "@/hooks/useTemplates";
 import { Navigation } from "@/components/Navigation";
 import { GradedCardIntake } from "@/components/GradedCardIntake";
 import RawIntake from "@/components/RawIntake";
+import { CurrentBatchPanel } from "@/components/CurrentBatchPanel";
 
 interface IntakeItem {
   id: string;
@@ -46,6 +47,7 @@ const Index = () => {
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [selectAll, setSelectAll] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState("graded");
   
   const { defaultTemplate } = useTemplates('raw');
 
@@ -100,6 +102,26 @@ const Index = () => {
 
   useEffect(() => {
     fetchData();
+
+    // Set up realtime subscription for system stats updates
+    const channel = supabase
+      .channel('dashboard-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'intake_items'
+        },
+        () => {
+          fetchData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const handleSelectAll = () => {
@@ -327,7 +349,7 @@ const Index = () => {
         </div>
 
         {/* Main Content Tabs */}
-        <Tabs defaultValue="graded" className="w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="graded" className="flex items-center gap-2">
               <Award className="h-4 w-4" />
@@ -343,11 +365,12 @@ const Index = () => {
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="graded" className="mt-6">
+          <TabsContent value="graded" className="mt-6 space-y-6">
             <GradedCardIntake />
+            <CurrentBatchPanel onViewFullBatch={() => setActiveTab("batch")} />
           </TabsContent>
 
-          <TabsContent value="raw" className="mt-6">
+          <TabsContent value="raw" className="mt-6 space-y-6">
             <Card>
               <CardHeader>
                 <CardTitle>Raw Cards Intake</CardTitle>
@@ -357,6 +380,7 @@ const Index = () => {
                 <RawIntake />
               </CardContent>
             </Card>
+            <CurrentBatchPanel onViewFullBatch={() => setActiveTab("batch")} />
           </TabsContent>
 
           <TabsContent value="batch" className="mt-6">
