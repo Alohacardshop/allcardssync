@@ -332,14 +332,15 @@ serve(async (req) => {
           }
         }
 
-        // Update intake item with Shopify IDs
+        // Update intake item with Shopify IDs and SKU
         await supabase
           .from('intake_items')
           .update({
             pushed_at: new Date().toISOString(),
             shopify_product_id: productId.toString(),
             shopify_variant_id: variantId.toString(),
-            shopify_inventory_item_id: inventoryItemId.toString()
+            shopify_inventory_item_id: inventoryItemId.toString(),
+            sku: productSku
           })
           .eq('id', item.id);
 

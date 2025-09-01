@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { log } from "../_shared/log.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -55,35 +56,164 @@ Deno.serve(async (req) => {
 
     const payload = JSON.parse(raw);
 
-    // Handle order-related updates: decrement quantity by sold amount per SKU
+    // Handle order-related updates: decrement quantity by sold amount per SKU with multi-row allocation
     if (topic && topic.startsWith("orders/")) {
+      log.info("Processing Shopify order webhook", {
+        topic,
+        orderId: payload?.id,
+        lineItemsCount: payload?.line_items?.length || 0
+      });
+
       const lineItems: any[] = payload?.line_items || [];
+      const results = [];
+
       for (const li of lineItems) {
         const sku: string | undefined = li?.sku || undefined;
-        const qty: number = Number(li?.quantity || 0);
-        if (!sku || qty <= 0) continue;
+        const requestedQty: number = Number(li?.quantity || 0);
+        
+        if (!sku || requestedQty <= 0) {
+          log.warn("Skipping line item - invalid SKU or quantity", {
+            sku,
+            requestedQty,
+            lineItemId: li?.id
+          });
+          continue;
+        }
 
-        // Find the earliest pushed, non-deleted, positive-qty item with this SKU
+        log.info("Processing line item", {
+          sku,
+          requestedQty,
+          lineItemId: li?.id,
+          productId: li?.product_id,
+          variantId: li?.variant_id
+        });
+
+        // Find all eligible rows for this SKU, ordered by creation date
         const { data: rows, error } = await supabase
           .from("intake_items")
-          .select("id, quantity")
+          .select("id, quantity, lot_number, created_at")
           .eq("sku", sku)
           .is("deleted_at", null)
           .not("pushed_at", "is", null)
           .gt("quantity", 0)
-          .order("created_at", { ascending: true })
-          .limit(1);
-        if (error) throw error;
-        if (!rows || rows.length === 0) continue;
+          .order("created_at", { ascending: true });
 
-        const row = rows[0] as { id: string; quantity: number };
-        const newQty = Math.max(0, Number(row.quantity || 0) - qty);
-        const { error: upErr } = await supabase
-          .from("intake_items")
-          .update({ quantity: newQty })
-          .eq("id", row.id);
-        if (upErr) throw upErr;
+        if (error) {
+          log.error("Failed to fetch intake items", {
+            sku,
+            error: error.message
+          });
+          throw error;
+        }
+
+        if (!rows || rows.length === 0) {
+          log.warn("No eligible intake items found for SKU", {
+            sku,
+            requestedQty
+          });
+          results.push({
+            sku,
+            requestedQty,
+            allocatedQty: 0,
+            status: 'no_inventory'
+          });
+          continue;
+        }
+
+        // Multi-row allocation: cascade decrements across rows
+        let remainingQty = requestedQty;
+        const allocations = [];
+        let totalAvailable = rows.reduce((sum, row) => sum + row.quantity, 0);
+
+        for (const row of rows) {
+          if (remainingQty <= 0) break;
+
+          const availableInRow = Number(row.quantity || 0);
+          const allocateFromRow = Math.min(remainingQty, availableInRow);
+          const newQty = availableInRow - allocateFromRow;
+
+          // Update the row
+          const { error: updateError } = await supabase
+            .from("intake_items")
+            .update({ quantity: newQty })
+            .eq("id", row.id);
+
+          if (updateError) {
+            log.error("Failed to update intake item quantity", {
+              itemId: row.id,
+              sku,
+              originalQty: availableInRow,
+              attemptedDeduction: allocateFromRow,
+              error: updateError.message
+            });
+            throw updateError;
+          }
+
+          allocations.push({
+            itemId: row.id,
+            lotNumber: row.lot_number,
+            originalQty: availableInRow,
+            allocatedQty: allocateFromRow,
+            newQty: newQty,
+            createdAt: row.created_at
+          });
+
+          remainingQty -= allocateFromRow;
+
+          log.info("Applied quantity decrement", {
+            itemId: row.id,
+            sku,
+            lotNumber: row.lot_number,
+            originalQty: availableInRow,
+            allocatedQty: allocateFromRow,
+            newQty: newQty,
+            remainingToAllocate: remainingQty
+          });
+        }
+
+        const totalAllocated = requestedQty - remainingQty;
+        const allocationStatus = remainingQty > 0 ? 'partial_allocation' : 'fully_allocated';
+
+        log.info("Completed SKU allocation", {
+          sku,
+          requestedQty,
+          totalAllocated,
+          remainingQty,
+          totalAvailable,
+          rowsProcessed: allocations.length,
+          status: allocationStatus,
+          allocations: allocations
+        });
+
+        results.push({
+          sku,
+          requestedQty,
+          allocatedQty: totalAllocated,
+          remainingQty,
+          totalAvailable,
+          status: allocationStatus,
+          allocations
+        });
+
+        // Log warning if we couldn't fulfill the full quantity
+        if (remainingQty > 0) {
+          log.warn("Partial allocation - insufficient inventory", {
+            sku,
+            requestedQty,
+            allocatedQty: totalAllocated,
+            shortfall: remainingQty,
+            totalAvailable
+          });
+        }
       }
+
+      log.info("Completed order processing", {
+        orderId: payload?.id,
+        topic,
+        totalLineItems: lineItems.length,
+        processedResults: results.length,
+        summary: results
+      });
     }
 
     return new Response(JSON.stringify({ ok: true }), {
