@@ -3,8 +3,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Archive, Eye, Package } from "lucide-react";
+import { Archive, Eye, Package, Trash2, Send } from "lucide-react";
 import { toast } from "sonner";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 interface IntakeItem {
   id: string;
@@ -33,6 +34,54 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
   const [recentItems, setRecentItems] = useState<IntakeItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [totalCount, setTotalCount] = useState(0);
+
+  const handleSendToInventory = async (itemId: string) => {
+    try {
+      const { error } = await supabase
+        .from('intake_items')
+        .update({ 
+          processing_notes: 'Sent to inventory',
+          removed_from_batch_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', itemId);
+
+      if (error) {
+        console.error('Inventory update error:', error);
+        throw error;
+      }
+
+      toast.success('Item sent to inventory');
+      fetchRecentItems(); // Refresh the list
+    } catch (error) {
+      console.error('Error sending item to inventory:', error);
+      toast.error(`Error sending item to inventory: ${error?.message || 'Unknown error'}`);
+    }
+  };
+
+  const handleDeleteItem = async (itemId: string) => {
+    try {
+      const { error } = await supabase
+        .from('intake_items')
+        .update({ 
+          deleted_at: new Date().toISOString(),
+          deleted_reason: 'Deleted from current batch',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', itemId);
+
+      if (error) {
+        console.error('Delete error:', error);
+        throw error;
+      }
+
+      toast.success('Item deleted');
+      fetchRecentItems(); // Refresh the list
+    } catch (error) {
+      console.error('Error deleting item:', error);
+      toast.error(`Error deleting item: ${error?.message || 'Unknown error'}`);
+    }
+  };
 
   const fetchRecentItems = async () => {
     try {
@@ -195,7 +244,46 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
                 {item.pushed_at && (
                   <Badge variant="secondary" className="text-xs">Pushed</Badge>
                 )}
-                <Package className="h-4 w-4 text-muted-foreground" />
+                
+                {/* Action buttons */}
+                <div className="flex gap-1 ml-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleSendToInventory(item.id)}
+                    className="h-8 px-2 bg-green-50 hover:bg-green-100 border-green-200 text-green-700"
+                    title="Send to Inventory"
+                  >
+                    <Send className="h-3 w-3" />
+                  </Button>
+                  
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 px-2 bg-red-50 hover:bg-red-100 border-red-200 text-red-700"
+                        title="Delete Item"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Delete Item</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Are you sure you want to delete this item? This action cannot be undone.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => handleDeleteItem(item.id)}>
+                          Delete
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
               </div>
             </div>
           ))}
