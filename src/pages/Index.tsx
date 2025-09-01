@@ -8,11 +8,14 @@ import { toast } from "sonner";
 import { Loader2, Package, ShoppingCart, DollarSign, Trash2, Archive } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useTemplateDefault } from "@/hooks/useTemplateDefault";
+import { useTemplates } from "@/hooks/useTemplates";
 
 interface IntakeItem {
   id: string;
-  card_name: string;
+  card_name?: string;
+  subject?: string;
+  brand_title?: string;
+  sku?: string;
   set_name?: string;
   card_number?: string;
   quantity: number;
@@ -51,22 +54,8 @@ const Index = () => {
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [selectAll, setSelectAll] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
-  const [defaultTemplateId, setDefaultTemplateId] = useState<string | null>(null);
   
-  const { getDefaultTemplate } = useTemplateDefault();
-
-  // Load default template
-  useEffect(() => {
-    const loadDefaultTemplate = async () => {
-      try {
-        const template = await getDefaultTemplate('raw');
-        setDefaultTemplateId(template?.id || null);
-      } catch (error) {
-        console.error('Error loading default template:', error);
-      }
-    };
-    loadDefaultTemplate();
-  }, [getDefaultTemplate]);
+  const { defaultTemplate, loading: templatesLoading } = useTemplates('raw');
 
   const fetchData = async () => {
     try {
@@ -79,7 +68,7 @@ const Index = () => {
         .eq('status', 'active')
         .order('created_at', { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
 
       let currentBatch: IntakeItem[] = [];
       if (latestLot) {
@@ -246,7 +235,7 @@ const Index = () => {
 
   const handlePrintLabels = async (itemIds: string[]) => {
     if (itemIds.length === 0) return;
-    if (!defaultTemplateId) {
+    if (!defaultTemplate) {
       toast.error('No default template found. Please set a default template first.');
       return;
     }
@@ -254,13 +243,17 @@ const Index = () => {
     try {
       setActionLoading(true);
 
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+
       // Create print jobs for selected items
       const printJobs = itemIds.map(itemId => ({
-        intake_item_id: itemId,
-        template_id: defaultTemplateId,
-        status: 'queued' as const,
         workstation_id: 'dashboard',
-        created_by: (await supabase.auth.getUser()).data.user?.id
+        template_id: defaultTemplate.id,
+        status: 'queued' as const,
+        data: { intake_item_id: itemId },
+        target: { type: 'intake_item', id: itemId },
+        copies: 1
       }));
 
       const { error: printError } = await supabase
@@ -435,11 +428,13 @@ const Index = () => {
                       className="rounded"
                     />
                     <div className="flex-1">
-                      <div className="font-medium">{item.card_name}</div>
+                      <div className="font-medium">
+                        {item.card_name || item.subject || item.brand_title || item.sku || 'Unknown Item'}
+                      </div>
                       <div className="text-sm text-muted-foreground">
                         {item.set_name && `${item.set_name} • `}
                         {item.card_number && `#${item.card_number} • `}
-                        Qty: {item.quantity} • ${item.price.toFixed(2)}
+                        Qty: {item.quantity} • ${(item.price || 0).toFixed(2)}
                         {item.game && ` • ${item.game}`}
                       </div>
                       {item.processing_notes && (
