@@ -158,6 +158,7 @@ export type Database = {
           psa_verified: boolean | null
           pushed_at: string | null
           quantity: number
+          removed_from_batch_at: string | null
           shopify_inventory_item_id: string | null
           shopify_location_gid: string | null
           shopify_product_id: string | null
@@ -204,6 +205,7 @@ export type Database = {
           psa_verified?: boolean | null
           pushed_at?: string | null
           quantity?: number
+          removed_from_batch_at?: string | null
           shopify_inventory_item_id?: string | null
           shopify_location_gid?: string | null
           shopify_product_id?: string | null
@@ -250,6 +252,7 @@ export type Database = {
           psa_verified?: boolean | null
           pushed_at?: string | null
           quantity?: number
+          removed_from_batch_at?: string | null
           shopify_inventory_item_id?: string | null
           shopify_location_gid?: string | null
           shopify_product_id?: string | null

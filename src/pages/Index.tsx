@@ -1,905 +1,497 @@
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
-import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { useStore } from "@/contexts/StoreContext";
-import { Package, FileText, Plus, Trash2, Archive, Eye, ShoppingCart, CheckCircle, Edit3, Save, X } from "lucide-react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
-import { Link } from "react-router-dom";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
-import { SystemStats } from "@/components/SystemStats";
-import { LoadingSpinner } from "@/components/LoadingSpinner";
-import { Navigation } from "@/components/Navigation";
-import { GradedCardIntake } from "@/components/GradedCardIntake";
-import { RawCardIntake } from "@/components/RawCardIntake";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Loader2, Package, ShoppingCart, DollarSign, Trash2, Archive } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useTemplateDefault } from "@/hooks/useTemplateDefault";
 
 interface IntakeItem {
   id: string;
-  sku: string;
-  subject: string;
-  brand_title: string;
-  category: string;
+  card_name: string;
+  set_name?: string;
+  card_number?: string;
   quantity: number;
   price: number;
-  cost?: number;
-  grade?: string;
-  psa_cert?: string;
-  year?: string;
-  card_number?: string;
-  variant?: string;
-  psa_cert_number?: string;
   lot_number: string;
-  created_at: string;
+  processing_notes?: string;
   printed_at?: string;
   pushed_at?: string;
-  deleted_at?: string;
+  game?: string;
+  created_at: string;
+  updated_at: string;
+  removed_from_batch_at?: string;
 }
 
-export default function Index() {
-  const [items, setItems] = useState<IntakeItem[]>([]);
-  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
-  const [editingItem, setEditingItem] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState<{
-    price: string;
-    quantity: string;
-    subject: string;
-    brand_title: string;
-  }>({
-    price: '',
-    quantity: '',
-    subject: '',
-    brand_title: ''
-  });
-  const [loading, setLoading] = useState(true);
-  const [batchNumber, setBatchNumber] = useState("");
-  const [batchDialogOpen, setBatchDialogOpen] = useState(false);
-  const [processingBatch, setProcessingBatch] = useState(false);
-  const { selectedStore, selectedLocation } = useStore();
-  const { toast: toastHook } = useToast();
+interface IntakeLot {
+  id: string;
+  lot_number: string;
+  total_items: number;
+  total_value: number;
+  status: string;
+  created_at: string;
+}
 
-  const loadItems = async () => {
+interface SystemStats {
+  total_items: number;
+  total_value: number;
+  items_printed: number;
+  items_pushed: number;
+}
+
+const Index = () => {
+  const [currentBatchItems, setCurrentBatchItems] = useState<IntakeItem[]>([]);
+  const [recentLots, setRecentLots] = useState<IntakeLot[]>([]);
+  const [systemStats, setSystemStats] = useState<SystemStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+  const [selectAll, setSelectAll] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [defaultTemplateId, setDefaultTemplateId] = useState<string | null>(null);
+  
+  const { getDefaultTemplate } = useTemplateDefault();
+
+  // Load default template
+  useEffect(() => {
+    const loadDefaultTemplate = async () => {
+      try {
+        const template = await getDefaultTemplate('raw');
+        setDefaultTemplateId(template?.id || null);
+      } catch (error) {
+        console.error('Error loading default template:', error);
+      }
+    };
+    loadDefaultTemplate();
+  }, [getDefaultTemplate]);
+
+  const fetchData = async () => {
     try {
       setLoading(true);
-      let query = supabase
-        .from("intake_items")
-        .select("*")
-        .is("deleted_at", null)
-        .order("created_at", { ascending: false })
-        .limit(100);
 
-      if (selectedStore) {
-        query = query.eq("store_key", selectedStore);
+      // Get current batch items (latest lot, not removed from batch, not deleted)
+      const { data: latestLot } = await supabase
+        .from('intake_lots')
+        .select('lot_number')
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      let currentBatch: IntakeItem[] = [];
+      if (latestLot) {
+        const { data: batchItems } = await supabase
+          .from('intake_items')
+          .select('*')
+          .eq('lot_number', latestLot.lot_number)
+          .is('deleted_at', null)
+          .is('removed_from_batch_at', null)
+          .order('created_at', { ascending: false });
+
+        currentBatch = batchItems || [];
       }
-      if (selectedLocation) {
-        query = query.eq("shopify_location_gid", selectedLocation);
-      }
 
-      const { data, error } = await query;
+      // Get recent lots
+      const { data: lots } = await supabase
+        .from('intake_lots')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(10);
 
-      if (error) throw error;
-      setItems(data || []);
+      // Get system stats
+      const { data: stats } = await supabase
+        .from('intake_items')
+        .select('quantity, price, printed_at, pushed_at')
+        .is('deleted_at', null);
+
+      const systemStats: SystemStats = {
+        total_items: stats?.reduce((sum, item) => sum + item.quantity, 0) || 0,
+        total_value: stats?.reduce((sum, item) => sum + (item.price * item.quantity), 0) || 0,
+        items_printed: stats?.filter(item => item.printed_at).length || 0,
+        items_pushed: stats?.filter(item => item.pushed_at).length || 0
+      };
+
+      setCurrentBatchItems(currentBatch);
+      setRecentLots(lots || []);
+      setSystemStats(systemStats);
     } catch (error) {
-      console.error("Error loading items:", error);
-      toastHook({
-        title: "Error",
-        description: "Failed to load current batch",
-        variant: "destructive",
-      });
+      console.error('Error fetching data:', error);
+      toast.error('Error loading dashboard data');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadItems();
-  }, [selectedStore, selectedLocation]);
-
-  // Real-time update handler for intake items
-  useEffect(() => {
-    const handler = (e: any) => {
-      const row = e.detail; // full intake_items row
-      console.log('New item added to batch:', row);
-      
-      // Prepend the new item to the list for immediate feedback
-      setItems(prevItems => [row, ...prevItems.slice(0, 99)]); // Keep only 100 items
-    };
-    
-    window.addEventListener('intake:item-added', handler);
-    return () => window.removeEventListener('intake:item-added', handler);
+    fetchData();
   }, []);
 
-  const handleSelectItem = (itemId: string, checked: boolean) => {
-    const newSelected = new Set(selectedItems);
-    if (checked) {
-      newSelected.add(itemId);
+  const handleSelectAll = () => {
+    if (selectAll) {
+      setSelectedItems(new Set());
     } else {
+      setSelectedItems(new Set(currentBatchItems.map(item => item.id)));
+    }
+    setSelectAll(!selectAll);
+  };
+
+  const handleItemSelect = (itemId: string) => {
+    const newSelected = new Set(selectedItems);
+    if (newSelected.has(itemId)) {
       newSelected.delete(itemId);
+    } else {
+      newSelected.add(itemId);
     }
     setSelectedItems(newSelected);
+    setSelectAll(newSelected.size === currentBatchItems.length);
   };
 
-  const handleSelectAll = (checked: boolean) => {
-    if (checked) {
-      setSelectedItems(new Set(items.map(item => item.id)));
-    } else {
-      setSelectedItems(new Set());
-    }
-  };
-
-  const handleBatchAction = async (action: 'inventory' | 'complete') => {
-    if (selectedItems.size === 0) return;
+  const handleInventoryAction = async (itemIds: string[]) => {
+    if (itemIds.length === 0) return;
 
     try {
-      const selectedItemsList = items.filter(item => selectedItems.has(item.id));
-      
-      switch (action) {
-        case 'inventory':
-          // Update items to mark as sent to inventory (without pushed_at)
-          await supabase
-            .from('intake_items')
-            .update({ 
-              processing_notes: 'Sent to inventory'
-            })
-            .in('id', Array.from(selectedItems));
-          
-          toast.success(`${selectedItems.size} items sent to inventory`);
-          break;
-          
-        case 'complete':
-          // Mark batch as completed
-          const lotNumbers = [...new Set(selectedItemsList.map(item => item.lot_number))];
-          
-          await supabase
-            .from('intake_lots')
-            .update({ status: 'completed' })
-            .in('lot_number', lotNumbers);
-            
-          await supabase
-            .from('intake_items')
-            .update({ 
-              processing_notes: 'Batch completed'
-            })
-            .in('id', Array.from(selectedItems));
-          
-          toast.success(`Batch completed for ${selectedItems.size} items`);
-          break;
-      }
-      
-      // Refetch data and clear selection
-      await loadItems();
-      setSelectedItems(new Set());
-      
-    } catch (error) {
-      console.error('Batch action error:', error);
-      toast.error('Failed to process batch action');
-    }
-  };
+      setActionLoading(true);
 
-  const handleSingleItemAction = async (itemId: string, action: 'inventory') => {
-    try {
-      await supabase
+      // Mark items as removed from batch
+      const { error } = await supabase
         .from('intake_items')
         .update({ 
-          processing_notes: 'Sent to inventory'
+          processing_notes: 'Sent to inventory',
+          removed_from_batch_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
         })
-        .eq('id', itemId);
-      
-      toast.success('Item sent to inventory');
-      await loadItems();
-      
-    } catch (error) {
-      console.error('Single item action error:', error);
-      toast.error('Failed to send item to inventory');
-    }
-  };
-
-  const startEditing = (item: IntakeItem) => {
-    setEditingItem(item.id);
-    setEditForm({
-      price: item.price?.toString() || '',
-      quantity: item.quantity?.toString() || '',
-      subject: item.subject || '',
-      brand_title: item.brand_title || ''
-    });
-  };
-
-  const cancelEditing = () => {
-    setEditingItem(null);
-    setEditForm({
-      price: '',
-      quantity: '',
-      subject: '',
-      brand_title: ''
-    });
-  };
-
-  const saveEdit = async (itemId: string) => {
-    try {
-      await supabase
-        .from('intake_items')
-        .update({
-          price: parseFloat(editForm.price) || 0,
-          quantity: parseInt(editForm.quantity) || 1,
-          subject: editForm.subject,
-          brand_title: editForm.brand_title
-        })
-        .eq('id', itemId);
-      
-      toast.success('Item updated successfully');
-      setEditingItem(null);
-      await loadItems();
-    } catch (error) {
-      console.error('Save error:', error);
-      toast.error('Failed to save changes');
-    }
-  };
-
-  const handleBatchItems = async () => {
-    if (selectedItems.size === 0) {
-      toastHook({
-        title: "No items selected",
-        description: "Please select items to batch",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (!batchNumber.trim()) {
-      toastHook({
-        title: "Batch number required",
-        description: "Please enter a batch number",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setProcessingBatch(true);
-    try {
-      // Update all selected items with the batch number
-      const { error } = await supabase
-        .from("intake_items")
-        .update({ lot_number: batchNumber.trim() })
-        .in("id", Array.from(selectedItems));
+        .in('id', itemIds);
 
       if (error) throw error;
 
-      toastHook({
-        title: "Batch created successfully",
-        description: `${selectedItems.size} items added to batch ${batchNumber}`,
-      });
-
-      // Clear selections and refresh
+      toast.success(`Successfully sent ${itemIds.length} item(s) to inventory`);
+      
+      // Clear selection and refresh
       setSelectedItems(new Set());
-      setBatchNumber("");
-      setBatchDialogOpen(false);
-      await loadItems();
+      setSelectAll(false);
+      await fetchData();
     } catch (error) {
-      console.error("Error batching items:", error);
-      toastHook({
-        title: "Error",
-        description: "Failed to create batch",
-        variant: "destructive",
-      });
+      console.error('Error updating items:', error);
+      toast.error('Error sending items to inventory');
     } finally {
-      setProcessingBatch(false);
+      setActionLoading(false);
     }
   };
 
-  const handleDeleteItems = async () => {
-    if (selectedItems.size === 0) {
-      toastHook({
-        title: "No items selected",
-        description: "Please select items to delete",
-        variant: "destructive",
-      });
-      return;
-    }
+  const handleCompleteAction = async (itemIds: string[]) => {
+    if (itemIds.length === 0) return;
 
     try {
-      // Soft delete by setting deleted_at timestamp
+      setActionLoading(true);
+
+      // Mark items as complete and removed from batch
       const { error } = await supabase
-        .from("intake_items")
+        .from('intake_items')
         .update({ 
-          deleted_at: new Date().toISOString(),
-          deleted_reason: "Batch deletion from dashboard"
+          processing_notes: 'Completed',
+          removed_from_batch_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
         })
-        .in("id", Array.from(selectedItems));
+        .in('id', itemIds);
 
       if (error) throw error;
 
-      toastHook({
-        title: "Items deleted",
-        description: `${selectedItems.size} items have been deleted`,
-      });
-
-      // Clear selections and refresh
+      toast.success(`Successfully completed ${itemIds.length} item(s)`);
+      
+      // Clear selection and refresh
       setSelectedItems(new Set());
-      await loadItems();
+      setSelectAll(false);
+      await fetchData();
     } catch (error) {
-      console.error("Error deleting items:", error);
-      toastHook({
-        title: "Error", 
-        description: "Failed to delete items",
-        variant: "destructive",
-      });
+      console.error('Error updating items:', error);
+      toast.error('Error completing items');
+    } finally {
+      setActionLoading(false);
     }
   };
 
-  const handleDeleteSingleItem = async (itemId: string) => {
+  const handleDeleteAction = async (itemIds: string[]) => {
+    if (itemIds.length === 0) return;
+
     try {
+      setActionLoading(true);
+
       const { error } = await supabase
-        .from("intake_items")
+        .from('intake_items')
         .update({ 
           deleted_at: new Date().toISOString(),
-          deleted_reason: "Individual deletion from dashboard"
+          deleted_reason: 'Deleted from dashboard',
+          updated_at: new Date().toISOString()
         })
-        .eq("id", itemId);
+        .in('id', itemIds);
 
       if (error) throw error;
 
-      toast.success("Item deleted successfully");
-      await loadItems();
+      toast.success(`Successfully deleted ${itemIds.length} item(s)`);
+      
+      // Clear selection and refresh
+      setSelectedItems(new Set());
+      setSelectAll(false);
+      await fetchData();
     } catch (error) {
-      console.error("Error deleting item:", error);
-      toast.error("Failed to delete item");
+      console.error('Error deleting items:', error);
+      toast.error('Error deleting items');
+    } finally {
+      setActionLoading(false);
     }
   };
 
-  const handleDeleteEntireBatch = async () => {
-    if (items.length === 0) {
-      toastHook({
-        title: "No items to delete",
-        description: "Current batch is empty",
-        variant: "destructive",
-      });
+  const handlePrintLabels = async (itemIds: string[]) => {
+    if (itemIds.length === 0) return;
+    if (!defaultTemplateId) {
+      toast.error('No default template found. Please set a default template first.');
       return;
     }
 
-    const currentLotNumber = items[0]?.lot_number;
-    const lotItems = items.filter(item => item.lot_number === currentLotNumber);
-    
     try {
-      // Try to use admin_delete_batch RPC function first
-      const lotRecord = await supabase
-        .from('intake_lots')
-        .select('id')
-        .eq('lot_number', currentLotNumber)
-        .single();
+      setActionLoading(true);
 
-      if (lotRecord.data?.id) {
-        const { error: rpcError } = await supabase.rpc('admin_delete_batch', {
-          lot_id_in: lotRecord.data.id,
-          reason_in: 'Entire batch deleted from dashboard'
-        });
+      // Create print jobs for selected items
+      const printJobs = itemIds.map(itemId => ({
+        intake_item_id: itemId,
+        template_id: defaultTemplateId,
+        status: 'queued' as const,
+        workstation_id: 'dashboard',
+        created_by: (await supabase.auth.getUser()).data.user?.id
+      }));
 
-        if (!rpcError) {
-          toastHook({
-            title: "Batch deleted",
-            description: `${lotItems.length} items deleted from batch ${currentLotNumber}`,
-          });
-          await loadItems();
-          return;
-        }
-      }
+      const { error: printError } = await supabase
+        .from('print_jobs')
+        .insert(printJobs);
 
-      // Fallback: individual soft delete
-      const { error } = await supabase
-        .from("intake_items")
+      if (printError) throw printError;
+
+      // Update items as printed
+      const { error: updateError } = await supabase
+        .from('intake_items')
         .update({ 
-          deleted_at: new Date().toISOString(),
-          deleted_reason: "Entire batch deletion from dashboard"
+          printed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
         })
-        .eq("lot_number", currentLotNumber);
+        .in('id', itemIds);
 
-      if (error) throw error;
+      if (updateError) throw updateError;
 
-      toastHook({
-        title: "Batch deleted",
-        description: `${lotItems.length} items deleted from batch ${currentLotNumber}`,
-      });
-      await loadItems();
+      toast.success(`Successfully queued ${itemIds.length} label(s) for printing`);
+      
+      // Clear selection and refresh
+      setSelectedItems(new Set());
+      setSelectAll(false);
+      await fetchData();
     } catch (error) {
-      console.error("Error deleting batch:", error);
-      toastHook({
-        title: "Error",
-        description: "Failed to delete batch",
-        variant: "destructive",
-      });
+      console.error('Error printing labels:', error);
+      toast.error('Error printing labels');
+    } finally {
+      setActionLoading(false);
     }
-  };
-
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD'
-    }).format(price);
-  };
-
-  const formatItemTitle = (item: IntakeItem) => {
-    const parts: string[] = [];
-
-    // Year
-    if (item.year) parts.push(item.year);
-
-    // Brand / Set (uppercase)
-    if (item.brand_title) parts.push(item.brand_title.toUpperCase());
-
-    // Card number
-    if (item.card_number) parts.push(`#${item.card_number}`);
-
-    // Subject (uppercase but keep certain suffixes like "ex" lowercase)
-    if (item.subject) {
-      let subj = item.subject.toUpperCase();
-      // Preserve common lowercase suffix tokens
-      subj = subj.replace(/\bEX\b/g, "ex");
-      parts.push(subj);
-    }
-
-    // Variant / Rarity (uppercase)
-    if (item.variant) parts.push(item.variant.toUpperCase());
-
-    // Grade -> always render as "PSA X" when grade is present
-    if (item.grade) {
-      const gradeStr = String(item.grade).trim();
-      const numMatch = gradeStr.match(/(\d+(?:\.\d+)?)/);
-      const numeric = numMatch?.[1];
-
-      if (/psa/i.test(gradeStr)) {
-        // If PSA already present, normalize to "PSA <num|text>"
-        const cleaned = gradeStr.replace(/psa/i, "").trim();
-        const cleanedNum = cleaned.match(/(\d+(?:\.\d+)?)/)?.[1];
-        parts.push(`PSA ${cleanedNum ?? cleaned.toUpperCase()}`);
-      } else {
-        parts.push(`PSA ${numeric ?? gradeStr.toUpperCase()}`);
-      }
-    }
-
-    return parts.join(" ") || item.subject || "Untitled Item";
-  };
-
-  const getItemType = (item: IntakeItem) => {
-    const brandLower = item.brand_title?.toLowerCase() || '';
-    const categoryLower = item.category?.toLowerCase() || '';
-    const subjectLower = item.subject?.toLowerCase() || '';
-    
-    if (brandLower.includes('pokemon') || categoryLower.includes('pokemon') || subjectLower.includes('pokemon')) {
-      return 'Pokemon';
-    }
-    if (brandLower.includes('magic') || categoryLower.includes('magic') || brandLower.includes('mtg')) {
-      return 'Magic: The Gathering';
-    }
-    
-    return item.category || 'Trading Card';
   };
 
   if (loading) {
-    return <LoadingSpinner />;
+    return (
+      <div className="flex items-center justify-center min-h-[50vh]">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <Navigation />
-      <div className="container mx-auto p-6 space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-3xl font-bold">Dashboard</h1>
-          <div className="flex gap-2">
-            <Link to="/bulk-import">
-              <Button variant="outline" size="sm">
-                <Plus className="h-4 w-4 mr-2" />
-                Bulk Import
-              </Button>
-            </Link>
-            {selectedItems.size > 0 && (
-              <>
-                <Dialog open={batchDialogOpen} onOpenChange={setBatchDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button variant="outline" size="sm">
-                    <Archive className="h-4 w-4 mr-2" />
-                    Batch ({selectedItems.size})
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Create Batch</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4">
-                    <div>
-                      <Label htmlFor="batchNumber">Batch Number</Label>
-                      <Input
-                        id="batchNumber"
-                        value={batchNumber}
-                        onChange={(e) => setBatchNumber(e.target.value)}
-                        placeholder="Enter batch number..."
-                      />
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      {selectedItems.size} items will be added to this batch
-                    </p>
-                  </div>
-                  <div className="flex gap-2 justify-end">
-                    <Button 
-                      variant="outline" 
-                      onClick={() => setBatchDialogOpen(false)}
-                      disabled={processingBatch}
-                    >
-                      Cancel
-                    </Button>
-                    <Button 
-                      onClick={handleBatchItems}
-                      disabled={processingBatch}
-                    >
-                      {processingBatch ? "Creating..." : "Create Batch"}
-                    </Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
-
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="destructive" size="sm">
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Delete ({selectedItems.size})
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Delete Items</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Are you sure you want to delete {selectedItems.size} selected items? 
-                      This action cannot be undone.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleDeleteItems}>
-                      Delete
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-              </>
-            )}
-          </div>
-        </div>
-        
-        <SystemStats />
-
-        {/* Single Card Entry Forms */}
+    <div className="container mx-auto p-6 space-y-6">
+      {/* System Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
-          <CardHeader>
-            <CardTitle>Single Card Entry</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Add individual graded or raw cards to inventory
-            </p>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Items</CardTitle>
+            <Package className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <Tabs defaultValue="graded" className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="graded">Graded Card</TabsTrigger>
-                <TabsTrigger value="raw">Raw Card</TabsTrigger>
-              </TabsList>
-              <TabsContent value="graded" className="mt-6">
-                <GradedCardIntake />
-              </TabsContent>
-              <TabsContent value="raw" className="mt-6">
-                <RawCardIntake />
-              </TabsContent>
-            </Tabs>
+            <div className="text-2xl font-bold">{systemStats?.total_items || 0}</div>
           </CardContent>
         </Card>
-
-        {/* Recent Inventory Items */}
         <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Value</CardTitle>
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">${systemStats?.total_value?.toFixed(2) || '0.00'}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Items Printed</CardTitle>
+            <Package className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{systemStats?.items_printed || 0}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Items Pushed</CardTitle>
+            <ShoppingCart className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{systemStats?.items_pushed || 0}</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Current Batch */}
+      <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <Package className="h-5 w-5" />
-              Current Batch
-              {items.length > 0 && items[0]?.lot_number && (
-                <Badge variant="outline" className="ml-2">
-                  {items[0].lot_number}
-                </Badge>
-              )}
-            </CardTitle>
-            <div className="flex items-center gap-2">
-              {items.length > 0 && (
-                <>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleBatchAction('inventory')}
-                    disabled={selectedItems.size === 0}
-                  >
-                    <Package className="h-4 w-4 mr-2" />
-                    Send to Inventory
-                  </Button>
-                  <Button
-                    variant="default"
-                    size="sm"
-                    onClick={() => handleBatchAction('complete')}
-                    disabled={selectedItems.size === 0}
-                  >
-                    <CheckCircle className="h-4 w-4 mr-2" />
-                    Complete Batch
-                  </Button>
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                      >
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Delete Entire Batch
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Delete Entire Batch</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          Are you sure you want to delete the entire batch? This will delete {items.filter(item => item.lot_number === items[0]?.lot_number).length} items from batch {items[0]?.lot_number}. This action cannot be undone.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleDeleteEntireBatch}>
-                          Delete Batch
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                </>
-              )}
-              <Checkbox
-                checked={selectedItems.size === items.length && items.length > 0}
-                onCheckedChange={handleSelectAll}
-              />
-              <Label>Select All</Label>
-            </div>
-          </div>
-          {items.length > 0 && (
-            <div className="text-sm text-muted-foreground mt-2">
-              {items.length} items • {selectedItems.size} selected • 
-              Total value: ${items.filter(item => selectedItems.has(item.id))
-                .reduce((sum, item) => sum + (item.price * item.quantity), 0).toFixed(2)}
-            </div>
-          )}
+          <CardTitle>Current Batch</CardTitle>
+          <CardDescription>
+            Items in the active batch that haven't been processed yet
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          {items.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <Package className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>No items in current batch</p>
+          {currentBatchItems.length === 0 ? (
+            <p className="text-muted-foreground">No items in current batch</p>
+          ) : (
+            <div className="space-y-4">
+              {/* Selection controls */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    checked={selectAll}
+                    onChange={handleSelectAll}
+                    className="rounded"
+                  />
+                  <span className="text-sm text-muted-foreground">
+                    Select all ({selectedItems.size} selected)
+                  </span>
+                </div>
+                
+                {/* Action buttons */}
+                {selectedItems.size > 0 && (
+                  <div className="flex space-x-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handlePrintLabels(Array.from(selectedItems))}
+                      disabled={actionLoading}
+                    >
+                      {actionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Print Labels"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleInventoryAction(Array.from(selectedItems))}
+                      disabled={actionLoading}
+                    >
+                      {actionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Archive className="h-4 w-4" />}
+                      Inventory
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleCompleteAction(Array.from(selectedItems))}
+                      disabled={actionLoading}
+                    >
+                      {actionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Complete"}
+                    </Button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button size="sm" variant="destructive" disabled={actionLoading}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Delete Items</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Are you sure you want to delete {selectedItems.size} selected item(s)? This action cannot be undone.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => handleDeleteAction(Array.from(selectedItems))}>
+                            Delete
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
+                )}
+              </div>
+
+              {/* Items list */}
+              <div className="space-y-2">
+                {currentBatchItems.map((item) => (
+                  <div key={item.id} className="flex items-center space-x-4 p-3 border rounded-lg">
+                    <input
+                      type="checkbox"
+                      checked={selectedItems.has(item.id)}
+                      onChange={() => handleItemSelect(item.id)}
+                      className="rounded"
+                    />
+                    <div className="flex-1">
+                      <div className="font-medium">{item.card_name}</div>
+                      <div className="text-sm text-muted-foreground">
+                        {item.set_name && `${item.set_name} • `}
+                        {item.card_number && `#${item.card_number} • `}
+                        Qty: {item.quantity} • ${item.price.toFixed(2)}
+                        {item.game && ` • ${item.game}`}
+                      </div>
+                      {item.processing_notes && (
+                        <div className="text-sm text-blue-600 mt-1">{item.processing_notes}</div>
+                      )}
+                    </div>
+                    <div className="flex space-x-2">
+                      {item.printed_at && (
+                        <Badge variant="secondary">Printed</Badge>
+                      )}
+                      {item.pushed_at && (
+                        <Badge variant="default">Pushed</Badge>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Recent Lots */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent Lots</CardTitle>
+          <CardDescription>Recently created intake lots</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {recentLots.length === 0 ? (
+            <p className="text-muted-foreground">No recent lots</p>
           ) : (
             <div className="space-y-2">
-              {items.map((item) => (
-                <div
-                  key={item.id}
-                  className={`flex items-center gap-3 p-2 rounded-lg border transition-colors ${
-                    selectedItems.has(item.id) ? 'bg-accent' : 'hover:bg-muted/50'
-                  }`}
-                >
-                  <Checkbox
-                    checked={selectedItems.has(item.id)}
-                    onCheckedChange={(checked) => 
-                      handleSelectItem(item.id, checked as boolean)
-                    }
-                  />
-                  
-                  <div className="flex-1 grid grid-cols-1 md:grid-cols-5 gap-3">
-                    {editingItem === item.id ? (
-                      // Edit mode
-                      <>
-                        <div>
-                          <Input
-                            value={editForm.subject}
-                            onChange={(e) => setEditForm(prev => ({...prev, subject: e.target.value}))}
-                            className="text-sm"
-                            placeholder="Subject"
-                          />
-                          <p className="text-sm text-muted-foreground">{item.sku}</p>
-                        </div>
-                        
-                        <div>
-                          <Input
-                            value={editForm.brand_title}
-                            onChange={(e) => setEditForm(prev => ({...prev, brand_title: e.target.value}))}
-                            className="text-sm"
-                            placeholder="Brand Title"
-                          />
-                          <p className="text-sm text-muted-foreground">{item.category}</p>
-                        </div>
-
-                        <div>
-                          <Input
-                            type="number"
-                            value={editForm.quantity}
-                            onChange={(e) => setEditForm(prev => ({...prev, quantity: e.target.value}))}
-                            className="text-sm"
-                            placeholder="Quantity"
-                            min="1"
-                          />
-                          <p className="text-sm text-muted-foreground">
-                            Lot: {item.lot_number}
-                          </p>
-                        </div>
-
-                        <div>
-                          <Input
-                            type="number"
-                            value={editForm.price}
-                            onChange={(e) => setEditForm(prev => ({...prev, price: e.target.value}))}
-                            className="text-sm"
-                            placeholder="Price"
-                            step="0.01"
-                          />
-                          {item.cost && (
-                            <p className="text-xs text-muted-foreground">
-                              Cost: {formatPrice(item.cost)}
-                            </p>
-                          )}
-                          {item.grade && (
-                            <p className="text-xs text-muted-foreground">
-                              Grade: {item.grade}
-                            </p>
-                          )}
-                          {item.psa_cert && (
-                            <p className="text-xs text-muted-foreground">
-                              PSA #{item.psa_cert}
-                            </p>
-                          )}
-                        </div>
-
-                        <div className="flex gap-1 items-center">
-                          <Button
-                            size="sm"
-                            variant="default"
-                            onClick={() => saveEdit(item.id)}
-                            className="h-6 px-2"
-                          >
-                            <Save className="h-3 w-3" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={cancelEditing}
-                            className="h-6 px-2"
-                          >
-                            <X className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      </>
-                    ) : (
-                      // View mode
-                      <>
-                        <div>
-                          <p className="font-medium">{formatItemTitle(item)}</p>
-                          <p className="text-sm text-muted-foreground">{item.sku}</p>
-                        </div>
-                        
-                        <div>
-                          <p className="text-sm">{item.brand_title}</p>
-                          <p className="text-sm text-muted-foreground">{getItemType(item)}</p>
-                        </div>
-
-                        <div>
-                          <p className="text-sm">Qty: {item.quantity}</p>
-                          <p className="text-sm text-muted-foreground">
-                            Lot: {item.lot_number}
-                          </p>
-                        </div>
-
-                        <div>
-                          <p className="text-sm font-medium">{formatPrice(item.price)}</p>
-                          {item.cost && (
-                            <p className="text-xs text-muted-foreground">
-                              Cost: {formatPrice(item.cost)}
-                            </p>
-                          )}
-                          {item.grade && (
-                            <p className="text-xs text-muted-foreground">
-                              Grade: {item.grade}
-                            </p>
-                          )}
-                          {item.psa_cert && (
-                            <p className="text-xs text-muted-foreground">
-                              PSA #{item.psa_cert}
-                            </p>
-                          )}
-                        </div>
-
-                        <div className="flex gap-1 items-center flex-wrap">
-                          {item.printed_at && (
-                            <Badge variant="default" className="text-xs">
-                              <FileText className="h-3 w-3 mr-1" />
-                              Printed
-                            </Badge>
-                          )}
-                          {item.pushed_at && (
-                            <Badge variant="secondary" className="text-xs">
-                              Pushed
-                            </Badge>
-                          )}
-                          {!item.pushed_at && (
-                            <>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleSingleItemAction(item.id, 'inventory')}
-                                className="h-6 px-2 text-xs"
-                              >
-                                <Package className="h-3 w-3 mr-1" />
-                                Inventory
-                              </Button>
-                            </>
-                          )}
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => startEditing(item)}
-                            className="h-6 px-2"
-                          >
-                            <Edit3 className="h-3 w-3" />
-                          </Button>
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-6 px-2 text-destructive hover:text-destructive"
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Delete Item</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  Are you sure you want to delete "{item.subject}"? This action cannot be undone.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => handleDeleteSingleItem(item.id)}>
-                                  Delete
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        </div>
-                      </>
-                    )}
+              {recentLots.map((lot) => (
+                <div key={lot.id} className="flex items-center justify-between p-3 border rounded-lg">
+                  <div>
+                    <div className="font-medium">{lot.lot_number}</div>
+                    <div className="text-sm text-muted-foreground">
+                      {lot.total_items} items • ${lot.total_value.toFixed(2)}
+                    </div>
                   </div>
+                  <Badge variant={lot.status === 'active' ? 'default' : 'secondary'}>
+                    {lot.status}
+                  </Badge>
                 </div>
               ))}
             </div>
           )}
         </CardContent>
       </Card>
-      </div>
     </div>
   );
-}
+};
+
+export default Index;
