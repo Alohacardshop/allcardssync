@@ -74,8 +74,10 @@ serve(async (req) => {
 
   const cert = String(body?.cert ?? '').trim();
   const forceRefresh = Boolean(body?.forceRefresh);
+  const includeRaw = Boolean(body?.includeRaw);
   console.log('🔍 Certificate number extracted:', cert);
   console.log('♻️ forceRefresh:', forceRefresh);
+  console.log('📋 includeRaw:', includeRaw);
 
   if (!/^\d{8,9}$/.test(cert)) {
     console.log('❌ Invalid certificate format:', cert);
@@ -112,27 +114,38 @@ serve(async (req) => {
       console.log('⚠️ Database cache check error:', cacheError);
     } else if (existingCert && !forceRefresh) {
       console.log('✅ Found cached result');
+      
+      // Build the same certData structure from cached data
+      const cacheResult = existingCert;
+      const certData = {
+        certNumber: cacheResult.cert_number,
+        isValid: cacheResult.is_valid,
+        grade: cacheResult.grade,
+        year: cacheResult.year,
+        brandTitle: cacheResult.brand,
+        brand: cacheResult.brand,
+        subject: cacheResult.subject,
+        cardNumber: cacheResult.card_number,
+        varietyPedigree: cacheResult.variety_pedigree,
+        category: cacheResult.category,
+        gameSport: cacheResult.brand && cacheResult.brand.toLowerCase().includes('pokemon') ? 'pokemon' : null,
+        psaUrl,
+        imageUrl: cacheResult.image_url,
+        imageUrls: cacheResult.image_urls
+      };
+      
       return new Response(
         JSON.stringify({
           ok: true,
           source: 'database_cache',
           url: psaUrl,
-          certNumber: existingCert.cert_number,
-          isValid: existingCert.is_valid,
-          grade: existingCert.grade,
-          year: existingCert.year,
-          brandTitle: existingCert.brand,
-          brand: existingCert.brand,
-          subject: existingCert.subject,
-          cardNumber: existingCert.card_number,
-          varietyPedigree: existingCert.variety_pedigree,
-          category: existingCert.category,
-          imageUrl: existingCert.image_url,
-          imageUrls: existingCert.image_urls,
+          ...certData,
+          ...(includeRaw && cacheResult.firecrawl_response && { rawPayload: cacheResult.firecrawl_response }),
           diagnostics: {
             totalMs: Date.now() - started,
             cached: true,
-            cacheAge: Date.now() - new Date(existingCert.scraped_at).getTime()
+            cacheAge: Math.round((Date.now() - new Date(cacheResult.scraped_at).getTime()) / 1000),
+            usedCache: true
           }
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -462,6 +475,7 @@ serve(async (req) => {
       source: 'psa_api',
       url: psaUrl,
       ...certData,
+      ...(includeRaw && { rawPayload: payload }),
       diagnostics: {
         hadApiKey: true,
         psaApiStatus,

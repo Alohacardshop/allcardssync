@@ -57,7 +57,7 @@ export const GradedCardIntake = () => {
     
     try {
       // Use the enhanced PSA service with both markdown and HTML
-      const data = await invokePSAScrapeV2({ cert: psaCert.trim(), forceRefresh: true }, 45000);
+      const data = await invokePSAScrapeV2({ cert: psaCert.trim(), forceRefresh: true, includeRaw: true }, 45000);
 
       if (data && data.ok) {
         console.log('PSA data received successfully:', JSON.stringify(data, null, 2));
@@ -315,9 +315,25 @@ export const GradedCardIntake = () => {
                   </Button>
                 </CollapsibleTrigger>
                 <CollapsibleContent className="mt-2">
-                  <pre className="text-xs bg-background p-3 rounded border overflow-auto max-h-40">
-                    {JSON.stringify(cardData, null, 2)}
-                  </pre>
+                  <div className="space-y-3">
+                    {/* Curated Fields */}
+                    <div>
+                      <h4 className="text-sm font-medium mb-2">Curated Fields</h4>
+                      <pre className="text-xs bg-background p-3 rounded border overflow-auto max-h-40">
+                        {JSON.stringify(cardData, null, 2)}
+                      </pre>
+                    </div>
+                    
+                    {/* Raw PSA API JSON */}
+                    {cardData?.rawPayload && (
+                      <div>
+                        <h4 className="text-sm font-medium mb-2">Full PSA API JSON</h4>
+                        <pre className="text-xs bg-background p-3 rounded border overflow-auto max-h-60">
+                          {JSON.stringify(cardData.rawPayload, null, 2)}
+                        </pre>
+                      </div>
+                    )}
+                  </div>
                 </CollapsibleContent>
               </Collapsible>
             </div>
@@ -486,7 +502,8 @@ export const GradedCardIntake = () => {
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <span>Data source:</span>
             <span className="px-2 py-1 rounded text-xs bg-blue-100 text-blue-800">
-              Web Scraping
+              {cardData.source === 'psa_api' ? 'PSA API' : 
+               cardData.source === 'database_cache' ? 'Database Cache' : 'Unknown'}
             </span>
           </div>
         )}
