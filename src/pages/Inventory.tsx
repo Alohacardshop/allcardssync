@@ -110,6 +110,7 @@ export default function Inventory() {
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [isEstimated, setIsEstimated] = useState(true);
   const [search, setSearch] = useState("");
   const [printed, setPrinted] = useState<"all" | "printed" | "unprinted">("all");
   const [pushed, setPushed] = useState<"all" | "pushed" | "unpushed">("all");
@@ -140,13 +141,15 @@ export default function Inventory() {
   const [yearFilter, setYearFilter] = useState("");
   const [priceRange, setPriceRange] = useState({ min: "", max: "" });
 
-  // Diagnostic state
+  // Diagnostic state and fetch management
   const [diagnostics, setDiagnostics] = useState<{
     user: any;
     roles: string[];
     locations: string[];
     itemCount: number;
   } | null>(null);
+  const [fetchId, setFetchId] = useState(0);
+  const [fetchStartTime, setFetchStartTime] = useState<number | null>(null);
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / pageSize)), [total]);
 
@@ -189,120 +192,152 @@ export default function Inventory() {
     fetchDiagnostics();
   }, []);
 
+  // Optimized query builder function
+  const buildInventoryQuery = (countMode: 'estimated' | 'exact' = 'estimated') => {
+    // Only select columns we actually need for display
+    const columns = [
+      'id', 'lot_number', 'created_at', 'updated_at', 'price', 'cost', 
+      'printed_at', 'pushed_at', 'year', 'brand_title', 'subject', 
+      'category', 'variant', 'card_number', 'grade', 'psa_cert', 'sku', 
+      'quantity', 'shopify_product_id', 'shopify_variant_id', 
+      'shopify_inventory_item_id', 'shopify_location_gid', 'source_provider'
+    ].join(',');
+
+    let query = supabase
+      .from("intake_items")
+      .select(columns, { count: countMode })
+      .order(sortKey as string, { ascending: sortAsc });
+
+    // Filter by location if selected
+    if (selectedLocationGid) {
+      query = query.eq("shopify_location_gid", selectedLocationGid);
+    }
+
+    if (search.trim()) {
+      const term = `%${search.trim()}%`;
+      query = query.or(
+        [
+          `brand_title.ilike.${term}`,
+          `subject.ilike.${term}`,
+          `category.ilike.${term}`,
+          `variant.ilike.${term}`,
+          `card_number.ilike.${term}`,
+          `year.ilike.${term}`,
+          `psa_cert.ilike.${term}`,
+          `sku.ilike.${term}`,
+          `lot_number.ilike.${term}`,
+          `grade.ilike.${term}`,
+        ].join(",")
+      );
+    }
+
+    if (lotFilter.trim()) {
+      query = query.ilike("lot_number", `%${lotFilter.trim()}%`);
+    }
+
+    if (printed === "printed") query = query.not("printed_at", "is", null);
+    if (printed === "unprinted") query = query.is("printed_at", null);
+    if (pushed === "pushed") query = query.not("pushed_at", "is", null);
+    if (pushed === "unpushed") query = query.is("pushed_at", null);
+
+    // Type filter logic
+    if (typeFilter === "graded") {
+      query = query.not("psa_cert", "is", null);
+    } else if (typeFilter === "raw") {
+      query = query.is("psa_cert", null);
+    }
+
+    if (conditionFilter.trim()) {
+      query = query.ilike("grade", `%${conditionFilter.trim()}%`);
+    }
+
+    if (setFilter.trim()) {
+      query = query.ilike("brand_title", `%${setFilter.trim()}%`);
+    }
+
+    if (categoryFilter.trim()) {
+      query = query.ilike("category", `%${categoryFilter.trim()}%`);
+    }
+
+    if (yearFilter.trim()) {
+      query = query.ilike("year", `%${yearFilter.trim()}%`);
+    }
+
+    if (priceRange.min.trim()) {
+      const minPrice = parseFloat(priceRange.min);
+      if (!isNaN(minPrice)) {
+        query = query.gte("price", minPrice);
+      }
+    }
+
+    if (priceRange.max.trim()) {
+      const maxPrice = parseFloat(priceRange.max);
+      if (!isNaN(maxPrice)) {
+        query = query.lte("price", maxPrice);
+      }
+    }
+
+    // Exclude soft-deleted records
+    query = query.is("deleted_at", null);
+
+    return query;
+  };
+
   useEffect(() => {
     let isCancelled = false;
     
     const fetchData = async () => {
       if (isCancelled) return;
       
+      const currentFetchId = Date.now();
+      setFetchId(currentFetchId);
       setLoading(true);
       setError(null);
+      setFetchStartTime(currentFetchId);
       
       try {
-        console.log('Loading intake items from DB...');
+        console.log(`[${currentFetchId}] Loading intake items from DB...`);
         
-        let query = supabase
-          .from("intake_items")
-          .select("*", { count: "exact" })
-          .order(sortKey as string, { ascending: sortAsc });
-
-        // Filter by location if selected
-        if (selectedLocationGid) {
-          query = query.eq("shopify_location_gid", selectedLocationGid);
-        }
-
-        if (search.trim()) {
-          const term = `%${search.trim()}%`;
-          query = query.or(
-            [
-              `brand_title.ilike.${term}`,
-              `subject.ilike.${term}`,
-              `category.ilike.${term}`,
-              `variant.ilike.${term}`,
-              `card_number.ilike.${term}`,
-              `year.ilike.${term}`,
-              `psa_cert.ilike.${term}`,
-              `sku.ilike.${term}`,
-              `lot_number.ilike.${term}`,
-              `grade.ilike.${term}`,
-            ].join(",")
-          );
-        }
-
-        if (lotFilter.trim()) {
-          query = query.ilike("lot_number", `%${lotFilter.trim()}%`);
-        }
-
-        if (printed === "printed") query = query.not("printed_at", "is", null);
-        if (printed === "unprinted") query = query.is("printed_at", null);
-        if (pushed === "pushed") query = query.not("pushed_at", "is", null);
-        if (pushed === "unpushed") query = query.is("pushed_at", null);
-
-        // Type filter logic
-        if (typeFilter === "graded") {
-          query = query.not("psa_cert", "is", null);
-        } else if (typeFilter === "raw") {
-          query = query.is("psa_cert", null);
-        }
-
-        if (conditionFilter.trim()) {
-          query = query.ilike("grade", `%${conditionFilter.trim()}%`);
-        }
-
-        if (setFilter.trim()) {
-          query = query.ilike("brand_title", `%${setFilter.trim()}%`);
-        }
-
-        if (categoryFilter.trim()) {
-          query = query.ilike("category", `%${categoryFilter.trim()}%`);
-        }
-
-        if (yearFilter.trim()) {
-          query = query.ilike("year", `%${yearFilter.trim()}%`);
-        }
-
-        if (priceRange.min.trim()) {
-          const minPrice = parseFloat(priceRange.min);
-          if (!isNaN(minPrice)) {
-            query = query.gte("price", minPrice);
-          }
-        }
-
-        if (priceRange.max.trim()) {
-          const maxPrice = parseFloat(priceRange.max);
-          if (!isNaN(maxPrice)) {
-            query = query.lte("price", maxPrice);
-          }
-        }
-
-        // Exclude soft-deleted records
-        query = query.is("deleted_at", null);
-
+        const query = buildInventoryQuery('estimated');
         const from = (page - 1) * pageSize;
         const to = from + pageSize - 1;
-        const { data, error, count } = await query.range(from, to);
+
+        // Set up timeout
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Request timed out after 12 seconds')), 12000)
+        );
+
+        const queryPromise = query.range(from, to);
+        const { data, error, count } = await Promise.race([queryPromise, timeoutPromise]);
         
+        // Check if this fetch is still current
+        if (isCancelled || fetchId !== currentFetchId) {
+          console.log(`[${currentFetchId}] Fetch cancelled or superseded`);
+          return;
+        }
+
         if (error) {
-          console.error('Inventory fetch error:', error);
+          console.error(`[${currentFetchId}] Inventory fetch error:`, error);
           throw new Error(`Database error: ${error.message}`);
         }
         
-        if (!isCancelled) {
-          setItems((data as ItemRow[]) || []);
-          setTotal(count || 0);
-          console.log(`Loaded ${(data || []).length} items out of ${count || 0} total`);
-        }
+        const duration = Date.now() - currentFetchId;
+        setItems((data as any) || []);
+        setTotal(count || 0);
+        setIsEstimated(true);
+        console.log(`[${currentFetchId}] Loaded ${(data || []).length} items out of ~${count || 0} total (${duration}ms)`);
         
       } catch (e: any) {
-        if (!isCancelled) {
-          console.error('Fetch error:', e);
+        if (!isCancelled && fetchId === currentFetchId) {
+          console.error(`[${currentFetchId}] Fetch error:`, e);
           setError(e.message || 'Failed to load inventory');
           setItems([]);
           setTotal(0);
         }
       } finally {
-        if (!isCancelled) {
+        if (!isCancelled && fetchId === currentFetchId) {
           setLoading(false);
+          setFetchStartTime(null);
         }
       }
     };
@@ -314,6 +349,32 @@ export default function Inventory() {
       clearTimeout(timeoutId);
     };
   }, [page, search, printed, pushed, lotFilter, sortKey, sortAsc, typeFilter, conditionFilter, setFilter, categoryFilter, yearFilter, priceRange, selectedLocationGid]);
+
+  // Function to get exact count
+  const getExactCount = async () => {
+    if (loading) return;
+    
+    setLoading(true);
+    try {
+      console.log('Getting exact count...');
+      const startTime = Date.now();
+      const query = buildInventoryQuery('exact');
+      const { count, error } = await query.range(0, 0);
+      
+      if (error) throw error;
+      
+      const duration = Date.now() - startTime;
+      setTotal(count || 0);
+      setIsEstimated(false);
+      console.log(`Got exact count: ${count} (${duration}ms)`);
+      toast.success(`Exact count: ${count?.toLocaleString()} items`);
+    } catch (e: any) {
+      console.error('Exact count error:', e);
+      toast.error('Failed to get exact count: ' + e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Clear selection when page or filters change
   useEffect(() => {
@@ -403,93 +464,20 @@ export default function Inventory() {
 
       toast.success(`Successfully pushed ${unpushedItems.length} items to Shopify`);
       
-      // Refresh the current page data
+      // Refresh using optimized query
       const fetchData = async () => {
-        // Reuse the existing fetch logic
         setLoading(true);
         try {
-          let query = supabase
-            .from("intake_items")
-            .select("*", { count: "exact" })
-            .order(sortKey as string, { ascending: sortAsc });
-
-          if (selectedLocationGid) {
-            query = query.eq("shopify_location_gid", selectedLocationGid);
-          }
-
-          if (search.trim()) {
-            const term = `%${search.trim()}%`;
-            query = query.or(
-              [
-                `brand_title.ilike.${term}`,
-                `subject.ilike.${term}`,
-                `category.ilike.${term}`,
-                `variant.ilike.${term}`,
-                `card_number.ilike.${term}`,
-                `year.ilike.${term}`,
-                `psa_cert.ilike.${term}`,
-                `sku.ilike.${term}`,
-                `lot_number.ilike.${term}`,
-                `grade.ilike.${term}`,
-              ].join(",")
-            );
-          }
-
-          if (lotFilter.trim()) {
-            query = query.ilike("lot_number", `%${lotFilter.trim()}%`);
-          }
-
-          if (printed === "printed") query = query.not("printed_at", "is", null);
-          if (printed === "unprinted") query = query.is("printed_at", null);
-          if (pushed === "pushed") query = query.not("pushed_at", "is", null);
-          if (pushed === "unpushed") query = query.is("pushed_at", null);
-
-          if (typeFilter === "graded") {
-            query = query.not("psa_cert", "is", null);
-          } else if (typeFilter === "raw") {
-            query = query.is("psa_cert", null);
-          }
-
-          if (conditionFilter.trim()) {
-            query = query.ilike("grade", `%${conditionFilter.trim()}%`);
-          }
-
-          if (setFilter.trim()) {
-            query = query.ilike("brand_title", `%${setFilter.trim()}%`);
-          }
-
-          if (categoryFilter.trim()) {
-            query = query.ilike("category", `%${categoryFilter.trim()}%`);
-          }
-
-          if (yearFilter.trim()) {
-            query = query.ilike("year", `%${yearFilter.trim()}%`);
-          }
-
-          if (priceRange.min.trim()) {
-            const minPrice = parseFloat(priceRange.min);
-            if (!isNaN(minPrice)) {
-              query = query.gte("price", minPrice);
-            }
-          }
-
-          if (priceRange.max.trim()) {
-            const maxPrice = parseFloat(priceRange.max);
-            if (!isNaN(maxPrice)) {
-              query = query.lte("price", maxPrice);
-            }
-          }
-
-          query = query.is("deleted_at", null);
-
+          const query = buildInventoryQuery('estimated');
           const from = (page - 1) * pageSize;
           const to = from + pageSize - 1;
           const { data, error, count } = await query.range(from, to);
 
           if (error) throw error;
 
-          setItems((data as ItemRow[]) || []);
+          setItems((data as any) || []);
           setTotal(count || 0);
+          setIsEstimated(true);
         } catch (e: any) {
           console.error('Refresh error:', e);
         } finally {
@@ -837,11 +825,22 @@ export default function Inventory() {
               <div className="flex items-center gap-4">
                 <CardTitle>Inventory List</CardTitle>
                 {loading && <RefreshCw className="h-4 w-4 animate-spin" />}
-                {!loading && total > 0 && (
-                  <span className="text-sm text-muted-foreground">
-                    {items.length} of {total} items
-                  </span>
-                )}
+                 {!loading && total > 0 && (
+                   <div className="flex items-center gap-2">
+                     <span className="text-sm text-muted-foreground">
+                       {items.length} of {isEstimated ? '~' : ''}{total.toLocaleString()} items
+                       {isEstimated && (
+                         <button
+                           onClick={getExactCount}
+                           className="ml-2 text-xs text-primary hover:underline"
+                           title="Get exact count"
+                         >
+                           (get exact)
+                         </button>
+                       )}
+                     </span>
+                   </div>
+                 )}
               </div>
               <div className="flex items-center gap-2">
                 <StoreSelector />
@@ -1325,7 +1324,12 @@ export default function Inventory() {
 
             <div className="flex items-center justify-between mt-6">
               <div className="text-sm text-muted-foreground">
-                Page {page} of {totalPages} • {total.toLocaleString()} items
+                Page {page} of {totalPages} • {isEstimated ? '~' : ''}{total.toLocaleString()} items
+                {fetchStartTime && (
+                  <span className="ml-2 text-xs">
+                    ({Math.round((Date.now() - fetchStartTime) / 1000)}s)
+                  </span>
+                )}
               </div>
               <div className="flex gap-2">
                 <Button variant="outline" disabled={page <= 1 || loading} onClick={() => setPage((p) => Math.max(1, p - 1))}>
