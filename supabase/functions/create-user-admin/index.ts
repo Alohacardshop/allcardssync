@@ -46,7 +46,13 @@ Deno.serve(async (req) => {
     const normalizedEmail = email.toLowerCase().trim();
 
     // Check if user already exists
-    const { data: existingUser } = await supabase.auth.admin.getUserByEmail(normalizedEmail);
+    const { data: existingUsers, error: listError } = await supabase.auth.admin.listUsers();
+    if (listError) {
+      console.error("Error checking existing users:", listError);
+      // Continue anyway - let the create operation handle duplicates
+    }
+    
+    const existingUser = existingUsers?.users?.find(u => u.email?.toLowerCase() === normalizedEmail);
     if (existingUser) {
       throw new Error("User with this email already exists");
     }
