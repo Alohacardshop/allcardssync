@@ -56,6 +56,8 @@ export function UserAssignmentManager() {
   const [loading, setLoading] = useState(true);
   const [loadingLocations, setLoadingLocations] = useState(false);
   const [userPermissions, setUserPermissions] = useState<UserLocationPermissions[]>([]);
+  const [loadingTimeout, setLoadingTimeout] = useState(false);
+  const [retryAttempts, setRetryAttempts] = useState(0);
   
   // Form state for quick assign
   const [email, setEmail] = useState("");
@@ -85,30 +87,32 @@ export function UserAssignmentManager() {
           location_name,
           is_default
         `)
-        .order("store_key");
+        .order("store_key, user_id");
       
       if (error) throw error;
       setAssignments(data || []);
       
-      // Group assignments by user
-      const grouped = (data || []).reduce((acc, assignment) => {
-        const existing = acc.find(u => u.userId === assignment.user_id);
-        if (existing) {
-          existing.assignments.push(assignment);
+      // Optimize grouping: O(n) instead of O(n^2) using Map
+      const userMap = new Map<string, UserLocationPermissions>();
+      
+      for (const assignment of data || []) {
+        if (userMap.has(assignment.user_id)) {
+          userMap.get(assignment.user_id)!.assignments.push(assignment);
         } else {
-          acc.push({
+          userMap.set(assignment.user_id, {
             userId: assignment.user_id,
             email: '', // Will be populated from users list
             assignments: [assignment]
           });
         }
-        return acc;
-      }, [] as UserLocationPermissions[]);
+      }
       
-      setUserPermissions(grouped);
+      setUserPermissions(Array.from(userMap.values()));
+      setRetryAttempts(0); // Reset on success
     } catch (e) {
       console.error("Failed to load assignments:", e);
-      toast.error("Failed to load assignments");
+      toast.error("Failed to load assignments. Please try again.");
+      throw e; // Re-throw for retry logic
     }
   };
 
@@ -183,13 +187,46 @@ export function UserAssignmentManager() {
     }
   };
 
+  const handleRetry = async () => {
+    setRetryAttempts(prev => prev + 1);
+    setLoading(true);
+    setLoadingTimeout(false);
+    
+    try {
+      await Promise.all([loadAssignments(), loadStores()]);
+    } catch (e) {
+      console.error("Retry failed:", e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     setLoading(true);
+    setLoadingTimeout(false);
+    
+    // Set timeout for loading state
+    const timeoutId = setTimeout(() => {
+      if (loading) {
+        setLoadingTimeout(true);
+        toast.error("Loading is taking longer than expected. You can retry if needed.");
+      }
+    }, 10000);
+    
     Promise.all([loadAssignments(), loadStores()])
-      .finally(() => setLoading(false));
+      .catch(e => {
+        console.error("Initial load failed:", e);
+        setLoadingTimeout(true);
+      })
+      .finally(() => {
+        setLoading(false);
+        clearTimeout(timeoutId);
+      });
     
     // Load users in background (can be slow)
     loadUsers();
+    
+    return () => clearTimeout(timeoutId);
   }, []);
 
   useEffect(() => {
@@ -428,8 +465,28 @@ export function UserAssignmentManager() {
            assignment.store_key;
   };
 
-  if (loading) {
-    return <div className="text-center text-muted-foreground">Loading assignments...</div>;
+  if (loading && !loadingTimeout) {
+    return (
+      <div className="text-center text-muted-foreground space-y-2">
+        <div>Loading user assignments and stores...</div>
+        {retryAttempts > 0 && (
+          <div className="text-sm">Attempt #{retryAttempts + 1}</div>
+        )}
+      </div>
+    );
+  }
+
+  if (loadingTimeout) {
+    return (
+      <div className="text-center space-y-4">
+        <div className="text-muted-foreground">
+          {loading ? "Loading is taking longer than expected..." : "Failed to load assignments"}
+        </div>
+        <Button onClick={handleRetry} variant="outline">
+          Retry Loading
+        </Button>
+      </div>
+    );
   }
 
   return (
