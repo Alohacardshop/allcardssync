@@ -162,7 +162,7 @@ serve(async (req) => {
 
             // Get inventory levels for this variant
             let inventoryLevels: any[] = [];
-            if (variant.inventory_item_id) {
+            if (variant.inventory_item_id && variant.inventory_item_id !== null && variant.inventory_item_id !== '') {
               try {
                 const levelsUrl = `https://${shopifyDomain}/admin/api/${apiVersion}/inventory_levels.json?inventory_item_ids=${variant.inventory_item_id}`;
                 console.log(`Fetching inventory levels for variant ${variant.id}, inventory_item_id: ${variant.inventory_item_id}`);
@@ -180,12 +180,17 @@ serve(async (req) => {
                 } else {
                   const errorText = await levelsResponse.text();
                   console.error(`Inventory levels API error for variant ${variant.id}: ${levelsResponse.status} ${levelsResponse.statusText}`, errorText);
-                  errors.push(`Inventory levels API error for variant ${variant.id}: ${levelsResponse.status} ${levelsResponse.statusText}`);
+                  // Don't add to errors array for 400s as they're often due to invalid inventory item IDs
+                  if (levelsResponse.status !== 400) {
+                    errors.push(`Inventory levels API error for variant ${variant.id}: ${levelsResponse.status} ${levelsResponse.statusText}`);
+                  }
                 }
               } catch (e) {
                 console.error(`Failed to fetch inventory levels for variant ${variant.id}:`, e);
                 errors.push(`Failed to fetch inventory levels for variant ${variant.id}: ${e.message}`);
               }
+            } else {
+              console.log(`Skipping inventory levels for variant ${variant.id} - no valid inventory_item_id (${variant.inventory_item_id})`);
             }
 
             // Create/update intake_items for each location (or one row if no locations)
