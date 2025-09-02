@@ -10,7 +10,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useTemplates } from "@/hooks/useTemplates";
 import { Navigation } from "@/components/Navigation";
 import { GradedCardIntake } from "@/components/GradedCardIntake";
-import RawIntake from "@/components/RawIntake";
+import { RawCardIntake } from "@/components/RawCardIntake";
 import { CurrentBatchPanel } from "@/components/CurrentBatchPanel";
 
 interface IntakeItem {
@@ -247,6 +247,19 @@ const Index = () => {
     }
   };
 
+  const handleCardPick = ({ card, chosenVariant }: {
+    card: any;
+    chosenVariant?: { condition: string; printing: string; price?: number };
+  }) => {
+    console.log('Card picked:', card, chosenVariant);
+    toast.success(`Selected ${card.name || card.subject || 'card'}`);
+  };
+
+  const handleBatchAdd = async () => {
+    toast.success('Item added to batch');
+    await fetchData();
+  };
+
   const handlePrintLabels = async (itemIds: string[]) => {
     if (itemIds.length === 0) return;
     if (!defaultTemplate) {
@@ -385,7 +398,13 @@ const Index = () => {
                 <CardDescription>Add raw (ungraded) cards to inventory</CardDescription>
               </CardHeader>
               <CardContent>
-                <RawIntake />
+                <RawCardIntake 
+                  defaultGame="pokemon"
+                  defaultPrinting="Normal"
+                  defaultConditions="NM,LP"
+                  onPick={handleCardPick}
+                  onBatchAdd={handleBatchAdd}
+                />
               </CardContent>
             </Card>
             <CurrentBatchPanel onViewFullBatch={() => setActiveTab("batch")} />
