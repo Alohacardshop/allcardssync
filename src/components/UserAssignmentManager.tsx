@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,9 +21,9 @@ interface UserAssignment {
   location_gid: string;
   location_name: string | null;
   is_default: boolean;
-  shopify_stores: {
+  shopify_stores?: {
     name: string;
-  };
+  } | null;
 }
 
 interface UserWithEmail {
@@ -347,6 +347,21 @@ export function UserAssignmentManager() {
     return userPerms?.assignments.filter(a => a.store_key === storeKey) || [];
   };
 
+  // Create a memoized stores map for fallback store names
+  const storesMap = useMemo(() => {
+    return stores.reduce((acc, store) => {
+      acc[store.key] = store.name;
+      return acc;
+    }, {} as Record<string, string>);
+  }, [stores]);
+
+  // Helper function to get store name with fallbacks
+  const getStoreName = (assignment: UserAssignment) => {
+    return storesMap[assignment.store_key] || 
+           assignment.shopify_stores?.name || 
+           assignment.store_key;
+  };
+
   if (loading) {
     return <div className="text-center text-muted-foreground">Loading assignments...</div>;
   }
@@ -617,7 +632,7 @@ export function UserAssignmentManager() {
                     return (
                       <TableRow key={assignment.id}>
                         <TableCell className="font-medium">{userEmail}</TableCell>
-                        <TableCell>{assignment.shopify_stores.name}</TableCell>
+                        <TableCell>{getStoreName(assignment)}</TableCell>
                         <TableCell>{assignment.location_name || assignment.location_gid}</TableCell>
                         <TableCell>
                           {assignment.is_default && <Badge variant="secondary">Default</Badge>}
