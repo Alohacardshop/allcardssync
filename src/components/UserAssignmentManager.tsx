@@ -732,47 +732,48 @@ export function UserAssignmentManager() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="manage" className="space-y-6">
-          <Card className="shadow-aloha">
-            <CardHeader>
-              <CardTitle>User Location Management</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Assign multiple locations to a user and set their default location for better control over what they see in the UI.
-              </p>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="bulk-user">Select User</Label>
-                  <Select value={selectedUser} onValueChange={setSelectedUser}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select user" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {users.map((user) => (
-                        <SelectItem key={user.id} value={user.id}>
-                          {user.email}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+        <div className="mt-6">
+          <TabsContent value="manage" className="space-y-6 mt-0">
+            <Card className="shadow-aloha">
+              <CardHeader>
+                <CardTitle>User Location Management</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Assign multiple locations to a user and set their default location for better control over what they see in the UI.
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="bulk-user">Select User</Label>
+                    <Select value={selectedUser} onValueChange={setSelectedUser}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select user" />
+                      </SelectTrigger>
+                      <SelectContent className="z-50 bg-background">
+                        {users.map((user) => (
+                          <SelectItem key={user.id} value={user.id}>
+                            {user.email}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="bulk-store">Store</Label>
+                    <Select value={selectedManageStore} onValueChange={setSelectedManageStore}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select store" />
+                      </SelectTrigger>
+                      <SelectContent className="z-50 bg-background">
+                        {stores.map((store) => (
+                          <SelectItem key={store.key} value={store.key}>
+                            {store.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
-                <div>
-                  <Label htmlFor="bulk-store">Store</Label>
-                  <Select value={selectedManageStore} onValueChange={setSelectedManageStore}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select store" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {stores.map((store) => (
-                        <SelectItem key={store.key} value={store.key}>
-                          {store.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
 
               {selectedManageStore && !loadingLocations && (
                 <div className="space-y-4">
@@ -846,7 +847,7 @@ export function UserAssignmentManager() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="multi-store" className="space-y-6">
+        <TabsContent value="multi-store" className="space-y-6 mt-0">
           <Card className="shadow-aloha">
             <CardHeader>
               <CardTitle>Multi-Store Assignment</CardTitle>
@@ -861,7 +862,7 @@ export function UserAssignmentManager() {
                   <SelectTrigger>
                     <SelectValue placeholder="Select user" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="z-50 bg-background">
                     {users.map((user) => (
                       <SelectItem key={user.id} value={user.id}>
                         {user.email}
@@ -876,7 +877,7 @@ export function UserAssignmentManager() {
                 <p className="text-sm text-muted-foreground mb-2">
                   Select which stores this user should have access to. They will be assigned to all locations in each store.
                 </p>
-                <div className="space-y-2 max-h-60 overflow-y-auto border rounded-md p-3">
+                <div className="space-y-2 max-h-60 overflow-y-auto border rounded-md p-3 bg-background">
                   {stores.map((store) => (
                     <div key={store.key} className="flex items-center space-x-2">
                       <Checkbox
@@ -930,7 +931,7 @@ export function UserAssignmentManager() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="quick" className="space-y-6">
+        <TabsContent value="quick" className="space-y-6 mt-0">
           <Card className="shadow-aloha">
             <CardHeader>
               <CardTitle>Quick Assign Multiple Locations</CardTitle>
@@ -955,7 +956,7 @@ export function UserAssignmentManager() {
                     <SelectTrigger>
                       <SelectValue placeholder="Select store" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="z-50 bg-background">
                       {stores.map((store) => (
                         <SelectItem key={store.key} value={store.key}>
                           {store.name}
@@ -991,7 +992,7 @@ export function UserAssignmentManager() {
                         Clear All
                       </Button>
                     </div>
-                    <div className="space-y-2 max-h-60 overflow-y-auto border rounded-md p-3">
+                    <div className="space-y-2 max-h-60 overflow-y-auto border rounded-md p-3 bg-background">
                       {locations.map((location) => (
                         <div key={location.gid} className="flex items-center justify-between space-x-2">
                           <div className="flex items-center space-x-2">
@@ -1039,7 +1040,7 @@ export function UserAssignmentManager() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="overview" className="space-y-6">
+        <TabsContent value="overview" className="space-y-6 mt-0">
           <Card className="shadow-aloha">
             <CardHeader>
               <CardTitle>All User Assignments</CardTitle>
@@ -1093,6 +1094,7 @@ export function UserAssignmentManager() {
             </CardContent>
           </Card>
         </TabsContent>
+        </div>
       </Tabs>
     </div>
   );
