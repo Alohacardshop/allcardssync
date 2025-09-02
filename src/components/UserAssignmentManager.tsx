@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
-import { Users, MapPin, Settings } from "lucide-react";
+import { Users, MapPin, Settings, Building } from "lucide-react";
 
 interface UserAssignment {
   id: string;
@@ -62,6 +62,10 @@ export function UserAssignmentManager() {
   const [selectedAssignStore, setSelectedAssignStore] = useState("");
   const [selectedQuickLocations, setSelectedQuickLocations] = useState<string[]>([]);
   const [quickDefaultLocation, setQuickDefaultLocation] = useState("");
+  
+  // Form state for multi-store assignment
+  const [multiStoreUser, setMultiStoreUser] = useState("");
+  const [selectedStores, setSelectedStores] = useState<string[]>([]);
   
   // Form state for bulk user management
   const [selectedUser, setSelectedUser] = useState("");
@@ -308,6 +312,65 @@ export function UserAssignmentManager() {
     }
   };
 
+  const handleMultiStoreAssign = async () => {
+    if (!multiStoreUser || selectedStores.length === 0) {
+      toast.error("Please select user and at least one store");
+      return;
+    }
+
+    const userEmail = users.find(u => u.id === multiStoreUser)?.email;
+    if (!userEmail) {
+      toast.error("User email not found");
+      return;
+    }
+
+    try {
+      // For each selected store, get all locations and assign user to all of them
+      for (const storeKey of selectedStores) {
+        // Get locations for this store
+        const { data, error } = await supabase.functions.invoke("shopify-locations", {
+          body: { storeKey }
+        });
+        
+        if (error) throw error;
+        
+        if (data?.ok && data?.locations) {
+          const storeLocations = data.locations.map((loc: any) => ({
+            id: String(loc.id),
+            name: loc.name,
+            gid: `gid://shopify/Location/${loc.id}`
+          }));
+
+          // Assign user to all locations in this store
+          for (let i = 0; i < storeLocations.length; i++) {
+            const location = storeLocations[i];
+            const isDefaultLocation = i === 0; // Make first location default
+            
+            const { error: assignError } = await supabase.functions.invoke("user-assignment-admin", {
+              body: {
+                action: "assign",
+                email: userEmail,
+                storeKey: storeKey,
+                locationGid: location.gid,
+                locationName: location.name,
+                isDefault: isDefaultLocation
+              }
+            });
+
+            if (assignError) throw assignError;
+          }
+        }
+      }
+
+      toast.success(`User assigned to ${selectedStores.length} store${selectedStores.length !== 1 ? 's' : ''} successfully`);
+      loadAssignments();
+      setSelectedStores([]);
+    } catch (e) {
+      console.error("Multi-store assignment failed:", e);
+      toast.error("Multi-store assignment failed");
+    }
+  };
+
   const handleLocationToggle = (locationGid: string) => {
     setSelectedLocations(prev => {
       if (prev.includes(locationGid)) {
@@ -372,10 +435,14 @@ export function UserAssignmentManager() {
   return (
     <div className="space-y-6">
       <Tabs defaultValue="manage" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="manage" className="flex items-center gap-2">
             <Users className="h-4 w-4" />
             Manage Users
+          </TabsTrigger>
+          <TabsTrigger value="multi-store" className="flex items-center gap-2">
+            <Building className="h-4 w-4" />
+            Multi-Store
           </TabsTrigger>
           <TabsTrigger value="quick" className="flex items-center gap-2">
             <MapPin className="h-4 w-4" />
@@ -493,6 +560,90 @@ export function UserAssignmentManager() {
                     ))}
                     {getUserAssignmentsForStore(selectedUser, selectedManageStore).length === 0 && (
                       <p className="text-sm text-muted-foreground">No locations assigned</p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="multi-store" className="space-y-6">
+          <Card className="shadow-aloha">
+            <CardHeader>
+              <CardTitle>Multi-Store Assignment</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Assign a user to access multiple stores at once.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label htmlFor="multi-store-user">Select User</Label>
+                <Select value={multiStoreUser} onValueChange={setMultiStoreUser}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select user" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {users.map((user) => (
+                      <SelectItem key={user.id} value={user.id}>
+                        {user.email}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div>
+                <Label>Available Stores</Label>
+                <p className="text-sm text-muted-foreground mb-2">
+                  Select which stores this user should have access to. They will be assigned to all locations in each store.
+                </p>
+                <div className="space-y-2 max-h-60 overflow-y-auto border rounded-md p-3">
+                  {stores.map((store) => (
+                    <div key={store.key} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`store-${store.key}`}
+                        checked={selectedStores.includes(store.key)}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setSelectedStores(prev => [...prev, store.key]);
+                          } else {
+                            setSelectedStores(prev => prev.filter(s => s !== store.key));
+                          }
+                        }}
+                      />
+                      <Label htmlFor={`store-${store.key}`}>{store.name}</Label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <Button 
+                onClick={() => handleMultiStoreAssign()} 
+                disabled={!multiStoreUser || selectedStores.length === 0}
+                className="w-full"
+              >
+                Assign User to {selectedStores.length} Store{selectedStores.length !== 1 ? 's' : ''}
+              </Button>
+
+              {multiStoreUser && (
+                <div className="mt-4 p-4 bg-muted/30 rounded-lg">
+                  <h4 className="font-medium mb-2">Current store assignments for this user:</h4>
+                  <div className="space-y-1">
+                    {Array.from(new Set(
+                      userPermissions
+                        .find(up => up.userId === multiStoreUser)?.assignments
+                        .map(a => a.store_key) || []
+                    )).map((storeKey) => (
+                      <div key={storeKey} className="flex items-center justify-between text-sm">
+                        <span>{storesMap[storeKey] || storeKey}</span>
+                        <Badge variant="outline" className="text-xs">
+                          {getUserAssignmentsForStore(multiStoreUser, storeKey).length} locations
+                        </Badge>
+                      </div>
+                    ))}
+                    {(!userPermissions.find(up => up.userId === multiStoreUser)?.assignments.length) && (
+                      <p className="text-sm text-muted-foreground">No store assignments</p>
                     )}
                   </div>
                 </div>
