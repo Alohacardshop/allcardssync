@@ -60,8 +60,8 @@ export function UserAssignmentManager() {
   // Form state for quick assign
   const [email, setEmail] = useState("");
   const [selectedAssignStore, setSelectedAssignStore] = useState("");
-  const [selectedLocation, setSelectedLocation] = useState("");
-  const [isDefault, setIsDefault] = useState(false);
+  const [selectedQuickLocations, setSelectedQuickLocations] = useState<string[]>([]);
+  const [quickDefaultLocation, setQuickDefaultLocation] = useState("");
   
   // Form state for bulk user management
   const [selectedUser, setSelectedUser] = useState("");
@@ -197,42 +197,40 @@ export function UserAssignmentManager() {
     }
   }, [selectedManageStore]);
 
-  const handleAssign = async () => {
-    if (!email || !selectedAssignStore || !selectedLocation) {
-      toast.error("Please fill all fields");
+  const handleQuickAssign = async () => {
+    if (!email || !selectedAssignStore || selectedQuickLocations.length === 0) {
+      toast.error("Please fill all fields and select at least one location");
       return;
     }
 
     try {
-      // First get user by email
-      const { data: userData, error: userError } = await supabase
-        .from("user_roles")
-        .select("user_id")
-        .eq("user_id", "auth.uid()") // This needs to be handled differently
-        .limit(1);
+      // Add assignments for each selected location
+      for (let i = 0; i < selectedQuickLocations.length; i++) {
+        const locationGid = selectedQuickLocations[i];
+        const isDefaultLocation = quickDefaultLocation === locationGid;
+        
+        const { data, error } = await supabase.functions.invoke("user-assignment-admin", {
+          body: {
+            action: "assign",
+            email,
+            storeKey: selectedAssignStore,
+            locationGid: locationGid,
+            locationName: locations.find(l => l.gid === locationGid)?.name,
+            isDefault: isDefaultLocation
+          }
+        });
 
-      // For now, we'll use the roles-admin function to handle user lookup
-      const { data, error } = await supabase.functions.invoke("user-assignment-admin", {
-        body: {
-          action: "assign",
-          email,
-          storeKey: selectedAssignStore,
-          locationGid: selectedLocation,
-          locationName: locations.find(l => l.gid === selectedLocation)?.name,
-          isDefault
-        }
-      });
+        if (error) throw error;
+        
+        const result: any = data;
+        if (!result?.ok) throw new Error(result?.error || "Assignment failed");
+      }
 
-      if (error) throw error;
-      
-      const result: any = data;
-      if (!result?.ok) throw new Error(result?.error || "Assignment failed");
-
-      toast.success("User assigned successfully");
+      toast.success(`User assigned to ${selectedQuickLocations.length} location${selectedQuickLocations.length > 1 ? 's' : ''} successfully`);
       loadAssignments();
       setEmail("");
-      setSelectedLocation("");
-      setIsDefault(false);
+      setSelectedQuickLocations([]);
+      setQuickDefaultLocation("");
     } catch (e) {
       console.error("Assignment failed:", e);
       toast.error("Assignment failed");
@@ -319,6 +317,29 @@ export function UserAssignmentManager() {
         return [...prev, locationGid];
       }
     });
+  };
+
+  const handleQuickLocationToggle = (locationGid: string) => {
+    setSelectedQuickLocations(prev => {
+      if (prev.includes(locationGid)) {
+        // If removing the default location, clear default
+        if (quickDefaultLocation === locationGid) {
+          setQuickDefaultLocation("");
+        }
+        return prev.filter(l => l !== locationGid);
+      } else {
+        return [...prev, locationGid];
+      }
+    });
+  };
+
+  const handleSelectAllQuickLocations = () => {
+    setSelectedQuickLocations(locations.map(l => l.gid));
+  };
+
+  const handleClearQuickLocations = () => {
+    setSelectedQuickLocations([]);
+    setQuickDefaultLocation("");
   };
 
   const getUserAssignmentsForStore = (userId: string, storeKey: string) => {
@@ -465,9 +486,9 @@ export function UserAssignmentManager() {
         <TabsContent value="quick" className="space-y-6">
           <Card className="shadow-aloha">
             <CardHeader>
-              <CardTitle>Quick Assign Single Location</CardTitle>
+              <CardTitle>Quick Assign Multiple Locations</CardTitle>
               <p className="text-sm text-muted-foreground">
-                Quickly assign a single user to a specific location.
+                Quickly assign a user to multiple locations at once.
               </p>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -498,38 +519,75 @@ export function UserAssignmentManager() {
                 </div>
               </div>
               
-              <div>
-                <Label htmlFor="location">Location</Label>
-                <Select 
-                  value={selectedLocation} 
-                  onValueChange={setSelectedLocation}
-                  disabled={!selectedAssignStore || loadingLocations}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder={loadingLocations ? "Loading..." : "Select location"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {locations.map((location) => (
-                      <SelectItem key={location.gid} value={location.gid}>
-                        {location.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {selectedAssignStore && !loadingLocations && (
+                <div className="space-y-4">
+                  <div>
+                    <Label>Available Locations</Label>
+                    <p className="text-sm text-muted-foreground mb-2">
+                      Select which locations to assign to this user. You can also set their default location.
+                    </p>
+                    <div className="flex gap-2 mb-2">
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={handleSelectAllQuickLocations}
+                        disabled={locations.length === 0}
+                      >
+                        Select All
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={handleClearQuickLocations}
+                        disabled={selectedQuickLocations.length === 0}
+                      >
+                        Clear All
+                      </Button>
+                    </div>
+                    <div className="space-y-2 max-h-60 overflow-y-auto border rounded-md p-3">
+                      {locations.map((location) => (
+                        <div key={location.gid} className="flex items-center justify-between space-x-2">
+                          <div className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`quick-location-${location.gid}`}
+                              checked={selectedQuickLocations.includes(location.gid)}
+                              onCheckedChange={() => handleQuickLocationToggle(location.gid)}
+                            />
+                            <Label htmlFor={`quick-location-${location.gid}`}>{location.name}</Label>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`quick-default-${location.gid}`}
+                              checked={quickDefaultLocation === location.gid}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  setQuickDefaultLocation(location.gid);
+                                  // Auto-select this location if not already selected
+                                  if (!selectedQuickLocations.includes(location.gid)) {
+                                    handleQuickLocationToggle(location.gid);
+                                  }
+                                } else {
+                                  setQuickDefaultLocation("");
+                                }
+                              }}
+                              disabled={!selectedQuickLocations.includes(location.gid)}
+                            />
+                            <Label htmlFor={`quick-default-${location.gid}`} className="text-xs">Default</Label>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
 
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="is-default"
-                  checked={isDefault}
-                  onCheckedChange={(checked) => setIsDefault(checked === true)}
-                />
-                <Label htmlFor="is-default">Set as default location for this user</Label>
-              </div>
-
-              <Button onClick={handleAssign} disabled={!email || !selectedAssignStore || !selectedLocation}>
-                Assign User
-              </Button>
+                  <Button 
+                    onClick={handleQuickAssign} 
+                    disabled={!email || !selectedAssignStore || selectedQuickLocations.length === 0}
+                    className="w-full"
+                  >
+                    Assign User to {selectedQuickLocations.length} Location{selectedQuickLocations.length !== 1 ? 's' : ''}
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
