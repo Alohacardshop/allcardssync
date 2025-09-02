@@ -20,7 +20,8 @@ serve(async (req) => {
       rawTags = ["single"],
       updatedSince,
       maxPages = 50,
-      dryRun = false 
+      dryRun = false,
+      status = 'active'
     } = await req.json();
 
     if (!storeKey) {
@@ -90,11 +91,17 @@ serve(async (req) => {
     // Fetch products from Shopify with pagination
     let pageInfo: string | null = null;
     let pageCount = 0;
+    
+    // Cap preview pages to 3 for faster previews
+    const effectiveMaxPages = dryRun ? Math.min(maxPages, 3) : maxPages;
 
-    while (pageCount < maxPages) {
+    while (pageCount < effectiveMaxPages) {
       pageCount++;
       
       let url = `https://${shopifyDomain}/admin/api/${apiVersion}/products.json?limit=250`;
+      if (status && status !== 'any') {
+        url += `&status=${status}`;
+      }
       if (updatedSince) {
         url += `&updated_at_min=${encodeURIComponent(updatedSince)}`;
       }
