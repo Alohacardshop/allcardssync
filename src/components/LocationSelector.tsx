@@ -93,6 +93,14 @@ export function LocationSelector({ className }: LocationSelectorProps) {
               </div>
             </SelectTrigger>
           </Select>
+          <div className="text-xs space-y-1">
+            <p className="text-muted-foreground">
+              No locations found for {selectedStore}
+            </p>
+            <p className="text-muted-foreground">
+              Check Admin &gt; Shopify Config for details
+            </p>
+          </div>
           {isAdmin && (
             <Button
               variant="outline"
@@ -116,24 +124,31 @@ export function LocationSelector({ className }: LocationSelectorProps) {
 
   return (
     <div className={className}>
-      <Select 
-        value={selectedLocation || ""} 
-        onValueChange={setSelectedLocation}
-      >
-        <SelectTrigger className="w-[200px]">
-          <div className="flex items-center gap-2">
-            <MapPin className="h-4 w-4" />
-            <SelectValue placeholder="Select location" />
-          </div>
-        </SelectTrigger>
-        <SelectContent>
-          {availableLocations.map((location) => (
-            <SelectItem key={location.gid} value={location.gid}>
-              {location.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <div className="space-y-1">
+        <Select 
+          value={selectedLocation || ""} 
+          onValueChange={setSelectedLocation}
+        >
+          <SelectTrigger className="w-[200px]">
+            <div className="flex items-center gap-2">
+              <MapPin className="h-4 w-4" />
+              <SelectValue placeholder="Select location" />
+            </div>
+          </SelectTrigger>
+          <SelectContent>
+            {availableLocations.map((location) => (
+              <SelectItem key={location.gid} value={location.gid}>
+                {location.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {selectedStore && availableLocations.length > 0 && (
+          <p className="text-xs text-muted-foreground">
+            {selectedStore}: {availableLocations.length} location{availableLocations.length !== 1 ? 's' : ''} available
+          </p>
+        )}
+      </div>
     </div>
   );
 }

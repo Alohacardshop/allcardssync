@@ -25,6 +25,7 @@ Deno.serve(async (req) => {
     if (!storeKey) throw new Error("Missing storeKey parameter");
 
     const storeKeyUpper = storeKey.toUpperCase();
+    console.log(`shopify-locations: Fetching locations for store ${storeKey}`);
 
     // Get store-specific credentials from system_settings table
     const { data: domainData } = await supabase
@@ -43,6 +44,7 @@ Deno.serve(async (req) => {
     const SHOPIFY_ADMIN_ACCESS_TOKEN = tokenData?.key_value;
 
     if (!SHOPIFY_STORE_DOMAIN || !SHOPIFY_ADMIN_ACCESS_TOKEN) {
+      console.log(`shopify-locations: Missing configuration for store ${storeKey}`);
       throw new Error(`Shopify configuration not found for store '${storeKey}'. Please configure credentials in Admin > Shopify Config.`);
     }
 
@@ -54,15 +56,45 @@ Deno.serve(async (req) => {
       },
     });
 
+    console.log(`shopify-locations: Shopify API response status ${response.status} for store ${storeKey}`);
+
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(`Shopify API error: ${response.status} ${text}`);
+      let errorMessage = `Shopify API error: ${response.status}`;
+      
+      // Provide more helpful error messages
+      switch (response.status) {
+        case 401:
+        case 403:
+          errorMessage = "Invalid or insufficient permissions for this store's access token";
+          break;
+        case 404:
+          errorMessage = "Invalid store domain";
+          break;
+        default:
+          errorMessage = `Shopify API error: ${response.status} ${text}`;
+      }
+      
+      throw new Error(errorMessage);
     }
 
-    const data = await response.json();
+    let data;
+    try {
+      data = await response.json();
+    } catch (parseError) {
+      throw new Error("Unexpected Shopify response format");
+    }
+    
+    const locations = data.locations || [];
+    console.log(`shopify-locations: Found ${locations.length} locations for store ${storeKey}`);
     
     return new Response(
-      JSON.stringify({ ok: true, locations: data.locations || [] }),
+      JSON.stringify({ 
+        ok: true, 
+        storeKey,
+        count: locations.length,
+        locations
+      }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (e) {

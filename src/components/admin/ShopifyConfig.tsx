@@ -220,16 +220,46 @@ export function ShopifyConfig() {
     try {
       setTesting(storeKey);
       
-      const { data, error } = await supabase.functions.invoke('shopify-config-check', {
+      // Test basic connection first
+      const { data: configData, error: configError } = await supabase.functions.invoke('shopify-config-check', {
         body: { storeKey }
       });
 
-      if (error) throw error;
+      if (configError) throw configError;
 
-      if (data?.shop) {
+      // Test locations endpoint to get location count
+      let locationCount = 0;
+      let locationError = null;
+      
+      try {
+        const { data: locationData } = await supabase.functions.invoke('shopify-locations', {
+          body: { storeKey }
+        });
+        
+        if (locationData?.ok) {
+          locationCount = locationData.count || 0;
+        }
+      } catch (err) {
+        locationError = err;
+        console.warn('Error fetching locations during test:', err);
+      }
+
+      if (configData?.shop) {
+        const shopName = configData.shop.name || 'Shopify store';
+        let description = `Connected to ${shopName} successfully.`;
+        
+        if (locationError) {
+          description += ` Warning: Could not fetch locations - ${locationError.message || 'unknown error'}.`;
+        } else if (locationCount === 0) {
+          description += ` Found 0 locations. Check if this store has active locations or if the access token has location permissions.`;
+        } else {
+          description += ` Found ${locationCount} location${locationCount !== 1 ? 's' : ''}.`;
+        }
+        
         toast({
-          title: "Connection Successful",
-          description: `Connected to ${data.shop.name || 'Shopify store'} successfully.`
+          title: "Connection Test Complete",
+          description,
+          variant: locationError || locationCount === 0 ? "default" : "default"
         });
       } else {
         toast({
@@ -242,7 +272,7 @@ export function ShopifyConfig() {
       console.error('Error testing connection:', error);
       toast({
         title: "Error",
-        description: "Failed to test connection.",
+        description: `Failed to test connection: ${error.message || 'Unknown error'}`,
         variant: "destructive"
       });
     } finally {

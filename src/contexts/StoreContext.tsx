@@ -132,13 +132,22 @@ export function StoreProvider({ children }: StoreProviderProps) {
         
         if (error) throw error;
         
-        if (data?.ok && data?.locations) {
-          const locations = data.locations.map((loc: any) => ({
+        if (data?.ok) {
+          const locations = (data.locations || []).map((loc: any) => ({
             id: String(loc.id),
             name: loc.name,
             gid: `gid://shopify/Location/${loc.id}`
           }));
           setAvailableLocations(locations);
+          
+          // Show specific message for 0 locations
+          if (locations.length === 0) {
+            toast({
+              title: `No locations found for ${selectedStore}`,
+              description: "Check Admin > Shopify Config > Test Connection for details.",
+              variant: "default",
+            });
+          }
           
           // Clear selected location if it's not available in new locations
           if (selectedLocation && !locations.some(loc => loc.gid === selectedLocation)) {
