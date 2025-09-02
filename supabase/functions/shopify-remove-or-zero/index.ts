@@ -35,28 +35,45 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Get Shopify credentials
-    const { data: domainData } = await supabase
-      .from('system_settings')
-      .select('key_value')
-      .eq('key_name', `SHOPIFY_STORE_DOMAIN_${storeKey}`)
-      .single();
+    // Get Shopify credentials (support multiple key formats for compatibility)
+    const upper = storeKey.toUpperCase();
+    const domainKeys = [
+      `SHOPIFY_${upper}_DOMAIN`,
+      `SHOPIFY_STORE_DOMAIN_${storeKey}`,
+      `SHOPIFY_${upper}_STORE_DOMAIN`,
+    ];
+    const tokenKeys = [
+      `SHOPIFY_${upper}_ACCESS_TOKEN`,
+      `SHOPIFY_ADMIN_ACCESS_TOKEN_${storeKey}`,
+      `SHOPIFY_${upper}_ADMIN_ACCESS_TOKEN`,
+    ];
 
-    const { data: tokenData } = await supabase
+    const { data: settings, error: settingsError } = await supabase
       .from('system_settings')
-      .select('key_value')
-      .eq('key_name', `SHOPIFY_ADMIN_ACCESS_TOKEN_${storeKey}`)
-      .single();
+      .select('key_name,key_value')
+      .in('key_name', [...domainKeys, ...tokenKeys]);
 
-    if (!domainData?.key_value || !tokenData?.key_value) {
+    if (settingsError) {
+      console.error('Failed to read system_settings for Shopify credentials', settingsError);
       return new Response(
-        JSON.stringify({ error: 'Shopify credentials not found for store' }), 
+        JSON.stringify({ error: 'Failed to read system settings for Shopify credentials' }),
+        { status: 500, headers: corsHeaders }
+      );
+    }
+
+    const map = new Map<string, string>();
+    (settings || []).forEach(s => map.set(s.key_name, s.key_value as string));
+    const shopifyDomain = domainKeys.map(k => map.get(k)).find(Boolean);
+    const accessToken = tokenKeys.map(k => map.get(k)).find(Boolean);
+
+    if (!shopifyDomain || !accessToken) {
+      console.error('Missing Shopify credentials', { tried: { domainKeys, tokenKeys }, found: Object.fromEntries(map) });
+      return new Response(
+        JSON.stringify({ error: 'Shopify credentials not found for store', tried: { domainKeys, tokenKeys } }), 
         { status: 400, headers: corsHeaders }
       );
     }
 
-    const shopifyDomain = domainData.key_value;
-    const accessToken = tokenData.key_value;
     const apiVersion = '2024-07';
 
     let resolvedProductId = productId;
