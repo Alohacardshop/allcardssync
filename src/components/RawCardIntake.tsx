@@ -5,6 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Loader2, Search, Plus, AlertCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -12,6 +13,7 @@ import type { GameKey, Printing } from '@/lib/types';
 import { GAME_OPTIONS } from '@/lib/types';
 import { useStore } from '@/contexts/StoreContext';
 import { AllLocationsSelector } from '@/components/AllLocationsSelector';
+import { TCGCardSearch } from '@/components/TCGCardSearch';
 
 interface CatalogCard {
   id: string;
@@ -246,6 +248,37 @@ export function RawCardIntake({
     }
   };
 
+  // Handle card selection from TCG search
+  const handleTCGCardSelect = (card: any) => {
+    // Convert TCG card format to CatalogCard format
+    const catalogCard: CatalogCard = {
+      id: card.id,
+      name: card.name,
+      set: { name: card.set_name },
+      tcgplayer_product_id: undefined
+    };
+
+    const chosenVar = {
+      condition: conditionCsv.split(',')[0]?.trim() || 'NM',
+      printing: printing,
+      price: card.selectedPrice ? card.selectedPrice / 100 : null // Convert from cents
+    };
+
+    setPicked(catalogCard);
+    setChosenVariant(chosenVar);
+
+    const payload = {
+      card: catalogCard,
+      chosenVariant: chosenVar,
+    };
+
+    onPick?.(payload);
+
+    if (autoSaveToBatch && chosenVar) {
+      setTimeout(addToBatch, 100);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <Card>
@@ -266,139 +299,162 @@ export function RawCardIntake({
               className="w-full"
             />
           </div>
-          <Alert>
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              Card search now uses local catalog data only. External sync functionality has been removed.
-              {/* TODO: Update message when external catalog API is integrated */}
-            </AlertDescription>
-          </Alert>
 
-          {/* Game Selection */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div>
-              <Label htmlFor="game">Game</Label>
-              <Select value={game} onValueChange={(value: GameKey) => setGame(value)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {GAME_OPTIONS.map(option => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label htmlFor="printing">Printing</Label>  
-              <Select value={printing} onValueChange={(value: Printing) => setPrinting(value)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {PRINTINGS.map(p => (
-                    <SelectItem key={p} value={p}>{p}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="md:col-span-2">
-              <Label htmlFor="conditions">Preferred Conditions (CSV)</Label>
-              <Input
-                id="conditions"
-                placeholder="NM,LP,MP"
-                value={conditionCsv}
-                onChange={(e) => setConditionCsv(e.target.value)}
-              />
-            </div>
-          </div>
-
-          {/* Search Inputs */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="md:col-span-2">
-              <Label htmlFor="name">Card Name</Label>
-              <Input
-                id="name"
-                placeholder="e.g., Charizard ex"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && doSearch()}
-              />
-            </div>
-            <div>
-              <Label htmlFor="number">Card Number (Optional)</Label>
-              <Input
-                id="number"
-                placeholder="e.g., 201/197 or 201"
-                value={number}
-                onChange={(e) => setNumber(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && doSearch()}
-              />
-            </div>
-          </div>
-
-          {/* Error Alert */}
-          {error && (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-
-          {/* Suggestions */}
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <Label className="text-base font-semibold">Suggestions</Label>
-              <Button 
-                size="sm" 
-                onClick={doSearch}
-                disabled={loading}
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin mr-1" />
-                    Searching...
-                  </>
-                ) : (
-                  'Search'
-                )}
-              </Button>
-            </div>
+          <Tabs defaultValue="tcg-search" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="tcg-search">TCG Database Search</TabsTrigger>
+              <TabsTrigger value="legacy-search">Legacy Search</TabsTrigger>
+            </TabsList>
             
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
-              {suggestions.map((card, index) => (
-                <Button
-                  key={card.id || `card-${index}`}
-                  variant="outline"
-                  className="h-auto p-3 text-left flex flex-col items-start"
-                  onClick={() => handleSuggestionClick(card)}
-                >
-                  <div className="w-full h-32 bg-muted rounded mb-2 flex items-center justify-center text-xs text-muted-foreground">
-                    {card.name?.substring(0, 20)}...
-                  </div>
-                  <div className="text-sm font-medium truncate w-full">{card.name}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {card.set?.name} • {card.number}
-                  </div>
-                </Button>
-              ))}
-            </div>
+            <TabsContent value="tcg-search" className="space-y-4">
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  Enhanced card search with real-time pricing from our comprehensive TCG database.
+                </AlertDescription>
+              </Alert>
 
-            {!loading && suggestions.length === 0 && name && name.length >= 3 && (
-              <div className="text-center py-8 text-muted-foreground">
-                No matches found for "{name}"
-              </div>
-            )}
+              <TCGCardSearch 
+                onCardSelect={handleTCGCardSelect}
+                showSelectButton={true}
+              />
+            </TabsContent>
 
-            {!loading && suggestions.length === 0 && name && name.length < 3 && (
-              <div className="text-center py-8 text-muted-foreground">
-                Enter card name (3+ characters) to search
+            <TabsContent value="legacy-search" className="space-y-4">
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  Legacy search functionality - limited to local catalog data only.
+                </AlertDescription>
+              </Alert>
+
+              {/* Game Selection */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                  <Label htmlFor="game">Game</Label>
+                  <Select value={game} onValueChange={(value: GameKey) => setGame(value)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {GAME_OPTIONS.map(option => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label htmlFor="printing">Printing</Label>  
+                  <Select value={printing} onValueChange={(value: Printing) => setPrinting(value)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PRINTINGS.map(p => (
+                        <SelectItem key={p} value={p}>{p}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="md:col-span-2">
+                  <Label htmlFor="conditions">Preferred Conditions (CSV)</Label>
+                  <Input
+                    id="conditions"
+                    placeholder="NM,LP,MP"
+                    value={conditionCsv}
+                    onChange={(e) => setConditionCsv(e.target.value)}
+                  />
+                </div>
               </div>
-            )}
-          </div>
+
+              {/* Search Inputs */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="md:col-span-2">
+                  <Label htmlFor="name">Card Name</Label>
+                  <Input
+                    id="name"
+                    placeholder="e.g., Charizard ex"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && doSearch()}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="number">Card Number (Optional)</Label>
+                  <Input
+                    id="number"
+                    placeholder="e.g., 201/197 or 201"
+                    value={number}
+                    onChange={(e) => setNumber(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && doSearch()}
+                  />
+                </div>
+              </div>
+
+              {/* Error Alert */}
+              {error && (
+                <Alert variant="destructive">
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
+
+              {/* Suggestions */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <Label className="text-base font-semibold">Suggestions</Label>
+                  <Button 
+                    size="sm" 
+                    onClick={doSearch}
+                    disabled={loading}
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                        Searching...
+                      </>
+                    ) : (
+                      'Search'
+                    )}
+                  </Button>
+                </div>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
+                  {suggestions.map((card, index) => (
+                    <Button
+                      key={card.id || `card-${index}`}
+                      variant="outline"
+                      className="h-auto p-3 text-left flex flex-col items-start"
+                      onClick={() => handleSuggestionClick(card)}
+                    >
+                      <div className="w-full h-32 bg-muted rounded mb-2 flex items-center justify-center text-xs text-muted-foreground">
+                        {card.name?.substring(0, 20)}...
+                      </div>
+                      <div className="text-sm font-medium truncate w-full">{card.name}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {card.set?.name} • {card.number}
+                      </div>
+                    </Button>
+                  ))}
+                </div>
+
+                {!loading && suggestions.length === 0 && name && name.length >= 3 && (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No matches found for "{name}"
+                  </div>
+                )}
+
+                {!loading && suggestions.length === 0 && name && name.length < 3 && (
+                  <div className="text-center py-8 text-muted-foreground">
+                    Enter card name (3+ characters) to search
+                  </div>
+                )}
+              </div>
+            </TabsContent>
+          </Tabs>
 
           {/* Selected Card Preview */}
           {picked && (
@@ -413,6 +469,9 @@ export function RawCardIntake({
                   <div><span className="text-muted-foreground">Number:</span> {picked.number || '—'}</div>
                   <div><span className="text-muted-foreground">Printing:</span> {printing}</div>
                   <div><span className="text-muted-foreground">Condition:</span> {conditionCsv.split(',')[0]?.trim() || 'NM'}</div>
+                  {chosenVariant?.price && (
+                    <div><span className="text-muted-foreground">Market Price:</span> ${chosenVariant.price.toFixed(2)}</div>
+                  )}
                   {selectedStore && selectedLocation && (
                     <>
                       <div><span className="text-muted-foreground">Store:</span> {availableStores.find(s => s.key === selectedStore)?.name}</div>
