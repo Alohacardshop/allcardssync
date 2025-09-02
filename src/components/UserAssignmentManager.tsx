@@ -205,7 +205,7 @@ export function UserAssignmentManager() {
       return;
     }
 
-    if (newUserStoreKey && newUserLocations.length === 0) {
+    if (newUserStoreKey && newUserStoreKey !== "none" && newUserLocations.length === 0) {
       toast.error("Please select at least one location for the store");
       return;
     }
@@ -228,7 +228,7 @@ export function UserAssignmentManager() {
           email: newUserEmail,
           password: sendInviteEmail ? undefined : newUserPassword,
           roles: newUserRoles.length > 0 ? newUserRoles : ['staff'], // Default to staff role
-          storeAssignments: newUserStoreKey ? storeAssignments : [],
+          storeAssignments: (newUserStoreKey && newUserStoreKey !== "none") ? storeAssignments : [],
           sendInvite: sendInviteEmail
         }
       });
@@ -301,11 +301,11 @@ export function UserAssignmentManager() {
   }, []);
 
   // Load locations when new user store changes  
-  useEffect(() => {
-    if (newUserStoreKey) {
-      loadLocations(newUserStoreKey);
-    }
-  }, [newUserStoreKey]);
+   useEffect(() => {
+     if (newUserStoreKey && newUserStoreKey !== "none") {
+       loadLocations(newUserStoreKey);
+     }
+   }, [newUserStoreKey]);
 
   useEffect(() => {
     if (selectedAssignStore) {
@@ -646,22 +646,22 @@ export function UserAssignmentManager() {
 
               <div>
                 <Label htmlFor="newUserStore">Store (Optional)</Label>
-                <Select value={newUserStoreKey} onValueChange={setNewUserStoreKey}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select store to assign access" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">No store access</SelectItem>
-                    {stores.map(store => (
-                      <SelectItem key={store.key} value={store.key}>
-                        {store.name}
-                      </SelectItem>
-                    ))}
+                 <Select value={newUserStoreKey} onValueChange={setNewUserStoreKey}>
+                   <SelectTrigger>
+                     <SelectValue placeholder="Select store to assign access" />
+                   </SelectTrigger>
+                   <SelectContent>
+                     <SelectItem value="none">No store access</SelectItem>
+                     {stores.map(store => (
+                       <SelectItem key={store.key} value={store.key}>
+                         {store.name}
+                       </SelectItem>
+                     ))}
                   </SelectContent>
                 </Select>
               </div>
 
-              {newUserStoreKey && (
+              {newUserStoreKey && newUserStoreKey !== "none" && (
                 <div>
                   <Label>Locations for {stores.find(s => s.key === newUserStoreKey)?.name}</Label>
                   {loadingLocations ? (
