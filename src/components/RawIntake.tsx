@@ -242,8 +242,7 @@ export default function RawIntake() {
         <Alert className="mb-4">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            Card search now uses local catalog data only. External sync functionality has been removed.
-            {/* TODO: Update message when external catalog API is integrated */}
+            Enhanced card search with real-time pricing from our comprehensive TCG database.
           </AlertDescription>
         </Alert>
 
