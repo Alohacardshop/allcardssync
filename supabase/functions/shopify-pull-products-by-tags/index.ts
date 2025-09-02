@@ -165,6 +165,8 @@ serve(async (req) => {
             if (variant.inventory_item_id) {
               try {
                 const levelsUrl = `https://${shopifyDomain}/admin/api/${apiVersion}/inventory_levels.json?inventory_item_ids=${variant.inventory_item_id}`;
+                console.log(`Fetching inventory levels for variant ${variant.id}, inventory_item_id: ${variant.inventory_item_id}`);
+                
                 const levelsResponse = await fetchWithRetry(levelsUrl, {
                   headers: {
                     'X-Shopify-Access-Token': accessToken,
@@ -175,9 +177,14 @@ serve(async (req) => {
                 if (levelsResponse.ok) {
                   const levelsData = await levelsResponse.json();
                   inventoryLevels = levelsData.inventory_levels || [];
+                } else {
+                  const errorText = await levelsResponse.text();
+                  console.error(`Inventory levels API error for variant ${variant.id}: ${levelsResponse.status} ${levelsResponse.statusText}`, errorText);
+                  errors.push(`Inventory levels API error for variant ${variant.id}: ${levelsResponse.status} ${levelsResponse.statusText}`);
                 }
               } catch (e) {
-                console.warn(`Failed to fetch inventory levels for variant ${variant.id}:`, e);
+                console.error(`Failed to fetch inventory levels for variant ${variant.id}:`, e);
+                errors.push(`Failed to fetch inventory levels for variant ${variant.id}: ${e.message}`);
               }
             }
 
