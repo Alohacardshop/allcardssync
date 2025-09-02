@@ -284,35 +284,73 @@ export default function Inventory() {
   };
 
   useEffect(() => {
-    let isCancelled = false;
+    let abortController = new AbortController();
+    let watchdogTimer: NodeJS.Timeout;
     
     const fetchData = async () => {
-      if (isCancelled) return;
-      
       const currentFetchId = Date.now();
       setFetchId(currentFetchId);
       setLoading(true);
       setError(null);
       setFetchStartTime(currentFetchId);
       
+      // Watchdog timer to prevent stuck loading (15 seconds)
+      watchdogTimer = setTimeout(() => {
+        if (!abortController.signal.aborted) {
+          console.error(`[${currentFetchId}] Watchdog: Request stuck after 15s, aborting`);
+          abortController.abort();
+          setError('Request timed out. Click "Retry" to try again.');
+          setLoading(false);
+          setFetchStartTime(null);
+        }
+      }, 15000);
+      
       try {
         console.log(`[${currentFetchId}] Loading intake items from DB...`);
+        
+        // Fast zero-results check first
+        if (!search && !lotFilter && printed === 'all' && pushed === 'all' && 
+            typeFilter === 'all' && !conditionFilter && !setFilter && 
+            !categoryFilter && !yearFilter && !priceRange.min && !priceRange.max) {
+          
+          const zeroCheck = supabase
+            .from("intake_items")
+            .select('id', { count: 'estimated', head: true })
+            .is("deleted_at", null);
+            
+          if (selectedLocationGid) {
+            zeroCheck.eq("shopify_location_gid", selectedLocationGid);
+          }
+          
+          const { count: quickCount } = await zeroCheck.abortSignal(abortController.signal);
+          
+          if (abortController.signal.aborted) {
+            console.log(`[${currentFetchId}] Zero-check aborted`);
+            return;
+          }
+          
+          if (quickCount === 0) {
+            console.log(`[${currentFetchId}] Fast zero-check: No items found`);
+            setItems([]);
+            setTotal(0);
+            setIsEstimated(true);
+            setLoading(false);
+            setFetchStartTime(null);
+            clearTimeout(watchdogTimer);
+            return;
+          }
+        }
         
         const query = buildInventoryQuery('estimated');
         const from = (page - 1) * pageSize;
         const to = from + pageSize - 1;
 
-        // Set up timeout
-        const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Request timed out after 12 seconds')), 12000)
-        );
-
-        const queryPromise = query.range(from, to);
-        const { data, error, count } = await Promise.race([queryPromise, timeoutPromise]);
+        const { data, error, count } = await query
+          .range(from, to)
+          .abortSignal(abortController.signal);
         
-        // Check if this fetch is still current
-        if (isCancelled || fetchId !== currentFetchId) {
-          console.log(`[${currentFetchId}] Fetch cancelled or superseded`);
+        if (abortController.signal.aborted) {
+          console.log(`[${currentFetchId}] Main query aborted`);
           return;
         }
 
@@ -328,29 +366,41 @@ export default function Inventory() {
         console.log(`[${currentFetchId}] Loaded ${(data || []).length} items out of ~${count || 0} total (${duration}ms)`);
         
       } catch (e: any) {
-        if (!isCancelled && fetchId === currentFetchId) {
+        if (!abortController.signal.aborted) {
           console.error(`[${currentFetchId}] Fetch error:`, e);
-          setError(e.message || 'Failed to load inventory');
+          if (e.name === 'AbortError') {
+            setError('Request was cancelled');
+          } else {
+            setError(e.message || 'Failed to load inventory');
+          }
           setItems([]);
           setTotal(0);
         }
       } finally {
-        if (!isCancelled && fetchId === currentFetchId) {
+        if (!abortController.signal.aborted) {
           setLoading(false);
           setFetchStartTime(null);
         }
+        clearTimeout(watchdogTimer);
       }
     };
 
     const timeoutId = setTimeout(fetchData, 100); // Debounce rapid changes
     
     return () => {
-      isCancelled = true;
+      abortController.abort();
       clearTimeout(timeoutId);
+      clearTimeout(watchdogTimer);
     };
   }, [page, search, printed, pushed, lotFilter, sortKey, sortAsc, typeFilter, conditionFilter, setFilter, categoryFilter, yearFilter, priceRange, selectedLocationGid]);
 
-  // Function to get exact count
+  // Function to retry fetch
+  const retryFetch = () => {
+    setError(null);
+    setLoading(false);
+    // Force a re-fetch by updating a dependency
+    setFetchId(prev => prev + 1);
+  };
   const getExactCount = async () => {
     if (loading) return;
     
@@ -845,7 +895,7 @@ export default function Inventory() {
               <div className="flex items-center gap-2">
                 <StoreSelector />
                 {error && (
-                  <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
+                  <Button variant="outline" size="sm" onClick={retryFetch}>
                     <RefreshCw className="h-4 w-4 mr-2" />
                     Retry
                   </Button>
