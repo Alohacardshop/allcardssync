@@ -25,3 +25,11 @@ verify_jwt = false
 # Shopify inventory sync (public - called by database triggers)
 [functions.shopify-sync-inventory]
 verify_jwt = false
+
+# Shopify product import by tags (public - admin access via UI)
+[functions.shopify-pull-products-by-tags]
+verify_jwt = false
+
+# Shopify product removal/zeroing (public - admin access via UI) 
+[functions.shopify-remove-or-zero]
+verify_jwt = false

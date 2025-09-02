@@ -16,9 +16,10 @@ import { StoreSelector } from "@/components/StoreSelector";
 import { useStore } from "@/contexts/StoreContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { RefreshCw, AlertTriangle, ShoppingCart, Printer } from "lucide-react";
+import { RefreshCw, AlertTriangle, ShoppingCart, Printer, Trash2 } from "lucide-react";
 import { usePrintNode } from "@/hooks/usePrintNode";
 import { generateLabelTSPL } from "@/lib/labelTemplates";
+import { ShopifyRemovalDialog } from "@/components/ShopifyRemovalDialog";
 
 // Simple SEO helpers without extra deps
 function useSEO(opts: { title: string; description?: string; canonical?: string }) {
@@ -87,6 +88,11 @@ type ItemRow = {
   psa_cert: string | null;
   sku: string | null;
   quantity: number | null;
+  shopify_product_id: string | null;
+  shopify_variant_id: string | null;
+  shopify_inventory_item_id: string | null;
+  shopify_location_gid: string | null;
+  source_provider: string | null;
 };
 
 export default function Inventory() {
@@ -114,6 +120,17 @@ export default function Inventory() {
   // Selection state for bulk actions
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [processingIds, setProcessingIds] = useState<Set<string>>(new Set());
+  
+  // Shopify removal dialog state
+  const [removalDialog, setRemovalDialog] = useState<{
+    isOpen: boolean;
+    items: ItemRow[];
+    onConfirm?: (mode: 'auto' | 'graded' | 'raw') => void;
+  }>({
+    isOpen: false,
+    items: []
+  });
+  const [removalProcessing, setRemovalProcessing] = useState(false);
   
   // New filters
   const [typeFilter, setTypeFilter] = useState<"all" | "graded" | "raw">("all");
@@ -627,6 +644,54 @@ export default function Inventory() {
   };
 
   const handleDeleteRow = async (row: ItemRow) => {
+    const isMirrored = row.shopify_product_id || 
+                      (row.sku && row.source_provider === 'shopify-pull');
+    
+    if (isMirrored) {
+      // Show Shopify removal dialog for mirrored items
+      setRemovalDialog({
+        isOpen: true,
+        items: [row],
+        onConfirm: async (mode) => {
+          setRemovalProcessing(true);
+          try {
+            // First apply Shopify removal
+            const { error: shopifyError } = await supabase.functions.invoke("shopify-remove-or-zero", {
+              body: {
+                storeKey: selectedStore,
+                mode,
+                productId: row.shopify_product_id,
+                sku: row.sku,
+                locationGid: row.shopify_location_gid
+              }
+            });
+
+            if (shopifyError) {
+              console.error('Shopify removal error:', shopifyError);
+              toast.error("Shopify removal failed: " + shopifyError.message);
+              return;
+            }
+
+            // Then delete locally
+            await performLocalDelete(row);
+            
+            setRemovalDialog({ isOpen: false, items: [] });
+            toast.success(`Item removed from Shopify and deleted locally`);
+          } catch (error) {
+            console.error('Removal error:', error);
+            toast.error("Failed to remove item: " + (error instanceof Error ? error.message : "Unknown error"));
+          } finally {
+            setRemovalProcessing(false);
+          }
+        }
+      });
+    } else {
+      // Direct local delete for non-mirrored items
+      await performLocalDelete(row);
+    }
+  };
+
+  const performLocalDelete = async (row: ItemRow) => {
     const reason = window.prompt("Delete reason (optional)?") || null;
     try {
       const { error } = await supabase
@@ -640,6 +705,87 @@ export default function Inventory() {
     } catch (e) {
       console.error(e);
       toast.error("Failed to delete item");
+      throw e;
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) {
+      toast.error("Please select items to delete");
+      return;
+    }
+
+    const selectedItems = items.filter(item => selectedIds.has(item.id));
+    const mirroredItems = selectedItems.filter(item => 
+      item.shopify_product_id || 
+      (item.sku && item.source_provider === 'shopify-pull')
+    );
+
+    if (mirroredItems.length > 0) {
+      // Show Shopify removal dialog for bulk delete
+      setRemovalDialog({
+        isOpen: true,
+        items: selectedItems,
+        onConfirm: async (mode) => {
+          setRemovalProcessing(true);
+          try {
+            // Process Shopify removals for mirrored items
+            const results = await Promise.allSettled(
+              mirroredItems.map(item =>
+                supabase.functions.invoke("shopify-remove-or-zero", {
+                  body: {
+                    storeKey: selectedStore,
+                    mode,
+                    productId: item.shopify_product_id,
+                    sku: item.sku,
+                    locationGid: item.shopify_location_gid
+                  }
+                })
+              )
+            );
+
+            const failures = results.filter(r => r.status === 'rejected').length;
+            if (failures > 0) {
+              toast.warning(`${failures} Shopify removals failed, but continuing with local deletion`);
+            }
+
+            // Then delete all selected items locally
+            await performBulkLocalDelete(Array.from(selectedIds));
+            
+            setRemovalDialog({ isOpen: false, items: [] });
+            setSelectedIds(new Set());
+            toast.success(`${selectedItems.length} items processed`);
+          } catch (error) {
+            console.error('Bulk removal error:', error);
+            toast.error("Failed to remove items: " + (error instanceof Error ? error.message : "Unknown error"));
+          } finally {
+            setRemovalProcessing(false);
+          }
+        }
+      });
+    } else {
+      // Direct bulk local delete for non-mirrored items
+      await performBulkLocalDelete(Array.from(selectedIds));
+      setSelectedIds(new Set());
+    }
+  };
+
+  const performBulkLocalDelete = async (itemIds: string[]) => {
+    const reason = window.prompt("Delete reason for all items (optional)?") || null;
+    try {
+      const { error } = await supabase
+        .from("intake_items")
+        .update({ deleted_at: new Date().toISOString(), deleted_reason: reason })
+        .in("id", itemIds);
+      if (error) throw error;
+      
+      setItems((prev) => prev.filter((it) => !itemIds.includes(it.id)));
+      setTotal((t) => Math.max(0, t - itemIds.length));
+      toast.success(`Deleted ${itemIds.length} items${reason ? ` (${reason})` : ""}`);
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to delete items");
+      throw e;
     }
   };
 
@@ -746,6 +892,16 @@ export default function Inventory() {
                     <ShoppingCart className="h-4 w-4" />
                     <Printer className="h-4 w-4" />
                     Push + Print ({selectedIds.size})
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={handleBulkDelete}
+                    disabled={processingIds.size > 0}
+                    className="flex items-center gap-2"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Delete ({selectedIds.size})
                   </Button>
                 </div>
               </div>
@@ -1183,6 +1339,15 @@ export default function Inventory() {
           </CardContent>
         </Card>
       </main>
+
+      {/* Shopify Removal Dialog */}
+      <ShopifyRemovalDialog
+        isOpen={removalDialog.isOpen}
+        onClose={() => setRemovalDialog({ isOpen: false, items: [] })}
+        onConfirm={removalDialog.onConfirm || (() => {})}
+        items={removalDialog.items}
+        loading={removalProcessing}
+      />
     </div>
   );
 }

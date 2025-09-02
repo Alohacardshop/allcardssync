@@ -14,6 +14,7 @@ import CatalogTab from "@/components/admin/CatalogTab";
 import TCGDatabaseSettings from "@/components/admin/TCGDatabaseSettings";
 import { UserAssignmentManager } from "@/components/UserAssignmentManager";
 import { ShopifyConfig } from "@/components/admin/ShopifyConfig";
+import { ShopifyTagImport } from "@/components/admin/ShopifyTagImport";
 
 import { checkSystemHealth } from "@/lib/api";
 
@@ -94,6 +95,7 @@ const Admin = () => {
               <TabsTrigger value="users" className="whitespace-nowrap">Users</TabsTrigger>
               <TabsTrigger value="integrations" className="whitespace-nowrap">Integrations</TabsTrigger>
               <TabsTrigger value="shopify-config" className="whitespace-nowrap">Shopify Config</TabsTrigger>
+              <TabsTrigger value="shopify-import" className="whitespace-nowrap">Shopify Import</TabsTrigger>
               <TabsTrigger value="shopify-inspect" className="whitespace-nowrap">Inspect Shopify</TabsTrigger>
             </TabsList>
           </div>
@@ -194,6 +196,10 @@ const Admin = () => {
 
           <TabsContent value="shopify-config" className="space-y-4">
             <ShopifyConfig />
+          </TabsContent>
+
+          <TabsContent value="shopify-import" className="space-y-4">
+            <ShopifyTagImport />
           </TabsContent>
           
           <TabsContent value="shopify-inspect" className="space-y-4">
