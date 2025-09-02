@@ -31,6 +31,9 @@ serve(async (req) => {
       );
     }
 
+    // Normalize date to ISO8601 if provided
+    const updatedSinceIso = updatedSince ? new Date(updatedSince).toISOString() : undefined;
+
     console.log(`Starting Shopify product import for store: ${storeKey}`);
     console.log(`Graded tags: ${JSON.stringify(gradedTags)}`);
     console.log(`Raw tags: ${JSON.stringify(rawTags)}`);
@@ -88,30 +91,26 @@ serve(async (req) => {
     let upsertedRows = 0;
     let errors: string[] = [];
 
-    // Fetch products from Shopify with pagination
-    let pageInfo: string | null = null;
+    // Fetch products from Shopify with pagination (use full next link URL to avoid 400s)
     let pageCount = 0;
     
     // Cap preview pages to 3 for faster previews
     const effectiveMaxPages = dryRun ? Math.min(maxPages, 3) : maxPages;
 
-    while (pageCount < effectiveMaxPages) {
+    const initialUrlBase = `https://${shopifyDomain}/admin/api/${apiVersion}/products.json?limit=250`;
+    const initialUrl =
+      initialUrlBase +
+      (status && status !== 'any' ? `&status=${encodeURIComponent(status)}` : '') +
+      (updatedSinceIso ? `&updated_at_min=${encodeURIComponent(updatedSinceIso)}` : '');
+
+    let currentUrl: string | null = initialUrl;
+
+    while (currentUrl && pageCount < effectiveMaxPages) {
       pageCount++;
       
-      let url = `https://${shopifyDomain}/admin/api/${apiVersion}/products.json?limit=250`;
-      if (status && status !== 'any') {
-        url += `&status=${status}`;
-      }
-      if (updatedSince) {
-        url += `&updated_at_min=${encodeURIComponent(updatedSince)}`;
-      }
-      if (pageInfo) {
-        url += `&page_info=${pageInfo}`;
-      }
+      console.log(`Fetching page ${pageCount}: ${currentUrl}`);
 
-      console.log(`Fetching page ${pageCount}: ${url}`);
-
-      const response = await fetchWithRetry(url, {
+      const response = await fetchWithRetry(currentUrl, {
         headers: {
           'X-Shopify-Access-Token': accessToken,
           'Content-Type': 'application/json',
@@ -254,19 +253,19 @@ serve(async (req) => {
         }
       }
 
-      // Check for next page
+      // Check for next page (use full URL from Link header)
       const linkHeader = response.headers.get('link');
-      if (linkHeader && linkHeader.includes('rel="next"')) {
-        const nextMatch = linkHeader.match(/<[^>]*[?&]page_info=([^&>]+)[^>]*>;\s*rel="next"/);
-        pageInfo = nextMatch ? nextMatch[1] : null;
-      } else {
-        pageInfo = null;
+      let nextUrl: string | null = null;
+      if (linkHeader) {
+        const m = linkHeader.match(/<([^>]+)>;\s*rel="next"/);
+        nextUrl = m ? m[1] : null;
       }
 
-      if (!pageInfo) {
+      if (!nextUrl) {
         console.log('No more pages available');
         break;
       }
+      currentUrl = nextUrl;
     }
 
     const result = {
