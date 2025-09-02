@@ -285,8 +285,9 @@ export function RawCardIntake({
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Search className="h-5 w-5" />
-            Card Intake
+            Raw Cards Intake
           </CardTitle>
+          <p className="text-sm text-muted-foreground">Add raw (ungraded) cards to inventory</p>
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Location Selector */}
@@ -300,161 +301,17 @@ export function RawCardIntake({
             />
           </div>
 
-          <Tabs defaultValue="tcg-search" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="tcg-search">TCG Database Search</TabsTrigger>
-              <TabsTrigger value="legacy-search">Legacy Search</TabsTrigger>
-            </TabsList>
-            
-            <TabsContent value="tcg-search" className="space-y-4">
-              <Alert>
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>
-                  Enhanced card search with real-time pricing from our comprehensive TCG database.
-                </AlertDescription>
-              </Alert>
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Enhanced card search with real-time pricing from our comprehensive TCG database.
+            </AlertDescription>
+          </Alert>
 
-              <TCGCardSearch 
-                onCardSelect={handleTCGCardSelect}
-                showSelectButton={true}
-              />
-            </TabsContent>
-
-            <TabsContent value="legacy-search" className="space-y-4">
-              <Alert>
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>
-                  Legacy search functionality - limited to local catalog data only.
-                </AlertDescription>
-              </Alert>
-
-              {/* Game Selection */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div>
-                  <Label htmlFor="game">Game</Label>
-                  <Select value={game} onValueChange={(value: GameKey) => setGame(value)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {GAME_OPTIONS.map(option => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <Label htmlFor="printing">Printing</Label>  
-                  <Select value={printing} onValueChange={(value: Printing) => setPrinting(value)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {PRINTINGS.map(p => (
-                        <SelectItem key={p} value={p}>{p}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="md:col-span-2">
-                  <Label htmlFor="conditions">Preferred Conditions (CSV)</Label>
-                  <Input
-                    id="conditions"
-                    placeholder="NM,LP,MP"
-                    value={conditionCsv}
-                    onChange={(e) => setConditionCsv(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              {/* Search Inputs */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="md:col-span-2">
-                  <Label htmlFor="name">Card Name</Label>
-                  <Input
-                    id="name"
-                    placeholder="e.g., Charizard ex"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && doSearch()}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="number">Card Number (Optional)</Label>
-                  <Input
-                    id="number"
-                    placeholder="e.g., 201/197 or 201"
-                    value={number}
-                    onChange={(e) => setNumber(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && doSearch()}
-                  />
-                </div>
-              </div>
-
-              {/* Error Alert */}
-              {error && (
-                <Alert variant="destructive">
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              )}
-
-              {/* Suggestions */}
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <Label className="text-base font-semibold">Suggestions</Label>
-                  <Button 
-                    size="sm" 
-                    onClick={doSearch}
-                    disabled={loading}
-                  >
-                    {loading ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin mr-1" />
-                        Searching...
-                      </>
-                    ) : (
-                      'Search'
-                    )}
-                  </Button>
-                </div>
-                
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
-                  {suggestions.map((card, index) => (
-                    <Button
-                      key={card.id || `card-${index}`}
-                      variant="outline"
-                      className="h-auto p-3 text-left flex flex-col items-start"
-                      onClick={() => handleSuggestionClick(card)}
-                    >
-                      <div className="w-full h-32 bg-muted rounded mb-2 flex items-center justify-center text-xs text-muted-foreground">
-                        {card.name?.substring(0, 20)}...
-                      </div>
-                      <div className="text-sm font-medium truncate w-full">{card.name}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {card.set?.name} • {card.number}
-                      </div>
-                    </Button>
-                  ))}
-                </div>
-
-                {!loading && suggestions.length === 0 && name && name.length >= 3 && (
-                  <div className="text-center py-8 text-muted-foreground">
-                    No matches found for "{name}"
-                  </div>
-                )}
-
-                {!loading && suggestions.length === 0 && name && name.length < 3 && (
-                  <div className="text-center py-8 text-muted-foreground">
-                    Enter card name (3+ characters) to search
-                  </div>
-                )}
-              </div>
-            </TabsContent>
-          </Tabs>
+          <TCGCardSearch 
+            onCardSelect={handleTCGCardSelect}
+            showSelectButton={true}
+          />
 
           {/* Selected Card Preview */}
           {picked && (
