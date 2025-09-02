@@ -8,11 +8,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
-import { Users, MapPin, Settings, Building } from "lucide-react";
+import { Users, MapPin, Settings, Building, Plus } from "lucide-react";
 
 interface UserAssignment {
   id: string;
@@ -74,6 +76,16 @@ export function UserAssignmentManager() {
   const [selectedManageStore, setSelectedManageStore] = useState("");
   const [selectedLocations, setSelectedLocations] = useState<string[]>([]);
   const [defaultLocation, setDefaultLocation] = useState("");
+
+  // Create user form state
+  const [createUserDialogOpen, setCreateUserDialogOpen] = useState(false);
+  const [newUserEmail, setNewUserEmail] = useState("");
+  const [newUserPassword, setNewUserPassword] = useState("");
+  const [newUserRoles, setNewUserRoles] = useState<string[]>([]);
+  const [newUserStoreKey, setNewUserStoreKey] = useState<string>("");
+  const [newUserLocations, setNewUserLocations] = useState<string[]>([]);
+  const [sendInviteEmail, setSendInviteEmail] = useState(true);
+  const [creatingUser, setCreatingUser] = useState(false);
 
   const loadAssignments = async () => {
     try {
@@ -187,6 +199,65 @@ export function UserAssignmentManager() {
     }
   };
 
+  const handleCreateUser = async () => {
+    if (!newUserEmail || (!newUserPassword && !sendInviteEmail)) {
+      toast.error("Email is required, and password is required if not sending invite");
+      return;
+    }
+
+    if (newUserStoreKey && newUserLocations.length === 0) {
+      toast.error("Please select at least one location for the store");
+      return;
+    }
+
+    setCreatingUser(true);
+
+    try {
+      const storeAssignments = newUserLocations.map(locationGid => {
+        const location = locations.find(l => l.id === locationGid);
+        return {
+          storeKey: newUserStoreKey,
+          locationGid,
+          locationName: location?.name || locationGid,
+          isDefault: newUserLocations.length === 1 // Default if only one location
+        };
+      });
+
+      const { data, error } = await supabase.functions.invoke('create-user-admin', {
+        body: {
+          email: newUserEmail,
+          password: sendInviteEmail ? undefined : newUserPassword,
+          roles: newUserRoles.length > 0 ? newUserRoles : ['staff'], // Default to staff role
+          storeAssignments: newUserStoreKey ? storeAssignments : [],
+          sendInvite: sendInviteEmail
+        }
+      });
+
+      if (error) throw error;
+      if (!data.ok) throw new Error(data.error);
+
+      toast.success(`User created successfully! ${data.inviteSent ? 'Invite email sent.' : 'User can log in immediately.'}`);
+      
+      // Reset form
+      setNewUserEmail("");
+      setNewUserPassword("");
+      setNewUserRoles([]);
+      setNewUserStoreKey("");
+      setNewUserLocations([]);
+      setSendInviteEmail(true);
+      setCreateUserDialogOpen(false);
+
+      // Reload data
+      await Promise.all([loadAssignments(), loadUsers()]);
+      
+    } catch (e: any) {
+      console.error("Failed to create user:", e);
+      toast.error(`Failed to create user: ${e.message}`);
+    } finally {
+      setCreatingUser(false);
+    }
+  };
+
   const handleRetry = async () => {
     setRetryAttempts(prev => prev + 1);
     setLoading(true);
@@ -228,6 +299,13 @@ export function UserAssignmentManager() {
     
     return () => clearTimeout(timeoutId);
   }, []);
+
+  // Load locations when new user store changes  
+  useEffect(() => {
+    if (newUserStoreKey) {
+      loadLocations(newUserStoreKey);
+    }
+  }, [newUserStoreKey]);
 
   useEffect(() => {
     if (selectedAssignStore) {
@@ -491,6 +569,149 @@ export function UserAssignmentManager() {
 
   return (
     <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold">User Assignment Manager</h2>
+          <p className="text-muted-foreground">Manage user access to store locations</p>
+        </div>
+        <Dialog open={createUserDialogOpen} onOpenChange={setCreateUserDialogOpen}>
+          <DialogTrigger asChild>
+            <Button>
+              <Plus className="h-4 w-4 mr-2" />
+              Create User
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Create New User</DialogTitle>
+              <DialogDescription>
+                Create a new user and assign them roles and store access.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="newUserEmail">Email *</Label>
+                  <Input
+                    id="newUserEmail"
+                    type="email"
+                    value={newUserEmail}
+                    onChange={(e) => setNewUserEmail(e.target.value)}
+                    placeholder="user@example.com"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="newUserPassword">Password</Label>
+                  <Input
+                    id="newUserPassword"
+                    type="password"
+                    value={newUserPassword}
+                    onChange={(e) => setNewUserPassword(e.target.value)}
+                    placeholder={sendInviteEmail ? "Auto-generated if sending invite" : "Required"}
+                    disabled={sendInviteEmail}
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="sendInvite"
+                  checked={sendInviteEmail}
+                  onCheckedChange={setSendInviteEmail}
+                />
+                <Label htmlFor="sendInvite">Send invitation email (user sets own password)</Label>
+              </div>
+
+              <div>
+                <Label>Roles</Label>
+                <div className="flex gap-4 mt-2">
+                  {['staff', 'admin'].map(role => (
+                    <div key={role} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`role-${role}`}
+                        checked={newUserRoles.includes(role)}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setNewUserRoles(prev => [...prev, role]);
+                          } else {
+                            setNewUserRoles(prev => prev.filter(r => r !== role));
+                          }
+                        }}
+                      />
+                      <Label htmlFor={`role-${role}`} className="capitalize">{role}</Label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="newUserStore">Store (Optional)</Label>
+                <Select value={newUserStoreKey} onValueChange={setNewUserStoreKey}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select store to assign access" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">No store access</SelectItem>
+                    {stores.map(store => (
+                      <SelectItem key={store.key} value={store.key}>
+                        {store.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {newUserStoreKey && (
+                <div>
+                  <Label>Locations for {stores.find(s => s.key === newUserStoreKey)?.name}</Label>
+                  {loadingLocations ? (
+                    <div className="text-sm text-muted-foreground">Loading locations...</div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2 mt-2 max-h-32 overflow-y-auto">
+                      {locations.map(location => (
+                        <div key={location.id} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`new-location-${location.id}`}
+                            checked={newUserLocations.includes(location.id)}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setNewUserLocations(prev => [...prev, location.id]);
+                              } else {
+                                setNewUserLocations(prev => prev.filter(id => id !== location.id));
+                              }
+                            }}
+                          />
+                          <Label htmlFor={`new-location-${location.id}`} className="text-sm">
+                            {location.name}
+                          </Label>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-4">
+                <Button 
+                  onClick={handleCreateUser} 
+                  disabled={creatingUser}
+                  className="flex-1"
+                >
+                  {creatingUser ? "Creating..." : "Create User"}
+                </Button>
+                <Button 
+                  variant="outline" 
+                  onClick={() => setCreateUserDialogOpen(false)}
+                  disabled={creatingUser}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
+
       <Tabs defaultValue="manage" className="w-full">
         <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="manage" className="flex items-center gap-2">
