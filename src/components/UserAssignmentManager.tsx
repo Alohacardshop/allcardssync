@@ -79,8 +79,7 @@ export function UserAssignmentManager() {
           store_key,
           location_gid,
           location_name,
-          is_default,
-          shopify_stores (name)
+          is_default
         `)
         .order("store_key");
       
@@ -182,7 +181,11 @@ export function UserAssignmentManager() {
 
   useEffect(() => {
     setLoading(true);
-    Promise.all([loadAssignments(), loadStores(), loadUsers()]).finally(() => setLoading(false));
+    Promise.all([loadAssignments(), loadStores()])
+      .finally(() => setLoading(false));
+    
+    // Load users in background (can be slow)
+    loadUsers();
   }, []);
 
   useEffect(() => {
