@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -48,13 +48,18 @@ interface PricingVariant {
 }
 
 interface TCGCardSearchProps {
-  onCardSelect?: (card: TCGCard & { selectedPrice?: number }) => void;
+  onCardSelect?: (card: TCGCard & { selectedPrice?: number; selectedCondition?: string; selectedPrinting?: string }) => void;
   showSelectButton?: boolean;
 }
 
 const CONDITIONS = [
   'mint', 'near_mint', 'lightly_played', 'light_played', 'moderately_played', 
   'played', 'heavily_played', 'poor', 'damaged', 'good', 'excellent'
+];
+
+const PRINTINGS = [
+  'normal', 'foil', 'holo', 'reverse_holo', 'etched', 'borderless', 
+  'extended', 'showcase', 'promo', 'first_edition'
 ];
 
 export function TCGCardSearch({ onCardSelect, showSelectButton = false }: TCGCardSearchProps) {
@@ -64,14 +69,94 @@ export function TCGCardSearch({ onCardSelect, showSelectButton = false }: TCGCar
   const [cards, setCards] = useState<TCGCard[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Typeahead states
+  const [suggestions, setSuggestions] = useState<TCGCard[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  
+  // Selected card and pricing states
   const [selectedCard, setSelectedCard] = useState<TCGCard | null>(null);
   const [pricing, setPricing] = useState<PricingVariant[]>([]);
   const [pricingLoading, setPricingLoading] = useState(false);
   const [selectedCondition, setSelectedCondition] = useState<string>("near_mint");
+  const [selectedPrinting, setSelectedPrinting] = useState<string>("normal");
 
   // Load games on mount
   useEffect(() => {
     loadGames();
+  }, []);
+
+  // Debounced search for typeahead
+  const debouncedSearch = useCallback(
+    async (query: string) => {
+      if (query.length < 2) {
+        setSuggestions([]);
+        setShowSuggestions(false);
+        return;
+      }
+
+      // Cancel previous request
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+
+      abortControllerRef.current = new AbortController();
+      setSuggestionsLoading(true);
+
+      try {
+        const { data, error } = await supabase.functions.invoke('tcg-card-search', {
+          body: {
+            action: 'search',
+            search_query: query,
+            game_slug: selectedGame || null,
+            limit_count: 5
+          }
+        });
+
+        if (error) throw error;
+
+        if (data.success) {
+          setSuggestions(data.results);
+          setShowSuggestions(true);
+        }
+      } catch (e: any) {
+        if (e.name !== 'AbortError') {
+          console.error('Typeahead search error:', e);
+        }
+      } finally {
+        setSuggestionsLoading(false);
+      }
+    },
+    [selectedGame]
+  );
+
+  // Debounce the search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (searchQuery.trim()) {
+        debouncedSearch(searchQuery);
+      } else {
+        setSuggestions([]);
+        setShowSuggestions(false);
+      }
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery, debouncedSearch]);
+
+  // Close suggestions on outside click
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (inputRef.current && !inputRef.current.contains(event.target as Node)) {
+        setShowSuggestions(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   const loadGames = async () => {
@@ -168,9 +253,27 @@ export function TCGCardSearch({ onCardSelect, showSelectButton = false }: TCGCar
 
   const handleCardSelect = (card: TCGCard, selectedPrice?: number) => {
     if (onCardSelect) {
-      onCardSelect({ ...card, selectedPrice });
+      onCardSelect({ 
+        ...card, 
+        selectedPrice,
+        selectedCondition,
+        selectedPrinting
+      });
     }
     toast.success(`Selected ${card.name}`);
+    // Clear selected card to hide inline pricing panel
+    setSelectedCard(null);
+    setSuggestions([]);
+    setShowSuggestions(false);
+  };
+
+  const handleSuggestionSelect = (card: TCGCard) => {
+    setSelectedCard(card);
+    setSearchQuery(card.name);
+    setShowSuggestions(false);
+    setPricing([]);
+    // Auto-fetch pricing with default condition
+    fetchPricing(card, false);
   };
 
   return (
@@ -185,13 +288,65 @@ export function TCGCardSearch({ onCardSelect, showSelectButton = false }: TCGCar
         <CardContent className="space-y-4">
           {/* Search Controls */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="md:col-span-2">
+            <div className="md:col-span-2 relative">
               <Input
+                ref={inputRef}
                 placeholder="Search for cards (e.g., Lightning Bolt, Charizard)"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && searchCards()}
+                onFocus={() => {
+                  if (suggestions.length > 0) {
+                    setShowSuggestions(true);
+                  }
+                }}
               />
+              
+              {/* Typeahead Suggestions Dropdown */}
+              {showSuggestions && (
+                <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-background border rounded-md shadow-lg max-h-80 overflow-y-auto">
+                  {suggestionsLoading ? (
+                    <div className="p-3">
+                      <div className="flex items-center gap-2">
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                        <span className="text-sm text-muted-foreground">Searching...</span>
+                      </div>
+                    </div>
+                  ) : suggestions.length > 0 ? (
+                    <div className="py-1">
+                      {suggestions.map((card) => (
+                        <button
+                          key={card.id}
+                          onClick={() => handleSuggestionSelect(card)}
+                          className="w-full flex items-center gap-3 p-3 hover:bg-muted/50 text-left"
+                        >
+                          <img
+                            src={card.image_url}
+                            alt={card.name}
+                            className="w-8 h-10 object-cover rounded flex-shrink-0"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = '/placeholder.svg';
+                            }}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium text-sm truncate">{card.name}</div>
+                            <div className="text-xs text-muted-foreground truncate">
+                              {card.set_name} • {card.game_name}
+                            </div>
+                            <Badge variant="outline" className="text-xs mt-1">
+                              {card.rarity}
+                            </Badge>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-3 text-sm text-muted-foreground">
+                      No matches found
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
             <Select value={selectedGame} onValueChange={setSelectedGame}>
               <SelectTrigger>
@@ -209,13 +364,13 @@ export function TCGCardSearch({ onCardSelect, showSelectButton = false }: TCGCar
           </div>
 
           <div className="flex gap-2">
-            <Button onClick={searchCards} disabled={loading} className="flex-1 md:flex-none">
+            <Button onClick={searchCards} disabled={loading} variant="outline" size="sm">
               {loading ? (
                 <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
               ) : (
                 <Search className="h-4 w-4 mr-2" />
               )}
-              Search Cards
+              Search All
             </Button>
           </div>
 
@@ -226,6 +381,141 @@ export function TCGCardSearch({ onCardSelect, showSelectButton = false }: TCGCar
           )}
         </CardContent>
       </Card>
+
+      {/* Inline Pricing Panel */}
+      {selectedCard && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <DollarSign className="h-5 w-5" />
+              {selectedCard.name} - Pricing
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center gap-4">
+              <Select value={selectedCondition} onValueChange={setSelectedCondition}>
+                <SelectTrigger className="w-48">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CONDITIONS.map((condition) => (
+                    <SelectItem key={condition} value={condition}>
+                      {condition.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              
+              <Select value={selectedPrinting} onValueChange={setSelectedPrinting}>
+                <SelectTrigger className="w-48">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PRINTINGS.map((printing) => (
+                    <SelectItem key={printing} value={printing}>
+                      {printing.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              
+              <Button 
+                onClick={() => fetchPricing(selectedCard, false)}
+                disabled={pricingLoading}
+                variant="outline"
+              >
+                <DollarSign className={`h-4 w-4 mr-2`} />
+                Get Pricing
+              </Button>
+              
+              <Button 
+                onClick={() => fetchPricing(selectedCard, true)}
+                disabled={pricingLoading}
+                variant="outline"
+              >
+                <RefreshCw className={`h-4 w-4 mr-2 ${pricingLoading ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
+            </div>
+
+            {error && (
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+
+            {pricingLoading ? (
+              <div className="space-y-3">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <Skeleton key={i} className="h-16 w-full" />
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {pricing.length === 0 ? (
+                  <Alert>
+                    <AlertDescription>
+                      No pricing data available for this card and condition.
+                    </AlertDescription>
+                  </Alert>
+                ) : (
+                  pricing
+                    .filter(variant => !selectedPrinting || selectedPrinting === 'normal' || variant.printing === selectedPrinting)
+                    .map((variant) => (
+                      <div key={variant.id} className="border rounded-lg p-4">
+                        <div className="flex justify-between items-start mb-2">
+                          <div>
+                            <div className="font-medium">
+                              {variant.condition.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())} 
+                              {variant.printing !== 'normal' && ` - ${variant.printing}`}
+                            </div>
+                            <div className="text-sm text-muted-foreground">
+                              Updated: {new Date(variant.last_updated).toLocaleDateString()}
+                            </div>
+                          </div>
+                          {showSelectButton && (
+                            <Button
+                              size="sm"
+                              onClick={() => handleCardSelect(selectedCard, variant.pricing.market_price_cents)}
+                            >
+                              <Check className="h-3 w-3 mr-1" />
+                              Select
+                            </Button>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+                          <div>
+                            <div className="text-muted-foreground">Market</div>
+                            <div className="font-semibold">
+                              {formatPrice(variant.pricing.market_price_cents)}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-muted-foreground">Low</div>
+                            <div>{formatPrice(variant.pricing.low_price_cents)}</div>
+                          </div>
+                          <div>
+                            <div className="text-muted-foreground">High</div>
+                            <div>{formatPrice(variant.pricing.high_price_cents)}</div>
+                          </div>
+                          <div>
+                            <div className="text-muted-foreground">Price</div>
+                            <div>{formatPrice(variant.pricing.price_cents)}</div>
+                          </div>
+                        </div>
+                        {!variant.is_available && (
+                          <Badge variant="secondary" className="mt-2">
+                            Not Available
+                          </Badge>
+                        )}
+                      </div>
+                    ))
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Search Results */}
       {(loading || cards.length > 0) && (

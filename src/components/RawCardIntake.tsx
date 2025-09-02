@@ -258,9 +258,13 @@ export function RawCardIntake({
       tcgplayer_product_id: undefined
     };
 
+    // Use selected condition and printing from TCG search, or fallback to current values
+    const selectedCondition = card.selectedCondition || conditionCsv.split(',')[0]?.trim() || 'NM';
+    const selectedPrinting = card.selectedPrinting || printing;
+
     const chosenVar = {
-      condition: conditionCsv.split(',')[0]?.trim() || 'NM',
-      printing: printing,
+      condition: selectedCondition,
+      printing: selectedPrinting,
       price: card.selectedPrice ? card.selectedPrice / 100 : null // Convert from cents
     };
 
