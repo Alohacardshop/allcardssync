@@ -70,12 +70,7 @@ export function TCGCardSearch({ onCardSelect, showSelectButton = false, defaultG
     const namePart = cardName.trim().toLowerCase();
     let numberPart = cardNumber.trim();
     
-    // If card number doesn't contain "/" and is numeric, make it more flexible
-    if (numberPart && !numberPart.includes('/') && /^\d+$/.test(numberPart)) {
-      // Search for both "123" and "123/" patterns to catch cards like "123/456"
-      numberPart = `${numberPart} ${numberPart}/`;
-    }
-    
+    // Keep the number simple - don't add extra patterns that might confuse the search
     const parts = [namePart, numberPart].filter(Boolean);
     return parts.join(' ');
   }, [cardName, cardNumber]);
