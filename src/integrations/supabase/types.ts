@@ -1415,52 +1415,8 @@ export type Database = {
       restore_intake_item: {
         Args: { item_id: string; reason_in?: string }
         Returns: {
-          brand_title: string | null
-          card_number: string | null
-          catalog_snapshot: Json | null
-          category: string | null
-          cost: number | null
-          created_at: string
-          deleted_at: string | null
-          deleted_reason: string | null
-          grade: string | null
-          grading_data: Json | null
           id: string
-          image_urls: Json | null
-          intake_batch_id: string | null
-          label_snapshot: Json | null
-          lot_id: string | null
-          lot_number: string
-          original_filename: string | null
-          price: number | null
-          pricing_snapshot: Json | null
-          printed_at: string | null
-          processing_notes: string | null
-          product_weight: number | null
-          psa_cert: string | null
-          psa_cert_number: string | null
-          psa_last_check: string | null
-          psa_snapshot: Json | null
-          psa_verified: boolean | null
-          pushed_at: string | null
-          quantity: number
-          removed_from_batch_at: string | null
-          shopify_inventory_item_id: string | null
-          shopify_location_gid: string | null
-          shopify_product_id: string | null
-          shopify_snapshot: Json | null
-          shopify_variant_id: string | null
-          sku: string | null
-          source_payload: Json | null
-          source_provider: string | null
-          source_row_number: number | null
-          store_key: string | null
-          subject: string | null
-          unique_item_uid: string
-          updated_at: string
-          variant: string | null
-          year: string | null
-        }
+        }[]
       }
       secure_get_secret: {
         Args: { secret_name: string }
@@ -1539,52 +1495,8 @@ export type Database = {
       soft_delete_intake_item: {
         Args: { item_id: string; reason_in?: string }
         Returns: {
-          brand_title: string | null
-          card_number: string | null
-          catalog_snapshot: Json | null
-          category: string | null
-          cost: number | null
-          created_at: string
-          deleted_at: string | null
-          deleted_reason: string | null
-          grade: string | null
-          grading_data: Json | null
           id: string
-          image_urls: Json | null
-          intake_batch_id: string | null
-          label_snapshot: Json | null
-          lot_id: string | null
-          lot_number: string
-          original_filename: string | null
-          price: number | null
-          pricing_snapshot: Json | null
-          printed_at: string | null
-          processing_notes: string | null
-          product_weight: number | null
-          psa_cert: string | null
-          psa_cert_number: string | null
-          psa_last_check: string | null
-          psa_snapshot: Json | null
-          psa_verified: boolean | null
-          pushed_at: string | null
-          quantity: number
-          removed_from_batch_at: string | null
-          shopify_inventory_item_id: string | null
-          shopify_location_gid: string | null
-          shopify_product_id: string | null
-          shopify_snapshot: Json | null
-          shopify_variant_id: string | null
-          sku: string | null
-          source_payload: Json | null
-          source_provider: string | null
-          source_row_number: number | null
-          store_key: string | null
-          subject: string | null
-          unique_item_uid: string
-          updated_at: string
-          variant: string | null
-          year: string | null
-        }
+        }[]
       }
       soft_delete_intake_items: {
         Args: { ids: string[]; reason?: string }
