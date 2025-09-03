@@ -164,9 +164,8 @@ export function TCGCardSearch({ onCardSelect, showSelectButton = false, defaultG
   const loadGames = async () => {
     try {
       const { data, error } = await supabase
-        .from('justtcg_games')
-        .select('id, name, active')
-        .eq('active', true)
+        .from('games')
+        .select('id, name')
         .order('name');
 
       if (error) throw error;
@@ -174,7 +173,7 @@ export function TCGCardSearch({ onCardSelect, showSelectButton = false, defaultG
       const formattedGames = data.map(game => ({
         name: game.name,
         slug: game.id,
-        is_active: game.active
+        is_active: true
       }));
 
       setGames(formattedGames);
