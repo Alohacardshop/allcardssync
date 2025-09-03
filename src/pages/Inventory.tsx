@@ -739,9 +739,11 @@ export default function Inventory() {
   };
 
   const handleDeleteRow = async (row: ItemRow) => {
+    console.log('Delete button clicked for item:', row.lot_number, row.id);
     const isMirrored = row.shopify_product_id || 
                       (row.sku && row.source_provider === 'shopify-pull');
     
+    console.log('Item is mirrored:', isMirrored);
     if (isMirrored) {
       // Show Shopify removal dialog for mirrored items
       setRemovalDialog({
@@ -781,24 +783,31 @@ export default function Inventory() {
       });
     } else {
       // Show confirmation dialog for non-mirrored items
+      console.log('Showing delete confirmation dialog for non-mirrored item');
       setDeleteDialog({
         isOpen: true,
         items: [row],
         isBulk: false,
-        onConfirm: () => performRPCDelete(row.id, 'Deleted from Inventory UI')
+        onConfirm: () => {
+          console.log('Delete confirmation dialog confirmed');
+          performRPCDelete(row.id, 'Deleted from Inventory UI');
+        }
       });
     }
   };
 
   // RPC-based delete functions
   const performRPCDelete = async (itemId: string, reason: string) => {
+    console.log('performRPCDelete called with:', { itemId, reason });
     setDeletingId(itemId);
     try {
+      console.log('Calling soft_delete_intake_item RPC...');
       const { data, error } = await supabase.rpc('soft_delete_intake_item', {
         item_id: itemId,
         reason_in: reason
       });
       
+      console.log('RPC response:', { data, error });
       if (error) throw error;
       
       // Update UI immediately
