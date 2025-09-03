@@ -18,7 +18,7 @@ import { StoreSelector } from '@/components/StoreSelector';
 import { LocationSelector } from '@/components/LocationSelector';
 import { TCGCardSearch } from '@/components/TCGCardSearch';
 import { fetchCardPricing } from '@/hooks/useTCGData';
-import { tcgSupabase, PricingData } from '@/lib/tcg-supabase';
+import { tcgSupabase, PricingData, updateVariantPricing, getVariantPricing } from '@/lib/tcg-supabase';
 
 interface CatalogCard {
   id: string;
@@ -376,11 +376,21 @@ export function RawCardIntake({
     setPricingData(null);
 
     try {
-      const data = await fetchCardPricing(picked.id, selectedCondition, selectedPrinting, refresh);
-      setPricingData(data);
+      let data;
       if (refresh) {
-        toast.success("Pricing data refreshed");
+        // Use updateVariantPricing for refresh to get latest data from JustTCG API
+        const result = await updateVariantPricing(picked.id, selectedCondition, selectedPrinting);
+        if (result.success) {
+          data = result;
+          toast.success("Pricing data refreshed from JustTCG API");
+        } else {
+          throw new Error(result.error);
+        }
+      } else {
+        // Use getVariantPricing for normal fetch to get cached data
+        data = await getVariantPricing(picked.id, selectedCondition, selectedPrinting);
       }
+      setPricingData(data);
     } catch (e: any) {
       console.error('Pricing error:', e);
       toast.error('Failed to fetch pricing: ' + e.message);

@@ -81,3 +81,60 @@ export interface PricingData {
     last_updated: string;
   }[];
 }
+
+// Function to update variant pricing
+export async function updateVariantPricing(
+  cardId: string,
+  condition?: string,
+  printing?: string
+) {
+  try {
+    const { data, error } = await tcgSupabase.functions.invoke('get-card-pricing', {
+      body: {
+        cardId,
+        condition: condition || 'near_mint',
+        printing: printing || 'normal',
+        refresh: true  // This triggers price refresh from JustTCG API
+      }
+    });
+
+    if (error) throw error;
+    
+    return {
+      success: true,
+      card: data.card,
+      variants: data.variants,
+      message: 'Pricing updated successfully'
+    };
+  } catch (error) {
+    console.error('Error updating variant pricing:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+}
+
+// Function to get current pricing without refresh
+export async function getVariantPricing(
+  cardId: string,
+  condition?: string,
+  printing?: string
+) {
+  try {
+    const { data, error } = await tcgSupabase.functions.invoke('get-card-pricing', {
+      body: {
+        cardId,
+        condition: condition || 'near_mint',
+        printing: printing || 'normal',
+        refresh: false  // Just get current data
+      }
+    });
+
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Error getting variant pricing:', error);
+    throw error;
+  }
+}
