@@ -97,18 +97,22 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
     }
   };
 
-  const handleSendToInventory = async (itemId: string) => {
+  const handleSendToInventory = async (item: IntakeItem) => {
     try {
-      console.log('Starting send to inventory for item:', itemId);
+      console.log('Starting send to inventory for item:', item.id, { price: item.price, sku: item.sku });
+
+      const payload: any = {
+        processing_notes: 'Sent to inventory',
+        removed_from_batch_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      // Ensure price is not null to avoid lot total trigger math issues
+      if (item.price == null) payload.price = 0;
 
       const { data, error } = await supabase
         .from('intake_items')
-        .update({ 
-          processing_notes: 'Sent to inventory',
-          removed_from_batch_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', itemId)
+        .update(payload)
+        .eq('id', item.id)
         .select('*');
 
       if (error) {
@@ -118,7 +122,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
       }
 
       if (!data || data.length === 0) {
-        console.warn('Send to inventory: no rows updated for id', itemId);
+        console.warn('Send to inventory: no rows updated for id', item.id);
         toast.error('Could not send item to inventory (no permission or not found).');
         return;
       }
@@ -127,7 +131,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
       toast.success('Item sent to inventory');
 
       // Optimistic UI update for immediate feedback
-      setRecentItems((prev) => prev.filter((i) => i.id !== itemId));
+      setRecentItems((prev) => prev.filter((i) => i.id !== item.id));
       setTotalCount((c) => Math.max(0, (c || 0) - 1));
 
       // Small delay to allow DB triggers to run before refetching
@@ -366,7 +370,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => handleSendToInventory(item.id)}
+                      onClick={() => handleSendToInventory(item)}
                       className="h-8 px-2 bg-green-50 hover:bg-green-100 border-green-200 text-green-700"
                       title="Send to Inventory"
                     >
