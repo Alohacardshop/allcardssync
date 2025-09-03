@@ -177,6 +177,12 @@ export function TCGCardSearch({ onCardSelect, showSelectButton = false, defaultG
       }));
 
       setGames(formattedGames);
+      
+      // Set Pokemon as default if it exists and no game is currently selected
+      if (selectedGame === defaultGameSlug && formattedGames.some(game => game.slug === 'pokemon')) {
+        setSelectedGame('pokemon');
+        onGameChange?.('pokemon');
+      }
     } catch (e: any) {
       console.error('Failed to load games:', e);
       toast.error('Failed to load games');
