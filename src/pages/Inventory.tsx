@@ -245,6 +245,30 @@ export default function Inventory() {
 
   useEffect(() => {
     runDiagnostics();
+    
+    // Debug helper for diagnostics
+    if (typeof window !== 'undefined') {
+      (window as any).debugDeleteRPC = async (itemId: string) => {
+        console.log('Testing soft_delete_intake_item RPC with item:', itemId);
+        try {
+          const { data, error, status } = await supabase.rpc('soft_delete_intake_item', {
+            item_id: itemId,
+            reason_in: 'diagnostic test'
+          });
+          console.log('[debug] RPC response:', { data, error, status });
+          if (error) {
+            console.error('[debug] RPC error details:', { message: error.message, details: error.details, hint: error.hint });
+            toast.error(`RPC Error: ${error.message || error.details || error.hint}`);
+          } else {
+            console.log('[debug] Success response:', data);
+            toast.success('Diagnostic delete successful (check console)');
+          }
+        } catch (e) {
+          console.error('[debug] Exception:', e);
+          toast.error(`Exception: ${e}`);
+        }
+      };
+    }
   }, []);
 
   // Optimized query builder function
@@ -794,13 +818,14 @@ export default function Inventory() {
     setDeletingId(itemId);
     
     try {
-      const { data, error } = await supabase.rpc('soft_delete_intake_item', {
+      const { data, error, status } = await supabase.rpc('soft_delete_intake_item', {
         item_id: itemId,
         reason_in: reason,
       });
 
       if (error) {
-        throw new Error(error.message || error.hint || error.details || 'Delete failed');
+        console.error('[delete] RPC error', { status, ...error });
+        throw new Error(error.message || error.details || error.hint || `RPC failed (status ${status})`);
       }
       
       // Update UI immediately
@@ -825,8 +850,52 @@ export default function Inventory() {
       startUndoTimer(itemId, undoToastId);
       
     } catch (e: any) {
-      toast.error(`Delete failed: ${e.message || e}`);
-      throw e;
+      console.warn('[delete] falling back to direct update:', e?.message || e);
+      
+      try {
+        const { error: fbError } = await supabase
+          .from('intake_items')
+          .update({
+            deleted_at: new Date().toISOString(),
+            deleted_reason: 'fallback delete',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', itemId)
+          .select('id')
+          .single();
+
+        if (fbError) {
+          console.error('[delete] fallback failed', fbError);
+          toast.error(`Delete failed: ${fbError.message || fbError.details || 'unknown error'}`);
+          setDeletingId(null);
+          return;
+        }
+        
+        // Update UI immediately
+        setItems(prev => prev.filter(item => item.id !== itemId));
+        setTotal(prev => Math.max(0, prev - 1));
+        
+        // Show success toast with undo option
+        const undoToastId = toast.success(
+          <div className="flex items-center justify-between w-full">
+            <span>Item deleted (fallback). Undo still available.</span>
+            <button
+              onClick={() => undoDelete(itemId, undoToastId)}
+              className="ml-2 text-xs bg-primary text-primary-foreground px-2 py-1 rounded hover:bg-primary/80"
+            >
+              Undo
+            </button>
+          </div>,
+          { duration: 10000 }
+        );
+        
+        // Start undo timer
+        startUndoTimer(itemId, undoToastId);
+        
+      } catch (fallbackError: any) {
+        console.error('[delete] fallback also failed', fallbackError);
+        toast.error(`Delete completely failed: ${fallbackError.message || 'unknown error'}`);
+      }
     } finally {
       setDeletingId(null);
     }

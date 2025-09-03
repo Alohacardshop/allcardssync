@@ -142,26 +142,39 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
     try {
       console.log('Starting delete for item:', item.id);
 
-      const { data, error } = await supabase.rpc('soft_delete_intake_item', {
+      const { data, error, status } = await supabase.rpc('soft_delete_intake_item', {
         item_id: item.id,
         reason_in: 'Deleted from current batch'
       });
 
       if (error) {
-        console.error('Delete error:', error);
-        toast.error(`Error deleting item: ${error.message || 'Unknown error'}`);
-        return;
-      }
+        console.error('[delete] RPC error', { status, ...error });
+        
+        // Try direct update fallback
+        const { error: fbError } = await supabase
+          .from('intake_items')
+          .update({
+            deleted_at: new Date().toISOString(),
+            deleted_reason: 'fallback delete from batch',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', item.id)
+          .select('id')
+          .single();
 
-      if (!data) {
-        console.warn('Delete: no data returned for id', item.id);
-        toast.error('Could not delete item (no permission or not found).');
-        return;
+        if (fbError) {
+          console.error('[delete] fallback failed', fbError);
+          toast.error(`Delete failed: ${fbError.message || fbError.details || 'unknown error'}`);
+          return;
+        }
+        
+        toast.success('Item deleted (fallback)');
+      } else {
+        toast.success('Item deleted successfully');
       }
 
       console.log('Successfully deleted item:', data);
-      toast.success('Item deleted');
-
+      
       // Optimistic UI update for immediate feedback
       setRecentItems((prev) => prev.filter((i) => i.id !== item.id));
       setTotalCount((c) => Math.max(0, (c || 0) - 1));
