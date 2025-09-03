@@ -294,7 +294,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
                       item.subject,
                       item.brand_title,
                       item.card_number && `#${item.card_number}`
-                    ].filter(Boolean).join(' ') || item.sku || 'Unknown Item'}
+                    ].filter(Boolean).join(' • ') || item.sku || 'Unknown Item'}
                   </div>
                   <div className="text-xs text-muted-foreground space-y-1">
                     <div>
