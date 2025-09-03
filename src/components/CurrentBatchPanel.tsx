@@ -101,35 +101,25 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
 
   const handleSendToInventory = async (item: IntakeItem) => {
     try {
-      console.log('Starting send to inventory for item:', item.id, { price: item.price, sku: item.sku });
+      console.log('Starting send to inventory for item:', item.id);
 
-      const payload: any = {
-        processing_notes: 'Sent to inventory',
-        removed_from_batch_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
-      // Ensure price is not null to avoid lot total trigger math issues
-      if (item.price == null) payload.price = 0;
-
-      const { data, error } = await supabase
-        .from('intake_items')
-        .update(payload)
-        .eq('id', item.id)
-        .select('*');
+      const { data, error } = await supabase.rpc('send_intake_item_to_inventory', {
+        item_id: item.id
+      });
 
       if (error) {
-        console.error('Inventory update error:', error);
+        console.error('Send to inventory error:', error);
         toast.error(`Error sending item to inventory: ${error.message || 'Unknown error'}`);
         return;
       }
 
-      if (!data || data.length === 0) {
-        console.warn('Send to inventory: no rows updated for id', item.id);
+      if (!data) {
+        console.warn('Send to inventory: no data returned for id', item.id);
         toast.error('Could not send item to inventory (no permission or not found).');
         return;
       }
 
-      console.log('Successfully updated item:', data[0]);
+      console.log('Successfully sent item to inventory:', data);
       toast.success('Item sent to inventory');
 
       // Optimistic UI update for immediate feedback
@@ -148,17 +138,12 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
 
   const handleDeleteItem = async (item: IntakeItem) => {
     try {
-      console.log('Starting delete for item:', item.id, { store_key: item.store_key, location_gid: item.shopify_location_gid });
+      console.log('Starting delete for item:', item.id);
 
-      const { data, error } = await supabase
-        .from('intake_items')
-        .update({ 
-          deleted_at: new Date().toISOString(),
-          deleted_reason: 'Deleted from current batch',
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', item.id)
-        .select('*');
+      const { data, error } = await supabase.rpc('soft_delete_intake_item', {
+        item_id: item.id,
+        reason_in: 'Deleted from current batch'
+      });
 
       if (error) {
         console.error('Delete error:', error);
@@ -166,13 +151,13 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
         return;
       }
 
-      if (!data || data.length === 0) {
-        console.warn('Delete: no rows updated for id', item.id);
+      if (!data) {
+        console.warn('Delete: no data returned for id', item.id);
         toast.error('Could not delete item (no permission or not found).');
         return;
       }
 
-      console.log('Successfully deleted item:', data[0]);
+      console.log('Successfully deleted item:', data);
       toast.success('Item deleted');
 
       // Optimistic UI update for immediate feedback
