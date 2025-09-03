@@ -100,7 +100,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
   const handleSendToInventory = async (itemId: string) => {
     try {
       console.log('Starting send to inventory for item:', itemId);
-      
+
       const { data, error } = await supabase
         .from('intake_items')
         .update({ 
@@ -109,21 +109,32 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
           updated_at: new Date().toISOString()
         })
         .eq('id', itemId)
-        .select();
+        .select('*');
 
       if (error) {
         console.error('Inventory update error:', error);
-        throw error;
+        toast.error(`Error sending item to inventory: ${error.message || 'Unknown error'}`);
+        return;
       }
 
-      console.log('Successfully updated item:', data);
+      if (!data || data.length === 0) {
+        console.warn('Send to inventory: no rows updated for id', itemId);
+        toast.error('Could not send item to inventory (no permission or not found).');
+        return;
+      }
+
+      console.log('Successfully updated item:', data[0]);
       toast.success('Item sent to inventory');
-      
-      // Add a small delay before refreshing to ensure the update is reflected
+
+      // Optimistic UI update for immediate feedback
+      setRecentItems((prev) => prev.filter((i) => i.id !== itemId));
+      setTotalCount((c) => Math.max(0, (c || 0) - 1));
+
+      // Small delay to allow DB triggers to run before refetching
       setTimeout(() => {
         fetchRecentItems();
-      }, 100);
-    } catch (error) {
+      }, 150);
+    } catch (error: any) {
       console.error('Error sending item to inventory:', error);
       toast.error(`Error sending item to inventory: ${error?.message || 'Unknown error'}`);
     }
