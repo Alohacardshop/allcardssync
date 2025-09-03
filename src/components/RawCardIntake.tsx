@@ -18,7 +18,7 @@ import { StoreSelector } from '@/components/StoreSelector';
 import { LocationSelector } from '@/components/LocationSelector';
 import { TCGCardSearch } from '@/components/TCGCardSearch';
 import { fetchCardPricing } from '@/hooks/useTCGData';
-import { tcgSupabase, PricingResponse, PricingData, updateVariantPricing, getVariantPricing, formatPrice as tcgFormatPrice, findVariant } from '@/lib/tcg-supabase';
+import { tcgSupabase, PricingResponse, PricingData, updateVariantPricing, getVariantPricing, formatPrice as tcgFormatPrice, findVariant, fetchCardVariants } from '@/lib/tcg-supabase';
 import { generateSKU as generateSkuFromVariant } from '@/lib/sku';
 
 interface CatalogCard {
@@ -93,21 +93,44 @@ export function RawCardIntake({
   const [showPricingDebug, setShowPricingDebug] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
 
+  // Card variant data from TCG DB
+  const [cardVariants, setCardVariants] = useState<{conditions: string[], printings: string[]} | null>(null);
+
   // Refs for input focus management
   const costInputRef = useRef<HTMLInputElement>(null);
 
-  // Available options from pricing data
+  // Available options from pricing data and card variants
   const availableConditions = useMemo(() => {
-    if (!pricingData?.variants?.length) return CONDITIONS;
-    const conditions = [...new Set(pricingData.variants.map(v => v.condition))];
-    return conditions.length > 0 ? conditions : CONDITIONS;
-  }, [pricingData]);
+    // First try pricing data variants
+    if (pricingData?.variants?.length) {
+      const conditions = [...new Set(pricingData.variants.map(v => v.condition))];
+      if (conditions.length > 0) return conditions;
+    }
+    
+    // Fallback to card variants from TCG DB
+    if (cardVariants?.conditions?.length) {
+      return cardVariants.conditions;
+    }
+    
+    // Final fallback to static list
+    return CONDITIONS;
+  }, [pricingData, cardVariants]);
 
   const availablePrintings = useMemo(() => {
-    if (!pricingData?.variants?.length) return TCGDB_PRINTINGS;
-    const printings = [...new Set(pricingData.variants.map(v => v.printing))];
-    return printings.length > 0 ? printings : TCGDB_PRINTINGS;
-  }, [pricingData]);
+    // First try pricing data variants
+    if (pricingData?.variants?.length) {
+      const printings = [...new Set(pricingData.variants.map(v => v.printing))];
+      if (printings.length > 0) return printings;
+    }
+    
+    // Fallback to card variants from TCG DB
+    if (cardVariants?.printings?.length) {
+      return cardVariants.printings;
+    }
+    
+    // Final fallback to static list
+    return TCGDB_PRINTINGS;
+  }, [pricingData, cardVariants]);
 
   // Auto-update selections when available options change
   useEffect(() => {
@@ -435,6 +458,21 @@ export function RawCardIntake({
         setPricingLoading(false);
       }
     }, 100);
+
+    // Also fetch card variants from TCG DB for condition/printing options
+    setTimeout(async () => {
+      try {
+        const variants = await fetchCardVariants(catalogCard.id);
+        setCardVariants(variants);
+        console.log('Card variants from TCG DB:', variants);
+        if (variants.conditions.length > 0 || variants.printings.length > 0) {
+          console.log(`Found ${variants.conditions.length} conditions and ${variants.printings.length} printings in TCG DB`);
+        }
+      } catch (e: any) {
+        console.error('Failed to fetch card variants:', e);
+        setCardVariants(null);
+      }
+    }, 50);
 
     if (autoSaveToBatch) {
       setTimeout(addToBatch, 100);

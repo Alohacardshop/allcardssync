@@ -293,3 +293,26 @@ export async function getVariantPricing(
     throw error;
   }
 }
+
+// Fetch card variants directly from TCG DB for condition/printing options
+export async function fetchCardVariants(cardId: string): Promise<{conditions: string[], printings: string[]}> {
+  try {
+    const { data: variants, error } = await tcgSupabase
+      .from('variants')
+      .select('condition, printing')
+      .eq('card_id', cardId);
+
+    if (error) {
+      console.error('Error fetching card variants:', error);
+      return { conditions: [], printings: [] };
+    }
+
+    const conditions = [...new Set(variants?.map(v => v.condition).filter(Boolean))];
+    const printings = [...new Set(variants?.map(v => v.printing).filter(Boolean))];
+
+    return { conditions, printings };
+  } catch (error) {
+    console.error('Error fetching card variants:', error);
+    return { conditions: [], printings: [] };
+  }
+}
