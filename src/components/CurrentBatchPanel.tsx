@@ -27,6 +27,7 @@ interface IntakeItem {
   variant?: string;
   category?: string;
   year?: string;
+  catalog_snapshot?: any; // Using any to match the Json type from database
 }
 
 interface CurrentBatchPanelProps {
@@ -290,6 +291,18 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
                 <div className="flex-1">
                   <div className="font-medium text-sm">
                     {(() => {
+                      // Use catalog_snapshot for proper formatting
+                      const catalog = item.catalog_snapshot;
+                      if (catalog?.name && catalog?.set) {
+                        const cardName = catalog.name.split(' - ')[0]; // Extract "Blaziken" from "Blaziken - 192/182"
+                        const cardNumber = catalog.name.split(' - ')[1]; // Extract "192/182" from "Blaziken - 192/182"
+                        const category = item.category || '';
+                        const set = catalog.set;
+                        
+                        return `${category} ${cardName} ${set} • #${cardNumber}`.trim();
+                      }
+                      
+                      // Fallback to original logic
                       const base = [item.category, item.subject, item.brand_title]
                         .filter(Boolean)
                         .join(' ');
