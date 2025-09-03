@@ -10,11 +10,9 @@ import EditIntakeItemDialog, { IntakeItemDetails } from "@/components/EditIntake
 
 interface IntakeItem {
   id: string;
-  card_name?: string;
   subject?: string;
   brand_title?: string;
   sku?: string;
-  set_name?: string;
   card_number?: string;
   quantity: number;
   price: number;
@@ -23,7 +21,6 @@ interface IntakeItem {
   processing_notes?: string;
   printed_at?: string;
   pushed_at?: string;
-  game?: string;
   created_at: string;
   psa_cert?: string;
   grade?: string;
@@ -292,17 +289,16 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
               <div key={item.id} className="flex items-center justify-between p-3 border rounded-lg bg-muted/20">
                 <div className="flex-1">
                   <div className="font-medium text-sm">
-                    {item.card_name || item.subject || item.brand_title || item.sku || 'Unknown Item'}
+                    {item.subject || item.brand_title || item.sku || 'Unknown Item'}
                   </div>
                   <div className="text-xs text-muted-foreground space-y-1">
                     <div>
-                      {item.set_name && `${item.set_name} • `}
+                      {item.brand_title && `${item.brand_title} • `}
                       {item.card_number && `#${item.card_number} • `}
                       Qty: {item.quantity} • ${(item.price || 0).toFixed(2)}
                       {item.cost && ` (Cost: $${item.cost.toFixed(2)})`}
                     </div>
                     <div>
-                      {item.game && `${item.game} • `}
                       {item.year && `${item.year} • `}
                       {item.category && `${item.category} • `}
                       {item.variant && `${item.variant} • `}
