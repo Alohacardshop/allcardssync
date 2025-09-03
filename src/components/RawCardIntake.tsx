@@ -133,6 +133,23 @@ export function RawCardIntake({
     }
   }, [selectedCondition, selectedPrinting]);
 
+  // Auto-populate selling price from TCG price (rounded UP) when pricing data loads
+  useEffect(() => {
+    if (!pricingData?.variants?.length) return;
+    const v: any = findVariant(pricingData as any, selectedCondition, selectedPrinting) || pricingData.variants[0];
+    if (!v) return;
+    const priceCents = v.pricing?.price_cents ?? v.price_cents;
+    const priceInDollars = priceCents ? priceCents / 100 : 0;
+    const roundedUp = priceInDollars > 0 ? Math.ceil(priceInDollars) : 0;
+    setChosenVariant({
+      condition: v.condition,
+      printing: v.printing,
+      price: priceInDollars,
+      variant_id: v.id || null,
+    });
+    setCustomPrice(roundedUp > 0 ? String(roundedUp) : "");
+  }, [pricingData, selectedCondition, selectedPrinting]);
+
   const debounceRef = useRef<NodeJS.Timeout>();
 
   // Clear suggestions when inputs change
@@ -424,8 +441,8 @@ export function RawCardIntake({
     const priceCents = variant.pricing?.price_cents || variant.price_cents;
     const priceInDollars = priceCents && !isNaN(priceCents) ? priceCents / 100 : 0;
     
-    // Round to nearest whole dollar for selling price
-    const roundedSellingPrice = priceInDollars > 0 ? Math.round(priceInDollars) : 0;
+    // Round UP to nearest whole dollar for selling price
+    const roundedSellingPrice = priceInDollars > 0 ? Math.ceil(priceInDollars) : 0;
     
     const newVariant = {
       condition: variant.condition,
@@ -649,7 +666,7 @@ export function RawCardIntake({
                    id="customPrice"
                    type="number"
                    step="0.01"
-                   placeholder="Rounded to nearest dollar"
+                   placeholder="0.00"
                    value={customPrice}
                    onChange={(e) => setCustomPrice(e.target.value)}
                    className="mt-1"
