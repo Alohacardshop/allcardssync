@@ -269,8 +269,8 @@ export function RawCardIntake({
         variant_in: chosenVariant.printing,
         card_number_in: picked.number || "",
         grade_in: chosenVariant.condition,
-        price_in: customPrice ? parseFloat(customPrice) : (chosenVariant.price || null),
-        cost_in: cost ? parseFloat(cost) : null,
+        price_in: customPrice ? parseFloat(customPrice) : (chosenVariant.price || 0),
+        cost_in: cost ? (isNaN(parseFloat(cost)) ? null : parseFloat(cost)) : null,
         sku_in: generateSKU(picked, chosenVariant, game),
         source_provider_in: 'raw_search',
         catalog_snapshot_in: {
@@ -311,11 +311,20 @@ export function RawCardIntake({
 
       const responseData = Array.isArray(response.data) ? response.data[0] : response.data;
 
+      // Show warning if price was saved as 0
+      const finalPrice = customPrice ? parseFloat(customPrice) : (chosenVariant.price || 0);
+      if (finalPrice === 0) {
+        toast.warning(`Added to batch with $0.00 price - please review pricing`, {
+          duration: 5000
+        });
+      } else {
+        toast.success(`Added to batch (Lot ${responseData?.lot_number ?? ''})`);
+      }
+
       // Dispatch browser event for real-time updates
       window.dispatchEvent(new CustomEvent('intake:item-added', { 
         detail: { ...responseData, lot_number: responseData?.lot_number }
       }));
-      toast.success(`Added to batch (Lot ${responseData?.lot_number ?? ''})`);
       
       // Reset selection but keep search results
       setPicked(null);
