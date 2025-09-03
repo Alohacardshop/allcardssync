@@ -88,6 +88,8 @@ export function RawCardIntake({
   const [selectedPrinting, setSelectedPrinting] = useState<string>("normal");
   const [pricingData, setPricingData] = useState<PricingData | null>(null);
   const [pricingLoading, setPricingLoading] = useState(false);
+  const [lastPricingRequest, setLastPricingRequest] = useState<any>(null);
+  const [showPricingDebug, setShowPricingDebug] = useState(false);
 
   // Available options from pricing data
   const availableConditions = useMemo(() => {
@@ -125,7 +127,8 @@ export function RawCardIntake({
       setChosenVariant({
         condition: selectedCondition,
         printing: selectedPrinting,
-        price: chosenVariant?.price || null // Keep existing price if available
+        price: chosenVariant?.price || null, // Keep existing price if available
+        variant_id: chosenVariant?.variant_id || null // Keep variant ID if available
       });
     }
   }, [selectedCondition, selectedPrinting]);
@@ -239,7 +242,11 @@ export function RawCardIntake({
             number: picked.number,
             set: picked.set?.name
           },
-          selected_variant: chosenVariant
+          selected_variant: {
+            ...chosenVariant,
+            variant_id: chosenVariant.variant_id || null,
+            last_pricing_request: lastPricingRequest
+          }
         })),
         catalog_snapshot: {
           card_id: picked.id,
@@ -252,7 +259,12 @@ export function RawCardIntake({
           price: chosenVariant.price,
           condition: chosenVariant.condition,
           printing: chosenVariant.printing,
-          captured_at: new Date().toISOString()
+          variant_id: chosenVariant.variant_id || null,
+          captured_at: new Date().toISOString(),
+          pricing_data: pricingData ? {
+            cardId: pricingData.cardId,
+            variant_count: pricingData.variants?.length || 0
+          } : null
         },
         processing_notes: `Raw card intake search for "${name}" in ${game}`
       };
@@ -377,18 +389,22 @@ export function RawCardIntake({
 
     try {
       let data;
+      const variantId = chosenVariant?.variant_id || null;
+      
       if (refresh) {
-        // Use updateVariantPricing for refresh to get latest data from JustTCG API
-        const result = await updateVariantPricing(picked.id, selectedCondition, selectedPrinting);
+        // Always force refresh to get latest data from JustTCG API
+        const result = await updateVariantPricing(picked.id, selectedCondition, selectedPrinting, variantId);
         if (result.success) {
           data = result;
+          setLastPricingRequest(result.requestPayload);
           toast.success("Pricing data refreshed from JustTCG API");
         } else {
           throw new Error(result.error);
         }
       } else {
         // Use getVariantPricing for normal fetch to get cached data
-        data = await getVariantPricing(picked.id, selectedCondition, selectedPrinting);
+        data = await getVariantPricing(picked.id, selectedCondition, selectedPrinting, variantId);
+        setLastPricingRequest(data.requestPayload);
       }
       setPricingData(data);
     } catch (e: any) {
@@ -400,22 +416,30 @@ export function RawCardIntake({
     }
   };
 
-  const formatPrice = (cents: number | null | undefined) => {
-    if (cents === null || cents === undefined || isNaN(cents)) {
-      return '$0.00';
+  const formatPrice = (cents: number | null | undefined, showNoPrice = false) => {
+    if (cents === null || cents === undefined || isNaN(cents) || cents === 0) {
+      return showNoPrice ? 'No price' : '$0.00';
     }
     return `$${(cents / 100).toFixed(2)}`;
   };
 
   const handlePricingSelect = (variant: any) => {
-    const priceInDollars = variant.price_cents ? variant.price_cents / 100 : 0;
-    setChosenVariant({
+    const priceInDollars = variant.price_cents && !isNaN(variant.price_cents) ? variant.price_cents / 100 : 0;
+    const newVariant = {
       condition: variant.condition,
       printing: variant.printing,
-      price: priceInDollars
-    });
-    setCustomPrice(priceInDollars.toFixed(2));
-    toast.success(`Selected ${variant.condition} ${variant.printing} at ${formatPrice(variant.price_cents)}`);
+      price: priceInDollars,
+      variant_id: variant.id || null // Capture variant ID
+    };
+    
+    setChosenVariant(newVariant);
+    setCustomPrice(priceInDollars > 0 ? priceInDollars.toFixed(2) : "");
+    
+    const priceDisplay = variant.price_cents && !isNaN(variant.price_cents) && variant.price_cents > 0 
+      ? formatPrice(variant.price_cents) 
+      : 'No price available';
+    
+    toast.success(`Selected ${variant.condition} ${variant.printing} at ${priceDisplay}`);
   };
 
   const SelectedCardPanel = () => (
@@ -488,23 +512,53 @@ export function RawCardIntake({
             </Select>
             
             <Button 
-              onClick={() => fetchPricingData(false)}
-              disabled={pricingLoading}
-              variant="outline"
-            >
-              <DollarSign className={`h-4 w-4 mr-2`} />
-              Get Pricing
-            </Button>
-            
-            <Button 
               onClick={() => fetchPricingData(true)}
               disabled={pricingLoading}
               variant="outline"
             >
-              <RefreshCw className={`h-4 w-4 mr-2 ${pricingLoading ? 'animate-spin' : ''}`} />
-              Refresh
+              {pricingLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <DollarSign className="w-4 h-4 mr-2" />}
+              Get Pricing
+            </Button>
+            
+            <Button 
+              onClick={() => setShowPricingDebug(!showPricingDebug)}
+              variant="ghost"
+            >
+              Debug {showPricingDebug ? '−' : '+'}
             </Button>
           </div>
+
+          {/* Pricing Debug Panel */}
+          {showPricingDebug && (
+            <div className="mt-4 p-3 bg-muted rounded-lg text-sm">
+              <h4 className="font-medium mb-2">Pricing Debug Information</h4>
+              {lastPricingRequest && (
+                <div className="space-y-2">
+                  <div><strong>Last Request:</strong></div>
+                  <pre className="bg-background p-2 rounded text-xs overflow-x-auto">
+                    {JSON.stringify(lastPricingRequest, null, 2)}
+                  </pre>
+                  {pricingData && (
+                    <>
+                      <div><strong>Response Summary:</strong></div>
+                      <pre className="bg-background p-2 rounded text-xs overflow-x-auto">
+                        {JSON.stringify({
+                          cardId: pricingData.cardId,
+                          variants: pricingData.variants?.map(v => ({
+                            id: v.id,
+                            sku: v.sku,
+                            condition: v.condition,
+                            printing: v.printing,
+                            price_cents: v.price_cents
+                          })) || []
+                        }, null, 2)}
+                      </pre>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Pricing Display */}
           {pricingLoading ? (
@@ -548,9 +602,11 @@ export function RawCardIntake({
                         )}
                       </div>
                     </div>
-                    <div className="text-xs text-muted-foreground">
-                      Updated: {new Date(variant.last_updated).toLocaleDateString()}
-                    </div>
+                     <div className="text-xs text-muted-foreground">
+                       Updated: {new Date(variant.last_updated).toLocaleDateString()}
+                       {variant.id && <span className="ml-2">ID: {variant.id}</span>}
+                       {variant.sku && <span className="ml-2">SKU: {variant.sku}</span>}
+                     </div>
                   </button>
                 ))
             }

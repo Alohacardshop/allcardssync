@@ -74,6 +74,8 @@ export interface PopularCard {
 export interface PricingData {
   cardId: string;
   variants: {
+    id?: string;
+    sku?: string;
     condition: string;
     printing: string;
     price_cents: number;
@@ -82,20 +84,27 @@ export interface PricingData {
   }[];
 }
 
-// Function to update variant pricing
+// Function to update variant pricing with optional variantId
 export async function updateVariantPricing(
   cardId: string,
   condition?: string,
-  printing?: string
+  printing?: string,
+  variantId?: string
 ) {
   try {
+    const requestBody: any = {
+      cardId,
+      condition: condition || 'near_mint',
+      printing: printing || 'normal',
+      refresh: true  // This triggers price refresh from JustTCG API
+    };
+
+    if (variantId) {
+      requestBody.variantId = variantId;
+    }
+
     const { data, error } = await tcgSupabase.functions.invoke('get-card-pricing', {
-      body: {
-        cardId,
-        condition: condition || 'near_mint',
-        printing: printing || 'normal',
-        refresh: true  // This triggers price refresh from JustTCG API
-      }
+      body: requestBody
     });
 
     if (error) throw error;
@@ -104,35 +113,46 @@ export async function updateVariantPricing(
       success: true,
       card: data.card,
       variants: data.variants,
+      requestPayload: requestBody,
       message: 'Pricing updated successfully'
     };
   } catch (error) {
     console.error('Error updating variant pricing:', error);
     return {
       success: false,
-      error: error.message
+      error: error.message || 'Unknown error'
     };
   }
 }
 
-// Function to get current pricing without refresh
+// Function to get current pricing without refresh with optional variantId
 export async function getVariantPricing(
   cardId: string,
   condition?: string,
-  printing?: string
+  printing?: string,
+  variantId?: string
 ) {
   try {
+    const requestBody: any = {
+      cardId,
+      condition: condition || 'near_mint',
+      printing: printing || 'normal',
+      refresh: false  // Just get current data
+    };
+
+    if (variantId) {
+      requestBody.variantId = variantId;
+    }
+
     const { data, error } = await tcgSupabase.functions.invoke('get-card-pricing', {
-      body: {
-        cardId,
-        condition: condition || 'near_mint',
-        printing: printing || 'normal',
-        refresh: false  // Just get current data
-      }
+      body: requestBody
     });
 
     if (error) throw error;
-    return data;
+    return {
+      ...data,
+      requestPayload: requestBody
+    };
   } catch (error) {
     console.error('Error getting variant pricing:', error);
     throw error;
