@@ -124,6 +124,21 @@ async function handleCardPricing(req: Request) {
   if (!pricingResponse.ok) {
     const errorText = await pricingResponse.text()
     console.error('Pricing API error:', errorText)
+    
+    // Handle "Card not found" as a graceful app error instead of 500
+    if (pricingResponse.status === 404 || errorText.includes('Card not found')) {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          cardId,
+          refreshed: refresh,
+          variants: [],
+          error: 'Card not found'
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+    
     return new Response(
       JSON.stringify({ error: 'Pricing fetch failed', details: errorText }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

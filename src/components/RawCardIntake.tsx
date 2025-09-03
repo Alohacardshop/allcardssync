@@ -514,9 +514,9 @@ export function RawCardIntake({
     }
   };
 
-  const fetchPricingData = async (refresh = false) => {
-    if (!picked || !justtcgCardId) {
-      toast.error('Card or JustTCG ID not available for pricing');
+  const fetchPricingData = async (refresh = false, variantId?: string) => {
+    if (!picked || !picked.id) {
+      toast.error('Card not available for pricing');
       return;
     }
     
@@ -524,21 +524,23 @@ export function RawCardIntake({
     setPricingData(null);
 
     try {
-      // Use our proxy directly with JustTCG card ID
-      const { proxyPricing } = await import('@/lib/tcg-supabase');
-      const data = await proxyPricing(justtcgCardId, selectedCondition, selectedPrinting, refresh);
+      // Use direct Supabase functions instead of proxy
+      const data = refresh 
+        ? await updateVariantPricing(picked.id, selectedCondition, selectedPrinting, variantId)
+        : await getVariantPricing(picked.id, selectedCondition, selectedPrinting, variantId);
       
       setLastPricingRequest({
-        cardId: justtcgCardId,
+        cardId: justtcgCardId || picked.id,
         condition: selectedCondition,
         printing: selectedPrinting,
-        refresh
+        refresh,
+        variantId
       });
       
       if (data.success && data.variants.length > 0) {
         toast.success(refresh ? "Pricing data refreshed from JustTCG API" : "Pricing data loaded");
-      } else {
-        console.log('No pricing variants found for JustTCG card ID:', justtcgCardId);
+      } else if (data.success === false && data.variants.length === 0) {
+        toast.info("No pricing variants found for this card");
       }
       
       setPricingData(data);
@@ -565,6 +567,9 @@ export function RawCardIntake({
     
     // Round UP to nearest whole dollar for selling price
     const roundedSellingPrice = priceInDollars > 0 ? Math.ceil(priceInDollars) : 0;
+    
+    // Store variant ID for more precise pricing updates
+    const variantId = variant.id;
     
     const newVariant = {
       condition: variant.condition,
