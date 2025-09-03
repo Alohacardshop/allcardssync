@@ -82,10 +82,18 @@ serve(async (req) => {
         
         // Determine grading company and status
         const getGradingInfo = (grade, psa_cert) => {
-          const company = psa_cert ? 'PSA' : 'Unknown';
           const isGraded = grade && grade !== 'Raw' && grade !== 'Ungraded';
-          const status = isGraded ? 'graded' : 'raw';
-          return { company, status, isGraded };
+          
+          if (isGraded && psa_cert) {
+            // PSA graded card
+            return { company: 'PSA', status: 'graded', isGraded: true };
+          } else if (isGraded) {
+            // Other graded card (BGS, SGC, etc.)
+            return { company: 'graded', status: 'graded', isGraded: true };
+          } else {
+            // Raw single card
+            return { company: 'single', status: 'raw', isGraded: false };
+          }
         };
         
         const game = getGame(item.brand_title);
