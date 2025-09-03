@@ -65,7 +65,8 @@ const PRINTINGS = [
 ];
 
 export function TCGCardSearch({ onCardSelect, showSelectButton = false, defaultGameSlug = "pokemon", onGameChange }: TCGCardSearchProps) {
-  const [searchQuery, setSearchQuery] = useState("");
+  const [cardName, setCardName] = useState("");
+  const [cardNumber, setCardNumber] = useState("");
   const [selectedGame, setSelectedGame] = useState<string>(defaultGameSlug);
   const [games, setGames] = useState<Game[]>([]);
   const [cards, setCards] = useState<TCGCard[]>([]);
@@ -79,6 +80,12 @@ export function TCGCardSearch({ onCardSelect, showSelectButton = false, defaultG
   const abortControllerRef = useRef<AbortController | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   
+  // Helper function to combine name and number into search query
+  const getCombinedQuery = useCallback(() => {
+    const parts = [cardName.trim(), cardNumber.trim()].filter(Boolean);
+    return parts.join(' ');
+  }, [cardName, cardNumber]);
+
   // Selected card and pricing states
   const [selectedCard, setSelectedCard] = useState<TCGCard | null>(null);
   const [pricing, setPricing] = useState<PricingVariant[]>([]);
@@ -137,9 +144,10 @@ export function TCGCardSearch({ onCardSelect, showSelectButton = false, defaultG
 
   // Debounce the search
   useEffect(() => {
+    const combinedQuery = getCombinedQuery();
     const timer = setTimeout(() => {
-      if (searchQuery.trim()) {
-        debouncedSearch(searchQuery);
+      if (combinedQuery.trim()) {
+        debouncedSearch(combinedQuery);
       } else {
         setSuggestions([]);
         setShowSuggestions(false);
@@ -147,7 +155,7 @@ export function TCGCardSearch({ onCardSelect, showSelectButton = false, defaultG
     }, 350);
 
     return () => clearTimeout(timer);
-  }, [searchQuery, debouncedSearch]);
+  }, [cardName, cardNumber, debouncedSearch, getCombinedQuery]);
 
   // Close suggestions on outside click
   useEffect(() => {
@@ -190,8 +198,9 @@ export function TCGCardSearch({ onCardSelect, showSelectButton = false, defaultG
   };
 
   const searchCards = async () => {
-    if (!searchQuery.trim()) {
-      toast.error("Please enter a search query");
+    const combinedQuery = getCombinedQuery();
+    if (!combinedQuery.trim()) {
+      toast.error("Please enter a card name or number");
       return;
     }
 
@@ -202,7 +211,7 @@ export function TCGCardSearch({ onCardSelect, showSelectButton = false, defaultG
       const { data, error } = await supabase.functions.invoke('tcg-card-search', {
         body: {
           action: 'search',
-          search_query: searchQuery,
+          search_query: combinedQuery,
           game_slug: selectedGame === "all" ? null : selectedGame,
           limit_count: 20
         }
@@ -282,7 +291,8 @@ export function TCGCardSearch({ onCardSelect, showSelectButton = false, defaultG
 
   const handleSuggestionSelect = (card: TCGCard) => {
     setSelectedCard(card);
-    setSearchQuery(card.name);
+    setCardName(card.name);
+    setCardNumber('');
     setShowSuggestions(false);
     setPricing([]);
     // Auto-fetch pricing with default condition
@@ -301,19 +311,27 @@ export function TCGCardSearch({ onCardSelect, showSelectButton = false, defaultG
         <CardContent className="space-y-4">
           {/* Search Controls */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="md:col-span-2 relative">
-              <Input
-                ref={inputRef}
-                placeholder="Enter card name and number (e.g., Charizard 4, Lightning Bolt)"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && searchCards()}
-                onFocus={() => {
-                  if (suggestions.length > 0) {
-                    setShowSuggestions(true);
-                  }
-                }}
-              />
+            <div className="md:col-span-2 relative space-y-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <Input
+                  ref={inputRef}
+                  placeholder="Card name (e.g., Charizard, Lightning Bolt)"
+                  value={cardName}
+                  onChange={(e) => setCardName(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && searchCards()}
+                  onFocus={() => {
+                    if (suggestions.length > 0) {
+                      setShowSuggestions(true);
+                    }
+                  }}
+                />
+                <Input
+                  placeholder="Card number (e.g., 4, 192/102)"
+                  value={cardNumber}
+                  onChange={(e) => setCardNumber(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && searchCards()}
+                />
+              </div>
               
               {/* Typeahead Suggestions Dropdown */}
               {showSuggestions && (
