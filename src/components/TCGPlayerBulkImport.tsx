@@ -10,6 +10,9 @@ import { toast } from "sonner";
 import { Upload, FileText, Download } from "lucide-react";
 import { useStore } from "@/contexts/StoreContext";
 import { v4 as uuidv4 } from 'uuid';
+import { generateSKU } from '@/lib/sku';
+import { fetchCardPricing } from '@/hooks/useTCGData';
+import { tcgSupabase } from '@/lib/tcg-supabase';
 
 interface TCGPlayerItem {
   quantity: number;
@@ -24,6 +27,8 @@ interface TCGPlayerItem {
   status: 'pending' | 'processing' | 'success' | 'error';
   error?: string;
   generatedSku?: string;
+  variantId?: string; // TCG variant ID if resolved
+  cardId?: string; // TCG card ID if found
 }
 
 export const TCGPlayerBulkImport = () => {
@@ -134,16 +139,59 @@ export const TCGPlayerBulkImport = () => {
     reader.readAsText(file);
   };
 
-  const generateSKU = (item: TCGPlayerItem): string => {
-    // Generate SKU: GAME-CONDITION-RANDOM
-    const gameAbbr = 'PKM'; // Assuming Pokemon for now
-    const conditionAbbr = item.condition.replace(/[^A-Z]/g, '').substring(0, 2) || 'NM';
-    const randomSuffix = Math.random().toString(36).substring(2, 8).toUpperCase();
-    return `${gameAbbr}-${conditionAbbr}-${randomSuffix}`;
+  // Resolve variant ID for a TCGPlayer item by searching TCG database
+  const resolveVariantId = async (item: TCGPlayerItem): Promise<{ cardId?: string; variantId?: string }> => {
+    try {
+      // Search for the card first
+      const { data: cards } = await tcgSupabase
+        .from('cards')
+        .select('id, name, sets!inner(name)')
+        .ilike('name', `%${item.name}%`)
+        .limit(10);
+
+      if (!cards?.length) return {};
+
+      // Find best match
+      const cardMatch = cards.find(card => {
+        const setName = (card.sets as any)?.name;
+        return card.name.toLowerCase().includes(item.name.toLowerCase()) &&
+               setName?.toLowerCase().includes(item.set.toLowerCase());
+      }) || cards[0];
+
+      if (!cardMatch) return {};
+
+      // Get pricing data to find variant
+      const pricingData = await fetchCardPricing(cardMatch.id);
+      
+      if (pricingData?.variants?.length) {
+        // Find matching variant by condition and printing
+        const variant = pricingData.variants.find(v => 
+          v.condition?.toLowerCase() === item.condition.toLowerCase() &&
+          v.printing?.toLowerCase().includes(item.foil.toLowerCase())
+        ) || pricingData.variants[0];
+
+        if (variant?.id) {
+          return { cardId: cardMatch.id, variantId: variant.id };
+        }
+      }
+
+      return { cardId: cardMatch.id };
+    } catch (error) {
+      console.warn('Failed to resolve variant ID:', error);
+      return {};
+    }
   };
 
   const insertIntakeItem = async (item: TCGPlayerItem) => {
-    const sku = generateSKU(item);
+    // Try to resolve variant ID first
+    const { cardId, variantId } = await resolveVariantId(item);
+    
+    // Update item with resolved IDs
+    item.cardId = cardId;
+    item.variantId = variantId;
+    
+    // Generate SKU using new format
+    const sku = generateSKU('pokemon', variantId, 'CARD', cardId);
     
     const { error } = await supabase
       .from('intake_items')

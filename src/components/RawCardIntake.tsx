@@ -19,6 +19,7 @@ import { LocationSelector } from '@/components/LocationSelector';
 import { TCGCardSearch } from '@/components/TCGCardSearch';
 import { fetchCardPricing } from '@/hooks/useTCGData';
 import { tcgSupabase, PricingResponse, PricingData, updateVariantPricing, getVariantPricing, formatPrice as tcgFormatPrice, findVariant } from '@/lib/tcg-supabase';
+import { generateSKU as generateSkuFromVariant } from '@/lib/sku';
 
 interface CatalogCard {
   id: string;
@@ -206,10 +207,7 @@ export function RawCardIntake({
   };
 
   const generateSKU = (card: CatalogCard, variant: any, game: GameKey): string => {
-    const gameAbbr = game === 'pokemon' ? 'PKM' : game === 'pokemon_japan' ? 'PKJ' : 'MTG';
-    const conditionAbbr = String(variant?.condition || 'NM').replace(/[^A-Z]/g, '').substring(0, 2) || 'NM';
-    const randomSuffix = Math.random().toString(36).substring(2, 8).toUpperCase();
-    return `${gameAbbr}-${conditionAbbr}-${randomSuffix}`;
+    return generateSkuFromVariant(game, variant?.variant_id, 'CARD', card.id);
   };
 
   const mapGameToCategory = (game: GameKey): string => {
