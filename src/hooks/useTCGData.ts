@@ -132,7 +132,28 @@ export async function fetchCardPricing(cardId: string, condition?: string, print
   });
   
   if (!response.ok) {
-    throw new Error('Failed to fetch pricing data');
+    if (response.status === 404) {
+      // Handle 404 as "no pricing available" instead of an error
+      return {
+        success: false,
+        cardId,
+        refreshed: refresh,
+        variants: []
+      };
+    }
+    
+    // Try to get error message from response
+    let errorMessage = 'Failed to fetch pricing data';
+    try {
+      const errorData = await response.json();
+      if (errorData.error) {
+        errorMessage = errorData.error;
+      }
+    } catch (e) {
+      // Use default message if can't parse error
+    }
+    
+    throw new Error(errorMessage);
   }
   
   return response.json();

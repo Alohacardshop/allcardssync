@@ -131,7 +131,18 @@ export async function updateCardPricing(
       }
     })
 
-    if (error) throw error
+    if (error) {
+      // Handle 404 as "no pricing available"
+      if (error.message?.includes('404') || error.message?.includes('No variants found')) {
+        return {
+          success: false,
+          cardId,
+          refreshed: true,
+          variants: []
+        }
+      }
+      throw error
+    }
     return data
   } catch (error) {
     console.error('Pricing update failed:', error)
@@ -163,7 +174,19 @@ export async function updateVariantPricing(
       body: requestBody
     });
 
-    if (error) throw error;
+    if (error) {
+      // Handle 404 as "no pricing available"
+      if (error.message?.includes('404') || error.message?.includes('No variants found')) {
+        return {
+          success: false,
+          cardId,
+          refreshed: true,
+          variants: [],
+          requestPayload: requestBody
+        }
+      }
+      throw error;
+    }
     
     return {
       success: true,
@@ -192,7 +215,18 @@ export async function getCachedPricing(
     }
   })
 
-  if (error) throw error
+  if (error) {
+    // Handle 404 as "no pricing available"
+    if (error.message?.includes('404') || error.message?.includes('No variants found')) {
+      return {
+        success: false,
+        cardId,
+        refreshed: false,
+        variants: []
+      }
+    }
+    throw error
+  }
   return data
 }
 
@@ -237,7 +271,19 @@ export async function getVariantPricing(
       body: requestBody
     });
 
-    if (error) throw error;
+    if (error) {
+      // Handle 404 as "no pricing available"  
+      if (error.message?.includes('404') || error.message?.includes('No variants found')) {
+        return {
+          success: false,
+          cardId,
+          refreshed: false,
+          variants: [],
+          requestPayload: requestBody
+        }
+      }
+      throw error;
+    }
     return {
       ...data,
       requestPayload: requestBody

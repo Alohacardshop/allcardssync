@@ -410,10 +410,15 @@ export function RawCardIntake({
       try {
         const data = await fetchCardPricing(catalogCard.id);
         setPricingData(data);
-        toast.success("Pricing data loaded");
+        if (data.success && data.variants.length > 0) {
+          toast.success("Pricing data loaded");
+        } else {
+          console.log('No pricing variants found for card:', catalogCard.id);
+          // Don't show error toast for "no pricing found" - this is normal
+        }
       } catch (e: any) {
         console.error('Auto-pricing error:', e);
-        toast.error('Failed to load pricing data');
+        toast.error('Failed to load pricing data: ' + e.message);
       } finally {
         setPricingLoading(false);
       }
@@ -439,7 +444,11 @@ export function RawCardIntake({
         const result = await updateVariantPricing(picked.id, selectedCondition, selectedPrinting, variantId);
         data = result;
         setLastPricingRequest(result.requestPayload);
-        toast.success("Pricing data refreshed from JustTCG API");
+        if (data.success && data.variants.length > 0) {
+          toast.success("Pricing data refreshed from JustTCG API");
+        } else {
+          console.log('No pricing variants found after refresh for card:', picked.id);
+        }
       } else {
         // Use getVariantPricing for normal fetch to get cached data
         data = await getVariantPricing(picked.id, selectedCondition, selectedPrinting, variantId);
