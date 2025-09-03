@@ -1,4 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
+import { supabase } from "@/integrations/supabase/client";
+
 
 // TCG Database Connection
 const TCG_URL = "https://dhyvufggodqkcjbrjhxk.supabase.co";
@@ -180,12 +182,19 @@ export async function proxyPricing(
   refresh = false
 ): Promise<PricingResponse> {
   try {
+    // Include Authorization header (edge functions require JWT)
+    const { data: { session } } = await supabase.auth.getSession();
+    const accessToken = session?.access_token;
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRtcG9hbmRveWRhcXhoemRqbm1rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ0MDU5NDMsImV4cCI6MjA2OTk4MTk0M30.WoHlHO_Z4_ogeO5nt4I29j11aq09RMBtNug8a5rStgk'
+    };
+    if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+
     const response = await fetch('https://dmpoandoydaqxhzdjnmk.supabase.co/functions/v1/tcg-card-search?action=pricing', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRtcG9hbmRveWRhcXhoemRqbm1rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ0MDU5NDMsImV4cCI6MjA2OTk4MTk0M30.WoHlHO_Z4_ogeO5nt4I29j11aq09RMBtNug8a5rStgk'
-      },
+      headers,
       body: JSON.stringify({
         cardId: justtcgCardId,
         condition,
