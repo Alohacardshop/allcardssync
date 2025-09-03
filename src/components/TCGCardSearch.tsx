@@ -89,21 +89,26 @@ export function TCGCardSearch({ onCardSelect, showSelectButton = false, defaultG
     5
   );
 
-  // Filter search results by card number client-side
+  // Filter search results by card number client-side and limit to top 5
   const filteredSearchResults = useMemo(() => {
-    if (!cardNumber.trim()) return searchResults;
+    let results = searchResults;
     
-    const numberFilter = cardNumber.trim().toLowerCase();
-    return searchResults.filter(card => {
-      // Check if the card has a number field and if it matches
-      const cardId = card.id?.toLowerCase() || '';
-      const cardName = card.name?.toLowerCase() || '';
-      
-      // Match against card number patterns (supports partial matches)
-      return cardId.includes(numberFilter) || 
-             cardName.includes(numberFilter) ||
-             (card as any).number?.toString().toLowerCase().includes(numberFilter);
-    });
+    if (cardNumber.trim()) {
+      const numberFilter = cardNumber.trim().toLowerCase();
+      results = searchResults.filter(card => {
+        // Check if the card has a number field and if it matches
+        const cardId = card.id?.toLowerCase() || '';
+        const cardName = card.name?.toLowerCase() || '';
+        
+        // Match against card number patterns (supports partial matches)
+        return cardId.includes(numberFilter) || 
+               cardName.includes(numberFilter) ||
+               (card as any).number?.toString().toLowerCase().includes(numberFilter);
+      });
+    }
+    
+    // Limit to top 5 results
+    return results.slice(0, 5);
   }, [searchResults, cardNumber]);
 
   // Also filter suggestions by number
