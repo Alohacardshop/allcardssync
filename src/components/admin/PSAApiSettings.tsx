@@ -26,22 +26,29 @@ export function PSAApiSettings() {
 
   const checkCurrentTokenStatus = async () => {
     try {
-      // Check if token exists in database
-      const { data: tokenSetting } = await supabase
-        .from('system_settings')
-        .select('key_value, updated_at')
-        .eq('key_name', 'PSA_API_TOKEN')
-        .maybeSingle();
+      // Use the get-system-setting edge function to check token status
+      const { data, error } = await supabase.functions.invoke('get-system-setting', {
+        body: { 
+          keyName: 'PSA_API_TOKEN',
+          fallbackSecretName: 'PSA_API_TOKEN'
+        }
+      });
 
-      if (tokenSetting?.key_value) {
+      if (error) {
+        console.error('Error checking token status:', error);
+        setCurrentStatus({ hasToken: false, source: 'none' });
+        return;
+      }
+
+      if (data?.value) {
+        // Determine source based on response
+        const source = data.source || 'database';
         setCurrentStatus({
           hasToken: true,
-          source: 'database',
-          lastTested: tokenSetting.updated_at ? new Date(tokenSetting.updated_at) : undefined
+          source: source as 'database' | 'environment',
+          lastTested: data.lastUpdated ? new Date(data.lastUpdated) : undefined
         });
       } else {
-        // For environment check, we'll assume it exists if the user has it configured
-        // (we can't directly check environment variables from the frontend)
         setCurrentStatus({
           hasToken: false,
           source: 'none'
@@ -64,21 +71,35 @@ export function PSAApiSettings() {
     }
 
     setLoading(true);
+    
+    // Set timeout for the operation
+    const timeoutId = setTimeout(() => {
+      setLoading(false);
+      toast({
+        title: "Error",
+        description: "Save operation timed out. Please try again.",
+        variant: "destructive"
+      });
+    }, 10000); // 10 second timeout
+
     try {
-      const { error } = await supabase
-        .from('system_settings')
-        .upsert({
-          key_name: 'PSA_API_TOKEN',
-          key_value: token.trim(),
+      const { data, error } = await supabase.functions.invoke('set-system-setting', {
+        body: {
+          keyName: 'PSA_API_TOKEN',
+          keyValue: token.trim(),
           description: 'PSA API Token for certificate verification',
-          category: 'api',
-          is_encrypted: true
-        }, {
-          onConflict: 'key_name'
-        });
+          category: 'api'
+        }
+      });
+
+      clearTimeout(timeoutId);
 
       if (error) {
         throw error;
+      }
+
+      if (data?.error) {
+        throw new Error(data.error);
       }
 
       toast({
@@ -89,10 +110,21 @@ export function PSAApiSettings() {
       setToken('');
       await checkCurrentTokenStatus(); // Refresh status
     } catch (error: any) {
+      clearTimeout(timeoutId);
       console.error('Error saving PSA API token:', error);
+      
+      let errorMessage = "Failed to save PSA API token";
+      if (error.message?.includes('Admin role required')) {
+        errorMessage = "Admin role required to save PSA API token";
+      } else if (error.message?.includes('timeout')) {
+        errorMessage = "Request timed out. Please try again.";
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
       toast({
         title: "Error",
-        description: error.message || "Failed to save PSA API token",
+        description: errorMessage,
         variant: "destructive"
       });
     } finally {
@@ -114,18 +146,19 @@ export function PSAApiSettings() {
     setTestResult(null);
     
     try {
-      // First save the token temporarily
-      await supabase
-        .from('system_settings')
-        .upsert({
-          key_name: 'PSA_API_TOKEN',
-          key_value: token.trim(),
+      // First save the token temporarily for testing
+      const { data: saveData, error: saveError } = await supabase.functions.invoke('set-system-setting', {
+        body: {
+          keyName: 'PSA_API_TOKEN',
+          keyValue: token.trim(),
           description: 'PSA API Token for certificate verification',
-          category: 'api',
-          is_encrypted: true
-        }, {
-          onConflict: 'key_name'
-        });
+          category: 'api'
+        }
+      });
+
+      if (saveError || saveData?.error) {
+        throw new Error(saveData?.error || saveError?.message || 'Failed to save token for testing');
+      }
 
       // Test with a known certificate number (user can change this in settings)
       const testCertNumber = '120317196'; // Use the known test cert number
