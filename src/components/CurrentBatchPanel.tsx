@@ -99,22 +99,30 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
 
   const handleSendToInventory = async (itemId: string) => {
     try {
-      const { error } = await supabase
+      console.log('Starting send to inventory for item:', itemId);
+      
+      const { data, error } = await supabase
         .from('intake_items')
         .update({ 
           processing_notes: 'Sent to inventory',
           removed_from_batch_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         })
-        .eq('id', itemId);
+        .eq('id', itemId)
+        .select();
 
       if (error) {
         console.error('Inventory update error:', error);
         throw error;
       }
 
+      console.log('Successfully updated item:', data);
       toast.success('Item sent to inventory');
-      fetchRecentItems(); // Refresh the list
+      
+      // Add a small delay before refreshing to ensure the update is reflected
+      setTimeout(() => {
+        fetchRecentItems();
+      }, 100);
     } catch (error) {
       console.error('Error sending item to inventory:', error);
       toast.error(`Error sending item to inventory: ${error?.message || 'Unknown error'}`);
