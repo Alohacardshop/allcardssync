@@ -151,6 +151,77 @@ export async function updateCardPricing(
   }
 }
 
+// Helper to fetch JustTCG card ID from TCG DB
+export async function getJustTCGCardId(cardId: string): Promise<string | null> {
+  try {
+    const { data, error } = await tcgSupabase
+      .from('cards')
+      .select('justtcg_card_id')
+      .eq('id', cardId)
+      .single();
+    
+    if (error || !data) {
+      console.error('Failed to fetch JustTCG card ID:', error);
+      return null;
+    }
+    
+    return data.justtcg_card_id;
+  } catch (error) {
+    console.error('Error fetching JustTCG card ID:', error);
+    return null;
+  }
+}
+
+// Proxy pricing helper - calls our edge function instead of external API
+export async function proxyPricing(
+  justtcgCardId: string,
+  condition?: string,
+  printing?: string,
+  refresh = false
+): Promise<PricingResponse> {
+  try {
+    const response = await fetch('https://dmpoandoydaqxhzdjnmk.supabase.co/functions/v1/tcg-card-search?action=pricing', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRtcG9hbmRveWRhcXhoemRqbm1rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ0MDU5NDMsImV4cCI6MjA2OTk4MTk0M30.WoHlHO_Z4_ogeO5nt4I29j11aq09RMBtNug8a5rStgk'
+      },
+      body: JSON.stringify({
+        cardId: justtcgCardId,
+        condition,
+        printing,
+        refresh
+      })
+    });
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        return {
+          success: false,
+          cardId: justtcgCardId,
+          refreshed: refresh,
+          variants: []
+        };
+      }
+      
+      const errorText = await response.text();
+      throw new Error(`Pricing request failed: ${response.status} ${errorText}`);
+    }
+
+    const data = await response.json();
+    return {
+      success: true,
+      cardId: justtcgCardId,
+      refreshed: refresh,
+      variants: data.variants || [],
+      requestPayload: { cardId: justtcgCardId, condition, printing, refresh }
+    };
+  } catch (error) {
+    console.error('Proxy pricing error:', error);
+    throw error;
+  }
+}
+
 // Function to update variant pricing with optional variantId
 export async function updateVariantPricing(
   cardId: string,
@@ -159,42 +230,19 @@ export async function updateVariantPricing(
   variantId?: string
 ): Promise<PricingResponse> {
   try {
-    const requestBody: any = {
-      cardId,
-      condition: condition || 'near_mint',
-      printing: printing || 'normal',
-      refresh: true  // This triggers price refresh from JustTCG API
-    };
-
-    if (variantId) {
-      requestBody.variantId = variantId;
+    // First get the JustTCG card ID
+    const justtcgCardId = await getJustTCGCardId(cardId);
+    if (!justtcgCardId) {
+      throw new Error('Could not find JustTCG card ID for this card');
     }
 
-    const { data, error } = await tcgSupabase.functions.invoke('get-card-pricing', {
-      body: requestBody
-    });
-
-    if (error) {
-      // Handle 404 as "no pricing available"
-      if (error.message?.includes('404') || error.message?.includes('No variants found')) {
-        return {
-          success: false,
-          cardId,
-          refreshed: true,
-          variants: [],
-          requestPayload: requestBody
-        }
-      }
-      throw error;
-    }
-    
-    return {
-      success: true,
-      cardId: data.cardId || cardId,
-      refreshed: true,
-      variants: data.variants || [],
-      requestPayload: requestBody
-    } as PricingResponse;
+    // Use our proxy for pricing
+    return await proxyPricing(
+      justtcgCardId,
+      condition || 'near_mint',
+      printing || 'normal', 
+      true // refresh = true
+    );
   } catch (error) {
     console.error('Error updating variant pricing:', error);
     throw error;
@@ -256,38 +304,19 @@ export async function getVariantPricing(
   variantId?: string
 ): Promise<PricingResponse> {
   try {
-    const requestBody: any = {
-      cardId,
-      condition: condition || 'near_mint',
-      printing: printing || 'normal',
-      refresh: false  // Just get current data
-    };
-
-    if (variantId) {
-      requestBody.variantId = variantId;
+    // First get the JustTCG card ID
+    const justtcgCardId = await getJustTCGCardId(cardId);
+    if (!justtcgCardId) {
+      throw new Error('Could not find JustTCG card ID for this card');
     }
 
-    const { data, error } = await tcgSupabase.functions.invoke('get-card-pricing', {
-      body: requestBody
-    });
-
-    if (error) {
-      // Handle 404 as "no pricing available"  
-      if (error.message?.includes('404') || error.message?.includes('No variants found')) {
-        return {
-          success: false,
-          cardId,
-          refreshed: false,
-          variants: [],
-          requestPayload: requestBody
-        }
-      }
-      throw error;
-    }
-    return {
-      ...data,
-      requestPayload: requestBody
-    } as PricingResponse;
+    // Use our proxy for pricing
+    return await proxyPricing(
+      justtcgCardId,
+      condition || 'near_mint',
+      printing || 'normal',
+      false // refresh = false (cached)
+    );
   } catch (error) {
     console.error('Error getting variant pricing:', error);
     throw error;

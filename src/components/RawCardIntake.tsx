@@ -18,7 +18,7 @@ import { StoreSelector } from '@/components/StoreSelector';
 import { LocationSelector } from '@/components/LocationSelector';
 import { TCGCardSearch } from '@/components/TCGCardSearch';
 import { fetchCardPricing } from '@/hooks/useTCGData';
-import { tcgSupabase, PricingResponse, PricingData, updateVariantPricing, getVariantPricing, formatPrice as tcgFormatPrice, findVariant, fetchCardVariants } from '@/lib/tcg-supabase';
+import { tcgSupabase, PricingResponse, PricingData, updateVariantPricing, getVariantPricing, formatPrice as tcgFormatPrice, findVariant, fetchCardVariants, getJustTCGCardId, proxyPricing } from '@/lib/tcg-supabase';
 import { generateSKU as generateSkuFromVariant } from '@/lib/sku';
 
 interface CatalogCard {
@@ -102,6 +102,7 @@ export function RawCardIntake({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [picked, setPicked] = useState<CatalogCard | null>(null);
+  const [justtcgCardId, setJusttcgCardId] = useState<string | null>(null);
   const [chosenVariant, setChosenVariant] = useState<any>(null);
   const [quantity, setQuantity] = useState(1);
   const [cost, setCost] = useState("");
@@ -369,6 +370,7 @@ export function RawCardIntake({
       
       // Reset selection but keep search results
       setPicked(null);
+      setJusttcgCardId(null);
       setChosenVariant(null);
       setQuantity(1);
       setCost("");
@@ -447,6 +449,24 @@ export function RawCardIntake({
     setCustomPrice(""); // Reset custom price
     setCost(""); // Reset cost
 
+    // Fetch JustTCG card ID first
+    setTimeout(async () => {
+      try {
+        const { getJustTCGCardId } = await import('@/lib/tcg-supabase');
+        const justtcgId = await getJustTCGCardId(catalogCard.id);
+        if (justtcgId) {
+          setJusttcgCardId(justtcgId);
+          console.log('JustTCG card ID found:', justtcgId);
+        } else {
+          console.log('No JustTCG card ID found for card:', catalogCard.id);
+          setJusttcgCardId(null);
+        }
+      } catch (e: any) {
+        console.error('Failed to fetch JustTCG card ID:', e);
+        setJusttcgCardId(null);
+      }
+    }, 10);
+
     const payload = {
       card: catalogCard,
       chosenVariant: null,
@@ -454,7 +474,7 @@ export function RawCardIntake({
 
     onPick?.(payload);
 
-    // Auto-fetch pricing data when card is selected
+    // Auto-fetch pricing data when card is selected (after JustTCG ID is set)
     setTimeout(async () => {
       setPricingLoading(true);
       try {
@@ -472,7 +492,7 @@ export function RawCardIntake({
       } finally {
         setPricingLoading(false);
       }
-    }, 100);
+    }, 200); // Increased delay to allow JustTCG ID to be fetched
 
     // Also fetch card variants from TCG DB for condition/printing options
     setTimeout(async () => {
@@ -495,30 +515,32 @@ export function RawCardIntake({
   };
 
   const fetchPricingData = async (refresh = false) => {
-    if (!picked) return;
+    if (!picked || !justtcgCardId) {
+      toast.error('Card or JustTCG ID not available for pricing');
+      return;
+    }
     
     setPricingLoading(true);
     setPricingData(null);
 
     try {
-      let data;
-      const variantId = chosenVariant?.variant_id || null;
+      // Use our proxy directly with JustTCG card ID
+      const { proxyPricing } = await import('@/lib/tcg-supabase');
+      const data = await proxyPricing(justtcgCardId, selectedCondition, selectedPrinting, refresh);
       
-      if (refresh) {
-        // Always force refresh to get latest data from JustTCG API
-        const result = await updateVariantPricing(picked.id, selectedCondition, selectedPrinting, variantId);
-        data = result;
-        setLastPricingRequest(result.requestPayload);
-        if (data.success && data.variants.length > 0) {
-          toast.success("Pricing data refreshed from JustTCG API");
-        } else {
-          console.log('No pricing variants found after refresh for card:', picked.id);
-        }
+      setLastPricingRequest({
+        cardId: justtcgCardId,
+        condition: selectedCondition,
+        printing: selectedPrinting,
+        refresh
+      });
+      
+      if (data.success && data.variants.length > 0) {
+        toast.success(refresh ? "Pricing data refreshed from JustTCG API" : "Pricing data loaded");
       } else {
-        // Use getVariantPricing for normal fetch to get cached data
-        data = await getVariantPricing(picked.id, selectedCondition, selectedPrinting, variantId);
-        setLastPricingRequest(data.requestPayload);
+        console.log('No pricing variants found for JustTCG card ID:', justtcgCardId);
       }
+      
       setPricingData(data);
     } catch (e: any) {
       console.error('Pricing error:', e);
@@ -772,7 +794,11 @@ export function RawCardIntake({
                 <div className="space-y-2">
                   <div><strong>Last Request:</strong></div>
                   <pre className="bg-background p-2 rounded text-xs overflow-x-auto">
-                    {JSON.stringify(lastPricingRequest, null, 2)}
+                    {JSON.stringify({
+                      ...lastPricingRequest,
+                      justtcgCardId: justtcgCardId,
+                      tcgDbCardId: picked?.id
+                    }, null, 2)}
                   </pre>
                   {pricingData && (
                     <>

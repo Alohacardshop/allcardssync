@@ -118,22 +118,14 @@ export function useCard(cardId?: string) {
   });
 }
 
-// Get card pricing
+// Get card pricing - use our proxy
 export async function fetchCardPricing(cardId: string, condition?: string, printing?: string, refresh = false): Promise<PricingData> {
-  const response = await fetch('https://dhyvufggodqkcjbrjhxk.supabase.co/functions/v1/get-card-pricing', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ 
-      cardId,
-      condition,
-      printing,
-      refresh
-    })
-  });
-  
-  if (!response.ok) {
-    if (response.status === 404) {
-      // Handle 404 as "no pricing available" instead of an error
+  try {
+    // First get the JustTCG card ID from TCG DB
+    const { tcgSupabase, getJustTCGCardId, proxyPricing } = await import('@/lib/tcg-supabase');
+    
+    const justtcgCardId = await getJustTCGCardId(cardId);
+    if (!justtcgCardId) {
       return {
         success: false,
         cardId,
@@ -141,22 +133,13 @@ export async function fetchCardPricing(cardId: string, condition?: string, print
         variants: []
       };
     }
-    
-    // Try to get error message from response
-    let errorMessage = 'Failed to fetch pricing data';
-    try {
-      const errorData = await response.json();
-      if (errorData.error) {
-        errorMessage = errorData.error;
-      }
-    } catch (e) {
-      // Use default message if can't parse error
-    }
-    
-    throw new Error(errorMessage);
+
+    // Use our proxy for consistent pricing calls
+    return await proxyPricing(justtcgCardId, condition, printing, refresh);
+  } catch (error) {
+    console.error('fetchCardPricing error:', error);
+    throw error;
   }
-  
-  return response.json();
 }
 
 export function useCardPricing(cardId?: string, condition?: string, printing?: string) {
