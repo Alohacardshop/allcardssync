@@ -12,7 +12,8 @@ import { toast } from 'sonner';
 import type { GameKey, Printing } from '@/lib/types';
 import { GAME_OPTIONS } from '@/lib/types';
 import { useStore } from '@/contexts/StoreContext';
-import { AllLocationsSelector } from '@/components/AllLocationsSelector';
+import { StoreSelector } from '@/components/StoreSelector';
+import { LocationSelector } from '@/components/LocationSelector';
 import { TCGCardSearch } from '@/components/TCGCardSearch';
 
 interface CatalogCard {
@@ -294,15 +295,23 @@ export function RawCardIntake({
           <p className="text-sm text-muted-foreground">Add raw (ungraded) cards to inventory</p>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Location Selector */}
-          <div>
-            <Label className="text-sm font-medium mb-2 block">Shopify Location</Label>
-            <AllLocationsSelector
-              value={selectedLocation || ""}
-              onValueChange={setSelectedLocation}
-              placeholder="Select location for intake"
-              className="w-full"
-            />
+          {/* Store and Location Selectors */}
+          <div className="space-y-4">
+            <div>
+              <Label className="text-sm font-medium mb-2 block">Store Selection</Label>
+              <StoreSelector className="w-full" />
+              <p className="text-xs text-muted-foreground mt-1">
+                Select the store first, then choose a location below
+              </p>
+            </div>
+            
+            <div>
+              <Label className="text-sm font-medium mb-2 block">Shopify Location</Label>
+              <LocationSelector className="w-full" />
+              <p className="text-xs text-muted-foreground mt-1">
+                Choose the specific location where items will be added
+              </p>
+            </div>
           </div>
 
           <Alert>
@@ -335,11 +344,20 @@ export function RawCardIntake({
                   {chosenVariant?.price && (
                     <div><span className="text-muted-foreground">Market Price:</span> ${chosenVariant.price.toFixed(2)}</div>
                   )}
-                  {selectedStore && selectedLocation && (
+                  
+                  {/* Store and Location Display */}
+                  {selectedStore && selectedLocation ? (
                     <>
                       <div><span className="text-muted-foreground">Store:</span> {availableStores.find(s => s.key === selectedStore)?.name}</div>
                       <div><span className="text-muted-foreground">Location:</span> {availableLocations.find(l => l.gid === selectedLocation)?.name}</div>
                     </>
+                  ) : (
+                    <Alert className="border-orange-200 bg-orange-50">
+                      <AlertCircle className="h-4 w-4 text-orange-600" />
+                      <AlertDescription className="text-orange-800">
+                        Please select both a store and location above to add this card to your batch.
+                      </AlertDescription>
+                    </Alert>
                   )}
                 </div>
                 
