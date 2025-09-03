@@ -7,7 +7,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Home, Package, Tags, Settings, FileText, Menu, LogOut, Upload, BarChart3, Archive, Database } from "lucide-react";
+import { Home, Package, Tags, Settings, FileText, Menu, LogOut, Upload, BarChart3, Archive } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { cleanupAuthState } from "@/lib/auth";
 import { useEffect, useState } from "react";
@@ -82,7 +82,6 @@ export function Navigation({ showMobileMenu = true }: NavigationProps) {
     { to: "/bulk-import", label: "Import", icon: Upload },
     { to: "/shopify-mapping", label: "Shopify", icon: FileText },
     { to: "/print-logs", label: "Print Logs", icon: FileText },
-    { to: "/tcg", label: "TCG Database", icon: Database },
   ];
 
   if (isAdmin) {
@@ -91,12 +90,7 @@ export function Navigation({ showMobileMenu = true }: NavigationProps) {
     );
   }
 
-  const isActive = (path: string) => {
-    if (path === "/tcg") {
-      return location.pathname === path || location.pathname.startsWith("/tcg/");
-    }
-    return location.pathname === path;
-  };
+  const isActive = (path: string) => location.pathname === path;
 
   // Desktop Navigation
   const DesktopNav = () => (

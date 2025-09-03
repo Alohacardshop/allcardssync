@@ -308,7 +308,7 @@ export function RawCardIntake({
           <Alert>
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              Enhanced card search with real-time pricing from our comprehensive TCG database.
+              Raw card intake now uses our comprehensive TCG database with real-time pricing from JustTCG API.
             </AlertDescription>
           </Alert>
 
