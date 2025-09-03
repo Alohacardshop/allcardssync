@@ -48,17 +48,42 @@ interface RawCardIntakeProps {
   onBatchAdd?: (item: any) => void;
 }
 
-const PRINTINGS: Printing[] = ['Normal', 'Foil'];
-
-const CONDITIONS = [
-  'mint', 'near_mint', 'lightly_played', 'light_played', 'moderately_played', 
-  'played', 'heavily_played', 'poor', 'damaged', 'good', 'excellent'
+// Constants - Standardized options
+const STANDARD_CONDITIONS = [
+  { value: 'sealed', label: 'Sealed' },
+  { value: 'near_mint', label: 'Near Mint' },
+  { value: 'lightly_played', label: 'Lightly Played' },
+  { value: 'moderately_played', label: 'Moderately Played' },
+  { value: 'heavily_played', label: 'Heavily Played' },
+  { value: 'damaged', label: 'Damaged' }
 ];
 
-const TCGDB_PRINTINGS = [
-  'normal', 'foil', 'holo', 'reverse_holo', 'etched', 'borderless', 
-  'extended', 'showcase', 'promo', 'first_edition'
+const STANDARD_PRINTINGS = [
+  { value: 'normal', label: 'Normal' },
+  { value: 'foil', label: 'Foil' }
 ];
+
+// Helper function to normalize condition from API abbreviations
+const normalizeCondition = (condition: string): string => {
+  const normalized = condition.toLowerCase().trim();
+  const conditionMap: { [key: string]: string } = {
+    's': 'sealed',
+    'nm': 'near_mint',
+    'lp': 'lightly_played', 
+    'mp': 'moderately_played',
+    'hp': 'heavily_played',
+    'dmg': 'damaged',
+    'damaged': 'damaged',
+    'mint': 'near_mint' // Map mint to near_mint
+  };
+  return conditionMap[normalized] || normalized;
+};
+
+// Helper function to normalize printing
+const normalizePrinting = (printing: string): string => {
+  const normalized = printing.toLowerCase().trim();
+  return normalized === 'foil' ? 'foil' : 'normal';
+};
 
 export function RawCardIntake({
   defaultGame = 'pokemon',
@@ -99,38 +124,28 @@ export function RawCardIntake({
   // Refs for input focus management
   const costInputRef = useRef<HTMLInputElement>(null);
 
-  // Available options from pricing data and card variants - only show actual card options
+  // Available options - always show standardized conditions and filtering printings based on card data
   const availableConditions = useMemo(() => {
-    // First try pricing data variants
-    if (pricingData?.variants?.length) {
-      const conditions = [...new Set(pricingData.variants.map(v => v.condition))];
-      if (conditions.length > 0) return conditions;
-    }
-    
-    // Fallback to card variants from TCG DB
-    if (cardVariants?.conditions?.length) {
-      return cardVariants.conditions;
-    }
-    
-    // If no card is selected, show empty array (no options)
-    return picked ? [] : CONDITIONS;
-  }, [pricingData, cardVariants, picked]);
+    // Always return the standardized condition values
+    return STANDARD_CONDITIONS.map(c => c.value);
+  }, []);
 
   const availablePrintings = useMemo(() => {
     // First try pricing data variants
     if (pricingData?.variants?.length) {
-      const printings = [...new Set(pricingData.variants.map(v => v.printing))];
+      const printings = [...new Set(pricingData.variants.map(v => normalizePrinting(v.printing)))];
       if (printings.length > 0) return printings;
     }
     
     // Fallback to card variants from TCG DB
     if (cardVariants?.printings?.length) {
-      return cardVariants.printings;
+      const normalizedPrintings = [...new Set(cardVariants.printings.map(p => normalizePrinting(p)))];
+      if (normalizedPrintings.length > 0) return normalizedPrintings;
     }
     
-    // If no card is selected, show empty array (no options)
-    return picked ? [] : TCGDB_PRINTINGS;
-  }, [pricingData, cardVariants, picked]);
+    // Default to just normal printing if no card is picked or no data
+    return ['normal'];
+  }, [pricingData, cardVariants]);
 
   // Auto-update selections when available options change
   useEffect(() => {
@@ -707,9 +722,9 @@ export function RawCardIntake({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="bg-popover border-border z-50">
-                {availableConditions.map((condition) => (
-                  <SelectItem key={condition} value={condition}>
-                    {condition.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                {STANDARD_CONDITIONS.map((conditionOption) => (
+                  <SelectItem key={conditionOption.value} value={conditionOption.value}>
+                    {conditionOption.label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -720,11 +735,13 @@ export function RawCardIntake({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="bg-popover border-border z-50">
-                {availablePrintings.map((printing) => (
-                  <SelectItem key={printing} value={printing}>
-                    {printing.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                  </SelectItem>
-                ))}
+                {STANDARD_PRINTINGS
+                  .filter(printingOption => availablePrintings.includes(printingOption.value))
+                  .map((printingOption) => (
+                    <SelectItem key={printingOption.value} value={printingOption.value}>
+                      {printingOption.label}
+                    </SelectItem>
+                  ))}
               </SelectContent>
             </Select>
             
@@ -791,8 +808,8 @@ export function RawCardIntake({
               <Label className="text-sm font-medium">Available Prices:</Label>
               {pricingData.variants
                 .filter(variant => 
-                  (!selectedCondition || variant.condition === selectedCondition) &&
-                  (!selectedPrinting || variant.printing === selectedPrinting)
+                  (!selectedCondition || normalizeCondition(variant.condition) === selectedCondition) &&
+                  (!selectedPrinting || normalizePrinting(variant.printing) === selectedPrinting)
                 )
                 .slice(0, 5)
                 .map((variant, index) => (
