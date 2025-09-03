@@ -289,18 +289,20 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
               <div key={item.id} className="flex items-center justify-between p-3 border rounded-lg bg-muted/20">
                 <div className="flex-1">
                   <div className="font-medium text-sm">
-                    {item.subject || item.brand_title || item.sku || 'Unknown Item'}
+                    {[
+                      item.category,
+                      item.subject,
+                      item.brand_title,
+                      item.card_number && `#${item.card_number}`
+                    ].filter(Boolean).join(' ') || item.sku || 'Unknown Item'}
                   </div>
                   <div className="text-xs text-muted-foreground space-y-1">
                     <div>
-                      {item.brand_title && `${item.brand_title} • `}
-                      {item.card_number && `#${item.card_number} • `}
                       Qty: {item.quantity} • ${(item.price || 0).toFixed(2)}
                       {item.cost && ` (Cost: $${item.cost.toFixed(2)})`}
                     </div>
                     <div>
                       {item.year && `${item.year} • `}
-                      {item.category && `${item.category} • `}
                       {item.variant && `${item.variant} • `}
                       {item.grade && `Condition: ${item.grade} • `}
                       {item.psa_cert && `PSA ${item.psa_cert}`}
