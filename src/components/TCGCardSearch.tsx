@@ -163,17 +163,24 @@ export function TCGCardSearch({ onCardSelect, showSelectButton = false, defaultG
 
   const loadGames = async () => {
     try {
-      const { data, error } = await supabase.functions.invoke('tcg-card-search?action=games', {
-        body: {}
-      });
+      const { data, error } = await supabase
+        .from('justtcg_games')
+        .select('id, name, active')
+        .eq('active', true)
+        .order('name');
 
       if (error) throw error;
 
-      if (data.success) {
-        setGames(data.games);
-      }
+      const formattedGames = data.map(game => ({
+        name: game.name,
+        slug: game.id,
+        is_active: game.active
+      }));
+
+      setGames(formattedGames);
     } catch (e: any) {
       console.error('Failed to load games:', e);
+      toast.error('Failed to load games');
     }
   };
 
