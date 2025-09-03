@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Archive, Eye, Package, Trash2, Send, Edit } from "lucide-react";
+import { Archive, Eye, Package, Trash2, Send, Edit, Eraser } from "lucide-react";
 import { toast } from "sonner";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import EditIntakeItemDialog, { IntakeItemDetails } from "@/components/EditIntakeItemDialog";
@@ -42,6 +42,8 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
   const [totalCount, setTotalCount] = useState(0);
   const [editItem, setEditItem] = useState<IntakeItemDetails | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [currentLotId, setCurrentLotId] = useState<string | null>(null);
 
   const handleEditItem = (item: IntakeItem) => {
     const editDetails: IntakeItemDetails = {
@@ -174,12 +176,40 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
     }
   };
 
+  const handleClearBatch = async () => {
+    if (!currentLotId) {
+      toast.error('No active batch to clear');
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase.rpc('admin_delete_batch', {
+        lot_id_in: currentLotId,
+        reason_in: 'Batch cleared manually for testing'
+      });
+
+      if (error) {
+        console.error('Error clearing batch:', error);
+        toast.error(`Error clearing batch: ${error.message}`);
+        return;
+      }
+
+      toast.success(`Cleared batch: ${data} items deleted`);
+      
+      // Refresh the batch data
+      fetchRecentItems();
+    } catch (error: any) {
+      console.error('Error clearing batch:', error);
+      toast.error(`Error clearing batch: ${error?.message || 'Unknown error'}`);
+    }
+  };
+
   const fetchRecentItems = async () => {
     try {
       // Get latest active lot
       const { data: latestLot } = await supabase
         .from('intake_lots')
-        .select('lot_number')
+        .select('id, lot_number')
         .eq('status', 'active')
         .order('created_at', { ascending: false })
         .limit(1)
@@ -188,8 +218,11 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
       if (!latestLot) {
         setRecentItems([]);
         setTotalCount(0);
+        setCurrentLotId(null);
         return;
       }
+
+      setCurrentLotId(latestLot.id);
 
       // Get total count
       const { count } = await supabase
@@ -220,6 +253,23 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
   };
 
   useEffect(() => {
+    // Check if user is admin
+    const checkAdminRole = async () => {
+      try {
+        const { data: session } = await supabase.auth.getSession();
+        if (session?.session?.user) {
+          const { data: adminCheck } = await supabase.rpc("has_role", { 
+            _user_id: session.session.user.id, 
+            _role: "admin" as any 
+          });
+          setIsAdmin(Boolean(adminCheck));
+        }
+      } catch (error) {
+        console.error('Error checking admin role:', error);
+      }
+    };
+
+    checkAdminRole();
     fetchRecentItems();
 
     // Set up realtime subscription
@@ -305,12 +355,38 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
               </CardTitle>
               <CardDescription>Recent items added to the batch</CardDescription>
             </div>
-            {onViewFullBatch && (
-              <Button variant="outline" size="sm" onClick={onViewFullBatch}>
-                <Eye className="h-4 w-4 mr-2" />
-                View Full Batch
-              </Button>
-            )}
+            <div className="flex gap-2">
+              {onViewFullBatch && (
+                <Button variant="outline" size="sm" onClick={onViewFullBatch}>
+                  <Eye className="h-4 w-4 mr-2" />
+                  View Full Batch
+                </Button>
+              )}
+              {isAdmin && totalCount > 0 && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="outline" size="sm" className="text-red-600 hover:text-red-700">
+                      <Eraser className="h-4 w-4 mr-2" />
+                      Clear Batch
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Clear Current Batch</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Are you sure you want to clear the entire current batch? This will soft-delete all {totalCount} items in the batch. This action cannot be undone.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleClearBatch} className="bg-red-600 hover:bg-red-700">
+                        Clear Batch
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
+            </div>
           </div>
         </CardHeader>
         <CardContent>
