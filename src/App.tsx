@@ -17,6 +17,9 @@ import PrintLogs from "./pages/PrintLogs";
 import ShopifyMapping from "./pages/ShopifyMapping";
 import ShopifyInspect from "./pages/ShopifyInspect";
 import BulkImport from "./pages/BulkImport";
+import TCGHome from "./pages/TCGHome";
+import TCGSearch from "./pages/TCGSearch";
+import TCGCard from "./pages/TCGCard";
 
 import { supabase } from "@/integrations/supabase/client";
 import { CatalogMigrationPlaceholder } from "@/components/CatalogMigrationPlaceholder";
@@ -108,6 +111,11 @@ const App = () => (
               <Route path="/shopify-inspect" element={<ProtectedRoute><ShopifyInspect /></ProtectedRoute>} />
               <Route path="/shopify-mapping" element={<ProtectedRoute><ShopifyMapping /></ProtectedRoute>} />
               <Route path="/print-logs" element={<ProtectedRoute><PrintLogs /></ProtectedRoute>} />
+              
+              {/* TCG Database Routes */}
+              <Route path="/tcg" element={<TCGHome />} />
+              <Route path="/tcg/search" element={<TCGSearch />} />
+              <Route path="/tcg/card/:cardId" element={<TCGCard />} />
               
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
