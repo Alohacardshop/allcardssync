@@ -193,27 +193,22 @@ export const TCGPlayerBulkImport = () => {
     // Generate SKU using new format
     const sku = generateSKU('pokemon', variantId, 'CARD', cardId);
     
-    const { error } = await supabase
-      .from('intake_items')
-      .insert({
-        sku,
-        brand_title: item.set,
-        subject: item.name,
-        card_number: item.cardNumber,
-        grade: item.condition,
-        variant: item.foil,
-        category: 'Pokemon', // Default category
-        price: item.priceEach,
-        cost: item.priceEach * 0.7, // Assume 70% cost ratio
-        quantity: item.quantity,
-        // New comprehensive data capture fields
-        source_provider: 'tcgplayer',
-        source_payload: JSON.parse(JSON.stringify({
-          tcgplayer_data: item,
-          csv_row: items.indexOf(item) + 1,
-          original_filename: file?.name
-        })),
-        catalog_snapshot: {
+    try {
+      const rpcParams = {
+        store_key_in: selectedStore || null,
+        shopify_location_gid_in: selectedLocation || null,
+        quantity_in: item.quantity,
+        brand_title_in: item.set,
+        subject_in: item.name,
+        category_in: 'Pokemon',
+        variant_in: item.foil,
+        card_number_in: item.cardNumber,
+        grade_in: item.condition,
+        price_in: item.priceEach,
+        cost_in: item.priceEach * 0.7,
+        sku_in: sku,
+        source_provider_in: 'tcgplayer',
+        catalog_snapshot_in: {
           name: item.name,
           set: item.set,
           number: item.cardNumber,
@@ -221,22 +216,20 @@ export const TCGPlayerBulkImport = () => {
           foil: item.foil,
           language: item.language
         },
-        pricing_snapshot: {
+        pricing_snapshot_in: {
           price: item.priceEach,
           total_price: item.totalPrice,
           captured_at: new Date().toISOString()
         },
-        intake_batch_id: batchId,
-        original_filename: file?.name,
-        source_row_number: items.indexOf(item) + 1,
-        processing_notes: `TCGPlayer bulk import from ${file?.name}`,
-        store_key: selectedStore || null,
-        // Set product weight: 1 oz for raw cards (no grading)
-        product_weight: 1.0,
-        shopify_location_gid: selectedLocation || null
-      });
+        processing_notes_in: `TCGPlayer bulk import from ${file?.name}`
+      };
 
-    if (error) throw error;
+      const response: any = await supabase.rpc('create_raw_intake_item', rpcParams);
+      if (response.error) throw response.error;
+    } catch (error: any) {
+      console.error('TCGPlayer bulk import error:', error);
+      throw error;
+    }
     return sku;
   };
 

@@ -72,50 +72,35 @@ export const PSABulkImport = () => {
   };
 
   const insertIntakeItem = async (item: PSAImportItem) => {
-    const { error } = await supabase
-      .from('intake_items')
-      .insert({
-        psa_cert: item.psaCert,
-        brand_title: item.data?.brandTitle,
-        subject: item.data?.subject,
-        year: item.data?.year,
-        grade: item.data?.grade,
-        category: item.data?.category,
-        price: 0, // Default price, can be updated later
-        // Set product weight: 3 oz for graded cards (PSA)
-        product_weight: 3.0,
-        // Store image URLs with proper array handling
-        image_urls: item.data?.imageUrls && Array.isArray(item.data.imageUrls) 
-          ? JSON.stringify(item.data.imageUrls) 
-          : null,
-        // New comprehensive data capture fields
-        source_provider: 'scrape',
-        source_payload: {
-          psa_cert: item.psaCert,
-          csv_row: items.indexOf(item) + 1,
-          original_filename: file?.name,
-          scraped_fields: Object.keys(item.data || {}).filter(k => item.data[k])
-        },
-        grading_data: {
-          psa_cert: item.psaCert,
-          grade: item.data?.grade,
-          grading_company: 'PSA',
-          cert_url: `https://www.psacard.com/cert/${item.psaCert}`
-        },
-        catalog_snapshot: item.data,
-        pricing_snapshot: {
+    try {
+      const rpcParams = {
+        store_key_in: selectedStore || null,
+        shopify_location_gid_in: selectedLocation || null,
+        quantity_in: 1,
+        brand_title_in: item.data?.brandTitle || '',
+        subject_in: item.data?.subject || '',
+        category_in: item.data?.category || '',
+        variant_in: '',
+        card_number_in: '',
+        grade_in: item.data?.grade || '',
+        price_in: 0,
+        cost_in: null,
+        sku_in: `PSA-${item.psaCert}`,
+        source_provider_in: 'psa_bulk',
+        catalog_snapshot_in: item.data,
+        pricing_snapshot_in: {
           price: 0,
           captured_at: new Date().toISOString()
         },
-        intake_batch_id: batchId,
-        original_filename: file?.name,
-        source_row_number: items.indexOf(item) + 1,
-        processing_notes: `PSA bulk import from ${file?.name}`,
-        store_key: selectedStore || null,
-        shopify_location_gid: selectedLocation || null
-      });
+        processing_notes_in: `PSA bulk import from ${file?.name}`
+      };
 
-    if (error) throw error;
+      const response: any = await supabase.rpc('create_raw_intake_item', rpcParams);
+      if (response.error) throw response.error;
+    } catch (error: any) {
+      console.error('PSA bulk import error:', error);
+      throw error;
+    }
   };
 
   const handleImport = async () => {

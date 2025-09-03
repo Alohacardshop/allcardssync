@@ -139,64 +139,73 @@ export const GradedCardIntake = () => {
 
     setSubmitting(true);
     try {
-      const insertPayload = {
-        // Required/common fields
-        store_key: selectedStore,
-        shopify_location_gid: selectedLocation,
-        quantity: formData.quantity,
-        product_weight: 3.0, // graded default
-        brand_title: formData.brandTitle,
-        subject: formData.subject,
-        category: formData.category,
-        variant: formData.variant,
-        card_number: formData.cardNumber,
-        year: formData.year,
-        grade: formData.grade,
-        price: formData.price ? parseFloat(formData.price) : 0,
-        cost: formData.cost ? parseFloat(formData.cost) : null,
+      // Use the new RPC with enhanced timeout and error handling
+      const withTimeoutAndRetry = async <T,>(
+        fn: () => Promise<T>, 
+        timeoutMs = 20000, 
+        retryCount = 1
+      ): Promise<T> => {
+        for (let attempt = 0; attempt <= retryCount; attempt++) {
+          try {
+            return await Promise.race([
+              fn(),
+              new Promise<never>((_, reject) => 
+                setTimeout(() => reject(new Error('Request timed out')), timeoutMs)
+              )
+            ]);
+          } catch (error: any) {
+            if (attempt === retryCount) throw error;
+            if (error?.message?.includes('timed out')) {
+              console.log(`Attempt ${attempt + 1} timed out, retrying...`);
+              continue;
+            }
+            throw error;
+          }
+        }
+        throw new Error('All retry attempts failed');
+      };
 
-        // PSA linkage + snapshots for search
-        psa_cert: formData.certNumber,
-        image_urls: cardData?.imageUrls && Array.isArray(cardData.imageUrls) 
-          ? JSON.stringify(cardData.imageUrls) 
-          : null,
-        source_provider: 'psa',
-        psa_snapshot: cardData, // NEW column name (JSONB)
-        grading_data: {
-          psa_cert: formData.certNumber,
-          grade: formData.grade,
-          grading_company: 'PSA',
-          cert_url: `https://www.psacard.com/cert/${formData.certNumber}`
-        },
-        processing_notes: `Single graded card intake - PSA cert ${formData.certNumber}`,
-
-        // Identity
-        unique_item_uid: crypto.randomUUID(), // NEW column (UUID)
-
-        // Legacy fields for compatibility
-        catalog_snapshot: cardData,
-        pricing_snapshot: {
+      const rpcParams = {
+        store_key_in: selectedStore,
+        shopify_location_gid_in: selectedLocation,
+        quantity_in: formData.quantity,
+        brand_title_in: formData.brandTitle,
+        subject_in: formData.subject,
+        category_in: formData.category,
+        variant_in: formData.variant,
+        card_number_in: formData.cardNumber,
+        grade_in: formData.grade,
+        price_in: formData.price ? parseFloat(formData.price) : 0,
+        cost_in: formData.cost ? parseFloat(formData.cost) : null,
+        sku_in: `PSA-${formData.certNumber}`, // Generate simple SKU for PSA cards
+        source_provider_in: 'psa',
+        catalog_snapshot_in: cardData,
+        pricing_snapshot_in: {
           price: formData.price ? parseFloat(formData.price) : 0,
           captured_at: new Date().toISOString()
         },
-        source_payload: {
-          psa_cert: formData.certNumber,
-          fetch_source: 'scrape',
-          scraped_fields: Object.keys(cardData || {}).filter(k => cardData[k])
-        }
+        processing_notes_in: `Single graded card intake - PSA cert ${formData.certNumber}`
       };
 
-      const { data, error } = await supabase
-        .from('intake_items')
-        .insert(insertPayload)
-        .select('*')
-        .single();
+      const response: any = await withTimeoutAndRetry(
+        async () => await supabase.rpc('create_raw_intake_item', rpcParams)
+      );
 
-      if (error) throw error;
+      if (response.error) {
+        console.error('RPC Error:', response.error);
+        if (response.error.code === 'PGRST116') {
+          throw new Error('Access denied - please check your permissions');
+        } else if (response.error.message?.includes('store_key') || response.error.message?.includes('location')) {
+          throw new Error('Invalid store or location selection');
+        }
+        throw response.error;
+      }
+
+      const responseData = Array.isArray(response.data) ? response.data[0] : response.data;
 
       // Dispatch browser event for real-time updates
-      window.dispatchEvent(new CustomEvent('intake:item-added', { detail: data }));
-      toast.success(`Added to batch (Lot ${data?.lot_number ?? ''})`);
+      window.dispatchEvent(new CustomEvent('intake:item-added', { detail: responseData }));
+      toast.success(`Added to batch (Lot ${responseData?.lot_number ?? ''})`);
       
       // Reset form
       setPsaCert("");
@@ -217,12 +226,18 @@ export const GradedCardIntake = () => {
         psaEstimate: ""
       });
 
-    } catch (error) {
-      console.error('Submit error:', error);
-      if (error?.message?.includes('timed out')) {
+    } catch (error: any) {
+      console.error('Error saving item:', error);
+      const errorMessage = error?.message || 'Unknown error';
+      
+      if (errorMessage.includes('timed out')) {
         toast.error('Request timed out - please try again');
+      } else if (errorMessage.includes('Access denied')) {
+        toast.error('Access denied - please check your permissions');
+      } else if (errorMessage.includes('store') || errorMessage.includes('location')) {
+        toast.error('Please select a valid store and location');
       } else {
-        toast.error('Failed to add to batch');
+        toast.error(`Failed to add to batch: ${errorMessage}`);
       }
     } finally {
       setSubmitting(false);

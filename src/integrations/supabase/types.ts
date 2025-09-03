@@ -1344,6 +1344,31 @@ export type Database = {
           workstation_id: string
         }
       }
+      create_raw_intake_item: {
+        Args: {
+          brand_title_in: string
+          card_number_in: string
+          catalog_snapshot_in?: Json
+          category_in: string
+          cost_in: number
+          grade_in: string
+          price_in: number
+          pricing_snapshot_in?: Json
+          processing_notes_in?: string
+          quantity_in: number
+          shopify_location_gid_in: string
+          sku_in: string
+          source_provider_in?: string
+          store_key_in: string
+          subject_in: string
+          variant_in: string
+        }
+        Returns: {
+          created_at: string
+          id: string
+          lot_number: string
+        }[]
+      }
       generate_lot_number: {
         Args: Record<PropertyKey, never>
         Returns: string
