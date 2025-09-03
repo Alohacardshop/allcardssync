@@ -328,8 +328,8 @@ export function RawCardIntake({
                   <div><span className="text-muted-foreground">Name:</span> {picked.name}</div>
                   <div><span className="text-muted-foreground">Set:</span> {picked.set?.name || '—'}</div>
                   <div><span className="text-muted-foreground">Number:</span> {picked.number || '—'}</div>
-                  <div><span className="text-muted-foreground">Printing:</span> {printing}</div>
-                  <div><span className="text-muted-foreground">Condition:</span> {conditionCsv.split(',')[0]?.trim() || 'NM'}</div>
+                   <div><span className="text-muted-foreground">Printing:</span> {chosenVariant?.printing || printing}</div>
+                   <div><span className="text-muted-foreground">Condition:</span> {chosenVariant?.condition || conditionCsv.split(',')[0]?.trim() || 'NM'}</div>
                   {chosenVariant?.price && (
                     <div><span className="text-muted-foreground">Market Price:</span> ${chosenVariant.price.toFixed(2)}</div>
                   )}
