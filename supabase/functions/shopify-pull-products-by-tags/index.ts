@@ -14,6 +14,45 @@ serve(async (req) => {
   }
 
   try {
+    // SECURITY: Require authentication and admin role
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: "Missing authorization header" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+
+    // Create service client for auth check
+    const authClient = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Get user from JWT token
+    const { data: { user }, error: userError } = await authClient.auth.getUser(
+      authHeader.replace("Bearer ", "")
+    );
+
+    if (userError || !user) {
+      return new Response(JSON.stringify({ error: "Invalid or expired token" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Check if user has admin role
+    const { data: roleData } = await authClient.rpc("has_role", {
+      _user_id: user.id,
+      _role: "admin"
+    });
+
+    if (!roleData) {
+      return new Response(JSON.stringify({ error: "Admin role required" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     const { 
       storeKey, 
       gradedTags = ["graded", "Professional Sports Authenticator (PSA)", "PSA"],
@@ -38,9 +77,8 @@ serve(async (req) => {
     console.log(`Graded tags: ${JSON.stringify(gradedTags)}`);
     console.log(`Raw tags: ${JSON.stringify(rawTags)}`);
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    // Use service client already created above for auth check
+    const supabase = authClient;
 
     // Get Shopify credentials (support multiple key formats for compatibility)
     const upper = storeKey.toUpperCase();
