@@ -315,6 +315,8 @@ export function RawCardIntake({
           <TCGCardSearch 
             onCardSelect={handleTCGCardSelect}
             showSelectButton={true}
+            defaultGameSlug={game}
+            onGameChange={(gameSlug) => setGame(gameSlug as GameKey)}
           />
 
           {/* Selected Card Preview */}

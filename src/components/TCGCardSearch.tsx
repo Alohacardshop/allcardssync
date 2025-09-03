@@ -50,6 +50,8 @@ interface PricingVariant {
 interface TCGCardSearchProps {
   onCardSelect?: (card: TCGCard & { selectedPrice?: number; selectedCondition?: string; selectedPrinting?: string }) => void;
   showSelectButton?: boolean;
+  defaultGameSlug?: string;
+  onGameChange?: (gameSlug: string) => void;
 }
 
 const CONDITIONS = [
@@ -62,9 +64,9 @@ const PRINTINGS = [
   'extended', 'showcase', 'promo', 'first_edition'
 ];
 
-export function TCGCardSearch({ onCardSelect, showSelectButton = false }: TCGCardSearchProps) {
+export function TCGCardSearch({ onCardSelect, showSelectButton = false, defaultGameSlug = "pokemon", onGameChange }: TCGCardSearchProps) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedGame, setSelectedGame] = useState<string>("all");
+  const [selectedGame, setSelectedGame] = useState<string>(defaultGameSlug);
   const [games, setGames] = useState<Game[]>([]);
   const [cards, setCards] = useState<TCGCard[]>([]);
   const [loading, setLoading] = useState(false);
@@ -290,7 +292,7 @@ export function TCGCardSearch({ onCardSelect, showSelectButton = false }: TCGCar
             <div className="md:col-span-2 relative">
               <Input
                 ref={inputRef}
-                placeholder="Search for cards (e.g., Lightning Bolt, Charizard)"
+                placeholder="Enter card name and number (e.g., Charizard 4, Lightning Bolt)"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && searchCards()}
@@ -347,7 +349,10 @@ export function TCGCardSearch({ onCardSelect, showSelectButton = false }: TCGCar
                 </div>
               )}
             </div>
-            <Select value={selectedGame} onValueChange={setSelectedGame}>
+            <Select value={selectedGame} onValueChange={(value) => {
+              setSelectedGame(value);
+              onGameChange?.(value);
+            }}>
               <SelectTrigger>
                 <SelectValue placeholder="All Games" />
               </SelectTrigger>
