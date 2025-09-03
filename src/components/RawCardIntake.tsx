@@ -478,7 +478,8 @@ export function RawCardIntake({
     setTimeout(async () => {
       setPricingLoading(true);
       try {
-        const data = await fetchCardPricing(catalogCard.id);
+        // Use new helper instead of fetchCardPricing
+        const data = await getVariantPricing(catalogCard.id);
         setPricingData(data);
         if (data.success && data.variants.length > 0) {
           toast.success("Pricing data loaded");
@@ -534,13 +535,14 @@ export function RawCardIntake({
         condition: selectedCondition,
         printing: selectedPrinting,
         refresh,
-        variantId
+        variantId,
+        ...data.requestPayload // Store server's request payload for debugging
       });
       
       if (data.success && data.variants.length > 0) {
         toast.success(refresh ? "Pricing data refreshed from JustTCG API" : "Pricing data loaded");
-      } else if (data.success === false && data.variants.length === 0) {
-        toast.info("No pricing variants found for this card");
+      } else if (data.success === false) {
+        toast.info(data.error || "No pricing variants found for this card");
       }
       
       setPricingData(data);
@@ -773,7 +775,7 @@ export function RawCardIntake({
             </Select>
             
             <Button 
-              onClick={() => fetchPricingData(true)}
+              onClick={() => fetchPricingData(true, chosenVariant?.variant_id)}
               disabled={pricingLoading}
               variant="outline"
             >
@@ -846,7 +848,8 @@ export function RawCardIntake({
                 .map((variant, index) => (
                   <div
                     key={`${variant.condition}-${variant.printing}-${index}`}
-                    className="w-full border rounded-lg p-3 bg-muted/20"
+                    onClick={() => handlePricingSelect(variant)}
+                    className="w-full border rounded-lg p-3 bg-muted/20 cursor-pointer hover:bg-muted/40 transition-colors"
                   >
                     <div className="flex justify-between items-start mb-2">
                       <div>

@@ -21,6 +21,8 @@ interface SearchParams {
 interface PricingParams {
   cardId: string
   condition?: string
+  printing?: string
+  variantId?: string
   refresh?: boolean
 }
 
@@ -93,7 +95,7 @@ async function handleCardSearch(req: Request) {
 }
 
 async function handleCardPricing(req: Request) {
-  const { cardId, condition, refresh = false }: PricingParams = await req.json()
+  const { cardId, condition, printing, variantId, refresh = false }: PricingParams = await req.json()
 
   if (!cardId) {
     return new Response(
@@ -102,7 +104,17 @@ async function handleCardPricing(req: Request) {
     )
   }
 
-  console.log('Fetching pricing for card:', { cardId, condition, refresh })
+  const startTime = Date.now()
+  
+  console.log(JSON.stringify({
+    event: "pricing_lookup",
+    cardId,
+    variantId: variantId || null,
+    condition: condition || 'near_mint',
+    printing: printing || 'normal',
+    refresh,
+    timestamp: new Date().toISOString()
+  }))
 
   // Call the external pricing function
   const params = new URLSearchParams({ 
@@ -110,6 +122,8 @@ async function handleCardPricing(req: Request) {
     refresh: refresh.toString()
   })
   if (condition) params.append('condition', condition)
+  if (printing) params.append('printing', printing)
+  if (variantId) params.append('variantId', variantId)
 
   const pricingResponse = await fetch(
     `https://dhyvufggodqkcjbrjhxk.supabase.co/functions/v1/get-card-pricing?${params}`,
@@ -121,9 +135,23 @@ async function handleCardPricing(req: Request) {
     }
   )
 
+  const duration = Date.now() - startTime
+
   if (!pricingResponse.ok) {
     const errorText = await pricingResponse.text()
     console.error('Pricing API error:', errorText)
+    
+    console.log(JSON.stringify({
+      event: "pricing_lookup",
+      cardId,
+      variantId: variantId || null,
+      condition: condition || 'near_mint',
+      printing: printing || 'normal',
+      refresh,
+      outcome: 'error',
+      duration_ms: duration,
+      error: errorText
+    }))
     
     // Handle "Card not found" as a graceful app error instead of 500
     if (pricingResponse.status === 404 || errorText.includes('Card not found')) {
@@ -133,22 +161,45 @@ async function handleCardPricing(req: Request) {
           cardId,
           refreshed: refresh,
           variants: [],
-          error: 'Card not found'
+          error: 'Card not found',
+          requestPayload: { cardId, condition, printing, variantId, refresh }
         }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
     
     return new Response(
-      JSON.stringify({ error: 'Pricing fetch failed', details: errorText }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify({ 
+        success: false,
+        cardId,
+        refreshed: refresh,
+        variants: [],
+        error: 'Pricing fetch failed',
+        requestPayload: { cardId, condition, printing, variantId, refresh }
+      }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
 
   const pricingData = await pricingResponse.json()
+  
+  console.log(JSON.stringify({
+    event: "pricing_lookup",
+    cardId,
+    variantId: variantId || null,
+    condition: condition || 'near_mint',
+    printing: printing || 'normal',
+    refresh,
+    outcome: 'success',
+    duration_ms: duration,
+    variants_count: pricingData.variants?.length || 0
+  }))
 
   return new Response(
-    JSON.stringify(pricingData),
+    JSON.stringify({
+      ...pricingData,
+      requestPayload: { cardId, condition, printing, variantId, refresh }
+    }),
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   )
 }

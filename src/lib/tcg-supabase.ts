@@ -79,6 +79,7 @@ export interface PricingResponse {
   cardId: string
   refreshed: boolean
   requestPayload?: any
+  error?: string
   variants: Array<{
     id: string
     sku?: string
@@ -239,22 +240,41 @@ export async function updateVariantPricing(
   variantId?: string
 ): Promise<PricingResponse> {
   try {
-    // First get the JustTCG card ID
-    const justtcgCardId = await getJustTCGCardId(cardId);
-    if (!justtcgCardId) {
-      throw new Error('Could not find JustTCG card ID for this card');
+    const { data, error } = await supabase.functions.invoke('get-card-pricing', {
+      body: {
+        cardId,
+        condition: condition || 'near_mint',
+        printing: printing || 'normal',
+        variantId,
+        refresh: true
+      }
+    });
+
+    if (error) {
+      return {
+        success: false,
+        cardId,
+        refreshed: true,
+        variants: [],
+        error: error.message,
+        requestPayload: { cardId, condition, printing, variantId, refresh: true }
+      };
     }
 
-    // Use our proxy for pricing
-    return await proxyPricing(
-      justtcgCardId,
-      condition || 'near_mint',
-      printing || 'normal', 
-      true // refresh = true
-    );
+    return {
+      ...data,
+      requestPayload: { cardId, condition, printing, variantId, refresh: true }
+    };
   } catch (error) {
     console.error('Error updating variant pricing:', error);
-    throw error;
+    return {
+      success: false,
+      cardId,
+      refreshed: true,
+      variants: [],
+      error: error instanceof Error ? error.message : 'Unknown error',
+      requestPayload: { cardId, condition, printing, variantId, refresh: true }
+    };
   }
 }
 
@@ -313,22 +333,41 @@ export async function getVariantPricing(
   variantId?: string
 ): Promise<PricingResponse> {
   try {
-    // First get the JustTCG card ID
-    const justtcgCardId = await getJustTCGCardId(cardId);
-    if (!justtcgCardId) {
-      throw new Error('Could not find JustTCG card ID for this card');
+    const { data, error } = await supabase.functions.invoke('get-card-pricing', {
+      body: {
+        cardId,
+        condition: condition || 'near_mint',
+        printing: printing || 'normal',
+        variantId,
+        refresh: false
+      }
+    });
+
+    if (error) {
+      return {
+        success: false,
+        cardId,
+        refreshed: false,
+        variants: [],
+        error: error.message,
+        requestPayload: { cardId, condition, printing, variantId, refresh: false }
+      };
     }
 
-    // Use our proxy for pricing
-    return await proxyPricing(
-      justtcgCardId,
-      condition || 'near_mint',
-      printing || 'normal',
-      false // refresh = false (cached)
-    );
+    return {
+      ...data,
+      requestPayload: { cardId, condition, printing, variantId, refresh: false }
+    };
   } catch (error) {
     console.error('Error getting variant pricing:', error);
-    throw error;
+    return {
+      success: false,
+      cardId,
+      refreshed: false,
+      variants: [],
+      error: error instanceof Error ? error.message : 'Unknown error',
+      requestPayload: { cardId, condition, printing, variantId, refresh: false }
+    };
   }
 }
 
