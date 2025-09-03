@@ -54,6 +54,7 @@ export interface SearchResult {
   name: string;
   set_name: string;
   game_name: string;
+  number?: string;
   rarity?: string;
   image_url?: string;
   rank: number;

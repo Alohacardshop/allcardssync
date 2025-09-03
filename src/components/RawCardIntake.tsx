@@ -5,8 +5,10 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Loader2, Search, Plus, AlertCircle } from 'lucide-react';
+import { Loader2, Search, Plus, AlertCircle, DollarSign, RefreshCw } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { GameKey, Printing } from '@/lib/types';
@@ -15,12 +17,16 @@ import { useStore } from '@/contexts/StoreContext';
 import { StoreSelector } from '@/components/StoreSelector';
 import { LocationSelector } from '@/components/LocationSelector';
 import { TCGCardSearch } from '@/components/TCGCardSearch';
+import { fetchCardPricing } from '@/hooks/useTCGData';
+import { tcgSupabase, PricingData } from '@/lib/tcg-supabase';
 
 interface CatalogCard {
   id: string;
   name: string;
   number?: string;
+  set_name?: string;
   set?: { name: string };
+  image_url?: string;
   images?: { small?: string };
   tcgplayer_product_id?: number;
 }
@@ -42,6 +48,16 @@ interface RawCardIntakeProps {
 }
 
 const PRINTINGS: Printing[] = ['Normal', 'Foil'];
+
+const CONDITIONS = [
+  'mint', 'near_mint', 'lightly_played', 'light_played', 'moderately_played', 
+  'played', 'heavily_played', 'poor', 'damaged', 'good', 'excellent'
+];
+
+const TCGDB_PRINTINGS = [
+  'normal', 'foil', 'holo', 'reverse_holo', 'etched', 'borderless', 
+  'extended', 'showcase', 'promo', 'first_edition'
+];
 
 export function RawCardIntake({
   defaultGame = 'pokemon',
@@ -65,6 +81,12 @@ export function RawCardIntake({
   const [cost, setCost] = useState("");
   const { selectedStore, selectedLocation, availableStores, availableLocations, setSelectedLocation } = useStore();
   const [saving, setSaving] = useState(false);
+  
+  // Pricing states
+  const [selectedCondition, setSelectedCondition] = useState<string>("near_mint");
+  const [selectedPrinting, setSelectedPrinting] = useState<string>("normal");
+  const [pricingData, setPricingData] = useState<PricingData | null>(null);
+  const [pricingLoading, setPricingLoading] = useState(false);
 
   const debounceRef = useRef<NodeJS.Timeout>();
 
@@ -255,18 +277,18 @@ export function RawCardIntake({
     const catalogCard: CatalogCard = {
       id: card.id,
       name: card.name,
+      number: card.number,
+      set_name: card.set_name,
       set: { name: card.set_name },
+      image_url: card.image_url,
       tcgplayer_product_id: undefined
     };
 
-    // Use selected condition and printing from TCG search, or fallback to current values
-    const selectedCondition = card.selectedCondition || conditionCsv.split(',')[0]?.trim() || 'NM';
-    const selectedPrinting = card.selectedPrinting || printing;
-
+    // Initialize with default condition and printing - user will select before adding to batch
     const chosenVar = {
-      condition: selectedCondition,
-      printing: selectedPrinting,
-      price: card.selectedPrice ? card.selectedPrice / 100 : null // Convert from cents
+      condition: conditionCsv.split(',')[0]?.trim() || 'NM',
+      printing: printing,
+      price: null
     };
 
     setPicked(catalogCard);
@@ -283,6 +305,242 @@ export function RawCardIntake({
       setTimeout(addToBatch, 100);
     }
   };
+
+  const fetchPricingData = async (refresh = false) => {
+    if (!picked) return;
+    
+    setPricingLoading(true);
+    setPricingData(null);
+
+    try {
+      const data = await fetchCardPricing(picked.id, selectedCondition, selectedPrinting, refresh);
+      setPricingData(data);
+      if (refresh) {
+        toast.success("Pricing data refreshed");
+      }
+    } catch (e: any) {
+      console.error('Pricing error:', e);
+      toast.error('Failed to fetch pricing: ' + e.message);
+      setPricingData(null);
+    } finally {
+      setPricingLoading(false);
+    }
+  };
+
+  const formatPrice = (cents: number) => {
+    return `$${(cents / 100).toFixed(2)}`;
+  };
+
+  const handlePricingSelect = (variant: any) => {
+    setChosenVariant({
+      condition: variant.condition,
+      printing: variant.printing,
+      price: variant.price_cents / 100 // Convert to dollars
+    });
+    toast.success(`Selected ${variant.condition} ${variant.printing} at ${formatPrice(variant.price_cents)}`);
+  };
+
+  const SelectedCardPanel = () => (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-lg flex items-center gap-2">
+          {picked?.image_url && (
+            <img
+              src={picked.image_url}
+              alt={picked.name}
+              className="w-12 h-16 object-cover rounded flex-shrink-0"
+              onError={(e) => {
+                (e.target as HTMLImageElement).src = '/placeholder.svg';
+              }}
+            />
+          )}
+          Selected Card
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="space-y-2">
+          <div><span className="text-muted-foreground">Name:</span> {picked?.name}</div>
+          <div><span className="text-muted-foreground">Set:</span> {picked?.set_name || picked?.set?.name || '—'}</div>
+          <div><span className="text-muted-foreground">Number:</span> {picked?.number || '—'}</div>
+          
+          {/* Store and Location Display */}
+          {selectedStore && selectedLocation ? (
+            <>
+              <div><span className="text-muted-foreground">Store:</span> {availableStores.find(s => s.key === selectedStore)?.name}</div>
+              <div><span className="text-muted-foreground">Location:</span> {availableLocations.find(l => l.gid === selectedLocation)?.name}</div>
+            </>
+          ) : (
+            <Alert className="border-orange-200 bg-orange-50">
+              <AlertCircle className="h-4 w-4 text-orange-600" />
+              <AlertDescription className="text-orange-800">
+                Please select both a store and location above to add this card to your batch.
+              </AlertDescription>
+            </Alert>
+          )}
+        </div>
+
+        {/* Condition & Printing Selection */}
+        <div className="pt-4 border-t">
+          <Label className="text-sm font-medium mb-3 block">Select Condition & Printing</Label>
+          <div className="flex items-center gap-4 mb-4">
+            <Select value={selectedCondition} onValueChange={setSelectedCondition}>
+              <SelectTrigger className="w-48">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-popover border-border z-50">
+                {CONDITIONS.map((condition) => (
+                  <SelectItem key={condition} value={condition}>
+                    {condition.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            
+            <Select value={selectedPrinting} onValueChange={setSelectedPrinting}>
+              <SelectTrigger className="w-48">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-popover border-border z-50">
+                {TCGDB_PRINTINGS.map((printing) => (
+                  <SelectItem key={printing} value={printing}>
+                    {printing.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            
+            <Button 
+              onClick={() => fetchPricingData(false)}
+              disabled={pricingLoading}
+              variant="outline"
+            >
+              <DollarSign className={`h-4 w-4 mr-2`} />
+              Get Pricing
+            </Button>
+            
+            <Button 
+              onClick={() => fetchPricingData(true)}
+              disabled={pricingLoading}
+              variant="outline"
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${pricingLoading ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+          </div>
+
+          {/* Pricing Display */}
+          {pricingLoading ? (
+            <div className="space-y-3">
+              {Array.from({ length: 2 }).map((_, i) => (
+                <Skeleton key={i} className="h-16 w-full" />
+              ))}
+            </div>
+          ) : pricingData?.variants && pricingData.variants.length > 0 ? (
+            <div className="space-y-3 mb-4">
+              <Label className="text-sm font-medium">Available Prices (click to select):</Label>
+              {pricingData.variants
+                .filter(variant => !selectedPrinting || selectedPrinting === 'normal' || variant.printing === selectedPrinting)
+                .slice(0, 3)
+                .map((variant, index) => (
+                  <button
+                    key={`${variant.condition}-${variant.printing}-${index}`}
+                    onClick={() => handlePricingSelect(variant)}
+                    className="w-full border rounded-lg p-3 hover:bg-muted/50 text-left transition-colors"
+                  >
+                    <div className="flex justify-between items-start mb-2">
+                      <div>
+                        <Badge variant="outline" className="mr-2">
+                          {variant.condition.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                        </Badge>
+                        <Badge variant="secondary">
+                          {variant.printing.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                        </Badge>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-semibold text-lg">
+                          {formatPrice(variant.price_cents)}
+                        </div>
+                        {variant.market_price_cents && (
+                          <div className="text-sm text-muted-foreground">
+                            Market: {formatPrice(variant.market_price_cents)}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      Updated: {new Date(variant.last_updated).toLocaleDateString()}
+                    </div>
+                  </button>
+                ))
+            }
+            </div>
+          ) : null}
+
+          {/* Selected Variant Display */}
+          {chosenVariant && (
+            <div className="mb-4 p-3 bg-muted/50 rounded-lg">
+              <Label className="text-sm font-medium">Selected:</Label>
+              <div className="flex items-center gap-2 mt-1">
+                <Badge variant="outline">
+                  {chosenVariant.condition.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                </Badge>
+                <Badge variant="secondary">
+                  {chosenVariant.printing.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                </Badge>
+                {chosenVariant.price && (
+                  <span className="font-semibold text-primary">
+                    ${chosenVariant.price.toFixed(2)}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+          
+          {/* Cost, Quantity and Add to Batch */}
+          <div className="flex items-center gap-4 pt-4 border-t">
+            <div className="flex items-center gap-2">
+              <Label htmlFor="cost">Cost each ($):</Label>
+              <Input
+                id="cost"
+                type="number"
+                step="0.01"
+                placeholder="0.00"
+                value={cost}
+                onChange={(e) => setCost(e.target.value)}
+                className="w-24"
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Label htmlFor="quantity">Quantity:</Label>
+              <Input
+                id="quantity"
+                type="number"
+                min="1"
+                max="999"
+                value={quantity}
+                onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+                className="w-20"
+              />
+            </div>
+            
+            <Button 
+              onClick={addToBatch}
+              disabled={saving || !chosenVariant || !selectedStore || !selectedLocation}
+              className="flex items-center gap-2"
+            >
+              {saving ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Plus className="h-4 w-4" />
+              )}
+              Add to Batch
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
 
   return (
     <div className="space-y-6">
@@ -323,88 +581,12 @@ export function RawCardIntake({
 
           <TCGCardSearch 
             onCardSelect={handleTCGCardSelect}
-            showSelectButton={true}
             defaultGameSlug={game}
             onGameChange={(gameSlug) => setGame(gameSlug as GameKey)}
           />
 
           {/* Selected Card Preview */}
-          {picked && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Selected Card</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <div><span className="text-muted-foreground">Name:</span> {picked.name}</div>
-                  <div><span className="text-muted-foreground">Set:</span> {picked.set?.name || '—'}</div>
-                  <div><span className="text-muted-foreground">Number:</span> {picked.number || '—'}</div>
-                   <div><span className="text-muted-foreground">Printing:</span> {chosenVariant?.printing || printing}</div>
-                   <div><span className="text-muted-foreground">Condition:</span> {chosenVariant?.condition || conditionCsv.split(',')[0]?.trim() || 'NM'}</div>
-                  {chosenVariant?.price && (
-                    <div><span className="text-muted-foreground">Market Price:</span> ${chosenVariant.price.toFixed(2)}</div>
-                  )}
-                  
-                  {/* Store and Location Display */}
-                  {selectedStore && selectedLocation ? (
-                    <>
-                      <div><span className="text-muted-foreground">Store:</span> {availableStores.find(s => s.key === selectedStore)?.name}</div>
-                      <div><span className="text-muted-foreground">Location:</span> {availableLocations.find(l => l.gid === selectedLocation)?.name}</div>
-                    </>
-                  ) : (
-                    <Alert className="border-orange-200 bg-orange-50">
-                      <AlertCircle className="h-4 w-4 text-orange-600" />
-                      <AlertDescription className="text-orange-800">
-                        Please select both a store and location above to add this card to your batch.
-                      </AlertDescription>
-                    </Alert>
-                  )}
-                </div>
-                
-                {/* Cost, Quantity and Add to Batch */}
-                <div className="flex items-center gap-4 pt-4 border-t">
-                  <div className="flex items-center gap-2">
-                    <Label htmlFor="cost">Cost each ($):</Label>
-                    <Input
-                      id="cost"
-                      type="number"
-                      step="0.01"
-                      placeholder="0.00"
-                      value={cost}
-                      onChange={(e) => setCost(e.target.value)}
-                      className="w-24"
-                    />
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <Label htmlFor="quantity">Quantity:</Label>
-                    <Input
-                      id="quantity"
-                      type="number"
-                      min="1"
-                      max="999"
-                      value={quantity}
-                      onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-                      className="w-20"
-                    />
-                  </div>
-                  
-                  <Button 
-                    onClick={addToBatch}
-                    disabled={saving || !chosenVariant || !selectedStore || !selectedLocation}
-                    className="flex items-center gap-2"
-                  >
-                    {saving ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Plus className="h-4 w-4" />
-                    )}
-                    Add to Batch
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+          {picked && <SelectedCardPanel />}
         </CardContent>
       </Card>
     </div>
