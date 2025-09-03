@@ -165,17 +165,48 @@ serve(async (req) => {
     );
   }
 
-  // Get PSA API token
+  // Get PSA API token - check system_settings first, then env var
   console.log('🔑 Getting PSA API token...');
-  const psaApiToken = Deno.env.get('PSA_API_TOKEN') ?? '';
+  let psaApiToken = '';
+  let tokenSource = 'none';
+  
+  try {
+    // First check system_settings table
+    const { data: tokenSetting, error: tokenError } = await supabase
+      .from('system_settings')
+      .select('key_value')
+      .eq('key_name', 'PSA_API_TOKEN')
+      .maybeSingle();
+    
+    if (tokenSetting?.key_value) {
+      psaApiToken = tokenSetting.key_value;
+      tokenSource = 'database';
+      console.log('✅ PSA API token loaded from database');
+    } else {
+      // Fall back to environment variable
+      psaApiToken = Deno.env.get('PSA_API_TOKEN') ?? '';
+      if (psaApiToken) {
+        tokenSource = 'environment';
+        console.log('✅ PSA API token loaded from environment');
+      }
+    }
+  } catch (error) {
+    console.log('⚠️ Error checking system_settings for PSA token:', error);
+    // Fall back to environment variable
+    psaApiToken = Deno.env.get('PSA_API_TOKEN') ?? '';
+    if (psaApiToken) {
+      tokenSource = 'environment';
+      console.log('✅ PSA API token loaded from environment (fallback)');
+    }
+  }
   
   if (!psaApiToken) {
-    console.log('❌ PSA_API_TOKEN not configured');
+    console.log('❌ PSA_API_TOKEN not configured in database or environment');
     return new Response(
       JSON.stringify({
         ok: false,
-        error: 'PSA_API_TOKEN not configured',
-        diagnostics: { hadApiKey: false, totalMs: Date.now() - started }
+        error: 'PSA_API_TOKEN not configured. Please set it in Admin > System tab.',
+        diagnostics: { hadApiKey: false, tokenSource, totalMs: Date.now() - started }
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -12,7 +13,45 @@ export function PSAApiSettings() {
   const [loading, setLoading] = useState(false);
   const [testLoading, setTestLoading] = useState(false);
   const [testResult, setTestResult] = useState<any>(null);
+  const [currentStatus, setCurrentStatus] = useState<{
+    hasToken: boolean;
+    source: 'database' | 'environment' | 'none';
+    lastTested?: Date;
+  }>({ hasToken: false, source: 'none' });
   const { toast } = useToast();
+
+  useEffect(() => {
+    checkCurrentTokenStatus();
+  }, []);
+
+  const checkCurrentTokenStatus = async () => {
+    try {
+      // Check if token exists in database
+      const { data: tokenSetting } = await supabase
+        .from('system_settings')
+        .select('key_value, updated_at')
+        .eq('key_name', 'PSA_API_TOKEN')
+        .maybeSingle();
+
+      if (tokenSetting?.key_value) {
+        setCurrentStatus({
+          hasToken: true,
+          source: 'database',
+          lastTested: tokenSetting.updated_at ? new Date(tokenSetting.updated_at) : undefined
+        });
+      } else {
+        // For environment check, we'll assume it exists if the user has it configured
+        // (we can't directly check environment variables from the frontend)
+        setCurrentStatus({
+          hasToken: false,
+          source: 'none'
+        });
+      }
+    } catch (error) {
+      console.error('Error checking token status:', error);
+      setCurrentStatus({ hasToken: false, source: 'none' });
+    }
+  };
 
   const handleSaveToken = async () => {
     if (!token.trim()) {
@@ -48,6 +87,7 @@ export function PSAApiSettings() {
       });
 
       setToken('');
+      await checkCurrentTokenStatus(); // Refresh status
     } catch (error: any) {
       console.error('Error saving PSA API token:', error);
       toast({
@@ -143,6 +183,18 @@ export function PSAApiSettings() {
             This replaces web scraping with reliable API calls.
           </AlertDescription>
         </Alert>
+
+        <div className="flex items-center gap-2">
+          <Label>Current Status:</Label>
+          <Badge variant={currentStatus.hasToken ? "default" : "secondary"}>
+            {currentStatus.hasToken ? `Active (${currentStatus.source})` : "Not configured"}
+          </Badge>
+          {currentStatus.lastTested && (
+            <span className="text-sm text-muted-foreground">
+              Last updated: {currentStatus.lastTested.toLocaleDateString()}
+            </span>
+          )}
+        </div>
 
         <div className="space-y-2">
           <Label htmlFor="psa-token">PSA API Token</Label>
