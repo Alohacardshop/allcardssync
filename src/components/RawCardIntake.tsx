@@ -658,25 +658,6 @@ export function RawCardIntake({
             </div>
           ) : null}
 
-          {/* Selected Variant Display */}
-          {chosenVariant && (
-            <div className="mb-4 p-3 bg-muted/50 rounded-lg">
-              <Label className="text-sm font-medium">Selected:</Label>
-              <div className="flex items-center gap-2 mt-1">
-                <Badge variant="outline">
-                  {chosenVariant.condition.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                </Badge>
-                <Badge variant="secondary">
-                  {chosenVariant.printing.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                </Badge>
-                {chosenVariant.price && (
-                  <span className="font-semibold text-primary">
-                    ${chosenVariant.price.toFixed(2)}
-                  </span>
-                )}
-              </div>
-            </div>
-          )}
           
           {/* Pricing and Cost Input */}
           <div className="pt-4 border-t">
