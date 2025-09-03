@@ -64,7 +64,7 @@ const PRINTINGS = [
 
 export function TCGCardSearch({ onCardSelect, showSelectButton = false }: TCGCardSearchProps) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedGame, setSelectedGame] = useState<string>("");
+  const [selectedGame, setSelectedGame] = useState<string>("all");
   const [games, setGames] = useState<Game[]>([]);
   const [cards, setCards] = useState<TCGCard[]>([]);
   const [loading, setLoading] = useState(false);
@@ -111,7 +111,7 @@ export function TCGCardSearch({ onCardSelect, showSelectButton = false }: TCGCar
           body: {
             action: 'search',
             search_query: query,
-            game_slug: selectedGame || null,
+            game_slug: selectedGame === "all" ? null : selectedGame,
             limit_count: 5
           }
         });
@@ -161,8 +161,8 @@ export function TCGCardSearch({ onCardSelect, showSelectButton = false }: TCGCar
 
   const loadGames = async () => {
     try {
-      const { data, error } = await supabase.functions.invoke('tcg-card-search', {
-        body: { action: 'games' }
+      const { data, error } = await supabase.functions.invoke('tcg-card-search?action=games', {
+        body: {}
       });
 
       if (error) throw error;
@@ -189,7 +189,7 @@ export function TCGCardSearch({ onCardSelect, showSelectButton = false }: TCGCar
         body: {
           action: 'search',
           search_query: searchQuery,
-          game_slug: selectedGame || null,
+          game_slug: selectedGame === "all" ? null : selectedGame,
           limit_count: 20
         }
       });
@@ -219,9 +219,8 @@ export function TCGCardSearch({ onCardSelect, showSelectButton = false }: TCGCar
     setPricing([]);
 
     try {
-      const { data, error } = await supabase.functions.invoke('tcg-card-search', {
+      const { data, error } = await supabase.functions.invoke('tcg-card-search?action=pricing', {
         body: {
-          action: 'pricing',
           cardId: card.id,
           condition: selectedCondition,
           refresh
@@ -353,7 +352,7 @@ export function TCGCardSearch({ onCardSelect, showSelectButton = false }: TCGCar
                 <SelectValue placeholder="All Games" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Games</SelectItem>
+                <SelectItem value="all">All Games</SelectItem>
                 {games.map((game) => (
                   <SelectItem key={game.slug} value={game.slug}>
                     {game.name}
