@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -65,15 +65,12 @@ export function TCGCardSearch({ onCardSelect, showSelectButton = false, defaultG
   const [showSuggestions, setShowSuggestions] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   
-  // Helper function to combine name and number into search query
+  // Helper function to get search query (primarily card name)
   const getCombinedQuery = useCallback(() => {
     const namePart = cardName.trim().toLowerCase();
-    let numberPart = cardNumber.trim();
-    
-    // Keep the number simple - don't add extra patterns that might confuse the search
-    const parts = [namePart, numberPart].filter(Boolean);
-    return parts.join(' ');
-  }, [cardName, cardNumber]);
+    // Only use card name for the main search, we'll filter by number client-side
+    return namePart;
+  }, [cardName]);
 
   // Selected card and pricing states
   const [selectedCard, setSelectedCard] = useState<TCGCard | null>(null);
@@ -82,7 +79,7 @@ export function TCGCardSearch({ onCardSelect, showSelectButton = false, defaultG
   const [selectedCondition, setSelectedCondition] = useState<string>("near_mint");
   const [selectedPrinting, setSelectedPrinting] = useState<string>("normal");
 
-  // Use our new hooks
+  // Use our new hooks with filtered results
   const { data: games = [] } = useGames();
   const { data: searchResults = [], isLoading } = useCardSearch(debouncedQuery, selectedGame === "all" ? undefined : selectedGame);
   const { data: suggestions = [] } = useCardSearch(
@@ -91,6 +88,38 @@ export function TCGCardSearch({ onCardSelect, showSelectButton = false, defaultG
     undefined, 
     5
   );
+
+  // Filter search results by card number client-side
+  const filteredSearchResults = useMemo(() => {
+    if (!cardNumber.trim()) return searchResults;
+    
+    const numberFilter = cardNumber.trim().toLowerCase();
+    return searchResults.filter(card => {
+      // Check if the card has a number field and if it matches
+      const cardId = card.id?.toLowerCase() || '';
+      const cardName = card.name?.toLowerCase() || '';
+      
+      // Match against card number patterns (supports partial matches)
+      return cardId.includes(numberFilter) || 
+             cardName.includes(numberFilter) ||
+             (card as any).number?.toString().toLowerCase().includes(numberFilter);
+    });
+  }, [searchResults, cardNumber]);
+
+  // Also filter suggestions by number
+  const filteredSuggestions = useMemo(() => {
+    if (!cardNumber.trim()) return suggestions;
+    
+    const numberFilter = cardNumber.trim().toLowerCase();
+    return suggestions.filter(card => {
+      const cardId = card.id?.toLowerCase() || '';
+      const cardName = card.name?.toLowerCase() || '';
+      
+      return cardId.includes(numberFilter) || 
+             cardName.includes(numberFilter) ||
+             (card as any).number?.toString().toLowerCase().includes(numberFilter);
+    });
+  }, [suggestions, cardNumber]);
 
   // Update debounced query
   useEffect(() => {
@@ -102,14 +131,14 @@ export function TCGCardSearch({ onCardSelect, showSelectButton = false, defaultG
     return () => clearTimeout(timer);
   }, [cardName, cardNumber, getCombinedQuery]);
 
-  // Update suggestions
+  // Update suggestions display
   useEffect(() => {
-    if (suggestions.length > 0 && getCombinedQuery().length >= 2) {
+    if (filteredSuggestions.length > 0 && getCombinedQuery().length >= 2) {
       setShowSuggestions(true);
     } else {
       setShowSuggestions(false);
     }
-  }, [suggestions, getCombinedQuery]);
+  }, [filteredSuggestions, getCombinedQuery]);
 
   // Close suggestions on outside click
   useEffect(() => {
@@ -130,10 +159,10 @@ export function TCGCardSearch({ onCardSelect, showSelectButton = false, defaultG
       return;
     }
     // Search results are handled by the hook, just show success message
-    if (searchResults.length === 0) {
+    if (filteredSearchResults.length === 0) {
       toast.info("No cards found for your search");
     } else {
-      toast.success(`Found ${searchResults.length} cards`);
+      toast.success(`Found ${filteredSearchResults.length} cards`);
     }
   };
 
@@ -221,10 +250,10 @@ export function TCGCardSearch({ onCardSelect, showSelectButton = false, defaultG
               </div>
               
               {/* Typeahead Suggestions Dropdown */}
-              {showSuggestions && suggestions.length > 0 && (
+              {showSuggestions && filteredSuggestions.length > 0 && (
                 <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-background border rounded-md shadow-lg max-h-80 overflow-y-auto">
                   <div className="py-1">
-                    {suggestions.map((card) => (
+                    {filteredSuggestions.map((card) => (
                       <button
                         key={card.id}
                         onClick={() => handleSuggestionSelect(card)}
@@ -404,10 +433,10 @@ export function TCGCardSearch({ onCardSelect, showSelectButton = false, defaultG
       )}
 
       {/* Search Results */}
-      {(isLoading || searchResults.length > 0) && (
+      {(isLoading || filteredSearchResults.length > 0) && (
         <Card>
           <CardHeader>
-            <CardTitle>Search Results ({searchResults.length} cards found)</CardTitle>
+            <CardTitle>Search Results ({filteredSearchResults.length} cards found)</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -420,7 +449,7 @@ export function TCGCardSearch({ onCardSelect, showSelectButton = false, defaultG
                   </div>
                 ))
               ) : (
-                searchResults.map((card) => (
+                filteredSearchResults.map((card) => (
                   <div key={card.id} className="border rounded-lg p-4 space-y-3">
                     <div className="flex items-start gap-3">
                       {card.image_url && (
