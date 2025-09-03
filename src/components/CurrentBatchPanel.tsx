@@ -302,7 +302,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
                       {item.year && `${item.year} • `}
                       {item.category && `${item.category} • `}
                       {item.variant && `${item.variant} • `}
-                      {item.grade && `Grade: ${item.grade} • `}
+                      {item.grade && `Condition: ${item.grade} • `}
                       {item.psa_cert && `PSA ${item.psa_cert}`}
                     </div>
                   </div>
