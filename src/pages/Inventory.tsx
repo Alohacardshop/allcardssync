@@ -16,7 +16,8 @@ import { StoreSelector } from "@/components/StoreSelector";
 import { useStore } from "@/contexts/StoreContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { RefreshCw, AlertTriangle, ShoppingCart, Printer, Trash2 } from "lucide-react";
+import { RefreshCw, AlertTriangle, ShoppingCart, Printer, Trash2, Undo } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { usePrintNode } from "@/hooks/usePrintNode";
 import { generateLabelTSPL } from "@/lib/labelTemplates";
 import { ShopifyRemovalDialog } from "@/components/ShopifyRemovalDialog";
@@ -121,6 +122,24 @@ export default function Inventory() {
   // Selection state for bulk actions
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [processingIds, setProcessingIds] = useState<Set<string>>(new Set());
+  
+  // Delete confirmation dialog state
+  const [deleteDialog, setDeleteDialog] = useState<{
+    isOpen: boolean;
+    items: ItemRow[];
+    isBulk: boolean;
+    onConfirm?: () => void;
+  }>({
+    isOpen: false,
+    items: [],
+    isBulk: false
+  });
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  
+  // Undo functionality
+  const [undoTimers, setUndoTimers] = useState<Map<string, NodeJS.Timeout>>(new Map());
+  const [showDeletedToggle, setShowDeletedToggle] = useState(false);
   
   // Shopify removal dialog state
   const [removalDialog, setRemovalDialog] = useState<{
@@ -244,6 +263,11 @@ export default function Inventory() {
       .select(columns, { count: countMode })
       .order(sortKey as string, { ascending: sortAsc });
 
+    // ALWAYS exclude soft-deleted items (centrally controlled)
+    if (!showDeletedToggle) {
+      query = query.is("deleted_at", null);
+    }
+
     // Filter by location if selected
     if (selectedLocationGid) {
       query = query.eq("shopify_location_gid", selectedLocationGid);
@@ -312,9 +336,6 @@ export default function Inventory() {
         query = query.lte("price", maxPrice);
       }
     }
-
-    // Exclude soft-deleted records
-    query = query.is("deleted_at", null);
 
     return query;
   };
@@ -746,11 +767,10 @@ export default function Inventory() {
               return;
             }
 
-            // Then delete locally
-            await performLocalDelete(row);
+            // Then delete using RPC
+            await performRPCDelete(row.id, 'Removed from Shopify and deleted');
             
             setRemovalDialog({ isOpen: false, items: [] });
-            toast.success(`Item removed from Shopify and deleted locally`);
           } catch (error) {
             console.error('Removal error:', error);
             toast.error("Failed to remove item: " + (error instanceof Error ? error.message : "Unknown error"));
@@ -760,10 +780,137 @@ export default function Inventory() {
         }
       });
     } else {
-      // Direct local delete for non-mirrored items
-      await performLocalDelete(row);
+      // Show confirmation dialog for non-mirrored items
+      setDeleteDialog({
+        isOpen: true,
+        items: [row],
+        isBulk: false,
+        onConfirm: () => performRPCDelete(row.id, 'Deleted from Inventory UI')
+      });
     }
   };
+
+  // RPC-based delete functions
+  const performRPCDelete = async (itemId: string, reason: string) => {
+    setDeletingId(itemId);
+    try {
+      const { data, error } = await supabase.rpc('soft_delete_intake_item', {
+        item_id: itemId,
+        reason_in: reason
+      });
+      
+      if (error) throw error;
+      
+      // Update UI immediately
+      setItems(prev => prev.filter(item => item.id !== itemId));
+      setTotal(prev => Math.max(0, prev - 1));
+      
+      // Show success toast with undo option
+      const undoToastId = toast.success(
+        <div className="flex items-center justify-between w-full">
+          <span>Item deleted. Undo available for 10s.</span>
+          <button
+            onClick={() => undoDelete(itemId, undoToastId)}
+            className="ml-2 text-xs bg-primary text-primary-foreground px-2 py-1 rounded hover:bg-primary/80"
+          >
+            Undo
+          </button>
+        </div>,
+        { duration: 10000 }
+      );
+      
+      // Start undo timer
+      startUndoTimer(itemId, undoToastId);
+      
+    } catch (e: any) {
+      toast.error(`Delete failed: ${e.message || e}`);
+      throw e;
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const performBulkRPCDelete = async (itemIds: string[]) => {
+    setBulkDeleting(true);
+    try {
+      const { data, error } = await supabase.rpc('soft_delete_intake_items', {
+        ids: itemIds,
+        reason: 'Bulk delete from Inventory'
+      });
+      
+      if (error) throw error;
+      
+      const deletedCount = (data as any)?.deleted_count ?? itemIds.length;
+      
+      // Update UI immediately  
+      setItems(prev => prev.filter(item => !itemIds.includes(item.id)));
+      setTotal(prev => Math.max(0, prev - deletedCount));
+      setSelectedIds(new Set());
+      
+      toast.success(`${deletedCount} items deleted successfully`);
+      
+    } catch (e: any) {
+      toast.error(`Bulk delete failed: ${e.message || e}`);
+      throw e;
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
+  const undoDelete = async (itemId: string, toastId?: string | number) => {
+    try {
+      const { error } = await supabase.rpc('restore_intake_item', {
+        item_id: itemId,
+        reason_in: 'Undo from Inventory UI'
+      });
+      
+      if (error) throw error;
+      
+      toast.success('Item restored successfully');
+      
+      // Clear the undo timer
+      const timer = undoTimers.get(itemId);
+      if (timer) {
+        clearTimeout(timer);
+        setUndoTimers(prev => {
+          const newMap = new Map(prev);
+          newMap.delete(itemId);
+          return newMap;
+        });
+      }
+      
+      // Dismiss the original toast
+      if (toastId) {
+        toast.dismiss(toastId);
+      }
+      
+      // Refresh the list to show the restored item
+      window.location.reload();
+      
+    } catch (e: any) {
+      toast.error(`Restore failed: ${e.message || e}`);
+    }
+  };
+
+  const startUndoTimer = (itemId: string, toastId?: string | number) => {
+    const timer = setTimeout(() => {
+      // Remove from undo timers after 10 seconds
+      setUndoTimers(prev => {
+        const newMap = new Map(prev);
+        newMap.delete(itemId);
+        return newMap;
+      });
+    }, 10000);
+    
+    setUndoTimers(prev => new Map(prev).set(itemId, timer));
+  };
+
+  // Cleanup timers on unmount
+  useEffect(() => {
+    return () => {
+      undoTimers.forEach(timer => clearTimeout(timer));
+    };
+  }, [undoTimers]);
 
   const performLocalDelete = async (row: ItemRow) => {
     const reason = window.prompt("Delete reason (optional)?") || null;
@@ -823,12 +970,10 @@ export default function Inventory() {
               toast.warning(`${failures} Shopify removals failed, but continuing with local deletion`);
             }
 
-            // Then delete all selected items locally
-            await performBulkLocalDelete(Array.from(selectedIds));
+            // Then delete all selected items using bulk RPC
+            await performBulkRPCDelete(Array.from(selectedIds));
             
             setRemovalDialog({ isOpen: false, items: [] });
-            setSelectedIds(new Set());
-            toast.success(`${selectedItems.length} items processed`);
           } catch (error) {
             console.error('Bulk removal error:', error);
             toast.error("Failed to remove items: " + (error instanceof Error ? error.message : "Unknown error"));
@@ -838,30 +983,17 @@ export default function Inventory() {
         }
       });
     } else {
-      // Direct bulk local delete for non-mirrored items
-      await performBulkLocalDelete(Array.from(selectedIds));
-      setSelectedIds(new Set());
+      // Show confirmation dialog for bulk delete
+      setDeleteDialog({
+        isOpen: true,
+        items: selectedItems,
+        isBulk: true,
+        onConfirm: () => performBulkRPCDelete(Array.from(selectedIds))
+      });
     }
   };
 
-  const performBulkLocalDelete = async (itemIds: string[]) => {
-    const reason = window.prompt("Delete reason for all items (optional)?") || null;
-    try {
-      const { error } = await supabase
-        .from("intake_items")
-        .update({ deleted_at: new Date().toISOString(), deleted_reason: reason })
-        .in("id", itemIds);
-      if (error) throw error;
-      
-      setItems((prev) => prev.filter((it) => !itemIds.includes(it.id)));
-      setTotal((t) => Math.max(0, t - itemIds.length));
-      toast.success(`Deleted ${itemIds.length} items${reason ? ` (${reason})` : ""}`);
-    } catch (e) {
-      console.error(e);
-      toast.error("Failed to delete items");
-      throw e;
-    }
-  };
+  // Legacy function removed - replaced with performBulkRPCDelete
 
   const clearAllFilters = () => {
     setSearch("");
@@ -1418,8 +1550,13 @@ export default function Inventory() {
                                 Print
                               </Button>
                             )}
-                            <Button size="sm" variant="destructive" onClick={() => handleDeleteRow(it)}>
-                              Delete
+                            <Button 
+                              size="sm" 
+                              variant="destructive" 
+                              onClick={() => handleDeleteRow(it)}
+                              disabled={deletingId === it.id || bulkDeleting}
+                            >
+                              {deletingId === it.id ? "Deleting..." : "Delete"}
                             </Button>
                           </div>
                         </TableCell>
@@ -1461,6 +1598,40 @@ export default function Inventory() {
         items={removalDialog.items}
         loading={removalProcessing}
       />
+      
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialog.isOpen} onOpenChange={(open) => !open && setDeleteDialog({ isOpen: false, items: [], isBulk: false })}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {deleteDialog.isBulk ? `Delete ${deleteDialog.items.length} Items` : 'Delete Item'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteDialog.isBulk 
+                ? `Are you sure you want to delete ${deleteDialog.items.length} selected items? This action cannot be undone.`
+                : `Are you sure you want to delete this item (${deleteDialog.items[0]?.lot_number})? This action cannot be undone.`
+              }
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingId !== null || bulkDeleting}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (deleteDialog.onConfirm) {
+                  deleteDialog.onConfirm();
+                }
+                setDeleteDialog({ isOpen: false, items: [], isBulk: false });
+              }}
+              disabled={deletingId !== null || bulkDeleting}
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              {deletingId !== null || bulkDeleting ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
