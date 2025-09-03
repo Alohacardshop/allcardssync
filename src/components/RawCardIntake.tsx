@@ -99,7 +99,7 @@ export function RawCardIntake({
   // Refs for input focus management
   const costInputRef = useRef<HTMLInputElement>(null);
 
-  // Available options from pricing data and card variants
+  // Available options from pricing data and card variants - only show actual card options
   const availableConditions = useMemo(() => {
     // First try pricing data variants
     if (pricingData?.variants?.length) {
@@ -112,9 +112,9 @@ export function RawCardIntake({
       return cardVariants.conditions;
     }
     
-    // Final fallback to static list
-    return CONDITIONS;
-  }, [pricingData, cardVariants]);
+    // If no card is selected, show empty array (no options)
+    return picked ? [] : CONDITIONS;
+  }, [pricingData, cardVariants, picked]);
 
   const availablePrintings = useMemo(() => {
     // First try pricing data variants
@@ -128,9 +128,9 @@ export function RawCardIntake({
       return cardVariants.printings;
     }
     
-    // Final fallback to static list
-    return TCGDB_PRINTINGS;
-  }, [pricingData, cardVariants]);
+    // If no card is selected, show empty array (no options)
+    return picked ? [] : TCGDB_PRINTINGS;
+  }, [pricingData, cardVariants, picked]);
 
   // Auto-update selections when available options change
   useEffect(() => {
