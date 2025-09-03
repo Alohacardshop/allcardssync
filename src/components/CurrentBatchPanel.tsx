@@ -28,6 +28,8 @@ interface IntakeItem {
   category?: string;
   year?: string;
   catalog_snapshot?: any; // Using any to match the Json type from database
+  store_key?: string;
+  shopify_location_gid?: string;
 }
 
 interface CurrentBatchPanelProps {
@@ -144,25 +146,44 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
     }
   };
 
-  const handleDeleteItem = async (itemId: string) => {
+  const handleDeleteItem = async (item: IntakeItem) => {
     try {
-      const { error } = await supabase
+      console.log('Starting delete for item:', item.id, { store_key: item.store_key, location_gid: item.shopify_location_gid });
+
+      const { data, error } = await supabase
         .from('intake_items')
         .update({ 
           deleted_at: new Date().toISOString(),
           deleted_reason: 'Deleted from current batch',
           updated_at: new Date().toISOString()
         })
-        .eq('id', itemId);
+        .eq('id', item.id)
+        .select('*');
 
       if (error) {
         console.error('Delete error:', error);
-        throw error;
+        toast.error(`Error deleting item: ${error.message || 'Unknown error'}`);
+        return;
       }
 
+      if (!data || data.length === 0) {
+        console.warn('Delete: no rows updated for id', item.id);
+        toast.error('Could not delete item (no permission or not found).');
+        return;
+      }
+
+      console.log('Successfully deleted item:', data[0]);
       toast.success('Item deleted');
-      fetchRecentItems(); // Refresh the list
-    } catch (error) {
+
+      // Optimistic UI update for immediate feedback
+      setRecentItems((prev) => prev.filter((i) => i.id !== item.id));
+      setTotalCount((c) => Math.max(0, (c || 0) - 1));
+
+      // Small delay to allow DB triggers to run before refetching
+      setTimeout(() => {
+        fetchRecentItems();
+      }, 150);
+    } catch (error: any) {
       console.error('Error deleting item:', error);
       toast.error(`Error deleting item: ${error?.message || 'Unknown error'}`);
     }
@@ -397,7 +418,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                           <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => handleDeleteItem(item.id)}>
+                          <AlertDialogAction onClick={() => handleDeleteItem(item)}>
                             Delete
                           </AlertDialogAction>
                         </AlertDialogFooter>
