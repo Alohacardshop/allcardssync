@@ -88,6 +88,36 @@ export function RawCardIntake({
   const [pricingData, setPricingData] = useState<PricingData | null>(null);
   const [pricingLoading, setPricingLoading] = useState(false);
 
+  // Available options from pricing data
+  const availableConditions = useMemo(() => {
+    if (!pricingData?.variants?.length) return CONDITIONS;
+    const conditions = [...new Set(pricingData.variants.map(v => v.condition))];
+    return conditions.length > 0 ? conditions : CONDITIONS;
+  }, [pricingData]);
+
+  const availablePrintings = useMemo(() => {
+    if (!pricingData?.variants?.length) return TCGDB_PRINTINGS;
+    const printings = [...new Set(pricingData.variants.map(v => v.printing))];
+    return printings.length > 0 ? printings : TCGDB_PRINTINGS;
+  }, [pricingData]);
+
+  // Auto-update selections when available options change
+  useEffect(() => {
+    if (!pricingData?.variants?.length) return;
+
+    // Check if current condition is available
+    const currentConditionAvailable = availableConditions.includes(selectedCondition);
+    if (!currentConditionAvailable && availableConditions.length > 0) {
+      setSelectedCondition(availableConditions[0]);
+    }
+
+    // Check if current printing is available
+    const currentPrintingAvailable = availablePrintings.includes(selectedPrinting);
+    if (!currentPrintingAvailable && availablePrintings.length > 0) {
+      setSelectedPrinting(availablePrintings[0]);
+    }
+  }, [availableConditions, availablePrintings, selectedCondition, selectedPrinting, pricingData]);
+
   const debounceRef = useRef<NodeJS.Timeout>();
 
   // Clear suggestions when inputs change
@@ -272,7 +302,7 @@ export function RawCardIntake({
   };
 
   // Handle card selection from TCG search
-  const handleTCGCardSelect = (card: any) => {
+  const handleTCGCardSelect = async (card: any) => {
     // Convert TCG card format to CatalogCard format
     const catalogCard: CatalogCard = {
       id: card.id,
@@ -284,24 +314,33 @@ export function RawCardIntake({
       tcgplayer_product_id: undefined
     };
 
-    // Initialize with default condition and printing - user will select before adding to batch
-    const chosenVar = {
-      condition: conditionCsv.split(',')[0]?.trim() || 'NM',
-      printing: printing,
-      price: null
-    };
-
     setPicked(catalogCard);
-    setChosenVariant(chosenVar);
+    setChosenVariant(null);
+    setPricingData(null);
 
     const payload = {
       card: catalogCard,
-      chosenVariant: chosenVar,
+      chosenVariant: null,
     };
 
     onPick?.(payload);
 
-    if (autoSaveToBatch && chosenVar) {
+    // Auto-fetch pricing data when card is selected
+    setTimeout(async () => {
+      setPricingLoading(true);
+      try {
+        const data = await fetchCardPricing(catalogCard.id);
+        setPricingData(data);
+        toast.success("Pricing data loaded");
+      } catch (e: any) {
+        console.error('Auto-pricing error:', e);
+        toast.error('Failed to load pricing data');
+      } finally {
+        setPricingLoading(false);
+      }
+    }, 100);
+
+    if (autoSaveToBatch) {
       setTimeout(addToBatch, 100);
     }
   };
@@ -388,7 +427,7 @@ export function RawCardIntake({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="bg-popover border-border z-50">
-                {CONDITIONS.map((condition) => (
+                {availableConditions.map((condition) => (
                   <SelectItem key={condition} value={condition}>
                     {condition.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
                   </SelectItem>
@@ -401,7 +440,7 @@ export function RawCardIntake({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="bg-popover border-border z-50">
-                {TCGDB_PRINTINGS.map((printing) => (
+                {availablePrintings.map((printing) => (
                   <SelectItem key={printing} value={printing}>
                     {printing.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
                   </SelectItem>
@@ -439,8 +478,11 @@ export function RawCardIntake({
             <div className="space-y-3 mb-4">
               <Label className="text-sm font-medium">Available Prices (click to select):</Label>
               {pricingData.variants
-                .filter(variant => !selectedPrinting || selectedPrinting === 'normal' || variant.printing === selectedPrinting)
-                .slice(0, 3)
+                .filter(variant => 
+                  (!selectedCondition || variant.condition === selectedCondition) &&
+                  (!selectedPrinting || variant.printing === selectedPrinting)
+                )
+                .slice(0, 5)
                 .map((variant, index) => (
                   <button
                     key={`${variant.condition}-${variant.printing}-${index}`}
