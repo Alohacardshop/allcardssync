@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -92,6 +92,9 @@ export function RawCardIntake({
   const [lastPricingRequest, setLastPricingRequest] = useState<any>(null);
   const [showPricingDebug, setShowPricingDebug] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+
+  // Refs for input focus management
+  const costInputRef = useRef<HTMLInputElement>(null);
 
   // Available options from pricing data
   const availableConditions = useMemo(() => {
@@ -506,6 +509,118 @@ export function RawCardIntake({
     toast.success(`Selected ${variant.condition} ${variant.printing} at ${priceDisplay}`);
   };
 
+  // Memoized pricing form component to prevent unnecessary re-renders
+  const PricingForm = React.memo(({ 
+    customPrice, 
+    setCustomPrice, 
+    cost, 
+    setCost, 
+    quantity, 
+    setQuantity, 
+    chosenVariant,
+    costInputRef,
+    addToBatch,
+    saving,
+    selectedStore,
+    selectedLocation
+  }: {
+    customPrice: string;
+    setCustomPrice: (value: string) => void;
+    cost: string;
+    setCost: (value: string) => void;
+    quantity: number;
+    setQuantity: (value: number) => void;
+    chosenVariant: any;
+    costInputRef: React.RefObject<HTMLInputElement>;
+    addToBatch: () => void;
+    saving: boolean;
+    selectedStore: string | null;
+    selectedLocation: string | null;
+  }) => {
+    
+    const handleCostChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+      console.log('Cost input change:', e.target.value);
+      setCost(e.target.value);
+    }, [setCost]);
+
+    const handleCostBlur = useCallback(() => {
+      console.log('Cost input blur detected');
+    }, []);
+
+    const handleCostFocus = useCallback(() => {
+      console.log('Cost input focus detected');
+    }, []);
+
+    return (
+      <div className="pt-4 border-t">
+        <Label className="text-sm font-medium mb-3 block">Pricing & Inventory Details</Label>
+        <div className="grid grid-cols-3 gap-4 mb-4">
+          <div>
+            <Label htmlFor="customPrice">Selling Price ($) - Auto-filled from TCG</Label>
+            <Input
+              id="customPrice"
+              type="number"
+              step="0.01"
+              placeholder="0.00"
+              value={customPrice}
+              onChange={(e) => setCustomPrice(e.target.value)}
+              className="mt-1"
+            />
+            {/* Database pricing reference */}
+            {chosenVariant?.price && (
+              <div className="text-xs text-muted-foreground mt-1">
+                TCG Price: ${chosenVariant.price.toFixed(2)} (Selling: ${customPrice || '0.00'})
+              </div>
+            )}
+          </div>
+         
+          <div>
+            <Label htmlFor="cost">Cost per Item ($)</Label>
+            <Input
+              ref={costInputRef}
+              id="cost"
+              type="text"
+              inputMode="decimal"
+              pattern="[0-9]*\.?[0-9]*"
+              placeholder="0.00"
+              value={cost}
+              onChange={handleCostChange}
+              onFocus={handleCostFocus}
+              onBlur={handleCostBlur}
+              className="mt-1"
+            />
+          </div>
+          
+          <div>
+            <Label htmlFor="quantity">Quantity</Label>
+            <Input
+              id="quantity"
+              type="number"
+              min="1"
+              max="999"
+              value={quantity}
+              onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+              className="mt-1"
+            />
+          </div>
+        </div>
+        
+        <Button 
+          onClick={addToBatch}
+          disabled={saving || !chosenVariant || !selectedStore || !selectedLocation}
+          className="flex items-center gap-2 w-full"
+        >
+          {saving ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Plus className="h-4 w-4" />
+          )}
+          Add to Batch
+        </Button>
+      </div>
+    );
+  });
+
   const SelectedCardPanel = () => (
     <Card>
       <CardHeader>
@@ -682,69 +797,20 @@ export function RawCardIntake({
           ) : null}
 
           
-          {/* Pricing and Cost Input */}
-          <div className="pt-4 border-t">
-            <Label className="text-sm font-medium mb-3 block">Pricing & Inventory Details</Label>
-            <div className="grid grid-cols-3 gap-4 mb-4">
-               <div>
-                 <Label htmlFor="customPrice">Selling Price ($) - Auto-filled from TCG</Label>
-                 <Input
-                   id="customPrice"
-                   type="number"
-                   step="0.01"
-                   placeholder="0.00"
-                   value={customPrice}
-                   onChange={(e) => setCustomPrice(e.target.value)}
-                   className="mt-1"
-                 />
-                 {/* Database pricing reference */}
-                 {chosenVariant?.price && (
-                   <div className="text-xs text-muted-foreground mt-1">
-                     TCG Price: ${chosenVariant.price.toFixed(2)} (Selling: ${customPrice || '0.00'})
-                   </div>
-                 )}
-               </div>
-              
-              <div>
-                <Label htmlFor="cost">Cost per Item ($)</Label>
-                <Input
-                  id="cost"
-                  type="number"
-                  step="0.01"
-                  placeholder="0.00"
-                  value={cost}
-                  onChange={(e) => setCost(e.target.value)}
-                  className="mt-1"
-                />
-              </div>
-              
-              <div>
-                <Label htmlFor="quantity">Quantity</Label>
-                <Input
-                  id="quantity"
-                  type="number"
-                  min="1"
-                  max="999"
-                  value={quantity}
-                  onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-                  className="mt-1"
-                />
-              </div>
-            </div>
-            
-            <Button 
-              onClick={addToBatch}
-              disabled={saving || !chosenVariant || !selectedStore || !selectedLocation}
-              className="flex items-center gap-2 w-full"
-            >
-              {saving ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Plus className="h-4 w-4" />
-              )}
-              Add to Batch
-            </Button>
-          </div>
+          <PricingForm 
+            customPrice={customPrice}
+            setCustomPrice={setCustomPrice}
+            cost={cost}
+            setCost={setCost}
+            quantity={quantity}
+            setQuantity={setQuantity}
+            chosenVariant={chosenVariant}
+            costInputRef={costInputRef}
+            addToBatch={addToBatch}
+            saving={saving}
+            selectedStore={selectedStore}
+            selectedLocation={selectedLocation}
+           />
         </div>
       </CardContent>
     </Card>
