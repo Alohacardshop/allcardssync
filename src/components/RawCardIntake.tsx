@@ -79,6 +79,7 @@ export function RawCardIntake({
   const [chosenVariant, setChosenVariant] = useState<any>(null);
   const [quantity, setQuantity] = useState(1);
   const [cost, setCost] = useState("");
+  const [customPrice, setCustomPrice] = useState("");
   const { selectedStore, selectedLocation, availableStores, availableLocations, setSelectedLocation } = useStore();
   const [saving, setSaving] = useState(false);
   
@@ -117,6 +118,17 @@ export function RawCardIntake({
       setSelectedPrinting(availablePrintings[0]);
     }
   }, [availableConditions, availablePrintings, selectedCondition, selectedPrinting, pricingData]);
+
+  // Update chosen variant when condition/printing changes
+  useEffect(() => {
+    if (selectedCondition && selectedPrinting) {
+      setChosenVariant({
+        condition: selectedCondition,
+        printing: selectedPrinting,
+        price: chosenVariant?.price || null // Keep existing price if available
+      });
+    }
+  }, [selectedCondition, selectedPrinting]);
 
   const debounceRef = useRef<NodeJS.Timeout>();
 
@@ -198,7 +210,7 @@ export function RawCardIntake({
         card_number: picked.number || "",
         year: "", // Raw cards typically don't have year data
         grade: chosenVariant.condition,
-        price: chosenVariant.price || null,
+        price: customPrice ? parseFloat(customPrice) : (chosenVariant.price || null),
         cost: cost ? parseFloat(cost) : null,
         sku: generateSKU(picked, chosenVariant, game),
 
@@ -261,6 +273,8 @@ export function RawCardIntake({
       setChosenVariant(null);
       setQuantity(1);
       setCost("");
+      setCustomPrice("");
+      setPricingData(null);
       
       // Call onBatchAdd if provided
       if (onBatchAdd) {
@@ -303,11 +317,19 @@ export function RawCardIntake({
 
   // Handle card selection from TCG search
   const handleTCGCardSelect = async (card: any) => {
+    console.log('Card picked:', card, card.number);
+    
+    // Fix card number extraction - handle if it's an object
+    let cardNumber = card.number;
+    if (typeof card.number === 'object' && card.number?.value !== undefined) {
+      cardNumber = card.number.value === 'undefined' ? null : card.number.value;
+    }
+    
     // Convert TCG card format to CatalogCard format
     const catalogCard: CatalogCard = {
       id: card.id,
       name: card.name,
-      number: card.number,
+      number: cardNumber,
       set_name: card.set_name,
       set: { name: card.set_name },
       image_url: card.image_url,
@@ -317,6 +339,8 @@ export function RawCardIntake({
     setPicked(catalogCard);
     setChosenVariant(null);
     setPricingData(null);
+    setCustomPrice(""); // Reset custom price
+    setCost(""); // Reset cost
 
     const payload = {
       card: catalogCard,
@@ -366,16 +390,21 @@ export function RawCardIntake({
     }
   };
 
-  const formatPrice = (cents: number) => {
+  const formatPrice = (cents: number | null | undefined) => {
+    if (cents === null || cents === undefined || isNaN(cents)) {
+      return '$0.00';
+    }
     return `$${(cents / 100).toFixed(2)}`;
   };
 
   const handlePricingSelect = (variant: any) => {
+    const priceInDollars = variant.price_cents ? variant.price_cents / 100 : 0;
     setChosenVariant({
       condition: variant.condition,
       printing: variant.printing,
-      price: variant.price_cents / 100 // Convert to dollars
+      price: priceInDollars
     });
+    setCustomPrice(priceInDollars.toFixed(2));
     toast.success(`Selected ${variant.condition} ${variant.printing} at ${formatPrice(variant.price_cents)}`);
   };
 
@@ -538,38 +567,60 @@ export function RawCardIntake({
             </div>
           )}
           
-          {/* Cost, Quantity and Add to Batch */}
-          <div className="flex items-center gap-4 pt-4 border-t">
-            <div className="flex items-center gap-2">
-              <Label htmlFor="cost">Cost each ($):</Label>
-              <Input
-                id="cost"
-                type="number"
-                step="0.01"
-                placeholder="0.00"
-                value={cost}
-                onChange={(e) => setCost(e.target.value)}
-                className="w-24"
-              />
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Label htmlFor="quantity">Quantity:</Label>
-              <Input
-                id="quantity"
-                type="number"
-                min="1"
-                max="999"
-                value={quantity}
-                onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-                className="w-20"
-              />
+          {/* Pricing and Cost Input */}
+          <div className="pt-4 border-t">
+            <Label className="text-sm font-medium mb-3 block">Pricing & Inventory Details</Label>
+            <div className="grid grid-cols-3 gap-4 mb-4">
+              <div>
+                <Label htmlFor="customPrice">Selling Price ($)</Label>
+                <Input
+                  id="customPrice"
+                  type="number"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={customPrice}
+                  onChange={(e) => setCustomPrice(e.target.value)}
+                  className="mt-1"
+                />
+                {/* Database pricing reference */}
+                {chosenVariant?.price && (
+                  <div className="text-xs text-muted-foreground mt-1">
+                    Database: ${chosenVariant.price.toFixed(2)}
+                  </div>
+                )}
+              </div>
+              
+              <div>
+                <Label htmlFor="cost">Cost per Item ($)</Label>
+                <Input
+                  id="cost"
+                  type="number"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={cost}
+                  onChange={(e) => setCost(e.target.value)}
+                  className="mt-1"
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="quantity">Quantity</Label>
+                <Input
+                  id="quantity"
+                  type="number"
+                  min="1"
+                  max="999"
+                  value={quantity}
+                  onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+                  className="mt-1"
+                />
+              </div>
             </div>
             
             <Button 
               onClick={addToBatch}
               disabled={saving || !chosenVariant || !selectedStore || !selectedLocation}
-              className="flex items-center gap-2"
+              className="flex items-center gap-2 w-full"
             >
               {saving ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
