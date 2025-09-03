@@ -423,6 +423,10 @@ export function RawCardIntake({
     // Handle both old and new pricing formats
     const priceCents = variant.pricing?.price_cents || variant.price_cents;
     const priceInDollars = priceCents && !isNaN(priceCents) ? priceCents / 100 : 0;
+    
+    // Round to nearest whole dollar for selling price
+    const roundedSellingPrice = priceInDollars > 0 ? Math.round(priceInDollars) : 0;
+    
     const newVariant = {
       condition: variant.condition,
       printing: variant.printing,
@@ -431,7 +435,8 @@ export function RawCardIntake({
     };
     
     setChosenVariant(newVariant);
-    setCustomPrice(priceInDollars > 0 ? priceInDollars.toFixed(2) : "");
+    // Set selling price to nearest whole dollar
+    setCustomPrice(roundedSellingPrice > 0 ? roundedSellingPrice.toString() : "");
     
     const priceDisplay = priceCents && !isNaN(priceCents) && priceCents > 0 
       ? tcgFormatPrice(priceCents) 
@@ -592,6 +597,9 @@ export function RawCardIntake({
                       <div className="text-right">
                         <div className="font-semibold text-lg">
                           {formatPrice(variant.pricing?.price_cents || variant.price_cents)}
+                          <div className="text-xs text-muted-foreground font-normal">
+                            TCGplayer price as of yesterday
+                          </div>
                         </div>
                         {(variant.pricing?.market_price_cents || variant.market_price_cents) && (
                           <div className="text-sm text-muted-foreground">
@@ -635,24 +643,24 @@ export function RawCardIntake({
           <div className="pt-4 border-t">
             <Label className="text-sm font-medium mb-3 block">Pricing & Inventory Details</Label>
             <div className="grid grid-cols-3 gap-4 mb-4">
-              <div>
-                <Label htmlFor="customPrice">Selling Price ($)</Label>
-                <Input
-                  id="customPrice"
-                  type="number"
-                  step="0.01"
-                  placeholder="0.00"
-                  value={customPrice}
-                  onChange={(e) => setCustomPrice(e.target.value)}
-                  className="mt-1"
-                />
-                {/* Database pricing reference */}
-                {chosenVariant?.price && (
-                  <div className="text-xs text-muted-foreground mt-1">
-                    Database: ${chosenVariant.price.toFixed(2)}
-                  </div>
-                )}
-              </div>
+               <div>
+                 <Label htmlFor="customPrice">Selling Price ($) - Auto-filled from TCG</Label>
+                 <Input
+                   id="customPrice"
+                   type="number"
+                   step="0.01"
+                   placeholder="Rounded to nearest dollar"
+                   value={customPrice}
+                   onChange={(e) => setCustomPrice(e.target.value)}
+                   className="mt-1"
+                 />
+                 {/* Database pricing reference */}
+                 {chosenVariant?.price && (
+                   <div className="text-xs text-muted-foreground mt-1">
+                     TCG Price: ${chosenVariant.price.toFixed(2)} (Selling: ${customPrice || '0.00'})
+                   </div>
+                 )}
+               </div>
               
               <div>
                 <Label htmlFor="cost">Cost per Item ($)</Label>
