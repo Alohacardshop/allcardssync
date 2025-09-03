@@ -71,17 +71,72 @@ export interface PopularCard {
   rarity?: string; // Added optional rarity field
 }
 
-export interface PricingData {
-  cardId: string;
-  variants: {
-    id?: string;
-    sku?: string;
-    condition: string;
-    printing: string;
-    price_cents: number;
-    market_price_cents?: number;
-    last_updated: string;
-  }[];
+export interface PricingResponse {
+  success: boolean
+  cardId: string
+  refreshed: boolean
+  requestPayload?: any
+  variants: Array<{
+    id: string
+    sku?: string
+    condition: string
+    printing: string
+    pricing: {
+      price_cents: number | null
+      market_price_cents: number | null
+      low_price_cents: number | null
+      high_price_cents: number | null
+    }
+    // Legacy format for compatibility
+    price_cents?: number
+    market_price_cents?: number
+    is_available: boolean
+    last_updated: string
+    card: {
+      name: string
+      image_url: string
+      set_name: string
+      game_name: string
+    }
+  }>
+}
+
+// Legacy interface for compatibility
+export interface PricingData extends PricingResponse {}
+
+export function formatPrice(cents: number | null): string {
+  if (!cents) return 'N/A'
+  return `$${(cents / 100).toFixed(2)}`
+}
+
+export function findVariant(response: PricingResponse, condition: string, printing: string) {
+  return response.variants.find(v => 
+    v.condition === condition && v.printing === printing
+  )
+}
+
+export async function updateCardPricing(
+  cardId: string, 
+  condition: string = 'near_mint', 
+  printing: string = 'normal'
+): Promise<PricingResponse> {
+  try {
+    const { data, error } = await tcgSupabase.functions.invoke('get-card-pricing', {
+      body: {
+        cardId,
+        condition,
+        printing,
+        refresh: true
+      }
+    })
+
+    if (error) throw error
+    return data
+  } catch (error) {
+    console.error('Pricing update failed:', error)
+    // Fallback to cached data
+    return getCachedPricing(cardId, condition, printing)
+  }
 }
 
 // Function to update variant pricing with optional variantId
@@ -90,7 +145,7 @@ export async function updateVariantPricing(
   condition?: string,
   printing?: string,
   variantId?: string
-) {
+): Promise<PricingResponse> {
   try {
     const requestBody: any = {
       cardId,
@@ -111,17 +166,50 @@ export async function updateVariantPricing(
     
     return {
       success: true,
-      card: data.card,
-      variants: data.variants,
-      requestPayload: requestBody,
-      message: 'Pricing updated successfully'
-    };
+      cardId: data.cardId || cardId,
+      refreshed: true,
+      variants: data.variants || [],
+      requestPayload: requestBody
+    } as PricingResponse;
   } catch (error) {
     console.error('Error updating variant pricing:', error);
-    return {
-      success: false,
-      error: error.message || 'Unknown error'
-    };
+    throw error;
+  }
+}
+
+export async function getCachedPricing(
+  cardId: string, 
+  condition?: string, 
+  printing?: string
+): Promise<PricingResponse> {
+  const { data, error } = await tcgSupabase.functions.invoke('get-card-pricing', {
+    body: {
+      cardId,
+      condition,
+      printing,
+      refresh: false
+    }
+  })
+
+  if (error) throw error
+  return data
+}
+
+// Get pricing by variant ID directly
+export async function updateVariantPricingById(variantId: string): Promise<PricingResponse> {
+  try {
+    const { data, error } = await tcgSupabase.functions.invoke('get-card-pricing', {
+      body: {
+        variantId,
+        refresh: true
+      }
+    })
+
+    if (error) throw error
+    return data
+  } catch (error) {
+    console.error('Variant pricing update failed:', error)
+    throw error
   }
 }
 
@@ -131,7 +219,7 @@ export async function getVariantPricing(
   condition?: string,
   printing?: string,
   variantId?: string
-) {
+): Promise<PricingResponse> {
   try {
     const requestBody: any = {
       cardId,
@@ -152,7 +240,7 @@ export async function getVariantPricing(
     return {
       ...data,
       requestPayload: requestBody
-    };
+    } as PricingResponse;
   } catch (error) {
     console.error('Error getting variant pricing:', error);
     throw error;

@@ -18,7 +18,7 @@ import { StoreSelector } from '@/components/StoreSelector';
 import { LocationSelector } from '@/components/LocationSelector';
 import { TCGCardSearch } from '@/components/TCGCardSearch';
 import { fetchCardPricing } from '@/hooks/useTCGData';
-import { tcgSupabase, PricingData, updateVariantPricing, getVariantPricing } from '@/lib/tcg-supabase';
+import { tcgSupabase, PricingResponse, PricingData, updateVariantPricing, getVariantPricing, formatPrice as tcgFormatPrice, findVariant } from '@/lib/tcg-supabase';
 
 interface CatalogCard {
   id: string;
@@ -86,7 +86,7 @@ export function RawCardIntake({
   // Pricing states
   const [selectedCondition, setSelectedCondition] = useState<string>("near_mint");
   const [selectedPrinting, setSelectedPrinting] = useState<string>("normal");
-  const [pricingData, setPricingData] = useState<PricingData | null>(null);
+  const [pricingData, setPricingData] = useState<PricingResponse | null>(null);
   const [pricingLoading, setPricingLoading] = useState(false);
   const [lastPricingRequest, setLastPricingRequest] = useState<any>(null);
   const [showPricingDebug, setShowPricingDebug] = useState(false);
@@ -394,13 +394,9 @@ export function RawCardIntake({
       if (refresh) {
         // Always force refresh to get latest data from JustTCG API
         const result = await updateVariantPricing(picked.id, selectedCondition, selectedPrinting, variantId);
-        if (result.success) {
-          data = result;
-          setLastPricingRequest(result.requestPayload);
-          toast.success("Pricing data refreshed from JustTCG API");
-        } else {
-          throw new Error(result.error);
-        }
+        data = result;
+        setLastPricingRequest(result.requestPayload);
+        toast.success("Pricing data refreshed from JustTCG API");
       } else {
         // Use getVariantPricing for normal fetch to get cached data
         data = await getVariantPricing(picked.id, selectedCondition, selectedPrinting, variantId);
@@ -424,7 +420,9 @@ export function RawCardIntake({
   };
 
   const handlePricingSelect = (variant: any) => {
-    const priceInDollars = variant.price_cents && !isNaN(variant.price_cents) ? variant.price_cents / 100 : 0;
+    // Handle both old and new pricing formats
+    const priceCents = variant.pricing?.price_cents || variant.price_cents;
+    const priceInDollars = priceCents && !isNaN(priceCents) ? priceCents / 100 : 0;
     const newVariant = {
       condition: variant.condition,
       printing: variant.printing,
@@ -435,8 +433,8 @@ export function RawCardIntake({
     setChosenVariant(newVariant);
     setCustomPrice(priceInDollars > 0 ? priceInDollars.toFixed(2) : "");
     
-    const priceDisplay = variant.price_cents && !isNaN(variant.price_cents) && variant.price_cents > 0 
-      ? formatPrice(variant.price_cents) 
+    const priceDisplay = priceCents && !isNaN(priceCents) && priceCents > 0 
+      ? tcgFormatPrice(priceCents) 
       : 'No price available';
     
     toast.success(`Selected ${variant.condition} ${variant.printing} at ${priceDisplay}`);
@@ -542,16 +540,16 @@ export function RawCardIntake({
                     <>
                       <div><strong>Response Summary:</strong></div>
                       <pre className="bg-background p-2 rounded text-xs overflow-x-auto">
-                        {JSON.stringify({
-                          cardId: pricingData.cardId,
-                          variants: pricingData.variants?.map(v => ({
-                            id: v.id,
-                            sku: v.sku,
-                            condition: v.condition,
-                            printing: v.printing,
-                            price_cents: v.price_cents
-                          })) || []
-                        }, null, 2)}
+                         {JSON.stringify({
+                           cardId: pricingData.cardId,
+                           variants: pricingData.variants?.map(v => ({
+                             id: v.id,
+                             sku: v.sku || 'N/A',
+                             condition: v.condition,
+                             printing: v.printing,
+                             price_cents: v.pricing?.price_cents || v.price_cents
+                           })) || []
+                         }, null, 2)}
                       </pre>
                     </>
                   )}
@@ -593,11 +591,11 @@ export function RawCardIntake({
                       </div>
                       <div className="text-right">
                         <div className="font-semibold text-lg">
-                          {formatPrice(variant.price_cents)}
+                          {formatPrice(variant.pricing?.price_cents || variant.price_cents)}
                         </div>
-                        {variant.market_price_cents && (
+                        {(variant.pricing?.market_price_cents || variant.market_price_cents) && (
                           <div className="text-sm text-muted-foreground">
-                            Market: {formatPrice(variant.market_price_cents)}
+                            Market: {formatPrice(variant.pricing?.market_price_cents || variant.market_price_cents)}
                           </div>
                         )}
                       </div>
