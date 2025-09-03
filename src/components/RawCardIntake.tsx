@@ -90,6 +90,7 @@ export function RawCardIntake({
   const [pricingLoading, setPricingLoading] = useState(false);
   const [lastPricingRequest, setLastPricingRequest] = useState<any>(null);
   const [showPricingDebug, setShowPricingDebug] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   // Available options from pricing data
   const availableConditions = useMemo(() => {
@@ -151,6 +152,26 @@ export function RawCardIntake({
   }, [pricingData, selectedCondition, selectedPrinting]);
 
   const debounceRef = useRef<NodeJS.Timeout>();
+
+  // Check if user is admin
+  useEffect(() => {
+    const checkAdminRole = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          const { data: adminCheck } = await supabase.rpc("has_role", { 
+            _user_id: session.user.id, 
+            _role: "admin" as any 
+          });
+          setIsAdmin(Boolean(adminCheck));
+        }
+      } catch (error) {
+        console.error('Error checking admin role:', error);
+        setIsAdmin(false);
+      }
+    };
+    checkAdminRole();
+  }, []);
 
   // Clear suggestions when inputs change
   useEffect(() => {
@@ -540,16 +561,18 @@ export function RawCardIntake({
               Get Pricing
             </Button>
             
-            <Button 
-              onClick={() => setShowPricingDebug(!showPricingDebug)}
-              variant="ghost"
-            >
-              Debug {showPricingDebug ? '−' : '+'}
-            </Button>
+            {isAdmin && (
+              <Button 
+                onClick={() => setShowPricingDebug(!showPricingDebug)}
+                variant="ghost"
+              >
+                Debug {showPricingDebug ? '−' : '+'}
+              </Button>
+            )}
           </div>
 
-          {/* Pricing Debug Panel */}
-          {showPricingDebug && (
+          {/* Pricing Debug Panel - Admin Only */}
+          {isAdmin && showPricingDebug && (
             <div className="mt-4 p-3 bg-muted rounded-lg text-sm">
               <h4 className="font-medium mb-2">Pricing Debug Information</h4>
               {lastPricingRequest && (
@@ -589,7 +612,7 @@ export function RawCardIntake({
             </div>
           ) : pricingData?.variants && pricingData.variants.length > 0 ? (
             <div className="space-y-3 mb-4">
-              <Label className="text-sm font-medium">Available Prices (click to select):</Label>
+              <Label className="text-sm font-medium">Available Prices:</Label>
               {pricingData.variants
                 .filter(variant => 
                   (!selectedCondition || variant.condition === selectedCondition) &&
@@ -597,10 +620,9 @@ export function RawCardIntake({
                 )
                 .slice(0, 5)
                 .map((variant, index) => (
-                  <button
+                  <div
                     key={`${variant.condition}-${variant.printing}-${index}`}
-                    onClick={() => handlePricingSelect(variant)}
-                    className="w-full border rounded-lg p-3 hover:bg-muted/50 text-left transition-colors"
+                    className="w-full border rounded-lg p-3 bg-muted/20"
                   >
                     <div className="flex justify-between items-start mb-2">
                       <div>
@@ -630,7 +652,7 @@ export function RawCardIntake({
                        {variant.id && <span className="ml-2">ID: {variant.id}</span>}
                        {variant.sku && <span className="ml-2">SKU: {variant.sku}</span>}
                      </div>
-                  </button>
+                  </div>
                 ))
             }
             </div>
