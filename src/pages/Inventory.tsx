@@ -147,49 +147,85 @@ export default function Inventory() {
     roles: string[];
     locations: string[];
     itemCount: number;
+    accessTest?: boolean;
   } | null>(null);
   const [fetchId, setFetchId] = useState(0);
   const [fetchStartTime, setFetchStartTime] = useState<number | null>(null);
+  const [timeoutBanner, setTimeoutBanner] = useState<string | null>(null);
+  const [runningDiagnostics, setRunningDiagnostics] = useState(false);
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / pageSize)), [total]);
 
-  // Fetch diagnostics on mount
-  useEffect(() => {
-    const fetchDiagnostics = async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        
-        const roles: string[] = [];
-        if (user) {
-          const { data: roleData } = await supabase
-            .from('user_roles')
-            .select('role')
-            .eq('user_id', user.id);
-          roles.push(...(roleData?.map(r => r.role) || []));
-        }
-
-        const { data: locationData } = await supabase
-          .from('user_shopify_assignments')
-          .select('location_gid')
-          .eq('user_id', user?.id || '');
-
-        const { count: itemCount } = await supabase
-          .from('intake_items')
-          .select('*', { count: 'exact', head: true })
-          .is('deleted_at', null);
-
-        setDiagnostics({
-          user,
-          roles,
-          locations: locationData?.map(l => l.location_gid) || [],
-          itemCount: itemCount || 0
-        });
-      } catch (err) {
-        console.error('Diagnostics error:', err);
+  // Fetch diagnostics on mount and comprehensive diagnostics function
+  const runDiagnostics = async () => {
+    setRunningDiagnostics(true);
+    try {
+      console.log('Running inventory diagnostics...');
+      const startTime = Date.now();
+      
+      // 1. Auth check
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      // 2. Roles check
+      const roles: string[] = [];
+      if (user) {
+        const { data: roleData } = await supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', user.id);
+        roles.push(...(roleData?.map(r => r.role) || []));
       }
-    };
 
-    fetchDiagnostics();
+      // 3. Location assignments
+      const { data: locationData } = await supabase
+        .from('user_shopify_assignments')
+        .select('location_gid')
+        .eq('user_id', user?.id || '');
+
+      // 4. Access test - try to fetch 1 item
+      let accessTest = false;
+      try {
+        const { data: testItem, error: accessError } = await supabase
+          .from('intake_items')
+          .select('id')
+          .is('deleted_at', null)
+          .limit(1);
+        accessTest = !accessError;
+        if (accessError) console.warn('Access test failed:', accessError);
+      } catch (e) {
+        console.warn('Access test exception:', e);
+      }
+
+      // 5. Quick count probe
+      const { count: itemCount } = await supabase
+        .from('intake_items')
+        .select('*', { count: 'estimated', head: true })
+        .is('deleted_at', null);
+
+      const duration = Date.now() - startTime;
+      
+      const result = {
+        user,
+        roles,
+        locations: locationData?.map(l => l.location_gid) || [],
+        itemCount: itemCount || 0,
+        accessTest
+      };
+      
+      setDiagnostics(result);
+      console.log(`Diagnostics completed in ${duration}ms:`, result);
+      toast.success(`Diagnostics completed in ${duration}ms`);
+      
+    } catch (err) {
+      console.error('Diagnostics error:', err);
+      toast.error('Diagnostics failed: ' + (err instanceof Error ? err.message : 'Unknown error'));
+    } finally {
+      setRunningDiagnostics(false);
+    }
+  };
+
+  useEffect(() => {
+    runDiagnostics();
   }, []);
 
   // Optimized query builder function
@@ -283,6 +319,7 @@ export default function Inventory() {
     return query;
   };
 
+  // Split fetch: First get items quickly, then count in background
   useEffect(() => {
     let abortController = new AbortController();
     let watchdogTimer: NodeJS.Timeout;
@@ -292,78 +329,66 @@ export default function Inventory() {
       setFetchId(currentFetchId);
       setLoading(true);
       setError(null);
+      setTimeoutBanner(null);
       setFetchStartTime(currentFetchId);
       
-      // Watchdog timer to prevent stuck loading (15 seconds)
+      // Shorter watchdog timer (10 seconds)
       watchdogTimer = setTimeout(() => {
         if (!abortController.signal.aborted) {
-          console.error(`[${currentFetchId}] Watchdog: Request stuck after 15s, aborting`);
+          console.error(`[${currentFetchId}] Watchdog: Request stuck after 10s, aborting`);
           abortController.abort();
+          setTimeoutBanner('Request timed out after 10 seconds. The database may be under heavy load.');
           setError('Request timed out. Click "Retry" to try again.');
           setLoading(false);
           setFetchStartTime(null);
         }
-      }, 15000);
+      }, 10000);
       
       try {
         console.log(`[${currentFetchId}] Loading intake items from DB...`);
         
-        // Fast zero-results check first
-        if (!search && !lotFilter && printed === 'all' && pushed === 'all' && 
-            typeFilter === 'all' && !conditionFilter && !setFilter && 
-            !categoryFilter && !yearFilter && !priceRange.min && !priceRange.max) {
-          
-          const zeroCheck = supabase
-            .from("intake_items")
-            .select('id', { count: 'estimated', head: true })
-            .is("deleted_at", null);
-            
-          if (selectedLocationGid) {
-            zeroCheck.eq("shopify_location_gid", selectedLocationGid);
-          }
-          
-          const { count: quickCount } = await zeroCheck.abortSignal(abortController.signal);
-          
-          if (abortController.signal.aborted) {
-            console.log(`[${currentFetchId}] Zero-check aborted`);
-            return;
-          }
-          
-          if (quickCount === 0) {
-            console.log(`[${currentFetchId}] Fast zero-check: No items found`);
-            setItems([]);
-            setTotal(0);
-            setIsEstimated(true);
-            setLoading(false);
-            setFetchStartTime(null);
-            clearTimeout(watchdogTimer);
-            return;
-          }
-        }
-        
-        const query = buildInventoryQuery('estimated');
+        // Step 1: Fast items-only fetch (no count)
+        const query = buildInventoryQuery();
         const from = (page - 1) * pageSize;
         const to = from + pageSize - 1;
 
-        const { data, error, count } = await query
+        const { data, error } = await query
           .range(from, to)
           .abortSignal(abortController.signal);
         
         if (abortController.signal.aborted) {
-          console.log(`[${currentFetchId}] Main query aborted`);
+          console.log(`[${currentFetchId}] Items query aborted`);
           return;
         }
 
         if (error) {
           console.error(`[${currentFetchId}] Inventory fetch error:`, error);
-          throw new Error(`Database error: ${error.message}`);
+          throw new Error(`Database error: ${error.message || error.hint || 'Unknown PostgREST error'}`);
         }
         
         const duration = Date.now() - currentFetchId;
         setItems((data as any) || []);
-        setTotal(count || 0);
-        setIsEstimated(true);
-        console.log(`[${currentFetchId}] Loaded ${(data || []).length} items out of ~${count || 0} total (${duration}ms)`);
+        console.log(`[${currentFetchId}] Loaded ${(data || []).length} items (${duration}ms)`);
+        setLoading(false);
+        setFetchStartTime(null);
+        
+        // Step 2: Background count fetch (estimated, then exact if needed)
+        setTimeout(async () => {
+          try {
+            const countQuery = buildInventoryQuery('estimated');
+            const { count: estimatedCount } = await countQuery
+              .range(0, 0)
+              .abortSignal(abortController.signal);
+              
+            if (!abortController.signal.aborted) {
+              setTotal(estimatedCount || 0);
+              setIsEstimated(true);
+              console.log(`[${currentFetchId}] Got estimated count: ~${estimatedCount}`);
+            }
+          } catch (e) {
+            console.warn(`[${currentFetchId}] Count fetch failed:`, e);
+          }
+        }, 100);
         
       } catch (e: any) {
         if (!abortController.signal.aborted) {
@@ -371,7 +396,17 @@ export default function Inventory() {
           if (e.name === 'AbortError') {
             setError('Request was cancelled');
           } else {
-            setError(e.message || 'Failed to load inventory');
+            const errorMsg = e.message || 'Failed to load inventory';
+            setError(errorMsg);
+            
+            // Show specific PostgREST error details if available
+            if (e.code || e.hint || e.details) {
+              console.error(`PostgREST Error Details:`, {
+                code: e.code,
+                hint: e.hint, 
+                details: e.details
+              });
+            }
           }
           setItems([]);
           setTotal(0);
@@ -385,7 +420,8 @@ export default function Inventory() {
       }
     };
 
-    const timeoutId = setTimeout(fetchData, 100); // Debounce rapid changes
+    // Debounce rapid changes (500ms)
+    const timeoutId = setTimeout(fetchData, 500);
     
     return () => {
       abortController.abort();
@@ -956,13 +992,36 @@ export default function Inventory() {
               </div>
             )}
             
+            {/* Timeout Banner */}
+            {timeoutBanner && (
+              <Alert className="mt-4" variant="destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>
+                  {timeoutBanner}
+                </AlertDescription>
+              </Alert>
+            )}
+            
             {/* Diagnostics Panel */}
             {diagnostics && (process.env.NODE_ENV === 'development' || diagnostics.itemCount === 0) && (
               <div className="mt-4 p-3 bg-muted/50 rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-sm font-medium">Diagnostics</h4>
+                  <Button 
+                    size="sm" 
+                    variant="ghost" 
+                    onClick={runDiagnostics}
+                    disabled={runningDiagnostics}
+                  >
+                    <RefreshCw className={`h-3 w-3 mr-1 ${runningDiagnostics ? 'animate-spin' : ''}`} />
+                    Re-run
+                  </Button>
+                </div>
                 <div className="text-sm space-y-1">
                   <div><strong>Auth:</strong> {diagnostics.user ? `✅ ${diagnostics.user.email}` : '❌ Not logged in'}</div>
                   <div><strong>Roles:</strong> {diagnostics.roles.length > 0 ? diagnostics.roles.join(', ') : 'None'}</div>
                   <div><strong>Locations:</strong> {diagnostics.locations.length > 0 ? `${diagnostics.locations.length} assigned` : 'None'}</div>
+                  <div><strong>Access Test:</strong> {diagnostics.accessTest ? '✅ Database accessible' : '❌ Access denied'}</div>
                   <div><strong>Total Items:</strong> {diagnostics.itemCount}</div>
                 </div>
               </div>
