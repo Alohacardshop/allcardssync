@@ -121,21 +121,12 @@ export function useCard(cardId?: string) {
 // Get card pricing - use our proxy
 export async function fetchCardPricing(cardId: string, condition?: string, printing?: string, refresh = false): Promise<PricingData> {
   try {
-    // First get the JustTCG card ID from TCG DB
-    const { tcgSupabase, getJustTCGCardId, proxyPricing } = await import('@/lib/tcg-supabase');
+    const { getCachedPricingViaDB, updateVariantPricing } = await import('@/lib/tcg-supabase');
     
-    const justtcgCardId = await getJustTCGCardId(cardId);
-    if (!justtcgCardId) {
-      return {
-        success: false,
-        cardId,
-        refreshed: refresh,
-        variants: []
-      };
-    }
-
-    // Use our proxy for consistent pricing calls
-    return await proxyPricing(justtcgCardId, condition, printing, refresh);
+    // Use cached DB read by default, edge function for refresh
+    return refresh 
+      ? await updateVariantPricing(cardId, condition, printing)
+      : await getCachedPricingViaDB(cardId, condition, printing);
   } catch (error) {
     console.error('fetchCardPricing error:', error);
     throw error;

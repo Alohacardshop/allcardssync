@@ -16,6 +16,7 @@ import { UserAssignmentManager } from "@/components/UserAssignmentManager";
 import { ShopifyConfig } from "@/components/admin/ShopifyConfig";
 import { ShopifyTagImport } from "@/components/admin/ShopifyTagImport";
 import { PricingJobsMonitor } from "@/components/admin/PricingJobsMonitor";
+import { TCGHealthCheck } from "@/components/admin/TCGHealthCheck";
 
 import { checkSystemHealth } from "@/lib/api";
 
@@ -139,6 +140,7 @@ const Admin = () => {
             <div className="space-y-6">
               <CatalogTab />
               <PricingJobsMonitor />
+              <TCGHealthCheck />
             </div>
           </TabsContent>
 

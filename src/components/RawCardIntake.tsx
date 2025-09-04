@@ -18,7 +18,7 @@ import { StoreSelector } from '@/components/StoreSelector';
 import { LocationSelector } from '@/components/LocationSelector';
 import { TCGCardSearch } from '@/components/TCGCardSearch';
 import { fetchCardPricing } from '@/hooks/useTCGData';
-import { tcgSupabase, PricingResponse, PricingData, updateVariantPricing, getVariantPricing, formatPrice as tcgFormatPrice, findVariant, fetchCardVariants, getJustTCGCardId, proxyPricing } from '@/lib/tcg-supabase';
+import { tcgSupabase, PricingResponse, PricingData, updateVariantPricing, getVariantPricing, getCachedPricingViaDB, formatPrice as tcgFormatPrice, findVariant, fetchCardVariants } from '@/lib/tcg-supabase';
 import { generateSKU as generateSkuFromVariant } from '@/lib/sku';
 
 interface CatalogCard {
@@ -102,7 +102,6 @@ export function RawCardIntake({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [picked, setPicked] = useState<CatalogCard | null>(null);
-  const [justtcgCardId, setJusttcgCardId] = useState<string | null>(null);
   const [chosenVariant, setChosenVariant] = useState<any>(null);
   const [quantity, setQuantity] = useState(1);
   const [cost, setCost] = useState("");
@@ -370,7 +369,6 @@ export function RawCardIntake({
       
       // Reset selection but keep search results
       setPicked(null);
-      setJusttcgCardId(null);
       setChosenVariant(null);
       setQuantity(1);
       setCost("");
@@ -449,24 +447,6 @@ export function RawCardIntake({
     setCustomPrice(""); // Reset custom price
     setCost(""); // Reset cost
 
-    // Fetch JustTCG card ID first
-    setTimeout(async () => {
-      try {
-        const { getJustTCGCardId } = await import('@/lib/tcg-supabase');
-        const justtcgId = await getJustTCGCardId(catalogCard.id);
-        if (justtcgId) {
-          setJusttcgCardId(justtcgId);
-          console.log('JustTCG card ID found:', justtcgId);
-        } else {
-          console.log('No JustTCG card ID found for card:', catalogCard.id);
-          setJusttcgCardId(null);
-        }
-      } catch (e: any) {
-        console.error('Failed to fetch JustTCG card ID:', e);
-        setJusttcgCardId(null);
-      }
-    }, 10);
-
     const payload = {
       card: catalogCard,
       chosenVariant: null,
@@ -531,7 +511,7 @@ export function RawCardIntake({
         : await getVariantPricing(picked.id, selectedCondition, selectedPrinting, variantId);
       
       setLastPricingRequest({
-        cardId: justtcgCardId || picked.id,
+        cardId: picked.id,
         condition: selectedCondition,
         printing: selectedPrinting,
         refresh,
@@ -803,8 +783,9 @@ export function RawCardIntake({
                   <pre className="bg-background p-2 rounded text-xs overflow-x-auto">
                     {JSON.stringify({
                       ...lastPricingRequest,
-                      justtcgCardId: justtcgCardId,
-                      tcgDbCardId: picked?.id
+                      tcgDbCardId: picked?.id,
+                      variants_found: pricingData?.variants?.length || 0,
+                      last_updated: pricingData?.variants?.[0]?.last_updated
                     }, null, 2)}
                   </pre>
                   {pricingData && (

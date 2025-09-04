@@ -154,103 +154,181 @@ export async function updateCardPricing(
   }
 }
 
-// Helper to fetch JustTCG card ID from TCG DB
-export async function getJustTCGCardId(cardId: string): Promise<string | null> {
-  try {
-    const { data, error } = await tcgSupabase
-      .from('cards')
-      .select('justtcg_card_id')
-      .eq('id', cardId)
-      .single();
-    
-    if (error || !data) {
-      console.error('Failed to fetch JustTCG card ID:', error);
-      return null;
-    }
-    
-    return data.justtcg_card_id;
-  } catch (error) {
-    console.error('Error fetching JustTCG card ID:', error);
-    return null;
-  }
-}
-
-// Proxy pricing helper - calls our edge function instead of external API
-export async function proxyPricing(
-  justtcgCardId: string,
-  condition?: string,
-  printing?: string,
-  refresh = false
-): Promise<PricingResponse> {
-  try {
-    // Include Authorization header (edge functions require JWT)
-    const { data: { session } } = await supabase.auth.getSession();
-    const accessToken = session?.access_token;
-
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRtcG9hbmRveWRhcXhoemRqbm1rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ0MDU5NDMsImV4cCI6MjA2OTk4MTk0M30.WoHlHO_Z4_ogeO5nt4I29j11aq09RMBtNug8a5rStgk'
-    };
-    if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
-
-    const response = await fetch('https://dmpoandoydaqxhzdjnmk.supabase.co/functions/v1/tcg-card-search?action=pricing', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        cardId: justtcgCardId,
-        condition,
-        printing,
-        refresh
-      })
-    });
-
-    if (!response.ok) {
-      if (response.status === 404) {
-        return {
-          success: false,
-          cardId: justtcgCardId,
-          refreshed: refresh,
-          variants: []
-        };
-      }
-      
-      const errorText = await response.text();
-      throw new Error(`Pricing request failed: ${response.status} ${errorText}`);
-    }
-
-    const data = await response.json();
-    return {
-      success: true,
-      cardId: justtcgCardId,
-      refreshed: refresh,
-      variants: data.variants || [],
-      requestPayload: { cardId: justtcgCardId, condition, printing, refresh }
-    };
-  } catch (error) {
-    console.error('Proxy pricing error:', error);
-    throw error;
-  }
-}
-
-// Function to update variant pricing with optional variantId
-export async function updateVariantPricing(
-  cardId: string,
-  condition?: string,
-  printing?: string,
+// Read cached pricing from TCG DB (default path)
+export async function getCachedPricingViaDB(
+  cardId: string, 
+  condition: string = 'near_mint', 
+  printing: string = 'normal',
   variantId?: string
 ): Promise<PricingResponse> {
   try {
-    const { data, error } = await supabase.functions.invoke('get-card-pricing', {
+    if (variantId) {
+      // Read specific variant by ID
+      const { data: variant, error } = await tcgSupabase
+        .from('catalog_v2.variants')
+        .select('id, condition, printing, sku, price, market_price, low_price, mid_price, high_price, updated_at, card_id')
+        .eq('id', variantId)
+        .single();
+
+      if (error || !variant) {
+        return {
+          success: false,
+          cardId,
+          refreshed: false,
+          variants: [],
+          error: 'Variant not found'
+        };
+      }
+
+      // Get card info
+      const { data: card } = await tcgSupabase
+        .from('catalog_v2.cards')
+        .select('name, image_url, set_id, game')
+        .eq('id', variant.card_id)
+        .single();
+
+      // Get set name if available
+      let setName = '';
+      if (card?.set_id) {
+        const { data: set } = await tcgSupabase
+          .from('catalog_v2.sets')
+          .select('name')
+          .eq('id', card.set_id)
+          .single();
+        setName = set?.name || '';
+      }
+
+      return {
+        success: true,
+        cardId,
+        refreshed: false,
+        variants: [{
+          id: variant.id,
+          sku: variant.sku,
+          condition: variant.condition,
+          printing: variant.printing,
+          pricing: {
+            price_cents: variant.price ? Math.round(variant.price * 100) : null,
+            market_price_cents: variant.market_price ? Math.round(variant.market_price * 100) : null,
+            low_price_cents: variant.low_price ? Math.round(variant.low_price * 100) : null,
+            high_price_cents: variant.high_price ? Math.round(variant.high_price * 100) : null
+          },
+          is_available: true,
+          last_updated: variant.updated_at,
+          card: {
+            name: card?.name || '',
+            image_url: card?.image_url || '',
+            set_name: setName,
+            game_name: card?.game || ''
+          }
+        }]
+      };
+    } else {
+      // Read by card ID, condition, printing
+      const { data: variants, error } = await tcgSupabase
+        .from('catalog_v2.variants')
+        .select('id, condition, printing, sku, price, market_price, low_price, mid_price, high_price, updated_at, card_id')
+        .eq('card_id', cardId)
+        .eq('condition', condition)
+        .eq('printing', printing);
+
+      if (error) {
+        return {
+          success: false,
+          cardId,
+          refreshed: false,
+          variants: [],
+          error: error.message
+        };
+      }
+
+      // Get card info for display
+      const { data: card } = await tcgSupabase
+        .from('catalog_v2.cards')
+        .select('name, image_url, set_id, game')
+        .eq('id', cardId)
+        .single();
+
+      // Get set name if available
+      let setName = '';
+      if (card?.set_id) {
+        const { data: set } = await tcgSupabase
+          .from('catalog_v2.sets')
+          .select('name')
+          .eq('id', card.set_id)
+          .single();
+        setName = set?.name || '';
+      }
+
+      return {
+        success: true,
+        cardId,
+        refreshed: false,
+        variants: (variants || []).map(variant => ({
+          id: variant.id,
+          sku: variant.sku,
+          condition: variant.condition,
+          printing: variant.printing,
+          pricing: {
+            price_cents: variant.price ? Math.round(variant.price * 100) : null,
+            market_price_cents: variant.market_price ? Math.round(variant.market_price * 100) : null,
+            low_price_cents: variant.low_price ? Math.round(variant.low_price * 100) : null,
+            high_price_cents: variant.high_price ? Math.round(variant.high_price * 100) : null
+          },
+          is_available: true,
+          last_updated: variant.updated_at,
+          card: {
+            name: card?.name || '',
+            image_url: card?.image_url || '',
+            set_name: setName,
+            game_name: card?.game || ''
+          }
+        }))
+      };
+    }
+  } catch (error) {
+    console.error('Error reading cached pricing from DB:', error);
+    return {
+      success: false,
+      cardId,
+      refreshed: false,
+      variants: [],
+      error: error instanceof Error ? error.message : 'Unknown error'
+    };
+  }
+}
+
+// Manual refresh - calls TCG DB edge function
+export async function updateVariantPricing(
+  cardId: string,
+  condition: string = 'near_mint',
+  printing: string = 'normal',
+  variantId?: string
+): Promise<PricingResponse> {
+  try {
+    const { data, error } = await tcgSupabase.functions.invoke('get-card-pricing', {
       body: {
         cardId,
-        condition: condition || 'near_mint',
-        printing: printing || 'normal',
+        condition,
+        printing,
         variantId,
         refresh: true
       }
     });
 
     if (error) {
+      // Handle "Card not found" gracefully
+      if (error.message?.includes('Card not found') || error.message?.includes('404')) {
+        return {
+          success: false,
+          cardId,
+          refreshed: true,
+          variants: [],
+          error: 'Card not found',
+          requestPayload: { cardId, condition, printing, variantId, refresh: true }
+        };
+      }
+      
       return {
         success: false,
         cardId,
@@ -325,25 +403,37 @@ export async function updateVariantPricingById(variantId: string): Promise<Prici
   }
 }
 
-// Function to get current pricing without refresh with optional variantId
+// Get pricing without refresh - calls TCG DB edge function
 export async function getVariantPricing(
   cardId: string,
-  condition?: string,
-  printing?: string,
+  condition: string = 'near_mint',
+  printing: string = 'normal',
   variantId?: string
 ): Promise<PricingResponse> {
   try {
-    const { data, error } = await supabase.functions.invoke('get-card-pricing', {
+    const { data, error } = await tcgSupabase.functions.invoke('get-card-pricing', {
       body: {
         cardId,
-        condition: condition || 'near_mint',
-        printing: printing || 'normal',
+        condition,
+        printing,
         variantId,
         refresh: false
       }
     });
 
     if (error) {
+      // Handle "Card not found" gracefully
+      if (error.message?.includes('Card not found') || error.message?.includes('404')) {
+        return {
+          success: false,
+          cardId,
+          refreshed: false,
+          variants: [],
+          error: 'Card not found',
+          requestPayload: { cardId, condition, printing, variantId, refresh: false }
+        };
+      }
+
       return {
         success: false,
         cardId,

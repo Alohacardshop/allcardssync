@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Clock, TrendingUp, Database, Activity } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { tcgSupabase } from "@/lib/tcg-supabase";
 
 interface PricingJobRun {
   id: string;
@@ -24,7 +24,7 @@ export function PricingJobsMonitor() {
   useEffect(() => {
     const fetchJobRuns = async () => {
       try {
-        const { data, error } = await supabase
+        const { data, error } = await tcgSupabase
           .from('pricing_job_runs')
           .select('*')
           .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()) // Last 24 hours
@@ -32,12 +32,12 @@ export function PricingJobsMonitor() {
           .limit(20);
 
         if (error) {
-          console.error('Failed to fetch pricing job runs:', error);
+          console.error('Failed to fetch pricing job runs from TCG DB:', error);
         } else {
           setJobRuns(data || []);
         }
       } catch (error) {
-        console.error('Error fetching pricing jobs:', error);
+        console.error('Error fetching pricing jobs from TCG DB:', error);
       } finally {
         setLoading(false);
       }
