@@ -15,6 +15,7 @@ import TCGDatabaseSettings from "@/components/admin/TCGDatabaseSettings";
 import { UserAssignmentManager } from "@/components/UserAssignmentManager";
 import { ShopifyConfig } from "@/components/admin/ShopifyConfig";
 import { ShopifyTagImport } from "@/components/admin/ShopifyTagImport";
+import { PricingJobsMonitor } from "@/components/admin/PricingJobsMonitor";
 
 import { checkSystemHealth } from "@/lib/api";
 
@@ -135,7 +136,10 @@ const Admin = () => {
           </TabsContent>
 
           <TabsContent value="catalog" className="space-y-4">
-            <CatalogTab />
+            <div className="space-y-6">
+              <CatalogTab />
+              <PricingJobsMonitor />
+            </div>
           </TabsContent>
 
           <TabsContent value="settings" className="space-y-4">

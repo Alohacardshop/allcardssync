@@ -506,6 +506,51 @@ export type Database = {
         }
         Relationships: []
       }
+      pricing_job_runs: {
+        Row: {
+          actual_batches: number
+          cards_processed: number
+          created_at: string
+          duration_ms: number
+          expected_batches: number
+          finished_at: string
+          game: string
+          id: string
+          payload: Json | null
+          started_at: string
+          updated_at: string
+          variants_updated: number
+        }
+        Insert: {
+          actual_batches?: number
+          cards_processed?: number
+          created_at?: string
+          duration_ms?: number
+          expected_batches?: number
+          finished_at?: string
+          game: string
+          id?: string
+          payload?: Json | null
+          started_at?: string
+          updated_at?: string
+          variants_updated?: number
+        }
+        Update: {
+          actual_batches?: number
+          cards_processed?: number
+          created_at?: string
+          duration_ms?: number
+          expected_batches?: number
+          finished_at?: string
+          game?: string
+          id?: string
+          payload?: Json | null
+          started_at?: string
+          updated_at?: string
+          variants_updated?: number
+        }
+        Relationships: []
+      }
       print_jobs: {
         Row: {
           claimed_at: string | null
