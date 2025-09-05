@@ -1,9 +1,11 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useStore } from "@/contexts/StoreContext";
-import { MapPin, ExternalLink } from "lucide-react";
+import { MapPin, ExternalLink, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useEffect } from "react";
 import { useLocalStorageString } from "@/hooks/useLocalStorage";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 interface LocationSelectorProps {
   className?: string;
@@ -16,12 +18,46 @@ export function LocationSelector({ className }: LocationSelectorProps) {
     availableLocations, 
     loadingLocations,
     selectedStore,
-    isAdmin
+    isAdmin,
+    userAssignments,
+    refreshUserAssignments
   } = useStore();
 
   const [lastSelectedLocation, setLastSelectedLocation] = useLocalStorageString(
     `last-location-${selectedStore}`, 
     ""
+  );
+
+  const handleSetDefault = async () => {
+    if (!selectedStore || !selectedLocation) {
+      toast.error("Please select both store and location first");
+      return;
+    }
+
+    try {
+      const { error } = await supabase.rpc("set_user_default_location", {
+        _store_key: selectedStore,
+        _location_gid: selectedLocation
+      });
+
+      if (error) throw error;
+
+      const locationName = availableLocations.find(l => l.gid === selectedLocation)?.name;
+      toast.success(`Set ${locationName} as default for ${selectedStore}`);
+      
+      // Refresh user assignments to reflect the new default
+      await refreshUserAssignments();
+    } catch (error) {
+      console.error("Failed to set default:", error);
+      toast.error("Failed to set default location");
+    }
+  };
+
+  const isCurrentDefault = userAssignments.some(
+    assignment => 
+      assignment.store_key === selectedStore && 
+      assignment.location_gid === selectedLocation && 
+      assignment.is_default
   );
 
   // Auto-select single available location or restore last selection
@@ -138,14 +174,40 @@ export function LocationSelector({ className }: LocationSelectorProps) {
           <SelectContent>
             {availableLocations.map((location) => (
               <SelectItem key={location.gid} value={location.gid}>
-                {location.name}
+                <div className="flex items-center justify-between w-full">
+                  <span>{location.name}</span>
+                  {userAssignments.some(a => 
+                    a.store_key === selectedStore && 
+                    a.location_gid === location.gid && 
+                    a.is_default
+                  ) && (
+                    <Star className="h-3 w-3 text-yellow-500 ml-2" />
+                  )}
+                </div>
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
+        
+        {/* Set as Default Button */}
+        {selectedLocation && selectedStore && !isCurrentDefault && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleSetDefault}
+            className="w-full flex items-center gap-2"
+          >
+            <Star className="h-3 w-3" />
+            Set as Default
+          </Button>
+        )}
+        
         {selectedStore && availableLocations.length > 0 && (
           <p className="text-xs text-muted-foreground">
             {selectedStore}: {availableLocations.length} location{availableLocations.length !== 1 ? 's' : ''} available
+            {isCurrentDefault && selectedLocation && (
+              <span className="text-yellow-600 ml-1">(Current Default)</span>
+            )}
           </p>
         )}
       </div>
