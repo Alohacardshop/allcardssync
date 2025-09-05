@@ -124,6 +124,31 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
       console.log('Successfully sent item to inventory:', data);
       toast.success('Item sent to inventory');
 
+      // Trigger Shopify inventory sync (non-blocking)
+      if (item.sku && item.store_key) {
+        console.log(`🔄 Triggering Shopify inventory sync for SKU: ${item.sku}`);
+        supabase.functions.invoke('shopify-sync-inventory', {
+          body: {
+            storeKey: item.store_key,
+            sku: item.sku,
+            locationGid: item.shopify_location_gid
+          }
+        }).then(({ error: syncError }) => {
+          if (syncError) {
+            console.warn('⚠️ Shopify sync failed (non-critical):', syncError);
+            toast.error('Item sent to inventory, but Shopify sync failed');
+          } else {
+            console.log('✅ Shopify inventory sync completed');
+            toast.success('Item sent to inventory and synced to Shopify');
+          }
+        }).catch((syncError) => {
+          console.warn('⚠️ Shopify sync error (non-critical):', syncError);
+          toast.error('Item sent to inventory, but Shopify sync failed');
+        });
+      } else {
+        console.log('ℹ️ Skipping Shopify sync - missing SKU or store info');
+      }
+
       // Optimistic UI update for immediate feedback
       setRecentItems((prev) => prev.filter((i) => i.id !== item.id));
       setTotalCount((c) => Math.max(0, (c || 0) - 1));
