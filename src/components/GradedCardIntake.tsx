@@ -216,13 +216,28 @@ export const GradedCardIntake = () => {
         processing_notes_in: `Single graded card intake - PSA cert ${formData.certNumber}`
       };
 
-      const { data, error } = await supabase.rpc('create_raw_intake_item', rpcParams);
+      console.log('📤 Sending RPC request with params:', rpcParams);
+      
+      // Add timeout to the RPC call
+      const rpcPromise = supabase.rpc('create_raw_intake_item', rpcParams);
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Request timed out after 30 seconds')), 30000);
+      });
+      
+      const { data, error } = await Promise.race([rpcPromise, timeoutPromise]) as any;
 
       const elapsed = Date.now() - startTime;
       console.log(`⏰ Database operation completed in ${elapsed}ms`);
+      console.log('📥 RPC response:', { data, error });
 
       if (error) {
-        console.error('❌ Database error:', error);
+        console.error('❌ Database error details:', {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          fullError: error
+        });
         throw new Error(parseFunctionError(error));
       }
 
