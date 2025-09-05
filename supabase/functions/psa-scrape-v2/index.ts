@@ -413,34 +413,21 @@ serve(async (req) => {
         const imagesData = await imagesResp.json();
         console.log('📷 Images API response:', JSON.stringify(imagesData));
         
-        // Extract image URLs from the images API response
-        if (imagesData && typeof imagesData === 'object') {
-          const walkImages = (obj: any, path = '') => {
-            if (!obj || typeof obj !== 'object') return;
-            
-            for (const [key, value] of Object.entries(obj)) {
-              const fullPath = path ? `${path}.${key}` : key;
-              
-              if (typeof value === 'string' && value.startsWith('http') && 
-                  (value.includes('.jpg') || value.includes('.jpeg') || value.includes('.png') || value.includes('.webp'))) {
-                imageUrls.push(value);
-                console.log(`📷 Found image URL at ${fullPath}:`, value);
-              } else if (Array.isArray(value)) {
-                value.forEach((item, index) => {
-                  if (typeof item === 'string' && item.startsWith('http') && 
-                      (item.includes('.jpg') || item.includes('.jpeg') || item.includes('.png') || item.includes('.webp'))) {
-                    imageUrls.push(item);
-                    console.log(`📷 Found image URL in array at ${fullPath}[${index}]:`, item);
-                  }
-                });
-              } else if (value && typeof value === 'object') {
-                walkImages(value, fullPath);
-              }
+        // Extract image URLs from the images API response - only get front image
+        if (imagesData && Array.isArray(imagesData)) {
+          // PSA Images API returns array of objects with IsFrontImage and ImageURL properties
+          const frontImage = imagesData.find(item => item.IsFrontImage === true);
+          if (frontImage && frontImage.ImageURL) {
+            imageUrls.push(frontImage.ImageURL);
+            console.log('📷 Found front image URL:', frontImage.ImageURL);
+          } else {
+            // Fallback to first image if no front image is explicitly marked
+            const firstImage = imagesData.find(item => item.ImageURL);
+            if (firstImage && firstImage.ImageURL) {
+              imageUrls.push(firstImage.ImageURL);
+              console.log('📷 Found first available image URL:', firstImage.ImageURL);
             }
-          };
-          
-          walkImages(imagesData);
-          imageUrls = [...new Set(imageUrls)]; // Remove duplicates
+          }
           console.log('🖼️ Found', imageUrls.length, 'images from images API');
         }
       } else {
