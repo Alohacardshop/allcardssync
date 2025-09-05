@@ -194,8 +194,12 @@ export function StoreProvider({ children }: StoreProviderProps) {
     ),
     selectedLocation,
     setSelectedLocation,
-    // Show all locations to admins, or all locations to users (they can set defaults for any)
-    availableLocations,
+    // Show locations filtered by assignments for non-admins
+    availableLocations: isAdmin 
+      ? availableLocations 
+      : availableLocations.filter(loc => 
+          userAssignments.some(a => a.store_key === selectedStore && a.location_gid === loc.gid)
+        ),
     loadingLocations,
     isAdmin,
     userAssignments,

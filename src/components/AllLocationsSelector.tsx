@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
+import { useStore } from "@/contexts/StoreContext";
 import { MapPin, Star } from "lucide-react";
 import { toast } from "sonner";
 
@@ -27,6 +28,7 @@ export function AllLocationsSelector({
   onValueChange, 
   placeholder = "Select location" 
 }: AllLocationsSelectorProps) {
+  const { setSelectedStore } = useStore();
   const [locations, setLocations] = useState<LocationOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -171,6 +173,14 @@ export function AllLocationsSelector({
   const handleValueChange = (selectedValue: string) => {
     const newValue = selectedValue === "all" ? null : selectedValue;
     onValueChange?.(newValue);
+
+    // Keep store and location in sync
+    if (newValue) {
+      const loc = locations.find(l => l.gid === newValue);
+      if (loc) setSelectedStore(loc.storeKey);
+    } else {
+      setSelectedStore(null);
+    }
   };
 
   return (
