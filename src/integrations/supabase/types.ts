@@ -1373,10 +1373,6 @@ export type Database = {
           lot_number: string
         }[]
       }
-      debug_lot_creation_for_dorian: {
-        Args: Record<PropertyKey, never>
-        Returns: Json
-      }
       generate_lot_number: {
         Args: Record<PropertyKey, never>
         Returns: string
