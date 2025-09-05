@@ -165,17 +165,20 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
 
   const handleDeleteItem = async (item: IntakeItem) => {
     try {
-      console.log('Starting delete for item:', item.id);
+      console.log('🗑️ DELETE ITEM CLICKED - Starting delete for item:', item.id);
 
       const { data, error, status } = await supabase.rpc('soft_delete_intake_item', {
         item_id: item.id,
         reason_in: 'Deleted from current batch'
       });
 
+      console.log('🗑️ RPC Response:', { data, error, status });
+
       if (error) {
-        console.error('[delete] RPC error', { status, ...error });
+        console.error('🗑️ [delete] RPC error', { status, ...error });
         
         // Try direct update fallback
+        console.log('🗑️ Trying fallback update method...');
         const { error: fbError } = await supabase
           .from('intake_items')
           .update({
@@ -188,17 +191,19 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
           .single();
 
         if (fbError) {
-          console.error('[delete] fallback failed', fbError);
+          console.error('🗑️ [delete] fallback failed', fbError);
           toast.error(`Delete failed: ${fbError.message || fbError.details || 'unknown error'}`);
           return;
         }
         
+        console.log('🗑️ Fallback delete successful');
         toast.success('Item deleted (fallback)');
       } else {
+        console.log('🗑️ RPC delete successful');
         toast.success('Item deleted successfully');
       }
 
-      console.log('Successfully deleted item:', data);
+      console.log('🗑️ Successfully deleted item:', data);
       
       // Optimistic UI update for immediate feedback
       setRecentItems((prev) => prev.filter((i) => i.id !== item.id));
@@ -209,35 +214,42 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
         fetchRecentItems();
       }, 150);
     } catch (error: any) {
-      console.error('Error deleting item:', error);
+      console.error('🗑️ Error deleting item:', error);
       toast.error(`Error deleting item: ${error?.message || 'Unknown error'}`);
     }
   };
 
   const handleClearBatch = async () => {
+    console.log('🧹 CLEAR BATCH CLICKED - Current lot ID:', currentLotId);
+    
     if (!currentLotId) {
+      console.log('🧹 No active batch to clear');
       toast.error('No active batch to clear');
       return;
     }
 
     try {
+      console.log('🧹 Calling admin_delete_batch RPC...');
       const { data, error } = await supabase.rpc('admin_delete_batch', {
         lot_id_in: currentLotId,
         reason_in: 'Batch cleared manually for testing'
       });
 
+      console.log('🧹 RPC Response:', { data, error });
+
       if (error) {
-        console.error('Error clearing batch:', error);
+        console.error('🧹 Error clearing batch:', error);
         toast.error(`Error clearing batch: ${error.message}`);
         return;
       }
 
+      console.log('🧹 Successfully cleared batch');
       toast.success(`Cleared batch: ${data} items deleted`);
       
       // Refresh the batch data
       fetchRecentItems();
     } catch (error: any) {
-      console.error('Error clearing batch:', error);
+      console.error('🧹 Error clearing batch:', error);
       toast.error(`Error clearing batch: ${error?.message || 'Unknown error'}`);
     }
   };
@@ -417,7 +429,10 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                       <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction onClick={handleClearBatch} className="bg-red-600 hover:bg-red-700">
+                      <AlertDialogAction onClick={() => {
+                        console.log('🧹 CLEAR BATCH BUTTON CLICKED IN DIALOG');
+                        handleClearBatch();
+                      }} className="bg-red-600 hover:bg-red-700">
                         Clear Batch
                       </AlertDialogAction>
                     </AlertDialogFooter>
@@ -517,7 +532,10 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                           <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => handleDeleteItem(item)}>
+                          <AlertDialogAction onClick={() => {
+                            console.log('🗑️ DELETE BUTTON CLICKED IN DIALOG');
+                            handleDeleteItem(item);
+                          }}>
                             Delete
                           </AlertDialogAction>
                         </AlertDialogFooter>
