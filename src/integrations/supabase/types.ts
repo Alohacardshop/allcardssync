@@ -706,13 +706,6 @@ export type Database = {
             foreignKeyName: "products_group_id_fkey"
             columns: ["group_id"]
             isOneToOne: false
-            referencedRelation: "group_sync_status"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "products_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
             referencedRelation: "groups"
             referencedColumns: ["id"]
           },
@@ -843,13 +836,6 @@ export type Database = {
           released_at?: string | null
         }
         Relationships: [
-          {
-            foreignKeyName: "sets_game_fkey"
-            columns: ["game"]
-            isOneToOne: false
-            referencedRelation: "game_catalog_stats"
-            referencedColumns: ["game_id"]
-          },
           {
             foreignKeyName: "sets_game_fkey"
             columns: ["game"]
@@ -1127,34 +1113,7 @@ export type Database = {
       }
     }
     Views: {
-      game_catalog_stats: {
-        Row: {
-          cards_count: number | null
-          game_id: string | null
-          game_name: string | null
-          sets_count: number | null
-        }
-        Relationships: []
-      }
-      group_sync_status: {
-        Row: {
-          category_id: number | null
-          id: number | null
-          is_fully_synced: boolean | null
-          name: string | null
-          synced_products: number | null
-          total_products: number | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "groups_category_id_fkey"
-            columns: ["category_id"]
-            isOneToOne: false
-            referencedRelation: "categories"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
+      [_ in never]: never
     }
     Functions: {
       admin_delete_batch: {
@@ -1421,6 +1380,26 @@ export type Database = {
       get_decrypted_secret: {
         Args: { secret_name: string }
         Returns: string
+      }
+      get_game_catalog_stats: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          cards_count: number
+          game_id: string
+          game_name: string
+          sets_count: number
+        }[]
+      }
+      get_group_sync_status: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          category_id: number
+          id: number
+          is_fully_synced: boolean
+          name: string
+          synced_products: number
+          total_products: number
+        }[]
       }
       gtrgm_compress: {
         Args: { "": unknown }
