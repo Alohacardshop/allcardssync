@@ -389,16 +389,26 @@ export const GradedCardIntake = () => {
         )}
 
         {/* Card Image Preview */}
-        {cardData?.imageUrl && (
+        {cardData && (
           <div className="flex justify-center">
-            <img 
-              src={cardData.imageUrl} 
-              alt="PSA Card"
-              className="max-w-xs max-h-80 object-contain rounded-lg border shadow-md"
-              onError={(e) => {
-                e.currentTarget.style.display = 'none';
-              }}
-            />
+            {cardData.imageUrl ? (
+              <img 
+                src={cardData.imageUrl} 
+                alt="PSA Card"
+                className="max-w-xs max-h-80 object-contain rounded-lg border shadow-md"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                }}
+              />
+            ) : (
+              <div className="flex items-center justify-center w-48 h-32 bg-muted/50 rounded-lg border border-dashed">
+                <div className="text-center text-muted-foreground">
+                  <Award className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">No image available</p>
+                  <p className="text-xs">PSA #{cardData.certNumber}</p>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
