@@ -40,7 +40,7 @@ export const GradedCardIntake = () => {
   const [abortController, setAbortController] = useState<AbortController | null>(null);
   const [showRawData, setShowRawData] = useState(false);
   const [populatedFieldsCount, setPopulatedFieldsCount] = useState(0);
-  const { selectedStore, selectedLocation, setSelectedLocation } = useStore();
+  const { selectedStore, selectedLocation, availableLocations, setSelectedLocation } = useStore();
 
   // Form fields that can be edited after fetching
   const [formData, setFormData] = useState({
@@ -160,6 +160,13 @@ export const GradedCardIntake = () => {
       return;
     }
 
+    // Ensure location belongs to the currently selected store
+    const locValid = availableLocations.some(l => l.gid === selectedLocation);
+    if (!locValid) {
+      toast.error("Selected location doesn't belong to the selected store. Please reselect.");
+      return;
+    }
+
     if (!formData.certNumber) {
       toast.error("Please fetch PSA data first");
       return;
@@ -262,8 +269,8 @@ export const GradedCardIntake = () => {
       });
       
       const errorMessage = error?.message || 'Unknown error';
-      if (errorMessage.includes('Access denied')) {
-        toast.error('Access denied - please check your permissions');
+      if (errorMessage.includes('Access denied') || error?.code === 'PGRST116' || errorMessage.toLowerCase().includes('row-level security') || error?.code === '42501') {
+        toast.error('Access denied: you do not have access to the selected store/location. Please ask an admin to assign access.');
       } else if (errorMessage.includes('store') || errorMessage.includes('location')) {
         toast.error('Please select a valid store and location');
       } else {

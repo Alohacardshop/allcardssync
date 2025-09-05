@@ -36,7 +36,7 @@ export const PSABulkImport = () => {
   const [items, setItems] = useState<PSAImportItem[]>([]);
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState(0);
-  const { selectedStore, selectedLocation } = useStore();
+  const { selectedStore, selectedLocation, availableLocations } = useStore();
   const batchId = uuidv4(); // Generate a unique batch ID for this import session
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -111,6 +111,13 @@ export const PSABulkImport = () => {
 
     if (!selectedStore || !selectedLocation) {
       toast.error("Please select a store and location before importing");
+      return;
+    }
+
+    // Ensure location belongs to the selected store
+    const locValid = availableLocations.some(l => l.gid === selectedLocation);
+    if (!locValid) {
+      toast.error("Selected location doesn't belong to the selected store. Please reselect.");
       return;
     }
 

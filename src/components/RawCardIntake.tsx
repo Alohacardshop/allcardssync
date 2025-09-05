@@ -271,6 +271,13 @@ export function RawCardIntake({
       return;
     }
 
+    // Ensure location belongs to the selected store
+    const locValid = availableLocations.some(l => l.gid === selectedLocation);
+    if (!locValid) {
+      toast.error("Selected location doesn't belong to the selected store. Please reselect.");
+      return;
+    }
+
     setSaving(true);
     try {
       // Enhanced timeout helper with retry
@@ -342,9 +349,10 @@ export function RawCardIntake({
       if (response.error) {
         // Enhanced error handling
         console.error('RPC Error:', response.error);
-        if (response.error.code === 'PGRST116') {
-          throw new Error('Access denied - please check your permissions');
-        } else if (response.error.message?.includes('store_key') || response.error.message?.includes('location')) {
+        const msg = response.error.message || '';
+        if (response.error.code === 'PGRST116' || response.error.code === '42501' || msg.toLowerCase().includes('row-level security')) {
+          throw new Error('Access denied: you do not have access to the selected store/location. Please ask an admin to assign access.');
+        } else if (msg.includes('store') || msg.includes('location')) {
           throw new Error('Invalid store or location selection');
         }
         throw response.error;
