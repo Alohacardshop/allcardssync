@@ -692,21 +692,35 @@ function StoreLocationSelector({
     const loadLocations = async () => {
       setLoading(true);
       try {
+        console.log(`Loading locations for store: ${storeKey}`);
         const { data, error } = await supabase.functions.invoke("shopify-locations", {
           body: { storeKey }
         });
         
-        if (error) throw error;
+        console.log(`Shopify locations response:`, { data, error });
+        
+        if (error) {
+          console.error("Supabase function error:", error);
+          throw error;
+        }
         
         if (data?.ok && data?.locations) {
-          setLocations(data.locations.map((loc: any) => ({
+          const mappedLocations = data.locations.map((loc: any) => ({
             id: String(loc.id),
             name: loc.name,
             gid: `gid://shopify/Location/${loc.id}`
-          })));
+          }));
+          console.log(`Mapped locations:`, mappedLocations);
+          setLocations(mappedLocations);
+        } else {
+          console.warn("No locations returned or invalid response:", data);
+          if (data?.error) {
+            throw new Error(data.error);
+          }
         }
       } catch (error) {
-        console.error("Failed to load locations:", error);
+        console.error("Failed to load locations for store", storeKey, ":", error);
+        toast.error(`Failed to load locations for store ${storeKey}: ${error instanceof Error ? error.message : String(error)}`);
       } finally {
         setLoading(false);
       }
