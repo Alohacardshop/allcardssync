@@ -248,26 +248,8 @@ export const GradedCardIntake = () => {
           psaEstimate: ""
         });
 
-        // Optional: Trigger Shopify sync in background (non-blocking)
-        const sku = `PSA-${formData.certNumber}`;
-        if (sku && selectedStore) {
-          console.log(`🔄 Triggering Shopify inventory sync for SKU: ${sku}`);
-          supabase.functions.invoke('shopify-sync-inventory', {
-            body: {
-              storeKey: selectedStore,
-              sku: sku,
-              locationGid: selectedLocation
-            }
-          }).then(({ error: syncError }) => {
-            if (syncError) {
-              console.warn('⚠️ Shopify sync failed (non-critical):', syncError);
-            } else {
-              console.log('✅ Shopify inventory sync completed');
-            }
-          }).catch((syncError) => {
-            console.warn('⚠️ Shopify sync error (non-critical):', syncError);
-          });
-        }
+        // Note: Shopify sync will happen later when items are moved from batch to inventory
+        console.log(`📦 Item added to batch only - Shopify sync will occur during inventory processing`);
       } else {
         console.error('❌ Unexpected response format:', responseData);
         throw new Error('Invalid response format from server');
