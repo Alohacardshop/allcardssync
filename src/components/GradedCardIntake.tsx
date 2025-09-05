@@ -11,6 +11,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { invokePSAScrapeV2 } from "@/lib/psaServiceV2";
 import { normalizePSAData } from "@/lib/psaNormalization";
 import { AllLocationsSelector } from "@/components/AllLocationsSelector";
+import { parseFunctionError } from "@/lib/fns";
 
 // Helper function to extract numeric grade from PSA grade strings
 const parsePSAGrade = (gradeStr: string): { numeric: string; original: string; hasNonNumeric: boolean } => {
@@ -181,33 +182,11 @@ export const GradedCardIntake = () => {
     }
 
     setSubmitting(true);
-    try {
-      // Use the new RPC with enhanced timeout and error handling
-      const withTimeoutAndRetry = async <T,>(
-        fn: () => Promise<T>, 
-        timeoutMs = 20000, 
-        retryCount = 1
-      ): Promise<T> => {
-        for (let attempt = 0; attempt <= retryCount; attempt++) {
-          try {
-            return await Promise.race([
-              fn(),
-              new Promise<never>((_, reject) => 
-                setTimeout(() => reject(new Error('Request timed out')), timeoutMs)
-              )
-            ]);
-          } catch (error: any) {
-            if (attempt === retryCount) throw error;
-            if (error?.message?.includes('timed out')) {
-              console.log(`Attempt ${attempt + 1} timed out, retrying...`);
-              continue;
-            }
-            throw error;
-          }
-        }
-        throw new Error('All retry attempts failed');
-      };
+    const startTime = Date.now();
+    
+    console.log(`🚀 Adding item to batch - Started at ${new Date().toISOString()}`);
 
+    try {
       const rpcParams = {
         store_key_in: selectedStore,
         shopify_location_gid_in: selectedLocation,
@@ -230,52 +209,78 @@ export const GradedCardIntake = () => {
         processing_notes_in: `Single graded card intake - PSA cert ${formData.certNumber}`
       };
 
-      const response: any = await withTimeoutAndRetry(
-        async () => await supabase.rpc('create_raw_intake_item', rpcParams)
-      );
+      const { data, error } = await supabase.rpc('create_raw_intake_item', rpcParams);
 
-      if (response.error) {
-        console.error('RPC Error:', response.error);
-        if (response.error.code === 'PGRST116') {
-          throw new Error('Access denied - please check your permissions');
-        } else if (response.error.message?.includes('store_key') || response.error.message?.includes('location')) {
-          throw new Error('Invalid store or location selection');
-        }
-        throw response.error;
+      const elapsed = Date.now() - startTime;
+      console.log(`⏰ Database operation completed in ${elapsed}ms`);
+
+      if (error) {
+        console.error('❌ Database error:', error);
+        throw new Error(parseFunctionError(error));
       }
 
-      const responseData = Array.isArray(response.data) ? response.data[0] : response.data;
+      const responseData = Array.isArray(data) ? data[0] : data;
 
-      // Dispatch browser event for real-time updates
-      window.dispatchEvent(new CustomEvent('intake:item-added', { detail: responseData }));
-      toast.success(`Added to batch (Lot ${responseData?.lot_number ?? ''})`);
-      
-      // Reset form
-      setPsaCert("");
-      setCardData(null);
-      setFormData({
-        brandTitle: "",
-        subject: "",
-        category: "",
-        variant: "",
-        cardNumber: "",
-        year: "",
-        grade: "",
-        game: "",
-        certNumber: "",
-        price: "",
-        cost: "",
-        quantity: 1,
-        psaEstimate: ""
-      });
+      if (responseData?.id) {
+        const lotNumber = responseData.lot_number;
+        console.log(`✅ Item successfully added to batch: ${lotNumber} (ID: ${responseData.id})`);
+        
+        // Dispatch browser event for real-time updates
+        window.dispatchEvent(new CustomEvent('intake:item-added', { detail: responseData }));
+        toast.success(`Added to batch ${lotNumber}!`);
+        
+        // Reset form on success
+        setPsaCert("");
+        setCardData(null);
+        setFormData({
+          brandTitle: "",
+          subject: "",
+          category: "",
+          variant: "",
+          cardNumber: "",
+          year: "",
+          grade: "",
+          game: "",
+          certNumber: "",
+          price: "",
+          cost: "",
+          quantity: 1,
+          psaEstimate: ""
+        });
 
+        // Optional: Trigger Shopify sync in background (non-blocking)
+        const sku = `PSA-${formData.certNumber}`;
+        if (sku && selectedStore) {
+          console.log(`🔄 Triggering Shopify inventory sync for SKU: ${sku}`);
+          supabase.functions.invoke('shopify-sync-inventory', {
+            body: {
+              storeKey: selectedStore,
+              sku: sku,
+              locationGid: selectedLocation
+            }
+          }).then(({ error: syncError }) => {
+            if (syncError) {
+              console.warn('⚠️ Shopify sync failed (non-critical):', syncError);
+            } else {
+              console.log('✅ Shopify inventory sync completed');
+            }
+          }).catch((syncError) => {
+            console.warn('⚠️ Shopify sync error (non-critical):', syncError);
+          });
+        }
+      } else {
+        console.error('❌ Unexpected response format:', responseData);
+        throw new Error('Invalid response format from server');
+      }
     } catch (error: any) {
-      console.error('Error saving item:', error);
-      const errorMessage = error?.message || 'Unknown error';
+      const elapsed = Date.now() - startTime;
+      console.error(`❌ Error saving item after ${elapsed}ms:`, {
+        message: error.message,
+        error: error
+      });
       
-      if (errorMessage.includes('timed out')) {
-        toast.error('Request timed out - please try again');
-      } else if (errorMessage.includes('Access denied')) {
+      const errorMessage = error?.message || 'Unknown error';
+      if (errorMessage.includes('Access denied')) {
         toast.error('Access denied - please check your permissions');
       } else if (errorMessage.includes('store') || errorMessage.includes('location')) {
         toast.error('Please select a valid store and location');
