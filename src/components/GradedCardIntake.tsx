@@ -12,6 +12,25 @@ import { invokePSAScrapeV2 } from "@/lib/psaServiceV2";
 import { normalizePSAData } from "@/lib/psaNormalization";
 import { AllLocationsSelector } from "@/components/AllLocationsSelector";
 
+// Helper function to extract numeric grade from PSA grade strings
+const parsePSAGrade = (gradeStr: string): { numeric: string; original: string; hasNonNumeric: boolean } => {
+  if (!gradeStr) return { numeric: "", original: "", hasNonNumeric: false };
+  
+  // Extract numeric part using regex - matches integers and decimals
+  const numericMatch = gradeStr.match(/\d+(?:\.\d+)?/);
+  const numeric = numericMatch ? numericMatch[0] : "";
+  
+  // Check if there are non-numeric parts (excluding spaces)
+  const cleanedOriginal = gradeStr.replace(/\s+/g, " ").trim();
+  const hasNonNumeric = cleanedOriginal !== numeric && cleanedOriginal.length > 0;
+  
+  return {
+    numeric,
+    original: cleanedOriginal,
+    hasNonNumeric
+  };
+};
+
 export const GradedCardIntake = () => {
   const [psaCert, setPsaCert] = useState("");
   const [fetching, setFetching] = useState(false);
@@ -66,6 +85,9 @@ export const GradedCardIntake = () => {
         const normalizedData = normalizePSAData(data);
         setCardData(normalizedData);
         
+        // Parse the grade to extract numeric value for the number input
+        const gradeInfo = parsePSAGrade(normalizedData.grade || "");
+        
         const newFormData = {
           brandTitle: normalizedData.brandTitle || "",
           subject: normalizedData.subject || "",
@@ -73,7 +95,7 @@ export const GradedCardIntake = () => {
           variant: normalizedData.varietyPedigree || "",
           cardNumber: normalizedData.cardNumber || "",
           year: normalizedData.year || "",
-          grade: normalizedData.grade || "",
+          grade: gradeInfo.numeric,
           game: normalizedData.gameSport || 
                 (normalizedData.category?.toLowerCase().includes('pokemon') ? 'pokemon' : 
                  normalizedData.category?.toLowerCase().includes('magic') ? 'mtg' : ""),
@@ -96,6 +118,11 @@ export const GradedCardIntake = () => {
           toast.success(`PSA certificate verified - ${populatedCount} fields populated`);
         } else {
           toast.warning(`PSA certificate found but may have incomplete data - ${populatedCount} fields populated`);
+        }
+        
+        // Show info if grade had non-numeric parts that were stripped
+        if (gradeInfo.hasNonNumeric) {
+          toast.info(`Grade "${gradeInfo.original}" converted to numeric: ${gradeInfo.numeric}`);
         }
       } else {
         const errorMsg = data?.error || 'Invalid response from PSA scraping service';
