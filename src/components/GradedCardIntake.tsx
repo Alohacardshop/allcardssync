@@ -164,6 +164,22 @@ export const GradedCardIntake = () => {
       return;
     }
 
+    // Validate required fields
+    if (!formData.grade) {
+      toast.error("Grade is required");
+      return;
+    }
+
+    if (!formData.price) {
+      toast.error("Price is required");
+      return;
+    }
+
+    if (!formData.cost) {
+      toast.error("Cost is required");
+      return;
+    }
+
     setSubmitting(true);
     try {
       // Use the new RPC with enhanced timeout and error handling
@@ -485,7 +501,7 @@ export const GradedCardIntake = () => {
           </div>
 
           <div>
-            <Label htmlFor="grade">Grade (Number only)</Label>
+            <Label htmlFor="grade">Grade (Number only) <span className="text-destructive">*</span></Label>
             <Input
               id="grade"
               type="number"
@@ -495,6 +511,7 @@ export const GradedCardIntake = () => {
               placeholder="e.g., 10"
               value={formData.grade}
               onChange={(e) => updateFormField('grade', e.target.value)}
+              className={!formData.grade ? "border-destructive/50" : ""}
             />
           </div>
 
@@ -509,7 +526,7 @@ export const GradedCardIntake = () => {
           </div>
 
           <div>
-            <Label htmlFor="price">Price ($)</Label>
+            <Label htmlFor="price">Price ($) <span className="text-destructive">*</span></Label>
             <Input
               id="price"
               type="number"
@@ -517,6 +534,7 @@ export const GradedCardIntake = () => {
               placeholder="0.00"
               value={formData.price}
               onChange={(e) => updateFormField('price', e.target.value)}
+              className={!formData.price ? "border-destructive/50" : ""}
             />
             {formData.psaEstimate && (
               <p className="text-xs text-muted-foreground mt-1">
@@ -526,7 +544,7 @@ export const GradedCardIntake = () => {
           </div>
 
           <div>
-            <Label htmlFor="cost">Cost ($)</Label>
+            <Label htmlFor="cost">Cost ($) <span className="text-destructive">*</span></Label>
             <Input
               id="cost"
               type="number"
@@ -534,6 +552,7 @@ export const GradedCardIntake = () => {
               placeholder="0.00"
               value={formData.cost}
               onChange={(e) => updateFormField('cost', e.target.value)}
+              className={!formData.cost ? "border-destructive/50" : ""}
             />
           </div>
 
@@ -564,7 +583,7 @@ export const GradedCardIntake = () => {
         <div className="flex justify-end pt-4">
           <Button 
             onClick={handleSubmit}
-            disabled={submitting || !formData.certNumber}
+            disabled={submitting || !formData.certNumber || !formData.grade || !formData.price || !formData.cost}
             className="px-8"
             size="lg"
           >
