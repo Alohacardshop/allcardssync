@@ -21,7 +21,8 @@ export function StoreLocationSelector({ className, showSetDefault = true }: Stor
     selectedLocation, 
     availableStores, 
     availableLocations,
-    userAssignments 
+    userAssignments,
+    refreshUserAssignments
   } = useStore();
 
   const hasMultipleOptions = availableStores.length > 1 || availableLocations.length > 1;
@@ -47,8 +48,8 @@ export function StoreLocationSelector({ className, showSetDefault = true }: Stor
       if (error) throw error;
 
       toast.success("Default store and location updated");
-      // Reload the page to refresh user assignments
-      window.location.reload();
+      // Refresh user assignments to reflect the new default
+      await refreshUserAssignments();
     } catch (error) {
       console.error("Failed to set default:", error);
       toast.error("Failed to set default location");

@@ -35,6 +35,9 @@ interface StoreContextType {
     location_name: string;
     is_default: boolean;
   }>;
+  
+  // Actions
+  refreshUserAssignments: () => Promise<void>;
 }
 
 const StoreContext = createContext<StoreContextType | null>(null);
@@ -62,39 +65,43 @@ export function StoreProvider({ children }: StoreProviderProps) {
 
   // Load user roles and assignments
   useEffect(() => {
-    const loadUserData = async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-
-        // Check if user is admin
-        const { data: adminCheck } = await supabase.rpc("has_role", { 
-          _user_id: user.id, 
-          _role: "admin" 
-        });
-        setIsAdmin(adminCheck || false);
-
-        // Load user assignments
-        const { data: assignments } = await supabase
-          .from("user_shopify_assignments")
-          .select("store_key, location_gid, location_name, is_default")
-          .eq("user_id", user.id);
-        
-        setUserAssignments(assignments || []);
-
-        // Set default store/location if user has assignments
-        const defaultAssignment = assignments?.find(a => a.is_default);
-        if (defaultAssignment && !selectedStore) {
-          setSelectedStore(defaultAssignment.store_key);
-          setSelectedLocation(defaultAssignment.location_gid);
-        }
-      } catch (error) {
-        console.error("Error loading user data:", error);
-      }
-    };
-
     loadUserData();
   }, []);
+
+  const loadUserData = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Check if user is admin
+      const { data: adminCheck } = await supabase.rpc("has_role", { 
+        _user_id: user.id, 
+        _role: "admin" 
+      });
+      setIsAdmin(adminCheck || false);
+
+      // Load user assignments
+      const { data: assignments } = await supabase
+        .from("user_shopify_assignments")
+        .select("store_key, location_gid, location_name, is_default")
+        .eq("user_id", user.id);
+      
+      setUserAssignments(assignments || []);
+
+      // Set default store/location if user has assignments
+      const defaultAssignment = assignments?.find(a => a.is_default);
+      if (defaultAssignment && !selectedStore) {
+        setSelectedStore(defaultAssignment.store_key);
+        setSelectedLocation(defaultAssignment.location_gid);
+      }
+    } catch (error) {
+      console.error("Error loading user data:", error);
+    }
+  };
+
+  const refreshUserAssignments = async () => {
+    await loadUserData();
+  };
 
   // Load available stores
   useEffect(() => {
@@ -192,6 +199,7 @@ export function StoreProvider({ children }: StoreProviderProps) {
     loadingLocations,
     isAdmin,
     userAssignments,
+    refreshUserAssignments,
   };
 
   return (

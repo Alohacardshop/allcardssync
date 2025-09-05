@@ -89,7 +89,7 @@ export default function Auth() {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
         toast.success("Signed in");
-        window.location.href = "/";
+        navigate("/", { replace: true });
       } catch (err: any) {
         console.error(err);
         

@@ -1,4 +1,4 @@
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -18,6 +18,7 @@ interface NavigationProps {
 
 export function Navigation({ showMobileMenu = true }: NavigationProps) {
   const location = useLocation();
+  const navigate = useNavigate();
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
@@ -70,7 +71,7 @@ export function Navigation({ showMobileMenu = true }: NavigationProps) {
         await supabase.auth.signOut({ scope: 'global' } as any); 
       } catch {}
     } finally {
-      window.location.href = '/auth';
+      navigate('/auth', { replace: true });
     }
   };
 

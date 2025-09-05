@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate, Link } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +22,7 @@ import { TCGHealthCheck } from "@/components/admin/TCGHealthCheck";
 import { checkSystemHealth } from "@/lib/api";
 
 const Admin = () => {
+  const navigate = useNavigate();
   const [healthStatus, setHealthStatus] = useState<{database: boolean; timestamp: string; error?: string} | null>(null);
 
   useEffect(() => {
@@ -49,7 +51,7 @@ const Admin = () => {
         await supabase.auth.signOut({ scope: 'global' } as any); 
       } catch {}
     } finally {
-      window.location.href = '/auth';
+      navigate('/auth', { replace: true });
     }
   };
 
@@ -218,15 +220,13 @@ const Admin = () => {
                   <p className="text-sm text-muted-foreground mb-4">
                     Inspect Shopify store configuration and validate API connections.
                   </p>
-                  <a 
-                    href="/shopify-inspect" 
-                    target="_blank" 
-                    rel="noopener noreferrer"
+                  <Link 
+                    to="/shopify-inspect" 
                     className="inline-flex items-center gap-2 text-primary hover:underline"
                   >
                     Open Shopify Inspector
                     <ExternalLink className="h-4 w-4" />
-                  </a>
+                  </Link>
                 </CardContent>
               </Card>
             </div>
