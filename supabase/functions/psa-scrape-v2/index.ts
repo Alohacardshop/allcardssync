@@ -534,11 +534,11 @@ serve(async (req) => {
 
   console.log('📊 Final extracted certificate data:', JSON.stringify(certData, null, 2));
 
-  // Handle images from PSA API response
+  // Handle images from PSA API response - only use front image
   const images = imageUrls || [];
   
   certData.imageUrl = images[0] || null;
-  certData.imageUrls = images;
+  certData.imageUrls = images[0] ? [images[0]] : []; // Only include front image
 
   // Temporary hardcoded override for cert 120317196 while parser is refined
   if (cert === '120317196') {
