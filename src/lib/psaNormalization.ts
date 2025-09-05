@@ -107,7 +107,7 @@ export function normalizePSAData(rawData: any): PSACertificateData {
     varietyPedigree: extractCleanField(rawData.varietyPedigree || rawData.variety_pedigree, 100),
     category: extractCleanField(rawData.category, 100),
     gameSport: extractCleanField(rawData.gameSport || rawData.game_sport, 100),
-    imageUrl: extractCleanField(rawData.imageUrl || rawData.image_url, 500),
+    imageUrl: rawData.imageUrl || rawData.image_url || (imageUrls.length > 0 ? imageUrls[0] : undefined),
     imageUrls,
     psaUrl: rawData.psaUrl || `https://www.psacard.com/cert/${rawData.certNumber || rawData.cert}/psa`,
     source: rawData.source,
