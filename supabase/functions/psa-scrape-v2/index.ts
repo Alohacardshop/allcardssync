@@ -390,7 +390,62 @@ serve(async (req) => {
       if (Array.isArray(v)) v.filter(u => typeof u === 'string' && u.startsWith('http')).forEach(u => imageSet.add(u));
     }
   }
-  const imageUrls = Array.from(imageSet);
+  let imageUrls = Array.from(imageSet);
+
+  // If no images from API, try scraping the certificate page
+  if (imageUrls.length === 0) {
+    try {
+      console.log('🖼️ No images from API, scraping certificate page...');
+      const certPageUrl = `https://www.psacard.com/cert/${cert}/psa`;
+      const certPageResp = await fetch(certPageUrl);
+      
+      if (certPageResp.ok) {
+        const html = await certPageResp.text();
+        
+        // Extract image URLs from HTML - PSA typically uses patterns like:
+        // - img tags with src containing cert images
+        // - background images in style attributes
+        const imgMatches = html.match(/<img[^>]+src="([^"]*card[^"]*\.(?:jpg|jpeg|png|webp))"[^>]*>/gi) || [];
+        const bgMatches = html.match(/background-image:\s*url\(['"](.*?card.*?\.(?:jpg|jpeg|png|webp))['\"]\)/gi) || [];
+        
+        imgMatches.forEach(match => {
+          const srcMatch = match.match(/src="([^"]*)"/);
+          if (srcMatch && srcMatch[1]) {
+            let imgUrl = srcMatch[1];
+            if (imgUrl.startsWith('//')) imgUrl = 'https:' + imgUrl;
+            else if (imgUrl.startsWith('/')) imgUrl = 'https://www.psacard.com' + imgUrl;
+            if (imgUrl.includes('card') || imgUrl.includes('cert')) {
+              imageUrls.push(imgUrl);
+            }
+          }
+        });
+
+        bgMatches.forEach(match => {
+          const urlMatch = match.match(/url\(['"](.*?)['\"]\)/);
+          if (urlMatch && urlMatch[1]) {
+            let imgUrl = urlMatch[1];
+            if (imgUrl.startsWith('//')) imgUrl = 'https:' + imgUrl;
+            else if (imgUrl.startsWith('/')) imgUrl = 'https://www.psacard.com' + imgUrl;
+            imageUrls.push(imgUrl);
+          }
+        });
+
+        // Also look for any .jpg/.png/.webp URLs in the HTML that might be card images
+        const allImageMatches = html.match(/https?:\/\/[^\s"'<>]+\.(?:jpg|jpeg|png|webp)(?:\?[^\s"'<>]*)?/gi) || [];
+        allImageMatches.forEach(url => {
+          if (url.includes('cert') || url.includes('card') || url.includes('psa')) {
+            imageUrls.push(url);
+          }
+        });
+
+        // Remove duplicates
+        imageUrls = [...new Set(imageUrls)];
+        console.log('🖼️ Found', imageUrls.length, 'images from certificate page');
+      }
+    } catch (scrapeError) {
+      console.log('⚠️ Failed to scrape certificate page for images:', scrapeError);
+    }
+  }
 
   console.log('🔍 Extracted PSA API data:');
   console.log('- Brand:', brand);
