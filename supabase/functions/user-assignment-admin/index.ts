@@ -37,7 +37,7 @@ Deno.serve(async (req) => {
 
     if (!isAdmin) throw new Error("Admin access required");
 
-    const { action, email, storeKey, locationGid, locationName, isDefault } = await req.json();
+    const { action, email, storeKey, locationGid, locationName, isDefault, userId, roles, storeAssignments } = await req.json();
 
     if (action === "assign") {
       if (!email || !storeKey || !locationGid) {
@@ -77,6 +77,70 @@ Deno.serve(async (req) => {
 
       return new Response(
         JSON.stringify({ ok: true }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (action === "update") {
+      if (!userId || !email || !roles) {
+        throw new Error("Missing required fields for update");
+      }
+
+      console.log('Updating user:', userId, email);
+
+      // Update user roles
+      if (roles && roles.length > 0) {
+        // Remove existing roles
+        await supabase
+          .from("user_roles")
+          .delete()
+          .eq("user_id", userId);
+
+        // Add new roles
+        for (const role of roles) {
+          const { error: roleError } = await supabase
+            .from("user_roles")
+            .insert({
+              user_id: userId,
+              role: role
+            });
+          
+          if (roleError) {
+            console.error('Error adding role:', roleError);
+            throw new Error(`Failed to add role ${role}: ${roleError.message}`);
+          }
+        }
+      }
+
+      // Update store assignments if provided
+      if (storeAssignments && Array.isArray(storeAssignments)) {
+        // Remove all existing assignments for this user
+        await supabase
+          .from("user_shopify_assignments")
+          .delete()
+          .eq("user_id", userId);
+
+        // Add new assignments
+        for (const assignment of storeAssignments) {
+          const { error: assignError } = await supabase
+            .from("user_shopify_assignments")
+            .insert({
+              user_id: userId,
+              store_key: assignment.storeKey,
+              location_gid: assignment.locationGid,
+              location_name: assignment.locationName,
+              is_default: assignment.isDefault
+            });
+
+          if (assignError) {
+            console.error('Error adding assignment:', assignError);
+            throw new Error(`Failed to add assignment: ${assignError.message}`);
+          }
+        }
+      }
+
+      return new Response(
+        JSON.stringify({ ok: true, message: "User updated successfully" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

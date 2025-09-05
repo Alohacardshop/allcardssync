@@ -12,7 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Separator } from "@/components/ui/separator";
-import { Users, Plus, Pencil, Trash2, ShieldCheck, Store, MapPin } from "lucide-react";
+import { Users, Plus, Pencil, Trash2, ShieldCheck, Store, MapPin, KeyRound } from "lucide-react";
 
 interface UserAssignment {
   id: string;
@@ -65,7 +65,6 @@ export function UserAssignmentManager() {
   const [formData, setFormData] = useState({
     email: "",
     password: "",
-    sendInvite: true,
     roles: [] as string[],
     selectedStores: [] as string[],
     storeLocations: {} as { [storeKey: string]: string[] },
@@ -76,7 +75,6 @@ export function UserAssignmentManager() {
     setFormData({
       email: "",
       password: "",
-      sendInvite: true,
       roles: [],
       selectedStores: [],
       storeLocations: {},
@@ -271,16 +269,48 @@ export function UserAssignmentManager() {
       return;
     }
 
-    if (!formData.sendInvite && !formData.password) {
-      toast.error("Password is required when not sending invite");
+    if (!editingUser && !formData.password) {
+      toast.error("Password is required for new users");
       return;
     }
 
     try {
       if (editingUser) {
         // Update existing user
-        toast.error("User editing not yet implemented");
-        return;
+        const storeAssignments = [];
+        
+        for (const storeKey of formData.selectedStores) {
+          const storeLocations = formData.storeLocations[storeKey] || [];
+          const defaultLocation = formData.defaultLocations[storeKey];
+          
+          for (const locationGid of storeLocations) {
+            // Get location details
+            const locations = await loadLocationsForStore(storeKey);
+            const location = locations.find(l => l.gid === locationGid);
+            
+            storeAssignments.push({
+              storeKey,
+              locationGid,
+              locationName: location?.name || locationGid,
+              isDefault: locationGid === defaultLocation
+            });
+          }
+        }
+
+        const { data, error } = await supabase.functions.invoke('user-assignment-admin', {
+          body: {
+            action: "update",
+            userId: editingUser.id,
+            email: formData.email,
+            roles: formData.roles.length > 0 ? formData.roles : ['staff'],
+            storeAssignments
+          }
+        });
+
+        if (error) throw error;
+        if (!data.ok) throw new Error(data.error);
+
+        toast.success("User updated successfully!");
       } else {
         // Create new user
         const storeAssignments = [];
@@ -306,17 +336,16 @@ export function UserAssignmentManager() {
         const { data, error } = await supabase.functions.invoke('create-user-admin', {
           body: {
             email: formData.email,
-            password: formData.sendInvite ? undefined : formData.password,
+            password: formData.password,
             roles: formData.roles.length > 0 ? formData.roles : ['staff'],
-            storeAssignments,
-            sendInvite: formData.sendInvite
+            storeAssignments
           }
         });
 
         if (error) throw error;
         if (!data.ok) throw new Error(data.error);
 
-        toast.success(`User created successfully! ${data.inviteSent ? 'Invite email sent.' : 'User can log in immediately.'}`);
+        toast.success("User created successfully!");
       }
 
       setDialogOpen(false);
@@ -354,7 +383,6 @@ export function UserAssignmentManager() {
     setFormData({
       email: user.email,
       password: "",
-      sendInvite: false,
       roles: user.roles,
       selectedStores: Object.keys(user.storeAssignments),
       storeLocations: Object.fromEntries(
@@ -371,6 +399,26 @@ export function UserAssignmentManager() {
       )
     });
     setDialogOpen(true);
+  };
+
+  const handleResetPassword = async (userId: string, email: string) => {
+    if (!confirm(`Reset password for ${email}? A new temporary password will be generated.`)) {
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase.functions.invoke('reset-user-password', {
+        body: { userId }
+      });
+
+      if (error) throw error;
+      if (!data.ok) throw new Error(data.error);
+
+      toast.success(`Password reset for ${email}. New password: ${data.newPassword}`);
+    } catch (error: any) {
+      console.error("Failed to reset password:", error);
+      toast.error(`Failed to reset password: ${error.message}`);
+    }
   };
 
   useEffect(() => {
@@ -429,28 +477,18 @@ export function UserAssignmentManager() {
                     />
                   </div>
                   <div>
-                    <Label htmlFor="password">Password</Label>
+                    <Label htmlFor="password">
+                      Password {editingUser ? "(leave blank to keep current)" : "*"}
+                    </Label>
                     <Input
                       id="password"
                       type="password"
                       value={formData.password}
                       onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
-                      placeholder={formData.sendInvite ? "Auto-generated" : "Required"}
-                      disabled={formData.sendInvite && !editingUser}
+                      placeholder={editingUser ? "Leave blank to keep current password" : "Required"}
                     />
                   </div>
                 </div>
-                
-                {!editingUser && (
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      id="sendInvite"
-                      checked={formData.sendInvite}
-                      onCheckedChange={(checked) => setFormData(prev => ({ ...prev, sendInvite: !!checked }))}
-                    />
-                    <Label htmlFor="sendInvite">Send invitation email (user sets own password)</Label>
-                  </div>
-                )}
               </div>
 
               <Separator />
@@ -601,13 +639,23 @@ export function UserAssignmentManager() {
                         variant="ghost"
                         size="sm"
                         onClick={() => openEditDialog(user)}
+                        title="Edit user"
                       >
                         <Pencil className="h-4 w-4" />
                       </Button>
                       <Button
                         variant="ghost"
                         size="sm"
+                        onClick={() => handleResetPassword(user.id, user.email)}
+                        title="Reset password"
+                      >
+                        <KeyRound className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={() => handleDeleteUser(user.id)}
+                        title="Delete user"
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
