@@ -392,10 +392,69 @@ serve(async (req) => {
   }
   let imageUrls = Array.from(imageSet);
 
-  // If no images from API, try scraping the certificate page
+  // Try PSA Images API endpoint
   if (imageUrls.length === 0) {
     try {
-      console.log('🖼️ No images from API, scraping certificate page...');
+      console.log('🖼️ No images from main API, trying images endpoint...');
+      const imagesApiUrl = `https://api.psacard.com/publicapi/cert/GetImagesByCertNumber/${cert}`;
+      console.log('📷 PSA Images API URL:', imagesApiUrl);
+      
+      const imagesResp = await fetch(imagesApiUrl, {
+        method: 'GET',
+        mode: 'cors',
+        headers: {
+          'Authorization': `bearer ${psaApiToken}`,
+          'Content-Type': 'application/json'
+        },
+        signal: ctrl.signal
+      });
+
+      if (imagesResp.ok) {
+        const imagesData = await imagesResp.json();
+        console.log('📷 Images API response:', JSON.stringify(imagesData));
+        
+        // Extract image URLs from the images API response
+        if (imagesData && typeof imagesData === 'object') {
+          const walkImages = (obj: any, path = '') => {
+            if (!obj || typeof obj !== 'object') return;
+            
+            for (const [key, value] of Object.entries(obj)) {
+              const fullPath = path ? `${path}.${key}` : key;
+              
+              if (typeof value === 'string' && value.startsWith('http') && 
+                  (value.includes('.jpg') || value.includes('.jpeg') || value.includes('.png') || value.includes('.webp'))) {
+                imageUrls.push(value);
+                console.log(`📷 Found image URL at ${fullPath}:`, value);
+              } else if (Array.isArray(value)) {
+                value.forEach((item, index) => {
+                  if (typeof item === 'string' && item.startsWith('http') && 
+                      (item.includes('.jpg') || item.includes('.jpeg') || item.includes('.png') || item.includes('.webp'))) {
+                    imageUrls.push(item);
+                    console.log(`📷 Found image URL in array at ${fullPath}[${index}]:`, item);
+                  }
+                });
+              } else if (value && typeof value === 'object') {
+                walkImages(value, fullPath);
+              }
+            }
+          };
+          
+          walkImages(imagesData);
+          imageUrls = [...new Set(imageUrls)]; // Remove duplicates
+          console.log('🖼️ Found', imageUrls.length, 'images from images API');
+        }
+      } else {
+        console.log('⚠️ Images API failed with status:', imagesResp.status);
+      }
+    } catch (imagesError) {
+      console.log('⚠️ Failed to call images API:', imagesError);
+    }
+  }
+
+  // If still no images, try scraping the certificate page as fallback
+  if (imageUrls.length === 0) {
+    try {
+      console.log('🖼️ No images from APIs, scraping certificate page as fallback...');
       const certPageUrl = `https://www.psacard.com/cert/${cert}/psa`;
       const certPageResp = await fetch(certPageUrl);
       
@@ -440,7 +499,7 @@ serve(async (req) => {
 
         // Remove duplicates
         imageUrls = [...new Set(imageUrls)];
-        console.log('🖼️ Found', imageUrls.length, 'images from certificate page');
+        console.log('🖼️ Found', imageUrls.length, 'images from certificate page scraping');
       }
     } catch (scrapeError) {
       console.log('⚠️ Failed to scrape certificate page for images:', scrapeError);
