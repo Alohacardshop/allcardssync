@@ -1,6 +1,6 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useStore } from "@/contexts/StoreContext";
-import { MapPin, ExternalLink, Star } from "lucide-react";
+import { MapPin, ExternalLink, Star, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useEffect } from "react";
 import { useLocalStorageString } from "@/hooks/useLocalStorage";
@@ -17,10 +17,12 @@ export function LocationSelector({ className }: LocationSelectorProps) {
     setSelectedLocation, 
     availableLocations, 
     loadingLocations,
+    locationsLastUpdated,
     selectedStore,
     isAdmin,
     userAssignments,
-    refreshUserAssignments
+    refreshUserAssignments,
+    refreshLocations
   } = useStore();
 
   const [lastSelectedLocation, setLastSelectedLocation] = useLocalStorageString(
@@ -125,18 +127,33 @@ export function LocationSelector({ className }: LocationSelectorProps) {
             <SelectTrigger className="w-[200px]">
               <div className="flex items-center gap-2">
                 <MapPin className="h-4 w-4" />
-                <SelectValue placeholder="No locations available" />
+                <SelectValue placeholder={locationsLastUpdated ? "No locations found" : "Click refresh to load locations"} />
               </div>
             </SelectTrigger>
           </Select>
-          <div className="text-xs space-y-1">
-            <p className="text-muted-foreground">
-              No locations found for {selectedStore}
-            </p>
-            <p className="text-muted-foreground">
-              Check Admin &gt; Shopify Config for details
-            </p>
-          </div>
+          
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={refreshLocations}
+            disabled={loadingLocations}
+            className="w-full flex items-center gap-2"
+          >
+            <RefreshCw className={`h-3 w-3 ${loadingLocations ? 'animate-spin' : ''}`} />
+            {loadingLocations ? "Refreshing..." : "Refresh Locations"}
+          </Button>
+          
+          {locationsLastUpdated && (
+            <div className="text-xs space-y-1">
+              <p className="text-muted-foreground">
+                No locations found for {selectedStore}
+              </p>
+              <p className="text-muted-foreground">
+                Check Admin &gt; Shopify Config for details
+              </p>
+            </div>
+          )}
+          
           {isAdmin && (
             <Button
               variant="outline"
@@ -171,9 +188,9 @@ export function LocationSelector({ className }: LocationSelectorProps) {
               <SelectValue placeholder="Select location" />
             </div>
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="bg-background border-border z-50">
             {availableLocations.map((location) => (
-              <SelectItem key={location.gid} value={location.gid}>
+              <SelectItem key={location.gid} value={location.gid} className="text-foreground hover:bg-accent">
                 <div className="flex items-center justify-between w-full">
                   <span>{location.name}</span>
                   {userAssignments.some(a => 
@@ -189,26 +206,47 @@ export function LocationSelector({ className }: LocationSelectorProps) {
           </SelectContent>
         </Select>
         
-        {/* Set as Default Button */}
-        {selectedLocation && selectedStore && !isCurrentDefault && (
+        <div className="flex gap-2">
+          {/* Refresh Button */}
           <Button
             variant="outline"
             size="sm"
-            onClick={handleSetDefault}
-            className="w-full flex items-center gap-2"
+            onClick={refreshLocations}
+            disabled={loadingLocations}
+            className="flex items-center gap-2"
           >
-            <Star className="h-3 w-3" />
-            Set as Default
+            <RefreshCw className={`h-3 w-3 ${loadingLocations ? 'animate-spin' : ''}`} />
+            {loadingLocations ? "Refreshing..." : "Refresh"}
           </Button>
-        )}
+          
+          {/* Set as Default Button */}
+          {selectedLocation && selectedStore && !isCurrentDefault && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSetDefault}
+              className="flex items-center gap-2"
+            >
+              <Star className="h-3 w-3" />
+              Set as Default
+            </Button>
+          )}
+        </div>
         
         {selectedStore && availableLocations.length > 0 && (
-          <p className="text-xs text-muted-foreground">
-            {selectedStore}: {availableLocations.length} location{availableLocations.length !== 1 ? 's' : ''} available
-            {isCurrentDefault && selectedLocation && (
-              <span className="text-yellow-600 ml-1">(Current Default)</span>
+          <div className="text-xs text-muted-foreground space-y-1">
+            <p>
+              {selectedStore}: {availableLocations.length} location{availableLocations.length !== 1 ? 's' : ''} available
+              {isCurrentDefault && selectedLocation && (
+                <span className="text-yellow-600 ml-1">(Current Default)</span>
+              )}
+            </p>
+            {locationsLastUpdated && (
+              <p>
+                Last updated: {locationsLastUpdated.toLocaleTimeString()}
+              </p>
             )}
-          </p>
+          </div>
         )}
       </div>
     </div>

@@ -26,6 +26,7 @@ interface StoreContextType {
   setSelectedLocation: (locationGid: string | null) => void;
   availableLocations: Location[];
   loadingLocations: boolean;
+  locationsLastUpdated: Date | null;
   
   // User access
   isAdmin: boolean;
@@ -38,6 +39,7 @@ interface StoreContextType {
   
   // Actions
   refreshUserAssignments: () => Promise<void>;
+  refreshLocations: () => Promise<void>;
 }
 
 const StoreContext = createContext<StoreContextType | null>(null);
@@ -60,6 +62,8 @@ export function StoreProvider({ children }: StoreProviderProps) {
   const [availableStores, setAvailableStores] = useState<Store[]>([]);
   const [availableLocations, setAvailableLocations] = useState<Location[]>([]);
   const [loadingLocations, setLoadingLocations] = useState(false);
+  const [locationsLastUpdated, setLocationsLastUpdated] = useState<Date | null>(null);
+  const [locationsCache, setLocationsCache] = useState<Record<string, Location[]>>({});
   const [isAdmin, setIsAdmin] = useState(false);
   const [userAssignments, setUserAssignments] = useState<any[]>([]);
 
@@ -122,68 +126,91 @@ export function StoreProvider({ children }: StoreProviderProps) {
     loadStores();
   }, []);
 
-  // Load locations when store changes
+  // Load cached locations when store changes (no automatic refresh)
   useEffect(() => {
-    const loadLocations = async () => {
-      if (!selectedStore) {
-        setAvailableLocations([]);
-        setSelectedLocation(null);
-        return;
-      }
+    if (!selectedStore) {
+      setAvailableLocations([]);
+      setSelectedLocation(null);
+      return;
+    }
 
-      setLoadingLocations(true);
-      try {
-        const { data, error } = await supabase.functions.invoke("shopify-locations", {
-          body: { storeKey: selectedStore }
-        });
-        
-        if (error) throw error;
-        
-        if (data?.ok) {
-          const locations = (data.locations || []).map((loc: any) => ({
-            id: String(loc.id),
-            name: loc.name,
-            gid: `gid://shopify/Location/${loc.id}`
-          }));
-          setAvailableLocations(locations);
-          
-          // Show specific message for 0 locations
-          if (locations.length === 0) {
-            toast({
-              title: `No locations found for ${selectedStore}`,
-              description: "Check Admin > Shopify Config > Test Connection for details.",
-              variant: "default",
-            });
-          }
-          
-          // Clear selected location if it's not available in new locations
-          if (selectedLocation && !locations.some(loc => loc.gid === selectedLocation)) {
-            setSelectedLocation(null);
-          }
-        } else {
-          throw new Error(data?.error || "Failed to load locations");
-        }
-      } catch (error) {
-        console.error("Error loading locations:", error);
-        setAvailableLocations([]);
+    // Use cached locations if available
+    const cached = locationsCache[selectedStore];
+    if (cached) {
+      setAvailableLocations(cached);
+      
+      // Clear selected location if it's not available in cached locations
+      if (selectedLocation && !cached.some(loc => loc.gid === selectedLocation)) {
         setSelectedLocation(null);
+      }
+    } else {
+      // No cache, start with empty locations (user needs to refresh manually)
+      setAvailableLocations([]);
+      setSelectedLocation(null);
+    }
+  }, [selectedStore, locationsCache, selectedLocation]);
+
+  // Manual location refresh function
+  const refreshLocations = async () => {
+    if (!selectedStore) {
+      toast({
+        title: "No store selected",
+        description: "Please select a store first",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setLoadingLocations(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("shopify-locations", {
+        body: { storeKey: selectedStore }
+      });
+      
+      if (error) throw error;
+      
+      if (data?.ok) {
+        const locations = (data.locations || []).map((loc: any) => ({
+          id: String(loc.id),
+          name: loc.name,
+          gid: `gid://shopify/Location/${loc.id}`
+        }));
         
-        // Show user-friendly error message
-        const errorMessage = error instanceof Error ? error.message : "Failed to load locations";
+        // Update cache and available locations
+        setLocationsCache(prev => ({ ...prev, [selectedStore]: locations }));
+        setAvailableLocations(locations);
+        setLocationsLastUpdated(new Date());
+        
+        // Show success message
         toast({
-          title: "Failed to load locations", 
-          description: errorMessage.includes("configuration not found") 
-            ? "Please configure Shopify credentials in Admin > Shopify Config"
-            : errorMessage,
-          variant: "destructive",
+          title: "Locations refreshed",
+          description: `Found ${locations.length} location${locations.length !== 1 ? 's' : ''} for ${selectedStore}`,
+          variant: "default",
         });
-      } finally {
-        setLoadingLocations(false);
+        
+        // Clear selected location if it's not available in new locations
+        if (selectedLocation && !locations.some(loc => loc.gid === selectedLocation)) {
+          setSelectedLocation(null);
+        }
+      } else {
+        throw new Error(data?.error || "Failed to load locations");
       }
-    };
-
-    loadLocations();
-  }, [selectedStore]);
+    } catch (error) {
+      console.error("Error loading locations:", error);
+      
+      // Don't clear existing locations on error, just show error message
+      const errorMessage = error instanceof Error ? error.message : "Failed to load locations";
+      toast({
+        title: "Failed to refresh locations", 
+        description: errorMessage.includes("configuration not found") 
+          ? "Please configure Shopify credentials in Admin > Shopify Config"
+          : errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingLocations(false);
+    }
+  };
 
   const contextValue: StoreContextType = {
     selectedStore,
@@ -201,9 +228,11 @@ export function StoreProvider({ children }: StoreProviderProps) {
           userAssignments.some(a => a.store_key === selectedStore && a.location_gid === loc.gid)
         ),
     loadingLocations,
+    locationsLastUpdated,
     isAdmin,
     userAssignments,
     refreshUserAssignments,
+    refreshLocations,
   };
 
   return (

@@ -3,7 +3,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useStore } from "@/contexts/StoreContext";
-import { MapPin, Star } from "lucide-react";
+import { MapPin, Star, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 interface LocationOption {
@@ -33,6 +33,8 @@ export function AllLocationsSelector({
   const [loading, setLoading] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [userAssignments, setUserAssignments] = useState<any[]>([]);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [hasInitialLoad, setHasInitialLoad] = useState(false);
 
   const loadUserAssignments = async () => {
     try {
@@ -50,114 +52,121 @@ export function AllLocationsSelector({
     }
   };
 
+  // Initial load only
   useEffect(() => {
-    const loadAllAccessibleLocations = async () => {
-      setLoading(true);
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
+    if (!hasInitialLoad) {
+      loadAllAccessibleLocations();
+    }
+  }, [hasInitialLoad]);
 
-        // Check if user is admin
-        const { data: adminCheck } = await supabase.rpc("has_role", { 
-          _user_id: user.id, 
-          _role: "admin" 
-        });
-        const isUserAdmin = adminCheck || false;
-        setIsAdmin(isUserAdmin);
+  const loadAllAccessibleLocations = async () => {
+    setLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
 
-        // Load user assignments for default status
-        await loadUserAssignments();
+      // Check if user is admin
+      const { data: adminCheck } = await supabase.rpc("has_role", { 
+        _user_id: user.id, 
+        _role: "admin" 
+      });
+      const isUserAdmin = adminCheck || false;
+      setIsAdmin(isUserAdmin);
 
-        if (isUserAdmin) {
-          // Admin can access all stores and locations
-          const { data: stores } = await supabase
-            .from("shopify_stores")
-            .select("key, name")
-            .order("name");
+      // Load user assignments for default status
+      await loadUserAssignments();
 
-          if (!stores) return;
+      if (isUserAdmin) {
+        // Admin can access all stores and locations
+        const { data: stores } = await supabase
+          .from("shopify_stores")
+          .select("key, name")
+          .order("name");
 
-          const allLocations: LocationOption[] = [];
-          
-          // Load locations for each store
-          for (const store of stores) {
-            try {
-              const { data, error } = await supabase.functions.invoke("shopify-locations", {
-                body: { storeKey: store.key }
-              });
-              
-              if (!error && data?.ok && data?.locations) {
-                const storeLocations = data.locations.map((loc: any) => ({
-                  gid: `gid://shopify/Location/${loc.id}`,
-                  name: loc.name,
-                  storeName: store.name,
-                  storeKey: store.key,
-                  displayName: `${store.name} - ${loc.name}`,
-                  isDefault: userAssignments.some(a => 
-                    a.store_key === store.key && 
-                    a.location_gid === `gid://shopify/Location/${loc.id}` && 
-                    a.is_default
-                  )
-                }));
-                allLocations.push(...storeLocations);
-              }
-            } catch (error) {
-              console.error(`Error loading locations for store ${store.key}:`, error);
+        if (!stores) return;
+
+        const allLocations: LocationOption[] = [];
+        
+        // Load locations for each store
+        for (const store of stores) {
+          try {
+            const { data, error } = await supabase.functions.invoke("shopify-locations", {
+              body: { storeKey: store.key }
+            });
+            
+            if (!error && data?.ok && data?.locations) {
+              const storeLocations = data.locations.map((loc: any) => ({
+                gid: `gid://shopify/Location/${loc.id}`,
+                name: loc.name,
+                storeName: store.name,
+                storeKey: store.key,
+                displayName: `${store.name} - ${loc.name}`,
+                isDefault: userAssignments.some(a => 
+                  a.store_key === store.key && 
+                  a.location_gid === `gid://shopify/Location/${loc.id}` && 
+                  a.is_default
+                )
+              }));
+              allLocations.push(...storeLocations);
             }
+          } catch (error) {
+            console.error(`Error loading locations for store ${store.key}:`, error);
           }
+        }
 
-          setLocations(allLocations);
+        setLocations(allLocations);
+        setLastUpdated(new Date());
+        
+        // Auto-select default location only on first load
+        if ((!value || value === "all") && !hasInitialLoad) {
+          const defaultLocation = allLocations.find(loc => loc.isDefault);
+          if (defaultLocation) {
+            onValueChange?.(defaultLocation.gid);
+          }
+        }
+      } else {
+        // Non-admin users can only access assigned locations
+        const { data: assignments } = await supabase
+          .from("user_shopify_assignments")
+          .select(`
+            store_key, 
+            location_gid, 
+            location_name,
+            is_default,
+            shopify_stores!inner(name)
+          `)
+          .eq("user_id", user.id);
+
+        if (assignments) {
+          const userLocations = assignments.map((assignment: any) => ({
+            gid: assignment.location_gid,
+            name: assignment.location_name,
+            storeName: assignment.shopify_stores.name,
+            storeKey: assignment.store_key,
+            displayName: `${assignment.shopify_stores.name} - ${assignment.location_name}`,
+            isDefault: assignment.is_default
+          }));
+          setLocations(userLocations);
+          setLastUpdated(new Date());
           
-          // Auto-select default location if no value is currently set
-          if (!value || value === "all") {
-            const defaultLocation = allLocations.find(loc => loc.isDefault);
+          // Auto-select default location only on first load
+          if ((!value || value === "all") && !hasInitialLoad) {
+            const defaultLocation = userLocations.find(loc => loc.isDefault);
             if (defaultLocation) {
               onValueChange?.(defaultLocation.gid);
             }
           }
-        } else {
-          // Non-admin users can only access assigned locations
-          const { data: assignments } = await supabase
-            .from("user_shopify_assignments")
-            .select(`
-              store_key, 
-              location_gid, 
-              location_name,
-              is_default,
-              shopify_stores!inner(name)
-            `)
-            .eq("user_id", user.id);
-
-          if (assignments) {
-            const userLocations = assignments.map((assignment: any) => ({
-              gid: assignment.location_gid,
-              name: assignment.location_name,
-              storeName: assignment.shopify_stores.name,
-              storeKey: assignment.store_key,
-              displayName: `${assignment.shopify_stores.name} - ${assignment.location_name}`,
-              isDefault: assignment.is_default
-            }));
-            setLocations(userLocations);
-            
-            // Auto-select default location if no value is currently set
-            if (!value || value === "all") {
-              const defaultLocation = userLocations.find(loc => loc.isDefault);
-              if (defaultLocation) {
-                onValueChange?.(defaultLocation.gid);
-              }
-            }
-          }
         }
-      } catch (error) {
-        console.error("Error loading accessible locations:", error);
-        toast.error("Failed to load locations. Please try again.");
-      } finally {
-        setLoading(false);
       }
-    };
-
-    loadAllAccessibleLocations();
-  }, [value, onValueChange, userAssignments]);
+      
+      setHasInitialLoad(true);
+    } catch (error) {
+      console.error("Error loading accessible locations:", error);
+      toast.error("Failed to load locations. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSetDefault = async (locationGid: string) => {
     const location = locations.find(l => l.gid === locationGid);
@@ -234,18 +243,38 @@ export function AllLocationsSelector({
           </SelectContent>
         </Select>
         
-        {/* Set as Default Button */}
-        {value && value !== "all" && (
+        <div className="flex gap-2">
+          {/* Refresh Button */}
           <Button
             variant="outline"
             size="sm"
-            onClick={() => handleSetDefault(value)}
-            className="w-full flex items-center gap-2"
-            disabled={locations.find(l => l.gid === value)?.isDefault}
+            onClick={loadAllAccessibleLocations}
+            disabled={loading}
+            className="flex items-center gap-2"
           >
-            <Star className="h-3 w-3" />
-            {locations.find(l => l.gid === value)?.isDefault ? "Current Default" : "Set as Default"}
+            <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
+            {loading ? "Refreshing..." : "Refresh"}
           </Button>
+          
+          {/* Set as Default Button */}
+          {value && value !== "all" && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleSetDefault(value)}
+              className="flex items-center gap-2"
+              disabled={locations.find(l => l.gid === value)?.isDefault}
+            >
+              <Star className="h-3 w-3" />
+              {locations.find(l => l.gid === value)?.isDefault ? "Current Default" : "Set as Default"}
+            </Button>
+          )}
+        </div>
+        
+        {lastUpdated && (
+          <p className="text-xs text-muted-foreground">
+            Last updated: {lastUpdated.toLocaleTimeString()}
+          </p>
         )}
       </div>
     </div>

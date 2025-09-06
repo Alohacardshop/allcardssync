@@ -8,7 +8,7 @@ import { LocationSelector } from "./LocationSelector";
 import { useStore } from "@/contexts/StoreContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { MapPin, Store, Star } from "lucide-react";
+import { MapPin, Store, Star, RefreshCw } from "lucide-react";
 
 interface StoreLocationSelectorProps {
   className?: string;
@@ -21,8 +21,11 @@ export function StoreLocationSelector({ className, showSetDefault = true }: Stor
     selectedLocation, 
     availableStores, 
     availableLocations,
+    loadingLocations,
+    locationsLastUpdated,
     userAssignments,
-    refreshUserAssignments
+    refreshUserAssignments,
+    refreshLocations
   } = useStore();
 
   const hasMultipleOptions = availableStores.length > 1 || availableLocations.length > 1;
@@ -92,17 +95,40 @@ export function StoreLocationSelector({ className, showSetDefault = true }: Stor
             </div>
           </div>
 
-          {showSetDefault && selectedStore && selectedLocation && !isCurrentDefault && (
-            <div className="pt-2 border-t">
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={handleSetDefault}
-                className="flex items-center gap-2"
-              >
-                <Star className="h-4 w-4" />
-                Set as Default
-              </Button>
+          {(showSetDefault || selectedStore) && (
+            <div className="pt-2 border-t space-y-2">
+              <div className="flex gap-2">
+                {selectedStore && (
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={refreshLocations}
+                    disabled={loadingLocations}
+                    className="flex items-center gap-2"
+                  >
+                    <RefreshCw className={`h-3 w-3 ${loadingLocations ? 'animate-spin' : ''}`} />
+                    {loadingLocations ? "Refreshing..." : "Refresh Locations"}
+                  </Button>
+                )}
+                
+                {showSetDefault && selectedStore && selectedLocation && !isCurrentDefault && (
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={handleSetDefault}
+                    className="flex items-center gap-2"
+                  >
+                    <Star className="h-4 w-4" />
+                    Set as Default
+                  </Button>
+                )}
+              </div>
+              
+              {locationsLastUpdated && availableLocations.length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Locations last updated: {locationsLastUpdated.toLocaleTimeString()}
+                </p>
+              )}
             </div>
           )}
         </div>
