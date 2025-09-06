@@ -44,6 +44,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [currentLotId, setCurrentLotId] = useState<string | null>(null);
+  const [currentLotNumber, setCurrentLotNumber] = useState<string | null>(null);
 
   const handleEditItem = (item: IntakeItem) => {
     const editDetails: IntakeItemDetails = {
@@ -269,10 +270,12 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
         setRecentItems([]);
         setTotalCount(0);
         setCurrentLotId(null);
+        setCurrentLotNumber(null);
         return;
       }
 
       setCurrentLotId(latestLot.id);
+      setCurrentLotNumber(latestLot.lot_number);
 
       // Get total count
       const { count } = await supabase
@@ -282,7 +285,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
         .is('deleted_at', null)
         .is('removed_from_batch_at', null);
 
-      // Get recent items (last 5)
+      // Get recent items (last 20)
       const { data: items } = await supabase
         .from('intake_items')
         .select('*')
@@ -290,7 +293,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
         .is('deleted_at', null)
         .is('removed_from_batch_at', null)
         .order('created_at', { ascending: false })
-        .limit(5);
+        .limit(20);
 
       setRecentItems(items || []);
       setTotalCount(count || 0);
@@ -396,13 +399,18 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Archive className="h-5 w-5" />
-                Current Batch
-                <Badge variant="secondary" className="ml-2">
-                  {totalCount} items
-                </Badge>
-              </CardTitle>
+               <CardTitle className="text-lg flex items-center gap-2">
+                 <Archive className="h-5 w-5" />
+                 Current Batch
+                 <Badge variant="secondary" className="ml-2">
+                   {totalCount} items
+                 </Badge>
+                 {currentLotNumber && (
+                   <Badge variant="outline" className="ml-1 text-xs">
+                     Lot #{currentLotNumber}
+                   </Badge>
+                 )}
+               </CardTitle>
               <CardDescription>Recent items added to the batch</CardDescription>
             </div>
             <div className="flex gap-2">

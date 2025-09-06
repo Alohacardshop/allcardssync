@@ -1460,6 +1460,13 @@ export type Database = {
           total_products: number
         }[]
       }
+      get_or_create_active_lot: {
+        Args: { _location_gid: string; _store_key: string }
+        Returns: {
+          id: string
+          lot_number: string
+        }[]
+      }
       gtrgm_compress: {
         Args: { "": unknown }
         Returns: unknown
