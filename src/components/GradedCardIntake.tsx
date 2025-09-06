@@ -12,6 +12,7 @@ import { invokePSAScrapeV2 } from "@/lib/psaServiceV2";
 import { normalizePSAData } from "@/lib/psaNormalization";
 import { AllLocationsSelector } from "@/components/AllLocationsSelector";
 import { parseFunctionError } from "@/lib/fns";
+import { useLogger } from "@/hooks/useLogger";
 
 // Helper function to extract numeric grade from PSA grade strings
 const parsePSAGrade = (gradeStr: string): { numeric: string; original: string; hasNonNumeric: boolean } => {
@@ -33,6 +34,7 @@ const parsePSAGrade = (gradeStr: string): { numeric: string; original: string; h
 };
 
 export const GradedCardIntake = () => {
+  const logger = useLogger();
   const [psaCert, setPsaCert] = useState("");
   const [fetching, setFetching] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -74,6 +76,8 @@ export const GradedCardIntake = () => {
     const controller = new AbortController();
     setAbortController(controller);
     setFetching(true);
+    
+    logger.logInfo("PSA fetch started", { certNumber: psaCert.trim() });
     
     try {
       // Use the enhanced PSA service with both markdown and HTML
@@ -117,8 +121,17 @@ export const GradedCardIntake = () => {
 
         if (normalizedData.isValid) {
           toast.success(`PSA certificate verified - ${populatedCount} fields populated`);
+          logger.logInfo("PSA fetch successful", { 
+            certNumber: psaCert.trim(), 
+            fieldsPopulated: populatedCount,
+            cardData: { subject: normalizedData.subject, grade: normalizedData.grade }
+          });
         } else {
           toast.warning(`PSA certificate found but may have incomplete data - ${populatedCount} fields populated`);
+          logger.logWarn("PSA fetch returned incomplete data", { 
+            certNumber: psaCert.trim(), 
+            fieldsPopulated: populatedCount 
+          });
         }
         
         // Show info if grade had non-numeric parts that were stripped
@@ -128,10 +141,12 @@ export const GradedCardIntake = () => {
       } else {
         const errorMsg = data?.error || 'Invalid response from PSA scraping service';
         console.error('PSA fetch failed:', errorMsg);
+        logger.logError("PSA fetch failed", new Error(errorMsg), { certNumber: psaCert.trim() });
         toast.error(`PSA fetch failed: ${errorMsg}`);
       }
     } catch (error) {
       console.error('PSA fetch error:', error);
+      logger.logError("PSA fetch error", error instanceof Error ? error : new Error(error?.message || 'Unknown error'), { certNumber: psaCert.trim() });
       if (error?.message?.includes('timed out')) {
         toast.error("PSA fetch timed out - try again");
       } else if (error?.message?.includes('cancelled')) {
@@ -212,6 +227,14 @@ export const GradedCardIntake = () => {
     setSubmitting(true);
     const startTime = Date.now();
     
+    logger.logInfo("Intake item submission started", {
+      store: selectedStore,
+      location: selectedLocation,
+      certNumber: formData.certNumber,
+      price: formData.price,
+      cost: formData.cost
+    });
+    
     console.log(`🚀 Adding item to batch - Started at ${new Date().toISOString()}`);
 
     try {
@@ -288,6 +311,16 @@ export const GradedCardIntake = () => {
         const lotNumber = responseData.lot_number;
         console.log(`✅ Item successfully added to batch: ${lotNumber} (ID: ${responseData.id})`);
         
+        logger.logInfo("Intake item added successfully", {
+          itemId: responseData.id,
+          lotNumber: lotNumber,
+          certNumber: formData.certNumber,
+          store: selectedStore,
+          location: selectedLocation,
+          price: formData.price,
+          processingTime: Date.now() - startTime
+        });
+        
         // Dispatch browser event for real-time updates
         window.dispatchEvent(new CustomEvent('intake:item-added', { detail: responseData }));
         toast.success(`Added to batch ${lotNumber}!`);
@@ -322,6 +355,16 @@ export const GradedCardIntake = () => {
       console.error(`❌ Error saving item after ${elapsed}ms:`, {
         message: error.message,
         error: error
+      });
+      
+      logger.logError("Intake item submission failed", 
+        error instanceof Error ? error : new Error(error?.message || 'Unknown error'), {
+        certNumber: formData.certNumber,
+        store: selectedStore,
+        location: selectedLocation,
+        processingTime: elapsed,
+        errorCode: error?.code,
+        errorDetails: error?.details
       });
       
       const errorMessage = error?.message || 'Unknown error';
