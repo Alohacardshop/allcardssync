@@ -47,10 +47,10 @@ export function useCardSearch(searchQuery: string, gameSlug?: string, setCode?: 
       if (!searchQuery.trim()) return [];
       
       const { data, error } = await tcgSupabase.rpc('search_cards', {
-        search_query: searchQuery,
-        game_slug: gameSlug || null,
-        set_code: setCode || null,
-        limit_count: limitCount
+        game_in: gameSlug || '',
+        q: searchQuery,
+        lim: limitCount,
+        off: 0
       });
       
       if (error) throw error;

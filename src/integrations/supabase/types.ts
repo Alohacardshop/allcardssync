@@ -1521,6 +1521,19 @@ export type Database = {
           id: string
         }[]
       }
+      search_cards: {
+        Args: { game_in?: string; lim?: number; off?: number; q?: string }
+        Returns: {
+          game_name: string
+          id: string
+          image_url: string
+          name: string
+          number: string
+          rank: number
+          rarity: string
+          set_name: string
+        }[]
+      }
       secure_get_secret: {
         Args: { secret_name: string }
         Returns: string
