@@ -232,6 +232,27 @@ export function RawCardSearch({ onCardSelect, onGameChange, className = '' }: Ra
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Game Selection */}
+          <div className="space-y-2">
+            <Label>Game</Label>
+            <Select value={selectedGameId} onValueChange={setSelectedGameId}>
+              <SelectTrigger className="bg-background border-input">
+                <SelectValue placeholder="Select a game" />
+              </SelectTrigger>
+              <SelectContent className="bg-background border z-50">
+                {gamesLoading ? (
+                  <SelectItem value="loading" disabled>Loading...</SelectItem>
+                ) : (
+                  games.map((game) => (
+                    <SelectItem key={game.id} value={game.id}>
+                      {game.name}
+                    </SelectItem>
+                  ))
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+
           {/* Search Inputs */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2 relative">
@@ -270,36 +291,15 @@ export function RawCardSearch({ onCardSelect, onGameChange, className = '' }: Ra
             </div>
           </div>
           
-          {/* Filters */}
-          <div className="grid grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label>Game</Label>
-              <Select value={selectedGameId} onValueChange={setSelectedGameId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="All Games" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Games</SelectItem>
-                  {gamesLoading ? (
-                    <SelectItem value="loading" disabled>Loading...</SelectItem>
-                  ) : (
-                    games.map((game) => (
-                      <SelectItem key={game.id} value={game.id}>
-                        {game.name}
-                      </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-            
+          {/* Additional Filters */}
+          <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Rarity</Label>
               <Select value={selectedRarity} onValueChange={setSelectedRarity}>
-                <SelectTrigger>
+                <SelectTrigger className="bg-background border-input">
                   <SelectValue placeholder="All Rarities" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="bg-background border z-50">
                   <SelectItem value="all">All Rarities</SelectItem>
                   {rarities.map((rarity) => (
                     <SelectItem key={rarity} value={rarity}>
