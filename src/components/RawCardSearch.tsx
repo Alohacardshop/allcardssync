@@ -23,9 +23,9 @@ export function RawCardSearch({ onCardSelect, className = '' }: RawCardSearchPro
   const [debouncedCardName, setDebouncedCardName] = useState('');
   
   // Filters
-  const [selectedGameId, setSelectedGameId] = useState<string>('');
-  const [selectedSetId, setSelectedSetId] = useState<string>('');
-  const [selectedRarity, setSelectedRarity] = useState<string>('');
+  const [selectedGameId, setSelectedGameId] = useState<string>('all');
+  const [selectedSetId, setSelectedSetId] = useState<string>('all');
+  const [selectedRarity, setSelectedRarity] = useState<string>('all');
   
   // UI state
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -49,19 +49,19 @@ export function RawCardSearch({ onCardSelect, className = '' }: RawCardSearchPro
   
   // Clear set when game changes
   useEffect(() => {
-    setSelectedSetId('');
+    setSelectedSetId('all');
   }, [selectedGameId]);
   
   // Data queries
   const { data: games = [], isLoading: gamesLoading } = useExternalGames();
-  const { data: sets = [], isLoading: setsLoading } = useExternalSets(selectedGameId);
-  const { data: rarities = [] } = useExternalRarities(selectedGameId);
+  const { data: sets = [], isLoading: setsLoading } = useExternalSets(selectedGameId !== 'all' ? selectedGameId : '');
+  const { data: rarities = [] } = useExternalRarities(selectedGameId !== 'all' ? selectedGameId : '');
   
   // Search suggestions (top 5)
   const { data: suggestionsData } = useExternalCardSearch(debouncedCardName, {
-    gameId: selectedGameId || undefined,
-    setId: selectedSetId || undefined,
-    rarity: selectedRarity || undefined,
+    gameId: selectedGameId !== 'all' ? selectedGameId : undefined,
+    setId: selectedSetId !== 'all' ? selectedSetId : undefined,
+    rarity: selectedRarity !== 'all' ? selectedRarity : undefined,
     page: 1,
     pageSize: 5,
   });
@@ -70,9 +70,9 @@ export function RawCardSearch({ onCardSelect, className = '' }: RawCardSearchPro
   const { data: resultsData, isLoading: resultsLoading } = useExternalCardSearch(
     showAllResults ? debouncedCardName : '',
     {
-      gameId: selectedGameId || undefined,
-      setId: selectedSetId || undefined,
-      rarity: selectedRarity || undefined,
+      gameId: selectedGameId !== 'all' ? selectedGameId : undefined,
+      setId: selectedSetId !== 'all' ? selectedSetId : undefined,
+      rarity: selectedRarity !== 'all' ? selectedRarity : undefined,
       page: currentPage,
       pageSize,
     }
@@ -263,9 +263,9 @@ export function RawCardSearch({ onCardSelect, className = '' }: RawCardSearchPro
                   <SelectValue placeholder="All Games" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Games</SelectItem>
+                  <SelectItem value="all">All Games</SelectItem>
                   {gamesLoading ? (
-                    <SelectItem value="" disabled>Loading...</SelectItem>
+                    <SelectItem value="loading" disabled>Loading...</SelectItem>
                   ) : (
                     games.map((game) => (
                       <SelectItem key={game.id} value={game.id}>
@@ -284,9 +284,9 @@ export function RawCardSearch({ onCardSelect, className = '' }: RawCardSearchPro
                   <SelectValue placeholder="All Sets" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Sets</SelectItem>
+                  <SelectItem value="all">All Sets</SelectItem>
                   {setsLoading ? (
-                    <SelectItem value="" disabled>Loading...</SelectItem>
+                    <SelectItem value="loading" disabled>Loading...</SelectItem>
                   ) : (
                     sets.map((set) => (
                       <SelectItem key={set.id} value={set.id}>
@@ -305,7 +305,7 @@ export function RawCardSearch({ onCardSelect, className = '' }: RawCardSearchPro
                   <SelectValue placeholder="All Rarities" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Rarities</SelectItem>
+                  <SelectItem value="all">All Rarities</SelectItem>
                   {rarities.map((rarity) => (
                     <SelectItem key={rarity} value={rarity}>
                       {rarity}
