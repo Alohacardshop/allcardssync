@@ -100,6 +100,7 @@ type ItemRow = {
   last_shopify_sync_error: string | null;
   store_key: string | null;
   removed_from_batch_at: string | null;
+  type: string | null;
 };
 
 export default function Inventory() {
@@ -316,7 +317,7 @@ export default function Inventory() {
       'quantity', 'shopify_product_id', 'shopify_variant_id', 
       'shopify_inventory_item_id', 'shopify_location_gid', 'source_provider',
       'shopify_sync_status', 'last_shopify_synced_at', 'last_shopify_sync_error',
-      'store_key', 'removed_from_batch_at'
+      'store_key', 'removed_from_batch_at', 'type'
     ].join(',');
 
     let query = supabase
@@ -361,11 +362,11 @@ export default function Inventory() {
     if (pushed === "pushed") query = query.not("pushed_at", "is", null);
     if (pushed === "unpushed") query = query.is("pushed_at", null);
 
-    // Type filter logic
+    // Type filter logic - use the new 'type' column
     if (typeFilter === "graded") {
-      query = query.not("psa_cert", "is", null);
+      query = query.eq("type", "Graded");
     } else if (typeFilter === "raw") {
-      query = query.is("psa_cert", null);
+      query = query.eq("type", "Raw");
     }
 
     if (conditionFilter.trim()) {
@@ -1858,7 +1859,7 @@ export default function Inventory() {
                   ) : (
                     items.map((it) => {
                       const title = buildTitleFromParts(it.year, it.brand_title, it.card_number, it.subject, it.variant);
-                      const isGraded = !!it.psa_cert;
+                      const isGraded = it.type === "Graded";
                       const isSelected = selectedIds.has(it.id);
                       const isProcessing = processingIds.has(it.id);
                       const canPush = !it.pushed_at && !isProcessing;
