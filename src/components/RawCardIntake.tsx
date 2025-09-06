@@ -16,7 +16,8 @@ import { GAME_OPTIONS } from '@/lib/types';
 import { useStore } from '@/contexts/StoreContext';
 import { StoreSelector } from '@/components/StoreSelector';
 import { LocationSelector } from '@/components/LocationSelector';
-import { TCGCardSearch } from '@/components/TCGCardSearch';
+import { RawCardSearch } from '@/components/RawCardSearch';
+import { ExternalCard } from '@/integrations/supabase/tcgLjyClient';
 import { fetchCardPricing } from '@/hooks/useTCGData';
 import { tcgSupabase, PricingResponse, PricingData, updateVariantPricing, getVariantPricing, getCachedPricingViaDB, formatPrice as tcgFormatPrice, findVariant, fetchCardVariants } from '@/lib/tcg-supabase';
 import { generateSKU as generateSkuFromVariant } from '@/lib/sku';
@@ -529,6 +530,36 @@ export function RawCardIntake({
       setTimeout(addToBatch, 100);
     }
   };
+
+  // Handle external card selection from RawCardSearch
+  const handleExternalCardSelect = useCallback(async (externalCard: ExternalCard & { price_display?: string }) => {
+    // Map ExternalCard to CatalogCard format
+    const catalogCard: CatalogCard = {
+      id: externalCard.id,
+      name: externalCard.name,
+      number: externalCard.number,
+      set_name: externalCard.set_name,
+      set: externalCard.set_name ? { name: externalCard.set_name } : undefined,
+      image_url: externalCard.image_url,
+    };
+
+    setPicked(catalogCard);
+    
+    // Try to fetch pricing data from JustTCG for this card
+    // This maintains the existing pricing flow after selection
+    if (catalogCard.id) {
+      try {
+        await fetchPricingData(false); // false = don't force refresh
+      } catch (error) {
+        console.error('Error fetching pricing for external card:', error);
+        // Continue without pricing data - user can still manually set price
+      }
+    }
+
+    if (onPick) {
+      onPick({ card: catalogCard });
+    }
+  }, [onPick]);
 
   // Handle card selection from TCG search
   const handleTCGCardSelect = async (card: any) => {
@@ -1079,14 +1110,12 @@ export function RawCardIntake({
           <Alert>
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              Raw card intake now uses our comprehensive TCG database with real-time pricing from JustTCG API.
+              Raw card intake now uses our external TCG database with comprehensive card search and real-time pricing.
             </AlertDescription>
           </Alert>
 
-          <TCGCardSearch 
-            onCardSelect={handleTCGCardSelect}
-            defaultGameSlug={game}
-            onGameChange={(gameSlug) => setGame(gameSlug as GameKey)}
+          <RawCardSearch 
+            onCardSelect={handleExternalCardSelect}
           />
 
           {/* Selected Card Preview */}
