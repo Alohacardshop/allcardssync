@@ -77,8 +77,8 @@ export const useExternalCardSearch = (query: string, filters: SearchFilters = {}
           games!inner(name)
         `);
       
-      // Search by name (case-insensitive)
-      dbQuery = dbQuery.ilike('name', `%${query}%`);
+      // Search by name (case-insensitive) OR card number
+      dbQuery = dbQuery.or(`name.ilike.%${query}%,number.ilike.%${query}%`);
       
       // Apply filters
       if (gameId) {
