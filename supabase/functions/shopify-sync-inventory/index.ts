@@ -48,7 +48,7 @@ Deno.serve(async (req) => {
     // Get Shopify store configuration
     const { data: storeConfig, error: configError } = await supabase
       .from('system_settings')
-      .select('key_value')
+      .select('key_name, key_value')
       .in('key_name', [`SHOPIFY_${storeKey.toUpperCase()}_DOMAIN`, `SHOPIFY_${storeKey.toUpperCase()}_ACCESS_TOKEN`])
 
     if (configError) {
@@ -56,6 +56,14 @@ Deno.serve(async (req) => {
       return new Response(
         JSON.stringify({ error: 'Failed to get store configuration' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    if (!storeConfig || storeConfig.length === 0) {
+      log.error('No Shopify configuration found', { storeKey })
+      return new Response(
+        JSON.stringify({ error: 'No Shopify store configuration found' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
