@@ -119,16 +119,25 @@ Deno.serve(async (req) => {
 
     if (action === "delete") {
       const email = String(body?.email || "").toLowerCase();
-      if (!email) return new Response(JSON.stringify({ ok: false, error: "Missing email" }), { status: 400, headers: jsonHeaders });
+      const userIdFromBody = body?.userId ? String(body.userId) : null;
 
-      // Find user by email
-      const usersResp = await admin.auth.admin.listUsers({ page: 1, perPage: 200 });
-      // @ts-ignore
-      const user = (usersResp?.data?.users || []).find((u: any) => (u.email || "").toLowerCase() === email);
-      if (!user) return new Response(JSON.stringify({ ok: false, error: "User not found" }), { status: 404, headers: jsonHeaders });
+      if (!email && !userIdFromBody) {
+        return new Response(JSON.stringify({ ok: false, error: "Missing userId or email" }), { status: 400, headers: jsonHeaders });
+      }
+
+      // Resolve target user id
+      let targetUserId: string | null = userIdFromBody;
+      if (!targetUserId) {
+        // Find user by email
+        const usersResp = await admin.auth.admin.listUsers({ page: 1, perPage: 200 });
+        // @ts-ignore
+        const user = (usersResp?.data?.users || []).find((u: any) => (u.email || "").toLowerCase() === email);
+        if (!user) return new Response(JSON.stringify({ ok: false, error: "User not found" }), { status: 404, headers: jsonHeaders });
+        targetUserId = user.id;
+      }
 
       // Prevent self-deletion
-      if (user.id === callerUser.id) {
+      if (targetUserId === callerUser.id) {
         return new Response(JSON.stringify({ ok: false, error: "Cannot delete yourself" }), { status: 400, headers: jsonHeaders });
       }
 
@@ -137,25 +146,24 @@ Deno.serve(async (req) => {
         .from("user_roles")
         .select("user_id")
         .eq("role", "admin");
-      
       if (adminRolesErr) throw adminRolesErr;
-      
-      const isTargetAdmin = adminRoles?.some(r => r.user_id === user.id);
-      const adminCount = adminRoles?.length || 0;
-      
+
+      const isTargetAdmin = (adminRoles || []).some((r: any) => r.user_id === targetUserId);
+      const adminCount = (adminRoles || []).length;
+
       if (isTargetAdmin && adminCount <= 1) {
         return new Response(JSON.stringify({ ok: false, error: "Cannot delete the last admin user" }), { status: 400, headers: jsonHeaders });
       }
 
       // Delete related records first
-      const { error: rolesDelErr } = await admin.from("user_roles").delete().eq("user_id", user.id);
+      const { error: rolesDelErr } = await admin.from("user_roles").delete().eq("user_id", targetUserId);
       if (rolesDelErr) throw rolesDelErr;
 
-      const { error: assignmentsDelErr } = await admin.from("user_shopify_assignments").delete().eq("user_id", user.id);
+      const { error: assignmentsDelErr } = await admin.from("user_shopify_assignments").delete().eq("user_id", targetUserId);
       if (assignmentsDelErr) throw assignmentsDelErr;
 
       // Delete the user
-      const { error: userDelErr } = await admin.auth.admin.deleteUser(user.id);
+      const { error: userDelErr } = await admin.auth.admin.deleteUser(targetUserId);
       if (userDelErr) throw userDelErr;
 
       return new Response(JSON.stringify({ ok: true }), { headers: jsonHeaders });

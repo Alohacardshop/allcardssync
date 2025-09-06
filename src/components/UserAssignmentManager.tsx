@@ -97,12 +97,19 @@ export function UserAssignmentManager() {
 
   const loadUsers = async () => {
     try {
-      // Load users from auth system
-      const { data: authData, error: authError } = await supabase.functions.invoke("roles-admin", {
-        body: { action: "list" }
-      });
+      // Load users from auth system with bootstrap fallback
+      let authData: any = null;
+      let resp = await supabase.functions.invoke("roles-admin", { body: { action: "list" } });
 
-      if (authError) throw authError;
+      if (resp.error || !resp.data?.ok) {
+        // Attempt to restore admin role if missing, then retry once
+        try { await supabase.functions.invoke("bootstrap-admin", { body: {} }); } catch {}
+        resp = await supabase.functions.invoke("roles-admin", { body: { action: "list" } });
+      }
+
+      if (resp.error) throw resp.error;
+      authData = resp.data;
+      if (!authData?.ok) throw new Error(authData?.error || "Failed to load users");
 
       // Load assignments
       const { data: assignments, error: assignError } = await supabase
