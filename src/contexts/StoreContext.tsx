@@ -31,6 +31,7 @@ interface StoreContextType {
   
   // User access
   isAdmin: boolean;
+  isStaff: boolean;
   userAssignments: Array<{
     store_key: string;
     location_gid: string;
@@ -68,6 +69,7 @@ export function StoreProvider({ children }: StoreProviderProps) {
   const [locationsLastUpdated, setLocationsLastUpdated] = useState<Date | null>(null);
   const [locationsCache, setLocationsCache] = useState<Record<string, Location[]>>({});
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isStaff, setIsStaff] = useState(false);
   const [userAssignments, setUserAssignments] = useState<any[]>([]);
 
   // Load user roles and assignments
@@ -107,12 +109,18 @@ export function StoreProvider({ children }: StoreProviderProps) {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Check if user is admin
+      // Check if user is admin or staff
       const { data: adminCheck } = await supabase.rpc("has_role", { 
         _user_id: user.id, 
         _role: "admin" 
       });
       setIsAdmin(adminCheck || false);
+
+      const { data: staffCheck } = await supabase.rpc("has_role", { 
+        _user_id: user.id, 
+        _role: "staff" 
+      });
+      setIsStaff(staffCheck || false);
 
       // Load user assignments
       const { data: assignments } = await supabase
@@ -189,6 +197,7 @@ export function StoreProvider({ children }: StoreProviderProps) {
         setAvailableLocations([]);
         setUserAssignments([]);
         setIsAdmin(false);
+        setIsStaff(false);
       }
     });
     return () => subscription.unsubscribe();
@@ -283,15 +292,15 @@ export function StoreProvider({ children }: StoreProviderProps) {
   const contextValue: StoreContextType = {
     selectedStore,
     setSelectedStore,
-    // Show all stores to admins, or only assigned stores to regular users
-    availableStores: isAdmin ? availableStores : availableStores.filter(store => 
+    // Show all stores to admins and staff, or only assigned stores to regular users
+    availableStores: (isAdmin || isStaff) ? availableStores : availableStores.filter(store => 
       userAssignments.some(assignment => assignment.store_key === store.key)
     ),
     loadingStores,
     selectedLocation,
     setSelectedLocation,
-    // Show locations filtered by assignments for non-admins
-    availableLocations: isAdmin 
+    // Show locations filtered by assignments for non-admins/non-staff
+    availableLocations: (isAdmin || isStaff)
       ? availableLocations 
       : availableLocations.filter(loc => 
           userAssignments.some(a => a.store_key === selectedStore && a.location_gid === loc.gid)
@@ -299,6 +308,7 @@ export function StoreProvider({ children }: StoreProviderProps) {
     loadingLocations,
     locationsLastUpdated,
     isAdmin,
+    isStaff,
     userAssignments,
     refreshUserAssignments,
     refreshLocations,
