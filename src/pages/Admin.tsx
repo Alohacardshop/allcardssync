@@ -19,6 +19,7 @@ import { ShopifyConfig } from "@/components/admin/ShopifyConfig";
 import { ShopifyTagImport } from "@/components/admin/ShopifyTagImport";
 import { PricingJobsMonitor } from "@/components/admin/PricingJobsMonitor";
 import { TCGHealthCheck } from "@/components/admin/TCGHealthCheck";
+import { RawIntakeSettings } from "@/components/admin/RawIntakeSettings";
 
 import { checkSystemHealth } from "@/lib/api";
 
@@ -95,6 +96,7 @@ const Admin = () => {
             <TabsList className="inline-flex h-10 items-center justify-start rounded-md bg-muted p-1 text-muted-foreground w-max">
               <TabsTrigger value="inventory" className="whitespace-nowrap">Inventory</TabsTrigger>
               <TabsTrigger value="catalog" className="whitespace-nowrap">Catalog</TabsTrigger>
+              <TabsTrigger value="raw-intake" className="whitespace-nowrap">Raw Intake</TabsTrigger>
               <TabsTrigger value="settings" className="whitespace-nowrap">Settings</TabsTrigger>
               <TabsTrigger value="system" className="whitespace-nowrap">System</TabsTrigger>
               <TabsTrigger value="users" className="whitespace-nowrap">Users</TabsTrigger>
@@ -146,6 +148,10 @@ const Admin = () => {
               <PricingJobsMonitor />
               <TCGHealthCheck />
             </div>
+          </TabsContent>
+
+          <TabsContent value="raw-intake" className="space-y-4">
+            <RawIntakeSettings />
           </TabsContent>
 
           <TabsContent value="settings" className="space-y-4">

@@ -9,23 +9,35 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Search, Plus } from 'lucide-react';
 import { useExternalGames, useExternalSets, useExternalCardSearch, useExternalCardPrices, useExternalRealtime, useExternalRarities } from '@/hooks/useExternalTCG';
 import { ExternalCard } from '@/integrations/supabase/tcgLjyClient';
+import { useRawIntakeSettings } from '@/hooks/useRawIntakeSettings';
 import { toast } from 'sonner';
 
 interface RawCardSearchProps {
   onCardSelect: (card: ExternalCard & { price_display?: string }) => void;
+  onGameChange?: (gameId: string) => void;
   className?: string;
 }
 
-export function RawCardSearch({ onCardSelect, className = '' }: RawCardSearchProps) {
+export function RawCardSearch({ onCardSelect, onGameChange, className = '' }: RawCardSearchProps) {
+  // Load raw intake settings
+  const { settings, loading: settingsLoading } = useRawIntakeSettings();
+  
   // Search inputs
   const [cardName, setCardName] = useState('');
   const [cardNumber, setCardNumber] = useState('');
   const [debouncedCardName, setDebouncedCardName] = useState('');
   
-  // Filters
-  const [selectedGameId, setSelectedGameId] = useState<string>('all');
+  // Filters - default to configured default game
+  const [selectedGameId, setSelectedGameId] = useState<string>('');
   const [selectedSetId, setSelectedSetId] = useState<string>('all');
   const [selectedRarity, setSelectedRarity] = useState<string>('all');
+
+  // Set default game when settings load
+  useEffect(() => {
+    if (!settingsLoading && settings.defaultGame && selectedGameId === '') {
+      setSelectedGameId(settings.defaultGame);
+    }
+  }, [settings, settingsLoading, selectedGameId]);
   
   // UI state
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -50,16 +62,20 @@ export function RawCardSearch({ onCardSelect, className = '' }: RawCardSearchPro
   // Clear set when game changes
   useEffect(() => {
     setSelectedSetId('all');
-  }, [selectedGameId]);
+    onGameChange?.(selectedGameId);
+  }, [selectedGameId, onGameChange]);
   
   // Data queries
-  const { data: games = [], isLoading: gamesLoading } = useExternalGames();
-  const { data: sets = [], isLoading: setsLoading } = useExternalSets(selectedGameId !== 'all' ? selectedGameId : '');
-  const { data: rarities = [] } = useExternalRarities(selectedGameId !== 'all' ? selectedGameId : '');
+  const { data: allGames = [], isLoading: gamesLoading } = useExternalGames();
+  const { data: sets = [], isLoading: setsLoading } = useExternalSets(selectedGameId !== 'all' && selectedGameId ? selectedGameId : '');
+  const { data: rarities = [] } = useExternalRarities(selectedGameId !== 'all' && selectedGameId ? selectedGameId : '');
+
+  // Filter games based on admin settings
+  const games = allGames.filter(game => settings.enabledGames.includes(game.id));
   
-  // Search suggestions (top 5)
+  // Search suggestions (top 5) - show immediately when typing
   const { data: suggestionsData } = useExternalCardSearch(debouncedCardName, {
-    gameId: selectedGameId !== 'all' ? selectedGameId : undefined,
+    gameId: selectedGameId !== 'all' && selectedGameId ? selectedGameId : undefined,
     setId: selectedSetId !== 'all' ? selectedSetId : undefined,
     rarity: selectedRarity !== 'all' ? selectedRarity : undefined,
     page: 1,
@@ -70,7 +86,7 @@ export function RawCardSearch({ onCardSelect, className = '' }: RawCardSearchPro
   const { data: resultsData, isLoading: resultsLoading } = useExternalCardSearch(
     showAllResults ? debouncedCardName : '',
     {
-      gameId: selectedGameId !== 'all' ? selectedGameId : undefined,
+      gameId: selectedGameId !== 'all' && selectedGameId ? selectedGameId : undefined,
       setId: selectedSetId !== 'all' ? selectedSetId : undefined,
       rarity: selectedRarity !== 'all' ? selectedRarity : undefined,
       page: currentPage,
@@ -270,27 +286,6 @@ export function RawCardSearch({ onCardSelect, className = '' }: RawCardSearchPro
                     games.map((game) => (
                       <SelectItem key={game.id} value={game.id}>
                         {game.name}
-                      </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="space-y-2">
-              <Label>Set</Label>
-              <Select value={selectedSetId} onValueChange={setSelectedSetId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="All Sets" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Sets</SelectItem>
-                  {setsLoading ? (
-                    <SelectItem value="loading" disabled>Loading...</SelectItem>
-                  ) : (
-                    sets.map((set) => (
-                      <SelectItem key={set.id} value={set.id}>
-                        {set.name}
                       </SelectItem>
                     ))
                   )}

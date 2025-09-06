@@ -94,6 +94,13 @@ export function RawCardIntake({
   onBatchAdd,
 }: RawCardIntakeProps) {
   const [game, setGame] = useState<GameKey>(defaultGame);
+  
+  // Handle game change from RawCardSearch
+  const handleGameChange = (gameId: string) => {
+    if (gameId && gameId !== 'all') {
+      setGame(gameId as GameKey);
+    }
+  };
   const [name, setName] = useState('');
   const [number, setNumber] = useState('');
   const [printing, setPrinting] = useState<Printing>(defaultPrinting);
@@ -1101,6 +1108,7 @@ export function RawCardIntake({
 
           <RawCardSearch 
             onCardSelect={handleExternalCardSelect}
+            onGameChange={handleGameChange}
           />
 
           {/* Selected Card Preview */}
