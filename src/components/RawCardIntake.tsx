@@ -260,6 +260,79 @@ export function RawCardIntake({
     }
   };
 
+  // Preflight access check function
+  const checkAccessAndShowToast = async (): Promise<boolean> => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) {
+        toast.error("No user session found");
+        return false;
+      }
+
+      if (!selectedStore || !selectedLocation) {
+        toast.error("Store and location must be selected");
+        return false;
+      }
+
+      const userId = session.user.id;
+      const userIdLast6 = userId.slice(-6);
+      const storeKeyTrimmed = selectedStore.trim();
+      const locationGidTrimmed = selectedLocation.trim();
+
+      // Log exact strings to catch whitespace issues
+      console.log('🔍 Access check strings:', {
+        userId: userId,
+        userIdLast6,
+        storeKey: `"${selectedStore}" (trimmed: "${storeKeyTrimmed}")`,
+        locationGid: `"${selectedLocation}" (trimmed: "${locationGidTrimmed}")`,
+        storeKeyLength: selectedStore.length,
+        locationGidLength: selectedLocation.length
+      });
+
+      // Check staff role
+      const { data: hasStaffRole, error: roleError } = await supabase.rpc('has_role', {
+        _user_id: userId,
+        _role: 'staff'
+      });
+
+      if (roleError) {
+        console.error('Role check error:', roleError);
+        toast.error(`Role check failed: ${roleError.message}`);
+        return false;
+      }
+
+      // Check location access
+      const { data: canAccessLocation, error: accessError } = await supabase.rpc('user_can_access_store_location', {
+        _user_id: userId,
+        _store_key: storeKeyTrimmed,
+        _location_gid: locationGidTrimmed
+      });
+
+      if (accessError) {
+        console.error('Access check error:', accessError);
+        toast.error(`Access check failed: ${accessError.message}`);
+        return false;
+      }
+
+      // Show diagnostic toast
+      toast.info(`Access Check: User ${userIdLast6} | Store: ${storeKeyTrimmed} | Location: ${locationGidTrimmed} | Staff: ${hasStaffRole ? 'true' : 'false'} | Access: ${canAccessLocation ? 'true' : 'false'}`, {
+        duration: 5000
+      });
+
+      // Block if no access
+      if (!canAccessLocation) {
+        toast.error(`Access denied — you're not assigned to this store/location (${storeKeyTrimmed}, ${locationGidTrimmed}).`);
+        return false;
+      }
+
+      return true;
+    } catch (error: any) {
+      console.error('Preflight check error:', error);
+      toast.error(`Preflight check failed: ${error.message}`);
+      return false;
+    }
+  };
+
   const addToBatch = async () => {
     if (!picked || !chosenVariant) {
       toast.error("Please select a card and variant first");
@@ -275,6 +348,12 @@ export function RawCardIntake({
     const locValid = availableLocations.some(l => l.gid === selectedLocation);
     if (!locValid) {
       toast.error("Selected location doesn't belong to the selected store. Please reselect.");
+      return;
+    }
+
+    // Preflight access check
+    const hasAccess = await checkAccessAndShowToast();
+    if (!hasAccess) {
       return;
     }
 
@@ -347,11 +426,15 @@ export function RawCardIntake({
       );
 
       if (response.error) {
-        // Enhanced error handling
+        // Enhanced error handling with detailed info for 42501 errors after preflight passed
         console.error('RPC Error:', response.error);
         const msg = response.error.message || '';
         if (response.error.code === 'PGRST116' || response.error.code === '42501' || msg.toLowerCase().includes('row-level security')) {
-          throw new Error('Access denied: you do not have access to the selected store/location. Please ask an admin to assign access.');
+          // Show detailed row data for comparison since preflight passed
+          toast.error(`Insert failed with 42501 despite preflight success. Row data: Store="${selectedStore}", Location="${selectedLocation}", User ID ending in="${(await supabase.auth.getSession()).data.session?.user.id?.slice(-6) || 'unknown'}"`, {
+            duration: 10000
+          });
+          throw new Error('Access denied: RLS policy rejected the insert despite preflight checks passing.');
         } else if (msg.includes('store') || msg.includes('location')) {
           throw new Error('Invalid store or location selection');
         }
@@ -922,6 +1005,21 @@ export function RawCardIntake({
                 Choose the specific location where items will be added
               </p>
             </div>
+
+            {/* Check Access Now Button */}
+            {selectedStore && selectedLocation && (
+              <div className="flex justify-center">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={checkAccessAndShowToast}
+                  className="gap-2"
+                >
+                  <AlertCircle className="h-4 w-4" />
+                  Check Access Now
+                </Button>
+              </div>
+            )}
           </div>
 
           <Alert>

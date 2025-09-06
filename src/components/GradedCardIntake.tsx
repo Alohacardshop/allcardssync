@@ -167,6 +167,12 @@ export const GradedCardIntake = () => {
       return;
     }
 
+    // Preflight access check
+    const hasAccess = await checkAccessAndShowToast();
+    if (!hasAccess) {
+      return;
+    }
+
     if (!formData.certNumber) {
       toast.error("Please fetch PSA data first");
       return;
@@ -238,6 +244,17 @@ export const GradedCardIntake = () => {
           hint: error.hint,
           fullError: error
         });
+        
+        // Enhanced error handling with detailed info for 42501 errors after preflight passed
+        if (error.code === 'PGRST116' || error.code === '42501' || error.message?.toLowerCase().includes('row-level security')) {
+          // Show detailed row data for comparison since preflight passed
+          const { data: { session } } = await supabase.auth.getSession();
+          toast.error(`Insert failed with 42501 despite preflight success. Row data: Store="${selectedStore}", Location="${selectedLocation}", User ID ending in "${session?.user.id?.slice(-6) || 'unknown'}"`, {
+            duration: 10000
+          });
+          throw new Error('Access denied: RLS policy rejected the insert despite preflight checks passing.');
+        }
+        
         throw new Error(parseFunctionError(error));
       }
 
@@ -300,6 +317,79 @@ export const GradedCardIntake = () => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
+  // Preflight access check function
+  const checkAccessAndShowToast = async (): Promise<boolean> => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) {
+        toast.error("No user session found");
+        return false;
+      }
+
+      if (!selectedStore || !selectedLocation) {
+        toast.error("Store and location must be selected");
+        return false;
+      }
+
+      const userId = session.user.id;
+      const userIdLast6 = userId.slice(-6);
+      const storeKeyTrimmed = selectedStore.trim();
+      const locationGidTrimmed = selectedLocation.trim();
+
+      // Log exact strings to catch whitespace issues
+      console.log('🔍 Access check strings:', {
+        userId: userId,
+        userIdLast6,
+        storeKey: `"${selectedStore}" (trimmed: "${storeKeyTrimmed}")`,
+        locationGid: `"${selectedLocation}" (trimmed: "${locationGidTrimmed}")`,
+        storeKeyLength: selectedStore.length,
+        locationGidLength: selectedLocation.length
+      });
+
+      // Check staff role
+      const { data: hasStaffRole, error: roleError } = await supabase.rpc('has_role', {
+        _user_id: userId,
+        _role: 'staff'
+      });
+
+      if (roleError) {
+        console.error('Role check error:', roleError);
+        toast.error(`Role check failed: ${roleError.message}`);
+        return false;
+      }
+
+      // Check location access
+      const { data: canAccessLocation, error: accessError } = await supabase.rpc('user_can_access_store_location', {
+        _user_id: userId,
+        _store_key: storeKeyTrimmed,
+        _location_gid: locationGidTrimmed
+      });
+
+      if (accessError) {
+        console.error('Access check error:', accessError);
+        toast.error(`Access check failed: ${accessError.message}`);
+        return false;
+      }
+
+      // Show diagnostic toast
+      toast.info(`Access Check: User ${userIdLast6} | Store: ${storeKeyTrimmed} | Location: ${locationGidTrimmed} | Staff: ${hasStaffRole ? 'true' : 'false'} | Access: ${canAccessLocation ? 'true' : 'false'}`, {
+        duration: 5000
+      });
+
+      // Block if no access
+      if (!canAccessLocation) {
+        toast.error(`Access denied — you're not assigned to this store/location (${storeKeyTrimmed}, ${locationGidTrimmed}).`);
+        return false;
+      }
+
+      return true;
+    } catch (error: any) {
+      console.error('Preflight check error:', error);
+      toast.error(`Preflight check failed: ${error.message}`);
+      return false;
+    }
+  };
+
   return (
     <Card className="w-full max-w-4xl mx-auto">
       <CardHeader>
@@ -319,6 +409,21 @@ export const GradedCardIntake = () => {
             className="w-full"
           />
         </div>
+
+        {/* Check Access Now Button */}
+        {selectedStore && selectedLocation && (
+          <div className="flex justify-center">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={checkAccessAndShowToast}
+              className="gap-2"
+            >
+              <AlertCircle className="h-4 w-4" />
+              Check Access Now
+            </Button>
+          </div>
+        )}
         {/* PSA Cert Input */}
         <div className="flex gap-3 items-end">
           <div className="flex-1">
