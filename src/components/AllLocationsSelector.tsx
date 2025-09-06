@@ -107,6 +107,14 @@ export function AllLocationsSelector({
           }
 
           setLocations(allLocations);
+          
+          // Auto-select default location if no value is currently set
+          if (!value || value === "all") {
+            const defaultLocation = allLocations.find(loc => loc.isDefault);
+            if (defaultLocation) {
+              onValueChange?.(defaultLocation.gid);
+            }
+          }
         } else {
           // Non-admin users can only access assigned locations
           const { data: assignments } = await supabase
@@ -130,6 +138,14 @@ export function AllLocationsSelector({
               isDefault: assignment.is_default
             }));
             setLocations(userLocations);
+            
+            // Auto-select default location if no value is currently set
+            if (!value || value === "all") {
+              const defaultLocation = userLocations.find(loc => loc.isDefault);
+              if (defaultLocation) {
+                onValueChange?.(defaultLocation.gid);
+              }
+            }
           }
         }
       } catch (error) {
@@ -141,7 +157,7 @@ export function AllLocationsSelector({
     };
 
     loadAllAccessibleLocations();
-  }, []);
+  }, [value, onValueChange, userAssignments]);
 
   const handleSetDefault = async (locationGid: string) => {
     const location = locations.find(l => l.gid === locationGid);
