@@ -155,7 +155,42 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ ok: false, error: "Cannot delete the last admin user" }), { status: 400, headers: jsonHeaders });
       }
 
-      // Delete related records first
+      // Clean up foreign key references first to avoid constraint violations
+      console.log(`Cleaning up FK references for user ${targetUserId}`);
+      
+      // Update intake_lots.created_by to NULL
+      const { count: lotsUpdated, error: lotsErr } = await admin
+        .from("intake_lots")
+        .update({ created_by: null })
+        .eq("created_by", targetUserId);
+      if (lotsErr) throw lotsErr;
+      console.log(`Updated ${lotsUpdated || 0} intake_lots records`);
+
+      // Update intake_items.created_by to NULL  
+      const { count: itemsUpdated, error: itemsErr } = await admin
+        .from("intake_items")
+        .update({ created_by: null })
+        .eq("created_by", targetUserId);
+      if (itemsErr) throw itemsErr;
+      console.log(`Updated ${itemsUpdated || 0} intake_items records`);
+
+      // Update item_snapshots.created_by to NULL
+      const { count: snapshotsUpdated, error: snapshotsErr } = await admin
+        .from("item_snapshots")
+        .update({ created_by: null })
+        .eq("created_by", targetUserId);
+      if (snapshotsErr) throw snapshotsErr;
+      console.log(`Updated ${snapshotsUpdated || 0} item_snapshots records`);
+
+      // Update audit_log.user_id to NULL
+      const { count: auditUpdated, error: auditErr } = await admin
+        .from("audit_log")
+        .update({ user_id: null })
+        .eq("user_id", targetUserId);
+      if (auditErr) throw auditErr;
+      console.log(`Updated ${auditUpdated || 0} audit_log records`);
+
+      // Delete related records
       const { error: rolesDelErr } = await admin.from("user_roles").delete().eq("user_id", targetUserId);
       if (rolesDelErr) throw rolesDelErr;
 
@@ -165,6 +200,8 @@ Deno.serve(async (req) => {
       // Delete the user
       const { error: userDelErr } = await admin.auth.admin.deleteUser(targetUserId);
       if (userDelErr) throw userDelErr;
+
+      console.log(`Successfully deleted user ${targetUserId}`);
 
       return new Response(JSON.stringify({ ok: true }), { headers: jsonHeaders });
     }
