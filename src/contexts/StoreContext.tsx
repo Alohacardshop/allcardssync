@@ -72,6 +72,33 @@ export function StoreProvider({ children }: StoreProviderProps) {
     loadUserData();
   }, []);
 
+  // Auto-load locations for a specific store (silent, no toast messages)
+  const autoLoadLocations = async (storeKey: string) => {
+    try {
+      const { data, error } = await supabase.functions.invoke("shopify-locations", {
+        body: { storeKey }
+      });
+      
+      if (error) throw error;
+      
+      if (data?.ok) {
+        const locations = (data.locations || []).map((loc: any) => ({
+          id: String(loc.id),
+          name: loc.name,
+          gid: `gid://shopify/Location/${loc.id}`
+        }));
+        
+        // Update cache and available locations
+        setLocationsCache(prev => ({ ...prev, [storeKey]: locations }));
+        setAvailableLocations(locations);
+        setLocationsLastUpdated(new Date());
+      }
+    } catch (error) {
+      console.error("Error auto-loading locations:", error);
+      // Silent failure - user can manually refresh if needed
+    }
+  };
+
   const loadUserData = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -92,11 +119,22 @@ export function StoreProvider({ children }: StoreProviderProps) {
       
       setUserAssignments(assignments || []);
 
-      // Set default store/location if user has assignments
+      // Set default store/location from user assignments
       const defaultAssignment = assignments?.find(a => a.is_default);
-      if (defaultAssignment && !selectedStore) {
+      if (defaultAssignment) {
         setSelectedStore(defaultAssignment.store_key);
         setSelectedLocation(defaultAssignment.location_gid);
+        
+        // Auto-load locations for the default store
+        await autoLoadLocations(defaultAssignment.store_key);
+      } else if (assignments && assignments.length > 0) {
+        // If no default, use the first assignment
+        const firstAssignment = assignments[0];
+        setSelectedStore(firstAssignment.store_key);
+        setSelectedLocation(firstAssignment.location_gid);
+        
+        // Auto-load locations for the selected store
+        await autoLoadLocations(firstAssignment.store_key);
       }
     } catch (error) {
       console.error("Error loading user data:", error);
