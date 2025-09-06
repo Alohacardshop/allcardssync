@@ -119,8 +119,16 @@ const Index = () => {
       )
       .subscribe();
 
+    // Listen for custom events from intake forms as backup
+    const handleItemAdded = () => {
+      fetchData();
+    };
+
+    window.addEventListener('intake:item-added', handleItemAdded);
+
     return () => {
       supabase.removeChannel(channel);
+      window.removeEventListener('intake:item-added', handleItemAdded);
     };
   }, []);
 
@@ -387,7 +395,7 @@ const Index = () => {
           </TabsList>
 
           <TabsContent value="graded" className="mt-6 space-y-6">
-            <GradedCardIntake />
+            <GradedCardIntake onBatchAdd={handleBatchAdd} />
             <CurrentBatchPanel onViewFullBatch={() => setActiveTab("batch")} />
           </TabsContent>
 

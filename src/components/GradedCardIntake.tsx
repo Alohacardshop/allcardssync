@@ -14,6 +14,10 @@ import { AllLocationsSelector } from "@/components/AllLocationsSelector";
 import { parseFunctionError } from "@/lib/fns";
 import { useLogger } from "@/hooks/useLogger";
 
+interface GradedCardIntakeProps {
+  onBatchAdd?: () => void;
+}
+
 // Helper function to extract numeric grade from PSA grade strings
 const parsePSAGrade = (gradeStr: string): { numeric: string; original: string; hasNonNumeric: boolean } => {
   if (!gradeStr) return { numeric: "", original: "", hasNonNumeric: false };
@@ -33,7 +37,7 @@ const parsePSAGrade = (gradeStr: string): { numeric: string; original: string; h
   };
 };
 
-export const GradedCardIntake = () => {
+export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => {
   const logger = useLogger();
   const [psaCert, setPsaCert] = useState("");
   const [fetching, setFetching] = useState(false);
@@ -323,6 +327,11 @@ export const GradedCardIntake = () => {
         
         // Dispatch browser event for real-time updates
         window.dispatchEvent(new CustomEvent('intake:item-added', { detail: responseData }));
+        
+        // Call onBatchAdd callback to refresh parent components
+        if (onBatchAdd) {
+          onBatchAdd();
+        }
         toast.success(`Added to batch ${lotNumber}!`);
         
         // Reset form on success
