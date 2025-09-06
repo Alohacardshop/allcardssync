@@ -254,7 +254,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         grade_in: formData.grade,
         price_in: formData.price ? parseFloat(formData.price) : 0,
         cost_in: formData.cost ? parseFloat(formData.cost) : null,
-        sku_in: `PSA-${formData.certNumber}`, // Generate simple SKU for PSA cards
+        sku_in: formData.certNumber, // Use cert number directly as SKU for PSA cards
         source_provider_in: 'psa',
         catalog_snapshot_in: cardData,
         pricing_snapshot_in: {

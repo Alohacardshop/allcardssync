@@ -30,6 +30,58 @@ export function generateVariantSKU(game: GameKey | string, variantId: string): s
 }
 
 /**
+ * Generate PSA-specific SKU using certificate number
+ */
+export function generatePSASKU(certNumber: string): string {
+  return certNumber; // Use cert number directly as SKU
+}
+
+/**
+ * Generate graded card SKU for non-PSA cards
+ */
+export function generateGradedSKU(company: string, grade: string, itemId: string): string {
+  const sanitizedCompany = company.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const sanitizedGrade = grade.replace(/[^A-Z0-9]/g, '');
+  return `${sanitizedCompany}${sanitizedGrade}-${itemId.slice(-8)}`;
+}
+
+/**
+ * Generate intake item SKU
+ */
+export function generateIntakeSKU(itemId: string): string {
+  return `intake-${itemId}`;
+}
+
+/**
+ * Main SKU generation for intake items based on grading status
+ */
+export function generateIntakeItemSKU(
+  grade?: string | null,
+  psaCert?: string | null,
+  existingSku?: string | null,
+  itemId?: string
+): string {
+  const isGraded = grade && grade !== 'Raw' && grade !== 'Ungraded';
+  
+  if (isGraded && psaCert) {
+    // For PSA graded cards: use certificate number directly
+    return generatePSASKU(psaCert);
+  } else if (isGraded && grade && itemId) {
+    // For other graded cards: company + grade + item id
+    return generateGradedSKU('GRADED', grade, itemId);
+  } else if (existingSku) {
+    // Use existing SKU if provided
+    return existingSku;
+  } else if (itemId) {
+    // Fallback for raw cards
+    return generateIntakeSKU(itemId);
+  }
+  
+  // Ultimate fallback
+  return `item-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+}
+
+/**
  * Generate fallback SKU when variant ID is not available
  */
 export function generateFallbackSKU(game: GameKey | string, type: 'CARD' | 'PSA' | 'RANDOM' = 'RANDOM', identifier?: string): string {

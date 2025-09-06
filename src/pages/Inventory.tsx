@@ -20,6 +20,7 @@ import { RefreshCw, AlertTriangle, ShoppingCart, Printer, Trash2, Undo } from "l
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { usePrintNode } from "@/hooks/usePrintNode";
 import { generateLabelTSPL } from "@/lib/labelTemplates";
+import EditIntakeItemDialog, { IntakeItemDetails } from "@/components/EditIntakeItemDialog";
 import { ShopifyRemovalDialog } from "@/components/ShopifyRemovalDialog";
 
 // Simple SEO helpers without extra deps
@@ -167,6 +168,32 @@ export default function Inventory() {
   const [categoryFilter, setCategoryFilter] = useState("");
   const [yearFilter, setYearFilter] = useState("");
   const [priceRange, setPriceRange] = useState({ min: "", max: "" });
+
+  // Admin state and user role checking
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [editingItem, setEditingItem] = useState<ItemRow | null>(null);
+  
+  // Check if user is admin
+  useEffect(() => {
+    const checkAdminStatus = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data, error } = await supabase.rpc('has_role', {
+            _user_id: user.id,
+            _role: 'admin'
+          });
+          if (!error && data) {
+            setIsAdmin(true);
+          }
+        }
+      } catch (error) {
+        console.error('Error checking admin status:', error);
+      }
+    };
+    
+    checkAdminStatus();
+  }, []);
 
   // Diagnostic state and fetch management
   const [diagnostics, setDiagnostics] = useState<{
@@ -1311,6 +1338,71 @@ export default function Inventory() {
     setSelectedIds(new Set()); // Clear selection on filter clear
   };
 
+  // Handle item editing
+  const handleSaveEdit = async (values: IntakeItemDetails) => {
+    if (!editingItem) return;
+    
+    try {
+      const updateData: any = {
+        year: values.year || null,
+        brand_title: values.brandTitle || null,
+        subject: values.subject || null,
+        category: values.category || null,
+        variant: values.variant || null,
+        card_number: values.cardNumber || null,
+        grade: values.grade || null,
+        psa_cert: values.psaCert || null,
+        price: values.price ? parseFloat(values.price) : null,
+        cost: values.cost ? parseFloat(values.cost) : null,
+        quantity: values.quantity || 1,
+        sku: values.sku || null
+      };
+      
+      // Add admin-only fields if user is admin
+      if (isAdmin) {
+        updateData.source_provider = values.sourceProvider || null;
+        updateData.shopify_product_id = values.shopifyProductId || null;
+        updateData.shopify_variant_id = values.shopifyVariantId || null;
+        updateData.shopify_inventory_item_id = values.shopifyInventoryItemId || null;
+        updateData.shopify_location_gid = values.shopifyLocationGid || null;
+        updateData.store_key = values.storeKey || null;
+      }
+
+      const { error } = await supabase
+        .from('intake_items')
+        .update(updateData)
+        .eq('id', editingItem.id);
+        
+      if (error) throw error;
+      
+      // Update local state
+      setItems(prev => prev.map(item => 
+        item.id === editingItem.id 
+          ? {
+              ...item,
+              ...updateData,
+              // Map back to display format
+              brand_title: updateData.brand_title,
+              card_number: updateData.card_number,
+              psa_cert: updateData.psa_cert,
+              source_provider: updateData.source_provider,
+              shopify_product_id: updateData.shopify_product_id,
+              shopify_variant_id: updateData.shopify_variant_id,
+              shopify_inventory_item_id: updateData.shopify_inventory_item_id,
+              shopify_location_gid: updateData.shopify_location_gid,
+              store_key: updateData.store_key
+            }
+          : item
+      ));
+      
+      setEditingItem(null);
+      toast.success('Item updated successfully');
+    } catch (error: any) {
+      console.error('Error updating item:', error);
+      toast.error(`Failed to update item: ${error.message}`);
+    }
+  };
+
   useEffect(() => {
     const channel = supabase
       .channel('inventory-updates')
@@ -1716,6 +1808,10 @@ export default function Inventory() {
                     <TableHead>Price</TableHead>
                     <TableHead>Cost</TableHead>
                     <TableHead>Qty</TableHead>
+                    {isAdmin && <TableHead>Source</TableHead>}
+                    {isAdmin && <TableHead>Shopify Product ID</TableHead>}
+                    {isAdmin && <TableHead>Shopify Variant ID</TableHead>}
+                    {isAdmin && <TableHead>Location GID</TableHead>}
                     <TableHead>Printed</TableHead>
                     <TableHead>Pushed</TableHead>
                     <TableHead>Shopify Sync</TableHead>
@@ -1748,7 +1844,7 @@ export default function Inventory() {
                     ))
                   ) : items.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={16} className="text-center py-8">
+                      <TableCell colSpan={isAdmin ? 20 : 16} className="text-center py-8">
                         <div className="flex flex-col items-center gap-2">
                           <p className="text-muted-foreground">No items found</p>
                           {(search || lotFilter || selectedLocationGid || printed !== "all" || pushed !== "all" || typeFilter !== "all" || conditionFilter || setFilter || categoryFilter || yearFilter || priceRange.min || priceRange.max) && (
@@ -1809,6 +1905,10 @@ export default function Inventory() {
                         <TableCell>{it.price != null ? `$${Number(it.price).toLocaleString()}` : "—"}</TableCell>
                         <TableCell>{it.cost != null ? `$${Number(it.cost).toLocaleString()}` : "—"}</TableCell>
                         <TableCell>{it.quantity != null ? Number(it.quantity) : "—"}</TableCell>
+                        {isAdmin && <TableCell className="text-xs text-muted-foreground">{it.source_provider || "—"}</TableCell>}
+                        {isAdmin && <TableCell className="text-xs text-muted-foreground">{it.shopify_product_id || "—"}</TableCell>}
+                        {isAdmin && <TableCell className="text-xs text-muted-foreground">{it.shopify_variant_id || "—"}</TableCell>}
+                        {isAdmin && <TableCell className="text-xs text-muted-foreground max-w-24 truncate" title={it.shopify_location_gid || ""}>{it.shopify_location_gid || "—"}</TableCell>}
                         <TableCell>
                           {it.printed_at ? <Badge variant="secondary">Printed</Badge> : <Badge>Unprinted</Badge>}
                         </TableCell>
@@ -1855,6 +1955,17 @@ export default function Inventory() {
                         <TableCell>{new Date(it.created_at).toLocaleString()}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex gap-2 justify-end">
+                            {isAdmin && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => setEditingItem(it)}
+                                className="flex items-center gap-1"
+                                title="Edit item details"
+                              >
+                                Edit
+                              </Button>
+                            )}
                             {canPush && (
                               <>
                                 <Button
@@ -1946,6 +2057,37 @@ export default function Inventory() {
           </CardContent>
         </Card>
       </main>
+
+      {/* Edit Item Dialog */}
+      {isAdmin && editingItem && (
+        <EditIntakeItemDialog
+          open={true}
+          item={{
+            id: editingItem.id,
+            year: editingItem.year || '',
+            brandTitle: editingItem.brand_title || '',
+            subject: editingItem.subject || '',
+            category: editingItem.category || '',
+            variant: editingItem.variant || '',
+            cardNumber: editingItem.card_number || '',
+            grade: editingItem.grade || '',
+            psaCert: editingItem.psa_cert || '',
+            price: editingItem.price ? editingItem.price.toString() : '',
+            cost: editingItem.cost ? editingItem.cost.toString() : '',
+            quantity: editingItem.quantity || 1,
+            sku: editingItem.sku || '',
+            sourceProvider: editingItem.source_provider || '',
+            shopifyProductId: editingItem.shopify_product_id || '',
+            shopifyVariantId: editingItem.shopify_variant_id || '',
+            shopifyInventoryItemId: editingItem.shopify_inventory_item_id || '',
+            shopifyLocationGid: editingItem.shopify_location_gid || '',
+            storeKey: editingItem.store_key || ''
+          }}
+          onOpenChange={(open) => !open && setEditingItem(null)}
+          onSave={handleSaveEdit}
+          isAdmin={isAdmin}
+        />
+      )}
 
       {/* Shopify Removal Dialog */}
       <ShopifyRemovalDialog

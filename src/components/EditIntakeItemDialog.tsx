@@ -18,6 +18,12 @@ export type IntakeItemDetails = {
   cost?: string;
   sku?: string;
   quantity?: number;
+  sourceProvider?: string;
+  shopifyProductId?: string;
+  shopifyVariantId?: string;
+  shopifyInventoryItemId?: string;
+  shopifyLocationGid?: string;
+  storeKey?: string;
 };
 
 interface Props {
@@ -25,9 +31,10 @@ interface Props {
   item: IntakeItemDetails | null;
   onOpenChange: (open: boolean) => void;
   onSave: (values: IntakeItemDetails) => Promise<void> | void;
+  isAdmin?: boolean;
 }
 
-export default function EditIntakeItemDialog({ open, item, onOpenChange, onSave }: Props) {
+export default function EditIntakeItemDialog({ open, item, onOpenChange, onSave, isAdmin = false }: Props) {
   const [form, setForm] = useState<IntakeItemDetails | null>(item);
 
   useEffect(() => {
@@ -99,6 +106,34 @@ export default function EditIntakeItemDialog({ open, item, onOpenChange, onSave 
             <Label htmlFor="sku">SKU</Label>
             <Input id="sku" value={form.sku || ""} onChange={(e) => handleChange("sku", e.target.value)} />
           </div>
+          {isAdmin && (
+            <>
+              <div>
+                <Label htmlFor="sourceProvider">Source Provider</Label>
+                <Input id="sourceProvider" value={form.sourceProvider || ""} onChange={(e) => handleChange("sourceProvider", e.target.value)} />
+              </div>
+              <div>
+                <Label htmlFor="shopifyProductId">Shopify Product ID</Label>
+                <Input id="shopifyProductId" value={form.shopifyProductId || ""} onChange={(e) => handleChange("shopifyProductId", e.target.value)} />
+              </div>
+              <div>
+                <Label htmlFor="shopifyVariantId">Shopify Variant ID</Label>
+                <Input id="shopifyVariantId" value={form.shopifyVariantId || ""} onChange={(e) => handleChange("shopifyVariantId", e.target.value)} />
+              </div>
+              <div>
+                <Label htmlFor="shopifyInventoryItemId">Shopify Inventory Item ID</Label>
+                <Input id="shopifyInventoryItemId" value={form.shopifyInventoryItemId || ""} onChange={(e) => handleChange("shopifyInventoryItemId", e.target.value)} />
+              </div>
+              <div>
+                <Label htmlFor="shopifyLocationGid">Shopify Location GID</Label>
+                <Input id="shopifyLocationGid" value={form.shopifyLocationGid || ""} onChange={(e) => handleChange("shopifyLocationGid", e.target.value)} />
+              </div>
+              <div>
+                <Label htmlFor="storeKey">Store Key</Label>
+                <Input id="storeKey" value={form.storeKey || ""} onChange={(e) => handleChange("storeKey", e.target.value)} />
+              </div>
+            </>
+          )}
         </div>
         <DialogFooter>
           <Button variant="secondary" onClick={() => onOpenChange(false)}>Cancel</Button>

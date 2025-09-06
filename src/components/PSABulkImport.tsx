@@ -108,7 +108,7 @@ export const PSABulkImport = () => {
         grade_in: item.data?.grade || '',
         price_in: 0,
         cost_in: null,
-        sku_in: `PSA-${item.psaCert}`,
+        sku_in: item.psaCert, // Use cert number directly as SKU
         source_provider_in: 'psa_bulk',
         catalog_snapshot_in: item.data,
         pricing_snapshot_in: {

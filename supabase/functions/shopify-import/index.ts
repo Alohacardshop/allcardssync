@@ -136,11 +136,11 @@ serve(async (req) => {
           gradingInfo.status
         ].filter(Boolean);
         
-        // Build SKU based on grading status
+        // Build SKU based on grading status - updated logic for cert numbers
         let productSku;
         if (gradingInfo.isGraded && item.psa_cert) {
-          // For graded cards with PSA cert: PSA + cert number
-          productSku = `PSA${item.psa_cert}`;
+          // For graded cards with PSA cert: Use cert number directly as SKU
+          productSku = item.psa_cert;
         } else if (gradingInfo.isGraded) {
           // For other graded cards: company + grade + item id
           productSku = `${gradingInfo.company}${item.grade || 'UNKNOWN'}-${item.id.slice(-8)}`;
@@ -161,7 +161,7 @@ serve(async (req) => {
               title: 'Default Title',
               price: (item.price || 99999).toString(),
               sku: productSku,
-              barcode: item.psa_cert || productSku,
+              barcode: item.psa_cert || productSku,  // Use cert number as barcode for graded cards
               inventory_quantity: item.quantity || 1,
               inventory_management: 'shopify',
               inventory_policy: 'deny',
