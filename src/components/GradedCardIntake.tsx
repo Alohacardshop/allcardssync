@@ -222,6 +222,15 @@ export const GradedCardIntake = () => {
         processing_notes_in: `Single graded card intake - PSA cert ${formData.certNumber}`
       };
 
+      // Check exact access before insert
+      console.log('🔧 Final values check:', {
+        userId: (await supabase.auth.getSession()).data.session?.user.id,
+        storeKey: selectedStore.trim(),
+        locationGid: selectedLocation.trim(),
+        rpcStoreKey: rpcParams.store_key_in,
+        rpcLocationGid: rpcParams.shopify_location_gid_in
+      });
+
       console.log('📤 Sending RPC request with params:', rpcParams);
       
       // Add timeout to the RPC call
