@@ -12,6 +12,7 @@ interface SyncRequest {
   sku: string
   locationGid?: string
   correlationId?: string
+  validateOnly?: boolean
 }
 
 interface LocationBucket {
@@ -26,8 +27,9 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { storeKey, sku, locationGid, correlationId }: SyncRequest = await req.json()
+    const { storeKey, sku, locationGid, correlationId, validateOnly }: SyncRequest = await req.json()
     const logPrefix = correlationId ? `[${correlationId}]` : '[shopify-sync]'
+    const mode = validateOnly ? 'VALIDATE' : 'SYNC'
     
     if (!storeKey || !sku) {
       log.error('Missing required parameters', { storeKey, sku, correlationId })
@@ -42,7 +44,7 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-    log.info(`${logPrefix} Starting inventory sync`, { storeKey, sku, locationGid, correlationId })
+    log.info(`${logPrefix} Starting inventory ${mode.toLowerCase()}`, { storeKey, sku, locationGid, correlationId, validateOnly })
     const startTime = Date.now()
 
     // Get Shopify store configuration
@@ -149,10 +151,15 @@ Deno.serve(async (req) => {
     }
 
     if (!inventoryItemId) {
-      log.warn('Could not resolve inventory_item_id, skipping sync', { sku })
+      const message = `Could not resolve inventory_item_id for SKU: ${sku}`
+      log.warn(message, { sku, validateOnly })
       return new Response(
-        JSON.stringify({ warning: 'Could not resolve inventory_item_id for SKU', sku }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ 
+          [validateOnly ? 'validation_error' : 'warning']: message, 
+          sku,
+          valid: false 
+        }),
+        { status: validateOnly ? 400 : 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
@@ -178,6 +185,24 @@ Deno.serve(async (req) => {
       return new Response(
         JSON.stringify({ error: 'Failed to fetch Shopify locations' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // If validation only, return early with success
+    if (validateOnly) {
+      log.info(`${logPrefix} Validation completed successfully`, {
+        storeKey, sku, inventoryItemId, locationTotals, valid: true
+      })
+      return new Response(
+        JSON.stringify({ 
+          valid: true, 
+          sku, 
+          storeKey,
+          inventory_item_id: inventoryItemId,
+          location_totals: locationTotals,
+          message: 'Validation successful - ready for sync'
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 

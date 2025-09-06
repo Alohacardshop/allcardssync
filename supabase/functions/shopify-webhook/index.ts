@@ -56,6 +56,105 @@ Deno.serve(async (req) => {
 
     const payload = JSON.parse(raw);
 
+    // Handle inventory level updates from Shopify (two-way sync)
+    if (topic === "inventory_levels/update") {
+      log.info("Processing Shopify inventory level update", {
+        topic,
+        inventoryItemId: payload?.inventory_item_id,
+        locationId: payload?.location_id,
+        available: payload?.available
+      });
+
+      try {
+        const inventoryItemId = payload?.inventory_item_id?.toString();
+        const locationId = payload?.location_id?.toString();
+        const available = parseInt(payload?.available) || 0;
+
+        if (!inventoryItemId || !locationId) {
+          log.warn("Missing required fields for inventory update", { inventoryItemId, locationId });
+          return new Response(JSON.stringify({ ok: true }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        // Find items with this inventory_item_id
+        const { data: items, error: itemsError } = await supabase
+          .from("intake_items")
+          .select("id, sku, quantity, shopify_inventory_item_id, shopify_location_gid")
+          .eq("shopify_inventory_item_id", inventoryItemId)
+          .is("deleted_at", null)
+          .not("removed_from_batch_at", "is", null);
+
+        if (itemsError) {
+          log.error("Failed to fetch items for inventory update", {
+            inventoryItemId,
+            error: itemsError.message
+          });
+          throw itemsError;
+        }
+
+        if (!items || items.length === 0) {
+          log.info("No matching items found for inventory update", { inventoryItemId });
+          return new Response(JSON.stringify({ ok: true }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        // Calculate current total quantity for this inventory item and location
+        const locationGid = `gid://shopify/Location/${locationId}`;
+        const currentTotal = items
+          .filter(item => item.shopify_location_gid === locationGid)
+          .reduce((sum, item) => sum + (item.quantity || 0), 0);
+
+        // If quantities match, no action needed
+        if (currentTotal === available) {
+          log.info("Quantities already match, no update needed", {
+            inventoryItemId,
+            locationId,
+            currentTotal,
+            shopifyAvailable: available
+          });
+          return new Response(JSON.stringify({ ok: true }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        // Update shopify sync status for tracking
+        const updatePromises = items
+          .filter(item => item.shopify_location_gid === locationGid)
+          .map(item => 
+            supabase
+              .from("intake_items")
+              .update({
+                shopify_sync_status: 'shopify_updated',
+                last_shopify_synced_at: new Date().toISOString(),
+                last_shopify_sync_error: null
+              })
+              .eq("id", item.id)
+          );
+
+        await Promise.all(updatePromises);
+
+        log.info("Processed Shopify inventory update", {
+          inventoryItemId,
+          locationId,
+          currentTotal,
+          shopifyAvailable: available,
+          itemsUpdated: items.length
+        });
+
+      } catch (error) {
+        log.error("Error processing inventory level update", {
+          error: error.message,
+          payload
+        });
+      }
+
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // Handle order-related updates: decrement quantity by sold amount per SKU with multi-row allocation
     if (topic && topic.startsWith("orders/")) {
       log.info("Processing Shopify order webhook", {

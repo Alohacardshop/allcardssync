@@ -680,13 +680,61 @@ export default function Inventory() {
         return;
       }
 
-      const correlationId = `manual_sync_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-      const syncPromises = itemsToSync.map(item => {
+      // First validate all items
+      const validationPromises = itemsToSync.map(async (item) => {
         if (!item.sku || !item.store_key) {
-          console.warn('Skipping item without SKU or store_key:', item.id);
-          return Promise.resolve({ success: false, error: 'Missing SKU or store_key' });
+          return {
+            item,
+            valid: false,
+            error: 'Missing SKU or store_key'
+          };
         }
 
+        const response = await supabase.functions.invoke('shopify-sync-inventory', {
+          body: {
+            storeKey: item.store_key,
+            sku: item.sku,
+            locationGid: item.shopify_location_gid,
+            correlationId: `validate-${item.id}`,
+            validateOnly: true
+          }
+        });
+
+        return {
+          item,
+          valid: response.data?.valid === true,
+          error: response.data?.validation_error || response.error?.message
+        };
+      });
+
+      const validationResults = await Promise.all(validationPromises);
+      const validItems = validationResults.filter(r => r.valid).map(r => r.item);
+      const invalidItems = validationResults.filter(r => !r.valid);
+
+      // Show validation errors
+      if (invalidItems.length > 0) {
+        const firstError = invalidItems[0].error;
+        toast.error(`Validation failed for ${invalidItems.length} item(s): ${firstError}`);
+        
+        // Mark invalid items with error status
+        for (const { item, error } of invalidItems) {
+          await supabase
+            .from('intake_items')
+            .update({
+              shopify_sync_status: 'error',
+              last_shopify_sync_error: error
+            })
+            .eq('id', item.id);
+        }
+      }
+
+      if (validItems.length === 0) {
+        return;
+      }
+
+      // Now sync only valid items
+      const correlationId = `manual_sync_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+      const syncPromises = validItems.map(item => {
         return supabase.functions.invoke('shopify-sync-inventory', {
           body: {
             storeKey: item.store_key,
@@ -697,9 +745,9 @@ export default function Inventory() {
         }).then(response => {
           if (response.error) {
             console.error('Sync failed for item:', item.id, response.error);
-            return { success: false, error: response.error.message };
+            return { success: false, error: response.error.message, itemId: item.id };
           }
-          return { success: true, data: response.data };
+          return { success: true, data: response.data, itemId: item.id };
         });
       });
 
@@ -707,27 +755,30 @@ export default function Inventory() {
       const successCount = results.filter(r => r.success).length;
       const failureCount = results.length - successCount;
 
-      // Update sync status for all items
+      // Update sync status for successful items
       const now = new Date().toISOString();
-      await supabase
-        .from('intake_items')
-        .update({
-          shopify_sync_status: 'synced',
-          last_shopify_synced_at: now,
-          last_shopify_sync_error: null
-        })
-        .in('id', itemIds.filter((_, i) => results[i].success));
+      const successfulIds = results.filter(r => r.success).map(r => r.itemId);
+      if (successfulIds.length > 0) {
+        await supabase
+          .from('intake_items')
+          .update({
+            shopify_sync_status: 'synced',
+            last_shopify_synced_at: now,
+            last_shopify_sync_error: null
+          })
+          .in('id', successfulIds);
+      }
 
       // Update failed items with error status
-      const failedIds = itemIds.filter((_, i) => !results[i].success);
-      if (failedIds.length > 0) {
+      const failedResults = results.filter(r => !r.success);
+      for (const result of failedResults) {
         await supabase
           .from('intake_items')
           .update({
             shopify_sync_status: 'error',
-            last_shopify_sync_error: 'Sync failed - check logs for details'
+            last_shopify_sync_error: result.error || 'Sync failed - check logs for details'
           })
-          .in('id', failedIds);
+          .eq('id', result.itemId);
       }
 
       if (successCount > 0) {
@@ -737,7 +788,13 @@ export default function Inventory() {
         toast.error(`Failed to sync ${failureCount} items`);
       }
 
-      // Refresh the current page data
+      // Refresh the data to show updated sync status
+      setPage(1);
+      // Force a refresh by changing a query parameter
+      const searchParams = new URLSearchParams(window.location.search);
+      searchParams.set('refresh', Date.now().toString());
+      const newUrl = `${window.location.pathname}?${searchParams.toString()}`;
+      window.history.replaceState({}, '', newUrl);
       window.location.reload();
 
     } catch (error) {

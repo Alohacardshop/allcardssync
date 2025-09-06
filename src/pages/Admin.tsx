@@ -20,6 +20,7 @@ import { ShopifyTagImport } from "@/components/admin/ShopifyTagImport";
 import { PricingJobsMonitor } from "@/components/admin/PricingJobsMonitor";
 import { TCGHealthCheck } from "@/components/admin/TCGHealthCheck";
 import { RawIntakeSettings } from "@/components/admin/RawIntakeSettings";
+import { InventorySyncSettings } from "@/components/admin/InventorySyncSettings";
 
 import { checkSystemHealth } from "@/lib/api";
 
@@ -140,6 +141,8 @@ const Admin = () => {
                 </CardContent>
               </Card>
             </div>
+            
+            <InventorySyncSettings />
           </TabsContent>
 
           <TabsContent value="catalog" className="space-y-4">
