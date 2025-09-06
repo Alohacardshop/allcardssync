@@ -31,6 +31,8 @@ interface IntakeItem {
   created_at: string;
   updated_at: string;
   removed_from_batch_at?: string;
+  category?: string;
+  catalog_snapshot?: any; // Match CurrentBatchPanel interface for consistent naming
 }
 
 interface SystemStats {
@@ -515,7 +517,26 @@ const Index = () => {
                           />
                           <div className="flex-1">
                             <div className="font-medium">
-                              {item.card_name || item.subject || item.brand_title || item.sku || 'Unknown Item'}
+                              {(() => {
+                                // Use catalog_snapshot for proper formatting (same as CurrentBatchPanel)
+                                const catalog = item.catalog_snapshot;
+                                if (catalog?.name && catalog?.set) {
+                                  const cardName = catalog.name.split(' - ')[0]; // Extract "Blaziken" from "Blaziken - 192/182"
+                                  const cardNumber = catalog.name.split(' - ')[1]; // Extract "192/182" from "Blaziken - 192/182"
+                                  const category = item.category || '';
+                                  const set = catalog.set;
+                                  
+                                  return `${category} ${cardName} ${set} • #${cardNumber}`.trim();
+                                }
+                                
+                                // Fallback to original logic
+                                const base = [item.category, item.subject, item.brand_title]
+                                  .filter(Boolean)
+                                  .join(' ');
+                                const card = item.card_number ? ` • #${item.card_number}` : '';
+                                const title = `${base}${card}`.trim();
+                                return title || item.sku || 'Unknown Item';
+                              })()}
                             </div>
                             <div className="text-sm text-muted-foreground">
                               {item.set_name && `${item.set_name} • `}
