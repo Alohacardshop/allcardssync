@@ -135,6 +135,7 @@ export type Database = {
           category: string | null
           cost: number | null
           created_at: string
+          created_by: string | null
           deleted_at: string | null
           deleted_reason: string | null
           grade: string | null
@@ -182,6 +183,7 @@ export type Database = {
           category?: string | null
           cost?: number | null
           created_at?: string
+          created_by?: string | null
           deleted_at?: string | null
           deleted_reason?: string | null
           grade?: string | null
@@ -229,6 +231,7 @@ export type Database = {
           category?: string | null
           cost?: number | null
           created_at?: string
+          created_by?: string | null
           deleted_at?: string | null
           deleted_reason?: string | null
           grade?: string | null
@@ -1463,6 +1466,7 @@ export type Database = {
           category: string | null
           cost: number | null
           created_at: string
+          created_by: string | null
           deleted_at: string | null
           deleted_reason: string | null
           grade: string | null
