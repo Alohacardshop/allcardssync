@@ -11,6 +11,7 @@ interface SyncRequest {
   storeKey: string
   sku: string
   locationGid?: string
+  correlationId?: string
 }
 
 interface LocationBucket {
@@ -25,10 +26,11 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { storeKey, sku, locationGid }: SyncRequest = await req.json()
+    const { storeKey, sku, locationGid, correlationId }: SyncRequest = await req.json()
+    const logPrefix = correlationId ? `[${correlationId}]` : '[shopify-sync]'
     
     if (!storeKey || !sku) {
-      log.error('Missing required parameters', { storeKey, sku })
+      log.error('Missing required parameters', { storeKey, sku, correlationId })
       return new Response(
         JSON.stringify({ error: 'storeKey and sku are required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -40,7 +42,7 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-    log.info('Starting inventory sync', { storeKey, sku, locationGid })
+    log.info(`${logPrefix} Starting inventory sync`, { storeKey, sku, locationGid, correlationId })
     const startTime = Date.now()
 
     // Get Shopify store configuration
@@ -98,7 +100,7 @@ Deno.serve(async (req) => {
       return acc
     }, {} as Record<string, number>)
 
-    log.info('Computed location totals', { sku, locationTotals, rowsConsidered: locationBuckets.length, queryMs })
+    log.info(`${logPrefix} Computed location totals`, { sku, locationTotals, rowsConsidered: locationBuckets.length, queryMs, correlationId })
 
     // Resolve inventory_item_id for this SKU
     let inventoryItemId: string | null = null
@@ -255,9 +257,10 @@ Deno.serve(async (req) => {
     const shopifyCallsMs = Date.now() - shopifyCallsStart
     const totalMs = Date.now() - startTime
 
-    log.info('Inventory sync completed', {
+    log.info(`${logPrefix} Inventory sync completed`, {
       storeKey,
       sku,
+      correlationId,
       per_location: syncResults,
       total_rows_considered: locationBuckets.length,
       totals_query_ms: queryMs,

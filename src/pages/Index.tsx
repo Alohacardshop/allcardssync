@@ -50,6 +50,13 @@ const Index = () => {
   const [selectAll, setSelectAll] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("graded");
+  const [sendProgress, setSendProgress] = useState<{
+    total: number;
+    completed: number;
+    failed: number;
+    inProgress: boolean;
+    correlationId?: string;
+  }>({ total: 0, completed: 0, failed: 0, inProgress: false });
   
   const { defaultTemplate } = useTemplates('raw');
 
@@ -160,37 +167,99 @@ const Index = () => {
       return;
     }
 
+    const correlationId = `batch_send_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+    console.log(`🚀 [${correlationId}] Starting bulk send to inventory:`, { itemCount: itemIds.length, itemIds });
+    
     try {
       setActionLoading(true);
-      console.log('Sending items to inventory:', itemIds);
+      setSendProgress({ total: itemIds.length, completed: 0, failed: 0, inProgress: true, correlationId });
 
-      // Mark items as removed from batch
-      const { error } = await supabase
-        .from('intake_items')
-        .update({ 
-          processing_notes: 'Sent to inventory',
-          removed_from_batch_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
-        .in('id', itemIds);
+      // Process items concurrently with limited concurrency
+      const CONCURRENCY_LIMIT = 3;
+      const results = [];
+      
+      for (let i = 0; i < itemIds.length; i += CONCURRENCY_LIMIT) {
+        const batch = itemIds.slice(i, i + CONCURRENCY_LIMIT);
+        const batchPromises = batch.map(async (itemId) => {
+          try {
+            console.log(`📦 [${correlationId}] Processing item ${itemId}...`);
+            
+            const startTime = Date.now();
+            const { data, error } = await supabase.rpc('send_intake_item_to_inventory', {
+              item_id: itemId
+            });
 
-      if (error) {
-        console.error('Inventory update error:', error);
-        throw error;
+            if (error) {
+              console.error(`❌ [${correlationId}] Failed to send item ${itemId}:`, error);
+              return { success: false, itemId, error: error.message };
+            }
+
+            if (!data) {
+              console.warn(`⚠️ [${correlationId}] No data returned for item ${itemId}`);
+              return { success: false, itemId, error: 'No data returned (permission or not found)' };
+            }
+
+            const duration = Date.now() - startTime;
+            console.log(`✅ [${correlationId}] Successfully sent item ${itemId} (${duration}ms):`, data);
+
+            // Trigger Shopify sync in background (non-blocking)
+            if (data.sku && data.store_key) {
+              supabase.functions.invoke('shopify-sync-inventory', {
+                body: {
+                  storeKey: data.store_key,
+                  sku: data.sku,
+                  locationGid: data.shopify_location_gid,
+                  correlationId
+                }
+              }).catch((syncError) => {
+                console.warn(`⚠️ [${correlationId}] Shopify sync failed for ${itemId} (non-critical):`, syncError);
+              });
+            }
+
+            return { success: true, itemId, data };
+          } catch (error: any) {
+            console.error(`💥 [${correlationId}] Exception processing item ${itemId}:`, error);
+            return { success: false, itemId, error: error?.message || 'Unknown error' };
+          }
+        });
+
+        const batchResults = await Promise.all(batchPromises);
+        results.push(...batchResults);
+        
+        // Update progress
+        const completed = results.filter(r => r.success).length;
+        const failed = results.filter(r => !r.success).length;
+        setSendProgress(prev => ({ ...prev, completed, failed }));
       }
 
-      toast.success(`Successfully sent ${itemIds.length} item(s) to inventory`);
-      console.log('Items successfully sent to inventory');
+      const successful = results.filter(r => r.success);
+      const failed = results.filter(r => !r.success);
+
+      console.log(`📊 [${correlationId}] Bulk send completed:`, {
+        total: itemIds.length,
+        successful: successful.length,
+        failed: failed.length,
+        results
+      });
+
+      if (failed.length === 0) {
+        toast.success(`Successfully sent ${successful.length} item(s) to inventory`);
+      } else if (successful.length === 0) {
+        toast.error(`Failed to send any items to inventory (${failed.length} failures)`);
+      } else {
+        toast.error(`Partially completed: ${successful.length} sent, ${failed.length} failed`);
+      }
       
       // Clear selection and refresh
       setSelectedItems(new Set());
       setSelectAll(false);
       await fetchData();
-    } catch (error) {
-      console.error('Error updating items:', error);
+    } catch (error: any) {
+      console.error(`💥 [${correlationId}] Bulk send failed:`, error);
       toast.error(`Error sending items to inventory: ${error?.message || 'Unknown error'}`);
     } finally {
       setActionLoading(false);
+      setSendProgress(prev => ({ ...prev, inProgress: false }));
     }
   };
 
@@ -462,15 +531,20 @@ const Index = () => {
                              size="sm"
                              variant="outline"
                              onClick={() => handleInventoryAction(Array.from(selectedItems))}
-                             disabled={actionLoading}
+                             disabled={actionLoading || sendProgress.inProgress}
                              className="bg-green-50 hover:bg-green-100 border-green-200 text-green-700"
                            >
-                             {actionLoading ? (
+                             {sendProgress.inProgress ? (
+                               <>
+                                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                 {sendProgress.completed}/{sendProgress.total} sent...
+                               </>
+                             ) : actionLoading ? (
                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
                              ) : (
                                <Archive className="h-4 w-4 mr-2" />
                              )}
-                             Send to Inventory
+                             {!sendProgress.inProgress && !actionLoading && 'Send to Inventory'}
                            </Button>
                           <Button
                             size="sm"

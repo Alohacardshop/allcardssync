@@ -103,51 +103,56 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
   };
 
   const handleSendToInventory = async (item: IntakeItem) => {
+    const correlationId = `single_send_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+    
     try {
-      console.log('Starting send to inventory for item:', item.id);
+      console.log(`🚀 [${correlationId}] Starting send to inventory for item:`, { itemId: item.id, sku: item.sku });
+      const startTime = Date.now();
 
       const { data, error } = await supabase.rpc('send_intake_item_to_inventory', {
         item_id: item.id
       });
 
       if (error) {
-        console.error('Send to inventory error:', error);
+        console.error(`❌ [${correlationId}] Send to inventory error:`, error);
         toast.error(`Error sending item to inventory: ${error.message || 'Unknown error'}`);
         return;
       }
 
       if (!data) {
-        console.warn('Send to inventory: no data returned for id', item.id);
+        console.warn(`⚠️ [${correlationId}] Send to inventory: no data returned for id ${item.id}`);
         toast.error('Could not send item to inventory (no permission or not found).');
         return;
       }
 
-      console.log('Successfully sent item to inventory:', data);
+      const duration = Date.now() - startTime;
+      console.log(`✅ [${correlationId}] Successfully sent item to inventory (${duration}ms):`, data);
       toast.success('Item sent to inventory');
 
       // Trigger Shopify inventory sync (non-blocking)
       if (item.sku && item.store_key) {
-        console.log(`🔄 Triggering Shopify inventory sync for SKU: ${item.sku}`);
+        console.log(`🔄 [${correlationId}] Triggering Shopify inventory sync for SKU: ${item.sku}`);
         supabase.functions.invoke('shopify-sync-inventory', {
           body: {
             storeKey: item.store_key,
             sku: item.sku,
-            locationGid: item.shopify_location_gid
+            locationGid: item.shopify_location_gid,
+            correlationId
           }
         }).then(({ error: syncError }) => {
           if (syncError) {
-            console.warn('⚠️ Shopify sync failed (non-critical):', syncError);
+            console.warn(`⚠️ [${correlationId}] Shopify sync failed (non-critical):`, syncError);
             toast.error('Item sent to inventory, but Shopify sync failed');
           } else {
-            console.log('✅ Shopify inventory sync completed');
+            console.log(`✅ [${correlationId}] Shopify inventory sync completed`);
             toast.success('Item sent to inventory and synced to Shopify');
           }
         }).catch((syncError) => {
-          console.warn('⚠️ Shopify sync error (non-critical):', syncError);
+          console.warn(`⚠️ [${correlationId}] Shopify sync error (non-critical):`, syncError);
           toast.error('Item sent to inventory, but Shopify sync failed');
         });
       } else {
-        console.log('ℹ️ Skipping Shopify sync - missing SKU or store info');
+        console.log(`ℹ️ [${correlationId}] Skipping Shopify sync - missing SKU or store info`);
       }
 
       // Optimistic UI update for immediate feedback
@@ -159,7 +164,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
         fetchRecentItems();
       }, 150);
     } catch (error: any) {
-      console.error('Error sending item to inventory:', error);
+      console.error(`💥 [${correlationId}] Error sending item to inventory:`, error);
       toast.error(`Error sending item to inventory: ${error?.message || 'Unknown error'}`);
     }
   };

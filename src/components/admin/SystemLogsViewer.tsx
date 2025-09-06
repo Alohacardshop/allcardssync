@@ -138,40 +138,100 @@ export function SystemLogsViewer() {
         </CardHeader>
         <CardContent>
           {/* Filters */}
-          <div className="flex gap-4 mb-6 flex-wrap">
-            <div className="relative flex-1 min-w-64">
-              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search logs..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-9"
-              />
+          <div className="space-y-4 mb-6">
+            {/* Quick Filter Shortcuts */}
+            <div className="flex gap-2 flex-wrap">
+              <span className="text-sm text-muted-foreground mr-2 self-center">Quick filters:</span>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => {
+                  setSearch('send_to_inventory');
+                  setSourceFilter('all');
+                }}
+              >
+                Send to Inventory
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => {
+                  setSearch('shopify-sync-inventory');
+                  setSourceFilter('all');
+                }}
+              >
+                Shopify Sync
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => {
+                  setSearch('correlation');
+                  setSourceFilter('all');
+                }}
+              >
+                Correlation IDs
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => {
+                  setSearch('');
+                  setLevelFilter('error');
+                  setSourceFilter('all');
+                }}
+              >
+                Errors Only
+              </Button>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => {
+                  setSearch('');
+                  setLevelFilter('all');
+                  setSourceFilter('all');
+                }}
+              >
+                Clear Filters
+              </Button>
             </div>
-            <Select value={levelFilter} onValueChange={setLevelFilter}>
-              <SelectTrigger className="w-32">
-                <Filter className="w-4 h-4 mr-2" />
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Levels</SelectItem>
-                <SelectItem value="error">Error</SelectItem>
-                <SelectItem value="warn">Warn</SelectItem>
-                <SelectItem value="info">Info</SelectItem>
-                <SelectItem value="debug">Debug</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={sourceFilter} onValueChange={setSourceFilter}>
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="Source" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Sources</SelectItem>
-                {uniqueSources.map(source => (
-                  <SelectItem key={source} value={source}>{source}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            
+            {/* Advanced Filters */}
+            <div className="flex gap-4 flex-wrap">
+              <div className="relative flex-1 min-w-64">
+                <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search logs..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              <Select value={levelFilter} onValueChange={setLevelFilter}>
+                <SelectTrigger className="w-32">
+                  <Filter className="w-4 h-4 mr-2" />
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Levels</SelectItem>
+                  <SelectItem value="error">Error</SelectItem>
+                  <SelectItem value="warn">Warn</SelectItem>
+                  <SelectItem value="info">Info</SelectItem>
+                  <SelectItem value="debug">Debug</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={sourceFilter} onValueChange={setSourceFilter}>
+                <SelectTrigger className="w-40">
+                  <SelectValue placeholder="Source" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Sources</SelectItem>
+                  {uniqueSources.map(source => (
+                    <SelectItem key={source} value={source}>{source}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           {/* Log Management */}
@@ -197,22 +257,28 @@ export function SystemLogsViewer() {
                             <CardContent className="p-4">
                               <div className="flex items-start justify-between gap-4">
                                 <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 mb-2">
-                                    {expandedLogs.has(log.id) ? (
-                                      <ChevronDown className="w-4 h-4" />
-                                    ) : (
-                                      <ChevronRight className="w-4 h-4" />
-                                    )}
-                                    {getLogLevelBadge(log.level)}
-                                    {log.source && (
-                                      <Badge variant="outline" className="text-xs">
-                                        {log.source}
-                                      </Badge>
-                                    )}
-                                    <span className="text-xs text-muted-foreground">
-                                      {format(new Date(log.created_at), 'MMM dd, HH:mm:ss')}
-                                    </span>
-                                  </div>
+                                   <div className="flex items-center gap-2 mb-2">
+                                     {expandedLogs.has(log.id) ? (
+                                       <ChevronDown className="w-4 h-4" />
+                                     ) : (
+                                       <ChevronRight className="w-4 h-4" />
+                                     )}
+                                     {getLogLevelBadge(log.level)}
+                                     {log.source && (
+                                       <Badge variant="outline" className="text-xs">
+                                         {log.source}
+                                       </Badge>
+                                     )}
+                                     {/* Show correlation ID if present */}
+                                     {(log.context?.correlationId || log.metadata?.correlationId) && (
+                                       <Badge variant="secondary" className="text-xs font-mono">
+                                         {log.context?.correlationId || log.metadata?.correlationId}
+                                       </Badge>
+                                     )}
+                                     <span className="text-xs text-muted-foreground">
+                                       {format(new Date(log.created_at), 'MMM dd, HH:mm:ss')}
+                                     </span>
+                                   </div>
                                   <p className="text-sm font-medium truncate">{log.message}</p>
                                 </div>
                               </div>
