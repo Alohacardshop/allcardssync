@@ -79,7 +79,25 @@ serve(async (req) => {
         
         // Determine if this is a graded card and extract numeric grade
         const isGraded = item.grade && item.grade !== 'Raw' && item.grade !== 'Ungraded';
-        const isPSAGraded = isGraded && item.psa_cert;
+        
+        // Improved PSA cert detection: check psa_cert field or derive from SKU patterns
+        let psaCert = item.psa_cert;
+        if (!psaCert && item.sku) {
+          // Check if SKU is pure 8-9 digits (PSA cert pattern)
+          const pureDigitsMatch = item.sku.match(/^\d{8,9}$/);
+          if (pureDigitsMatch) {
+            psaCert = item.sku;
+          } else {
+            // Check for PSA-<digits> pattern
+            const psaPatternMatch = item.sku.match(/^PSA-(\d{8,9})$/);
+            if (psaPatternMatch) {
+              psaCert = psaPatternMatch[1];
+            }
+          }
+        }
+        
+        const isPSAGraded = isGraded && psaCert;
+        console.log(`Item ${item.id} - isGraded: ${isGraded}, psaCert: ${psaCert}, isPSAGraded: ${isPSAGraded}`);
         
         // Extract numeric grade for consistent formatting and tags
         const numericGrade = isGraded ? (item.grade.match(/\d+(?:\.\d+)?/)?.[0] || '') : '';
@@ -141,11 +159,11 @@ serve(async (req) => {
         let productSku;
         let productBarcode;
         
-        if (isGraded && item.psa_cert) {
+        if (isGraded && psaCert) {
           // For graded PSA cards: Use cert number directly as both SKU and barcode
-          productSku = item.psa_cert;
-          productBarcode = item.psa_cert;
-          console.log(`Graded PSA card - SKU & barcode set to cert: ${item.psa_cert}`);
+          productSku = psaCert;
+          productBarcode = psaCert;
+          console.log(`Graded PSA card - SKU & barcode set to cert: ${psaCert}`);
         } else if (isGraded) {
           // For other graded cards: fallback SKU pattern, no specific barcode
           productSku = `GRADED${item.grade || 'UNKNOWN'}-${item.id.slice(-8)}`;
@@ -163,8 +181,8 @@ serve(async (req) => {
           product: {
             title: fullTitle || item.subject || item.brand_title || 'Untitled Item',
             body_html: fullTitle || item.subject || item.brand_title || '',
-            vendor: item.brand_title || 'Unknown',
-            product_type: item.category || 'Trading Card',
+            vendor: 'alohacardshop', // Set vendor to alohacardshop for all items
+            product_type: isGraded ? 'graded' : (item.category || 'Trading Card'), // Set type to 'graded' for graded items
             tags: tags.join(','),
             variants: [{
               title: 'Default Title',
@@ -199,7 +217,8 @@ serve(async (req) => {
         const inventoryItemId = productResult.product.variants[0].inventory_item_id;
 
         console.log(`Created product ${productId} with variant ${variantId}`);
-        console.log(`Grading details - isGraded: ${isGraded}, isPSA: ${isPSAGraded}, numericGrade: ${numericGrade}, finalSKU: ${productSku}, finalBarcode: ${productBarcode}`);
+        console.log(`Grading details - isGraded: ${isGraded}, isPSA: ${isPSAGraded}, psaCert: ${psaCert}, numericGrade: ${numericGrade}, finalSKU: ${productSku}, finalBarcode: ${productBarcode}`);
+        console.log(`Product details - title: "${fullTitle}", vendor: "alohacardshop", product_type: "${isGraded ? 'graded' : (item.category || 'Trading Card')}"`);
 
         // Normalize and add images from various sources
         const normalizeImageUrls = (item) => {
