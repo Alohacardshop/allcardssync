@@ -21,29 +21,51 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Get Shopify credentials from system_settings
-    const domainKey = `SHOPIFY_STORE_DOMAIN_${storeKey.toUpperCase()}`;
-    const tokenKey = `SHOPIFY_ADMIN_ACCESS_TOKEN_${storeKey.toUpperCase()}`;
+    // Get Shopify credentials from system_settings - standardized naming with fallbacks
+    const upper = storeKey.toUpperCase();
+    const domainKeys = [
+      `SHOPIFY_${upper}_STORE_DOMAIN`,     // New standard pattern
+      `SHOPIFY_STORE_DOMAIN_${upper}`,     // Legacy pattern
+      'SHOPIFY_STORE_DOMAIN'               // Fallback pattern
+    ];
+    const tokenKeys = [
+      `SHOPIFY_${upper}_ACCESS_TOKEN`,     // New standard pattern
+      `SHOPIFY_ADMIN_ACCESS_TOKEN_${upper}`, // Legacy pattern
+      'SHOPIFY_ADMIN_ACCESS_TOKEN'         // Fallback pattern
+    ];
     
-    const { data: domainSetting } = await supabase
+    // Try to get settings with multiple key patterns
+    const { data: allSettings } = await supabase
       .from('system_settings')
-      .select('key_value')
-      .eq('key_name', domainKey)
-      .single();
-      
-    const { data: tokenSetting } = await supabase
-      .from('system_settings')
-      .select('key_value')
-      .eq('key_name', tokenKey)
-      .single();
+      .select('key_name, key_value')
+      .in('key_name', [...domainKeys, ...tokenKeys]);
 
-    if (!domainSetting?.key_value || !tokenSetting?.key_value) {
-      throw new Error(`Store configuration not found for ${storeKey}. Missing domain or token in system_settings.`);
+    if (!allSettings || allSettings.length === 0) {
+      throw new Error(`No Shopify configuration found for store '${storeKey}'. Please configure Shopify settings in Admin.`);
     }
 
-    const shopifyUrl = `https://${domainSetting.key_value}/admin/api/2023-10/`;
+    // Find domain and token values from any matching pattern
+    const getSettingValue = (keys: string[]) => {
+      for (const key of keys) {
+        const setting = allSettings.find(s => s.key_name === key);
+        if (setting?.key_value) return setting.key_value;
+      }
+      return null;
+    };
+
+    const shopifyDomain = getSettingValue(domainKeys);
+    const shopifyToken = getSettingValue(tokenKeys);
+
+    if (!shopifyDomain) {
+      throw new Error(`Shopify domain not configured for store '${storeKey}'. Please set one of: ${domainKeys.join(', ')}`);
+    }
+    if (!shopifyToken) {
+      throw new Error(`Shopify access token not configured for store '${storeKey}'. Please set one of: ${tokenKeys.join(', ')}`);
+    }
+
+    const shopifyUrl = `https://${shopifyDomain}/admin/api/2024-07/`;
     const headers = {
-      'X-Shopify-Access-Token': tokenSetting.key_value,
+      'X-Shopify-Access-Token': shopifyToken,
       'Content-Type': 'application/json',
     };
 

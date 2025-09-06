@@ -47,11 +47,24 @@ Deno.serve(async (req) => {
     log.info(`${logPrefix} Starting inventory ${mode.toLowerCase()}`, { storeKey, sku, locationGid, correlationId, validateOnly })
     const startTime = Date.now()
 
-    // Get Shopify store configuration
+    // Get Shopify store configuration - standardized naming with fallbacks
+    const upper = storeKey.toUpperCase()
+    const domainKeys = [
+      `SHOPIFY_${upper}_STORE_DOMAIN`,     // New standard pattern
+      `SHOPIFY_${upper}_DOMAIN`,           // Legacy pattern
+      `SHOPIFY_STORE_DOMAIN_${upper}`,     // Another legacy pattern
+      'SHOPIFY_STORE_DOMAIN'               // Fallback pattern
+    ]
+    const tokenKeys = [
+      `SHOPIFY_${upper}_ACCESS_TOKEN`,     // New standard pattern
+      `SHOPIFY_ADMIN_ACCESS_TOKEN_${upper}`, // Legacy pattern
+      'SHOPIFY_ADMIN_ACCESS_TOKEN'         // Fallback pattern
+    ]
+
     const { data: storeConfig, error: configError } = await supabase
       .from('system_settings')
       .select('key_name, key_value')
-      .in('key_name', [`SHOPIFY_${storeKey.toUpperCase()}_DOMAIN`, `SHOPIFY_${storeKey.toUpperCase()}_ACCESS_TOKEN`])
+      .in('key_name', [...domainKeys, ...tokenKeys])
 
     if (configError) {
       log.error('Failed to get store config', { storeKey, error: configError })
@@ -62,23 +75,46 @@ Deno.serve(async (req) => {
     }
 
     if (!storeConfig || storeConfig.length === 0) {
-      log.error('No Shopify configuration found', { storeKey })
+      log.error('No Shopify configuration found', { storeKey, searchedKeys: [...domainKeys, ...tokenKeys] })
       return new Response(
-        JSON.stringify({ error: 'No Shopify store configuration found' }),
+        JSON.stringify({ 
+          error: `No Shopify store configuration found for '${storeKey}'. Please configure Shopify settings in Admin.`,
+          searched_keys: [...domainKeys, ...tokenKeys]
+        }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    const configMap = storeConfig.reduce((acc, setting) => {
-      const key = setting.key_name.replace(`SHOPIFY_${storeKey.toUpperCase()}_`, '').toLowerCase()
-      acc[key] = setting.key_value
-      return acc
-    }, {} as Record<string, string>)
+    // Find domain and token values from any matching pattern
+    const getSettingValue = (keys: string[]) => {
+      for (const key of keys) {
+        const setting = storeConfig.find(s => s.key_name === key)
+        if (setting?.key_value) return setting.key_value
+      }
+      return null
+    }
+
+    const configMap = {
+      domain: getSettingValue(domainKeys),
+      access_token: getSettingValue(tokenKeys)
+    }
 
     if (!configMap.domain || !configMap.access_token) {
-      log.error('Missing Shopify configuration', { storeKey, hasDomain: !!configMap.domain, hasToken: !!configMap.access_token })
+      log.error('Missing Shopify configuration', { 
+        storeKey, 
+        hasDomain: !!configMap.domain, 
+        hasToken: !!configMap.access_token,
+        availableKeys: storeConfig.map(s => s.key_name)
+      })
       return new Response(
-        JSON.stringify({ error: 'Missing Shopify store configuration' }),
+        JSON.stringify({ 
+          error: `Missing Shopify store configuration for '${storeKey}'.`,
+          missing: {
+            domain: !configMap.domain ? `Need one of: ${domainKeys.join(', ')}` : 'OK',
+            token: !configMap.access_token ? `Need one of: ${tokenKeys.join(', ')}` : 'OK'
+          },
+          found_keys: storeConfig.map(s => s.key_name)
+        }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
