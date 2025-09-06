@@ -10,7 +10,8 @@ import { useStore } from "@/contexts/StoreContext";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { invokePSAScrapeV2 } from "@/lib/psaServiceV2";
 import { normalizePSAData } from "@/lib/psaNormalization";
-import { AllLocationsSelector } from "@/components/AllLocationsSelector";
+import { StoreSelector } from "@/components/StoreSelector";
+import { LocationSelector } from "@/components/LocationSelector";
 import { parseFunctionError } from "@/lib/fns";
 import { useLogger } from "@/hooks/useLogger";
 
@@ -494,15 +495,23 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Location Selector */}
-        <div>
-          <Label className="text-sm font-medium mb-2 block">Shopify Location</Label>
-          <AllLocationsSelector
-            value={selectedLocation || ""}
-            onValueChange={setSelectedLocation}
-            placeholder="Select location for intake"
-            className="w-full"
-          />
+        {/* Store and Location Selectors */}
+        <div className="space-y-4">
+          <div>
+            <Label className="text-sm font-medium mb-2 block">Store Selection</Label>
+            <StoreSelector className="w-full" />
+            <p className="text-xs text-muted-foreground mt-1">
+              Select the store first, then choose a location below
+            </p>
+          </div>
+          
+          <div>
+            <Label className="text-sm font-medium mb-2 block">Shopify Location</Label>
+            <LocationSelector className="w-full" />
+            <p className="text-xs text-muted-foreground mt-1">
+              Choose the specific location where items will be added
+            </p>
+          </div>
         </div>
 
         {/* Check Access Now Button */}
