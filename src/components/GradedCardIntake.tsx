@@ -336,7 +336,7 @@ export const GradedCardIntake = () => {
     error?: string;
   } | null>(null);
 
-  // Enhanced preflight access check function
+  // Enhanced preflight access check function using diagnostic RPC
   const checkAccessAndShowToast = async (): Promise<boolean> => {
     setAccessCheckLoading(true);
     setAccessResult(null);
@@ -362,61 +362,46 @@ export const GradedCardIntake = () => {
       const storeKeyTrimmed = selectedStore.trim();
       const locationGidTrimmed = selectedLocation.trim();
 
-      // Log exact strings to catch whitespace issues
-      console.log('🔍 Access check strings:', {
-        userId: userId,
-        userIdLast6,
-        storeKey: `"${selectedStore}" (trimmed: "${storeKeyTrimmed}")`,
-        locationGid: `"${selectedLocation}" (trimmed: "${locationGidTrimmed}")`,
-        storeKeyLength: selectedStore.length,
-        locationGidLength: selectedLocation.length
-      });
-
-      // Check staff role
-      const { data: hasStaffRole, error: roleError } = await supabase.rpc('has_role', {
-        _user_id: userId,
-        _role: 'staff'
-      });
-
-      if (roleError) {
-        console.error('Role check error:', roleError);
-        const errorMsg = `Role check failed: ${roleError.message}`;
-        toast.error(errorMsg);
-        setAccessResult({ success: false, hasStaffRole: false, canAccessLocation: false, userId, error: errorMsg });
-        return false;
-      }
-
-      // Check location access
-      const { data: canAccessLocation, error: accessError } = await supabase.rpc('user_can_access_store_location', {
+      // Use the new diagnostic RPC for consolidated access check
+      const { data: debugResult, error: debugError } = await supabase.rpc('debug_eval_intake_access', {
         _user_id: userId,
         _store_key: storeKeyTrimmed,
         _location_gid: locationGidTrimmed
       });
 
-      if (accessError) {
-        console.error('Access check error:', accessError);
-        const errorMsg = `Access check failed: ${accessError.message}`;
+      if (debugError) {
+        console.error('Access check error:', debugError);
+        const errorMsg = `Access check failed: ${debugError.message}`;
         toast.error(errorMsg);
-        setAccessResult({ success: false, hasStaffRole: Boolean(hasStaffRole), canAccessLocation: false, userId, error: errorMsg });
+        setAccessResult({ success: false, hasStaffRole: false, canAccessLocation: false, userId, error: errorMsg });
         return false;
       }
 
-      // Set success result
+      // Cast the debug result to proper type
+      const result = debugResult as {
+        user_id: string;
+        store_key: string;
+        location_gid: string;
+        has_staff: boolean;
+        can_access_location: boolean;
+      };
+
+      // Set result from diagnostic RPC
       setAccessResult({ 
-        success: Boolean(canAccessLocation), 
-        hasStaffRole: Boolean(hasStaffRole), 
-        canAccessLocation: Boolean(canAccessLocation), 
+        success: Boolean(result.can_access_location), 
+        hasStaffRole: Boolean(result.has_staff), 
+        canAccessLocation: Boolean(result.can_access_location), 
         userId 
       });
 
-      // Show diagnostic toast
-      toast.info(`Access Check: User ${userIdLast6} | Store: ${storeKeyTrimmed} | Location: ${locationGidTrimmed} | Staff: ${hasStaffRole ? 'true' : 'false'} | Access: ${canAccessLocation ? 'true' : 'false'}`, {
+      // Show diagnostic toast with server truth
+      toast.info(`Access Check: User ${userIdLast6} | Store: ${result.store_key} | Location: ${result.location_gid} | hasStaff: ${result.has_staff} | canAccessLocation: ${result.can_access_location}`, {
         duration: 5000
       });
 
       // Block if no access
-      if (!canAccessLocation) {
-        const errorMsg = `Access denied — you're not assigned to this store/location (${storeKeyTrimmed}, ${locationGidTrimmed}).`;
+      if (!result.can_access_location) {
+        const errorMsg = `Access denied — you're not assigned to this store/location (${result.store_key}, ${result.location_gid}).`;
         toast.error(errorMsg);
         return false;
       }
