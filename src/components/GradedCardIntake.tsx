@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Loader2, Award, ChevronDown, ChevronUp, AlertCircle } from "lucide-react";
+import { Loader2, Award, ChevronDown, ChevronUp, AlertCircle, CheckCircle, XCircle } from "lucide-react";
 import { useStore } from "@/contexts/StoreContext";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { invokePSAScrapeV2 } from "@/lib/psaServiceV2";
@@ -317,17 +317,34 @@ export const GradedCardIntake = () => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  // Preflight access check function
+  // Access check state
+  const [accessCheckLoading, setAccessCheckLoading] = useState(false);
+  const [accessResult, setAccessResult] = useState<{
+    success: boolean;
+    hasStaffRole: boolean;
+    canAccessLocation: boolean;
+    userId: string;
+    error?: string;
+  } | null>(null);
+
+  // Enhanced preflight access check function
   const checkAccessAndShowToast = async (): Promise<boolean> => {
+    setAccessCheckLoading(true);
+    setAccessResult(null);
+    
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user) {
-        toast.error("No user session found");
+        const errorMsg = "No user session found";
+        toast.error(errorMsg);
+        setAccessResult({ success: false, hasStaffRole: false, canAccessLocation: false, userId: "", error: errorMsg });
         return false;
       }
 
       if (!selectedStore || !selectedLocation) {
-        toast.error("Store and location must be selected");
+        const errorMsg = "Store and location must be selected";
+        toast.error(errorMsg);
+        setAccessResult({ success: false, hasStaffRole: false, canAccessLocation: false, userId: session.user.id, error: errorMsg });
         return false;
       }
 
@@ -354,7 +371,9 @@ export const GradedCardIntake = () => {
 
       if (roleError) {
         console.error('Role check error:', roleError);
-        toast.error(`Role check failed: ${roleError.message}`);
+        const errorMsg = `Role check failed: ${roleError.message}`;
+        toast.error(errorMsg);
+        setAccessResult({ success: false, hasStaffRole: false, canAccessLocation: false, userId, error: errorMsg });
         return false;
       }
 
@@ -367,9 +386,19 @@ export const GradedCardIntake = () => {
 
       if (accessError) {
         console.error('Access check error:', accessError);
-        toast.error(`Access check failed: ${accessError.message}`);
+        const errorMsg = `Access check failed: ${accessError.message}`;
+        toast.error(errorMsg);
+        setAccessResult({ success: false, hasStaffRole: Boolean(hasStaffRole), canAccessLocation: false, userId, error: errorMsg });
         return false;
       }
+
+      // Set success result
+      setAccessResult({ 
+        success: Boolean(canAccessLocation), 
+        hasStaffRole: Boolean(hasStaffRole), 
+        canAccessLocation: Boolean(canAccessLocation), 
+        userId 
+      });
 
       // Show diagnostic toast
       toast.info(`Access Check: User ${userIdLast6} | Store: ${storeKeyTrimmed} | Location: ${locationGidTrimmed} | Staff: ${hasStaffRole ? 'true' : 'false'} | Access: ${canAccessLocation ? 'true' : 'false'}`, {
@@ -378,15 +407,20 @@ export const GradedCardIntake = () => {
 
       // Block if no access
       if (!canAccessLocation) {
-        toast.error(`Access denied — you're not assigned to this store/location (${storeKeyTrimmed}, ${locationGidTrimmed}).`);
+        const errorMsg = `Access denied — you're not assigned to this store/location (${storeKeyTrimmed}, ${locationGidTrimmed}).`;
+        toast.error(errorMsg);
         return false;
       }
 
       return true;
     } catch (error: any) {
       console.error('Preflight check error:', error);
-      toast.error(`Preflight check failed: ${error.message}`);
+      const errorMsg = `Preflight check failed: ${error.message}`;
+      toast.error(errorMsg);
+      setAccessResult({ success: false, hasStaffRole: false, canAccessLocation: false, userId: "", error: errorMsg });
       return false;
+    } finally {
+      setAccessCheckLoading(false);
     }
   };
 
@@ -412,16 +446,51 @@ export const GradedCardIntake = () => {
 
         {/* Check Access Now Button */}
         {selectedStore && selectedLocation && (
-          <div className="flex justify-center">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={checkAccessAndShowToast}
-              className="gap-2"
-            >
-              <AlertCircle className="h-4 w-4" />
-              Check Access Now
-            </Button>
+          <div className="space-y-3">
+            <div className="flex justify-center">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={checkAccessAndShowToast}
+                disabled={accessCheckLoading}
+                className="gap-2"
+              >
+                {accessCheckLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <AlertCircle className="h-4 w-4" />
+                )}
+                {accessCheckLoading ? "Checking..." : "Check Access Now"}
+              </Button>
+            </div>
+            
+            {/* Inline Access Result */}
+            {accessResult && (
+              <div className={`p-3 rounded-lg border text-sm ${
+                accessResult.success 
+                  ? 'bg-green-50 border-green-200 text-green-800' 
+                  : 'bg-red-50 border-red-200 text-red-800'
+              }`}>
+                <div className="flex items-center gap-2 mb-2">
+                  {accessResult.success ? (
+                    <CheckCircle className="h-4 w-4" />
+                  ) : (
+                    <XCircle className="h-4 w-4" />
+                  )}
+                  <span className="font-medium">
+                    {accessResult.success ? "Access Granted" : "Access Denied"}
+                  </span>
+                </div>
+                <div className="space-y-1 text-xs">
+                  <div>User: {accessResult.userId.slice(-6)}</div>
+                  <div>Staff Role: {accessResult.hasStaffRole ? "✓" : "✗"}</div>
+                  <div>Location Access: {accessResult.canAccessLocation ? "✓" : "✗"}</div>
+                  {accessResult.error && (
+                    <div className="text-red-600 font-medium">{accessResult.error}</div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
         {/* PSA Cert Input */}

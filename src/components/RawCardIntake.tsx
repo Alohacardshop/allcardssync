@@ -8,7 +8,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Loader2, Search, Plus, AlertCircle, DollarSign, RefreshCw } from 'lucide-react';
+import { Loader2, Search, Plus, AlertCircle, DollarSign, RefreshCw, CheckCircle, XCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { GameKey, Printing } from '@/lib/types';
@@ -260,17 +260,34 @@ export function RawCardIntake({
     }
   };
 
-  // Preflight access check function
+  // Access check state
+  const [accessCheckLoading, setAccessCheckLoading] = useState(false);
+  const [accessResult, setAccessResult] = useState<{
+    success: boolean;
+    hasStaffRole: boolean;
+    canAccessLocation: boolean;
+    userId: string;
+    error?: string;
+  } | null>(null);
+
+  // Enhanced preflight access check function
   const checkAccessAndShowToast = async (): Promise<boolean> => {
+    setAccessCheckLoading(true);
+    setAccessResult(null);
+    
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user) {
-        toast.error("No user session found");
+        const errorMsg = "No user session found";
+        toast.error(errorMsg);
+        setAccessResult({ success: false, hasStaffRole: false, canAccessLocation: false, userId: "", error: errorMsg });
         return false;
       }
 
       if (!selectedStore || !selectedLocation) {
-        toast.error("Store and location must be selected");
+        const errorMsg = "Store and location must be selected";
+        toast.error(errorMsg);
+        setAccessResult({ success: false, hasStaffRole: false, canAccessLocation: false, userId: session.user.id, error: errorMsg });
         return false;
       }
 
@@ -297,7 +314,9 @@ export function RawCardIntake({
 
       if (roleError) {
         console.error('Role check error:', roleError);
-        toast.error(`Role check failed: ${roleError.message}`);
+        const errorMsg = `Role check failed: ${roleError.message}`;
+        toast.error(errorMsg);
+        setAccessResult({ success: false, hasStaffRole: false, canAccessLocation: false, userId, error: errorMsg });
         return false;
       }
 
@@ -310,9 +329,19 @@ export function RawCardIntake({
 
       if (accessError) {
         console.error('Access check error:', accessError);
-        toast.error(`Access check failed: ${accessError.message}`);
+        const errorMsg = `Access check failed: ${accessError.message}`;
+        toast.error(errorMsg);
+        setAccessResult({ success: false, hasStaffRole: Boolean(hasStaffRole), canAccessLocation: false, userId, error: errorMsg });
         return false;
       }
+
+      // Set success result
+      setAccessResult({ 
+        success: Boolean(canAccessLocation), 
+        hasStaffRole: Boolean(hasStaffRole), 
+        canAccessLocation: Boolean(canAccessLocation), 
+        userId 
+      });
 
       // Show diagnostic toast
       toast.info(`Access Check: User ${userIdLast6} | Store: ${storeKeyTrimmed} | Location: ${locationGidTrimmed} | Staff: ${hasStaffRole ? 'true' : 'false'} | Access: ${canAccessLocation ? 'true' : 'false'}`, {
@@ -321,15 +350,50 @@ export function RawCardIntake({
 
       // Block if no access
       if (!canAccessLocation) {
-        toast.error(`Access denied — you're not assigned to this store/location (${storeKeyTrimmed}, ${locationGidTrimmed}).`);
+        const errorMsg = `Access denied — you're not assigned to this store/location (${storeKeyTrimmed}, ${locationGidTrimmed}).`;
+        toast.error(errorMsg);
         return false;
       }
 
       return true;
     } catch (error: any) {
       console.error('Preflight check error:', error);
-      toast.error(`Preflight check failed: ${error.message}`);
+      const errorMsg = `Preflight check failed: ${error.message}`;
+      toast.error(errorMsg);
+      setAccessResult({ success: false, hasStaffRole: false, canAccessLocation: false, userId: "", error: errorMsg });
       return false;
+    } finally {
+      setAccessCheckLoading(false);
+    }
+  };
+
+  const doSearch = async () => {
+    if (!name || name.length < 3) {
+      toast.error('Enter at least 3 characters');
+      return;
+    }
+
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      setLoading(true);
+      setError(null);
+      
+      try {
+        // TODO: Replace with API call to alohacardshopcarddatabase
+        // Legacy catalog browse function removed
+        throw new Error('Catalog search functionality moved to external service');
+
+      } catch (err: any) {
+        const message = err?.message || 'Failed to search cards';
+        setError(message);
+        toast.error('Search Error', { description: message });
+      } finally {
+        setLoading(false);
+      }
+    }, 450);
+  };
+
+  const generateSKU = (card: CatalogCard, variant: any, game: GameKey): string => {
     }
   };
 
@@ -1008,16 +1072,51 @@ export function RawCardIntake({
 
             {/* Check Access Now Button */}
             {selectedStore && selectedLocation && (
-              <div className="flex justify-center">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={checkAccessAndShowToast}
-                  className="gap-2"
-                >
-                  <AlertCircle className="h-4 w-4" />
-                  Check Access Now
-                </Button>
+              <div className="space-y-3">
+                <div className="flex justify-center">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={checkAccessAndShowToast}
+                    disabled={accessCheckLoading}
+                    className="gap-2"
+                  >
+                    {accessCheckLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <AlertCircle className="h-4 w-4" />
+                    )}
+                    {accessCheckLoading ? "Checking..." : "Check Access Now"}
+                  </Button>
+                </div>
+                
+                {/* Inline Access Result */}
+                {accessResult && (
+                  <div className={`p-3 rounded-lg border text-sm ${
+                    accessResult.success 
+                      ? 'bg-green-50 border-green-200 text-green-800' 
+                      : 'bg-red-50 border-red-200 text-red-800'
+                  }`}>
+                    <div className="flex items-center gap-2 mb-2">
+                      {accessResult.success ? (
+                        <CheckCircle className="h-4 w-4" />
+                      ) : (
+                        <XCircle className="h-4 w-4" />
+                      )}
+                      <span className="font-medium">
+                        {accessResult.success ? "Access Granted" : "Access Denied"}
+                      </span>
+                    </div>
+                    <div className="space-y-1 text-xs">
+                      <div>User: {accessResult.userId.slice(-6)}</div>
+                      <div>Staff Role: {accessResult.hasStaffRole ? "✓" : "✗"}</div>
+                      <div>Location Access: {accessResult.canAccessLocation ? "✓" : "✗"}</div>
+                      {accessResult.error && (
+                        <div className="text-red-600 font-medium">{accessResult.error}</div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1042,3 +1141,5 @@ export function RawCardIntake({
     </div>
   );
 }
+
+export default RawCardIntake;
