@@ -938,6 +938,59 @@ export default function Inventory() {
     handlePushAndPrint([itemId]);
   };
 
+  // Smart bulk sync - handles both push and sync intelligently
+  const handleSmartBulkSync = async () => {
+    if (selectedIds.size === 0) {
+      toast.error("Please select items to send to Shopify");
+      return;
+    }
+
+    const selectedItems = items.filter(item => selectedIds.has(item.id));
+    
+    // Separate items into push and sync categories
+    const itemsToPush = selectedItems.filter(item => !item.pushed_at);
+    const itemsToSync = selectedItems.filter(item => 
+      item.pushed_at && item.removed_from_batch_at && item.sku && item.store_key
+    );
+
+    let hasErrors = false;
+
+    try {
+      // Push unpushed items first
+      if (itemsToPush.length > 0) {
+        toast.info(`Pushing ${itemsToPush.length} new items to Shopify...`);
+        await handlePushToShopify(itemsToPush.map(item => item.id));
+      }
+
+      // Then sync existing items
+      if (itemsToSync.length > 0) {
+        toast.info(`Syncing ${itemsToSync.length} existing items to Shopify...`);
+        await handleSyncToShopify(itemsToSync.map(item => item.id));
+      }
+
+      const totalProcessed = itemsToPush.length + itemsToSync.length;
+      const skipped = selectedItems.length - totalProcessed;
+
+      if (totalProcessed > 0) {
+        toast.success(`Successfully processed ${totalProcessed} items to Shopify`);
+      }
+      
+      if (skipped > 0) {
+        toast.warning(`${skipped} items were skipped (not ready for Shopify sync)`);
+      }
+
+    } catch (error) {
+      console.error('Smart bulk sync error:', error);
+      toast.error("Failed to send items to Shopify: " + (error instanceof Error ? error.message : "Unknown error"));
+      hasErrors = true;
+    }
+
+    // Clear selection if no errors
+    if (!hasErrors) {
+      setSelectedIds(new Set());
+    }
+  };
+
   const handleDeleteRow = async (row: ItemRow) => {
     const isMirrored = row.shopify_product_id || 
                       (row.sku && row.source_provider === 'shopify-pull');
@@ -1339,29 +1392,22 @@ export default function Inventory() {
                 <div className="flex items-center gap-2">
                   <Button
                     size="sm"
-                    onClick={handleBulkPush}
-                    disabled={!selectedStore || processingIds.size > 0}
+                    onClick={handleSmartBulkSync}
+                    disabled={!selectedStore || processingIds.size > 0 || syncingIds.size > 0}
                     variant="outline"
                     className="flex items-center gap-2"
+                    title="Intelligently pushes new items and syncs existing items to Shopify"
                   >
                     <ShoppingCart className="h-4 w-4" />
-                    Push to Shopify ({selectedIds.size})
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={handleBulkSync}
-                    disabled={syncingIds.size > 0}
-                    variant="outline"
-                    className="flex items-center gap-2"
-                  >
-                    <RefreshCw className={`h-4 w-4 ${syncingIds.size > 0 ? 'animate-spin' : ''}`} />
-                    Sync to Shopify ({selectedIds.size})
+                    <RefreshCw className={`h-3 w-3 ${syncingIds.size > 0 ? 'animate-spin' : ''}`} />
+                    Send/Sync to Shopify ({selectedIds.size})
                   </Button>
                   <Button
                     size="sm"
                     onClick={handleBulkPushAndPrint}
                     disabled={!selectedStore || !isPrintNodeConnected || processingIds.size > 0}
                     className="flex items-center gap-2"
+                    title="Push to Shopify and print labels"
                   >
                     <ShoppingCart className="h-4 w-4" />
                     <Printer className="h-4 w-4" />
@@ -1817,6 +1863,7 @@ export default function Inventory() {
                                   onClick={() => handleSinglePush(it.id)}
                                   disabled={!selectedStore || isProcessing}
                                   className="flex items-center gap-1"
+                                  title="Create new item in Shopify"
                                 >
                                   <ShoppingCart className="h-3 w-3" />
                                   {isProcessing ? "Pushing..." : "Push"}
@@ -1827,6 +1874,7 @@ export default function Inventory() {
                                   onClick={() => handleSinglePushAndPrint(it.id)}
                                   disabled={!selectedStore || !isPrintNodeConnected || isProcessing}
                                   className="flex items-center gap-1"
+                                  title="Create new item in Shopify and print label"
                                 >
                                   <ShoppingCart className="h-3 w-3" />
                                   <Printer className="h-3 w-3" />
@@ -1834,13 +1882,14 @@ export default function Inventory() {
                                 </Button>
                               </>
                             )}
-                            {it.removed_from_batch_at && it.sku && it.store_key && (
+                            {it.removed_from_batch_at && it.sku && it.store_key && !canPush && (
                               <Button
                                 size="sm"
                                 variant="outline"
                                 onClick={() => handleSingleSync(it.id)}
                                 disabled={syncingIds.has(it.id)}
                                 className="flex items-center gap-1"
+                                title="Update quantity for existing Shopify item"
                               >
                                 <RefreshCw className={`h-3 w-3 ${syncingIds.has(it.id) ? 'animate-spin' : ''}`} />
                                 {syncingIds.has(it.id) ? "Syncing..." : "Sync"}
