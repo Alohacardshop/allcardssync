@@ -36,8 +36,7 @@ export function RawCardSearch({ onCardSelect, onGameChange, className = '' }: Ra
     }
   }, [settings, settingsLoading, selectedGameId]);
   
-  // UI state
-  const [showSuggestions, setShowSuggestions] = useState(false);
+  // UI state removed - no more dropdown suggestions
   
   // Debounce card name input
   useEffect(() => {
@@ -47,15 +46,6 @@ export function RawCardSearch({ onCardSelect, onGameChange, className = '' }: Ra
     
     return () => clearTimeout(timer);
   }, [cardName]);
-  
-  // Auto-show suggestions when typing 2+ characters
-  useEffect(() => {
-    if (debouncedCardName.length >= 2) {
-      setShowSuggestions(true);
-    } else {
-      setShowSuggestions(false);
-    }
-  }, [debouncedCardName]);
   
   // Handle game changes
   useEffect(() => {
@@ -80,15 +70,21 @@ export function RawCardSearch({ onCardSelect, onGameChange, className = '' }: Ra
     }
   );
   
-  // Filter suggestions by card number (client-side)
+  // Filter suggestions by card number (client-side) - more flexible matching
   const filteredSuggestions = useMemo(() => {
     if (!suggestionsData?.cards) return [];
     
     let filtered = suggestionsData.cards;
     if (cardNumber.trim()) {
-      filtered = filtered.filter(card => 
-        card.number?.toLowerCase().includes(cardNumber.toLowerCase())
-      );
+      // Normalize both search and card numbers by removing common separators
+      const normalizeNumber = (num: string) => num.replace(/[\/\-\s]/g, '').toLowerCase();
+      const searchNumber = normalizeNumber(cardNumber);
+      
+      filtered = filtered.filter(card => {
+        if (!card.number) return false;
+        const cardNum = normalizeNumber(card.number);
+        return cardNum.includes(searchNumber);
+      });
     }
     
     return filtered.slice(0, 5);
@@ -122,22 +118,9 @@ export function RawCardSearch({ onCardSelect, onGameChange, className = '' }: Ra
     };
     
     onCardSelect(cardWithPrice);
-    setShowSuggestions(false);
     
     toast.success(`Selected: ${card.name}${card.number ? ` #${card.number}` : ''}`);
   }, [onCardSelect, formatPrice]);
-  
-  // Handle input focus/blur for suggestions
-  const handleCardNameFocus = useCallback(() => {
-    if (debouncedCardName.length >= 2 && filteredSuggestions.length > 0) {
-      setShowSuggestions(true);
-    }
-  }, [debouncedCardName, filteredSuggestions.length]);
-  
-  const handleCardNameBlur = useCallback(() => {
-    // Delay hiding to allow click on suggestions
-    setTimeout(() => setShowSuggestions(false), 150);
-  }, []);
   
   // Card tile component
   const CardTile = ({ card, isSmall = false }: { card: ExternalCard; isSmall?: boolean }) => (
@@ -214,28 +197,15 @@ export function RawCardSearch({ onCardSelect, onGameChange, className = '' }: Ra
 
           {/* Search Inputs */}
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2 relative">
+            <div className="space-y-2">
               <Label htmlFor="cardName">Card Name</Label>
               <Input
                 id="cardName"
                 value={cardName}
                 onChange={(e) => setCardName(e.target.value)}
-                onFocus={handleCardNameFocus}
-                onBlur={handleCardNameBlur}
                 placeholder="Enter card name..."
                 className="w-full"
               />
-              
-              {/* Typeahead Suggestions */}
-              {showSuggestions && filteredSuggestions.length > 0 && (
-                <div className="absolute top-full left-0 right-0 z-50 bg-background border rounded-md shadow-lg max-h-64 overflow-y-auto">
-                  <div className="p-2 space-y-1">
-                    {filteredSuggestions.map((card) => (
-                      <CardTile key={card.id} card={card} isSmall />
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
             
             <div className="space-y-2">
@@ -267,6 +237,24 @@ export function RawCardSearch({ onCardSelect, onGameChange, className = '' }: Ra
               </SelectContent>
             </Select>
           </div>
+          
+          {/* Search Results */}
+          {debouncedCardName.length >= 2 && (
+            <div className="space-y-2">
+              <Label>Top 5 Results</Label>
+              {filteredSuggestions.length > 0 ? (
+                <div className="space-y-2">
+                  {filteredSuggestions.map((card) => (
+                    <CardTile key={card.id} card={card} />
+                  ))}
+                </div>
+              ) : (
+                <div className="text-muted-foreground text-sm text-center py-4">
+                  No cards found matching your search.
+                </div>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
