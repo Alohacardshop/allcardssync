@@ -62,7 +62,15 @@ export const PSABulkImport = () => {
           psaCert: cert,
           status: 'pending' as const
         };
-      }).filter(item => item.psaCert && item.psaCert.length > 0);
+      }).filter(item => {
+        if (!item.psaCert || item.psaCert.length === 0) return false;
+        // Validate 8-9 digit certificate numbers
+        if (!/^\d{8,9}$/.test(item.psaCert)) {
+          console.warn(`Invalid PSA cert format: ${item.psaCert} (must be 8-9 digits)`);
+          return false;
+        }
+        return true;
+      });
 
       setItems(parsedItems);
       toast.success(`Loaded ${parsedItems.length} PSA certificates`);
@@ -83,7 +91,15 @@ export const PSABulkImport = () => {
         psaCert: cert,
         status: 'pending' as const
       };
-    }).filter(item => item.psaCert && item.psaCert.length > 0);
+    }).filter(item => {
+      if (!item.psaCert || item.psaCert.length === 0) return false;
+      // Validate 8-9 digit certificate numbers
+      if (!/^\d{8,9}$/.test(item.psaCert)) {
+        console.warn(`Invalid PSA cert format: ${item.psaCert} (must be 8-9 digits)`);
+        return false;
+      }
+      return true;
+    });
 
     setItems(parsedItems);
     toast.success(`Added ${parsedItems.length} PSA certificates`);

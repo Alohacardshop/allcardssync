@@ -89,6 +89,11 @@ export default function EditIntakeItemDialog({ open, item, onOpenChange, onSave,
           <div>
             <Label htmlFor="psaCert">PSA Cert</Label>
             <Input id="psaCert" value={form.psaCert || ""} onChange={(e) => handleChange("psaCert", e.target.value)} />
+            {form.psaCert && form.grade && form.grade !== 'Raw' && form.grade !== 'Ungraded' && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Shopify SKU & barcode will be the PSA cert.
+              </p>
+            )}
           </div>
           <div>
             <Label htmlFor="price">Price</Label>

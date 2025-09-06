@@ -77,9 +77,16 @@ serve(async (req) => {
       try {
         console.log(`Processing item: ${item.subject || item.brand_title}`);
         
-        // Build full inventory title with grade information
-        const gradeText = item.grade && item.grade !== 'Raw' && item.grade !== 'Ungraded' 
-          ? (item.psa_cert ? `PSA ${item.grade}` : `Grade ${item.grade}`) 
+        // Determine if this is a graded card and extract numeric grade
+        const isGraded = item.grade && item.grade !== 'Raw' && item.grade !== 'Ungraded';
+        const isPSAGraded = isGraded && item.psa_cert;
+        
+        // Extract numeric grade for consistent formatting and tags
+        const numericGrade = isGraded ? (item.grade.match(/\d+(?:\.\d+)?/)?.[0] || '') : '';
+        
+        // Build grade text for title (only for graded items)
+        const gradeText = isGraded 
+          ? (isPSAGraded ? `PSA ${numericGrade}` : null) // Only PSA gets prefix
           : null;
           
         const titleParts = [
@@ -102,51 +109,53 @@ serve(async (req) => {
           return null;
         };
         
-        // Determine grading company and status
-        const getGradingInfo = (grade, psa_cert) => {
-          const isGraded = grade && grade !== 'Raw' && grade !== 'Ungraded';
-          
-          if (isGraded && psa_cert) {
-            // PSA graded card
-            return { company: 'PSA', status: 'graded', isGraded: true };
-          } else if (isGraded) {
-            // Other graded card (BGS, SGC, etc.)
-            return { company: 'graded', status: 'graded', isGraded: true };
-          } else {
-            // Raw single card
-            return { company: 'single', status: 'raw', isGraded: false };
-          }
-        };
-        
         const game = getGame(item.brand_title);
-        const gradingInfo = getGradingInfo(item.grade, item.psa_cert);
         
         // Determine product weight based on grading status
-        const productWeight = gradingInfo.isGraded ? 3 : 1; // 3oz for graded, 1oz for raw
+        const productWeight = isGraded ? 3 : 1; // 3oz for graded, 1oz for raw
         
-        // Build comprehensive tags
-        const tags = [
+        // Build comprehensive tags with grading-specific tags
+        const baseTags = [
           item.category,
           item.variant,
-          item.grade,
           `lot-${item.lot_number}`,
           'intake',
-          game,
-          gradingInfo.company,
-          gradingInfo.status
+          game
         ].filter(Boolean);
         
-        // Build SKU based on grading status - updated logic for cert numbers
+        // Add grading-specific tags only for graded items
+        const gradingTags = [];
+        if (isGraded) {
+          gradingTags.push('graded');
+          if (isPSAGraded) {
+            gradingTags.push('PSA');
+          }
+          if (numericGrade) {
+            gradingTags.push(`grade-${numericGrade}`);
+          }
+        }
+        
+        const tags = [...baseTags, ...gradingTags];
+        
+        // Build SKU and barcode based on grading status - enforced cert numbers for graded
         let productSku;
-        if (gradingInfo.isGraded && item.psa_cert) {
-          // For graded cards with PSA cert: Use cert number directly as SKU
+        let productBarcode;
+        
+        if (isGraded && item.psa_cert) {
+          // For graded PSA cards: Use cert number directly as both SKU and barcode
           productSku = item.psa_cert;
-        } else if (gradingInfo.isGraded) {
-          // For other graded cards: company + grade + item id
-          productSku = `${gradingInfo.company}${item.grade || 'UNKNOWN'}-${item.id.slice(-8)}`;
+          productBarcode = item.psa_cert;
+          console.log(`Graded PSA card - SKU & barcode set to cert: ${item.psa_cert}`);
+        } else if (isGraded) {
+          // For other graded cards: fallback SKU pattern, no specific barcode
+          productSku = `GRADED${item.grade || 'UNKNOWN'}-${item.id.slice(-8)}`;
+          productBarcode = productSku;
+          console.log(`Other graded card - SKU & barcode: ${productSku}`);
         } else {
           // For raw cards: use existing SKU or fallback
           productSku = item.sku || `intake-${item.id}`;
+          productBarcode = productSku;
+          console.log(`Raw card - SKU & barcode: ${productSku}`);
         }
         
         // Create product payload
@@ -161,7 +170,7 @@ serve(async (req) => {
               title: 'Default Title',
               price: (item.price || 99999).toString(),
               sku: productSku,
-              barcode: item.psa_cert || productSku,  // Use cert number as barcode for graded cards
+              barcode: productBarcode,
               inventory_quantity: item.quantity || 1,
               inventory_management: 'shopify',
               inventory_policy: 'deny',
@@ -190,6 +199,7 @@ serve(async (req) => {
         const inventoryItemId = productResult.product.variants[0].inventory_item_id;
 
         console.log(`Created product ${productId} with variant ${variantId}`);
+        console.log(`Grading details - isGraded: ${isGraded}, isPSA: ${isPSAGraded}, numericGrade: ${numericGrade}, finalSKU: ${productSku}, finalBarcode: ${productBarcode}`);
 
         // Normalize and add images from various sources
         const normalizeImageUrls = (item) => {

@@ -560,6 +560,9 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
               disabled={fetching}
               onKeyDown={(e) => e.key === 'Enter' && !fetching && handleFetchPSA()}
             />
+            <p className="text-xs text-muted-foreground mt-1">
+              SKU and barcode will be set to this certificate number on Shopify.
+            </p>
           </div>
           
           {!fetching ? (
