@@ -7,6 +7,9 @@ const EXTERNAL_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 export const tcgLjyClient = createClient(EXTERNAL_URL, EXTERNAL_ANON_KEY, {
   auth: {
     persistSession: false, // Read-only client, no session needed
+    storage: undefined, // Disable storage to avoid conflicts
+    autoRefreshToken: false,
+    detectSessionInUrl: false,
   }
 });
 

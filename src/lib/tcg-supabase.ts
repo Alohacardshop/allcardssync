@@ -9,7 +9,9 @@ const TCG_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 export const tcgSupabase = createClient(TCG_URL, TCG_ANON_KEY, {
   auth: {
     persistSession: false,
-    storageKey: 'tcg-supabase'
+    storage: undefined, // Disable storage to avoid conflicts
+    autoRefreshToken: false,
+    detectSessionInUrl: false,
   }
 });
 
