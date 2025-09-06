@@ -3,10 +3,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Archive, Eye, Package, Trash2, Send, Edit, Eraser } from "lucide-react";
+import { Archive, Eye, Package, Trash2, Send, Edit, Eraser, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import EditIntakeItemDialog, { IntakeItemDetails } from "@/components/EditIntakeItemDialog";
+import { useStore } from "@/contexts/StoreContext";
 
 interface IntakeItem {
   id: string;
@@ -45,6 +46,8 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
   const [isAdmin, setIsAdmin] = useState(false);
   const [currentLotId, setCurrentLotId] = useState<string | null>(null);
   const [currentLotNumber, setCurrentLotNumber] = useState<string | null>(null);
+  const [startingNewLot, setStartingNewLot] = useState(false);
+  const { selectedStore, selectedLocation } = useStore();
 
   const handleEditItem = (item: IntakeItem) => {
     const editDetails: IntakeItemDetails = {
@@ -159,9 +162,10 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
       setRecentItems((prev) => prev.filter((i) => i.id !== item.id));
       setTotalCount((c) => Math.max(0, (c || 0) - 1));
 
-      // Small delay to allow DB triggers to run before refetching
-      setTimeout(() => {
-        fetchRecentItems();
+      // Small delay to allow DB triggers to run before refetching, then check if we should close empty lot
+      setTimeout(async () => {
+        await fetchRecentItems();
+        await checkAndCloseEmptyLot();
       }, 150);
     } catch (error: any) {
       console.error(`💥 [${correlationId}] Error sending item to inventory:`, error);
@@ -215,9 +219,10 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
       setRecentItems((prev) => prev.filter((i) => i.id !== item.id));
       setTotalCount((c) => Math.max(0, (c || 0) - 1));
 
-      // Small delay to allow DB triggers to run before refetching
-      setTimeout(() => {
-        fetchRecentItems();
+      // Small delay to allow DB triggers to run before refetching, then check if we should close empty lot
+      setTimeout(async () => {
+        await fetchRecentItems();
+        await checkAndCloseEmptyLot();
       }, 150);
     } catch (error: any) {
       console.error('🗑️ Error deleting item:', error);
@@ -260,16 +265,86 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
     }
   };
 
+  const checkAndCloseEmptyLot = async () => {
+    if (!selectedStore || !selectedLocation) return;
+    
+    try {
+      const { data, error } = await supabase.rpc('close_empty_lot_and_create_new', {
+        _store_key: selectedStore,
+        _location_gid: selectedLocation
+      });
+
+      if (error) {
+        console.error('Error checking/closing empty lot:', error);
+        return;
+      }
+
+      if (data && data.length > 0) {
+        const result = data[0];
+        if (result.old_lot_id !== result.new_lot_id) {
+          console.log(`🔄 Closed empty lot ${result.old_lot_number}, created new lot ${result.new_lot_number}`);
+          toast.success(`Started new lot ${result.new_lot_number}`);
+          await fetchRecentItems();
+        }
+      }
+    } catch (error) {
+      console.error('Error in checkAndCloseEmptyLot:', error);
+    }
+  };
+
+  const handleStartNewLot = async () => {
+    if (!selectedStore || !selectedLocation) {
+      toast.error('Please select a store and location first');
+      return;
+    }
+
+    try {
+      setStartingNewLot(true);
+      const { data, error } = await supabase.rpc('force_new_lot', {
+        _store_key: selectedStore,
+        _location_gid: selectedLocation,
+        _reason: 'Manually started new lot'
+      });
+
+      if (error) {
+        console.error('Error starting new lot:', error);
+        toast.error(`Error starting new lot: ${error.message}`);
+        return;
+      }
+
+      if (data && data.length > 0) {
+        const result = data[0];
+        console.log(`🆕 Started new lot ${result.new_lot_number} (closed ${result.old_lot_number})`);
+        toast.success(`Started new lot ${result.new_lot_number}`);
+        await fetchRecentItems();
+      }
+    } catch (error: any) {
+      console.error('Error starting new lot:', error);
+      toast.error(`Error starting new lot: ${error?.message || 'Unknown error'}`);
+    } finally {
+      setStartingNewLot(false);
+    }
+  };
+
   const fetchRecentItems = async () => {
     try {
-      // Get latest active lot
-      const { data: latestLot } = await supabase
+      // Get latest active lot scoped by user/store/location
+      let lotQuery = supabase
         .from('intake_lots')
         .select('id, lot_number')
         .eq('status', 'active')
         .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .limit(1);
+
+      // Scope by store/location if available
+      if (selectedStore) {
+        lotQuery = lotQuery.eq('store_key', selectedStore);
+      }
+      if (selectedLocation) {
+        lotQuery = lotQuery.eq('shopify_location_gid', selectedLocation);
+      }
+
+      const { data: latestLot } = await lotQuery.maybeSingle();
 
       if (!latestLot) {
         setRecentItems([]);
@@ -362,11 +437,19 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
       fetchRecentItems();
     };
 
+    // Listen for batch items sent to inventory (from Index page bulk send)
+    const handleBatchSentToInventory = async () => {
+      await fetchRecentItems();
+      await checkAndCloseEmptyLot();
+    };
+
     window.addEventListener('intake:item-added', handleItemAdded);
+    window.addEventListener('batch:items-sent-to-inventory', handleBatchSentToInventory);
     
     return () => {
       supabase.removeChannel(channel);
       window.removeEventListener('intake:item-added', handleItemAdded);
+      window.removeEventListener('batch:items-sent-to-inventory', handleBatchSentToInventory);
     };
   }, []);
 
@@ -425,6 +508,15 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
                   View Full Batch
                 </Button>
               )}
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleStartNewLot}
+                disabled={startingNewLot}
+              >
+                <RotateCcw className={`h-4 w-4 mr-2 ${startingNewLot ? 'animate-spin' : ''}`} />
+                Start New Lot
+              </Button>
               {isAdmin && totalCount > 0 && (
                 <AlertDialog>
                   <AlertDialogTrigger asChild>

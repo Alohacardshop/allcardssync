@@ -250,10 +250,13 @@ const Index = () => {
         toast.error(`Partially completed: ${successful.length} sent, ${failed.length} failed`);
       }
       
-      // Clear selection and refresh
+      // Clear selection and refresh, then check for empty lot closure
       setSelectedItems(new Set());
       setSelectAll(false);
       await fetchData();
+      
+      // Trigger empty lot check after successful batch send
+      window.dispatchEvent(new CustomEvent('batch:items-sent-to-inventory'));
     } catch (error: any) {
       console.error(`💥 [${correlationId}] Bulk send failed:`, error);
       toast.error(`Error sending items to inventory: ${error?.message || 'Unknown error'}`);

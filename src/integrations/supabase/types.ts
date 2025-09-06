@@ -1412,6 +1412,15 @@ export type Database = {
           workstation_id: string
         }
       }
+      close_empty_lot_and_create_new: {
+        Args: { _location_gid: string; _store_key: string }
+        Returns: {
+          new_lot_id: string
+          new_lot_number: string
+          old_lot_id: string
+          old_lot_number: string
+        }[]
+      }
       create_raw_intake_item: {
         Args: {
           brand_title_in: string
@@ -1440,6 +1449,15 @@ export type Database = {
       debug_eval_intake_access: {
         Args: { _location_gid: string; _store_key: string; _user_id: string }
         Returns: Json
+      }
+      force_new_lot: {
+        Args: { _location_gid: string; _reason?: string; _store_key: string }
+        Returns: {
+          new_lot_id: string
+          new_lot_number: string
+          old_lot_id: string
+          old_lot_number: string
+        }[]
       }
       generate_lot_number: {
         Args: Record<PropertyKey, never>
