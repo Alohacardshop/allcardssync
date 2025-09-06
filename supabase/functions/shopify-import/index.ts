@@ -176,12 +176,27 @@ serve(async (req) => {
           console.log(`Raw card - SKU & barcode: ${productSku}`);
         }
         
+        // Determine vendor based on store key
+        const getVendorName = (storeKey) => {
+          switch (storeKey.toLowerCase()) {
+            case 'las_vegas':
+              return 'Aloha Card Shop Las Vegas';
+            case 'hawaii':
+              return 'aloha card shop hawaii';
+            default:
+              return 'alohacardshop'; // Default fallback
+          }
+        };
+        
+        const vendorName = getVendorName(storeKey);
+        console.log(`Using vendor: "${vendorName}" for store: ${storeKey}`);
+        
         // Create product payload
         const productData = {
           product: {
             title: fullTitle || item.subject || item.brand_title || 'Untitled Item',
             body_html: fullTitle || item.subject || item.brand_title || '',
-            vendor: 'alohacardshop', // Set vendor to alohacardshop for all items
+            vendor: vendorName,
             product_type: isGraded ? 'graded' : (item.category || 'Trading Card'), // Set type to 'graded' for graded items
             tags: tags.join(','),
             variants: [{
