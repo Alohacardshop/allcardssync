@@ -1377,6 +1377,10 @@ export type Database = {
           lot_number: string
         }[]
       }
+      debug_eval_intake_access: {
+        Args: { _location_gid: string; _store_key: string; _user_id: string }
+        Returns: Json
+      }
       generate_lot_number: {
         Args: Record<PropertyKey, never>
         Returns: string
