@@ -1116,6 +1116,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      _norm_gid: {
+        Args: { t: string }
+        Returns: string
+      }
       admin_delete_batch: {
         Args: { lot_id_in: string; reason_in?: string }
         Returns: number
