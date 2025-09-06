@@ -17,6 +17,7 @@ interface ShopifyRemovalDialogProps {
     category?: string | null;
     brand_title?: string | null;
     psa_cert?: string | null;
+    type?: string | null;
   }>;
   loading: boolean;
 }
@@ -37,7 +38,7 @@ export function ShopifyRemovalDialog({
 
   if (mirroredItems.length === 0) return null;
 
-  const gradedCount = mirroredItems.filter(item => item.psa_cert).length;
+  const gradedCount = mirroredItems.filter(item => item.type === "Graded").length;
   const rawCount = mirroredItems.length - gradedCount;
 
   const handleConfirm = () => {
