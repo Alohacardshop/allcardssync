@@ -367,36 +367,6 @@ export function RawCardIntake({
     }
   };
 
-  const doSearch = async () => {
-    if (!name || name.length < 3) {
-      toast.error('Enter at least 3 characters');
-      return;
-    }
-
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(async () => {
-      setLoading(true);
-      setError(null);
-      
-      try {
-        // TODO: Replace with API call to alohacardshopcarddatabase
-        // Legacy catalog browse function removed
-        throw new Error('Catalog search functionality moved to external service');
-
-      } catch (err: any) {
-        const message = err?.message || 'Failed to search cards';
-        setError(message);
-        toast.error('Search Error', { description: message });
-      } finally {
-        setLoading(false);
-      }
-    }, 450);
-  };
-
-  const generateSKU = (card: CatalogCard, variant: any, game: GameKey): string => {
-    }
-  };
-
   const addToBatch = async () => {
     if (!picked || !chosenVariant) {
       toast.error("Please select a card and variant first");
