@@ -201,8 +201,8 @@ export const GradedCardIntake = () => {
 
     try {
       const rpcParams = {
-        store_key_in: selectedStore,
-        shopify_location_gid_in: selectedLocation,
+        store_key_in: selectedStore.trim(),
+        shopify_location_gid_in: selectedLocation.trim(),
         quantity_in: formData.quantity,
         brand_title_in: formData.brandTitle,
         subject_in: formData.subject,

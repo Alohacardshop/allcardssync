@@ -421,8 +421,8 @@ export function RawCardIntake({
 
       // Use the new RPC with minimal payload
       const rpcParams = {
-        store_key_in: selectedStore,
-        shopify_location_gid_in: selectedLocation,
+        store_key_in: selectedStore.trim(),
+        shopify_location_gid_in: selectedLocation.trim(),
         quantity_in: quantity,
         brand_title_in: picked.name,
         subject_in: picked.name,
