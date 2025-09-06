@@ -14,8 +14,7 @@ import { toast } from 'sonner';
 import type { GameKey, Printing } from '@/lib/types';
 import { GAME_OPTIONS } from '@/lib/types';
 import { useStore } from '@/contexts/StoreContext';
-import { StoreSelector } from '@/components/StoreSelector';
-import { LocationSelector } from '@/components/LocationSelector';
+import { StoreLocationSelector } from "@/components/StoreLocationSelector";
 import { RawCardSearch } from '@/components/RawCardSearch';
 import { ExternalCard } from '@/integrations/supabase/tcgLjyClient';
 import { fetchCardPricing } from '@/hooks/useTCGData';
@@ -1040,21 +1039,7 @@ export function RawCardIntake({
         <CardContent className="space-y-4">
           {/* Store and Location Selectors */}
           <div className="space-y-4">
-            <div>
-              <Label className="text-sm font-medium mb-2 block">Store Selection</Label>
-              <StoreSelector className="w-full" />
-              <p className="text-xs text-muted-foreground mt-1">
-                Select the store first, then choose a location below
-              </p>
-            </div>
-            
-            <div>
-              <Label className="text-sm font-medium mb-2 block">Shopify Location</Label>
-              <LocationSelector className="w-full" />
-              <p className="text-xs text-muted-foreground mt-1">
-                Choose the specific location where items will be added
-              </p>
-            </div>
+          <StoreLocationSelector />
 
             {/* Check Access Now Button */}
             {selectedStore && selectedLocation && (
