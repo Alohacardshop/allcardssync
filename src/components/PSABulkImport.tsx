@@ -5,9 +5,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Upload, FileText, Download } from "lucide-react";
+import { Upload, FileText, Download, Hash } from "lucide-react";
 import { useStore } from "@/contexts/StoreContext";
 import { v4 as uuidv4 } from 'uuid';
 import { invokePSAScrapeV2 } from "@/lib/psaServiceV2";
@@ -36,6 +38,7 @@ export const PSABulkImport = () => {
   const [items, setItems] = useState<PSAImportItem[]>([]);
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [manualInput, setManualInput] = useState('');
   const { selectedStore, selectedLocation, availableLocations } = useStore();
   const batchId = uuidv4(); // Generate a unique batch ID for this import session
 
@@ -65,6 +68,26 @@ export const PSABulkImport = () => {
       toast.success(`Loaded ${parsedItems.length} PSA certificates`);
     };
     reader.readAsText(file);
+  };
+
+  const handleManualInput = () => {
+    if (!manualInput.trim()) {
+      toast.error("Please enter PSA certificate numbers");
+      return;
+    }
+
+    const lines = manualInput.split('\n').filter(line => line.trim());
+    const parsedItems: PSAImportItem[] = lines.map(line => {
+      const cert = line.trim().replace(/['"]/g, ''); // Remove quotes
+      return {
+        psaCert: cert,
+        status: 'pending' as const
+      };
+    }).filter(item => item.psaCert && item.psaCert.length > 0);
+
+    setItems(parsedItems);
+    toast.success(`Added ${parsedItems.length} PSA certificates`);
+    setManualInput('');
   };
 
   const scrapePSAData = async (psaCert: string) => {
@@ -215,29 +238,63 @@ export const PSABulkImport = () => {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-center gap-4">
-            <div className="flex-1">
-              <Label htmlFor="psa-csv">Upload CSV File</Label>
-              <Input
-                id="psa-csv"
-                type="file"
-                accept=".csv,.txt"
-                onChange={handleFileUpload}
-                disabled={importing}
-              />
-              <p className="text-sm text-muted-foreground mt-1">
-                Upload a CSV file with one PSA certificate number per line
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              onClick={downloadTemplate}
-              className="flex items-center gap-2"
-            >
-              <Download className="h-4 w-4" />
-              Template
-            </Button>
-          </div>
+          <Tabs defaultValue="file" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="file">Upload File</TabsTrigger>
+              <TabsTrigger value="manual">Manual Entry</TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="file" className="space-y-4">
+              <div className="flex items-center gap-4">
+                <div className="flex-1">
+                  <Label htmlFor="psa-csv">Upload CSV File</Label>
+                  <Input
+                    id="psa-csv"
+                    type="file"
+                    accept=".csv,.txt"
+                    onChange={handleFileUpload}
+                    disabled={importing}
+                  />
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Upload a CSV file with one PSA certificate number per line
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={downloadTemplate}
+                  className="flex items-center gap-2"
+                >
+                  <Download className="h-4 w-4" />
+                  Template
+                </Button>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="manual" className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="manual-certs">Enter PSA Certificate Numbers</Label>
+                <Textarea
+                  id="manual-certs"
+                  placeholder="Enter one PSA certificate number per line (up to 20 at a time)&#10;12345678&#10;87654321&#10;11111111"
+                  value={manualInput}
+                  onChange={(e) => setManualInput(e.target.value)}
+                  disabled={importing}
+                  rows={8}
+                />
+                <p className="text-sm text-muted-foreground">
+                  Enter one PSA certificate number per line. Recommended: 20 certificates at a time for optimal processing.
+                </p>
+              </div>
+              <Button
+                onClick={handleManualInput}
+                disabled={importing || !manualInput.trim()}
+                className="flex items-center gap-2"
+              >
+                <Hash className="h-4 w-4" />
+                Add Certificates
+              </Button>
+            </TabsContent>
+          </Tabs>
 
           {items.length > 0 && (
             <div className="space-y-4">
