@@ -194,6 +194,21 @@ export const GradedCardIntake = () => {
       return;
     }
 
+    // Validate numeric field limits (database precision 10, scale 2 = max 99,999,999.99)
+    const maxValue = 99999999.99;
+    const priceValue = parseFloat(formData.price);
+    const costValue = parseFloat(formData.cost);
+    
+    if (priceValue > maxValue) {
+      toast.error(`Price cannot exceed $${maxValue.toLocaleString()}`);
+      return;
+    }
+    
+    if (costValue > maxValue) {
+      toast.error(`Cost cannot exceed $${maxValue.toLocaleString()}`);
+      return;
+    }
+
     setSubmitting(true);
     const startTime = Date.now();
     
