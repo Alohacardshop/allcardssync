@@ -20,6 +20,7 @@ interface StoreContextType {
   selectedStore: string | null;
   setSelectedStore: (storeKey: string | null) => void;
   availableStores: Store[];
+  loadingStores: boolean;
   
   // Location management
   selectedLocation: string | null;
@@ -40,6 +41,7 @@ interface StoreContextType {
   // Actions
   refreshUserAssignments: () => Promise<void>;
   refreshLocations: () => Promise<void>;
+  refreshStores: () => Promise<void>;
 }
 
 const StoreContext = createContext<StoreContextType | null>(null);
@@ -61,6 +63,7 @@ export function StoreProvider({ children }: StoreProviderProps) {
   const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
   const [availableStores, setAvailableStores] = useState<Store[]>([]);
   const [availableLocations, setAvailableLocations] = useState<Location[]>([]);
+  const [loadingStores, setLoadingStores] = useState(false);
   const [loadingLocations, setLoadingLocations] = useState(false);
   const [locationsLastUpdated, setLocationsLastUpdated] = useState<Date | null>(null);
   const [locationsCache, setLocationsCache] = useState<Record<string, Location[]>>({});
@@ -147,17 +150,24 @@ export function StoreProvider({ children }: StoreProviderProps) {
 
   // Load available stores function
   const loadStores = async () => {
+    setLoadingStores(true);
     try {
       const { data } = await supabase
         .from("shopify_stores")
         .select("key, name, vendor")
-        .eq("vendor", "Aloha Card Shop")  // Safety filter to only show Aloha Card Shop stores
         .order("name");
       
       setAvailableStores(data || []);
     } catch (error) {
       console.error("Error loading stores:", error);
+    } finally {
+      setLoadingStores(false);
     }
+  };
+
+  // Refresh stores function
+  const refreshStores = async () => {
+    await loadStores();
   };
 
   // Load stores on mount
@@ -277,6 +287,7 @@ export function StoreProvider({ children }: StoreProviderProps) {
     availableStores: isAdmin ? availableStores : availableStores.filter(store => 
       userAssignments.some(assignment => assignment.store_key === store.key)
     ),
+    loadingStores,
     selectedLocation,
     setSelectedLocation,
     // Show locations filtered by assignments for non-admins
@@ -291,6 +302,7 @@ export function StoreProvider({ children }: StoreProviderProps) {
     userAssignments,
     refreshUserAssignments,
     refreshLocations,
+    refreshStores,
   };
 
   return (

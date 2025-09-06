@@ -1,7 +1,8 @@
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
 import { useStore } from "@/contexts/StoreContext";
-import { Store } from "lucide-react";
+import { Store, RefreshCw } from "lucide-react";
 import { useEffect } from "react";
 import { useLocalStorageString } from "@/hooks/useLocalStorage";
 
@@ -10,7 +11,7 @@ interface StoreSelectorProps {
 }
 
 export function StoreSelector({ className }: StoreSelectorProps) {
-  const { selectedStore, setSelectedStore, availableStores } = useStore();
+  const { selectedStore, setSelectedStore, availableStores, loadingStores, refreshStores } = useStore();
   const [lastSelectedStore, setLastSelectedStore] = useLocalStorageString("last-store", "");
 
   // Auto-select single available store or restore last selection
@@ -35,6 +36,47 @@ export function StoreSelector({ className }: StoreSelectorProps) {
     }
   }, [selectedStore, setLastSelectedStore]);
 
+  if (loadingStores) {
+    return (
+      <div className={className}>
+        <Select disabled>
+          <SelectTrigger className="w-[200px]">
+            <div className="flex items-center gap-2">
+              <Store className="h-4 w-4" />
+              <span>Loading stores...</span>
+            </div>
+          </SelectTrigger>
+        </Select>
+      </div>
+    );
+  }
+
+  if (availableStores.length === 0) {
+    return (
+      <div className={className}>
+        <div className="flex items-center gap-2">
+          <Select disabled>
+            <SelectTrigger className="w-[200px]">
+              <div className="flex items-center gap-2">
+                <Store className="h-4 w-4" />
+                <span>No stores found</span>
+              </div>
+            </SelectTrigger>
+          </Select>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={refreshStores}
+            className="flex items-center gap-1"
+          >
+            <RefreshCw className="h-3 w-3" />
+            Refresh
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={className}>
       <Select value={selectedStore || ""} onValueChange={setSelectedStore}>
@@ -44,7 +86,7 @@ export function StoreSelector({ className }: StoreSelectorProps) {
             <SelectValue placeholder="Select store" />
           </div>
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent className="bg-background border-border z-50">
           {availableStores.map((store) => (
             <SelectItem key={store.key} value={store.key}>
               {store.name}
