@@ -145,23 +145,43 @@ export function StoreProvider({ children }: StoreProviderProps) {
     await loadUserData();
   };
 
-  // Load available stores
-  useEffect(() => {
-    const loadStores = async () => {
-      try {
-        const { data } = await supabase
-          .from("shopify_stores")
-          .select("key, name, vendor")
-          .eq("vendor", "Aloha Card Shop")  // Safety filter to only show Aloha Card Shop stores
-          .order("name");
-        
-        setAvailableStores(data || []);
-      } catch (error) {
-        console.error("Error loading stores:", error);
-      }
-    };
+  // Load available stores function
+  const loadStores = async () => {
+    try {
+      const { data } = await supabase
+        .from("shopify_stores")
+        .select("key, name, vendor")
+        .eq("vendor", "Aloha Card Shop")  // Safety filter to only show Aloha Card Shop stores
+        .order("name");
+      
+      setAvailableStores(data || []);
+    } catch (error) {
+      console.error("Error loading stores:", error);
+    }
+  };
 
+  // Load stores on mount
+  useEffect(() => {
     loadStores();
+  }, []);
+
+  // Refresh data when auth state changes
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+        loadUserData();
+        loadStores();
+      }
+      if (event === "SIGNED_OUT") {
+        setSelectedStore(null);
+        setSelectedLocation(null);
+        setAvailableStores([]);
+        setAvailableLocations([]);
+        setUserAssignments([]);
+        setIsAdmin(false);
+      }
+    });
+    return () => subscription.unsubscribe();
   }, []);
 
   // Load cached locations when store changes (no automatic refresh)
