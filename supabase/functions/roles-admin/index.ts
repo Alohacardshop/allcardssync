@@ -49,15 +49,28 @@ Deno.serve(async (req) => {
     const action = body?.action as string;
 
     if (action === "list") {
+      console.log("Starting list action");
+      
       // List users with their roles
-      const usersResp = await admin.auth.admin.listUsers({ page: 1, perPage: 200 }).catch((e: any) => ({ data: null, error: e }));
+      console.log("Fetching users from auth admin");
+      const usersResp = await admin.auth.admin.listUsers({ page: 1, perPage: 200 }).catch((e: any) => {
+        console.error("Error fetching users:", e);
+        return { data: null, error: e };
+      });
+      
       // @ts-ignore - shape from GoTrue Admin API
       const users = (usersResp?.data?.users || []) as Array<{ id: string; email?: string | null; created_at?: string }>; 
+      console.log("Users fetched:", users.length);
 
+      console.log("Fetching user roles");
       const { data: roles, error: rolesErr } = await admin
         .from("user_roles")
         .select("user_id, role");
-      if (rolesErr) throw rolesErr;
+      if (rolesErr) {
+        console.error("Error fetching roles:", rolesErr);
+        throw rolesErr;
+      }
+      console.log("Roles fetched:", roles?.length || 0);
 
       const rolesMap = new Map<string, string[]>();
       (roles || []).forEach((r: any) => {
@@ -67,6 +80,7 @@ Deno.serve(async (req) => {
       });
 
       const result = users.map((u) => ({ id: u.id, email: u.email || null, created_at: u.created_at, roles: rolesMap.get(u.id) || [] }));
+      console.log("Returning result with users:", result.length);
       return new Response(JSON.stringify({ ok: true, users: result }), { headers: jsonHeaders });
     }
 
