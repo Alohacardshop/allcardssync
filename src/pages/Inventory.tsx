@@ -94,6 +94,11 @@ type ItemRow = {
   shopify_inventory_item_id: string | null;
   shopify_location_gid: string | null;
   source_provider: string | null;
+  shopify_sync_status: string | null;
+  last_shopify_synced_at: string | null;
+  last_shopify_sync_error: string | null;
+  store_key: string | null;
+  removed_from_batch_at: string | null;
 };
 
 export default function Inventory() {
@@ -122,6 +127,9 @@ export default function Inventory() {
   // Selection state for bulk actions
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [processingIds, setProcessingIds] = useState<Set<string>>(new Set());
+  
+  // Shopify sync state
+  const [syncingIds, setSyncingIds] = useState<Set<string>>(new Set());
   
   // Delete confirmation dialog state
   const [deleteDialog, setDeleteDialog] = useState<{
@@ -279,7 +287,9 @@ export default function Inventory() {
       'printed_at', 'pushed_at', 'year', 'brand_title', 'subject', 
       'category', 'variant', 'card_number', 'grade', 'psa_cert', 'sku', 
       'quantity', 'shopify_product_id', 'shopify_variant_id', 
-      'shopify_inventory_item_id', 'shopify_location_gid', 'source_provider'
+      'shopify_inventory_item_id', 'shopify_location_gid', 'source_provider',
+      'shopify_sync_status', 'last_shopify_synced_at', 'last_shopify_sync_error',
+      'store_key', 'removed_from_batch_at'
     ].join(',');
 
     let query = supabase
@@ -643,6 +653,115 @@ export default function Inventory() {
 
   const handleSinglePush = (itemId: string) => {
     handlePushToShopify([itemId]);
+  };
+
+  // Manual Shopify sync functions
+  const handleSyncToShopify = async (itemIds: string[]) => {
+    if (itemIds.length === 0) {
+      toast.error("No items selected for sync");
+      return;
+    }
+
+    setSyncingIds(prev => new Set([...prev, ...itemIds]));
+
+    try {
+      // Get the items to sync
+      const { data: itemsToSync, error: fetchError } = await supabase
+        .from('intake_items')
+        .select('*')
+        .in('id', itemIds)
+        .is('deleted_at', null)
+        .not('removed_from_batch_at', 'is', null); // Only inventory items
+
+      if (fetchError) throw fetchError;
+
+      if (!itemsToSync || itemsToSync.length === 0) {
+        toast.error("No valid inventory items found to sync");
+        return;
+      }
+
+      const correlationId = `manual_sync_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+      const syncPromises = itemsToSync.map(item => {
+        if (!item.sku || !item.store_key) {
+          console.warn('Skipping item without SKU or store_key:', item.id);
+          return Promise.resolve({ success: false, error: 'Missing SKU or store_key' });
+        }
+
+        return supabase.functions.invoke('shopify-sync-inventory', {
+          body: {
+            storeKey: item.store_key,
+            sku: item.sku,
+            locationGid: item.shopify_location_gid,
+            correlationId
+          }
+        }).then(response => {
+          if (response.error) {
+            console.error('Sync failed for item:', item.id, response.error);
+            return { success: false, error: response.error.message };
+          }
+          return { success: true, data: response.data };
+        });
+      });
+
+      const results = await Promise.all(syncPromises);
+      const successCount = results.filter(r => r.success).length;
+      const failureCount = results.length - successCount;
+
+      // Update sync status for all items
+      const now = new Date().toISOString();
+      await supabase
+        .from('intake_items')
+        .update({
+          shopify_sync_status: 'synced',
+          last_shopify_synced_at: now,
+          last_shopify_sync_error: null
+        })
+        .in('id', itemIds.filter((_, i) => results[i].success));
+
+      // Update failed items with error status
+      const failedIds = itemIds.filter((_, i) => !results[i].success);
+      if (failedIds.length > 0) {
+        await supabase
+          .from('intake_items')
+          .update({
+            shopify_sync_status: 'error',
+            last_shopify_sync_error: 'Sync failed - check logs for details'
+          })
+          .in('id', failedIds);
+      }
+
+      if (successCount > 0) {
+        toast.success(`Successfully synced ${successCount} items to Shopify`);
+      }
+      if (failureCount > 0) {
+        toast.error(`Failed to sync ${failureCount} items`);
+      }
+
+      // Refresh the current page data
+      window.location.reload();
+
+    } catch (error) {
+      console.error('Sync error:', error);
+      toast.error("Failed to sync to Shopify: " + (error instanceof Error ? error.message : "Unknown error"));
+    } finally {
+      setSyncingIds(prev => {
+        const next = new Set(prev);
+        itemIds.forEach(id => next.delete(id));
+        return next;
+      });
+    }
+  };
+
+  const handleBulkSync = () => {
+    if (selectedIds.size === 0) {
+      toast.error("Please select items to sync");
+      return;
+    }
+    handleSyncToShopify(Array.from(selectedIds));
+  };
+
+  const handleSingleSync = (itemId: string) => {
+    handleSyncToShopify([itemId]);
   };
 
   const handlePrintLabel = async (item: ItemRow) => {
@@ -1173,6 +1292,16 @@ export default function Inventory() {
                   </Button>
                   <Button
                     size="sm"
+                    onClick={handleBulkSync}
+                    disabled={syncingIds.size > 0}
+                    variant="outline"
+                    className="flex items-center gap-2"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${syncingIds.size > 0 ? 'animate-spin' : ''}`} />
+                    Sync to Shopify ({selectedIds.size})
+                  </Button>
+                  <Button
+                    size="sm"
                     onClick={handleBulkPushAndPrint}
                     disabled={!selectedStore || !isPrintNodeConnected || processingIds.size > 0}
                     className="flex items-center gap-2"
@@ -1486,6 +1615,7 @@ export default function Inventory() {
                     <TableHead>Qty</TableHead>
                     <TableHead>Printed</TableHead>
                     <TableHead>Pushed</TableHead>
+                    <TableHead>Shopify Sync</TableHead>
                     <TableHead>Created</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
@@ -1508,13 +1638,14 @@ export default function Inventory() {
                         <TableCell><Skeleton className="h-4 w-12" /></TableCell>
                         <TableCell><Skeleton className="h-6 w-16" /></TableCell>
                         <TableCell><Skeleton className="h-6 w-16" /></TableCell>
+                        <TableCell><Skeleton className="h-6 w-20" /></TableCell>
                         <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                         <TableCell><Skeleton className="h-8 w-20" /></TableCell>
                       </TableRow>
                     ))
                   ) : items.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={15} className="text-center py-8">
+                      <TableCell colSpan={16} className="text-center py-8">
                         <div className="flex flex-col items-center gap-2">
                           <p className="text-muted-foreground">No items found</p>
                           {(search || lotFilter || selectedLocationGid || printed !== "all" || pushed !== "all" || typeFilter !== "all" || conditionFilter || setFilter || categoryFilter || yearFilter || priceRange.min || priceRange.max) && (
@@ -1581,6 +1712,43 @@ export default function Inventory() {
                         <TableCell>
                           {it.pushed_at ? <Badge variant="secondary">Pushed</Badge> : <Badge>Unpushed</Badge>}
                         </TableCell>
+                        <TableCell>
+                          {(() => {
+                            if (!it.removed_from_batch_at) {
+                              return <Badge variant="outline">Not in Inventory</Badge>;
+                            }
+                            
+                            const syncStatus = it.shopify_sync_status || 'pending';
+                            const lastSynced = it.last_shopify_synced_at;
+                            const hasError = it.last_shopify_sync_error;
+                            
+                            if (syncStatus === 'synced' && !hasError) {
+                              return (
+                                <div className="space-y-1">
+                                  <Badge variant="secondary">Synced</Badge>
+                                  {lastSynced && (
+                                    <div className="text-xs text-muted-foreground">
+                                      {new Date(lastSynced).toLocaleString()}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            } else if (syncStatus === 'error' || hasError) {
+                              return (
+                                <div className="space-y-1">
+                                  <Badge variant="destructive">Error</Badge>
+                                  {hasError && (
+                                    <div className="text-xs text-red-600 max-w-24 truncate" title={hasError}>
+                                      {hasError}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            } else {
+                              return <Badge>Pending</Badge>;
+                            }
+                          })()}
+                        </TableCell>
                         <TableCell>{new Date(it.created_at).toLocaleString()}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex gap-2 justify-end">
@@ -1608,6 +1776,18 @@ export default function Inventory() {
                                   {isProcessing ? "Processing..." : "Push + Print"}
                                 </Button>
                               </>
+                            )}
+                            {it.removed_from_batch_at && it.sku && it.store_key && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleSingleSync(it.id)}
+                                disabled={syncingIds.has(it.id)}
+                                className="flex items-center gap-1"
+                              >
+                                <RefreshCw className={`h-3 w-3 ${syncingIds.has(it.id) ? 'animate-spin' : ''}`} />
+                                {syncingIds.has(it.id) ? "Syncing..." : "Sync"}
+                              </Button>
                             )}
                             {!it.printed_at && (
                               <Button
