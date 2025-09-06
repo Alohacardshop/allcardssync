@@ -103,6 +103,50 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ ok: true }), { headers: jsonHeaders });
     }
 
+    if (action === "delete") {
+      const email = String(body?.email || "").toLowerCase();
+      if (!email) return new Response(JSON.stringify({ ok: false, error: "Missing email" }), { status: 400, headers: jsonHeaders });
+
+      // Find user by email
+      const usersResp = await admin.auth.admin.listUsers({ page: 1, perPage: 200 });
+      // @ts-ignore
+      const user = (usersResp?.data?.users || []).find((u: any) => (u.email || "").toLowerCase() === email);
+      if (!user) return new Response(JSON.stringify({ ok: false, error: "User not found" }), { status: 404, headers: jsonHeaders });
+
+      // Prevent self-deletion
+      if (user.id === callerUser.id) {
+        return new Response(JSON.stringify({ ok: false, error: "Cannot delete yourself" }), { status: 400, headers: jsonHeaders });
+      }
+
+      // Check if this is the last admin
+      const { data: adminRoles, error: adminRolesErr } = await admin
+        .from("user_roles")
+        .select("user_id")
+        .eq("role", "admin");
+      
+      if (adminRolesErr) throw adminRolesErr;
+      
+      const isTargetAdmin = adminRoles?.some(r => r.user_id === user.id);
+      const adminCount = adminRoles?.length || 0;
+      
+      if (isTargetAdmin && adminCount <= 1) {
+        return new Response(JSON.stringify({ ok: false, error: "Cannot delete the last admin user" }), { status: 400, headers: jsonHeaders });
+      }
+
+      // Delete related records first
+      const { error: rolesDelErr } = await admin.from("user_roles").delete().eq("user_id", user.id);
+      if (rolesDelErr) throw rolesDelErr;
+
+      const { error: assignmentsDelErr } = await admin.from("user_shopify_assignments").delete().eq("user_id", user.id);
+      if (assignmentsDelErr) throw assignmentsDelErr;
+
+      // Delete the user
+      const { error: userDelErr } = await admin.auth.admin.deleteUser(user.id);
+      if (userDelErr) throw userDelErr;
+
+      return new Response(JSON.stringify({ ok: true }), { headers: jsonHeaders });
+    }
+
     return new Response(JSON.stringify({ ok: false, error: "Unknown action" }), { status: 400, headers: jsonHeaders });
   } catch (e) {
     console.error("roles-admin error", e);
