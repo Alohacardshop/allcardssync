@@ -70,10 +70,10 @@ async function handleCardSearch(req: Request) {
   console.log('Searching cards:', { search_query, game_slug, set_code, limit_count })
 
   const { data: searchResults, error } = await tcgSupabase.rpc('search_cards', {
-    search_query: search_query.trim(),
-    game_slug: game_slug || null,
-    set_code: set_code || null,
-    limit_count: Math.min(limit_count, 100) // Cap at 100 results
+    game_in: game_slug || 'pokemon',
+    q: search_query.trim(),
+    lim: Math.min(limit_count, 100), // Cap at 100 results
+    off: 0
   })
 
   if (error) {
