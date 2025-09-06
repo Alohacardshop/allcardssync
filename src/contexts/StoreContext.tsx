@@ -102,7 +102,6 @@ export function StoreProvider({ children }: StoreProviderProps) {
   const loadUserData = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      console.log('StoreContext: Loading user data for user:', user?.email);
       if (!user) return;
 
       // Check if user is admin
@@ -111,7 +110,6 @@ export function StoreProvider({ children }: StoreProviderProps) {
         _role: "admin" 
       });
       setIsAdmin(adminCheck || false);
-      console.log('StoreContext: Admin check for', user.email, ':', adminCheck);
 
       // Load user assignments
       const { data: assignments } = await supabase
@@ -119,13 +117,11 @@ export function StoreProvider({ children }: StoreProviderProps) {
         .select("store_key, location_gid, location_name, is_default")
         .eq("user_id", user.id);
       
-      console.log('StoreContext: User assignments for', user.email, ':', assignments);
       setUserAssignments(assignments || []);
 
       // Set default store/location from user assignments
       const defaultAssignment = assignments?.find(a => a.is_default);
       if (defaultAssignment) {
-        console.log('StoreContext: Setting default assignment:', defaultAssignment);
         setSelectedStore(defaultAssignment.store_key);
         setSelectedLocation(defaultAssignment.location_gid);
         
@@ -134,7 +130,6 @@ export function StoreProvider({ children }: StoreProviderProps) {
       } else if (assignments && assignments.length > 0) {
         // If no default, use the first assignment
         const firstAssignment = assignments[0];
-        console.log('StoreContext: Setting first assignment:', firstAssignment);
         setSelectedStore(firstAssignment.store_key);
         setSelectedLocation(firstAssignment.location_gid);
         
@@ -142,7 +137,7 @@ export function StoreProvider({ children }: StoreProviderProps) {
         await autoLoadLocations(firstAssignment.store_key);
       }
     } catch (error) {
-      console.error("StoreContext: Error loading user data:", error);
+      console.error("Error loading user data:", error);
     }
   };
 
@@ -259,11 +254,9 @@ export function StoreProvider({ children }: StoreProviderProps) {
     selectedStore,
     setSelectedStore,
     // Show all stores to admins, or only assigned stores to regular users
-    availableStores: isAdmin ? availableStores : availableStores.filter(store => {
-      const hasAccess = userAssignments.some(assignment => assignment.store_key === store.key);
-      console.log('StoreContext: Store access check for', store.key, ':', hasAccess, 'assignments:', userAssignments);
-      return hasAccess;
-    }),
+    availableStores: isAdmin ? availableStores : availableStores.filter(store => 
+      userAssignments.some(assignment => assignment.store_key === store.key)
+    ),
     selectedLocation,
     setSelectedLocation,
     // Show locations filtered by assignments for non-admins
