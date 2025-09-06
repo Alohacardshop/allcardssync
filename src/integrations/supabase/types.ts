@@ -1507,6 +1507,10 @@ export type Database = {
         Args: { body: Json; headers: Json; url: string }
         Returns: number
       }
+      is_inventory_sync_enabled: {
+        Args: Record<PropertyKey, never>
+        Returns: boolean
+      }
       normalize_game_slug: {
         Args: { input_game: string }
         Returns: string
