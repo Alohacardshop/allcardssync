@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Separator } from "@/components/ui/separator";
 import { Users, Plus, Pencil, Trash2, ShieldCheck, Store, MapPin, KeyRound } from "lucide-react";
+import { logger } from "@/lib/logger";
 
 interface UserAssignment {
   id: string;

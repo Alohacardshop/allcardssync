@@ -14,6 +14,7 @@ import { SystemStats } from "@/components/SystemStats";
 import CatalogTab from "@/components/admin/CatalogTab";
 import TCGDatabaseSettings from "@/components/admin/TCGDatabaseSettings";
 import { UserAssignmentManager } from "@/components/UserAssignmentManager";
+import { SystemLogsViewer } from "@/components/admin/SystemLogsViewer";
 import { ShopifyConfig } from "@/components/admin/ShopifyConfig";
 import { ShopifyTagImport } from "@/components/admin/ShopifyTagImport";
 import { PricingJobsMonitor } from "@/components/admin/PricingJobsMonitor";
@@ -101,6 +102,7 @@ const Admin = () => {
               <TabsTrigger value="shopify-config" className="whitespace-nowrap">Shopify Config</TabsTrigger>
               <TabsTrigger value="shopify-import" className="whitespace-nowrap">Shopify Import</TabsTrigger>
               <TabsTrigger value="shopify-inspect" className="whitespace-nowrap">Inspect Shopify</TabsTrigger>
+              <TabsTrigger value="logs" className="whitespace-nowrap">System Logs</TabsTrigger>
             </TabsList>
           </div>
 
@@ -230,6 +232,10 @@ const Admin = () => {
                 </CardContent>
               </Card>
             </div>
+          </TabsContent>
+
+          <TabsContent value="logs" className="space-y-4">
+            <SystemLogsViewer />
           </TabsContent>
         </Tabs>
       </div>

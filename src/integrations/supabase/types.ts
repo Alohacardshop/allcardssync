@@ -914,6 +914,42 @@ export type Database = {
         }
         Relationships: []
       }
+      system_logs: {
+        Row: {
+          context: Json | null
+          created_at: string
+          error_details: Json | null
+          id: string
+          level: string
+          message: string
+          metadata: Json | null
+          source: string | null
+          user_id: string | null
+        }
+        Insert: {
+          context?: Json | null
+          created_at?: string
+          error_details?: Json | null
+          id?: string
+          level: string
+          message: string
+          metadata?: Json | null
+          source?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          context?: Json | null
+          created_at?: string
+          error_details?: Json | null
+          id?: string
+          level?: string
+          message?: string
+          metadata?: Json | null
+          source?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       system_settings: {
         Row: {
           category: string | null
@@ -1121,6 +1157,18 @@ export type Database = {
     Functions: {
       _norm_gid: {
         Args: { t: string }
+        Returns: string
+      }
+      add_system_log: {
+        Args: {
+          context_in?: Json
+          error_details_in?: Json
+          level_in: string
+          message_in: string
+          metadata_in?: Json
+          source_in?: string
+          user_id_in?: string
+        }
         Returns: string
       }
       admin_delete_batch: {
