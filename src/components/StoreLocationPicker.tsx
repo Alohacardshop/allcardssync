@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Switch } from "@/components/ui/switch";
 import { useStore } from "@/contexts/StoreContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -40,8 +41,15 @@ export function StoreLocationPicker({ className, showSetDefault = true }: StoreL
   } = useStore();
 
   const [open, setOpen] = useState(false);
-  const [storeSearch, setStoreSearch] = useState("");
-  const [locationSearch, setLocationSearch] = useState("");
+const [storeSearch, setStoreSearch] = useState("");
+const [locationSearch, setLocationSearch] = useState("");
+const [autoSaveDefault, setAutoSaveDefault] = useState<boolean>(() => {
+  try {
+    return localStorage.getItem("storeLocation:autoSaveDefault") !== "false";
+  } catch {
+    return true;
+  }
+});
 
   const selectedStoreName = availableStores.find(s => s.key === selectedStore)?.name || "No store selected";
   const selectedLocationName = availableLocations.find(l => l.gid === selectedLocation)?.name || "No location selected";
@@ -61,11 +69,33 @@ export function StoreLocationPicker({ className, showSetDefault = true }: StoreL
     location.name.toLowerCase().includes(locationSearch.toLowerCase())
   );
 
-  const handleStoreSelect = (storeKey: string) => {
-    setSelectedStore(storeKey);
-    setSelectedLocation(null); // Reset location when store changes
-    setLocationSearch("");
-  };
+const handleStoreSelect = (storeKey: string) => {
+  setSelectedStore(storeKey);
+  setSelectedLocation(null); // Reset location when store changes
+  setLocationSearch("");
+  // Auto-refresh locations for the newly selected store
+  setTimeout(() => {
+    refreshLocations();
+  }, 0);
+};
+
+const handleLocationSelect = async (gid: string) => {
+  setSelectedLocation(gid);
+  if (autoSaveDefault && selectedStore) {
+    try {
+      const { error } = await supabase.rpc("set_user_default_location", {
+        _store_key: selectedStore,
+        _location_gid: gid
+      });
+      if (error) throw error;
+      toast.success("Default store/location saved");
+      await refreshUserAssignments();
+    } catch (err) {
+      console.error("Auto-save default failed", err);
+      toast.error("Failed to auto-save default");
+    }
+  }
+};
 
   const handleSetDefault = async () => {
     if (!selectedStore || !selectedLocation) {
@@ -230,7 +260,7 @@ export function StoreLocationPicker({ className, showSetDefault = true }: StoreL
                     filteredLocations.map((location) => (
                       <button
                         key={location.gid}
-                        onClick={() => setSelectedLocation(location.gid)}
+                        onClick={() => handleLocationSelect(location.gid)}
                         className={`w-full text-left p-3 rounded-md hover:bg-muted transition-colors flex items-center justify-between ${
                           selectedLocation === location.gid ? 'bg-muted' : ''
                         }`}
@@ -258,13 +288,24 @@ export function StoreLocationPicker({ className, showSetDefault = true }: StoreL
 
           {/* Actions */}
           <div className="flex items-center justify-between pt-4 border-t">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3 flex-wrap">
               {isCurrentDefault && (
                 <Badge variant="secondary" className="flex items-center gap-1">
                   <Star className="h-3 w-3" />
                   Current Default
                 </Badge>
               )}
+
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={autoSaveDefault}
+                  onCheckedChange={(val) => {
+                    setAutoSaveDefault(val);
+                    try { localStorage.setItem("storeLocation:autoSaveDefault", String(val)); } catch {}
+                  }}
+                />
+                <span className="text-sm text-muted-foreground">Auto-save default</span>
+              </div>
             </div>
             
             <div className="flex gap-2">
