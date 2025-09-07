@@ -57,6 +57,7 @@ export function UserAssignmentManager() {
   const [locations, setLocations] = useState<Location[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingLocations, setLoadingLocations] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   // Dialog state
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -430,6 +431,22 @@ export function UserAssignmentManager() {
   };
 
   useEffect(() => {
+    const checkAdminRole = async () => {
+      try {
+        const { data: session } = await supabase.auth.getSession();
+        if (session?.session?.user) {
+          const { data: adminCheck } = await supabase.rpc("has_role", { 
+            _user_id: session.session.user.id, 
+            _role: "admin" as any 
+          });
+          setIsAdmin(Boolean(adminCheck));
+        }
+      } catch (error) {
+        console.error('Error checking admin role:', error);
+      }
+    };
+
+    checkAdminRole();
     loadData();
   }, []);
 
@@ -659,14 +676,16 @@ export function UserAssignmentManager() {
                       >
                         <KeyRound className="h-4 w-4" />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDeleteUser(user.id)}
-                        title="Delete user"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      {isAdmin && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteUser(user.id)}
+                          title="Delete user"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>

@@ -617,35 +617,37 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
                       <Send className="h-3 w-3" />
                     </Button>
                     
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-8 px-2 bg-red-50 hover:bg-red-100 border-red-200 text-red-700"
-                          title="Delete Item"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Delete Item</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Are you sure you want to delete this item? This action cannot be undone.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => {
-                            console.log('🗑️ DELETE BUTTON CLICKED IN DIALOG');
-                            handleDeleteItem(item);
-                          }}>
-                            Delete
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
+                    {isAdmin && (
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 px-2 bg-red-50 hover:bg-red-100 border-red-200 text-red-700"
+                            title="Delete Item"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Delete Item</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Are you sure you want to delete this item? This action cannot be undone.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => {
+                              console.log('🗑️ DELETE BUTTON CLICKED IN DIALOG');
+                              handleDeleteItem(item);
+                            }}>
+                              Delete
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    )}
                   </div>
                 </div>
               </div>

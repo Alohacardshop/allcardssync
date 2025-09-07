@@ -55,7 +55,7 @@ export default function PrintLogs() {
           return;
         }
         const roles = (data || []).map((r: any) => r.role);
-        setCanDelete(roles.includes('admin') || roles.includes('staff'));
+        setCanDelete(roles.includes('admin'));
       } catch (err) {
         console.error('Role check failed:', err);
       }
