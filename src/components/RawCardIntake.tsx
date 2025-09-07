@@ -442,9 +442,14 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
                         </Select>
                       </TableCell>
                       <TableCell>
-                        <div className="text-sm">
-                          ${row.marketPrice?.toFixed(2) || '0.00'}
-                        </div>
+                        <Input
+                          type="number"
+                          step="1"
+                          min="0"
+                          value={row.marketPrice || ''}
+                          onChange={(e) => updateRow(index, 'marketPrice', parseFloat(e.target.value) || 0)}
+                          className="w-24"
+                        />
                       </TableCell>
                       <TableCell>
                         <Input

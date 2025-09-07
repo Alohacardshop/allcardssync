@@ -63,7 +63,7 @@ export function parseTcgplayerPaste(text: string): ParsedTcgplayerData {
 
     const [, quantityStr, cardInfo, priceStr] = cardMatch;
     const quantity = parseInt(quantityStr, 10);
-    const marketPrice = parseFloat(priceStr.replace(/,/g, ''));
+    const marketPrice = Math.ceil(parseFloat(priceStr.replace(/,/g, '')));
 
     // Parse card info: Name [Set] (attributes) or Name - number [Set] (attributes)
     let name = cardInfo;
