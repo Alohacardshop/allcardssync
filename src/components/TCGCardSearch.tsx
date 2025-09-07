@@ -47,12 +47,17 @@ export function TCGCardSearch({ onCardSelect, defaultGameSlug = "pokemon", onGam
   const [showSuggestions, setShowSuggestions] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   
-  // Helper function to get search query (primarily card name)
+  // Helper function to get search query (includes both name and number)
   const getCombinedQuery = useCallback(() => {
     const namePart = cardName.trim().toLowerCase();
-    // Only use card name for the main search, we'll filter by number client-side
+    const numberPart = cardNumber.trim().toLowerCase();
+    
+    // Combine name and number for database search - let the RPC function handle both
+    if (namePart && numberPart) {
+      return `${namePart} ${numberPart}`;
+    }
     return namePart;
-  }, [cardName]);
+  }, [cardName, cardNumber]);
 
   // Remove pricing states - will be handled in RawCardIntake
 
@@ -66,44 +71,51 @@ export function TCGCardSearch({ onCardSelect, defaultGameSlug = "pokemon", onGam
     5
   );
 
-  // Filter search results by card number client-side and limit to top 5
+  // Filter search results and limit to top 5 (reduced client-side filtering since we're sending full query to DB)
   const filteredSearchResults = useMemo(() => {
     let results = searchResults;
     
-    if (cardNumber.trim()) {
+    // If both name and number are provided, we already sent both to the DB
+    // Only do additional client-side filtering if user entered number separately after the search
+    if (cardNumber.trim() && !cardName.includes(cardNumber.trim())) {
       const numberFilter = cardNumber.trim().toLowerCase();
       results = searchResults.filter(card => {
-        // Check if the card has a number field and if it matches
+        // More flexible number matching for formats like "201/091"
+        const cardNumber = card.number?.toString().toLowerCase() || '';
         const cardId = card.id?.toLowerCase() || '';
         const cardName = card.name?.toLowerCase() || '';
         
-        // Match against card number patterns (supports partial matches)
-        return cardId.includes(numberFilter) || 
-               cardName.includes(numberFilter) ||
-               card.number?.toString().toLowerCase().includes(numberFilter);
+        // Match partial numbers (e.g., "201" matches "201/091")
+        return cardNumber.includes(numberFilter) || 
+               cardNumber.startsWith(numberFilter) ||
+               cardId.includes(numberFilter) || 
+               cardName.includes(numberFilter);
       });
     }
     
     // Limit to top 5 results
     return results.slice(0, 5);
-  }, [searchResults, cardNumber]);
+  }, [searchResults, cardNumber, cardName]);
 
-  // Also filter suggestions by number
+  // Filter suggestions by number with better matching
   const filteredSuggestions = useMemo(() => {
     if (!cardNumber.trim()) return suggestions;
     
     const numberFilter = cardNumber.trim().toLowerCase();
     return suggestions.filter(card => {
+      const cardNumber = card.number?.toString().toLowerCase() || '';
       const cardId = card.id?.toLowerCase() || '';
       const cardName = card.name?.toLowerCase() || '';
       
-      return cardId.includes(numberFilter) || 
-             cardName.includes(numberFilter) ||
-             card.number?.toString().toLowerCase().includes(numberFilter);
+      // More flexible number matching for formats like "201/091"
+      return cardNumber.includes(numberFilter) || 
+             cardNumber.startsWith(numberFilter) ||
+             cardId.includes(numberFilter) || 
+             cardName.includes(numberFilter);
     });
   }, [suggestions, cardNumber]);
 
-  // Update debounced query
+  // Update debounced query (now handles combined name + number)
   useEffect(() => {
     const combinedQuery = getCombinedQuery();
     const timer = setTimeout(() => {
@@ -111,7 +123,7 @@ export function TCGCardSearch({ onCardSelect, defaultGameSlug = "pokemon", onGam
     }, 350);
 
     return () => clearTimeout(timer);
-  }, [cardName, cardNumber, getCombinedQuery]);
+  }, [cardName, getCombinedQuery]); // Removed cardNumber dependency since it's now in getCombinedQuery
 
   // Update suggestions display
   useEffect(() => {
@@ -181,7 +193,7 @@ export function TCGCardSearch({ onCardSelect, defaultGameSlug = "pokemon", onGam
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 <Input
                   ref={inputRef}
-                  placeholder="Card name (e.g., Charizard, Lightning Bolt)"
+                  placeholder="Card name & number (e.g., Charizard, Ditto 201, Lightning Bolt 123)"
                   value={cardName}
                   onChange={(e) => setCardName(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && searchCards()}
