@@ -53,13 +53,13 @@ export const useExternalSets = (gameId?: string) => {
 };
 
 // Card search hook
-export const useExternalCardSearch = (query: string, filters: SearchFilters = {}) => {
+export const useExternalCardSearch = (nameQuery: string, numberQuery?: string, filters: SearchFilters = {}) => {
   const { gameId, setId, rarity, page = 1, pageSize = 24 } = filters;
   
   return useQuery({
-    queryKey: ['external-card-search', query, gameId, setId, rarity, page, pageSize],
+    queryKey: ['external-card-search', nameQuery, numberQuery, gameId, setId, rarity, page, pageSize],
     queryFn: async (): Promise<{ cards: ExternalCard[], totalCount: number }> => {
-      if (!query || query.length < 2) {
+      if (!nameQuery || nameQuery.length < 2) {
         return { cards: [], totalCount: 0 };
       }
       
@@ -77,8 +77,28 @@ export const useExternalCardSearch = (query: string, filters: SearchFilters = {}
           games!inner(name)
         `);
       
-      // Search by name (case-insensitive) OR card number
-      dbQuery = dbQuery.or(`name.ilike.%${query}%,number.ilike.%${query}%`);
+      // Build search conditions - AND logic for name and number
+      let searchConditions = [];
+      
+      // Always search by name
+      searchConditions.push(`name.ilike.%${nameQuery}%`);
+      
+      // Add number filter if provided
+      if (numberQuery && numberQuery.trim()) {
+        searchConditions.push(`number.ilike.%${numberQuery.trim()}%`);
+      }
+      
+      // Apply search conditions (AND logic)
+      if (searchConditions.length > 1) {
+        // Use AND logic by applying each condition separately
+        dbQuery = dbQuery.ilike('name', `%${nameQuery}%`);
+        if (numberQuery && numberQuery.trim()) {
+          dbQuery = dbQuery.ilike('number', `%${numberQuery.trim()}%`);
+        }
+      } else {
+        // Single condition
+        dbQuery = dbQuery.ilike('name', `%${nameQuery}%`);
+      }
       
       // Apply filters
       if (gameId) {
@@ -94,9 +114,10 @@ export const useExternalCardSearch = (query: string, filters: SearchFilters = {}
       // Order by relevance (exact matches first, then prefix matches, then contains)
       dbQuery = dbQuery.order('name');
       
-      // Pagination
-      const from = (page - 1) * pageSize;
-      const to = from + pageSize - 1;
+      // Pagination - increase page size when number is provided for better results
+      const adjustedPageSize = numberQuery && numberQuery.trim() ? 50 : pageSize;
+      const from = (page - 1) * adjustedPageSize;
+      const to = from + adjustedPageSize - 1;
       dbQuery = dbQuery.range(from, to);
       
       const { data, error, count } = await dbQuery;
@@ -121,7 +142,7 @@ export const useExternalCardSearch = (query: string, filters: SearchFilters = {}
       
       return { cards, totalCount: count || 0 };
     },
-    enabled: query.length >= 2,
+    enabled: nameQuery.length >= 2,
     staleTime: 30 * 1000, // 30 seconds for search results
   });
 };

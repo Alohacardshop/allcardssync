@@ -62,6 +62,7 @@ export function RawCardSearch({ onCardSelect, onGameChange, className = '' }: Ra
   // Search suggestions (top 5) - show when typing 2+ characters
   const { data: suggestionsData } = useExternalCardSearch(
     debouncedCardName.length >= 2 ? debouncedCardName : '',
+    cardNumber.trim() || undefined,
     {
       gameId: selectedGameId !== 'all' && selectedGameId ? selectedGameId : undefined,
       rarity: selectedRarity !== 'all' ? selectedRarity : undefined,
@@ -70,25 +71,10 @@ export function RawCardSearch({ onCardSelect, onGameChange, className = '' }: Ra
     }
   );
   
-  // Filter suggestions by card number (client-side) - more flexible matching
+  // No client-side filtering needed - server handles AND logic now
   const filteredSuggestions = useMemo(() => {
-    if (!suggestionsData?.cards) return [];
-    
-    let filtered = suggestionsData.cards;
-    if (cardNumber.trim()) {
-      // Normalize both search and card numbers by removing common separators
-      const normalizeNumber = (num: string) => num.replace(/[\/\-\s]/g, '').toLowerCase();
-      const searchNumber = normalizeNumber(cardNumber);
-      
-      filtered = filtered.filter(card => {
-        if (!card.number) return false;
-        const cardNum = normalizeNumber(card.number);
-        return cardNum.includes(searchNumber);
-      });
-    }
-    
-    return filtered.slice(0, 5);
-  }, [suggestionsData?.cards, cardNumber]);
+    return suggestionsData?.cards?.slice(0, 5) || [];
+  }, [suggestionsData?.cards]);
   
   // Get card IDs for pricing
   const visibleCardIds = useMemo(() => {
