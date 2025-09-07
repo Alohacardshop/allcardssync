@@ -496,10 +496,6 @@ const Index = () => {
               </CardHeader>
               <CardContent>
                 <RawCardIntake 
-                  defaultGame="pokemon"
-                  defaultPrinting="Normal"
-                  defaultConditions="NM,LP"
-                  onPick={handleCardPick}
                   onBatchAdd={handleBatchAdd}
                 />
               </CardContent>
