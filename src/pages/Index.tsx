@@ -12,6 +12,7 @@ import { Navigation } from "@/components/Navigation";
 import { GradedCardIntake } from "@/components/GradedCardIntake";
 import { RawCardIntake } from "@/components/RawCardIntake";
 import { CurrentBatchPanel } from "@/components/CurrentBatchPanel";
+import { StoreLocationSelector } from "@/components/StoreLocationSelector";
 
 interface IntakeItem {
   id: string;
@@ -448,6 +449,20 @@ const Index = () => {
             <CardContent>
               <div className="text-2xl font-bold">{systemStats?.items_pushed || 0}</div>
             </CardContent>
+          </Card>
+        </div>
+
+        {/* Store & Location Selector - with enhanced default functionality */}
+        <div className="mb-6">
+          <Card className="p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-medium text-muted-foreground">Store & Location Settings</h3>
+              <Badge variant="outline" className="text-xs">Default: Store + Location</Badge>
+            </div>
+            <StoreLocationSelector showSetDefault={true} />
+            <p className="text-xs text-muted-foreground mt-2">
+              💡 Set your default store & location combination to save time on future intake sessions
+            </p>
           </Card>
         </div>
 
