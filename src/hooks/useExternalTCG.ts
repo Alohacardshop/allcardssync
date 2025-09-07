@@ -259,3 +259,40 @@ export const useExternalRarities = (gameId?: string) => {
     staleTime: 10 * 60 * 1000, // 10 minutes
   });
 };
+
+// Debug helpers for raw data inspection
+export const getExternalCardById = async (cardId: string) => {
+  const { data, error } = await tcgLjyClient
+    .from('cards')
+    .select('*')
+    .eq('id', cardId)
+    .single();
+    
+  if (error) {
+    console.error('Error fetching card by ID:', error);
+    throw error;
+  }
+  
+  return data;
+};
+
+export const getExternalLatestPrice = async (cardId: string) => {
+  const { data, error } = await tcgLjyClient
+    .from('card_prices')
+    .select('*')
+    .eq('card_id', cardId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single();
+    
+  if (error) {
+    // No price found is not necessarily an error
+    if (error.code === 'PGRST116') {
+      return null;
+    }
+    console.error('Error fetching latest price:', error);
+    throw error;
+  }
+  
+  return data;
+};

@@ -4,8 +4,11 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Search } from 'lucide-react';
-import { useExternalGames, useExternalCardSearch, useExternalCardPrices, useExternalRealtime, useExternalRarities } from '@/hooks/useExternalTCG';
+import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Search, Code, Copy } from 'lucide-react';
+import { useExternalGames, useExternalCardSearch, useExternalCardPrices, useExternalRealtime, useExternalRarities, getExternalCardById, getExternalLatestPrice } from '@/hooks/useExternalTCG';
 import { ExternalCard } from '@/integrations/supabase/tcgLjyClient';
 import { useRawIntakeSettings } from '@/hooks/useRawIntakeSettings';
 import { toast } from 'sonner';
@@ -28,6 +31,12 @@ export function RawCardSearch({ onCardSelect, onGameChange, className = '' }: Ra
   // Filters - default to configured default game
   const [selectedGameId, setSelectedGameId] = useState<string>('');
   const [selectedRarity, setSelectedRarity] = useState<string>('all');
+  
+  // Debug state
+  const [debugMode, setDebugMode] = useState(false);
+  const [debugDialogOpen, setDebugDialogOpen] = useState(false);
+  const [debugData, setDebugData] = useState<{ card: any; price: any } | null>(null);
+  const [debugLoading, setDebugLoading] = useState(false);
 
   // Set default game when settings load
   useEffect(() => {
@@ -71,6 +80,17 @@ export function RawCardSearch({ onCardSelect, onGameChange, className = '' }: Ra
     }
   );
   
+  // Debug logging when enabled
+  useEffect(() => {
+    if (debugMode && suggestionsData) {
+      console.log('🔍 Raw Card Search Response:', {
+        query: { cardName: debouncedCardName, cardNumber },
+        filters: { gameId: selectedGameId, rarity: selectedRarity },
+        results: suggestionsData
+      });
+    }
+  }, [debugMode, suggestionsData, debouncedCardName, cardNumber, selectedGameId, selectedRarity]);
+  
   // No client-side filtering needed - server handles AND logic now
   const filteredSuggestions = useMemo(() => {
     return suggestionsData?.cards?.slice(0, 5) || [];
@@ -108,11 +128,38 @@ export function RawCardSearch({ onCardSelect, onGameChange, className = '' }: Ra
     toast.success(`Selected: ${card.name}${card.number ? ` #${card.number}` : ''}`);
   }, [onCardSelect, formatPrice]);
   
+  // Handle debug view
+  const handleViewRaw = useCallback(async (card: ExternalCard) => {
+    setDebugLoading(true);
+    try {
+      const [rawCard, rawPrice] = await Promise.all([
+        getExternalCardById(card.id),
+        getExternalLatestPrice(card.id)
+      ]);
+      
+      setDebugData({ card: rawCard, price: rawPrice });
+      setDebugDialogOpen(true);
+      
+      console.log('🔍 Raw card data for:', card.name, { rawCard, rawPrice });
+    } catch (error) {
+      console.error('Error fetching raw data:', error);
+      toast.error('Failed to fetch raw data');
+    } finally {
+      setDebugLoading(false);
+    }
+  }, []);
+  
+  // Copy to clipboard
+  const copyToClipboard = useCallback((text: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success('Copied to clipboard');
+  }, []);
+  
   // Card tile component
   const CardTile = ({ card, isSmall = false }: { card: ExternalCard; isSmall?: boolean }) => (
     <Card 
-      className={`cursor-pointer hover:bg-accent transition-colors ${isSmall ? 'p-2' : 'p-3'}`}
-      onClick={() => handleCardSelect(card)}
+      className={`${debugMode ? 'cursor-default' : 'cursor-pointer hover:bg-accent'} transition-colors ${isSmall ? 'p-2' : 'p-3'}`}
+      onClick={debugMode ? undefined : () => handleCardSelect(card)}
     >
       <div className={`flex gap-3 ${isSmall ? 'items-center' : ''}`}>
         <img
@@ -145,6 +192,34 @@ export function RawCardSearch({ onCardSelect, onGameChange, className = '' }: Ra
               {formatPrice(card.id)}
             </span>
           </div>
+          {debugMode && (
+            <div className="flex gap-2 mt-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleCardSelect(card);
+                }}
+                className="text-xs"
+              >
+                Select Card
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleViewRaw(card);
+                }}
+                disabled={debugLoading}
+                className="text-xs"
+              >
+                <Code className="h-3 w-3 mr-1" />
+                View Raw
+              </Button>
+            </div>
+          )}
         </div>
       </div>
     </Card>
@@ -154,9 +229,21 @@ export function RawCardSearch({ onCardSelect, onGameChange, className = '' }: Ra
     <div className={className}>
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Search className="h-5 w-5" />
-            Raw Card Search
+          <CardTitle className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Search className="h-5 w-5" />
+              Raw Card Search
+            </div>
+            <div className="flex items-center gap-2">
+              <Label htmlFor="debug-mode" className="text-sm font-normal">
+                Debug
+              </Label>
+              <Switch
+                id="debug-mode"
+                checked={debugMode}
+                onCheckedChange={setDebugMode}
+              />
+            </div>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -243,6 +330,56 @@ export function RawCardSearch({ onCardSelect, onGameChange, className = '' }: Ra
           )}
         </CardContent>
       </Card>
+      
+      {/* Debug Dialog */}
+      <Dialog open={debugDialogOpen} onOpenChange={setDebugDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Code className="h-5 w-5" />
+              Raw Card Data
+            </DialogTitle>
+          </DialogHeader>
+          
+          {debugData && (
+            <div className="space-y-4">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="font-semibold">Card Data</h3>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => copyToClipboard(JSON.stringify(debugData.card, null, 2))}
+                  >
+                    <Copy className="h-4 w-4 mr-1" />
+                    Copy
+                  </Button>
+                </div>
+                <pre className="bg-muted p-4 rounded-lg text-xs overflow-auto max-h-60">
+                  {JSON.stringify(debugData.card, null, 2)}
+                </pre>
+              </div>
+              
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="font-semibold">Latest Price Data</h3>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => copyToClipboard(JSON.stringify(debugData.price, null, 2))}
+                  >
+                    <Copy className="h-4 w-4 mr-1" />
+                    Copy
+                  </Button>
+                </div>
+                <pre className="bg-muted p-4 rounded-lg text-xs overflow-auto max-h-60">
+                  {debugData.price ? JSON.stringify(debugData.price, null, 2) : 'No price data available'}
+                </pre>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
