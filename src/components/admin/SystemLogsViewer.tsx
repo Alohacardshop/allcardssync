@@ -8,7 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ChevronDown, ChevronRight, RefreshCw, Trash2, Search, Filter } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ChevronDown, ChevronRight, RefreshCw, Trash2, Search, Filter, Copy, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -31,10 +32,54 @@ export function SystemLogsViewer() {
   const [levelFilter, setLevelFilter] = useState<string>("all");
   const [sourceFilter, setSourceFilter] = useState<string>("all");
   const [expandedLogs, setExpandedLogs] = useState<Set<string>>(new Set());
+  const [accessError, setAccessError] = useState<{type: 'permission' | 'missing-table' | null, details?: any}>({type: null});
+  const [showErrorDetails, setShowErrorDetails] = useState(false);
 
   const loadLogs = async () => {
     try {
       setLoading(true);
+      setAccessError({type: null});
+
+      // Lightweight access self-check first
+      const { data: checkData, error: checkError } = await supabase
+        .from("system_logs")
+        .select("id")
+        .limit(1);
+
+      if (checkError) {
+        const errorCode = checkError.code;
+        if (errorCode === '42501' || errorCode === '403' || errorCode === '401') {
+          setAccessError({type: 'permission', details: checkError});
+          toast.error(`Access denied: ${checkError.message}`, {
+            description: `Error code: ${errorCode}`,
+            action: {
+              label: "Details",
+              onClick: () => setShowErrorDetails(!showErrorDetails)
+            }
+          });
+          return;
+        } else if (errorCode === '42P01') {
+          setAccessError({type: 'missing-table', details: checkError});
+          toast.error(`Table not found: ${checkError.message}`, {
+            description: `Error code: ${errorCode}`,
+            action: {
+              label: "Details", 
+              onClick: () => setShowErrorDetails(!showErrorDetails)
+            }
+          });
+          return;
+        } else {
+          throw checkError;
+        }
+      }
+
+      // If check passed with 0 rows, show "No logs yet"
+      if (checkData && checkData.length === 0) {
+        setLogs([]);
+        return;
+      }
+
+      // Main query
       let query = supabase
         .from("system_logs")
         .select("*")
@@ -57,9 +102,16 @@ export function SystemLogsViewer() {
 
       if (error) throw error;
       setLogs((data || []) as SystemLog[]);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error loading logs:", error);
-      toast.error("Failed to load logs");
+      const errorCode = error?.code;
+      toast.error(`Failed to load logs: ${error.message}`, {
+        description: errorCode ? `Error code: ${errorCode}` : undefined,
+        action: {
+          label: "Details",
+          onClick: () => setShowErrorDetails(!showErrorDetails)
+        }
+      });
     } finally {
       setLoading(false);
     }
@@ -118,6 +170,29 @@ export function SystemLogsViewer() {
   // Get unique sources for filter
   const uniqueSources = [...new Set(logs.map(log => log.source).filter(Boolean))] as string[];
 
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success("Copied to clipboard");
+    } catch (error) {
+      toast.error("Failed to copy to clipboard"); 
+    }
+  };
+
+  const getCurrentUserEmail = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    return user?.email || 'your@email.com';
+  };
+
+  const generateAdminSQL = async () => {
+    const email = await getCurrentUserEmail();
+    return `-- Replace email with yours
+insert into public.user_roles (user_id, role)
+select id, 'admin'::public.app_role
+from auth.users where email = '${email}'
+on conflict (user_id, role) do nothing;`;
+  };
+
   useEffect(() => {
     loadLogs();
   }, [search, levelFilter, sourceFilter]);
@@ -137,6 +212,76 @@ export function SystemLogsViewer() {
           </CardTitle>
         </CardHeader>
         <CardContent>
+          {/* Access Error Alerts */}
+          {accessError.type && (
+            <div className="space-y-4 mb-6">
+              {accessError.type === 'permission' && (
+                <Alert className="border-destructive">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>
+                    <div className="space-y-3">
+                      <p><strong>You're signed in but don't have permission to view logs.</strong></p>
+                      <p>Ask an admin to grant the admin role, or run this SQL in Supabase:</p>
+                      <div className="bg-muted p-3 rounded font-mono text-sm relative">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="absolute top-2 right-2 h-6 w-6 p-0"
+                          onClick={async () => {
+                            const sql = await generateAdminSQL();
+                            copyToClipboard(sql);
+                          }}
+                        >
+                          <Copy className="h-3 w-3" />
+                        </Button>
+                        <div id="admin-sql">
+                          {`-- Replace email with yours
+insert into public.user_roles (user_id, role)
+select id, 'admin'::public.app_role
+from auth.users where email = 'admin@alohacardshop.com'
+on conflict (user_id, role) do nothing;`}
+                        </div>
+                      </div>
+                      <Button onClick={loadLogs} variant="outline" size="sm">
+                        <RefreshCw className="w-4 h-4 mr-2" />
+                        Retry
+                      </Button>
+                    </div>
+                  </AlertDescription>
+                </Alert>
+              )}
+              
+              {accessError.type === 'missing-table' && (
+                <Alert className="border-destructive">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>
+                    <div className="space-y-3">
+                      <p><strong>Logging tables not found.</strong></p>
+                      <p>Apply the latest migrations to create the system_logs table.</p>
+                      <Button onClick={loadLogs} variant="outline" size="sm">
+                        <RefreshCw className="w-4 h-4 mr-2" />
+                        Retry
+                      </Button>
+                    </div>
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {showErrorDetails && accessError.details && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm">Error Details</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <pre className="text-xs bg-muted p-2 rounded overflow-x-auto">
+                      {JSON.stringify(accessError.details, null, 2)}
+                    </pre>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
+
           {/* Filters */}
           <div className="space-y-4 mb-6">
             {/* Quick Filter Shortcuts */}
@@ -246,8 +391,12 @@ export function SystemLogsViewer() {
                 <div className="space-y-2 p-4">
                   {loading ? (
                     <div className="text-center py-8 text-muted-foreground">Loading logs...</div>
+                  ) : accessError.type ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      {accessError.type === 'permission' ? 'Access denied' : 'Table not found'}
+                    </div>
                   ) : logs.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground">No logs found</div>
+                    <div className="text-center py-8 text-muted-foreground">No logs yet.</div>
                   ) : (
                     logs.map((log) => (
                       <Collapsible key={log.id}>
