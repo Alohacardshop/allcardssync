@@ -13,6 +13,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { generateSKU } from '@/lib/sku';
 import { fetchCardPricing } from '@/hooks/useTCGData';
 import { tcgSupabase } from '@/lib/tcg-supabase';
+import { CsvPasteArea } from '@/components/csv/CsvPasteArea';
+import { NormalizedCard } from '@/lib/csv/normalize';
 
 interface TCGPlayerItem {
   quantity: number;
@@ -38,6 +40,25 @@ export const TCGPlayerBulkImport = () => {
   const [progress, setProgress] = useState(0);
   const { selectedStore, selectedLocation } = useStore();
   const batchId = uuidv4(); // Generate a unique batch ID for this import session
+
+  // Handle CSV parsing results
+  const handleCsvParsed = (cards: NormalizedCard[]) => {
+    const tcgItems: TCGPlayerItem[] = cards.map(card => ({
+      quantity: card.quantity || 1,
+      name: card.name,
+      set: card.set,
+      cardNumber: card.number,
+      foil: card.rarity || 'Normal',
+      condition: card.condition,
+      language: 'English', // Default, could be enhanced
+      priceEach: card.marketPrice || 0,
+      totalPrice: (card.marketPrice || 0) * (card.quantity || 1),
+      status: 'pending' as const
+    }));
+    
+    setItems(tcgItems);
+    toast.success(`Loaded ${tcgItems.length} items from CSV`);
+  };
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const uploadedFile = event.target.files?.[0];
@@ -318,60 +339,30 @@ Prices from Market Price on 8/24/2025 and are subject to change.`;
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FileText className="h-5 w-5" />
-            TCGPlayer List Import
+            Paste & Parse TCGPlayer CSV
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-center gap-4">
-            <div className="flex-1">
-              <Label htmlFor="tcg-csv">Upload TCGPlayer List</Label>
-              <Input
-                id="tcg-csv"
-                type="file"
-                accept=".txt,.csv"
-                onChange={handleFileUpload}
-                disabled={importing}
-              />
-              <p className="text-sm text-muted-foreground mt-1">
-                Upload a text file with TCGPlayer cart/list format
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              onClick={downloadTemplate}
-              className="flex items-center gap-2"
-            >
-              <Download className="h-4 w-4" />
-              Template
-            </Button>
-          </div>
-
-          {items.length > 0 && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <p className="text-sm text-muted-foreground">
-                  {items.length} items loaded
-                </p>
-                <Button
-                  onClick={handleImport}
+          <CsvPasteArea onParsed={handleCsvParsed} />
+          
+          <div className="border-t pt-4">
+            <div className="flex items-center gap-4">
+              <div className="flex-1">
+                <Label htmlFor="tcg-csv">Or Upload File</Label>
+                <Input
+                  id="tcg-csv"
+                  type="file"
+                  accept=".txt,.csv"
+                  onChange={handleFileUpload}
                   disabled={importing}
-                  className="flex items-center gap-2"
-                >
-                  <Upload className="h-4 w-4" />
-                  {importing ? 'Importing...' : 'Start Import'}
-                </Button>
+                />
               </div>
-
-              {importing && (
-                <div className="space-y-2">
-                  <Progress value={progress} />
-                  <p className="text-sm text-center text-muted-foreground">
-                    {Math.round(progress)}% complete
-                  </p>
-                </div>
-              )}
+              <Button variant="outline" onClick={downloadTemplate} className="flex items-center gap-2">
+                <Download className="h-4 w-4" />
+                Template
+              </Button>
             </div>
-          )}
+          </div>
         </CardContent>
       </Card>
 
