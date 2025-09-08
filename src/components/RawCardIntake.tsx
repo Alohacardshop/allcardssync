@@ -188,9 +188,9 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
         store_key_in: selectedStore!.trim(),
         shopify_location_gid_in: selectedLocation!.trim(),
         quantity_in: bulkQuantity,
-        brand_title_in: 'Bulk Item',
-        subject_in: 'Bulk Item',
-        category_in: 'Bulk',
+        brand_title_in: 'Card Bulk Item',
+        subject_in: 'Card Bulk Item',
+        category_in: 'Card Bulk',
         variant_in: 'Bulk',
         card_number_in: '',
         grade_in: '',
@@ -199,14 +199,14 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
         sku_in: '',
         source_provider_in: 'bulk_entry',
         catalog_snapshot_in: {
-          name: 'Bulk Item',
-          type: 'bulk'
+          name: 'Card Bulk Item',
+          type: 'card_bulk'
         },
         pricing_snapshot_in: {
           amount: bulkAmount,
           captured_at: new Date().toISOString()
         },
-        processing_notes_in: `Bulk entry: ${bulkQuantity} items at $${bulkAmount.toFixed(2)} each`
+        processing_notes_in: `Card bulk entry: ${bulkQuantity} items at $${bulkAmount.toFixed(2)} each`
       };
 
       const response = await supabase.rpc('create_raw_intake_item', rpcParams);
@@ -215,7 +215,7 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
         console.error('Bulk add error:', response.error);
         toast.error(`Failed to add bulk item: ${response.error.message}`);
       } else {
-        toast.success(`Successfully added bulk item (${bulkQuantity} items) to batch`);
+        toast.success(`Successfully added card bulk item (${bulkQuantity} items) to batch`);
         
         // Dispatch browser event for real-time updates
         const responseData = Array.isArray(response.data) ? response.data[0] : response.data;
@@ -284,7 +284,9 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
               name: row.name,
               set: row.set,
               number: row.number,
-              language: row.language
+              language: row.language,
+              tcgplayer_id: row.tcgplayerId,
+              image_url: row.photoUrl
             },
             pricing_snapshot_in: {
               market_price: row.marketPrice,
@@ -416,12 +418,12 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
               <DialogTrigger asChild>
                 <Button variant="outline" disabled={!selectedStore || !selectedLocation}>
                   <Package className="h-4 w-4 mr-2" />
-                  Bulk
+                  Card Bulk
                 </Button>
               </DialogTrigger>
               <DialogContent className="sm:max-w-md">
                 <DialogHeader>
-                  <DialogTitle>Add Bulk Item</DialogTitle>
+                  <DialogTitle>Add Card Bulk Item</DialogTitle>
                 </DialogHeader>
                 <div className="space-y-4">
                   <div>
@@ -497,6 +499,7 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
                     <TableHead className="w-32">Condition</TableHead>
                     <TableHead className="w-24">Language</TableHead>
                     <TableHead className="w-20">TCG ID</TableHead>
+                    <TableHead className="w-20">Image</TableHead>
                     <TableHead className="w-24">Market $ (ref)</TableHead>
                     <TableHead className="w-24">Price $ *</TableHead>
                     <TableHead className="w-24">Cost $ *</TableHead>
@@ -603,6 +606,33 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
                           className="w-20"
                           placeholder="ID"
                         />
+                      </TableCell>
+                      <TableCell>
+                        {row.photoUrl ? (
+                          <div className="flex items-center space-x-2">
+                            <img 
+                              src={row.photoUrl} 
+                              alt={row.name} 
+                              className="w-8 h-8 object-cover rounded border"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).style.display = 'none';
+                              }}
+                            />
+                            <Input
+                              value={row.photoUrl || ''}
+                              onChange={(e) => updateRow(index, 'photoUrl', e.target.value)}
+                              className="w-16 text-xs"
+                              placeholder="URL"
+                            />
+                          </div>
+                        ) : (
+                          <Input
+                            value={row.photoUrl || ''}
+                            onChange={(e) => updateRow(index, 'photoUrl', e.target.value)}
+                            className="w-20"
+                            placeholder="Image URL"
+                          />
+                        )}
                       </TableCell>
                       <TableCell>
                         <div className="text-sm">
