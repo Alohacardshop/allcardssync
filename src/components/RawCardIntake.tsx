@@ -269,9 +269,8 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
              if (row.productLine) parts.push(row.productLine);
              if (row.set) parts.push(row.set);
              
-             let cardPart = row.name;
-             if (row.number) cardPart += ` - ${row.number}`;
-             parts.push(cardPart);
+             // Use the card name as-is (it may already contain the number)
+             parts.push(row.name);
              
              if (row.condition && row.condition !== 'Near Mint') parts.push(row.condition);
              else parts.push('Near Mint');
