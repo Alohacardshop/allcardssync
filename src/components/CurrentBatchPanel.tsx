@@ -20,6 +20,7 @@ interface IntakeItem {
   cost?: number;
   lot_number: string;
   lot_id?: string;
+  type?: string;
   processing_notes?: string;
   printed_at?: string;
   pushed_at?: string;
@@ -56,6 +57,16 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
   // Helper to determine if user can delete from current batch
   const canDeleteFromBatch = (item: IntakeItem) => {
     return !!currentLotId && item.lot_id === currentLotId && !item.removed_from_batch_at;
+  };
+
+  // Helper to determine if item is bulk and should skip Shopify sync
+  const isBulkItem = (item: IntakeItem) => {
+    return item.variant === 'Bulk' || 
+           (item.catalog_snapshot && 
+            typeof item.catalog_snapshot === 'object' && 
+            item.catalog_snapshot !== null &&
+            'type' in item.catalog_snapshot && 
+            item.catalog_snapshot.type === 'card_bulk');
   };
 
   const handleEditItem = (item: IntakeItem) => {
@@ -141,8 +152,8 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
       console.log(`✅ [${correlationId}] Successfully sent item to inventory (${duration}ms):`, data);
       toast.success('Item sent to inventory');
 
-      // Trigger Shopify inventory sync (non-blocking)
-      if (item.sku && item.store_key) {
+      // Trigger Shopify inventory sync (non-blocking) - skip for bulk items
+      if (item.sku && item.store_key && !isBulkItem(item)) {
         console.log(`🔄 [${correlationId}] Triggering Shopify inventory sync for SKU: ${item.sku}`);
         supabase.functions.invoke('shopify-sync-inventory', {
           body: {
@@ -163,6 +174,9 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
           console.warn(`⚠️ [${correlationId}] Shopify sync error (non-critical):`, syncError);
           toast.error('Item sent to inventory, but Shopify sync failed');
         });
+      } else if (isBulkItem(item)) {
+        console.log(`ℹ️ [${correlationId}] Skipping Shopify sync for bulk item`);
+        toast.success('Bulk item sent to inventory (no Shopify sync)');
       } else {
         console.log(`ℹ️ [${correlationId}] Skipping Shopify sync - missing SKU or store info`);
       }
@@ -232,8 +246,15 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
             const duration = Date.now() - startTime;
             console.log(`✅ [${correlationId}] Successfully sent item ${item.id} (${duration}ms):`, data);
 
-            // Trigger Shopify sync in background (non-blocking)
-            if (data.sku && data.store_key) {
+            // Trigger Shopify sync in background (non-blocking) - skip for bulk items
+            const itemIsBulk = data.variant === 'Bulk' || 
+                              (data.catalog_snapshot && 
+                               typeof data.catalog_snapshot === 'object' && 
+                               data.catalog_snapshot !== null &&
+                               'type' in data.catalog_snapshot && 
+                               data.catalog_snapshot.type === 'card_bulk');
+            
+            if (data.sku && data.store_key && !itemIsBulk) {
               supabase.functions.invoke('shopify-sync-inventory', {
                 body: {
                   storeKey: data.store_key,
@@ -244,6 +265,8 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
               }).catch((syncError) => {
                 console.warn(`⚠️ [${correlationId}] Shopify sync failed for ${item.id} (non-critical):`, syncError);
               });
+            } else if (itemIsBulk) {
+              console.log(`ℹ️ [${correlationId}] Skipping Shopify sync for bulk item ${item.id}`);
             }
 
             return { success: true, itemId: item.id, data };

@@ -203,8 +203,15 @@ const Index = () => {
             const duration = Date.now() - startTime;
             console.log(`✅ [${correlationId}] Successfully sent item ${itemId} (${duration}ms):`, data);
 
-            // Trigger Shopify sync in background (non-blocking)
-            if (data.sku && data.store_key) {
+            // Trigger Shopify sync in background (non-blocking) - skip for bulk items
+            const itemIsBulk = data.variant === 'Bulk' || 
+                              (data.catalog_snapshot && 
+                               typeof data.catalog_snapshot === 'object' && 
+                               data.catalog_snapshot !== null &&
+                               'type' in data.catalog_snapshot && 
+                               data.catalog_snapshot.type === 'card_bulk');
+            
+            if (data.sku && data.store_key && !itemIsBulk) {
               supabase.functions.invoke('shopify-sync-inventory', {
                 body: {
                   storeKey: data.store_key,
@@ -215,6 +222,8 @@ const Index = () => {
               }).catch((syncError) => {
                 console.warn(`⚠️ [${correlationId}] Shopify sync failed for ${itemId} (non-critical):`, syncError);
               });
+            } else if (itemIsBulk) {
+              console.log(`ℹ️ [${correlationId}] Skipping Shopify sync for bulk item ${itemId}`);
             }
 
             return { success: true, itemId, data };
