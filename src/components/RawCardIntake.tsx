@@ -456,7 +456,21 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
                       </TableCell>
                       <TableCell>
                         <Input
-                          value={row.name}
+                          value={(() => {
+                            // Format title as: Game,Set,Name - Number,Condition
+                            const parts = [];
+                            if (row.productLine) parts.push(row.productLine);
+                            if (row.set) parts.push(row.set);
+                            
+                            let cardPart = row.name;
+                            if (row.number) cardPart += ` - ${row.number}`;
+                            parts.push(cardPart);
+                            
+                            if (row.condition && row.condition !== 'Near Mint') parts.push(row.condition);
+                            else parts.push('Near Mint');
+                            
+                            return parts.join(',');
+                          })()}
                           onChange={(e) => updateRow(index, 'name', e.target.value)}
                           className="min-w-[200px]"
                         />
