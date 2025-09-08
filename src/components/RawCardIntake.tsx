@@ -7,8 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Loader2, Plus, AlertCircle, Trash2, FileText, RotateCcw, Package } from 'lucide-react';
+import { Loader2, Plus, AlertCircle, Trash2, FileText, RotateCcw } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useStore } from '@/contexts/StoreContext';
@@ -40,8 +39,7 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
   const [addingToBatch, setAddingToBatch] = useState(false);
   const [accessCheckLoading, setAccessCheckLoading] = useState(false);
   
-  // Bulk dialog state
-  const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
+  // Bulk entry state
   const [bulkQuantity, setBulkQuantity] = useState(1);
   const [bulkAmount, setBulkAmount] = useState(0);
   const [addingBulk, setAddingBulk] = useState(false);
@@ -227,10 +225,9 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
           onBatchAdd(responseData);
         }
 
-        // Reset form and close dialog
+        // Reset form
         setBulkQuantity(1);
         setBulkAmount(0);
-        setBulkDialogOpen(false);
       }
     } catch (error: any) {
       console.error('Bulk add error:', error);
@@ -413,67 +410,6 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
               <RotateCcw className="h-4 w-4 mr-2" />
               Clear
             </Button>
-            
-            <Dialog open={bulkDialogOpen} onOpenChange={setBulkDialogOpen}>
-              <DialogTrigger asChild>
-                <Button variant="outline" disabled={!selectedStore || !selectedLocation}>
-                  <Package className="h-4 w-4 mr-2" />
-                  Card Bulk
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-md">
-                <DialogHeader>
-                  <DialogTitle>Add Card Bulk Item</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div>
-                    <Label htmlFor="bulkQuantity">Quantity</Label>
-                    <Input
-                      id="bulkQuantity"
-                      type="number"
-                      min="1"
-                      value={bulkQuantity}
-                      onChange={(e) => setBulkQuantity(parseInt(e.target.value) || 1)}
-                      className="mt-1"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="bulkAmount">Amount ($)</Label>
-                    <Input
-                      id="bulkAmount"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={bulkAmount}
-                      onChange={(e) => setBulkAmount(parseFloat(e.target.value) || 0)}
-                      className="mt-1"
-                      placeholder="0.00"
-                    />
-                  </div>
-                  <div className="flex justify-end gap-2">
-                    <Button variant="outline" onClick={() => setBulkDialogOpen(false)}>
-                      Cancel
-                    </Button>
-                    <Button 
-                      onClick={handleAddBulkToBatch} 
-                      disabled={addingBulk || bulkQuantity <= 0 || bulkAmount <= 0}
-                    >
-                      {addingBulk ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Adding...
-                        </>
-                      ) : (
-                        <>
-                          <Plus className="h-4 w-4 mr-2" />
-                          Add to Batch
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </div>
-              </DialogContent>
-            </Dialog>
           </div>
         </CardContent>
       </Card>
@@ -710,6 +646,51 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
           </CardContent>
         </Card>
       )}
+
+      {/* Bulk Cards Entry */}
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex items-center gap-4">
+            <Label className="text-sm font-medium whitespace-nowrap">Bulk cards</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                min="1"
+                value={bulkQuantity}
+                onChange={(e) => setBulkQuantity(parseInt(e.target.value) || 1)}
+                className="w-20"
+                placeholder="Qty"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Label className="text-sm whitespace-nowrap">Price ($)</Label>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                value={bulkAmount}
+                onChange={(e) => setBulkAmount(parseFloat(e.target.value) || 0)}
+                className="w-24"
+                placeholder="0.00"
+              />
+            </div>
+            <Button 
+              onClick={handleAddBulkToBatch} 
+              disabled={addingBulk || bulkQuantity <= 0 || bulkAmount <= 0 || !selectedStore || !selectedLocation}
+              size="sm"
+            >
+              {addingBulk ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Adding...
+                </>
+              ) : (
+                'Add to Batch'
+              )}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
