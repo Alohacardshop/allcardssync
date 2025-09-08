@@ -13,7 +13,7 @@ import { toast } from 'sonner';
 import { useStore } from '@/contexts/StoreContext';
 import { StoreLocationSelector } from '@/components/StoreLocationSelector';
 import { parseTcgplayerPaste, sumMarketPrice, type ParsedTcgplayerRow } from '@/lib/tcgplayerPasteParser';
-import { generateSKU } from '@/lib/sku';
+import { generateSKU, generateTCGSKU } from '@/lib/sku';
 import { fetchCardPricing } from '@/hooks/useTCGData';
 import { tcgSupabase } from '@/lib/tcg-supabase';
 
@@ -250,8 +250,8 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
            // Map product line to game key
            const gameKey = mapProductLineToGame(row.productLine || '');
            
-           // Use TCG ID directly as SKU/barcode, with fallback if not available
-           const generatedSku = row.tcgplayerId || generateSKU(gameKey, variantId, 'CARD', cardId);
+            // Prioritize TCGPlayer ID as SKU using new helper function
+            const generatedSku = generateTCGSKU(row.tcgplayerId, gameKey, variantId, cardId);
            
            const formattedTitle = (() => {
               // Format title as: Game,Set,Name - Number,Condition

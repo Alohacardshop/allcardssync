@@ -10,13 +10,14 @@ import { toast } from "sonner";
 import { Upload, FileText, Download } from "lucide-react";
 import { useStore } from "@/contexts/StoreContext";
 import { v4 as uuidv4 } from 'uuid';
-import { generateSKU } from '@/lib/sku';
+import { generateSKU, generateTCGSKU } from '@/lib/sku';
 import { fetchCardPricing } from '@/hooks/useTCGData';
 import { tcgSupabase } from '@/lib/tcg-supabase';
 import { CsvPasteArea } from '@/components/csv/CsvPasteArea';
 import { NormalizedCard } from '@/lib/csv/normalize';
 
 interface TCGPlayerItem {
+  tcgplayerId?: string; // TCGPlayer ID for SKU generation
   quantity: number;
   name: string;
   set: string;
@@ -44,6 +45,7 @@ export const TCGPlayerBulkImport = () => {
   // Handle CSV parsing results
   const handleCsvParsed = (cards: NormalizedCard[]) => {
     const tcgItems: TCGPlayerItem[] = cards.map(card => ({
+      tcgplayerId: card.id, // Preserve TCGPlayer ID
       quantity: card.quantity || 1,
       name: card.name,
       set: card.set,
@@ -214,8 +216,8 @@ export const TCGPlayerBulkImport = () => {
     // Map game from foil/set info (simplified mapping)
     const gameKey = 'pokemon'; // Default for now, could be enhanced with better game detection
     
-    // Generate SKU using new format
-    const sku = generateSKU(gameKey, variantId, 'CARD', cardId);
+    // Generate SKU prioritizing TCGPlayer ID
+    const sku = generateTCGSKU(item.tcgplayerId, gameKey, variantId, cardId);
     
     try {
       const rpcParams = {

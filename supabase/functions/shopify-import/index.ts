@@ -155,11 +155,29 @@ serve(async (req) => {
         
         const tags = [...baseTags, ...gradingTags];
         
-        // Build SKU and barcode based on grading status - enforced cert numbers for graded
+        // Build SKU and barcode - prioritize TCGPlayer ID, then grading logic
         let productSku;
         let productBarcode;
         
-        if (isGraded && psaCert) {
+        // Extract TCGPlayer ID from catalog_snapshot if available
+        let tcgplayerId = null;
+        if (item.catalog_snapshot) {
+          try {
+            const catalogData = typeof item.catalog_snapshot === 'string' 
+              ? JSON.parse(item.catalog_snapshot) 
+              : item.catalog_snapshot;
+            tcgplayerId = catalogData.tcgplayer_id || catalogData.tcgplayerId;
+          } catch (error) {
+            console.warn(`Failed to parse catalog_snapshot for TCGPlayer ID in item ${item.id}:`, error);
+          }
+        }
+        
+        if (tcgplayerId) {
+          // Prioritize TCGPlayer ID as SKU
+          productSku = tcgplayerId;
+          productBarcode = tcgplayerId;
+          console.log(`Using TCGPlayer ID as SKU & barcode: ${tcgplayerId}`);
+        } else if (isGraded && psaCert) {
           // For graded PSA cards: Use cert number directly as both SKU and barcode
           productSku = psaCert;
           productBarcode = psaCert;
@@ -191,45 +209,103 @@ serve(async (req) => {
         const vendorName = getVendorName(storeKey);
         console.log(`Using vendor: "${vendorName}" for store: ${storeKey}`);
         
-        // Create product payload
-        const productData = {
-          product: {
-            title: fullTitle || item.subject || item.brand_title || 'Untitled Item',
-            body_html: fullTitle || item.subject || item.brand_title || '',
-            vendor: vendorName,
-            product_type: isGraded ? 'graded' : (item.category || 'Trading Card'), // Set type to 'graded' for graded items
-            tags: tags.join(','),
-            variants: [{
-              title: 'Default Title',
-              price: (item.price || 99999).toString(),
-              sku: productSku,
-              barcode: productBarcode,
-              inventory_quantity: item.quantity || 1,
-              inventory_management: 'shopify',
-              inventory_policy: 'deny',
-              weight: productWeight,
-              weight_unit: 'oz'
-            }],
-            status: 'active'
+        // Check if variant with this SKU already exists in Shopify
+        let existingVariant = null;
+        let productId, variantId, inventoryItemId;
+        
+        try {
+          // Search for variants by SKU using the variants endpoint
+          const existingVariantsResponse = await fetch(`${shopifyUrl}variants.json?sku=${encodeURIComponent(productSku)}&limit=1&fields=id,product_id,inventory_item_id,inventory_quantity`, {
+            method: 'GET',
+            headers,
+          });
+          
+          if (existingVariantsResponse.ok) {
+            const variantsData = await existingVariantsResponse.json();
+            if (variantsData.variants && variantsData.variants.length > 0) {
+              existingVariant = variantsData.variants[0];
+              productId = existingVariant.product_id;
+              variantId = existingVariant.id;
+              inventoryItemId = existingVariant.inventory_item_id;
+              console.log(`Found existing variant ${variantId} in product ${productId} with matching SKU ${productSku}`);
+            }
           }
-        };
-
-        // Create product in Shopify
-        const productResponse = await fetch(`${shopifyUrl}products.json`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(productData),
-        });
-
-        if (!productResponse.ok) {
-          const errorText = await productResponse.text();
-          throw new Error(`Shopify API error: ${productResponse.status} - ${errorText}`);
+        } catch (error) {
+          console.warn(`Error checking for existing variant with SKU ${productSku}:`, error);
+          // Continue with creating new product if check fails
         }
 
-        const productResult = await productResponse.json();
-        const productId = productResult.product.id;
-        const variantId = productResult.product.variants[0].id;
-        const inventoryItemId = productResult.product.variants[0].inventory_item_id;
+        if (existingVariant && variantId) {
+          // Update existing variant quantity
+          const currentQuantity = existingVariant.inventory_quantity || 0;
+          const newQuantity = currentQuantity + (item.quantity || 1);
+          
+          try {
+            // Update variant inventory and price
+            const updateResponse = await fetch(`${shopifyUrl}variants/${variantId}.json`, {
+              method: 'PUT',
+              headers,
+              body: JSON.stringify({
+                variant: {
+                  id: variantId,
+                  inventory_quantity: newQuantity,
+                  price: (item.price || 99999).toString()
+                }
+              }),
+            });
+
+            if (!updateResponse.ok) {
+              const errorText = await updateResponse.text();
+              throw new Error(`Failed to update existing variant: ${updateResponse.status} - ${errorText}`);
+            }
+
+            console.log(`Updated existing variant ${variantId} - increased quantity from ${currentQuantity} to ${newQuantity}`);
+          } catch (updateError) {
+            console.error(`Error updating existing variant ${variantId}:`, updateError);
+            throw updateError;
+          }
+        } else {
+          // Create new product
+          const productData = {
+            product: {
+              title: fullTitle || item.subject || item.brand_title || 'Untitled Item',
+              body_html: fullTitle || item.subject || item.brand_title || '',
+              vendor: vendorName,
+              product_type: isGraded ? 'graded' : (item.category || 'Trading Card'),
+              tags: tags.join(','),
+              variants: [{
+                title: 'Default Title',
+                price: (item.price || 99999).toString(),
+                sku: productSku,
+                barcode: productBarcode,
+                inventory_quantity: item.quantity || 1,
+                inventory_management: 'shopify',
+                inventory_policy: 'deny',
+                weight: productWeight,
+                weight_unit: 'oz'
+              }],
+              status: 'active'
+            }
+          };
+
+          const productResponse = await fetch(`${shopifyUrl}products.json`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(productData),
+          });
+
+          if (!productResponse.ok) {
+            const errorText = await productResponse.text();
+            throw new Error(`Shopify API error: ${productResponse.status} - ${errorText}`);
+          }
+
+          const productResult = await productResponse.json();
+          productId = productResult.product.id;
+          variantId = productResult.product.variants[0].id;
+          inventoryItemId = productResult.product.variants[0].inventory_item_id;
+          
+          console.log(`Created new product ${productId} with variant ${variantId}`);
+        }
 
         console.log(`Created product ${productId} with variant ${variantId}`);
         console.log(`Grading details - isGraded: ${isGraded}, isPSA: ${isPSAGraded}, psaCert: ${psaCert}, numericGrade: ${numericGrade}, finalSKU: ${productSku}, finalBarcode: ${productBarcode}`);

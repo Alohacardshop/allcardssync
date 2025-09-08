@@ -104,6 +104,29 @@ export function generateFallbackSKU(game: GameKey | string, type: 'CARD' | 'PSA'
 }
 
 /**
+ * Generate SKU for TCG items - prioritizes TCGPlayer ID
+ */
+export function generateTCGSKU(tcgplayerId?: string | null, game?: GameKey | string, variantId?: string | null, cardId?: string): string {
+  // Prioritize TCGPlayer ID if available
+  if (tcgplayerId?.trim()) {
+    return tcgplayerId.trim();
+  }
+  
+  // Fall back to variant-based SKU
+  if (variantId && game) {
+    return generateVariantSKU(game, variantId);
+  }
+  
+  // Final fallback
+  if (game && cardId) {
+    return generateFallbackSKU(game, 'CARD', cardId);
+  }
+  
+  // Ultimate fallback
+  return `item-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+}
+
+/**
  * Main SKU generation function - tries variant ID first, falls back to other methods
  */
 export function generateSKU(
