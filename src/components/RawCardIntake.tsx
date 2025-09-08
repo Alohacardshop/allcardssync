@@ -326,8 +326,8 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
            // Map product line to game key
            const gameKey = mapProductLineToGame(row.productLine || '');
            
-           // Generate SKU using variant ID if available
-           const generatedSku = generateSKU(gameKey, variantId, 'CARD', cardId);
+           // Use TCG ID directly as SKU/barcode, with fallback if not available
+           const generatedSku = row.tcgplayerId || generateSKU(gameKey, variantId, 'CARD', cardId);
            
            const formattedTitle = (() => {
               // Format title as: Game,Set,Name - Number,Condition
