@@ -8,6 +8,7 @@ export interface ParsedTcgplayerRow {
   language?: string;
   marketPrice?: number;
   cost?: number; // Added for UI state
+  price?: number; // Your selling price
   tcgplayerId?: string;
   productLine?: string;
   rarity?: string;
