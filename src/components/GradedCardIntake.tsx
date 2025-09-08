@@ -72,7 +72,18 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
   const [bulkAmount, setBulkAmount] = useState(0);
   const [addingBulk, setAddingBulk] = useState(false);
 
+  // Access check state
+  const [accessCheckLoading, setAccessCheckLoading] = useState(false);
+  const [accessResult, setAccessResult] = useState<{
+    success: boolean;
+    hasStaffRole: boolean;
+    canAccessLocation: boolean;
+    userId: string;
+    error?: string;
+  } | null>(null);
+
   const handleFetchPSA = async () => {
+    if (!psaCert.trim()) {
       toast.error("Please enter a PSA certificate number");
       return;
     }
@@ -475,16 +486,6 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
       setAddingBulk(false);
     }
   };
-
-  // Access check state
-  const [accessCheckLoading, setAccessCheckLoading] = useState(false);
-  const [accessResult, setAccessResult] = useState<{
-    success: boolean;
-    hasStaffRole: boolean;
-    canAccessLocation: boolean;
-    userId: string;
-    error?: string;
-  } | null>(null);
 
   // Enhanced preflight access check function using diagnostic RPC
   const checkAccessAndShowToast = async (): Promise<boolean> => {
