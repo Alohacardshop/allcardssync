@@ -11,6 +11,7 @@ import { useTemplates } from "@/hooks/useTemplates";
 import { Navigation } from "@/components/Navigation";
 import { GradedCardIntake } from "@/components/GradedCardIntake";
 import { RawCardIntake } from "@/components/RawCardIntake";
+import { BulkCardIntake } from "@/components/BulkCardIntake";
 import { CurrentBatchPanel } from "@/components/CurrentBatchPanel";
 import { StoreLocationSelector } from "@/components/StoreLocationSelector";
 
@@ -477,7 +478,7 @@ const Index = () => {
 
         {/* Main Content Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="graded" className="flex items-center gap-2">
               <Award className="h-4 w-4" />
               Graded Cards
@@ -485,6 +486,10 @@ const Index = () => {
             <TabsTrigger value="raw" className="flex items-center gap-2">
               <FileEdit className="h-4 w-4" />
               Raw Cards
+            </TabsTrigger>
+            <TabsTrigger value="bulk" className="flex items-center gap-2">
+              <Package className="h-4 w-4" />
+              Bulk Cards
             </TabsTrigger>
             <TabsTrigger value="batch" className="flex items-center gap-2">
               <Archive className="h-4 w-4" />
@@ -509,6 +514,11 @@ const Index = () => {
                 />
               </CardContent>
             </Card>
+            <CurrentBatchPanel onViewFullBatch={() => setActiveTab("batch")} />
+          </TabsContent>
+
+          <TabsContent value="bulk" className="mt-6 space-y-6">
+            <BulkCardIntake onBatchAdd={handleBatchAdd} />
             <CurrentBatchPanel onViewFullBatch={() => setActiveTab("batch")} />
           </TabsContent>
 
