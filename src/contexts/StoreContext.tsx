@@ -283,7 +283,7 @@ export function StoreProvider({ children }: StoreProviderProps) {
         setSelectedLocation(null);
       }
     }
-  }, [selectedStore, locationsCache, selectedLocation, userAssignments]);
+  }, [selectedStore, locationsCache, userAssignments]); // Removed selectedLocation from deps to prevent loop
 
   // Manual location refresh function
   const refreshLocations = async () => {
