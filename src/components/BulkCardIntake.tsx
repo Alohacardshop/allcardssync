@@ -10,15 +10,18 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useStore } from '@/contexts/StoreContext';
 import { StoreLocationSelector } from '@/components/StoreLocationSelector';
-import { useRawIntakeSettings } from '@/hooks/useRawIntakeSettings';
-
 interface BulkCardIntakeProps {
   onBatchAdd?: (item: any) => void;
 }
 
+const GAME_OPTIONS = [
+  { value: 'pokemon', label: 'Pokemon' },
+  { value: 'magic-the-gathering', label: 'Magic the Gathering' },
+  { value: 'other', label: 'Other' }
+];
+
 export function BulkCardIntake({ onBatchAdd }: BulkCardIntakeProps) {
   const { selectedStore, selectedLocation } = useStore();
-  const { settings, loading: settingsLoading } = useRawIntakeSettings();
   
   // Form state
   const [selectedGame, setSelectedGame] = useState('');
@@ -174,13 +177,6 @@ export function BulkCardIntake({ onBatchAdd }: BulkCardIntakeProps) {
     }
   };
 
-  if (settingsLoading) {
-    return (
-      <div className="flex items-center justify-center p-8">
-        <Loader2 className="h-6 w-6 animate-spin" />
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6">
@@ -215,9 +211,9 @@ export function BulkCardIntake({ onBatchAdd }: BulkCardIntakeProps) {
                   <SelectValue placeholder="Select game" />
                 </SelectTrigger>
                 <SelectContent>
-                  {settings.enabledGames.map((game) => (
-                    <SelectItem key={game} value={game}>
-                      {game.charAt(0).toUpperCase() + game.slice(1)}
+                  {GAME_OPTIONS.map((game) => (
+                    <SelectItem key={game.value} value={game.value}>
+                      {game.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
