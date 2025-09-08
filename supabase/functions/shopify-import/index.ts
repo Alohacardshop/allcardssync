@@ -209,13 +209,13 @@ serve(async (req) => {
         const vendorName = getVendorName(storeKey);
         console.log(`Using vendor: "${vendorName}" for store: ${storeKey}`);
         
-        // Check if variant with this SKU already exists in Shopify
+        // Check if variant with this SKU or barcode already exists in Shopify
         let existingVariant = null;
         let productId, variantId, inventoryItemId;
         
         try {
-          // Search for variants by SKU using the variants endpoint
-          const existingVariantsResponse = await fetch(`${shopifyUrl}variants.json?sku=${encodeURIComponent(productSku)}&limit=1&fields=id,product_id,inventory_item_id,inventory_quantity`, {
+          // First try to find by SKU
+          let existingVariantsResponse = await fetch(`${shopifyUrl}variants.json?sku=${encodeURIComponent(productSku)}&limit=1&fields=id,product_id,inventory_item_id,inventory_quantity`, {
             method: 'GET',
             headers,
           });
@@ -224,14 +224,34 @@ serve(async (req) => {
             const variantsData = await existingVariantsResponse.json();
             if (variantsData.variants && variantsData.variants.length > 0) {
               existingVariant = variantsData.variants[0];
-              productId = existingVariant.product_id;
-              variantId = existingVariant.id;
-              inventoryItemId = existingVariant.inventory_item_id;
-              console.log(`Found existing variant ${variantId} in product ${productId} with matching SKU ${productSku}`);
+              console.log(`Found existing variant by SKU: ${productSku}`);
             }
           }
+          
+          // If not found by SKU and barcode is different from SKU, try searching by barcode
+          if (!existingVariant && productBarcode && productBarcode !== productSku) {
+            existingVariantsResponse = await fetch(`${shopifyUrl}variants.json?barcode=${encodeURIComponent(productBarcode)}&limit=1&fields=id,product_id,inventory_item_id,inventory_quantity`, {
+              method: 'GET',
+              headers,
+            });
+            
+            if (existingVariantsResponse.ok) {
+              const variantsData = await existingVariantsResponse.json();
+              if (variantsData.variants && variantsData.variants.length > 0) {
+                existingVariant = variantsData.variants[0];
+                console.log(`Found existing variant by barcode: ${productBarcode}`);
+              }
+            }
+          }
+          
+          if (existingVariant) {
+            productId = existingVariant.product_id;
+            variantId = existingVariant.id;
+            inventoryItemId = existingVariant.inventory_item_id;
+            console.log(`Found existing variant ${variantId} in product ${productId} with matching SKU/barcode`);
+          }
         } catch (error) {
-          console.warn(`Error checking for existing variant with SKU ${productSku}:`, error);
+          console.warn(`Error checking for existing variant with SKU ${productSku} or barcode ${productBarcode}:`, error);
           // Continue with creating new product if check fails
         }
 
@@ -249,7 +269,10 @@ serve(async (req) => {
                 variant: {
                   id: variantId,
                   inventory_quantity: newQuantity,
-                  price: (item.price || 99999).toString()
+                  price: (item.price || 99999).toString(),
+                  // Update SKU and barcode to ensure they match our current values
+                  sku: productSku,
+                  barcode: productBarcode
                 }
               }),
             });
