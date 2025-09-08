@@ -348,8 +348,10 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
                   <TableRow>
                     <TableHead className="w-16">Qty</TableHead>
                     <TableHead>Name</TableHead>
+                    <TableHead className="w-20">Game</TableHead>
                     <TableHead className="w-24">Set</TableHead>
                     <TableHead className="w-20">Number</TableHead>
+                    <TableHead className="w-24">Rarity</TableHead>
                     <TableHead className="w-32">Printing</TableHead>
                     <TableHead className="w-32">Condition</TableHead>
                     <TableHead className="w-24">Language</TableHead>
@@ -378,6 +380,11 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
                         />
                       </TableCell>
                       <TableCell>
+                        <div className="text-sm text-muted-foreground w-20 truncate" title={row.productLine || 'Unknown'}>
+                          {row.productLine || '—'}
+                        </div>
+                      </TableCell>
+                      <TableCell>
                         <Input
                           value={row.set || ''}
                           onChange={(e) => updateRow(index, 'set', e.target.value)}
@@ -390,6 +397,11 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
                           onChange={(e) => updateRow(index, 'number', e.target.value)}
                           className="w-20"
                         />
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-sm w-24 truncate" title={row.rarity || 'Unknown'}>
+                          {row.rarity || '—'}
+                        </div>
                       </TableCell>
                       <TableCell>
                         <Select 

@@ -8,6 +8,10 @@ export interface ParsedTcgplayerRow {
   language?: string;
   marketPrice?: number;
   cost?: number; // Added for UI state
+  tcgplayerId?: string;
+  productLine?: string;
+  rarity?: string;
+  photoUrl?: string;
 }
 
 export interface ParsedTcgplayerData {
@@ -34,7 +38,13 @@ export function parseTcgplayerPaste(text: string): ParsedTcgplayerData {
   let totalMarketValue: number | undefined;
   let cardCount: number | undefined;
 
-  for (const line of lines) {
+  // Find CSV header line to split sections
+  const csvHeaderIndex = lines.findIndex(line => line.startsWith('TCGplayer Id,'));
+  const humanReadableLines = csvHeaderIndex >= 0 ? lines.slice(0, csvHeaderIndex) : lines;
+  const csvLines = csvHeaderIndex >= 0 ? lines.slice(csvHeaderIndex + 1) : [];
+
+  // Parse human-readable section
+  for (const line of humanReadableLines) {
     // Skip TOTAL line but extract info
     if (line.startsWith('TOTAL:')) {
       const totalMatch = line.match(/TOTAL:\s*(\d+)\s*cards?\s*-\s*\$([0-9,]+\.?\d*)/i);
@@ -124,6 +134,52 @@ export function parseTcgplayerPaste(text: string): ParsedTcgplayerData {
       language,
       marketPrice
     });
+  }
+
+  // Parse CSV section and merge with human-readable data
+  if (csvLines.length > 0) {
+    const csvRows: any[] = [];
+    
+    for (const csvLine of csvLines) {
+      const fields = csvLine.split(',');
+      if (fields.length >= 16) {
+        csvRows.push({
+          tcgplayerId: fields[0],
+          productLine: fields[1],
+          setName: fields[2],
+          productName: fields[3],
+          number: fields[5],
+          rarity: fields[6],
+          condition: fields[7],
+          tcgMarketPrice: parseFloat(fields[8]) || 0,
+          quantity: parseInt(fields[12]) || 0,
+          photoUrl: fields[15]
+        });
+      }
+    }
+
+    // Merge CSV data with human-readable data by matching quantity and price
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const csvMatch = csvRows.find(csv => 
+        csv.quantity === row.quantity && 
+        Math.abs(csv.tcgMarketPrice - (row.marketPrice || 0)) < 0.01
+      );
+      
+      if (csvMatch) {
+        rows[i] = {
+          ...row,
+          tcgplayerId: csvMatch.tcgplayerId,
+          productLine: csvMatch.productLine,
+          rarity: csvMatch.rarity,
+          photoUrl: csvMatch.photoUrl,
+          // Use CSV data for missing fields
+          set: row.set || csvMatch.setName,
+          number: row.number || csvMatch.number,
+          condition: row.condition || csvMatch.condition
+        };
+      }
+    }
   }
 
   return {
