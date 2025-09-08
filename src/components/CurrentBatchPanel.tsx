@@ -22,6 +22,7 @@ interface IntakeItem {
   processing_notes?: string;
   printed_at?: string;
   pushed_at?: string;
+  removed_from_batch_at?: string;
   created_at: string;
   psa_cert?: string;
   grade?: string;
@@ -47,6 +48,8 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
   const [currentLotId, setCurrentLotId] = useState<string | null>(null);
   const [currentLotNumber, setCurrentLotNumber] = useState<string | null>(null);
   const [startingNewLot, setStartingNewLot] = useState(false);
+  const [sendingBatchToInventory, setSendingBatchToInventory] = useState(false);
+  const [batchSendProgress, setBatchSendProgress] = useState({ total: 0, completed: 0, failed: 0, inProgress: false });
   const { selectedStore, selectedLocation } = useStore();
 
   const handleEditItem = (item: IntakeItem) => {
@@ -170,6 +173,118 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
     } catch (error: any) {
       console.error(`💥 [${correlationId}] Error sending item to inventory:`, error);
       toast.error(`Error sending item to inventory: ${error?.message || 'Unknown error'}`);
+    }
+  };
+
+  // Send entire batch to inventory
+  const handleSendBatchToInventory = async () => {
+    if (recentItems.length === 0) {
+      toast.error('No items in batch to send to inventory');
+      return;
+    }
+
+    // Only include items that haven't been sent to inventory yet
+    const itemsToSend = recentItems.filter(item => !item.removed_from_batch_at);
+    
+    if (itemsToSend.length === 0) {
+      toast.error('All items in batch have already been sent to inventory');
+      return;
+    }
+
+    const correlationId = `batch_send_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+    console.log(`🚀 [${correlationId}] Starting batch send to inventory:`, { itemCount: itemsToSend.length, itemIds: itemsToSend.map(i => i.id) });
+    
+    try {
+      setSendingBatchToInventory(true);
+      setBatchSendProgress({ total: itemsToSend.length, completed: 0, failed: 0, inProgress: true });
+
+      // Process items concurrently with limited concurrency
+      const CONCURRENCY_LIMIT = 3;
+      const results = [];
+      
+      for (let i = 0; i < itemsToSend.length; i += CONCURRENCY_LIMIT) {
+        const batch = itemsToSend.slice(i, i + CONCURRENCY_LIMIT);
+        const batchPromises = batch.map(async (item) => {
+          try {
+            console.log(`📦 [${correlationId}] Processing item ${item.id}...`);
+            
+            const startTime = Date.now();
+            const { data, error } = await supabase.rpc('send_intake_item_to_inventory', {
+              item_id: item.id
+            });
+
+            if (error) {
+              console.error(`❌ [${correlationId}] Failed to send item ${item.id}:`, error);
+              return { success: false, itemId: item.id, error: error.message };
+            }
+
+            if (!data) {
+              console.warn(`⚠️ [${correlationId}] No data returned for item ${item.id}`);
+              return { success: false, itemId: item.id, error: 'No data returned (permission or not found)' };
+            }
+
+            const duration = Date.now() - startTime;
+            console.log(`✅ [${correlationId}] Successfully sent item ${item.id} (${duration}ms):`, data);
+
+            // Trigger Shopify sync in background (non-blocking)
+            if (data.sku && data.store_key) {
+              supabase.functions.invoke('shopify-sync-inventory', {
+                body: {
+                  storeKey: data.store_key,
+                  sku: data.sku,
+                  locationGid: data.shopify_location_gid,
+                  correlationId
+                }
+              }).catch((syncError) => {
+                console.warn(`⚠️ [${correlationId}] Shopify sync failed for ${item.id} (non-critical):`, syncError);
+              });
+            }
+
+            return { success: true, itemId: item.id, data };
+          } catch (error: any) {
+            console.error(`💥 [${correlationId}] Exception processing item ${item.id}:`, error);
+            return { success: false, itemId: item.id, error: error?.message || 'Unknown error' };
+          }
+        });
+
+        const batchResults = await Promise.all(batchPromises);
+        results.push(...batchResults);
+        
+        // Update progress
+        const completed = results.filter(r => r.success).length;
+        const failed = results.filter(r => !r.success).length;
+        setBatchSendProgress(prev => ({ ...prev, completed, failed }));
+      }
+
+      const successful = results.filter(r => r.success);
+      const failed = results.filter(r => !r.success);
+
+      console.log(`📊 [${correlationId}] Batch send completed:`, {
+        total: itemsToSend.length,
+        successful: successful.length,
+        failed: failed.length,
+        results
+      });
+
+      if (failed.length === 0) {
+        toast.success(`Successfully sent ${successful.length} item(s) to inventory`);
+      } else if (successful.length === 0) {
+        toast.error(`Failed to send any items to inventory (${failed.length} failures)`);
+      } else {
+        toast.error(`Partially completed: ${successful.length} sent, ${failed.length} failed`);
+      }
+      
+      // Refresh the batch view
+      await fetchRecentItems();
+      
+      // Trigger empty lot check after successful batch send
+      window.dispatchEvent(new CustomEvent('batch:items-sent-to-inventory'));
+    } catch (error: any) {
+      console.error(`💥 [${correlationId}] Batch send failed:`, error);
+      toast.error(`Error sending batch to inventory: ${error?.message || 'Unknown error'}`);
+    } finally {
+      setSendingBatchToInventory(false);
+      setBatchSendProgress(prev => ({ ...prev, inProgress: false }));
     }
   };
 
@@ -506,6 +621,24 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
                 <Button variant="outline" size="sm" onClick={onViewFullBatch}>
                   <Eye className="h-4 w-4 mr-2" />
                   View Full Batch
+                </Button>
+              )}
+              {totalCount > 0 && (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={handleSendBatchToInventory}
+                  disabled={sendingBatchToInventory || recentItems.filter(item => !item.removed_from_batch_at).length === 0}
+                  className="text-green-600 hover:text-green-700 border-green-200 hover:bg-green-50"
+                >
+                  <Package className={`h-4 w-4 mr-2 ${sendingBatchToInventory ? 'animate-pulse' : ''}`} />
+                  {sendingBatchToInventory ? (
+                    batchSendProgress.inProgress ? 
+                      `Sending... (${batchSendProgress.completed}/${batchSendProgress.total})` : 
+                      'Sending...'
+                  ) : (
+                    `Send Batch to Inventory`
+                  )}
                 </Button>
               )}
               <Button 
