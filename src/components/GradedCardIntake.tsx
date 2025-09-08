@@ -66,12 +66,6 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
     psaEstimate: ""
   });
 
-  // Bulk dialog state
-  const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
-  const [bulkQuantity, setBulkQuantity] = useState(1);
-  const [bulkAmount, setBulkAmount] = useState(0);
-  const [addingBulk, setAddingBulk] = useState(false);
-
   // Access check state
   const [accessCheckLoading, setAccessCheckLoading] = useState(false);
   const [accessResult, setAccessResult] = useState<{
@@ -408,83 +402,6 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
 
   const updateFormField = (field: string, value: string | number) => {
     setFormData(prev => ({ ...prev, [field]: value }));
-  };
-
-  // Add bulk item to batch
-  const handleAddBulkToBatch = async () => {
-    if (bulkQuantity <= 0 || bulkAmount <= 0) {
-      toast.error('Please enter valid quantity and amount');
-      return;
-    }
-
-    if (!selectedStore || !selectedLocation) {
-      toast.error("Please select a store and location before adding bulk items");
-      return;
-    }
-
-    // Check access
-    const hasAccess = await checkAccessAndShowToast();
-    if (!hasAccess) {
-      return;
-    }
-
-    setAddingBulk(true);
-
-    try {
-      const rpcParams = {
-        store_key_in: selectedStore.trim(),
-        shopify_location_gid_in: selectedLocation.trim(),
-        quantity_in: bulkQuantity,
-        brand_title_in: 'Card Bulk Item',
-        subject_in: 'Card Bulk Item',
-        category_in: 'Card Bulk',
-        variant_in: 'Bulk',
-        card_number_in: '',
-        grade_in: '',
-        price_in: bulkAmount,
-        cost_in: bulkAmount, // Use same amount for cost
-        sku_in: '',
-        source_provider_in: 'bulk_entry',
-        catalog_snapshot_in: {
-          name: 'Card Bulk Item',
-          type: 'card_bulk'
-        },
-        pricing_snapshot_in: {
-          amount: bulkAmount,
-          captured_at: new Date().toISOString()
-        },
-        processing_notes_in: `Card bulk entry: ${bulkQuantity} items at $${bulkAmount.toFixed(2)} each`
-      };
-
-      const { data, error } = await supabase.rpc('create_raw_intake_item', rpcParams);
-
-      if (error) {
-        console.error('Bulk add error:', error);
-        toast.error(`Failed to add card bulk item: ${error.message}`);
-      } else {
-        toast.success(`Successfully added card bulk item (${bulkQuantity} items) to batch`);
-        
-        // Dispatch browser event for real-time updates
-        const responseData = Array.isArray(data) ? data[0] : data;
-        window.dispatchEvent(new CustomEvent('intake:item-added', { 
-          detail: { ...responseData, lot_number: responseData?.lot_number }
-        }));
-
-        if (onBatchAdd) {
-          onBatchAdd();
-        }
-
-        // Reset form and close dialog
-        setBulkQuantity(1);
-        setBulkAmount(0);
-        setBulkDialogOpen(false);
-      }
-    } catch (error: any) {
-      console.error('Bulk add error:', error);
-      toast.error(`Failed to add card bulk item: ${error.message}`);
-    } finally {
-      setAddingBulk(false);
-    }
   };
 
   // Enhanced preflight access check function using diagnostic RPC
@@ -906,67 +823,6 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
 
         {/* Submit Button */}
         <div className="flex justify-end gap-2 pt-4">
-          <Dialog open={bulkDialogOpen} onOpenChange={setBulkDialogOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline" disabled={!selectedStore || !selectedLocation}>
-                <Package className="h-4 w-4 mr-2" />
-                Card Bulk
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle>Add Card Bulk Item</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="bulkQuantity">Quantity</Label>
-                  <Input
-                    id="bulkQuantity"
-                    type="number"
-                    min="1"
-                    value={bulkQuantity}
-                    onChange={(e) => setBulkQuantity(parseInt(e.target.value) || 1)}
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="bulkAmount">Amount ($)</Label>
-                  <Input
-                    id="bulkAmount"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={bulkAmount}
-                    onChange={(e) => setBulkAmount(parseFloat(e.target.value) || 0)}
-                    className="mt-1"
-                    placeholder="0.00"
-                  />
-                </div>
-                <div className="flex justify-end gap-2">
-                  <Button variant="outline" onClick={() => setBulkDialogOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button 
-                    onClick={handleAddBulkToBatch} 
-                    disabled={addingBulk || bulkQuantity <= 0 || bulkAmount <= 0}
-                  >
-                    {addingBulk ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Adding...
-                      </>
-                    ) : (
-                      <>
-                        <Plus className="h-4 w-4 mr-2" />
-                        Add to Batch
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
-          
           <Button 
             onClick={handleSubmit}
             disabled={submitting || !formData.certNumber || !formData.grade || !formData.price || !formData.cost}
