@@ -552,28 +552,9 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
             {recentItems.map((item) => (
               <div key={item.id} className="flex items-center justify-between p-3 border rounded-lg bg-muted/20">
                 <div className="flex-1">
-                  <div className="font-medium text-sm">
-                    {(() => {
-                      // Use catalog_snapshot for proper formatting
-                      const catalog = item.catalog_snapshot;
-                      if (catalog?.name && catalog?.set) {
-                        const cardName = catalog.name.split(' - ')[0]; // Extract "Blaziken" from "Blaziken - 192/182"
-                        const cardNumber = catalog.name.split(' - ')[1]; // Extract "192/182" from "Blaziken - 192/182"
-                        const category = item.category || '';
-                        const set = catalog.set;
-                        
-                        return `${category} ${cardName} ${set} • #${cardNumber}`.trim();
-                      }
-                      
-                      // Fallback to original logic
-                      const base = [item.category, item.subject, item.brand_title]
-                        .filter(Boolean)
-                        .join(' ');
-                      const card = item.card_number ? ` • #${item.card_number}` : '';
-                      const title = `${base}${card}`.trim();
-                      return title || item.sku || 'Unknown Item';
-                    })()}
-                  </div>
+                   <div className="font-medium text-sm">
+                     {item.brand_title || item.subject || item.sku || 'Unknown Item'}
+                   </div>
                   <div className="text-xs text-muted-foreground space-y-1">
                     <div>
                       Qty: {item.quantity} • ${(item.price || 0).toFixed(2)}

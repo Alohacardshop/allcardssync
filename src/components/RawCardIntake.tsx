@@ -263,12 +263,28 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
       // Process rows sequentially to avoid overwhelming the database
       for (const [index, row] of parsedRows.entries()) {
         try {
-          const rpcParams = {
-            store_key_in: selectedStore!.trim(),
-            shopify_location_gid_in: selectedLocation!.trim(),
-            quantity_in: row.quantity,
-            brand_title_in: row.name,
-            subject_in: row.name,
+           const formattedTitle = (() => {
+             // Format title as: Game,Set,Name - Number,Condition
+             const parts = [];
+             if (row.productLine) parts.push(row.productLine);
+             if (row.set) parts.push(row.set);
+             
+             let cardPart = row.name;
+             if (row.number) cardPart += ` - ${row.number}`;
+             parts.push(cardPart);
+             
+             if (row.condition && row.condition !== 'Near Mint') parts.push(row.condition);
+             else parts.push('Near Mint');
+             
+             return parts.join(',');
+           })();
+
+           const rpcParams = {
+             store_key_in: selectedStore!.trim(),
+             shopify_location_gid_in: selectedLocation!.trim(),
+             quantity_in: row.quantity,
+             brand_title_in: formattedTitle,
+             subject_in: formattedTitle,
             category_in: 'Trading Cards', // Generic category for TCGplayer imports
             variant_in: row.printing || 'Normal',
             card_number_in: row.number || '',
