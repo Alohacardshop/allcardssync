@@ -147,10 +147,12 @@ export function StoreProvider({ children }: StoreProviderProps) {
       if (defaultAssignment) {
         console.log("StoreContext: Found default assignment:", defaultAssignment);
         setSelectedStore(defaultAssignment.store_key);
-        setSelectedLocation(defaultAssignment.location_gid);
         
-        // Auto-load locations for the default store
+        // Auto-load locations for the default store FIRST
         await autoLoadLocations(defaultAssignment.store_key);
+        
+        // Then set the location after locations are loaded
+        setSelectedLocation(defaultAssignment.location_gid);
         
         toast({
           title: "Default store loaded",
@@ -162,10 +164,12 @@ export function StoreProvider({ children }: StoreProviderProps) {
         const firstAssignment = assignments[0];
         console.log("StoreContext: No default found, using first assignment:", firstAssignment);
         setSelectedStore(firstAssignment.store_key);
-        setSelectedLocation(firstAssignment.location_gid);
         
-        // Auto-load locations for the selected store
+        // Auto-load locations for the selected store FIRST
         await autoLoadLocations(firstAssignment.store_key);
+        
+        // Then set the location after locations are loaded
+        setSelectedLocation(firstAssignment.location_gid);
         
         toast({
           title: "Store loaded",
@@ -254,16 +258,32 @@ export function StoreProvider({ children }: StoreProviderProps) {
     if (cached) {
       setAvailableLocations(cached);
       
-      // Clear selected location if it's not available in cached locations
+      // Only clear selected location if it's not available in cached locations AND
+      // we're not loading default user data (which sets location after loading locations)
       if (selectedLocation && !cached.some(loc => loc.gid === selectedLocation)) {
-        setSelectedLocation(null);
+        // Check if this might be a default location that's valid but not yet loaded
+        const hasMatchingAssignment = userAssignments.some(
+          a => a.store_key === selectedStore && a.location_gid === selectedLocation
+        );
+        
+        // Only clear if we don't have a matching assignment
+        if (!hasMatchingAssignment) {
+          setSelectedLocation(null);
+        }
       }
     } else {
       // No cache, start with empty locations (user needs to refresh manually)
       setAvailableLocations([]);
-      setSelectedLocation(null);
+      // Don't clear selectedLocation here if user assignments indicate it should be valid
+      const hasMatchingAssignment = userAssignments.some(
+        a => a.store_key === selectedStore && a.location_gid === selectedLocation
+      );
+      
+      if (!hasMatchingAssignment) {
+        setSelectedLocation(null);
+      }
     }
-  }, [selectedStore, locationsCache, selectedLocation]);
+  }, [selectedStore, locationsCache, selectedLocation, userAssignments]);
 
   // Manual location refresh function
   const refreshLocations = async () => {
