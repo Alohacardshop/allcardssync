@@ -80,7 +80,6 @@ export function Navigation({ showMobileMenu = true }: NavigationProps) {
     { to: "/inventory", label: "Inventory", icon: Package },
     { to: "/batches", label: "Batches", icon: Archive },
     { to: "/labels", label: "Labels", icon: Tags },
-    { to: "/bulk-import", label: "Import", icon: Upload },
     { to: "/shopify-mapping", label: "Shopify", icon: FileText },
     { to: "/print-logs", label: "Print Logs", icon: FileText },
   ];
