@@ -107,7 +107,12 @@ export function StoreProvider({ children }: StoreProviderProps) {
   const loadUserData = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        console.log("StoreContext: No user found");
+        return;
+      }
+
+      console.log("StoreContext: Loading user data for user:", user.id);
 
       // Check if user is admin or staff
       const { data: adminCheck } = await supabase.rpc("has_role", { 
@@ -122,33 +127,66 @@ export function StoreProvider({ children }: StoreProviderProps) {
       });
       setIsStaff(staffCheck || false);
 
-      // Load user assignments
-      const { data: assignments } = await supabase
+      // Load user assignments with fresh data
+      const { data: assignments, error: assignmentsError } = await supabase
         .from("user_shopify_assignments")
         .select("store_key, location_gid, location_name, is_default")
-        .eq("user_id", user.id);
+        .eq("user_id", user.id)
+        .order("is_default", { ascending: false }); // Put defaults first
       
+      if (assignmentsError) {
+        console.error("StoreContext: Error loading assignments:", assignmentsError);
+        return;
+      }
+
+      console.log("StoreContext: Loaded assignments:", assignments);
       setUserAssignments(assignments || []);
 
       // Set default store/location from user assignments
       const defaultAssignment = assignments?.find(a => a.is_default);
       if (defaultAssignment) {
+        console.log("StoreContext: Found default assignment:", defaultAssignment);
         setSelectedStore(defaultAssignment.store_key);
         setSelectedLocation(defaultAssignment.location_gid);
         
         // Auto-load locations for the default store
         await autoLoadLocations(defaultAssignment.store_key);
+        
+        toast({
+          title: "Default store loaded",
+          description: `Using ${defaultAssignment.location_name}`,
+          variant: "default",
+        });
       } else if (assignments && assignments.length > 0) {
         // If no default, use the first assignment
         const firstAssignment = assignments[0];
+        console.log("StoreContext: No default found, using first assignment:", firstAssignment);
         setSelectedStore(firstAssignment.store_key);
         setSelectedLocation(firstAssignment.location_gid);
         
         // Auto-load locations for the selected store
         await autoLoadLocations(firstAssignment.store_key);
+        
+        toast({
+          title: "Store loaded",
+          description: `Please set ${firstAssignment.location_name} as default for faster access`,
+          variant: "default",
+        });
+      } else {
+        console.log("StoreContext: No assignments found");
+        toast({
+          title: "No store access",
+          description: "Please contact an administrator to assign you to a store",
+          variant: "destructive",
+        });
       }
     } catch (error) {
       console.error("Error loading user data:", error);
+      toast({
+        title: "Failed to load user data",
+        description: "Please try refreshing the page",
+        variant: "destructive",
+      });
     }
   };
 
