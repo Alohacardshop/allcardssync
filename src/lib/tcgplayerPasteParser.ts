@@ -44,8 +44,11 @@ export function parseTcgplayerPaste(text: string): ParsedTcgplayerData {
   const humanReadableLines = csvHeaderIndex >= 0 ? lines.slice(0, csvHeaderIndex) : lines;
   const csvLines = csvHeaderIndex >= 0 ? lines.slice(csvHeaderIndex + 1) : [];
 
-  // Parse human-readable section
+  // Parse human-readable section (if exists)
   for (const line of humanReadableLines) {
+    // Skip CSV header if it somehow ended up here
+    if (line.startsWith('TCGplayer Id,')) continue;
+    
     // Skip TOTAL line but extract info
     if (line.startsWith('TOTAL:')) {
       const totalMatch = line.match(/TOTAL:\s*(\d+)\s*cards?\s*-\s*\$([0-9,]+\.?\d*)/i);
@@ -137,48 +140,96 @@ export function parseTcgplayerPaste(text: string): ParsedTcgplayerData {
     });
   }
 
-  // Parse CSV section and merge with human-readable data
+  // Parse CSV section
   if (csvLines.length > 0) {
     const csvRows: any[] = [];
     
     for (const csvLine of csvLines) {
       const fields = csvLine.split(',');
       if (fields.length >= 16) {
-        csvRows.push({
-          tcgplayerId: fields[0],
-          productLine: fields[1],
-          setName: fields[2],
-          productName: fields[3],
-          number: fields[5],
-          rarity: fields[6],
-          condition: fields[7],
-          tcgMarketPrice: parseFloat(fields[8]) || 0,
-          quantity: parseInt(fields[12]) || 0,
-          photoUrl: fields[15]
-        });
+        // Parse CSV data
+        const tcgplayerId = fields[0];
+        const productLine = fields[1];
+        const setName = fields[2];
+        const productName = fields[3];
+        const title = fields[4];
+        const number = fields[5];
+        const rarity = fields[6];
+        const condition = fields[7];
+        const tcgMarketPrice = parseFloat(fields[8]) || 0;
+        const quantity = parseInt(fields[12]) || 1; // Default quantity to 1 if not specified
+        const photoUrl = fields[15];
+
+        const csvRow = {
+          tcgplayerId,
+          productLine,
+          setName,
+          productName: productName || title,
+          number,
+          rarity,
+          condition,
+          tcgMarketPrice: Math.ceil(tcgMarketPrice), // Round up market price
+          quantity,
+          photoUrl
+        };
+        
+        csvRows.push(csvRow);
       }
     }
 
-    // Merge CSV data with human-readable data by matching quantity and price
-    for (let i = 0; i < rows.length; i++) {
-      const row = rows[i];
-      const csvMatch = csvRows.find(csv => 
-        csv.quantity === row.quantity && 
-        Math.abs(csv.tcgMarketPrice - (row.marketPrice || 0)) < 0.01
-      );
+    // If we have CSV data but no human-readable data, create rows from CSV
+    if (rows.length === 0 && csvRows.length > 0) {
+      for (const csvRow of csvRows) {
+        // Extract language from condition if present
+        let language = 'English';
+        let cleanCondition = csvRow.condition;
+        if (csvRow.condition && csvRow.condition.includes(' - ')) {
+          const parts = csvRow.condition.split(' - ');
+          cleanCondition = parts[0];
+          language = parts[1] || 'English';
+        }
+
+        rows.push({
+          quantity: csvRow.quantity,
+          name: csvRow.productName,
+          set: csvRow.setName,
+          number: csvRow.number,
+          printing: csvRow.rarity === 'Holo Rare' ? 'Holofoil' : csvRow.rarity,
+          condition: cleanCondition,
+          language: language,
+          marketPrice: csvRow.tcgMarketPrice,
+          tcgplayerId: csvRow.tcgplayerId,
+          productLine: csvRow.productLine,
+          rarity: csvRow.rarity,
+          photoUrl: csvRow.photoUrl
+        });
+      }
       
-      if (csvMatch) {
-        rows[i] = {
-          ...row,
-          tcgplayerId: csvMatch.tcgplayerId,
-          productLine: csvMatch.productLine,
-          rarity: csvMatch.rarity,
-          photoUrl: csvMatch.photoUrl,
-          // Use CSV data for missing fields
-          set: row.set || csvMatch.setName,
-          number: row.number || csvMatch.number,
-          condition: row.condition || csvMatch.condition
-        };
+      // Calculate totals from CSV data
+      cardCount = csvRows.length;
+      totalMarketValue = csvRows.reduce((sum, row) => sum + (row.tcgMarketPrice * row.quantity), 0);
+    } else if (rows.length > 0) {
+      // Merge CSV data with human-readable data by matching quantity and price
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        const csvMatch = csvRows.find(csv => 
+          csv.quantity === row.quantity && 
+          Math.abs(csv.tcgMarketPrice - (row.marketPrice || 0)) < 1.01 // Allow for rounding differences
+        );
+        
+        if (csvMatch) {
+          rows[i] = {
+            ...row,
+            tcgplayerId: csvMatch.tcgplayerId,
+            productLine: csvMatch.productLine,
+            rarity: csvMatch.rarity,
+            photoUrl: csvMatch.photoUrl,
+            // Use CSV data for missing fields
+            set: row.set || csvMatch.setName,
+            number: row.number || csvMatch.number,
+            condition: row.condition || csvMatch.condition
+          };
+        }
       }
     }
   }
