@@ -78,7 +78,7 @@ export function StoreProvider({ children }: StoreProviderProps) {
   }, []);
 
   // Auto-load locations for a specific store (silent, no toast messages)
-  const autoLoadLocations = async (storeKey: string) => {
+  const autoLoadLocations = async (storeKey: string): Promise<Location[] | null> => {
     try {
       const { data, error } = await supabase.functions.invoke("shopify-locations", {
         body: { storeKey }
@@ -97,10 +97,13 @@ export function StoreProvider({ children }: StoreProviderProps) {
         setLocationsCache(prev => ({ ...prev, [storeKey]: locations }));
         setAvailableLocations(locations);
         setLocationsLastUpdated(new Date());
+        return locations;
       }
+      return null;
     } catch (error) {
       console.error("Error auto-loading locations:", error);
       // Silent failure - user can manually refresh if needed
+      return null;
     }
   };
 
@@ -149,14 +152,18 @@ export function StoreProvider({ children }: StoreProviderProps) {
         setSelectedStore(defaultAssignment.store_key);
         
         // Auto-load locations for the default store FIRST
-        await autoLoadLocations(defaultAssignment.store_key);
+        const loadedDefaultLocs = await autoLoadLocations(defaultAssignment.store_key);
         
         // Then set the location after locations are loaded
         setSelectedLocation(defaultAssignment.location_gid);
         
+        const defaultDisplayName = defaultAssignment.location_name 
+          || loadedDefaultLocs?.find(l => l.gid === defaultAssignment.location_gid)?.name 
+          || defaultAssignment.store_key;
+        
         toast({
           title: "Default store loaded",
-          description: `Using ${defaultAssignment.location_name}`,
+          description: `Using ${defaultDisplayName}`,
           variant: "default",
         });
       } else if (assignments && assignments.length > 0) {
@@ -166,14 +173,18 @@ export function StoreProvider({ children }: StoreProviderProps) {
         setSelectedStore(firstAssignment.store_key);
         
         // Auto-load locations for the selected store FIRST
-        await autoLoadLocations(firstAssignment.store_key);
+        const loadedLocs = await autoLoadLocations(firstAssignment.store_key);
         
         // Then set the location after locations are loaded
         setSelectedLocation(firstAssignment.location_gid);
         
+        const firstDisplayName = firstAssignment.location_name 
+          || loadedLocs?.find(l => l.gid === firstAssignment.location_gid)?.name 
+          || firstAssignment.store_key;
+        
         toast({
           title: "Store loaded",
-          description: `Please set ${firstAssignment.location_name} as default for faster access`,
+          description: `Please set ${firstDisplayName} as default for faster access`,
           variant: "default",
         });
       } else {
