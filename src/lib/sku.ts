@@ -15,7 +15,10 @@ export function getGameAbbreviation(game: GameKey | string): string {
     case 'pokemon_japan':
       return 'PKJ'; 
     case 'mtg':
+    case 'magic-the-gathering':
       return 'MTG';
+    case 'yugioh':
+      return 'YGO';
     default:
       return 'UNK';
   }
@@ -126,7 +129,7 @@ export function extractVariantIdFromSKU(sku: string): string | null {
   
   // Check if it matches variant pattern (GAME-variantId)
   const parts = sku.split('-');
-  if (parts.length === 2 && ['PKM', 'PKJ', 'MTG'].includes(parts[0])) {
+  if (parts.length === 2 && ['PKM', 'PKJ', 'MTG', 'YGO'].includes(parts[0])) {
     // Could be variant ID - return the second part
     return parts[1];
   }
@@ -141,5 +144,5 @@ export function isVariantSKU(sku: string): boolean {
   if (!sku) return false;
   
   const parts = sku.split('-');
-  return parts.length === 2 && ['PKM', 'PKJ', 'MTG'].includes(parts[0]);
+  return parts.length === 2 && ['PKM', 'PKJ', 'MTG', 'YGO'].includes(parts[0]);
 }

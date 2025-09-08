@@ -190,8 +190,11 @@ export const TCGPlayerBulkImport = () => {
     item.cardId = cardId;
     item.variantId = variantId;
     
+    // Map game from foil/set info (simplified mapping)
+    const gameKey = 'pokemon'; // Default for now, could be enhanced with better game detection
+    
     // Generate SKU using new format
-    const sku = generateSKU('pokemon', variantId, 'CARD', cardId);
+    const sku = generateSKU(gameKey, variantId, 'CARD', cardId);
     
     try {
       const rpcParams = {
@@ -214,7 +217,9 @@ export const TCGPlayerBulkImport = () => {
           number: item.cardNumber,
           condition: item.condition,
           foil: item.foil,
-          language: item.language
+          language: item.language,
+          card_id: cardId,
+          variant_id: variantId
         },
         pricing_snapshot_in: {
           price: item.priceEach,

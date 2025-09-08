@@ -13,6 +13,9 @@ import { toast } from 'sonner';
 import { useStore } from '@/contexts/StoreContext';
 import { StoreLocationSelector } from '@/components/StoreLocationSelector';
 import { parseTcgplayerPaste, sumMarketPrice, type ParsedTcgplayerRow } from '@/lib/tcgplayerPasteParser';
+import { generateSKU } from '@/lib/sku';
+import { fetchCardPricing } from '@/hooks/useTCGData';
+import { tcgSupabase } from '@/lib/tcg-supabase';
 
 interface RawCardIntakeProps {
   onBatchAdd?: (item: any) => void;
@@ -23,6 +26,60 @@ const EXAMPLE_TEXT = `TOTAL: 3 cards - $698.65
 1 Iono - 091/071 [SV2D:] (Holofoil, Near Mint, Japanese) - $45.60
 1 Bellibolt - 201/197 [SV03:] (Holofoil, Near Mint, English) - $3.05
 Prices from Market Price on 9/7/2025 and are subject to change.`;
+
+// Helper function to map product lines to game keys
+const mapProductLineToGame = (productLine: string): string => {
+  const product = productLine?.toLowerCase();
+  if (product?.includes('pokemon')) return 'pokemon';
+  if (product?.includes('magic') || product?.includes('mtg')) return 'magic-the-gathering';
+  if (product?.includes('yugioh') || product?.includes('yu-gi-oh')) return 'yugioh';
+  return 'pokemon'; // Default fallback
+};
+
+// Helper function to resolve variant ID for a row
+const resolveVariantId = async (row: ParsedTcgplayerRow): Promise<{ cardId?: string; variantId?: string }> => {
+  try {
+    const gameSlug = mapProductLineToGame(row.productLine || '');
+    
+    // Search for the card first
+    const { data: cards } = await tcgSupabase
+      .from('cards')
+      .select('id, name, sets!inner(name)')
+      .ilike('name', `%${row.name}%`)
+      .limit(10);
+
+    if (!cards?.length) return {};
+
+    // Find best match based on name and set
+    const cardMatch = cards.find(card => {
+      const setName = (card.sets as any)?.name;
+      return card.name.toLowerCase().includes(row.name.toLowerCase()) &&
+             setName?.toLowerCase().includes((row.set || '').toLowerCase());
+    }) || cards[0];
+
+    if (!cardMatch) return {};
+
+    // Get pricing data to find variant
+    const pricingData = await fetchCardPricing(cardMatch.id);
+    
+    if (pricingData?.variants?.length) {
+      // Find matching variant by condition and printing
+      const variant = pricingData.variants.find(v => 
+        v.condition?.toLowerCase() === (row.condition || 'near mint').toLowerCase() &&
+        v.printing?.toLowerCase().includes((row.printing || 'normal').toLowerCase())
+      ) || pricingData.variants[0];
+
+      if (variant?.id) {
+        return { cardId: cardMatch.id, variantId: variant.id };
+      }
+    }
+
+    return { cardId: cardMatch.id };
+  } catch (error) {
+    console.warn('Failed to resolve variant ID:', error);
+    return {};
+  }
+};
 
 export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
   const { selectedStore, selectedLocation, availableStores, availableLocations } = useStore();
@@ -263,53 +320,65 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
       // Process rows sequentially to avoid overwhelming the database
       for (const [index, row] of parsedRows.entries()) {
         try {
+           // Resolve variant ID first
+           const { cardId, variantId } = await resolveVariantId(row);
+           
+           // Map product line to game key
+           const gameKey = mapProductLineToGame(row.productLine || '');
+           
+           // Generate SKU using variant ID if available
+           const generatedSku = generateSKU(gameKey, variantId, 'CARD', cardId);
+           
            const formattedTitle = (() => {
-             // Format title as: Game,Set,Name - Number,Condition
-             const parts = [];
-             if (row.productLine) parts.push(row.productLine);
-             if (row.set) parts.push(row.set);
-             
-             // Use the card name as-is (it may already contain the number)
-             parts.push(row.name);
-             
-             if (row.condition && row.condition !== 'Near Mint') parts.push(row.condition);
-             else parts.push('Near Mint');
-             
-             return parts.join(',');
-           })();
+              // Format title as: Game,Set,Name - Number,Condition
+              const parts = [];
+              if (row.productLine) parts.push(row.productLine);
+              if (row.set) parts.push(row.set);
+              
+              // Use the card name as-is (it may already contain the number)
+              parts.push(row.name);
+              
+              if (row.condition && row.condition !== 'Near Mint') parts.push(row.condition);
+              else parts.push('Near Mint');
+              
+              return parts.join(',');
+            })();
 
-           const rpcParams = {
-             store_key_in: selectedStore!.trim(),
-             shopify_location_gid_in: selectedLocation!.trim(),
-             quantity_in: row.quantity,
-             brand_title_in: formattedTitle,
-             subject_in: formattedTitle,
-             category_in: 'Trading Cards', // Generic category for TCGplayer imports
-             variant_in: row.printing || 'Normal',
-             card_number_in: row.number || '',
-             grade_in: '', // leave empty so the DB marks item as Raw
-             price_in: row.price || 0,
-             cost_in: row.cost,
-             sku_in: '', // Will be generated by the system
-             source_provider_in: 'tcgplayer_paste',
-            catalog_snapshot_in: {
-              name: row.name,
-              set: row.set,
-              number: row.number,
-              language: row.language,
-              tcgplayer_id: row.tcgplayerId,
-              image_url: row.photoUrl
-            },
-            pricing_snapshot_in: {
-              market_price: row.marketPrice,
-              condition: row.condition,
-              printing: row.printing,
-              language: row.language,
-              captured_at: new Date().toISOString(),
-              market_as_of: marketAsOf
-            },
-            processing_notes_in: `TCGplayer paste import: ${row.name} from ${row.set || 'Unknown Set'}`
-          };
+            const rpcParams = {
+              store_key_in: selectedStore!.trim(),
+              shopify_location_gid_in: selectedLocation!.trim(),
+              quantity_in: row.quantity,
+              brand_title_in: formattedTitle,
+              subject_in: formattedTitle,
+              category_in: 'Trading Cards', // Generic category for TCGplayer imports
+              variant_in: row.printing || 'Normal',
+              card_number_in: row.number || '',
+              grade_in: '', // leave empty so the DB marks item as Raw
+              price_in: row.price || 0,
+              cost_in: row.cost,
+              sku_in: generatedSku,
+              source_provider_in: 'tcgplayer_paste',
+             catalog_snapshot_in: {
+               name: row.name,
+               set: row.set,
+               number: row.number,
+               language: row.language,
+               tcgplayer_id: row.tcgplayerId,
+               image_url: row.photoUrl,
+               card_id: cardId,
+               variant_id: variantId,
+               game: gameKey
+             },
+             pricing_snapshot_in: {
+               market_price: row.marketPrice,
+               condition: row.condition,
+               printing: row.printing,
+               language: row.language,
+               captured_at: new Date().toISOString(),
+               market_as_of: marketAsOf
+             },
+             processing_notes_in: `TCGplayer paste import: ${row.name} from ${row.set || 'Unknown Set'}`
+           };
 
           const response = await supabase.rpc('create_raw_intake_item', rpcParams);
 
