@@ -19,6 +19,7 @@ interface IntakeItem {
   price: number;
   cost?: number;
   lot_number: string;
+  lot_id?: string;
   processing_notes?: string;
   printed_at?: string;
   pushed_at?: string;
@@ -51,6 +52,11 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
   const [sendingBatchToInventory, setSendingBatchToInventory] = useState(false);
   const [batchSendProgress, setBatchSendProgress] = useState({ total: 0, completed: 0, failed: 0, inProgress: false });
   const { selectedStore, selectedLocation } = useStore();
+
+  // Helper to determine if user can delete from current batch
+  const canDeleteFromBatch = (item: IntakeItem) => {
+    return !!currentLotId && item.lot_id === currentLotId && !item.removed_from_batch_at;
+  };
 
   const handleEditItem = (item: IntakeItem) => {
     const editDetails: IntakeItemDetails = {
@@ -302,7 +308,13 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
       if (error) {
         console.error('🗑️ [delete] RPC error', { status, ...error });
         
-        // Try direct update fallback
+        // Check if it's a permission error (item already in inventory or not in active batch)
+        if (error.message?.includes('Access denied') || error.message?.includes('Only admins')) {
+          toast.error("Can't delete: only admins can delete inventory or other batches.");
+          return;
+        }
+        
+        // Try direct update fallback for other errors
         console.log('🗑️ Trying fallback update method...');
         const { error: fbError } = await supabase
           .from('intake_items')
@@ -317,15 +329,23 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
 
         if (fbError) {
           console.error('🗑️ [delete] fallback failed', fbError);
-          toast.error(`Delete failed: ${fbError.message || fbError.details || 'unknown error'}`);
+          if (fbError.message?.includes('Only admins') || fbError.message?.includes('Access denied')) {
+            toast.error("Can't delete: only admins can delete inventory or other batches.");
+          } else {
+            toast.error(`Delete failed: ${fbError.message || fbError.details || 'unknown error'}`);
+          }
           return;
         }
         
         console.log('🗑️ Fallback delete successful');
-        toast.success('Item deleted (fallback)');
+        toast.success('Removed from current batch.');
       } else {
         console.log('🗑️ RPC delete successful');
-        toast.success('Item deleted successfully');
+        if (isAdmin) {
+          toast.success('Item deleted successfully');
+        } else {
+          toast.success('Removed from current batch.');
+        }
       }
 
       console.log('🗑️ Successfully deleted item:', data);
@@ -341,7 +361,11 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
       }, 150);
     } catch (error: any) {
       console.error('🗑️ Error deleting item:', error);
-      toast.error(`Error deleting item: ${error?.message || 'Unknown error'}`);
+      if (error?.message?.includes('Access denied') || error?.message?.includes('Only admins')) {
+        toast.error("Can't delete: only admins can delete inventory or other batches.");
+      } else {
+        toast.error(`Error deleting item: ${error?.message || 'Unknown error'}`);
+      }
     }
   };
 
@@ -731,37 +755,40 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
                       <Send className="h-3 w-3" />
                     </Button>
                     
-                    {isAdmin && (
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-8 px-2 bg-red-50 hover:bg-red-100 border-red-200 text-red-700"
-                            title="Delete Item"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Delete Item</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Are you sure you want to delete this item? This action cannot be undone.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => {
-                              console.log('🗑️ DELETE BUTTON CLICKED IN DIALOG');
-                              handleDeleteItem(item);
-                            }}>
-                              Delete
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    )}
+                     {(isAdmin || canDeleteFromBatch(item)) && (
+                       <AlertDialog>
+                         <AlertDialogTrigger asChild>
+                           <Button
+                             size="sm"
+                             variant="outline"
+                             className="h-8 px-2 bg-red-50 hover:bg-red-100 border-red-200 text-red-700"
+                             title="Delete Item"
+                           >
+                             <Trash2 className="h-3 w-3" />
+                           </Button>
+                         </AlertDialogTrigger>
+                         <AlertDialogContent>
+                           <AlertDialogHeader>
+                             <AlertDialogTitle>Delete Item</AlertDialogTitle>
+                             <AlertDialogDescription>
+                               {isAdmin 
+                                 ? "Are you sure you want to delete this item? This action cannot be undone."
+                                 : "Are you sure you want to remove this item from the current batch? This action cannot be undone."
+                               }
+                             </AlertDialogDescription>
+                           </AlertDialogHeader>
+                           <AlertDialogFooter>
+                             <AlertDialogCancel>Cancel</AlertDialogCancel>
+                             <AlertDialogAction onClick={() => {
+                               console.log('🗑️ DELETE BUTTON CLICKED IN DIALOG');
+                               handleDeleteItem(item);
+                             }}>
+                               {isAdmin ? 'Delete' : 'Remove from Batch'}
+                             </AlertDialogAction>
+                           </AlertDialogFooter>
+                         </AlertDialogContent>
+                       </AlertDialog>
+                     )}
                   </div>
                 </div>
               </div>

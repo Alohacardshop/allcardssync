@@ -1191,6 +1191,10 @@ export type Database = {
         Args: { game_name: string }
         Returns: undefined
       }
+      can_delete_batch_item: {
+        Args: { _item_id: string }
+        Returns: boolean
+      }
       catalog_v2_browse_cards: {
         Args: {
           filter_japanese?: boolean
