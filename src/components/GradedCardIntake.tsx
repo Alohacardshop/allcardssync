@@ -401,7 +401,19 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
   };
 
   const updateFormField = (field: string, value: string | number) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    setFormData(prev => {
+      const updated = { ...prev, [field]: value };
+      
+      // Auto-calculate cost when price changes (70% of price)
+      if (field === 'price' && value && typeof value === 'string' && value.trim() !== '') {
+        const priceValue = parseFloat(value);
+        if (!isNaN(priceValue) && priceValue > 0) {
+          updated.cost = (Math.round(priceValue * 0.7 * 100) / 100).toString();
+        }
+      }
+      
+      return updated;
+    });
   };
 
   // Enhanced preflight access check function using diagnostic RPC

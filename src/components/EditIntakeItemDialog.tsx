@@ -44,7 +44,19 @@ export default function EditIntakeItemDialog({ open, item, onOpenChange, onSave,
   if (!form) return null;
 
   const handleChange = (key: keyof IntakeItemDetails, value: any) => {
-    setForm((f) => ({ ...(f as IntakeItemDetails), [key]: value }));
+    setForm((f) => {
+      const updated = { ...(f as IntakeItemDetails), [key]: value };
+      
+      // Auto-calculate cost when price changes (70% of price)
+      if (key === 'price' && value && typeof value === 'string' && value.trim() !== '') {
+        const priceValue = parseFloat(value);
+        if (!isNaN(priceValue) && priceValue > 0) {
+          updated.cost = (Math.round(priceValue * 0.7 * 100) / 100).toString();
+        }
+      }
+      
+      return updated;
+    });
   };
 
   const handleSubmit = async () => {

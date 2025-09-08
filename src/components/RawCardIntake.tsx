@@ -179,9 +179,16 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
       // Add cost and price fields to each row (required for batch add)
       const rowsWithCostAndPrice = result.rows.map(row => ({
         ...row,
-        cost: 0, // Start with 0, user must fill in
-        price: 0 // Start with 0, user must fill in
+        cost: 0, // Will be auto-calculated when price is set
+        price: row.marketPrice || 0 // Start with market price if available
       }));
+
+      // Auto-calculate cost at 70% of price for rows with price
+      rowsWithCostAndPrice.forEach(row => {
+        if (row.price && row.price > 0) {
+          row.cost = Math.round(row.price * 0.7 * 100) / 100; // Round to 2 decimal places
+        }
+      });
 
       setParsedRows(rowsWithCostAndPrice);
       setMarketAsOf(result.marketAsOf);
@@ -208,9 +215,19 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
 
   // Update parsed row
   const updateRow = useCallback((index: number, field: keyof ParsedTcgplayerRow | 'cost', value: any) => {
-    setParsedRows(prev => prev.map((row, i) => 
-      i === index ? { ...row, [field]: value } : row
-    ));
+    setParsedRows(prev => prev.map((row, i) => {
+      if (i === index) {
+        const updatedRow = { ...row, [field]: value };
+        
+        // Auto-calculate cost when price changes (70% of price)
+        if (field === 'price' && value && value > 0) {
+          updatedRow.cost = Math.round(value * 0.7 * 100) / 100; // Round to 2 decimal places
+        }
+        
+        return updatedRow;
+      }
+      return row;
+    }));
   }, []);
 
   // Remove row
