@@ -356,6 +356,7 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
                     <TableHead className="w-32">Printing</TableHead>
                     <TableHead className="w-32">Condition</TableHead>
                     <TableHead className="w-24">Language</TableHead>
+                    <TableHead className="w-20">TCG ID</TableHead>
                     <TableHead className="w-24">Market $ (ref)</TableHead>
                     <TableHead className="w-24">Price $ *</TableHead>
                     <TableHead className="w-24">Cost $ *</TableHead>
@@ -454,6 +455,14 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
                             <SelectItem value="Chinese">Chinese</SelectItem>
                           </SelectContent>
                         </Select>
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          value={row.tcgplayerId || ''}
+                          onChange={(e) => updateRow(index, 'tcgplayerId', e.target.value)}
+                          className="w-20"
+                          placeholder="ID"
+                        />
                       </TableCell>
                       <TableCell>
                         <div className="text-sm">
