@@ -354,10 +354,12 @@ serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     } else if (response.status === 403) {
-      console.log('CGC API returned 403 - Forbidden or wrong company scope');
+      const bodyText = await response.text().catch(() => '');
+      console.log('CGC API returned 403 - Forbidden or wrong company scope', { bodyText });
       return new Response(JSON.stringify({
         ok: false,
-        error: 'Forbidden or wrong company scope'
+        error: 'Forbidden or wrong company scope',
+        details: bodyText || undefined
       }), {
         status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

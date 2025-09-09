@@ -49,7 +49,7 @@ export type NormalizedCGCCard = {
 
 export async function invokeCGCLookup(
   params: { certNumber?: string; barcode?: string; include?: string },
-  timeoutMs = 12000  // Reduced timeout for faster debugging
+  timeoutMs = 30000 // Increase timeout to allow edge function + CGC API
 ): Promise<{ ok: boolean; data?: NormalizedCGCCard; error?: string }> {
   const { certNumber, barcode, include = 'pop,images' } = params;
   

@@ -149,7 +149,8 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
               data = { ok: false, error: cgcResult.error || 'CGC lookup failed' };
             }
           } else {
-            throw new Error(`Direct fetch failed: ${testResponse.status} ${testResponse.statusText}`);
+            const body = await testResponse.text().catch(() => '');
+            throw new Error(`Direct fetch failed: ${testResponse.status} ${testResponse.statusText} ${body}`);
           }
         } catch (directError) {
           console.error("[CGC:UI] Direct fetch failed, falling back to supabase.functions.invoke:", directError);
@@ -159,7 +160,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
             certNumber: /^\d+$/.test(certInput.trim()) ? certInput.trim() : undefined,
             barcode: !/^\d+$/.test(certInput.trim()) ? certInput.trim() : undefined,
             include: 'pop,images'
-          }, 12000);  // Use reduced timeout for faster debugging
+          }, 30000);  // Allow enough time for edge function + CGC API
           
           const endTime = Date.now();
           console.log(`[CGC:UI] CGC lookup completed in ${endTime - startTime}ms`, {
