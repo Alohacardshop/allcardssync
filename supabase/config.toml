@@ -38,6 +38,10 @@ verify_jwt = false
 [functions.tcg-card-search]
 verify_jwt = true
 
+# Shopify SKU inspection tool (requires authentication)
+[functions.shopify-inspect-sku]
+verify_jwt = true
+
 # All other critical functions require JWT authentication and admin role verification
 # These functions are secured by requiring authentication and admin role checks in code:
 # - bootstrap-admin (special case for first admin setup)
