@@ -70,13 +70,14 @@ export async function invokeCGCLookup(
   });
 
   try {
-    const searchParams = new URLSearchParams();
-    if (certNumber) searchParams.set('certNumber', certNumber);
-    if (barcode) searchParams.set('barcode', barcode);
-    if (include) searchParams.set('include', include);
+    const requestBody = {
+      certNumber,
+      barcode,
+      include
+    };
 
     const { data, error } = await supabase.functions.invoke("cgc-lookup", {
-      body: Object.fromEntries(searchParams),
+      body: requestBody,
     });
 
     const dt = Date.now() - started;

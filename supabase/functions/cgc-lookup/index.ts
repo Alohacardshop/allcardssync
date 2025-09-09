@@ -107,6 +107,7 @@ async function makeAuthorizedRequest(url: string, retryOnAuth = true): Promise<R
     headers: {
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json',
+      'Accept': 'application/json',
     },
   });
 
@@ -219,15 +220,32 @@ serve(async (req) => {
     // Validate configuration
     validateConfig();
 
+    // Parse parameters from both URL query string AND JSON body
     const url = new URL(req.url);
-    const certNumber = url.searchParams.get('certNumber');
-    const barcode = url.searchParams.get('barcode');
-    const include = url.searchParams.get('include') || '';
+    let certNumber = url.searchParams.get('certNumber');
+    let barcode = url.searchParams.get('barcode');
+    let include = url.searchParams.get('include') || '';
+    let paramSource = 'query';
+
+    // If no query params, try to parse JSON body
+    if (!certNumber && !barcode) {
+      try {
+        const body = await req.json();
+        certNumber = body.certNumber;
+        barcode = body.barcode;
+        include = body.include || '';
+        paramSource = 'body';
+      } catch (e) {
+        // If JSON parsing fails, continue with query params
+        console.log('Failed to parse JSON body, using query params only');
+      }
+    }
 
     console.log('CGC lookup request', { 
       certNumber: certNumber ? `${certNumber.substring(0, 4)}...` : null,
       barcode: barcode ? `${barcode.substring(0, 4)}...` : null,
-      include 
+      include,
+      paramSource
     });
 
     // Validate input
@@ -276,6 +294,7 @@ serve(async (req) => {
     if (response.status === 404) {
       tryFallback = true;
     } else if (response.status === 401) {
+      console.log('CGC API returned 401 - Unauthorized');
       return new Response(JSON.stringify({
         ok: false,
         error: 'Unauthorized'
@@ -284,11 +303,21 @@ serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     } else if (response.status === 403) {
+      console.log('CGC API returned 403 - Forbidden or wrong company scope');
       return new Response(JSON.stringify({
         ok: false,
         error: 'Forbidden or wrong company scope'
       }), {
         status: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    } else if (response.status === 429) {
+      console.log('CGC API returned 429 - Rate limit exceeded');
+      return new Response(JSON.stringify({
+        ok: false,
+        error: 'Rate limit exceeded. Please try again later.'
+      }), {
+        status: 429,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -301,15 +330,26 @@ serve(async (req) => {
 
     if (!response.ok) {
       if (response.status === 404) {
+        console.log('CGC API returned 404 - Certificate not found');
         return new Response(JSON.stringify({
           ok: false,
-          error: 'Not found'
+          error: 'Certificate not found'
         }), {
           status: 404,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
+      } else if (response.status === 429) {
+        console.log('CGC API returned 429 - Rate limit exceeded (fallback)');
+        return new Response(JSON.stringify({
+          ok: false,
+          error: 'Rate limit exceeded. Please try again later.'
+        }), {
+          status: 429,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
       }
       
+      console.log(`CGC API error: ${response.status} ${response.statusText}`);
       throw new Error(`CGC API error: ${response.status} ${response.statusText}`);
     }
 
@@ -329,11 +369,14 @@ serve(async (req) => {
     });
 
   } catch (error) {
-    console.error('CGC lookup error:', error);
+    console.error('CGC lookup error:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined
+    });
     
     return new Response(JSON.stringify({
       ok: false,
-      error: 'Unexpected error'
+      error: error instanceof Error ? error.message : 'Unexpected error'
     }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
