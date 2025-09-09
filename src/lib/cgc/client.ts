@@ -3,6 +3,8 @@ import type { CgcCard, CgcLookupResult, CgcLookupResponse } from "./types";
 const TIMEOUT_MS = 20000;
 
 export async function lookupCert(certNumber: string): Promise<CgcLookupResult> {
+  throw new Error('CGC functionality is temporarily disabled');
+  
   console.log('[CGC:CLIENT] Starting CGC cert lookup:', certNumber.trim());
   
   const controller = new AbortController();
@@ -53,6 +55,5 @@ export async function lookupCert(certNumber: string): Promise<CgcLookupResult> {
 }
 
 export async function lookupBarcode(_barcode: string): Promise<CgcLookupResult> {
-  console.warn('[CGC:CLIENT] Barcode lookup not supported via scraping');
-  throw new Error('CGC barcode lookup not supported via scraping. Please enter the certificate number.');
+  throw new Error('CGC functionality is temporarily disabled');
 }

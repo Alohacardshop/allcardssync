@@ -17,8 +17,8 @@ import { StoreLocationSelector } from "@/components/StoreLocationSelector";
 import { parseFunctionError } from "@/lib/fns";
 import { useLogger } from "@/hooks/useLogger";
 
-// Feature flag for CGC functionality - now enabled with Firecrawl scraping
-const CGC_ENABLED = true;
+// Feature flag for CGC functionality - temporarily disabled
+const CGC_ENABLED = false;
 
 interface GradedCardIntakeProps {
   onBatchAdd?: () => void;
@@ -46,6 +46,13 @@ const parsePSAGrade = (gradeStr: string): { numeric: string; original: string; h
 export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => {
   const logger = useLogger();
   const [gradingCompany, setGradingCompany] = useState<'PSA' | 'CGC'>('PSA');
+
+  // Force PSA when CGC is disabled
+  useEffect(() => {
+    if (!CGC_ENABLED) {
+      setGradingCompany('PSA');
+    }
+  }, []);
 
   // CGC is now enabled with Firecrawl scraping
   // No need to enforce PSA-only anymore
