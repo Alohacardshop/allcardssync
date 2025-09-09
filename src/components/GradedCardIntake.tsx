@@ -44,6 +44,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
   const logger = useLogger();
   const [gradingCompany, setGradingCompany] = useState<'PSA' | 'CGC'>('PSA');
   const [certInput, setCertInput] = useState("");
+  const [barcodeInput, setBarcodeInput] = useState("");
   const [fetching, setFetching] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [cardData, setCardData] = useState<any>(null);
@@ -79,49 +80,55 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
     error?: string;
   } | null>(null);
 
-  const handleFetchCard = async () => {
-    if (!certInput.trim()) {
-      toast.error(`Please enter a ${gradingCompany} certificate number${gradingCompany === 'CGC' ? ' or barcode' : ''}`);
+  const handleFetchCard = async (lookupType: 'cert' | 'barcode' = 'cert') => {
+    const inputValue = lookupType === 'cert' ? certInput.trim() : barcodeInput.trim();
+    
+    if (!inputValue) {
+      toast.error(`Please enter a ${gradingCompany} ${lookupType === 'cert' ? 'certificate number' : 'barcode'}`);
       return;
     }
 
-    // Validate certificate number format based on company
-    if (gradingCompany === 'PSA' && !/^\d{8,9}$/.test(certInput.trim())) {
+    // Validate certificate number format based on company (only for cert lookups)
+    if (lookupType === 'cert' && gradingCompany === 'PSA' && !/^\d{8,9}$/.test(inputValue)) {
       toast.error("PSA certificate numbers must be 8-9 digits");
       return;
     }
 
     const controller = new AbortController();
     setAbortController(controller);
-  console.log("[CGC:UI] Starting CGC invoke process", {
+    console.log("[CGC:UI] Starting CGC invoke process", {
     gradingCompany,
-    certInput: certInput.trim(),
+    inputValue,
+    lookupType,
     timestamp: new Date().toISOString()
   });
 
   setFetching(true);
     
-    logger.logInfo(`${gradingCompany} fetch started`, { certNumber: certInput.trim() });
+    logger.logInfo(`${gradingCompany} fetch started`, { 
+      certNumber: lookupType === 'cert' ? inputValue : undefined,
+      barcode: lookupType === 'barcode' ? inputValue : undefined,
+      lookupType
+    });
     
     try {
       let data: any;
       
       if (gradingCompany === 'PSA') {
-        // Use the enhanced PSA service
-        data = await invokePSAScrapeV2({ cert: certInput.trim(), forceRefresh: true, includeRaw: true }, 45000);
+        // Use the enhanced PSA service (PSA only supports cert lookup)
+        data = await invokePSAScrapeV2({ cert: inputValue, forceRefresh: true, includeRaw: true }, 45000);
       } else {
-        // Use new clean CGC client
+        // Use new clean CGC client with explicit lookup type
         const startTime = Date.now();
-        console.log("[CGC:UI] Starting CGC lookup with new client...");
+        console.log("[CGC:UI] Starting CGC lookup with new client...", { lookupType, inputValue });
         
         try {
           let cgcCard;
-          const isNumeric = /^\d+$/.test(certInput.trim());
           
-          if (isNumeric) {
-            cgcCard = await lookupCert(certInput.trim());
+          if (lookupType === 'cert') {
+            cgcCard = await lookupCert(inputValue);
           } else {
-            cgcCard = await lookupBarcode(certInput.trim());
+            cgcCard = await lookupBarcode(inputValue);
           }
           
           const endTime = Date.now();
@@ -142,7 +149,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
             game: cgcCard.collectible.game?.toLowerCase().includes('pokemon') ? 'pokemon' : 
                    cgcCard.collectible.game?.toLowerCase().includes('magic') ? 'mtg' : 
                    cgcCard.collectible.game || '',
-            imageUrl: cgcCard.images?.frontUrl || null,
+            imageUrl: cgcCard.images?.frontThumbnailUrl || cgcCard.images?.frontUrl || null,
             isValid: !!(cgcCard.certNumber && cgcCard.grade.displayGrade),
             source: 'cgc_api',
             rawPayload: cgcCard
@@ -185,7 +192,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
           game: normalizedData.game || normalizedData.gameSport || 
                 (normalizedData.category?.toLowerCase().includes('pokemon') ? 'pokemon' : 
                  normalizedData.category?.toLowerCase().includes('magic') ? 'mtg' : ""),
-          certNumber: normalizedData.certNumber || certInput.trim(),
+          certNumber: normalizedData.certNumber || inputValue,
           price: "",
           cost: "",
           quantity: 1,
@@ -201,16 +208,20 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         setPopulatedFieldsCount(populatedCount);
 
         if (normalizedData.isValid) {
-          toast.success(`${gradingCompany} certificate verified - ${populatedCount} fields populated`);
+          toast.success(`${gradingCompany} ${lookupType} verified - ${populatedCount} fields populated`);
           logger.logInfo(`${gradingCompany} fetch successful`, { 
-            certNumber: certInput.trim(), 
+            certNumber: lookupType === 'cert' ? inputValue : undefined,
+            barcode: lookupType === 'barcode' ? inputValue : undefined,
+            lookupType,
             fieldsPopulated: populatedCount,
             cardData: { subject: normalizedData.subject, grade: normalizedData.grade }
           });
         } else {
-          toast.warning(`${gradingCompany} certificate found but may have incomplete data - ${populatedCount} fields populated`);
+          toast.warning(`${gradingCompany} ${lookupType} found but may have incomplete data - ${populatedCount} fields populated`);
           logger.logWarn(`${gradingCompany} fetch returned incomplete data`, { 
-            certNumber: certInput.trim(), 
+            certNumber: lookupType === 'cert' ? inputValue : undefined,
+            barcode: lookupType === 'barcode' ? inputValue : undefined,
+            lookupType,
             fieldsPopulated: populatedCount 
           });
         }
@@ -223,7 +234,11 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         console.log(`[CGC:UI] invokeCGCLookup returned non-ok response:`, data);
         const errorMsg = data?.error || `Invalid response from ${gradingCompany} service`;
         console.error(`${gradingCompany} fetch failed:`, errorMsg);
-        logger.logError(`${gradingCompany} fetch failed`, new Error(errorMsg), { certNumber: certInput.trim() });
+        logger.logError(`${gradingCompany} fetch failed`, new Error(errorMsg), { 
+          certNumber: lookupType === 'cert' ? inputValue : undefined,
+          barcode: lookupType === 'barcode' ? inputValue : undefined,
+          lookupType
+        });
         
         // Show appropriate error message based on grading company
         if (gradingCompany === 'CGC') {
@@ -245,11 +260,17 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
       console.error(`${gradingCompany} fetch error:`, {
         error,
         message: errorMessage,
-        certNumber: certInput.trim(),
+        certNumber: lookupType === 'cert' ? inputValue : undefined,
+        barcode: lookupType === 'barcode' ? inputValue : undefined,
+        lookupType,
         timestamp: new Date().toISOString()
       });
       
-      logger.logError(`${gradingCompany} fetch error`, error instanceof Error ? error : new Error(errorMessage), { certNumber: certInput.trim() });
+      logger.logError(`${gradingCompany} fetch error`, error instanceof Error ? error : new Error(errorMessage), { 
+        certNumber: lookupType === 'cert' ? inputValue : undefined,
+        barcode: lookupType === 'barcode' ? inputValue : undefined,
+        lookupType
+      });
       
       if (errorMessage.includes('timed out')) {
         toast.error(`${gradingCompany} fetch timed out after 12s - try again`);
@@ -695,52 +716,138 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         </div>
 
         {/* Certificate Input */}
-        <div className="flex gap-3 items-end">
-          <div className="flex-1">
-            <Label htmlFor="cert-input">
-              {gradingCompany === 'CGC' ? 'CGC Cert # or Barcode' : 'PSA Cert #'} to fetch details
-            </Label>
-            <Input
-              id="cert-input"
-              placeholder={gradingCompany === 'CGC' ? 'e.g., 12345678 or ABC123/DEF' : 'e.g., 12345678'}
-              value={certInput}
-              onChange={(e) => setCertInput(e.target.value)}
-              disabled={fetching}
-              onKeyDown={(e) => e.key === 'Enter' && !fetching && handleFetchCard()}
-            />
-            <p className="text-xs text-muted-foreground mt-1">
-              SKU and barcode will be set to this {gradingCompany === 'CGC' ? 'certificate number' : 'certificate number'} on Shopify.
-            </p>
-          </div>
-          
-          {!fetching ? (
-            <Button 
-              onClick={handleFetchCard} 
-              disabled={!certInput.trim()}
-              className="px-8"
-            >
-              Fetch {gradingCompany}
-            </Button>
-          ) : (
-            <div className="flex gap-2">
+        {gradingCompany === 'PSA' ? (
+          <div className="flex gap-3 items-end">
+            <div className="flex-1">
+              <Label htmlFor="cert-input">PSA Cert # to fetch details</Label>
+              <Input
+                id="cert-input"
+                placeholder="e.g., 12345678"
+                value={certInput}
+                onChange={(e) => setCertInput(e.target.value)}
+                disabled={fetching}
+                onKeyDown={(e) => e.key === 'Enter' && !fetching && handleFetchCard('cert')}
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                SKU and barcode will be set to this certificate number on Shopify.
+              </p>
+            </div>
+            
+            {!fetching ? (
               <Button 
-                variant="outline"
-                disabled
+                onClick={() => handleFetchCard('cert')} 
+                disabled={!certInput.trim()}
                 className="px-8"
               >
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                Fetching...
+                Fetch PSA
               </Button>
-              <Button 
-                variant="destructive"
-                onClick={handleStopFetch}
-                className="px-4"
-              >
-                Stop
-              </Button>
+            ) : (
+              <div className="flex gap-2">
+                <Button 
+                  variant="outline"
+                  disabled
+                  className="px-8"
+                >
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Fetching...
+                </Button>
+                <Button 
+                  variant="destructive"
+                  onClick={handleStopFetch}
+                  className="px-4"
+                >
+                  Stop
+                </Button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {/* CGC Certificate Number Input */}
+            <div className="flex gap-3 items-end">
+              <div className="flex-1">
+                <Label htmlFor="cert-input">CGC Certification #</Label>
+                <Input
+                  id="cert-input"
+                  placeholder="e.g., 6038499265"
+                  value={certInput}
+                  onChange={(e) => setCertInput(e.target.value)}
+                  disabled={fetching}
+                  onKeyDown={(e) => e.key === 'Enter' && !fetching && handleFetchCard('cert')}
+                />
+              </div>
+              
+              {!fetching ? (
+                <Button 
+                  onClick={() => handleFetchCard('cert')} 
+                  disabled={!certInput.trim()}
+                  className="px-6"
+                >
+                  Lookup Cert
+                </Button>
+              ) : (
+                <Button 
+                  variant="outline"
+                  disabled
+                  className="px-6"
+                >
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Looking up...
+                </Button>
+              )}
             </div>
-          )}
-        </div>
+
+            {/* CGC Barcode Input */}
+            <div className="flex gap-3 items-end">
+              <div className="flex-1">
+                <Label htmlFor="barcode-input">CGC Barcode (Optional)</Label>
+                <Input
+                  id="barcode-input"
+                  placeholder="e.g., ABC123/DEF456"
+                  value={barcodeInput}
+                  onChange={(e) => setBarcodeInput(e.target.value)}
+                  disabled={fetching}
+                  onKeyDown={(e) => e.key === 'Enter' && !fetching && handleFetchCard('barcode')}
+                />
+              </div>
+              
+              {!fetching ? (
+                <Button 
+                  onClick={() => handleFetchCard('barcode')} 
+                  disabled={!barcodeInput.trim()}
+                  className="px-6"
+                >
+                  Lookup Barcode
+                </Button>
+              ) : (
+                <Button 
+                  variant="outline"
+                  disabled
+                  className="px-6"
+                >
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Looking up...
+                </Button>
+              )}
+            </div>
+
+            {fetching && (
+              <div className="flex justify-center">
+                <Button 
+                  variant="destructive"
+                  onClick={handleStopFetch}
+                  className="px-4"
+                >
+                  Stop
+                </Button>
+              </div>
+            )}
+
+            <p className="text-xs text-muted-foreground">
+              SKU and barcode will be set to the certificate number on Shopify.
+            </p>
+          </div>
+        )}
 
         {/* Fetch Results Summary */}
         {cardData && (
@@ -771,10 +878,10 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
                       </pre>
                     </div>
                     
-                    {/* Raw PSA API JSON */}
+                    {/* Raw API JSON */}
                     {cardData?.rawPayload && (
                       <div>
-                        <h4 className="text-sm font-medium mb-2">Full PSA API JSON</h4>
+                        <h4 className="text-sm font-medium mb-2">Full {gradingCompany} API JSON</h4>
                         <pre className="text-xs bg-background p-3 rounded border overflow-auto max-h-60">
                           {JSON.stringify(cardData.rawPayload, null, 2)}
                         </pre>
@@ -787,7 +894,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
             
             {populatedFieldsCount === 0 && (
               <div className="text-sm text-muted-foreground">
-                Limited data found - you may need to fill in the details manually. Try a different certificate number or check if the PSA cert exists.
+                Limited data found - you may need to fill in the details manually. Try a different {gradingCompany === 'CGC' ? 'certificate number or barcode' : 'certificate number'} or check if the {gradingCompany} cert exists.
               </div>
             )}
           </div>
@@ -799,7 +906,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
             {cardData.imageUrl ? (
               <img 
                 src={cardData.imageUrl} 
-                alt="PSA Card"
+                alt={`${gradingCompany} Card`}
                 className="max-w-xs max-h-80 object-contain rounded-lg border shadow-md"
                 onError={(e) => {
                   e.currentTarget.style.display = 'none';
@@ -807,10 +914,10 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
               />
             ) : (
               <div className="flex items-center justify-center w-48 h-32 bg-muted/50 rounded-lg border border-dashed">
-                <div className="text-center text-muted-foreground">
+                  <div className="text-center text-muted-foreground">
                   <Award className="h-8 w-8 mx-auto mb-2 opacity-50" />
                   <p className="text-sm">No image available</p>
-                  <p className="text-xs">PSA #{cardData.certNumber}</p>
+                  <p className="text-xs">{gradingCompany} #{cardData.certNumber}</p>
                 </div>
               </div>
             )}
@@ -908,7 +1015,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
             <Label htmlFor="cert-number">Cert Number</Label>
             <Input
               id="cert-number"
-              placeholder="PSA Certificate Number"
+              placeholder={`${gradingCompany} Certificate Number`}
               value={formData.certNumber}
               onChange={(e) => updateFormField('certNumber', e.target.value)}
             />
@@ -925,7 +1032,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
               onChange={(e) => updateFormField('price', e.target.value)}
               className={!formData.price ? "border-destructive/50" : ""}
             />
-            {formData.psaEstimate && (
+            {formData.psaEstimate && gradingCompany === 'PSA' && (
               <p className="text-xs text-muted-foreground mt-1">
                 PSA Estimate: ${formData.psaEstimate}
               </p>
@@ -963,6 +1070,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
             <span>Data source:</span>
             <span className="px-2 py-1 rounded text-xs bg-blue-100 text-blue-800">
               {cardData.source === 'psa_api' ? 'PSA API' : 
+               cardData.source === 'cgc_api' ? 'CGC API' :
                cardData.source === 'database_cache' ? 'Database Cache' : 'Unknown'}
             </span>
           </div>
