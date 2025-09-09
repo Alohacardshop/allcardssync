@@ -109,10 +109,22 @@ async function fetchCGCToken(): Promise<string> {
   }, 15000);
 
   if (!response.ok) {
-    throw new Error(`CGC auth failed: ${response.status} ${response.statusText}`);
+    const errorText = await response.text();
+    console.error('CGC auth failed:', {
+      status: response.status,
+      statusText: response.statusText,
+      error: errorText
+    });
+    throw new Error(`CGC auth failed: ${response.status} ${errorText}`);
   }
 
-  const token = await response.text(); // JWT returned as plain string
+  const responseText = await response.text();
+  console.log('CGC auth response received:', {
+    responseLength: responseText.length,
+    firstChars: responseText.substring(0, 50)
+  });
+  
+  const token = responseText.trim(); // JWT returned as plain string
   
   // Cache token for 30 days (minus 1 hour for safety)
   const expiresAt = Date.now() + (30 * 24 * 60 * 60 * 1000) - (60 * 60 * 1000);
@@ -122,7 +134,13 @@ async function fetchCGCToken(): Promise<string> {
 }
 
 async function makeAuthorizedRequest(url: string, retryOnAuth = true): Promise<Response> {
+  console.log('Making authorized CGC API request to:', url.replace(CGC_API_BASE, '[CGC_API_BASE]'));
+  
   const token = await fetchCGCToken();
+  console.log('Using token for request:', {
+    tokenLength: token.length,
+    tokenStart: token.substring(0, 20) + '...'
+  });
   
   const response = await fetchWithTimeout(url, {
     headers: {
@@ -131,6 +149,12 @@ async function makeAuthorizedRequest(url: string, retryOnAuth = true): Promise<R
       'Accept': 'application/json',
     },
   }, 20000);
+
+  console.log('CGC API response:', {
+    status: response.status,
+    statusText: response.statusText,
+    ok: response.ok
+  });
 
   // If 401 and retry allowed, clear cache and try once more
   if (response.status === 401 && retryOnAuth) {
