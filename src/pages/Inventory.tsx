@@ -645,12 +645,34 @@ const Inventory = () => {
             items={[selectedItemForRemoval]}
             onConfirm={async (mode) => {
               try {
-                // Handle removal logic here
-                toast.success('Item removed from Shopify');
+                // Map dialog mode to edge function action
+                let action: 'remove' | 'zero';
+                if (mode === 'graded') {
+                  action = 'remove'; // Delete graded items completely
+                } else if (mode === 'raw') {
+                  action = 'zero'; // Set raw items to 0 quantity
+                } else { // mode === 'auto'
+                  // Auto mode: remove if graded, zero if raw
+                  action = selectedItemForRemoval.type === 'Graded' ? 'remove' : 'zero';
+                }
+
+                const { error } = await supabase.functions.invoke('shopify-remove-or-zero', {
+                  body: {
+                    storeKey: selectedItemForRemoval.store_key,
+                    sku: selectedItemForRemoval.sku,
+                    locationGid: selectedItemForRemoval.shopify_location_gid,
+                    action: action
+                  }
+                });
+
+                if (error) throw error;
+                
+                toast.success(`Item ${action === 'remove' ? 'removed from' : 'zeroed in'} Shopify`);
                 setShowRemovalDialog(false);
                 setSelectedItemForRemoval(null);
                 fetchItems();
               } catch (error) {
+                console.error('Shopify removal failed:', error);
                 toast.error('Failed to remove item from Shopify');
               }
             }}
