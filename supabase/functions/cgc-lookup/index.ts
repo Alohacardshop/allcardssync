@@ -6,8 +6,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// CGC API configuration
-const CGC_API_BASE = Deno.env.get('CGC_API_BASE') || 'https://dealer-api.collectiblesgroup.com';
+// CGC API Configuration - using the official API base URL from OpenAPI spec
+const CGC_API_BASE = 'https://dealer-api.collectiblesgroup.com';
 const CGC_USERNAME = Deno.env.get('CGC_USERNAME');
 const CGC_PASSWORD = Deno.env.get('CGC_PASSWORD');
 
@@ -73,8 +73,8 @@ type NormalizedCard = {
 };
 
 function validateConfig() {
-  if (!CGC_USERNAME || !CGC_PASSWORD || !CGC_API_BASE) {
-    throw new Error('Missing required CGC configuration: CGC_USERNAME, CGC_PASSWORD, and CGC_API_BASE must be set');
+  if (!CGC_USERNAME || !CGC_PASSWORD) {
+    throw new Error('Missing required CGC configuration: CGC_USERNAME and CGC_PASSWORD must be set');
   }
 }
 
