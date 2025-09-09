@@ -231,34 +231,35 @@ Deno.serve(async (req) => {
           const allocateFromRow = Math.min(remainingQty, availableInRow);
           const newQty = availableInRow - allocateFromRow;
 
-          // Execute the allocations
-          for (const allocation of allocations) {
-            const updateData: any = { quantity: allocation.newQuantity };
+          // Update data for this row
+          const updateData: any = { quantity: newQty };
 
-            // C) Track sold information when quantity hits 0
-            if (allocation.newQuantity === 0) {
-              updateData.sold_price = parseFloat(lineItem.price) || 0;
-              updateData.sold_at = new Date().toISOString();
-              updateData.shopify_order_id = payload.id?.toString();
-              console.log(`Item ${allocation.itemId} fully sold - tracking sale info`);
-            }
+          // C) Track sold information when quantity hits 0
+          if (newQty === 0) {
+            updateData.sold_price = parseFloat(li.price) || 0;
+            updateData.sold_at = new Date().toISOString();
+            updateData.shopify_order_id = payload.id?.toString();
+            console.log(`Item ${row.id} fully sold - tracking sale info`);
+          }
 
-            const { error: updateError } = await supabase
-              .from("intake_items")
-              .update(updateData)
-              .eq("id", allocation.itemId);
+          // Update the row in database
+          const { error: updateError } = await supabase
+            .from("intake_items")
+            .update(updateData)
+            .eq("id", row.id);
 
-            if (updateError) {
-              console.error("Failed to update intake item quantity", {
-                itemId: allocation.itemId,
-                sku,
-                originalQty: allocation.originalQty,
-                attemptedDeduction: allocation.allocatedQty,
-                error: updateError.message
-              });
-              throw updateError;
-            }
+          if (updateError) {
+            log.error("Failed to update intake item quantity", {
+              itemId: row.id,
+              sku,
+              originalQty: availableInRow,
+              attemptedDeduction: allocateFromRow,
+              error: updateError.message
+            });
+            throw updateError;
+          }
 
+          // Track this allocation
           allocations.push({
             itemId: row.id,
             lotNumber: row.lot_number,
