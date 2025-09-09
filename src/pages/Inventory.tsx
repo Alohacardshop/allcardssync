@@ -349,7 +349,7 @@ const Inventory = () => {
     setShowRemovalDialog(true);
   };
 
-  const onRemovalConfirm = async (mode: 'auto' | 'graded' | 'raw') => {
+  const onRemovalConfirm = async (mode: 'delete') => {
     setBulkDeleting(true);
     try {
       const itemsToProcess = Array.isArray(selectedItemForRemoval) 

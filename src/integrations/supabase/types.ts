@@ -177,6 +177,9 @@ export type Database = {
           shopify_variant_id: string | null
           sku: string | null
           sold_at: string | null
+          sold_channel: string | null
+          sold_currency: string | null
+          sold_order_id: string | null
           sold_price: number | null
           source_payload: Json | null
           source_provider: string | null
@@ -238,6 +241,9 @@ export type Database = {
           shopify_variant_id?: string | null
           sku?: string | null
           sold_at?: string | null
+          sold_channel?: string | null
+          sold_currency?: string | null
+          sold_order_id?: string | null
           sold_price?: number | null
           source_payload?: Json | null
           source_provider?: string | null
@@ -299,6 +305,9 @@ export type Database = {
           shopify_variant_id?: string | null
           sku?: string | null
           sold_at?: string | null
+          sold_channel?: string | null
+          sold_currency?: string | null
+          sold_order_id?: string | null
           sold_price?: number | null
           source_payload?: Json | null
           source_provider?: string | null
@@ -1668,6 +1677,9 @@ export type Database = {
           shopify_variant_id: string | null
           sku: string | null
           sold_at: string | null
+          sold_channel: string | null
+          sold_currency: string | null
+          sold_order_id: string | null
           sold_price: number | null
           source_payload: Json | null
           source_provider: string | null
