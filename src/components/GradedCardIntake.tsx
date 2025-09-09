@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { StoreLocationSelector } from "@/components/StoreLocationSelector";
 import { parseFunctionError } from "@/lib/fns";
 import { useLogger } from "@/hooks/useLogger";
+
+// Feature flag for CGC functionality - disabled for external testing
+const CGC_ENABLED = false;
 
 interface GradedCardIntakeProps {
   onBatchAdd?: () => void;
@@ -42,7 +45,14 @@ const parsePSAGrade = (gradeStr: string): { numeric: string; original: string; h
 
 export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => {
   const logger = useLogger();
-  const [gradingCompany, setGradingCompany] = useState<'PSA' | 'CGC'>('PSA');
+  const [gradingCompany, setGradingCompany] = useState<'PSA' | 'CGC'>(CGC_ENABLED ? 'PSA' : 'PSA');
+
+  // Enforce PSA-only when CGC is disabled
+  useEffect(() => {
+    if (!CGC_ENABLED && gradingCompany === 'CGC') {
+      setGradingCompany('PSA');
+    }
+  }, [gradingCompany]);
   const [certInput, setCertInput] = useState("");
   const [barcodeInput, setBarcodeInput] = useState("");
   const [fetching, setFetching] = useState(false);
@@ -710,7 +720,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="PSA">PSA</SelectItem>
-              <SelectItem value="CGC">CGC</SelectItem>
+              {CGC_ENABLED && <SelectItem value="CGC">CGC</SelectItem>}
             </SelectContent>
           </Select>
         </div>
@@ -761,7 +771,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
               </div>
             )}
           </div>
-        ) : (
+        ) : CGC_ENABLED ? (
           <div className="space-y-4">
             {/* CGC Certificate Number Input */}
             <div className="flex gap-3 items-end">
@@ -847,7 +857,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
               SKU and barcode will be set to the certificate number on Shopify.
             </p>
           </div>
-        )}
+        ) : null}
 
         {/* Fetch Results Summary */}
         {cardData && (
