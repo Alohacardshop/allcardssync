@@ -22,7 +22,7 @@ verify_jwt = false
 [functions.psa-scrape-v2]
 verify_jwt = false
 
-# CGC card lookup (temporarily public for debugging)
+# CGC card lookup (public - Firecrawl scraping with CORS)
 [functions.cgc-lookup]
 verify_jwt = false
 

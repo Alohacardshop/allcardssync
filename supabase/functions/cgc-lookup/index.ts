@@ -1,5 +1,4 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { log } from '../_shared/log.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -12,159 +11,201 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  if (req.method !== 'POST') {
+    return new Response(
+      JSON.stringify({ ok: false, error: 'Only POST method is supported' }),
+      { 
+        status: 200, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      }
+    );
+  }
+
   const startTime = Date.now();
   
   try {
+    const body = await req.json();
+    console.log('[CGC-LOOKUP] Request received:', { mode: body.mode, certNumber: body.certNumber });
+
+    // Fast ping mode
+    if (body.mode === 'ping') {
+      console.log('[CGC-LOOKUP] Ping mode activated');
+      return new Response(
+        JSON.stringify({ ok: true, message: 'cgc-lookup reachable' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // Get Firecrawl API key
     const firecrawlApiKey = Deno.env.get('FIRECRAWL_API_KEY');
+    console.log('[CGC-LOOKUP] FIRECRAWL_API_KEY present:', !!firecrawlApiKey);
+    
     if (!firecrawlApiKey) {
-      log.error('Missing FIRECRAWL_API_KEY environment variable');
+      console.log('[CGC-LOOKUP] Missing FIRECRAWL_API_KEY environment variable');
       return new Response(
-        JSON.stringify({ ok: false, error: 'Firecrawl API key not configured' }),
+        JSON.stringify({ ok: false, error: 'FIRECRAWL_API_KEY not configured' }),
         { 
-          status: 500, 
+          status: 200, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
         }
       );
     }
 
-    let certNumber: string | null = null;
+    const { certNumber } = body;
+    
+    if (!certNumber || !/^\d{5,}$/.test(certNumber.toString())) {
+      console.log('[CGC-LOOKUP] Invalid cert number:', certNumber);
+      return new Response(
+        JSON.stringify({ ok: false, error: 'Missing or invalid cert number (digits only, 5+ chars required)' }),
+        { 
+          status: 200, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
 
-    // Parse certificate number from request
-    if (req.method === 'POST') {
-      const body = await req.json();
-      certNumber = body.certNumber;
-      log.info('CGC lookup via POST', { certNumber });
-    } else if (req.method === 'GET') {
-      const url = new URL(req.url);
-      const pathname = url.pathname;
-      
-      // Support legacy path format: /ccg/cards/cert/{certNumber}
-      const certMatch = pathname.match(/\/ccg\/cards\/cert\/([^\/]+)$/);
-      if (certMatch) {
-        certNumber = decodeURIComponent(certMatch[1]);
-        log.info('CGC lookup via GET (legacy path)', { certNumber, pathname });
-      } else {
-        log.error('Invalid GET request path', { pathname });
+    // Scrape CGC cards website with timeout
+    const cgcUrl = `https://www.cgccards.com/certlookup/${certNumber}/`;
+    console.log('[CGC-LOOKUP] Starting Firecrawl scrape:', cgcUrl);
+
+    const firecrawlStartTime = Date.now();
+    
+    // Create AbortController for 18s timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, 18000);
+
+    let firecrawlResponse;
+    try {
+      firecrawlResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${firecrawlApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          url: cgcUrl,
+          formats: ['extract', 'html'],
+          timeout: 18000,
+          waitFor: 2000,
+          proxy: { mode: 'basic' }
+        }),
+        signal: controller.signal
+      });
+    } catch (error) {
+      clearTimeout(timeoutId);
+      if (error.name === 'AbortError') {
+        console.log('[CGC-LOOKUP] Firecrawl request timed out');
         return new Response(
-          JSON.stringify({ ok: false, error: 'Invalid request path. Use POST with certNumber in body.' }),
+          JSON.stringify({ 
+            ok: false, 
+            error: 'CGC lookup timed out after 18 seconds',
+            diagnostics: { totalMs: Date.now() - startTime, firecrawlMs: 18000 }
+          }),
           { 
-            status: 400, 
+            status: 200, 
             headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
           }
         );
       }
+      throw error;
     }
+    
+    clearTimeout(timeoutId);
+    const firecrawlMs = Date.now() - firecrawlStartTime;
 
-    if (!certNumber) {
-      log.error('Missing certificate number');
-      return new Response(
-        JSON.stringify({ ok: false, error: 'Certificate number is required' }),
-        { 
-          status: 400, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
-      );
-    }
-
-    // Scrape CGC cards website
-    const cgcUrl = `https://www.cgccards.com/certlookup/${certNumber}/`;
-    log.info('Starting Firecrawl scrape', { cgcUrl, certNumber });
-
-    const firecrawlResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${firecrawlApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        url: cgcUrl,
-        formats: ['markdown', 'html'],
-        timeout: 15000,
-      }),
-    });
+    console.log('[CGC-LOOKUP] Firecrawl response status:', firecrawlResponse.status);
 
     if (!firecrawlResponse.ok) {
       const errorText = await firecrawlResponse.text();
-      log.error('Firecrawl API error', { 
-        status: firecrawlResponse.status, 
-        error: errorText,
-        certNumber 
-      });
+      console.log('[CGC-LOOKUP] Firecrawl API error:', firecrawlResponse.status, errorText);
       return new Response(
         JSON.stringify({ 
           ok: false, 
-          error: `Firecrawl scraping failed: ${firecrawlResponse.status}` 
+          error: `Firecrawl scraping failed: ${firecrawlResponse.status}`,
+          diagnostics: { firecrawlStatus: firecrawlResponse.status, firecrawlMs, totalMs: Date.now() - startTime }
         }),
         { 
-          status: 500, 
+          status: 200, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
         }
       );
     }
 
     const firecrawlData = await firecrawlResponse.json();
-    const scrapeDuration = Date.now() - startTime;
-    log.info('Firecrawl scrape completed', { 
-      certNumber, 
-      scrapeDuration,
-      hasMarkdown: !!firecrawlData.data?.markdown,
-      hasHtml: !!firecrawlData.data?.html 
+    console.log('[CGC-LOOKUP] Firecrawl completed:', { 
+      success: firecrawlData.success,
+      hasExtract: !!firecrawlData.data?.extract,
+      hasHtml: !!firecrawlData.data?.html,
+      firecrawlMs 
     });
 
     if (!firecrawlData.success || !firecrawlData.data) {
-      log.error('Firecrawl returned no data', { certNumber, firecrawlData });
+      console.log('[CGC-LOOKUP] No data found for cert:', certNumber);
       return new Response(
-        JSON.stringify({ ok: false, error: 'No data found for certificate number' }),
+        JSON.stringify({ 
+          ok: false, 
+          error: 'No data found for certificate number',
+          diagnostics: { firecrawlStatus: 'no_data', firecrawlMs, totalMs: Date.now() - startTime }
+        }),
         { 
-          status: 404, 
+          status: 200, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
         }
       );
     }
 
     // Parse the scraped content
-    const markdown = firecrawlData.data.markdown || '';
+    const extract = firecrawlData.data.extract || {};
     const html = firecrawlData.data.html || '';
     
-    // Extract card information using regex patterns (tolerant parsing)
-    const extractField = (pattern: RegExp, content: string): string | null => {
-      const match = content.match(pattern);
+    // Extract card information from structured extract first, fallback to HTML parsing
+    let cardName = extract.cardName || extract.title || extract.name;
+    let grade = extract.grade || extract.overallGrade;
+    let setName = extract.set || extract.series || extract.brandTitle;
+    let cardNumber = extract.cardNumber || extract.number;
+    let year = extract.year || extract.cardYear;
+    let game = extract.game;
+    let makerName = extract.maker || extract.manufacturer;
+    let language = extract.language;
+    let rarity = extract.rarity;
+
+    // Fallback HTML parsing if extract didn't provide data
+    const extractFromHtml = (pattern: RegExp): string | null => {
+      const match = html.match(pattern);
       return match ? match[1].trim() : null;
     };
 
-    // Parse card details from markdown/HTML content
-    const cardName = extractField(/(?:Card Name|Title|Name):\s*([^\n\r]+)/i, markdown) ||
-                    extractField(/<h[1-6][^>]*>\s*([^<]+)\s*<\/h[1-6]>/i, html);
+    if (!cardName) {
+      cardName = extractFromHtml(/<h[1-6][^>]*>\s*([^<]+)\s*<\/h[1-6]>/i) ||
+                extractFromHtml(/(?:Card Name|Title|Name):\s*([^\n\r<]+)/i);
+    }
     
-    const grade = extractField(/(?:Grade|Overall Grade):\s*([^\n\r]+)/i, markdown) ||
-                 extractField(/grade[^>]*>\s*([^<]+)/i, html);
-    
-    const setName = extractField(/(?:Set|Series):\s*([^\n\r]+)/i, markdown);
-    const cardNumber = extractField(/(?:Card #|Card Number|Number):\s*([^\n\r]+)/i, markdown);
-    const year = extractField(/(?:Year|Date):\s*([^\n\r]+)/i, markdown);
-    const rarity = extractField(/(?:Rarity):\s*([^\n\r]+)/i, markdown);
+    if (!grade) {
+      grade = extractFromHtml(/(?:Grade|Overall Grade):\s*([^\n\r<]+)/i) ||
+              extractFromHtml(/grade[^>]*>\s*([^<]+)/i);
+    }
 
-    // Extract images from HTML
-    const imageMatches = html.match(/<img[^>]+src=["']([^"']+)["'][^>]*>/gi) || [];
-    const images: { frontUrl?: string; frontThumbnailUrl?: string } = {};
-    
-    for (const imgMatch of imageMatches) {
-      const srcMatch = imgMatch.match(/src=["']([^"']+)["']/);
-      if (srcMatch && srcMatch[1].includes('cgccards.com')) {
-        if (!images.frontUrl) {
-          images.frontUrl = srcMatch[1];
-          images.frontThumbnailUrl = srcMatch[1]; // Use same image for thumbnail
+    // Extract images - look for og:image first, then any CGC card images
+    let frontUrl = null;
+    const ogImageMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i);
+    if (ogImageMatch) {
+      frontUrl = ogImageMatch[1];
+    } else {
+      const imgMatches = html.match(/<img[^>]+src=["']([^"']+)["'][^>]*>/gi) || [];
+      for (const imgMatch of imgMatches) {
+        const srcMatch = imgMatch.match(/src=["']([^"']+)["']/);
+        if (srcMatch && (srcMatch[1].includes('cgccards.com') || srcMatch[1].includes('card'))) {
+          frontUrl = srcMatch[1];
+          break;
         }
       }
     }
 
-    // Extract barcode if present
-    const barcode = extractField(/(?:Barcode|Bar Code):\s*([^\n\r]+)/i, markdown);
-
     // Construct CgcCard object
     const cgcCard = {
-      certNumber: certNumber,
+      certNumber: certNumber.toString(),
       grade: {
         displayGrade: grade || 'Unknown'
       },
@@ -172,36 +213,42 @@ serve(async (req) => {
         cardName: cardName || 'Unknown Card',
         cardNumber: cardNumber || null,
         cardYear: year || null,
+        game: game || null,
         setName: setName || null,
-        rarity: rarity || null,
-        language: 'English' // Default assumption
+        makerName: makerName || null,
+        language: language || 'English',
+        rarity: rarity || null
       },
-      images: Object.keys(images).length > 0 ? images : undefined,
+      images: frontUrl ? { frontUrl } : undefined,
       metadata: {
-        barcode: barcode || null,
         gradedDate: null,
         encapsulationDate: null,
-        submissionNumber: null
+        submissionNumber: null,
+        barcode: null
       }
     };
 
-    const totalDuration = Date.now() - startTime;
-    log.info('CGC lookup completed successfully', { 
-      certNumber, 
-      totalDuration,
-      extractedFields: {
-        cardName: !!cardName,
-        grade: !!grade,
-        setName: !!setName,
-        cardNumber: !!cardNumber,
-        hasImages: Object.keys(images).length > 0
-      }
+    const totalMs = Date.now() - startTime;
+    console.log('[CGC-LOOKUP] Parse summary:', { 
+      certNumber,
+      cardName: !!cardName,
+      grade: !!grade,
+      setName: !!setName,
+      hasImage: !!frontUrl,
+      totalMs,
+      firecrawlMs
     });
 
     return new Response(
       JSON.stringify({ 
         ok: true, 
-        data: cgcCard 
+        data: cgcCard,
+        source: 'cgc_scrape',
+        diagnostics: { 
+          firecrawlStatus: 'success', 
+          firecrawlMs, 
+          totalMs 
+        }
       }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
@@ -209,20 +256,17 @@ serve(async (req) => {
     );
 
   } catch (error) {
-    const totalDuration = Date.now() - startTime;
-    log.error('CGC lookup failed with exception', { 
-      error: error.message, 
-      stack: error.stack,
-      totalDuration 
-    });
+    const totalMs = Date.now() - startTime;
+    console.log('[CGC-LOOKUP] Exception:', error.message, { totalMs });
     
     return new Response(
       JSON.stringify({ 
         ok: false, 
-        error: `Scraping failed: ${error.message}` 
+        error: `Scraping failed: ${error.message}`,
+        diagnostics: { totalMs }
       }),
       { 
-        status: 500, 
+        status: 200, 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
       }
     );

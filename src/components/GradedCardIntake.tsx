@@ -47,12 +47,8 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
   const logger = useLogger();
   const [gradingCompany, setGradingCompany] = useState<'PSA' | 'CGC'>('PSA');
 
-  // Enforce PSA-only when CGC is disabled
-  useEffect(() => {
-    if (!CGC_ENABLED && gradingCompany === 'CGC') {
-      setGradingCompany('PSA');
-    }
-  }, [gradingCompany]);
+  // CGC is now enabled with Firecrawl scraping
+  // No need to enforce PSA-only anymore
   const [certInput, setCertInput] = useState("");
   const [barcodeInput, setBarcodeInput] = useState("");
   const [fetching, setFetching] = useState(false);
@@ -802,49 +798,72 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
               )}
             </div>
 
-            {/* CGC Barcode Input - Disabled (cert-based scraping only) */}
-            <div className="flex gap-3 items-end opacity-50">
-              <div className="flex-1">
-                <Label htmlFor="barcode-input">CGC Barcode (Not supported via scraping)</Label>
-                <Input
-                  id="barcode-input"
-                  placeholder="CGC barcode lookup not available - use certificate number"
-                  value=""
-                  disabled={true}
-                  className="cursor-not-allowed"
-                />
+            {/* CGC Notice - barcode not supported via scraping */}
+            <div className="bg-muted/50 p-4 rounded-lg border border-dashed border-muted-foreground/20">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <AlertCircle className="h-4 w-4" />
+                CGC barcode lookup isn't supported yet—please enter the certificate number above.
               </div>
-              
-              <Button 
-                disabled={true}
-                variant="outline"
-                className="px-6 opacity-50 cursor-not-allowed"
-              >
-                Not Available
-              </Button>
             </div>
-
-            <p className="text-sm text-muted-foreground mt-2">
-              CGC barcode lookup is not supported via scraping. Please use the certificate number above.
-            </p>
-
-            {fetching && (
-              <div className="flex justify-center">
-                <Button 
-                  variant="destructive"
-                  onClick={handleStopFetch}
-                  className="px-4"
-                >
-                  Stop
-                </Button>
-              </div>
-            )}
-
-            <p className="text-xs text-muted-foreground">
-              SKU and barcode will be set to the certificate number on Shopify.
-            </p>
           </div>
         ) : null}
+
+        {/* PSA Barcode Input - only shown for PSA */}
+        {gradingCompany === 'PSA' && (
+          <div className="flex gap-3 items-end">
+            <div className="flex-1">
+              <Label htmlFor="barcode-input">PSA Barcode</Label>
+              <Input
+                id="barcode-input"
+                placeholder="Enter PSA barcode number"
+                value={barcodeInput}
+                onChange={(e) => setBarcodeInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !fetching) {
+                    e.preventDefault();
+                    handleFetchCard('barcode');
+                  }
+                }}
+              />
+            </div>
+            
+            {!fetching ? (
+              <Button 
+                onClick={() => handleFetchCard('barcode')}
+                disabled={!barcodeInput.trim()}
+                variant="outline"
+                className="px-6"
+              >
+                Lookup
+              </Button>
+            ) : (
+              <Button 
+                variant="outline"
+                disabled
+                className="px-6"
+              >
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                Looking up...
+              </Button>
+            )}
+          </div>
+        )}
+
+        {fetching && (
+          <div className="flex justify-center">
+            <Button 
+              variant="destructive"
+              onClick={handleStopFetch}
+              className="px-4"
+            >
+              Stop
+            </Button>
+          </div>
+        )}
+
+        <p className="text-xs text-muted-foreground">
+          SKU and barcode will be set to the certificate number on Shopify.
+        </p>
 
         {/* Fetch Results Summary */}
         {cardData && (

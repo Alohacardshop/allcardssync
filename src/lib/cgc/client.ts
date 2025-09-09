@@ -1,23 +1,55 @@
 import type { CgcCard, CgcLookupResponse } from "./types";
-import { supabase } from "@/integrations/supabase/client";
+
+const TIMEOUT_MS = 20000;
 
 export async function lookupCert(certNumber: string): Promise<CgcCard> {
-  console.log('[CGC:CLIENT] Invoking edge function cgc-lookup (cert)');
-  const { data, error } = await supabase.functions.invoke('cgc-lookup', {
-    body: { certNumber: certNumber.trim() }
-  });
+  console.log('[CGC:CLIENT] Starting CGC cert lookup:', certNumber.trim());
+  
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort();
+  }, TIMEOUT_MS);
 
-  if (error) {
-    console.error('[CGC:CLIENT] invoke error', error);
-    throw new Error(error.message || 'CGC lookup failed');
+  try {
+    const response = await fetch('/functions/v1/cgc-lookup', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ certNumber: certNumber.trim() }),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+    
+    console.log('[CGC:CLIENT] Response status:', response.status);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.log('[CGC:CLIENT] Non-200 response:', response.status, errorText.substring(0, 200));
+      throw new Error(`CGC lookup failed: ${response.status}`);
+    }
+
+    const data = await response.json() as CgcLookupResponse;
+    
+    if (!data?.ok || !data.data) {
+      throw new Error(data?.error || 'CGC lookup failed - no data returned');
+    }
+
+    console.log('[CGC:CLIENT] Successfully retrieved CGC data for:', certNumber);
+    return data.data;
+    
+  } catch (error) {
+    clearTimeout(timeoutId);
+    
+    if (error.name === 'AbortError') {
+      console.log('[CGC:CLIENT] Request timed out after', TIMEOUT_MS, 'ms');
+      throw new Error('CGC lookup timed out - please try again');
+    }
+    
+    console.error('[CGC:CLIENT] Lookup error:', error);
+    throw error;
   }
-
-  const response = data as CgcLookupResponse;
-  if (!response?.ok || !response.data) {
-    throw new Error(response?.error || 'CGC lookup failed');
-  }
-
-  return response.data;
 }
 
 export async function lookupBarcode(_barcode: string): Promise<CgcCard> {
