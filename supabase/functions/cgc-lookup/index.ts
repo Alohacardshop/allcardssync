@@ -97,15 +97,21 @@ async function fetchCGCToken(): Promise<string> {
 
   console.log('Fetching new CGC token');
   
-  const response = await fetchWithTimeout(`${CGC_API_BASE}/auth/login/CGC`, {
+  const authUrl = `${CGC_API_BASE}/auth/login/CGC`; // Ensure CGC company scope
+  console.log('CGC Auth URL:', authUrl);
+  
+  const authBody = {
+    Username: CGC_USERNAME,
+    Password: CGC_PASSWORD
+  };
+  console.log('CGC Auth request body:', { Username: CGC_USERNAME ? 'SET' : 'NOT_SET', Password: CGC_PASSWORD ? 'SET' : 'NOT_SET' });
+  
+  const response = await fetchWithTimeout(authUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      Username: CGC_USERNAME,
-      Password: CGC_PASSWORD,
-    }),
+    body: JSON.stringify(authBody),
   }, 15000);
 
   if (!response.ok) {
@@ -113,7 +119,8 @@ async function fetchCGCToken(): Promise<string> {
     console.error('CGC auth failed:', {
       status: response.status,
       statusText: response.statusText,
-      error: errorText
+      error: errorText,
+      url: authUrl
     });
     throw new Error(`CGC auth failed: ${response.status} ${errorText}`);
   }
@@ -121,7 +128,8 @@ async function fetchCGCToken(): Promise<string> {
   const responseText = await response.text();
   console.log('CGC auth response received:', {
     responseLength: responseText.length,
-    firstChars: responseText.substring(0, 50)
+    firstChars: responseText.substring(0, 50),
+    statusCode: response.status
   });
   
   const token = responseText.trim(); // JWT returned as plain string
