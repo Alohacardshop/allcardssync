@@ -3,6 +3,8 @@ import type { CgcCard, CgcLookupResponse } from "./types";
 const base = "/functions/v1/cgc-lookup";
 
 export async function lookupCert(certNumber: string): Promise<CgcCard> {
+  console.log('[CGC:CLIENT] Making request to:', `${base}`);
+  
   const r = await fetch(`${base}`, {
     method: 'POST',
     headers: {
@@ -13,6 +15,9 @@ export async function lookupCert(certNumber: string): Promise<CgcCard> {
       include: 'pop,images'
     })
   });
+  
+  console.log('[CGC:CLIENT] Response status:', r.status);
+  console.log('[CGC:CLIENT] Response headers:', Object.fromEntries(r.headers.entries()));
   
   
   // Check if we got any response body (indicates function is running)
