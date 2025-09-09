@@ -31,15 +31,37 @@ export function ShopifyRemovalDialog({
 }: ShopifyRemovalDialogProps) {
   const [mode, setMode] = useState<'auto' | 'graded' | 'raw'>('auto');
 
-  const mirroredItems = items.filter(item => 
-    item.shopify_product_id || 
-    (item.sku && item.source_provider === 'shopify-pull')
+  // Check if items can be removed (have SKU or Shopify product ID)
+  const removableItems = items.filter(item => 
+    item.shopify_product_id || item.sku
   );
 
-  if (mirroredItems.length === 0) return null;
+  // If no removable items, show explanatory message
+  if (removableItems.length === 0) {
+    return (
+      <Dialog open={isOpen} onOpenChange={onClose}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Store className="h-5 w-5" />
+              Shopify Removal
+            </DialogTitle>
+            <DialogDescription>
+              This item cannot be removed from Shopify because it has no SKU or Shopify product ID to match.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={onClose}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
-  const gradedCount = mirroredItems.filter(item => item.type === "Graded").length;
-  const rawCount = mirroredItems.length - gradedCount;
+  const gradedCount = removableItems.filter(item => item.type === "Graded").length;
+  const rawCount = removableItems.length - gradedCount;
 
   const handleConfirm = () => {
     onConfirm(mode);
@@ -54,8 +76,7 @@ export function ShopifyRemovalDialog({
             Shopify Removal
           </DialogTitle>
           <DialogDescription>
-            We detected {mirroredItems.length} mirrored item{mirroredItems.length !== 1 ? 's' : ''} 
-            that should also be removed from Shopify.
+            {removableItems.length} item{removableItems.length !== 1 ? 's' : ''} will be processed in Shopify.
           </DialogDescription>
         </DialogHeader>
 

@@ -40,6 +40,7 @@ const Inventory = () => {
   const [editingItem, setEditingItem] = useState<any>(null);
   const [showRemovalDialog, setShowRemovalDialog] = useState(false);
   const [selectedItemForRemoval, setSelectedItemForRemoval] = useState<any>(null);
+  const [isRemoving, setIsRemoving] = useState(false);
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'sold' | 'deleted' | 'errors'>('active');
   const [typeFilter, setTypeFilter] = useState<string>('all');
@@ -532,14 +533,15 @@ const Inventory = () => {
                                   Sync
                                 </Button>
                                 {!item.deleted_at && (
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleRemoveFromShopify(item)}
-                                  >
-                                    <Trash2 className="w-4 h-4 mr-1" />
-                                    Remove
-                                  </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleRemoveFromShopify(item)}
+                                  disabled={!item.sku && !item.shopify_product_id}
+                                >
+                                  <Trash2 className="w-4 h-4 mr-1" />
+                                  Remove
+                                </Button>
                                 )}
                               </div>
 
@@ -637,43 +639,45 @@ const Inventory = () => {
         {showRemovalDialog && selectedItemForRemoval && (
           <ShopifyRemovalDialog
             isOpen={showRemovalDialog}
-            loading={false}
+            loading={isRemoving}
             onClose={() => {
               setShowRemovalDialog(false);
               setSelectedItemForRemoval(null);
             }}
             items={[selectedItemForRemoval]}
             onConfirm={async (mode) => {
+              setIsRemoving(true);
               try {
-                // Map dialog mode to edge function action
-                let action: 'remove' | 'zero';
-                if (mode === 'graded') {
-                  action = 'remove'; // Delete graded items completely
-                } else if (mode === 'raw') {
-                  action = 'zero'; // Set raw items to 0 quantity
-                } else { // mode === 'auto'
-                  // Auto mode: remove if graded, zero if raw
-                  action = selectedItemForRemoval.type === 'Graded' ? 'remove' : 'zero';
-                }
-
-                const { error } = await supabase.functions.invoke('shopify-remove-or-zero', {
+                const { data, error } = await supabase.functions.invoke('shopify-remove-or-zero', {
                   body: {
                     storeKey: selectedItemForRemoval.store_key,
+                    mode: mode,
                     sku: selectedItemForRemoval.sku,
-                    locationGid: selectedItemForRemoval.shopify_location_gid,
-                    action: action
+                    productId: selectedItemForRemoval.shopify_product_id,
+                    locationGid: selectedItemForRemoval.shopify_location_gid
                   }
                 });
 
                 if (error) throw error;
                 
-                toast.success(`Item ${action === 'remove' ? 'removed from' : 'zeroed in'} Shopify`);
+                console.debug('Shopify removal response:', data);
+                
+                const actionText = data?.mode === 'graded' ? 'deleted from' : 'zeroed in';
+                toast.success(`Item ${actionText} Shopify (mode: ${data?.mode})`);
+                
                 setShowRemovalDialog(false);
                 setSelectedItemForRemoval(null);
                 fetchItems();
-              } catch (error) {
+              } catch (error: any) {
                 console.error('Shopify removal failed:', error);
-                toast.error('Failed to remove item from Shopify');
+                const errorMessage = error?.message || 'Failed to remove item from Shopify';
+                if (errorMessage.includes('Could not resolve product ID')) {
+                  toast.error('Item not found in Shopify. It may need to be synced first.');
+                } else {
+                  toast.error(errorMessage);
+                }
+              } finally {
+                setIsRemoving(false);
               }
             }}
           />
