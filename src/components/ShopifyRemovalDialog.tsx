@@ -74,7 +74,7 @@ export function ShopifyRemovalDialog({
             Delete from Shopify
           </DialogTitle>
           <DialogDescription>
-            {removableItems.length} item{removableItems.length !== 1 ? 's' : ''} will be deleted from Shopify.
+            {removableItems.length} item{removableItems.length !== 1 ? 's' : ''} will be deleted from Shopify and archived locally (removed from Active inventory).
           </DialogDescription>
         </DialogHeader>
 
@@ -96,7 +96,7 @@ export function ShopifyRemovalDialog({
               <div className="text-sm space-y-1">
                 <div className="font-medium text-destructive">All items</div>
                 <div className="text-muted-foreground">
-                  Will be <strong>deleted</strong> from Shopify. If product has multiple variants, only this variant is deleted.
+                  Will be <strong>deleted</strong> from Shopify and <strong>archived locally</strong>. If product has multiple variants, only this variant is deleted.
                 </div>
               </div>
             </div>

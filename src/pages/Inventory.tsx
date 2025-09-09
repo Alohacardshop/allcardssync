@@ -356,50 +356,53 @@ const Inventory = () => {
         ? selectedItemForRemoval 
         : [selectedItemForRemoval];
 
-      let successCount = 0;
-      let errorCount = 0;
+      // Bulk update deleted_at to archive items locally
+      // The database trigger will handle Shopify removal asynchronously
+      const itemIds = itemsToProcess.map(item => item.id);
+      
+      const { error } = await supabase
+        .from('intake_items')
+        .update({ 
+          deleted_at: new Date().toISOString(),
+          deleted_reason: 'Removed via Inventory UI'
+        })
+        .in('id', itemIds);
 
-      // Process items in batches
-      const batchSize = 3;
-      for (let i = 0; i < itemsToProcess.length; i += batchSize) {
-        const batch = itemsToProcess.slice(i, i + batchSize);
-        
-        await Promise.all(
-          batch.map(async (item) => {
-            try {
-              const { error } = await supabase.functions.invoke('shopify-remove-or-zero', {
-                body: {
-                  storeKey: item.store_key,
-                  productId: item.shopify_product_id,
-                  sku: item.sku,
-                  locationGid: item.shopify_location_gid,
-                  itemIds: [item.id]
-                }
-              });
+      if (error) throw error;
 
-              if (error) throw error;
-              successCount++;
-            } catch (error) {
-              console.error(`Removal failed for ${item.sku}:`, error);
-              errorCount++;
+      toast.success(
+        `Archived ${itemIds.length} item${itemIds.length !== 1 ? 's' : ''} locally. Shopify removal in progress.`,
+        {
+          action: {
+            label: "Undo",
+            onClick: async () => {
+              try {
+                const { error: restoreError } = await supabase
+                  .from('intake_items')
+                  .update({ 
+                    deleted_at: null,
+                    deleted_reason: null 
+                  })
+                  .in('id', itemIds);
+                
+                if (restoreError) throw restoreError;
+                toast.success("Items restored");
+                fetchItems();
+              } catch (err) {
+                console.error('Restore failed:', err);
+                toast.error('Failed to restore items');
+              }
             }
-          })
-        );
-
-        // Small delay between batches
-        if (i + batchSize < itemsToProcess.length) {
-          await new Promise(resolve => setTimeout(resolve, 200));
+          }
         }
-      }
-
-      toast.success(`Removal completed: ${successCount} successful, ${errorCount} errors`);
+      );
       
       // Clear selection and refresh
       setSelectedItems(new Set());
       fetchItems();
     } catch (error) {
       console.error('Bulk removal failed:', error);
-      toast.error('Failed to process removals');
+      toast.error('Failed to archive items');
     } finally {
       setBulkDeleting(false);
       setShowRemovalDialog(false);
