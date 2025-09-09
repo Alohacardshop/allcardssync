@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Trash2, Package, Calendar, DollarSign, Eye, EyeOff, FileText, Tag, Printer, ExternalLink, RotateCcw, Loader2, Upload, Home, X, CheckSquare, Square } from 'lucide-react';
+import { Trash2, Package, Calendar, DollarSign, Eye, EyeOff, FileText, Tag, Printer, ExternalLink, RotateCcw, Loader2, Upload, Home, X, CheckSquare, Square, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -58,6 +58,10 @@ const Inventory = () => {
   const [printingItem, setPrintingItem] = useState<string | null>(null);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [showInspectDialog, setShowInspectDialog] = useState(false);
+  const [inspectSku, setInspectSku] = useState<string>('');
+  const [inspectResult, setInspectResult] = useState<any>(null);
+  const [inspecting, setInspecting] = useState(false);
   
   const { printPNG, selectedPrinter } = usePrintNode();
   const { selectedStore, selectedLocation } = useStore();
@@ -407,6 +411,28 @@ const Inventory = () => {
       setBulkDeleting(false);
       setShowRemovalDialog(false);
       setSelectedItemForRemoval(null);
+    }
+  };
+
+  const handleInspectInShopify = async (item: any) => {
+    setInspectSku(item.sku);
+    setInspecting(true);
+    setInspectResult(null);
+    setShowInspectDialog(true);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('shopify-inspect-sku', {
+        body: { storeKey: item.store_key, sku: item.sku }
+      });
+
+      if (error) throw error;
+      setInspectResult(data);
+    } catch (error) {
+      console.error('Inspect failed:', error);
+      toast.error('Failed to inspect SKU in Shopify');
+      setInspectResult({ success: false, error: error.message });
+    } finally {
+      setInspecting(false);
     }
   };
 
@@ -760,17 +786,27 @@ const Inventory = () => {
                                   <ExternalLink className="w-4 h-4 mr-1" />
                                   Sync
                                 </Button>
-                                {!item.deleted_at && (
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleRemoveFromShopify(item)}
-                                    disabled={!item.sku && !item.shopify_product_id}
-                                  >
-                                    <Trash2 className="w-4 h-4 mr-1" />
-                                    Remove
-                                  </Button>
-                                )}
+                                 {!item.deleted_at && (
+                                   <Button
+                                     variant="outline"
+                                     size="sm"
+                                     onClick={() => handleRemoveFromShopify(item)}
+                                     disabled={!item.sku && !item.shopify_product_id}
+                                   >
+                                     <Trash2 className="w-4 h-4 mr-1" />
+                                     Remove
+                                   </Button>
+                                 )}
+                                 
+                                 <Button
+                                   variant="ghost"
+                                   size="sm"
+                                   onClick={() => handleInspectInShopify(item)}
+                                   disabled={!item.sku}
+                                 >
+                                   <Search className="w-4 h-4 mr-1" />
+                                   Inspect
+                                 </Button>
 
                                 {/* Quick Delete as Graded for individual items */}
                                 {item.type === 'Graded' && (item.shopify_product_id || item.sku) && (
@@ -880,6 +916,89 @@ const Inventory = () => {
           items={Array.isArray(selectedItemForRemoval) ? selectedItemForRemoval : (selectedItemForRemoval ? [selectedItemForRemoval] : [])}
           loading={bulkDeleting}
         />
+
+        <Dialog open={showInspectDialog} onOpenChange={setShowInspectDialog}>
+          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Inspect SKU in Shopify</DialogTitle>
+              <DialogDescription>
+                Checking what exists for SKU: {inspectSku}
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              {inspecting && (
+                <div className="text-center py-4">
+                  <div className="animate-spin inline-block w-6 h-6 border-2 border-current border-t-transparent rounded-full" />
+                  <p className="mt-2">Querying Shopify...</p>
+                </div>
+              )}
+              
+              {inspectResult && (
+                <div className="space-y-4">
+                  {inspectResult.success ? (
+                    <>
+                      <div className="p-3 bg-muted rounded-lg">
+                        <h4 className="font-medium">Search Results</h4>
+                        <p className="text-sm text-muted-foreground">
+                          Found {inspectResult.variantsFound} variant{inspectResult.variantsFound !== 1 ? 's' : ''} for SKU "{inspectResult.sku}"
+                        </p>
+                      </div>
+                      
+                      {inspectResult.variants.length === 0 ? (
+                        <div className="p-4 border border-amber-200 bg-amber-50 rounded-lg">
+                          <p className="text-amber-800 font-medium">❌ SKU not found in Shopify</p>
+                          <p className="text-sm text-amber-700 mt-1">
+                            This SKU does not exist in your Shopify store.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {inspectResult.variants.map((variant: any, i: number) => (
+                            <div key={i} className="p-4 border rounded-lg space-y-2">
+                              <div className="grid grid-cols-2 gap-2 text-sm">
+                                <div><strong>Product:</strong> {variant.productTitle}</div>
+                                <div><strong>Status:</strong> {variant.productStatus}</div>
+                                <div><strong>SKU:</strong> {variant.sku}</div>
+                                <div><strong>Price:</strong> ${variant.price}</div>
+                                <div><strong>Product ID:</strong> {variant.productId.replace('gid://shopify/Product/', '')}</div>
+                                <div><strong>Variant ID:</strong> {variant.variantId.replace('gid://shopify/ProductVariant/', '')}</div>
+                              </div>
+                              
+                              {variant.inventoryLevels.length > 0 && (
+                                <div>
+                                  <strong className="text-sm">Inventory by Location:</strong>
+                                  <div className="mt-1 space-y-1">
+                                    {variant.inventoryLevels.map((level: any, j: number) => (
+                                      <div key={j} className="text-sm bg-muted/50 p-2 rounded">
+                                        <span className="font-medium">{level.locationName}:</span> {level.available} available
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="p-4 border border-red-200 bg-red-50 rounded-lg">
+                      <p className="text-red-800 font-medium">❌ Error inspecting SKU</p>
+                      <p className="text-sm text-red-700 mt-1">{inspectResult.error}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowInspectDialog(false)}>
+                Close
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </>
   );
