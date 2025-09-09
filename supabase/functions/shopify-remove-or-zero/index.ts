@@ -8,6 +8,17 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
+interface RemovalResult {
+  success: boolean;
+  status: string;
+  productId?: string;
+  variantId?: string;
+  actions: string[];
+  storeKey: string;
+  mode: string;
+  error?: string;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -53,13 +64,14 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
     const { 
       storeKey,
-      mode = 'auto', // 'graded' | 'raw' | 'auto'
       productId,
       variantId, 
       sku,
-      locationGid
+      locationGid,
+      itemIds = []
     } = await req.json();
 
     if (!storeKey) {
@@ -69,12 +81,21 @@ serve(async (req) => {
       );
     }
 
-    console.log(`Shopify removal request: ${JSON.stringify({ storeKey, mode, productId, variantId, sku, locationGid })}`);
+    console.log(`Shopify removal request: ${JSON.stringify({ storeKey, productId, variantId, sku, locationGid, itemIds })}`);
 
-    // Use service client already created above for auth check
+    // Use service client
     const supabase = authClient;
 
-    // Get Shopify credentials (support multiple key formats for compatibility)
+    // Get removal strategy setting
+    const { data: strategyData } = await supabase
+      .from('system_settings')
+      .select('key_value')
+      .eq('key_name', 'SHOPIFY_REMOVAL_STRATEGY')
+      .single();
+
+    const removalStrategy = strategyData?.key_value || 'delete';
+
+    // Get Shopify credentials
     const upper = storeKey.toUpperCase();
     const domainKeys = [
       `SHOPIFY_${upper}_DOMAIN`,
@@ -115,10 +136,10 @@ serve(async (req) => {
 
     const apiVersion = '2024-07';
 
+    // STEP 1: RESOLVE - Get product and variant info
     let resolvedProductId = productId;
-    let resolvedMode = mode;
-
-    // If we need to resolve product by SKU
+    let resolvedVariantId = variantId;
+    
     if (!resolvedProductId && sku) {
       console.log(`Resolving product by SKU: ${sku}`);
       const variantsUrl = `https://${shopifyDomain}/admin/api/${apiVersion}/variants.json?limit=1&sku=${encodeURIComponent(sku)}`;
@@ -133,173 +154,217 @@ serve(async (req) => {
       if (variantsResponse.ok) {
         const variantsData = await variantsResponse.json();
         if (variantsData.variants && variantsData.variants.length > 0) {
-          resolvedProductId = variantsData.variants[0].product_id.toString();
-          console.log(`Resolved product ID: ${resolvedProductId}`);
+          const variant = variantsData.variants[0];
+          resolvedProductId = variant.product_id.toString();
+          resolvedVariantId = variant.id.toString();
+          console.log(`Resolved product ID: ${resolvedProductId}, variant ID: ${resolvedVariantId}`);
         }
       }
     }
 
     if (!resolvedProductId) {
-      return new Response(
-        JSON.stringify({ error: 'Could not resolve product ID' }), 
-        { status: 400, headers: corsHeaders }
+      const result: RemovalResult = {
+        success: false,
+        status: 'resolution_failed',
+        actions: ['Could not resolve product ID from SKU'],
+        storeKey,
+        mode: 'failed',
+        error: 'Could not resolve product ID'
+      };
+
+      // Update item status in DB
+      if (itemIds.length > 0) {
+        await supabase
+          .from('intake_items')
+          .update({
+            shopify_removal_mode: 'failed',
+            last_shopify_removal_error: 'Could not resolve product ID',
+            shopify_sync_status: 'error'
+          })
+          .in('id', itemIds);
+      }
+
+      return new Response(JSON.stringify(result), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Get product details to determine variant count
+    const productUrl = `https://${shopifyDomain}/admin/api/${apiVersion}/products/${resolvedProductId}.json`;
+    const productResponse = await fetchWithRetry(productUrl, {
+      headers: {
+        'X-Shopify-Access-Token': accessToken,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!productResponse.ok) {
+      if (productResponse.status === 404) {
+        // Product already removed - idempotent success
+        const result: RemovalResult = {
+          success: true,
+          status: 'already_removed',
+          productId: resolvedProductId,
+          actions: ['Product already removed from Shopify'],
+          storeKey,
+          mode: 'idempotent'
+        };
+
+        // Update item status in DB
+        if (itemIds.length > 0) {
+          await supabase
+            .from('intake_items')
+            .update({
+              shopify_removed_at: new Date().toISOString(),
+              shopify_removal_mode: 'already_removed',
+              shopify_product_id: null,
+              shopify_sync_status: 'synced'
+            })
+            .in('id', itemIds);
+        }
+
+        return new Response(JSON.stringify(result), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      // Other errors - try fallback
+      return await handleFallback(
+        supabase, shopifyDomain, accessToken, apiVersion,
+        resolvedProductId, resolvedVariantId, storeKey, itemIds,
+        `Failed to fetch product: ${productResponse.status}`
       );
     }
 
-    // Auto-determine mode if needed
-    if (resolvedMode === 'auto') {
-      console.log('Auto-determining mode from product tags...');
-      
-      const productUrl = `https://${shopifyDomain}/admin/api/${apiVersion}/products/${resolvedProductId}.json`;
-      const productResponse = await fetchWithRetry(productUrl, {
-        headers: {
-          'X-Shopify-Access-Token': accessToken,
-          'Content-Type': 'application/json',
-        },
-      });
+    const productData = await productResponse.json();
+    const variants = productData.product?.variants || [];
+    const variantCount = variants.length;
 
-      if (productResponse.ok) {
-        const productData = await productResponse.json();
-        const productTags = (productData.product?.tags || '').toLowerCase();
-        
-        const gradedTags = ["graded", "professional sports authenticator (psa)", "psa"];
-        const rawTags = ["single"];
-        
-        const isGraded = gradedTags.some(tag => productTags.includes(tag.toLowerCase()));
-        const isRaw = rawTags.some(tag => productTags.includes(tag.toLowerCase()));
-        
-        if (isGraded) {
-          resolvedMode = 'graded';
-        } else if (isRaw) {
-          resolvedMode = 'raw';
-        } else {
-          // Fallback: check local intake_items category
-          console.log('Tags inconclusive, checking local category...');
-          const { data: localItem } = await supabase
-            .from('intake_items')
-            .select('category')
-            .eq('store_key', storeKey)
-            .eq('shopify_product_id', resolvedProductId)
-            .limit(1)
-            .single();
-            
-          if (localItem?.category === 'graded') {
-            resolvedMode = 'graded';
-          } else if (localItem?.category === 'raw') {
-            resolvedMode = 'raw';
-          } else {
-            resolvedMode = 'raw'; // Default fallback
-          }
-        }
-      } else {
-        console.warn('Could not fetch product for auto mode, defaulting to raw');
-        resolvedMode = 'raw';
-      }
+    console.log(`Product has ${variantCount} variants`);
+
+    // STEP 2: DECIDE - Determine deletion strategy
+    let deletionMode: 'product' | 'variant' | 'fallback';
+    
+    if (removalStrategy === 'zero') {
+      deletionMode = 'fallback';
+    } else if (variantCount === 1) {
+      deletionMode = 'product'; // Delete entire product if single variant
+    } else {
+      deletionMode = 'variant'; // Delete specific variant if multiple variants
     }
 
-    console.log(`Final mode: ${resolvedMode}`);
+    console.log(`Deletion mode: ${deletionMode}`);
 
+    // STEP 3: DELETE - Execute the deletion
     const actions: string[] = [];
     let success = true;
+    let status = '';
 
-    if (resolvedMode === 'graded') {
-      // DELETE the product from Shopify
-      console.log(`Deleting product ${resolvedProductId} (graded)`);
-      
-      const deleteUrl = `https://${shopifyDomain}/admin/api/${apiVersion}/products/${resolvedProductId}.json`;
-      const deleteResponse = await fetchWithRetry(deleteUrl, {
-        method: 'DELETE',
-        headers: {
-          'X-Shopify-Access-Token': accessToken,
-          'Content-Type': 'application/json',
-        },
-      });
+    try {
+      if (deletionMode === 'product') {
+        // Delete entire product
+        const deleteUrl = `https://${shopifyDomain}/admin/api/${apiVersion}/products/${resolvedProductId}.json`;
+        const deleteResponse = await fetchWithRetry(deleteUrl, {
+          method: 'DELETE',
+          headers: {
+            'X-Shopify-Access-Token': accessToken,
+            'Content-Type': 'application/json',
+          },
+        });
 
-      if (deleteResponse.ok || deleteResponse.status === 404) {
-        actions.push(`Deleted product ${resolvedProductId}`);
-      } else {
-        const errorText = await deleteResponse.text();
-        actions.push(`Failed to delete product ${resolvedProductId}: ${deleteResponse.status} ${errorText}`);
-        success = false;
-      }
-      
-    } else if (resolvedMode === 'raw') {
-      // ZERO out inventory levels for all locations
-      console.log(`Zeroing inventory for product ${resolvedProductId} (raw)`);
-      
-      // Get all variants for the product
-      const productUrl = `https://${shopifyDomain}/admin/api/${apiVersion}/products/${resolvedProductId}.json`;
-      const productResponse = await fetchWithRetry(productUrl, {
-        headers: {
-          'X-Shopify-Access-Token': accessToken,
-          'Content-Type': 'application/json',
-        },
-      });
+        if (deleteResponse.ok || deleteResponse.status === 404) {
+          actions.push(`Deleted product ${resolvedProductId}`);
+          status = 'product_deleted';
 
-      if (productResponse.ok) {
-        const productData = await productResponse.json();
-        const variants = productData.product?.variants || [];
-        
-        for (const variant of variants) {
-          if (!variant.inventory_item_id) continue;
-          
-          // Get inventory levels for this variant
-          const levelsUrl = `https://${shopifyDomain}/admin/api/${apiVersion}/inventory_levels.json?inventory_item_ids=${variant.inventory_item_id}`;
-          const levelsResponse = await fetchWithRetry(levelsUrl, {
-            headers: {
-              'X-Shopify-Access-Token': accessToken,
-              'Content-Type': 'application/json',
-            },
-          });
-
-          if (levelsResponse.ok) {
-            const levelsData = await levelsResponse.json();
-            const inventoryLevels = levelsData.inventory_levels || [];
-            
-            for (const level of inventoryLevels) {
-              // Filter by location if specified
-              if (locationGid) {
-                const levelLocationGid = `gid://shopify/Location/${level.location_id}`;
-                if (levelLocationGid !== locationGid) continue;
-              }
-              
-              // Set inventory to 0
-              const setUrl = `https://${shopifyDomain}/admin/api/${apiVersion}/inventory_levels/set.json`;
-              const setResponse = await fetchWithRetry(setUrl, {
-                method: 'POST',
-                headers: {
-                  'X-Shopify-Access-Token': accessToken,
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  location_id: level.location_id,
-                  inventory_item_id: variant.inventory_item_id,
-                  available: 0
-                })
-              });
-
-              if (setResponse.ok || setResponse.status === 404) {
-                actions.push(`Set inventory to 0 for variant ${variant.id} at location ${level.location_id}`);
-              } else {
-                const errorText = await setResponse.text();
-                actions.push(`Failed to set inventory for variant ${variant.id}: ${setResponse.status} ${errorText}`);
-                success = false;
-              }
-            }
+          // Update items in DB
+          if (itemIds.length > 0) {
+            await supabase
+              .from('intake_items')
+              .update({
+                shopify_removed_at: new Date().toISOString(),
+                shopify_removal_mode: 'product',
+                shopify_product_id: null,
+                shopify_sync_status: 'synced'
+              })
+              .in('id', itemIds);
           }
+        } else if (deleteResponse.status === 429 || deleteResponse.status >= 500) {
+          // Rate limit or server error - try fallback
+          return await handleFallback(
+            supabase, shopifyDomain, accessToken, apiVersion,
+            resolvedProductId, resolvedVariantId, storeKey, itemIds,
+            `Rate limit/server error: ${deleteResponse.status}`
+          );
+        } else {
+          throw new Error(`Delete failed: ${deleteResponse.status} ${await deleteResponse.text()}`);
         }
+
+      } else if (deletionMode === 'variant' && resolvedVariantId) {
+        // Delete specific variant
+        const deleteUrl = `https://${shopifyDomain}/admin/api/${apiVersion}/variants/${resolvedVariantId}.json`;
+        const deleteResponse = await fetchWithRetry(deleteUrl, {
+          method: 'DELETE',
+          headers: {
+            'X-Shopify-Access-Token': accessToken,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (deleteResponse.ok || deleteResponse.status === 404) {
+          actions.push(`Deleted variant ${resolvedVariantId} from product ${resolvedProductId}`);
+          status = 'variant_deleted';
+
+          // Update items in DB
+          if (itemIds.length > 0) {
+            await supabase
+              .from('intake_items')
+              .update({
+                shopify_removed_at: new Date().toISOString(),
+                shopify_removal_mode: 'variant',
+                shopify_variant_id: null,
+                shopify_sync_status: 'synced'
+              })
+              .in('id', itemIds);
+          }
+        } else if (deleteResponse.status === 429 || deleteResponse.status >= 500) {
+          // Rate limit or server error - try fallback
+          return await handleFallback(
+            supabase, shopifyDomain, accessToken, apiVersion,
+            resolvedProductId, resolvedVariantId, storeKey, itemIds,
+            `Rate limit/server error: ${deleteResponse.status}`
+          );
+        } else {
+          throw new Error(`Variant delete failed: ${deleteResponse.status} ${await deleteResponse.text()}`);
+        }
+
       } else {
-        actions.push(`Failed to fetch product details: ${productResponse.status}`);
-        success = false;
+        // Fall back to unpublish + zero inventory
+        return await handleFallback(
+          supabase, shopifyDomain, accessToken, apiVersion,
+          resolvedProductId, resolvedVariantId, storeKey, itemIds,
+          'Using fallback strategy'
+        );
       }
+
+    } catch (error) {
+      console.error('Deletion error:', error);
+      // Try fallback on any deletion error
+      return await handleFallback(
+        supabase, shopifyDomain, accessToken, apiVersion,
+        resolvedProductId, resolvedVariantId, storeKey, itemIds,
+        `Deletion failed: ${error.message}`
+      );
     }
 
-    const result = {
+    const result: RemovalResult = {
       success,
-      mode: resolvedMode,
+      status,
       productId: resolvedProductId,
+      variantId: resolvedVariantId,
       actions,
-      storeKey
+      storeKey,
+      mode: deletionMode
     };
 
     console.log('Removal completed:', result);
@@ -320,3 +385,153 @@ serve(async (req) => {
     );
   }
 });
+
+// STEP 4: FALLBACK - Unpublish and zero inventory
+async function handleFallback(
+  supabase: any,
+  shopifyDomain: string,
+  accessToken: string,
+  apiVersion: string,
+  productId: string,
+  variantId: string | undefined,
+  storeKey: string,
+  itemIds: string[],
+  reason: string
+): Promise<Response> {
+  console.log(`Executing fallback strategy: ${reason}`);
+  
+  const actions: string[] = [`Fallback: ${reason}`];
+  
+  try {
+    // Unpublish product from all sales channels
+    const unpublishUrl = `https://${shopifyDomain}/admin/api/${apiVersion}/products/${productId}.json`;
+    const unpublishResponse = await fetchWithRetry(unpublishUrl, {
+      method: 'PUT',
+      headers: {
+        'X-Shopify-Access-Token': accessToken,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        product: {
+          id: productId,
+          published: false
+        }
+      })
+    });
+
+    if (unpublishResponse.ok) {
+      actions.push(`Unpublished product ${productId}`);
+    } else {
+      actions.push(`Failed to unpublish product: ${unpublishResponse.status}`);
+    }
+
+    // Zero out inventory for all variants
+    const productUrl = `https://${shopifyDomain}/admin/api/${apiVersion}/products/${productId}.json`;
+    const productResponse = await fetchWithRetry(productUrl, {
+      headers: {
+        'X-Shopify-Access-Token': accessToken,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (productResponse.ok) {
+      const productData = await productResponse.json();
+      const variants = productData.product?.variants || [];
+      
+      for (const variant of variants) {
+        if (!variant.inventory_item_id) continue;
+        
+        // If we have a specific variant ID, only process that one
+        if (variantId && variant.id.toString() !== variantId) continue;
+        
+        // Get inventory levels
+        const levelsUrl = `https://${shopifyDomain}/admin/api/${apiVersion}/inventory_levels.json?inventory_item_ids=${variant.inventory_item_id}`;
+        const levelsResponse = await fetchWithRetry(levelsUrl, {
+          headers: {
+            'X-Shopify-Access-Token': accessToken,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (levelsResponse.ok) {
+          const levelsData = await levelsResponse.json();
+          const inventoryLevels = levelsData.inventory_levels || [];
+          
+          for (const level of inventoryLevels) {
+            const setUrl = `https://${shopifyDomain}/admin/api/${apiVersion}/inventory_levels/set.json`;
+            const setResponse = await fetchWithRetry(setUrl, {
+              method: 'POST',
+              headers: {
+                'X-Shopify-Access-Token': accessToken,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                location_id: level.location_id,
+                inventory_item_id: variant.inventory_item_id,
+                available: 0
+              })
+            });
+
+            if (setResponse.ok) {
+              actions.push(`Set inventory to 0 for variant ${variant.id} at location ${level.location_id}`);
+            }
+          }
+        }
+      }
+    }
+
+    // Update items in DB
+    if (itemIds.length > 0) {
+      await supabase
+        .from('intake_items')
+        .update({
+          shopify_removed_at: new Date().toISOString(),
+          shopify_removal_mode: 'fallback_unpublish_zero',
+          shopify_sync_status: 'synced'
+        })
+        .in('id', itemIds);
+    }
+
+    const result: RemovalResult = {
+      success: true,
+      status: 'fallback_unpublish_zero',
+      productId,
+      variantId,
+      actions,
+      storeKey,
+      mode: 'fallback'
+    };
+
+    return new Response(
+      JSON.stringify(result),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+
+  } catch (error) {
+    console.error('Fallback error:', error);
+
+    // Update items with error
+    if (itemIds.length > 0) {
+      await supabase
+        .from('intake_items')
+        .update({
+          shopify_removal_mode: 'failed',
+          last_shopify_removal_error: `Fallback failed: ${error.message}`,
+          shopify_sync_status: 'error'
+        })
+        .in('id', itemIds);
+    }
+
+    return new Response(
+      JSON.stringify({
+        success: false,
+        status: 'fallback_failed',
+        error: error.message,
+        actions,
+        storeKey,
+        mode: 'failed'
+      }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+}

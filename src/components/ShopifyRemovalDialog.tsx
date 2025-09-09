@@ -8,7 +8,7 @@ import { AlertTriangle, Store, Trash2 } from "lucide-react";
 interface ShopifyRemovalDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (mode: 'auto' | 'graded' | 'raw') => void;
+  onConfirm: (mode: 'delete') => void;
   items: Array<{
     id: string;
     sku?: string | null;
@@ -29,8 +29,6 @@ export function ShopifyRemovalDialog({
   items, 
   loading 
 }: ShopifyRemovalDialogProps) {
-  const [mode, setMode] = useState<'auto' | 'graded' | 'raw'>('auto');
-
   // Check if items can be removed (have SKU or Shopify product ID)
   const removableItems = items.filter(item => 
     item.shopify_product_id || item.sku
@@ -43,11 +41,11 @@ export function ShopifyRemovalDialog({
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Store className="h-5 w-5" />
-              Shopify Removal
+              <Trash2 className="h-5 w-5" />
+              Delete from Shopify
             </DialogTitle>
             <DialogDescription>
-              This item cannot be removed from Shopify because it has no SKU or Shopify product ID to match.
+              Can't resolve Shopify item—no SKU or product ID.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -64,7 +62,7 @@ export function ShopifyRemovalDialog({
   const rawCount = removableItems.length - gradedCount;
 
   const handleConfirm = () => {
-    onConfirm(mode);
+    onConfirm('delete'); // Always use delete mode now
   };
 
   return (
@@ -72,11 +70,11 @@ export function ShopifyRemovalDialog({
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Store className="h-5 w-5" />
-            Shopify Removal
+            <Trash2 className="h-5 w-5 text-destructive" />
+            Delete from Shopify
           </DialogTitle>
           <DialogDescription>
-            {removableItems.length} item{removableItems.length !== 1 ? 's' : ''} will be processed in Shopify.
+            {removableItems.length} item{removableItems.length !== 1 ? 's' : ''} will be deleted from Shopify.
           </DialogDescription>
         </DialogHeader>
 
@@ -96,39 +94,12 @@ export function ShopifyRemovalDialog({
             <div className="flex items-start gap-3 p-3 border rounded-lg bg-destructive/5 border-destructive/20">
               <Trash2 className="h-4 w-4 text-destructive mt-0.5" />
               <div className="text-sm space-y-1">
-                <div className="font-medium text-destructive">Graded items</div>
+                <div className="font-medium text-destructive">All items</div>
                 <div className="text-muted-foreground">
-                  Will be <strong>deleted</strong> from Shopify completely
+                  Will be <strong>deleted</strong> from Shopify. If product has multiple variants, only this variant is deleted.
                 </div>
               </div>
             </div>
-
-            <div className="flex items-start gap-3 p-3 border rounded-lg bg-amber-50 border-amber-200">
-              <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5" />
-              <div className="text-sm space-y-1">
-                <div className="font-medium text-amber-700">Raw items</div>
-                <div className="text-muted-foreground">
-                  Will have inventory <strong>set to 0</strong> in Shopify (product kept)
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Removal mode:</label>
-            <Select value={mode} onValueChange={(value: 'auto' | 'graded' | 'raw') => setMode(value)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="auto">Auto (recommended)</SelectItem>
-                <SelectItem value="graded">Force Graded (delete all)</SelectItem>
-                <SelectItem value="raw">Force Raw (zero all)</SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              Auto mode applies the correct action per item type
-            </p>
           </div>
         </div>
 
@@ -141,7 +112,7 @@ export function ShopifyRemovalDialog({
             onClick={handleConfirm} 
             disabled={loading}
           >
-            {loading ? "Processing..." : "Apply Shopify Removal"}
+            {loading ? "Deleting..." : "Delete from Shopify"}
           </Button>
         </DialogFooter>
       </DialogContent>

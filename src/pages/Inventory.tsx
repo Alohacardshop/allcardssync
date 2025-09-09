@@ -370,10 +370,10 @@ const Inventory = () => {
               const { error } = await supabase.functions.invoke('shopify-remove-or-zero', {
                 body: {
                   storeKey: item.store_key,
-                  mode,
                   productId: item.shopify_product_id,
                   sku: item.sku,
-                  locationGid: item.shopify_location_gid
+                  locationGid: item.shopify_location_gid,
+                  itemIds: [item.id]
                 }
               });
 
@@ -470,7 +470,7 @@ const Inventory = () => {
                     disabled={bulkDeleting}
                   >
                     <Trash2 className="w-4 h-4 mr-2" />
-                    Delete All Graded ({filteredItems.filter(item => item.type === 'Graded' && (item.shopify_product_id || item.sku)).length})
+                    Delete All from Shopify ({filteredItems.filter(item => item.type === 'Graded' && (item.shopify_product_id || item.sku)).length})
                   </Button>
                 )}
                 <Button

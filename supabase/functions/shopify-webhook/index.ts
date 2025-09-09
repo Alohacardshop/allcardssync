@@ -1,340 +1,266 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { log } from "../_shared/log.ts";
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.56.0";
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-shopify-hmac-sha256, x-shopify-topic",
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-shopify-webhook-id, x-shopify-hmac-sha256, x-shopify-topic',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-async function verifyHmac(rawBody: string, hmacHeader: string | null, secret: string | undefined) {
-  if (!hmacHeader || !secret) return false;
-  const enc = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    "raw",
-    enc.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
-  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(rawBody));
-  const digestBytes = new Uint8Array(sig);
-  const headerBytes = Uint8Array.from(atob(hmacHeader), (c) => c.charCodeAt(0));
-  if (digestBytes.length !== headerBytes.length) return false;
-  let out = 0;
-  for (let i = 0; i < digestBytes.length; i++) out |= digestBytes[i] ^ headerBytes[i];
-  return out === 0;
-}
-
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-  const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-
   try {
-    // Get webhook secret from system_settings table
-    const { data: webhookSetting } = await supabase.functions.invoke('get-system-setting', {
-      body: { 
-        keyName: 'SHOPIFY_WEBHOOK_SECRET',
-        fallbackSecretName: 'SHOPIFY_WEBHOOK_SECRET'
-      }
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Get webhook headers
+    const webhookId = req.headers.get('x-shopify-webhook-id');
+    const hmacHeader = req.headers.get('x-shopify-hmac-sha256');
+    const topic = req.headers.get('x-shopify-topic');
+    const shopifyDomain = req.headers.get('x-shopify-shop-domain');
+
+    if (!webhookId || !topic) {
+      return new Response(JSON.stringify({ error: 'Missing required webhook headers' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Check for duplicate webhook (idempotency)
+    const { data: existingEvent } = await supabase
+      .from('webhook_events')
+      .select('id')
+      .eq('webhook_id', webhookId)
+      .single();
+
+    if (existingEvent) {
+      console.log(`Duplicate webhook ignored: ${webhookId}`);
+      return new Response(JSON.stringify({ message: 'Webhook already processed' }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    const body = await req.text();
+    const payload = JSON.parse(body);
+
+    // Store webhook event for deduplication
+    await supabase
+      .from('webhook_events')
+      .insert({
+        webhook_id: webhookId,
+        event_type: topic,
+        payload: payload
+      });
+
+    console.log(`Processing webhook: ${topic} from ${shopifyDomain}`);
+
+    // Handle different webhook types
+    switch (topic) {
+      case 'products/delete':
+        await handleProductDelete(supabase, payload, shopifyDomain);
+        break;
+      
+      case 'product_listings/remove':
+        await handleProductListingRemove(supabase, payload, shopifyDomain);
+        break;
+      
+      case 'orders/paid':
+      case 'orders/fulfilled':
+        await handleOrderUpdate(supabase, payload, shopifyDomain);
+        break;
+      
+      default:
+        console.log(`Unhandled webhook topic: ${topic}`);
+    }
+
+    return new Response(JSON.stringify({ message: 'Webhook processed successfully' }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
 
-    const SHOPIFY_WEBHOOK_SECRET = webhookSetting?.value;
-    const topic = req.headers.get("x-shopify-topic");
-    const hmac = req.headers.get("x-shopify-hmac-sha256");
-    const raw = await req.text();
-
-    const isValid = await verifyHmac(raw, hmac, SHOPIFY_WEBHOOK_SECRET);
-    if (!isValid) {
-      console.warn("Invalid Shopify webhook HMAC");
-      return new Response("Invalid signature", { status: 401, headers: corsHeaders });
-    }
-
-    const payload = JSON.parse(raw);
-
-    // Handle inventory level updates from Shopify (two-way sync)
-    if (topic === "inventory_levels/update") {
-      log.info("Processing Shopify inventory level update", {
-        topic,
-        inventoryItemId: payload?.inventory_item_id,
-        locationId: payload?.location_id,
-        available: payload?.available
-      });
-
-      try {
-        const inventoryItemId = payload?.inventory_item_id?.toString();
-        const locationId = payload?.location_id?.toString();
-        const available = parseInt(payload?.available) || 0;
-
-        if (!inventoryItemId || !locationId) {
-          log.warn("Missing required fields for inventory update", { inventoryItemId, locationId });
-          return new Response(JSON.stringify({ ok: true }), {
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-
-        // Find items with this inventory_item_id
-        const { data: items, error: itemsError } = await supabase
-          .from("intake_items")
-          .select("id, sku, quantity, shopify_inventory_item_id, shopify_location_gid")
-          .eq("shopify_inventory_item_id", inventoryItemId)
-          .is("deleted_at", null)
-          .not("removed_from_batch_at", "is", null);
-
-        if (itemsError) {
-          log.error("Failed to fetch items for inventory update", {
-            inventoryItemId,
-            error: itemsError.message
-          });
-          throw itemsError;
-        }
-
-        if (!items || items.length === 0) {
-          log.info("No matching items found for inventory update", { inventoryItemId });
-          return new Response(JSON.stringify({ ok: true }), {
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-
-        // Calculate current total quantity for this inventory item and location
-        const locationGid = `gid://shopify/Location/${locationId}`;
-        const currentTotal = items
-          .filter(item => item.shopify_location_gid === locationGid)
-          .reduce((sum, item) => sum + (item.quantity || 0), 0);
-
-        // If quantities match, no action needed
-        if (currentTotal === available) {
-          log.info("Quantities already match, no update needed", {
-            inventoryItemId,
-            locationId,
-            currentTotal,
-            shopifyAvailable: available
-          });
-          return new Response(JSON.stringify({ ok: true }), {
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-
-        // Update shopify sync status for tracking
-        const updatePromises = items
-          .filter(item => item.shopify_location_gid === locationGid)
-          .map(item => 
-            supabase
-              .from("intake_items")
-              .update({
-                shopify_sync_status: 'shopify_updated',
-                last_shopify_synced_at: new Date().toISOString(),
-                last_shopify_sync_error: null
-              })
-              .eq("id", item.id)
-          );
-
-        await Promise.all(updatePromises);
-
-        log.info("Processed Shopify inventory update", {
-          inventoryItemId,
-          locationId,
-          currentTotal,
-          shopifyAvailable: available,
-          itemsUpdated: items.length
-        });
-
-      } catch (error) {
-        log.error("Error processing inventory level update", {
-          error: error.message,
-          payload
-        });
-      }
-
-      return new Response(JSON.stringify({ ok: true }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Handle order-related updates: decrement quantity by sold amount per SKU with multi-row allocation
-    if (topic && topic.startsWith("orders/")) {
-      log.info("Processing Shopify order webhook", {
-        topic,
-        orderId: payload?.id,
-        lineItemsCount: payload?.line_items?.length || 0
-      });
-
-      const lineItems: any[] = payload?.line_items || [];
-      const results = [];
-
-      for (const li of lineItems) {
-        const sku: string | undefined = li?.sku || undefined;
-        const requestedQty: number = Number(li?.quantity || 0);
-        
-        if (!sku || requestedQty <= 0) {
-          log.warn("Skipping line item - invalid SKU or quantity", {
-            sku,
-            requestedQty,
-            lineItemId: li?.id
-          });
-          continue;
-        }
-
-        log.info("Processing line item", {
-          sku,
-          requestedQty,
-          lineItemId: li?.id,
-          productId: li?.product_id,
-          variantId: li?.variant_id
-        });
-
-        // Find all eligible rows for this SKU, ordered by creation date
-        const { data: rows, error } = await supabase
-          .from("intake_items")
-          .select("id, quantity, lot_number, created_at")
-          .eq("sku", sku)
-          .is("deleted_at", null)
-          .not("pushed_at", "is", null)
-          .gt("quantity", 0)
-          .order("created_at", { ascending: true });
-
-        if (error) {
-          log.error("Failed to fetch intake items", {
-            sku,
-            error: error.message
-          });
-          throw error;
-        }
-
-        if (!rows || rows.length === 0) {
-          log.warn("No eligible intake items found for SKU", {
-            sku,
-            requestedQty
-          });
-          results.push({
-            sku,
-            requestedQty,
-            allocatedQty: 0,
-            status: 'no_inventory'
-          });
-          continue;
-        }
-
-        // Multi-row allocation: cascade decrements across rows
-        let remainingQty = requestedQty;
-        const allocations = [];
-        let totalAvailable = rows.reduce((sum, row) => sum + row.quantity, 0);
-
-        for (const row of rows) {
-          if (remainingQty <= 0) break;
-
-          const availableInRow = Number(row.quantity || 0);
-          const allocateFromRow = Math.min(remainingQty, availableInRow);
-          const newQty = availableInRow - allocateFromRow;
-
-          // Update data for this row
-          const updateData: any = { quantity: newQty };
-
-          // C) Track sold information when quantity hits 0
-          if (newQty === 0) {
-            updateData.sold_price = parseFloat(li.price) || 0;
-            updateData.sold_at = new Date().toISOString();
-            updateData.shopify_order_id = payload.id?.toString();
-            console.log(`Item ${row.id} fully sold - tracking sale info`);
-          }
-
-          // Update the row in database
-          const { error: updateError } = await supabase
-            .from("intake_items")
-            .update(updateData)
-            .eq("id", row.id);
-
-          if (updateError) {
-            log.error("Failed to update intake item quantity", {
-              itemId: row.id,
-              sku,
-              originalQty: availableInRow,
-              attemptedDeduction: allocateFromRow,
-              error: updateError.message
-            });
-            throw updateError;
-          }
-
-          // Track this allocation
-          allocations.push({
-            itemId: row.id,
-            lotNumber: row.lot_number,
-            originalQty: availableInRow,
-            allocatedQty: allocateFromRow,
-            newQty: newQty,
-            createdAt: row.created_at
-          });
-
-          remainingQty -= allocateFromRow;
-
-          log.info("Applied quantity decrement", {
-            itemId: row.id,
-            sku,
-            lotNumber: row.lot_number,
-            originalQty: availableInRow,
-            allocatedQty: allocateFromRow,
-            newQty: newQty,
-            remainingToAllocate: remainingQty
-          });
-        }
-
-        const totalAllocated = requestedQty - remainingQty;
-        const allocationStatus = remainingQty > 0 ? 'partial_allocation' : 'fully_allocated';
-
-        log.info("Completed SKU allocation", {
-          sku,
-          requestedQty,
-          totalAllocated,
-          remainingQty,
-          totalAvailable,
-          rowsProcessed: allocations.length,
-          status: allocationStatus,
-          allocations: allocations
-        });
-
-        results.push({
-          sku,
-          requestedQty,
-          allocatedQty: totalAllocated,
-          remainingQty,
-          totalAvailable,
-          status: allocationStatus,
-          allocations
-        });
-
-        // Log warning if we couldn't fulfill the full quantity
-        if (remainingQty > 0) {
-          log.warn("Partial allocation - insufficient inventory", {
-            sku,
-            requestedQty,
-            allocatedQty: totalAllocated,
-            shortfall: remainingQty,
-            totalAvailable
-          });
-        }
-      }
-
-      log.info("Completed order processing", {
-        orderId: payload?.id,
-        topic,
-        totalLineItems: lineItems.length,
-        processedResults: results.length,
-        summary: results
-      });
-    }
-
-    return new Response(JSON.stringify({ ok: true }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  } catch (e) {
-    console.error("shopify-webhook error", e);
-    return new Response(JSON.stringify({ ok: false, error: String(e) }), {
+  } catch (error) {
+    console.error('Webhook error:', error);
+    return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
   }
 });
+
+async function handleProductDelete(supabase: any, payload: any, shopifyDomain: string | null) {
+  const productId = payload.id?.toString();
+  if (!productId) return;
+
+  console.log(`Handling product delete: ${productId}`);
+
+  // Find store key from domain
+  const storeKey = await getStoreKeyFromDomain(supabase, shopifyDomain);
+  if (!storeKey) {
+    console.warn(`Could not determine store key for domain: ${shopifyDomain}`);
+    return;
+  }
+
+  // Mark matching items as removed
+  const { error } = await supabase
+    .from('intake_items')
+    .update({
+      shopify_removed_at: new Date().toISOString(),
+      shopify_removal_mode: 'webhook_product_delete',
+      shopify_product_id: null,
+      shopify_sync_status: 'synced'
+    })
+    .eq('store_key', storeKey)
+    .eq('shopify_product_id', productId);
+
+  if (error) {
+    console.error('Failed to update items for deleted product:', error);
+  } else {
+    console.log(`Updated items for deleted product ${productId}`);
+  }
+}
+
+async function handleProductListingRemove(supabase: any, payload: any, shopifyDomain: string | null) {
+  const productId = payload.product_id?.toString();
+  if (!productId) return;
+
+  console.log(`Handling product listing remove: ${productId}`);
+
+  // Find store key from domain
+  const storeKey = await getStoreKeyFromDomain(supabase, shopifyDomain);
+  if (!storeKey) return;
+
+  // Mark items as unpublished (but not deleted)
+  const { error } = await supabase
+    .from('intake_items')
+    .update({
+      shopify_removal_mode: 'webhook_unpublished',
+      shopify_sync_status: 'synced'
+    })
+    .eq('store_key', storeKey)
+    .eq('shopify_product_id', productId);
+
+  if (error) {
+    console.error('Failed to update items for unpublished product:', error);
+  }
+}
+
+async function handleOrderUpdate(supabase: any, payload: any, shopifyDomain: string | null) {
+  const orderId = payload.id?.toString();
+  const lineItems = payload.line_items || [];
+
+  if (!orderId || lineItems.length === 0) return;
+
+  console.log(`Handling order update: ${orderId} with ${lineItems.length} line items`);
+
+  // Find store key from domain
+  const storeKey = await getStoreKeyFromDomain(supabase, shopifyDomain);
+  if (!storeKey) return;
+
+  for (const lineItem of lineItems) {
+    const sku = lineItem.sku;
+    const variantId = lineItem.variant_id?.toString();
+    const quantity = lineItem.quantity || 0;
+    const price = lineItem.price;
+
+    if (!sku && !variantId) continue;
+
+    // Find matching items by SKU or variant ID
+    let query = supabase
+      .from('intake_items')
+      .select('id, quantity, type')
+      .eq('store_key', storeKey);
+
+    if (sku) {
+      query = query.eq('sku', sku);
+    } else if (variantId) {
+      query = query.eq('shopify_variant_id', variantId);
+    }
+
+    const { data: items, error } = await query;
+
+    if (error || !items?.length) {
+      console.warn(`No items found for SKU: ${sku}, variant: ${variantId}`);
+      continue;
+    }
+
+    for (const item of items) {
+      // For graded items, set quantity to 0 and record sale
+      if (item.type === 'Graded') {
+        const { error: updateError } = await supabase
+          .from('intake_items')
+          .update({
+            quantity: 0,
+            sold_at: new Date().toISOString(),
+            sold_price: price,
+            sold_order_id: orderId,
+            sold_channel: 'shopify',
+            sold_currency: payload.currency || 'USD'
+          })
+          .eq('id', item.id);
+
+        if (updateError) {
+          console.error('Failed to update sold item:', updateError);
+        } else {
+          console.log(`Marked graded item ${item.id} as sold`);
+        }
+      } else {
+        // For raw items, decrement quantity
+        const newQuantity = Math.max(0, (item.quantity || 0) - quantity);
+        
+        const updateData: any = { quantity: newQuantity };
+        
+        // If quantity goes to 0, record sale info
+        if (newQuantity === 0) {
+          updateData.sold_at = new Date().toISOString();
+          updateData.sold_price = price;
+          updateData.sold_order_id = orderId;
+          updateData.sold_channel = 'shopify';
+          updateData.sold_currency = payload.currency || 'USD';
+        }
+
+        const { error: updateError } = await supabase
+          .from('intake_items')
+          .update(updateData)
+          .eq('id', item.id);
+
+        if (updateError) {
+          console.error('Failed to update raw item quantity:', updateError);
+        } else {
+          console.log(`Updated raw item ${item.id} quantity to ${newQuantity}`);
+        }
+      }
+    }
+  }
+}
+
+async function getStoreKeyFromDomain(supabase: any, shopifyDomain: string | null): Promise<string | null> {
+  if (!shopifyDomain) return null;
+
+  // Try to find store key by checking system settings for matching domain
+  const { data: settings } = await supabase
+    .from('system_settings')
+    .select('key_name, key_value')
+    .like('key_name', 'SHOPIFY_%_DOMAIN');
+
+  if (settings) {
+    for (const setting of settings) {
+      if (setting.key_value === shopifyDomain) {
+        // Extract store key from setting name
+        // Format: SHOPIFY_{STORE_KEY}_DOMAIN
+        const match = setting.key_name.match(/SHOPIFY_(.+)_DOMAIN/);
+        if (match) {
+          return match[1].toLowerCase();
+        }
+      }
+    }
+  }
+
+  // Fallback: extract from domain (e.g., mystore.myshopify.com -> mystore)
+  const domainMatch = shopifyDomain.match(/^([^.]+)\.myshopify\.com/);
+  return domainMatch ? domainMatch[1] : null;
+}
