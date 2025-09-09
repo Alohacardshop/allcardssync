@@ -11,32 +11,52 @@ interface ShopifyCredentials {
 }
 
 async function getShopifyCredentials(supabase: any, storeKey: string): Promise<ShopifyCredentials> {
-  // Get store domain
-  const { data: storeData, error: storeError } = await supabase
-    .from('shopify_stores')
-    .select('domain')
-    .eq('key', storeKey)
-    .single();
+  const upper = storeKey.toUpperCase();
 
-  if (storeError || !storeData) {
-    throw new Error(`Store not found: ${storeKey}`);
-  }
+  // Prefer system_settings (align with other Shopify functions)
+  const domainKeys = [
+    `SHOPIFY_${upper}_STORE_DOMAIN`, // per-store
+    'SHOPIFY_STORE_DOMAIN'           // global fallback
+  ];
+  const tokenKeys = [
+    `SHOPIFY_${upper}_ACCESS_TOKEN`,           // current standard
+    `SHOPIFY_ADMIN_ACCESS_TOKEN_${upper}`,     // legacy pattern A
+    `SHOPIFY_${upper}_ADMIN_ACCESS_TOKEN`,     // legacy pattern B
+    'SHOPIFY_ADMIN_ACCESS_TOKEN',              // global fallback
+    `SHOPIFY_ACCESS_TOKEN_${upper}`            // legacy (our initial attempt)
+  ];
 
-  // Get access token from system settings
-  const { data: tokenData, error: tokenError } = await supabase
-    .from('system_settings')
-    .select('key_value')
-    .eq('key_name', `SHOPIFY_ACCESS_TOKEN_${storeKey.toUpperCase()}`)
-    .single();
-
-  if (tokenError || !tokenData) {
-    throw new Error(`Access token not found for store: ${storeKey}`);
-  }
-
-  return {
-    domain: storeData.domain,
-    accessToken: tokenData.key_value
+  // Helper to read first non-empty value
+  const getSetting = async (keys: string[]) => {
+    for (const key of keys) {
+      const { data } = await supabase
+        .from('system_settings')
+        .select('key_value')
+        .eq('key_name', key)
+        .single();
+      const val = data?.key_value?.trim();
+      if (val) return val;
+    }
+    return undefined;
   };
+
+  let domain = await getSetting(domainKeys);
+  let accessToken = await getSetting(tokenKeys);
+
+  // Fallback domain from shopify_stores table if not set in settings
+  if (!domain) {
+    const { data: storeData } = await supabase
+      .from('shopify_stores')
+      .select('domain')
+      .eq('key', storeKey)
+      .single();
+    domain = storeData?.domain;
+  }
+
+  if (!domain) throw new Error(`Store domain not found for store: ${storeKey}`);
+  if (!accessToken) throw new Error(`Access token not found for store: ${storeKey}`);
+
+  return { domain, accessToken };
 }
 
 async function inspectSkuInShopify(credentials: ShopifyCredentials, sku: string) {
