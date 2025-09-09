@@ -114,23 +114,78 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         const startTime = Date.now();
         console.log("[CGC:UI] Starting CGC lookup call...");
         
-        const cgcResult = await invokeCGCLookup({ 
-          certNumber: /^\d+$/.test(certInput.trim()) ? certInput.trim() : undefined,
-          barcode: !/^\d+$/.test(certInput.trim()) ? certInput.trim() : undefined,
-          include: 'pop,images'
-        }, 12000);  // Use reduced timeout for faster debugging
+        // Test direct function URL first
+        console.log("[CGC:UI] Testing direct function access...");
+        try {
+          const testResponse = await fetch('https://dmpoandoydaqxhzdjnmk.supabase.co/functions/v1/cgc-lookup', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              certNumber: /^\d+$/.test(certInput.trim()) ? certInput.trim() : undefined,
+              barcode: !/^\d+$/.test(certInput.trim()) ? certInput.trim() : undefined,
+              include: 'pop,images'
+            })
+          });
+          console.log("[CGC:UI] Direct fetch response:", {
+            ok: testResponse.ok,
+            status: testResponse.status,
+            statusText: testResponse.statusText
+          });
+          
+          if (testResponse.ok) {
+            const testData = await testResponse.json();
+            console.log("[CGC:UI] Direct fetch worked! Data:", testData);
+            
+            // Use the direct fetch result
+            const cgcResult = testData;
+            const endTime = Date.now();
+            console.log(`[CGC:UI] Direct fetch completed in ${endTime - startTime}ms`);
+        
+            if (cgcResult.ok && cgcResult.data) {
+              data = { ok: true, ...normalizeCGCForIntake(cgcResult.data) };
+            } else {
+              data = { ok: false, error: cgcResult.error || 'CGC lookup failed' };
+            }
+          } else {
+            throw new Error(`Direct fetch failed: ${testResponse.status} ${testResponse.statusText}`);
+          }
+        } catch (directError) {
+          console.error("[CGC:UI] Direct fetch failed, falling back to supabase.functions.invoke:", directError);
+          
+          // Fallback to original method
+          const cgcResult = await invokeCGCLookup({ 
+            certNumber: /^\d+$/.test(certInput.trim()) ? certInput.trim() : undefined,
+            barcode: !/^\d+$/.test(certInput.trim()) ? certInput.trim() : undefined,
+            include: 'pop,images'
+          }, 12000);  // Use reduced timeout for faster debugging
+          
+          const endTime = Date.now();
+          console.log(`[CGC:UI] CGC lookup completed in ${endTime - startTime}ms`, {
+            ok: cgcResult.ok,
+            hasData: !!cgcResult.data,
+            error: cgcResult.error
+          });
+        
+          if (cgcResult.ok && cgcResult.data) {
+            data = { ok: true, ...normalizeCGCForIntake(cgcResult.data) };
+          } else {
+            data = { ok: false, error: cgcResult.error || 'CGC lookup failed' };
+          }
+        }
         
         const endTime = Date.now();
         console.log(`[CGC:UI] CGC lookup completed in ${endTime - startTime}ms`, {
-          ok: cgcResult.ok,
-          hasData: !!cgcResult.data,
-          error: cgcResult.error
+          ok: data?.ok,
+          hasData: !!data,
+          error: data?.error
         });
         
-        if (cgcResult.ok && cgcResult.data) {
-          data = { ok: true, ...normalizeCGCForIntake(cgcResult.data) };
+        if (data && data.ok) {
+          // CGC data processing continues below...
         } else {
-          data = { ok: false, error: cgcResult.error || 'CGC lookup failed' };
+          data = { ok: false, error: data?.error || 'CGC lookup failed' };
         }
       }
 

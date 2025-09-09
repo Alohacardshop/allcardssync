@@ -81,14 +81,29 @@ export async function invokeCGCLookup(
       include
     };
 
+    console.info("[cgc:invoke] Creating Supabase function call...", {
+      functionName: "cgc-lookup",
+      requestBody: { ...requestBody, certNumber: maskedCert, barcode: maskedBarcode },
+      supabaseClientExists: !!supabase,
+      timestamp: new Date().toISOString()
+    });
+
     const invokePromise = supabase.functions.invoke("cgc-lookup", {
       body: requestBody,
     });
+    
+    console.info("[cgc:invoke] Function invoke promise created, setting up timeout...");
+    
     const timeoutPromise = new Promise((_, reject) => {
-      timeoutId = setTimeout(() => reject(new Error(`CGC lookup timed out after ${timeoutMs}ms`)), timeoutMs);
+      timeoutId = setTimeout(() => {
+        console.error("[cgc:invoke] TIMEOUT - Function call never completed");
+        reject(new Error(`CGC lookup timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
     });
 
+    console.info("[cgc:invoke] Waiting for Promise.race result...");
     const { data, error } = await Promise.race([invokePromise, timeoutPromise]) as any;
+    console.info("[cgc:invoke] Promise.race completed", { hasData: !!data, hasError: !!error });
 
     const dt = Date.now() - started;
 
