@@ -16,6 +16,22 @@ const CGC_PASSWORD = Deno.env.get('CGC_PASSWORD');
 let tokenCache: { token: string; expiresAt: number } | null = null;
 let refreshing: Promise<void> | null = null;
 
+// Redact sensitive information from logs
+function redactSensitive(obj: any): any {
+  if (typeof obj !== 'object' || obj === null) return obj;
+  
+  const redacted = { ...obj };
+  const sensitiveKeys = ['password', 'token', 'authorization', 'Username', 'Password'];
+  
+  for (const key of Object.keys(redacted)) {
+    if (sensitiveKeys.some(sk => key.toLowerCase().includes(sk.toLowerCase()))) {
+      redacted[key] = '[REDACTED]';
+    }
+  }
+  
+  return redacted;
+}
+
 // Upstream fetch with timeout helper
 async function fetchWithTimeout(resource: string, options: RequestInit = {}, timeoutMs = 20000): Promise<Response> {
   const controller = new AbortController();
@@ -111,25 +127,53 @@ async function login(): Promise<void> {
     console.error('CGC auth failed:', {
       status: response.status,
       statusText: response.statusText,
-      error: errorText
+      error: errorText.substring(0, 200) // Limit error text length
     });
     throw new Error(`CGC login failed: ${response.status}`);
   }
 
-  const token = await response.text();
+  // Normalize token - safely strip quotes
+  const raw = await response.text();
+  let token: string;
+  try { 
+    token = JSON.parse(raw); 
+  } catch { 
+    token = raw; 
+  }
+  token = token.trim().replace(/^"(.+)"$/, "$1");  // final dequote guard
   
-  // Parse JWT expiry or fallback to 29 days
+  if (token.startsWith('"') || token.endsWith('"')) {
+    throw new Error("bad_token_format");
+  }
+
+  // Debug logging (safe - no token content)
+  console.log("Using CGC token", { len: token.length, first: token[0] });
+  
+  // Parse JWT expiry and verify CGC scope
   let expMs: number;
   try {
-    const [, payload] = token.trim().split('.');
-    const { exp } = JSON.parse(atob(payload));
-    expMs = exp ? exp * 1000 : Date.now() + 29 * 24 * 3600 * 1000;
+    const [, payload] = token.split('.');
+    const p = JSON.parse(atob(payload));
+    
+    // Check for CGC scope
+    const hasCGC = p.company === "CGC" ||
+                   (Array.isArray(p.companies) && p.companies.includes("CGC")) ||
+                   /(^|[\s,])CGC($|[\s,])/.test(String(p.scope || p.scp || ""));
+    
+    if (!hasCGC) {
+      console.warn("Token payload lacks CGC scope", { keys: Object.keys(p) });
+    }
+    
+    expMs = p.exp ? p.exp * 1000 : Date.now() + 29 * 24 * 3600 * 1000;
   } catch {
     expMs = Date.now() + 29 * 24 * 3600 * 1000;
   }
 
-  tokenCache = { token: token.trim(), expiresAt: expMs };
-  console.log('CGC token cached successfully', { expiresAt: new Date(expMs).toISOString() });
+  tokenCache = { token, expiresAt: expMs };
+  console.log('CGC token cached successfully', { 
+    expiresAt: new Date(expMs).toISOString(),
+    tokenLength: token.length 
+  });
 }
 
 async function withAuthFetch(url: string): Promise<Response> {
@@ -139,29 +183,63 @@ async function withAuthFetch(url: string): Promise<Response> {
     refreshing = null;
   }
 
+  const token = tokenCache!.token;
+  
+  // Assert token is properly formatted
+  if (token.startsWith('"')) {
+    console.error("Quoted token detected");
+    throw new Error("Invalid token format detected");
+  }
+
   console.log('Making CGC API request to cards endpoint:', url.replace(CGC_API_BASE, '[API_BASE]'));
   
   let response = await fetchWithTimeout(url, {
     headers: {
-      'Authorization': `Bearer ${tokenCache!.token}`,
+      'Authorization': `Bearer ${token}`, // Never add quotes around token
       'Content-Type': 'application/json',
       'Accept': 'application/json',
     },
   }, 20000);
 
-  // Handle auth errors with single retry
+  // Handle auth errors with single retry and improved messages
   if (response.status === 401 || response.status === 403) {
-    console.log('Auth failed, refreshing token and retrying...');
+    console.log('Auth failed, refreshing token and retrying...', { 
+      status: response.status,
+      statusText: response.statusText 
+    });
+    
+    // Refresh token once
     await (refreshing ||= login());
     refreshing = null;
     
+    const retryToken = tokenCache!.token;
+    if (retryToken.startsWith('"')) {
+      console.error("Quoted token detected on retry");
+      throw new Error("Invalid token format detected on retry");
+    }
+    
     response = await fetchWithTimeout(url, {
       headers: {
-        'Authorization': `Bearer ${tokenCache!.token}`,
+        'Authorization': `Bearer ${retryToken}`, // Never add quotes around token
         'Content-Type': 'application/json',
         'Accept': 'application/json',
       },
     }, 20000);
+    
+    // If still failing after refresh, provide specific error
+    if (response.status === 401 || response.status === 403) {
+      const errorBody = await response.text().catch(() => '');
+      const errorMsg = response.status === 401 
+        ? "CGC auth failed/expired" 
+        : "Forbidden or wrong company scope";
+      
+      console.error('CGC auth still failing after token refresh:', {
+        status: response.status,
+        error: errorBody.substring(0, 200)
+      });
+      
+      throw new Error(`${errorMsg}: ${errorBody.substring(0, 200)}`);
+    }
   }
 
   return response;
@@ -322,13 +400,36 @@ serve(async (req) => {
       });
     }
 
+    if (response.status === 401) {
+      return new Response(JSON.stringify({
+        ok: false,
+        error: 'CGC auth failed/expired'
+      }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (response.status === 403) {
+      return new Response(JSON.stringify({
+        ok: false,
+        error: 'Forbidden or wrong company scope'
+      }), {
+        status: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     if (!response.ok) {
       const errorText = await response.text().catch(() => '');
-      console.error('CGC API error:', response.status, errorText);
+      console.error('CGC API error:', {
+        status: response.status,
+        error: errorText.substring(0, 200) // Limit error text length
+      });
       
       return new Response(JSON.stringify({
         ok: false,
-        error: `CGC API error: ${response.status}`
+        error: `CGC API error: ${response.status} - ${errorText.substring(0, 200)}`
       }), {
         status: response.status >= 500 ? 502 : response.status,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
