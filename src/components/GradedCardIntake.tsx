@@ -93,7 +93,13 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
 
     const controller = new AbortController();
     setAbortController(controller);
-    setFetching(true);
+  console.log("[CGC:UI] Starting CGC invoke process", {
+    gradingCompany,
+    certInput: certInput.trim(),
+    timestamp: new Date().toISOString()
+  });
+
+  setFetching(true);
     
     logger.logInfo(`${gradingCompany} fetch started`, { certNumber: certInput.trim() });
     
@@ -105,11 +111,21 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         data = await invokePSAScrapeV2({ cert: certInput.trim(), forceRefresh: true, includeRaw: true }, 45000);
       } else {
         // Use CGC service
+        const startTime = Date.now();
+        console.log("[CGC:UI] Starting CGC lookup call...");
+        
         const cgcResult = await invokeCGCLookup({ 
           certNumber: /^\d+$/.test(certInput.trim()) ? certInput.trim() : undefined,
           barcode: !/^\d+$/.test(certInput.trim()) ? certInput.trim() : undefined,
           include: 'pop,images'
-        }, 45000);
+        }, 12000);  // Use reduced timeout for faster debugging
+        
+        const endTime = Date.now();
+        console.log(`[CGC:UI] CGC lookup completed in ${endTime - startTime}ms`, {
+          ok: cgcResult.ok,
+          hasData: !!cgcResult.data,
+          error: cgcResult.error
+        });
         
         if (cgcResult.ok && cgcResult.data) {
           data = { ok: true, ...normalizeCGCForIntake(cgcResult.data) };
@@ -182,6 +198,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
           toast.info(`Grade "${gradeInfo.original}" converted to numeric: ${gradeInfo.numeric}`);
         }
       } else {
+        console.log(`[CGC:UI] invokeCGCLookup returned non-ok response:`, data);
         const errorMsg = data?.error || `Invalid response from ${gradingCompany} service`;
         console.error(`${gradingCompany} fetch failed:`, errorMsg);
         logger.logError(`${gradingCompany} fetch failed`, new Error(errorMsg), { certNumber: certInput.trim() });
@@ -192,24 +209,36 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
             toast.error("CGC certification not found.");
           } else if (errorMsg.includes('401') || errorMsg.includes('403') || errorMsg.includes('Unauthorized') || errorMsg.includes('Forbidden')) {
             toast.error("CGC token expired or invalid—please check credentials.");
+          } else if (errorMsg.includes('500') || errorMsg.includes('Configuration error')) {
+            toast.error("CGC API configuration error—please check server settings.");
           } else {
-            toast.error("CGC lookup failed.");
+            toast.error(`CGC lookup failed: ${errorMsg}`);
           }
         } else {
           toast.error(`PSA fetch failed: ${errorMsg}`);
         }
       }
     } catch (error) {
-      console.error(`${gradingCompany} fetch error:`, error);
-      logger.logError(`${gradingCompany} fetch error`, error instanceof Error ? error : new Error(error?.message || 'Unknown error'), { certNumber: certInput.trim() });
-      if (error?.message?.includes('timed out')) {
-        toast.error(`${gradingCompany} fetch timed out - try again`);
-      } else if (error?.message?.includes('cancelled')) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      console.error(`${gradingCompany} fetch error:`, {
+        error,
+        message: errorMessage,
+        certNumber: certInput.trim(),
+        timestamp: new Date().toISOString()
+      });
+      
+      logger.logError(`${gradingCompany} fetch error`, error instanceof Error ? error : new Error(errorMessage), { certNumber: certInput.trim() });
+      
+      if (errorMessage.includes('timed out')) {
+        toast.error(`${gradingCompany} fetch timed out after 12s - try again`);
+      } else if (errorMessage.includes('cancelled')) {
         toast.info(`${gradingCompany} fetch cancelled`);
       } else {
-        toast.error(error instanceof Error ? error.message : `Failed to fetch ${gradingCompany} data`);
+        // Show the actual error message with status code if available
+        toast.error(`${gradingCompany} Error: ${errorMessage}`);
       }
     } finally {
+      console.log(`[${gradingCompany}:UI] Fetch process completed, cleaning up...`);
       setFetching(false);
       setAbortController(null);
     }

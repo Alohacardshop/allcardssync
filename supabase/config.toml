@@ -22,9 +22,9 @@ verify_jwt = false
 [functions.psa-scrape-v2]
 verify_jwt = false
 
-# CGC card lookup (requires authentication)
+# CGC card lookup (temporarily public for debugging)
 [functions.cgc-lookup]
-verify_jwt = true
+verify_jwt = false
 
 # Shopify webhook handler (public - validates HMAC signature)
 [functions.shopify-webhook]

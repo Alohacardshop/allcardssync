@@ -73,7 +73,17 @@ type NormalizedCard = {
 };
 
 function validateConfig() {
+  console.log('Validating CGC configuration:', {
+    hasCGC_USERNAME: !!CGC_USERNAME,
+    hasCGC_PASSWORD: !!CGC_PASSWORD,
+    timestamp: new Date().toISOString()
+  });
+  
   if (!CGC_USERNAME || !CGC_PASSWORD) {
+    console.error('Missing CGC configuration:', {
+      CGC_USERNAME: !!CGC_USERNAME,
+      CGC_PASSWORD: !!CGC_PASSWORD
+    });
     throw new Error('Missing required CGC configuration: CGC_USERNAME and CGC_PASSWORD must be set');
   }
 }
@@ -228,6 +238,7 @@ serve(async (req) => {
   }
 
   try {
+    console.log("[CGC:UI] About to call invokeCGCLookup...");
     // Validate configuration
     validateConfig();
 
@@ -252,11 +263,16 @@ serve(async (req) => {
       }
     }
 
+    // Enhanced parameter logging with masking
+    const maskedCert = certNumber ? `${certNumber.slice(0, 3)}***${certNumber.slice(-3)}` : null;
+    const maskedBarcode = barcode ? `${barcode.slice(0, 3)}***${barcode.slice(-3)}` : null;
+    
     console.log('CGC lookup request', { 
-      certNumber: certNumber ? `${certNumber.substring(0, 4)}...` : null,
-      barcode: barcode ? `${barcode.substring(0, 4)}...` : null,
+      certNumber: maskedCert,
+      barcode: maskedBarcode,
       include,
-      paramSource
+      paramSource,
+      timestamp: new Date().toISOString()
     });
 
     // Validate input

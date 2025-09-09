@@ -49,7 +49,7 @@ export type NormalizedCGCCard = {
 
 export async function invokeCGCLookup(
   params: { certNumber?: string; barcode?: string; include?: string },
-  timeoutMs = 30000
+  timeoutMs = 12000  // Reduced timeout for faster debugging
 ): Promise<{ ok: boolean; data?: NormalizedCGCCard; error?: string }> {
   const { certNumber, barcode, include = 'pop,images' } = params;
   
@@ -60,12 +60,18 @@ export async function invokeCGCLookup(
   // Implement manual timeout since supabase.functions.invoke doesn't accept AbortController
   let timeoutId: any;
   const started = Date.now();
+  
+  // Enhanced logging with masked sensitive data
+  const maskedCert = certNumber ? `${certNumber.slice(0, 3)}***${certNumber.slice(-3)}` : null;
+  const maskedBarcode = barcode ? `${barcode.slice(0, 3)}***${barcode.slice(-3)}` : null;
+  
   console.info("[cgc:invoke] start", {
     msTimeout: timeoutMs,
-    hasCertNumber: !!certNumber,
-    hasBarcode: !!barcode,
+    certNumber: maskedCert,
+    barcode: maskedBarcode,
     include,
     supabaseUrl: "https://dmpoandoydaqxhzdjnmk.supabase.co",
+    timestamp: new Date().toISOString()
   });
 
   try {
@@ -90,8 +96,18 @@ export async function invokeCGCLookup(
       const status = (error as any)?.status;
       const name = (error as any)?.name;
       const message = (error as any)?.message || 'Unknown error';
-      console.error("[cgc:invoke] invoke ERROR", { name, message, status, dt });
-      throw new Error(`[cgc-lookup] ${status ?? ''} ${message}`.trim());
+      const fullError = `${status ? `[${status}] ` : ''}${message}`;
+      
+      console.error("[cgc:invoke] invoke ERROR", { 
+        name, 
+        message, 
+        status, 
+        dt,
+        fullErrorObject: error 
+      });
+      
+      // Throw with clear status and message for UI display
+      throw new Error(fullError);
     }
 
     console.info("[cgc:invoke] invoke OK", {
@@ -100,6 +116,7 @@ export async function invokeCGCLookup(
       hasImages: data?.data?.images ? true : false,
       keys: data ? Object.keys(data) : [],
       dt,
+      timestamp: new Date().toISOString()
     });
 
     return data;
@@ -107,9 +124,15 @@ export async function invokeCGCLookup(
     const dt = Date.now() - started;
     if (e?.name === "AbortError") {
       console.error("[cgc:invoke] ABORT after timeout", { dt, timeoutMs });
-      throw new Error(`Client aborted after ${timeoutMs}ms`);
+      throw new Error(`CGC lookup timed out after ${timeoutMs}ms`);
     }
-    console.error("[cgc:invoke] EXCEPTION", { name: e?.name, message: e?.message, dt });
+    console.error("[cgc:invoke] EXCEPTION", { 
+      name: e?.name, 
+      message: e?.message, 
+      dt,
+      timestamp: new Date().toISOString(),
+      stack: e?.stack
+    });
     throw e;
   } finally {
     clearTimeout(timeoutId);
