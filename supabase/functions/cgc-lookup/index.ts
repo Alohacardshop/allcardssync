@@ -6,13 +6,15 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// CGC API Configuration - using the official API base URL from OpenAPI spec
+// CGC API Configuration
 const CGC_API_BASE = 'https://dealer-api.collectiblesgroup.com';
+const CGC_COMPANY = 'CGC';
 const CGC_USERNAME = Deno.env.get('CGC_USERNAME');
 const CGC_PASSWORD = Deno.env.get('CGC_PASSWORD');
 
-// Token cache - simple in-memory cache with expiry
+// Token cache with promise lock to prevent concurrent refreshes
 let tokenCache: { token: string; expiresAt: number } | null = null;
+let refreshing: Promise<void> | null = null;
 
 // Upstream fetch with timeout helper
 async function fetchWithTimeout(resource: string, options: RequestInit = {}, timeoutMs = 20000): Promise<Response> {
@@ -88,30 +90,20 @@ function validateConfig() {
   }
 }
 
-async function fetchCGCToken(): Promise<string> {
-  // Check cache first
-  if (tokenCache && tokenCache.expiresAt > Date.now()) {
-    console.log('Using cached CGC token');
-    return tokenCache.token;
-  }
-
+async function login(): Promise<void> {
   console.log('Fetching new CGC token');
   
-  const authUrl = `${CGC_API_BASE}/auth/login/CGC`; // Ensure CGC company scope
-  console.log('CGC Auth URL:', authUrl);
-  
-  const authBody = {
-    Username: CGC_USERNAME,
-    Password: CGC_PASSWORD
-  };
-  console.log('CGC Auth request body:', { Username: CGC_USERNAME ? 'SET' : 'NOT_SET', Password: CGC_PASSWORD ? 'SET' : 'NOT_SET' });
+  const authUrl = `${CGC_API_BASE}/auth/login/${CGC_COMPANY}`;
   
   const response = await fetchWithTimeout(authUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(authBody),
+    body: JSON.stringify({
+      Username: CGC_USERNAME,
+      Password: CGC_PASSWORD,
+    }),
   }, 15000);
 
   if (!response.ok) {
@@ -119,56 +111,57 @@ async function fetchCGCToken(): Promise<string> {
     console.error('CGC auth failed:', {
       status: response.status,
       statusText: response.statusText,
-      error: errorText,
-      url: authUrl
+      error: errorText
     });
-    throw new Error(`CGC auth failed: ${response.status} ${errorText}`);
+    throw new Error(`CGC login failed: ${response.status}`);
   }
 
-  const responseText = await response.text();
-  console.log('CGC auth response received:', {
-    responseLength: responseText.length,
-    firstChars: responseText.substring(0, 50),
-    statusCode: response.status
-  });
+  const token = await response.text();
   
-  const token = responseText.trim(); // JWT returned as plain string
-  
-  // Cache token for 30 days (minus 1 hour for safety)
-  const expiresAt = Date.now() + (30 * 24 * 60 * 60 * 1000) - (60 * 60 * 1000);
-  tokenCache = { token, expiresAt };
+  // Parse JWT expiry or fallback to 29 days
+  let expMs: number;
+  try {
+    const [, payload] = token.trim().split('.');
+    const { exp } = JSON.parse(atob(payload));
+    expMs = exp ? exp * 1000 : Date.now() + 29 * 24 * 3600 * 1000;
+  } catch {
+    expMs = Date.now() + 29 * 24 * 3600 * 1000;
+  }
 
-  return token;
+  tokenCache = { token: token.trim(), expiresAt: expMs };
+  console.log('CGC token cached successfully', { expiresAt: new Date(expMs).toISOString() });
 }
 
-async function makeAuthorizedRequest(url: string, retryOnAuth = true): Promise<Response> {
-  console.log('Making authorized CGC API request to:', url.replace(CGC_API_BASE, '[CGC_API_BASE]'));
+async function withAuthFetch(url: string): Promise<Response> {
+  // Ensure we have a valid token (refresh if needed)
+  if (!tokenCache || Date.now() > tokenCache.expiresAt - 60000) {
+    await (refreshing ||= login());
+    refreshing = null;
+  }
+
+  console.log('Making CGC API request to cards endpoint:', url.replace(CGC_API_BASE, '[API_BASE]'));
   
-  const token = await fetchCGCToken();
-  console.log('Using token for request:', {
-    tokenLength: token.length,
-    tokenStart: token.substring(0, 20) + '...'
-  });
-  
-  const response = await fetchWithTimeout(url, {
+  let response = await fetchWithTimeout(url, {
     headers: {
-      'Authorization': `Bearer ${token}`,
+      'Authorization': `Bearer ${tokenCache!.token}`,
       'Content-Type': 'application/json',
       'Accept': 'application/json',
     },
   }, 20000);
 
-  console.log('CGC API response:', {
-    status: response.status,
-    statusText: response.statusText,
-    ok: response.ok
-  });
-
-  // If 401 and retry allowed, clear cache and try once more
-  if (response.status === 401 && retryOnAuth) {
-    console.log('CGC token expired, retrying with fresh token');
-    tokenCache = null; // Clear cache
-    return makeAuthorizedRequest(url, false); // Retry once without further retries
+  // Handle auth errors with single retry
+  if (response.status === 401 || response.status === 403) {
+    console.log('Auth failed, refreshing token and retrying...');
+    await (refreshing ||= login());
+    refreshing = null;
+    
+    response = await fetchWithTimeout(url, {
+      headers: {
+        'Authorization': `Bearer ${tokenCache!.token}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+    }, 20000);
   }
 
   return response;
@@ -194,14 +187,9 @@ function parseGradeNumeric(display: string | null): number | null {
 }
 
 function normalizeCgcCard(data: any, includeOptions?: string): NormalizedCard {
-  console.log('Normalizing CGC card data', { 
-    hasData: !!data, 
-    keys: data ? Object.keys(data) : [],
-    includeOptions 
-  });
-
   const includeFlags = includeOptions ? includeOptions.split(',').map(s => s.trim()) : [];
   
+  // Map CGC API response to our normalized format
   const normalized: NormalizedCard = {
     gradingCompany: "CGC",
     certNumber: data?.certificationNumber?.toString() || data?.certNumber?.toString() || '',
@@ -242,10 +230,10 @@ function normalizeCgcCard(data: any, includeOptions?: string): NormalizedCard {
     raw: data,
   };
 
-  // Parse numeric grade
+  // Parse numeric grade from display
   normalized.grade.numeric = parseGradeNumeric(normalized.grade.display);
 
-  // Add images if included
+  // Add images if requested
   if (includeFlags.includes('images') && data?.images) {
     normalized.images = {
       frontUrl: data.images.front || data.images.frontUrl || null,
@@ -255,7 +243,7 @@ function normalizeCgcCard(data: any, includeOptions?: string): NormalizedCard {
     };
   }
 
-  // Add population if included
+  // Add population if requested
   if (includeFlags.includes('pop') && data?.population) {
     normalized.population = data.population;
   }
@@ -270,42 +258,22 @@ serve(async (req) => {
   }
 
   try {
-    console.log("[CGC:UI] About to call invokeCGCLookup...");
     // Validate configuration
     validateConfig();
 
-    // Parse parameters from both URL query string AND JSON body
-    const url = new URL(req.url);
-    let certNumber = url.searchParams.get('certNumber');
-    let barcode = url.searchParams.get('barcode');
-    let include = url.searchParams.get('include') || '';
-    let paramSource = 'query';
-
-    // If no query params, try to parse JSON body
-    if (!certNumber && !barcode) {
-      try {
-        const body = await req.json();
-        certNumber = body.certNumber;
-        barcode = body.barcode;
-        include = body.include || '';
-        paramSource = 'body';
-      } catch (e) {
-        // If JSON parsing fails, continue with query params
-        console.log('Failed to parse JSON body, using query params only');
-      }
+    // Only support POST requests with JSON body for cards-only endpoints
+    if (req.method !== 'POST') {
+      return new Response(JSON.stringify({
+        ok: false,
+        error: 'Only POST method supported'
+      }), {
+        status: 405,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
-    // Enhanced parameter logging with masking
-    const maskedCert = certNumber ? `${certNumber.slice(0, 3)}***${certNumber.slice(-3)}` : null;
-    const maskedBarcode = barcode ? `${barcode.slice(0, 3)}***${barcode.slice(-3)}` : null;
-    
-    console.log('CGC lookup request', { 
-      certNumber: maskedCert,
-      barcode: maskedBarcode,
-      include,
-      paramSource,
-      timestamp: new Date().toISOString()
-    });
+    const body = await req.json().catch(() => ({}));
+    const { certNumber, barcode, include = 'pop,images' } = body;
 
     // Validate input
     if (!certNumber && !barcode) {
@@ -318,108 +286,43 @@ serve(async (req) => {
       });
     }
 
+    // Build cards-only API URL (enforcing cards restriction)
     let apiUrl: string;
-    let fallbackUrl: string | null = null;
-
+    
     if (certNumber) {
-      // Primary: v3 certification lookup
-      apiUrl = `${CGC_API_BASE}/cards/certifications/v3/lookup/${certNumber}`;
-      if (include) {
-        apiUrl += `?include=${encodeURIComponent(include)}`;
-      }
-      
-      // Fallback: v2 certification lookup
-      fallbackUrl = `${CGC_API_BASE}/cards/certifications/v2/lookup/${certNumber}`;
+      apiUrl = `${CGC_API_BASE}/cards/certifications/v3/lookup/${encodeURIComponent(certNumber)}?include=${encodeURIComponent(include)}`;
     } else {
-      // Barcode lookup - encode properly (/ becomes %2F)
-      const encodedBarcode = encodeURIComponent(barcode!);
-      
-      // Primary: v3 barcode lookup
-      apiUrl = `${CGC_API_BASE}/cards/certifications/v3/barcode/${encodedBarcode}`;
-      if (include) {
-        apiUrl += `?include=${encodeURIComponent(include)}`;
-      }
-      
-      // Fallback: v2 barcode lookup
-      fallbackUrl = `${CGC_API_BASE}/cards/certifications/v2/barcode/${encodedBarcode}`;
+      apiUrl = `${CGC_API_BASE}/cards/certifications/v3/barcode/${encodeURIComponent(barcode)}?include=${encodeURIComponent(include)}`;
     }
 
-    console.log('Trying CGC API URL:', apiUrl.replace(CGC_API_BASE, '[CGC_API_BASE]'));
+    console.log('CGC cards lookup:', { hasAuth: !!tokenCache, endpoint: 'cards/certifications/v3' });
 
-    // Try primary endpoint (v3)
-    let response = await makeAuthorizedRequest(apiUrl);
-    let tryFallback = false;
+    const response = await withAuthFetch(apiUrl);
 
     if (response.status === 404) {
-      tryFallback = true;
-    } else if (response.status === 401) {
-      console.log('CGC API returned 401 - Unauthorized');
       return new Response(JSON.stringify({
         ok: false,
-        error: 'Unauthorized'
+        error: 'Certificate not found'
       }), {
-        status: 401,
+        status: 404,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
-    } else if (response.status === 403) {
-      const bodyText = await response.text().catch(() => '');
-      console.log('CGC API returned 403 - Forbidden or wrong company scope', { bodyText });
-      return new Response(JSON.stringify({
-        ok: false,
-        error: 'Forbidden or wrong company scope',
-        details: bodyText || undefined
-      }), {
-        status: 403,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    } else if (response.status === 429) {
-      console.log('CGC API returned 429 - Rate limit exceeded');
-      return new Response(JSON.stringify({
-        ok: false,
-        error: 'Rate limit exceeded. Please try again later.'
-      }), {
-        status: 429,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    // Try fallback (v2) if primary failed with 404
-    if (tryFallback && fallbackUrl) {
-      console.log('Trying v2 fallback:', fallbackUrl.replace(CGC_API_BASE, '[CGC_API_BASE]'));
-      response = await makeAuthorizedRequest(fallbackUrl);
     }
 
     if (!response.ok) {
-      if (response.status === 404) {
-        console.log('CGC API returned 404 - Certificate not found');
-        return new Response(JSON.stringify({
-          ok: false,
-          error: 'Certificate not found'
-        }), {
-          status: 404,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      } else if (response.status === 429) {
-        console.log('CGC API returned 429 - Rate limit exceeded (fallback)');
-        return new Response(JSON.stringify({
-          ok: false,
-          error: 'Rate limit exceeded. Please try again later.'
-        }), {
-          status: 429,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
+      const errorText = await response.text().catch(() => '');
+      console.error('CGC API error:', response.status, errorText);
       
-      console.log(`CGC API error: ${response.status} ${response.statusText}`);
-      throw new Error(`CGC API error: ${response.status} ${response.statusText}`);
+      return new Response(JSON.stringify({
+        ok: false,
+        error: `CGC API error: ${response.status}`
+      }), {
+        status: response.status >= 500 ? 502 : response.status,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     const data = await response.json();
-    console.log('CGC API success', { 
-      hasData: !!data, 
-      keys: data ? Object.keys(data) : [] 
-    });
-
     const normalized = normalizeCgcCard(data, include);
 
     return new Response(JSON.stringify({
@@ -430,24 +333,19 @@ serve(async (req) => {
     });
 
   } catch (error) {
-    const name = error instanceof Error ? error.name : 'Error';
     const message = error instanceof Error ? error.message : 'Unknown error';
-
-    if (name === 'AbortError') {
-      console.error('CGC lookup error: Upstream timeout');
+    
+    if (error instanceof Error && error.name === 'AbortError') {
       return new Response(JSON.stringify({
         ok: false,
-        error: 'Upstream CGC request timed out'
+        error: 'Request timed out'
       }), {
         status: 504,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    console.error('CGC lookup error:', {
-      message,
-      stack: error instanceof Error ? error.stack : undefined
-    });
+    console.error('CGC function error:', message);
     
     return new Response(JSON.stringify({
       ok: false,
