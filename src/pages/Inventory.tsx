@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Trash2, Package, Calendar, DollarSign, Eye, EyeOff, FileText, Tag, Printer, ExternalLink, RotateCcw, Loader2, Upload } from 'lucide-react';
+import { Trash2, Package, Calendar, DollarSign, Eye, EyeOff, FileText, Tag, Printer, ExternalLink, RotateCcw, Loader2, Upload, Home } from 'lucide-react';
 import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -28,6 +28,10 @@ import { formatDistanceToNow } from 'date-fns';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { StoreLocationSelector } from '@/components/StoreLocationSelector';
+import { Navigation } from '@/components/Navigation';
+import BarcodeLabel from '@/components/BarcodeLabel';
+import { usePrintNode } from '@/hooks/usePrintNode';
+import { Link } from 'react-router-dom';
 
 const Inventory = () => {
   const [items, setItems] = useState<any[]>([]);
@@ -42,6 +46,20 @@ const Inventory = () => {
   const [selectedStoreKey, setSelectedStoreKey] = useState<string>('');
   const [selectedLocationGid, setSelectedLocationGid] = useState<string>('');
   const [syncingAll, setSyncingAll] = useState(false);
+  const [userFilter, setUserFilter] = useState<string>('all');
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [printingItem, setPrintingItem] = useState<string | null>(null);
+  
+  const { printPNG, selectedPrinter } = usePrintNode();
+
+  // Get current user on mount
+  useEffect(() => {
+    const getCurrentUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setCurrentUser(user);
+    };
+    getCurrentUser();
+  }, []);
 
   const fetchItems = async () => {
     setLoading(true);
@@ -69,6 +87,13 @@ const Inventory = () => {
       }
       // 'all' shows everything, no additional filters
 
+      // Apply user filter
+      if (userFilter === 'me' && currentUser) {
+        query = query.eq('created_by', currentUser.id);
+      } else if (userFilter !== 'all' && userFilter !== 'me') {
+        query = query.eq('created_by', userFilter);
+      }
+
       // Apply store/location filters
       if (selectedStoreKey) {
         query = query.eq('store_key', selectedStoreKey);
@@ -91,7 +116,7 @@ const Inventory = () => {
 
   useEffect(() => {
     fetchItems();
-  }, [statusFilter, selectedStoreKey, selectedLocationGid]);
+  }, [statusFilter, selectedStoreKey, selectedLocationGid, userFilter, currentUser]);
 
   // F) Manual sync retry function
   const retrySync = async (item: any) => {
@@ -196,10 +221,61 @@ const Inventory = () => {
   };
 
   const handlePrint = async (item: any) => {
+    if (!item.sku) {
+      toast.error('No SKU available for printing');
+      return;
+    }
+
+    if (!selectedPrinter) {
+      toast.error('No printer selected');
+      return;
+    }
+
+    setPrintingItem(item.id);
     try {
-      toast.success('Print initiated');
+      // Generate barcode as PNG
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Cannot create canvas context');
+
+      // Import and generate barcode
+      const JsBarcode = (await import('jsbarcode')).default;
+      JsBarcode(canvas, item.sku, {
+        format: "CODE128",
+        displayValue: true,
+        fontSize: 14,
+        lineColor: "#111827",
+        margin: 8,
+        width: 2,
+        height: 100
+      });
+
+      // Convert to blob
+      const blob = await new Promise<Blob>((resolve) => {
+        canvas.toBlob((blob) => {
+          if (blob) resolve(blob);
+        }, 'image/png');
+      });
+
+      // Print using PrintNode
+      await printPNG(blob, { 
+        title: `Barcode-${item.sku}`,
+        copies: 1 
+      });
+
+      // Update printed_at timestamp
+      await supabase
+        .from('intake_items')
+        .update({ printed_at: new Date().toISOString() })
+        .eq('id', item.id);
+
+      toast.success('Barcode printed successfully');
+      fetchItems(); // Refresh to show updated printed_at
     } catch (error) {
-      toast.error('Print failed');
+      console.error('Print failed:', error);
+      toast.error('Print failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    } finally {
+      setPrintingItem(null);
     }
   };
 
@@ -249,6 +325,25 @@ const Inventory = () => {
 
   return (
     <>
+      {/* Navigation Header */}
+      <div className="bg-background border-b">
+        <div className="container mx-auto px-4 py-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Link to="/">
+                <Button variant="ghost" size="sm" className="flex items-center gap-2">
+                  <Home className="w-4 h-4" />
+                  Back to Dashboard
+                </Button>
+              </Link>
+              <div className="h-6 w-px bg-border" />
+              <h1 className="text-lg font-semibold">Inventory</h1>
+            </div>
+            <Navigation showMobileMenu={true} />
+          </div>
+        </div>
+      </div>
+
       <div className="container mx-auto p-4">
         <Card>
           <CardHeader>
@@ -295,6 +390,19 @@ const Inventory = () => {
                       <SelectItem value="graded">Graded</SelectItem>
                       <SelectItem value="bulk">Bulk</SelectItem>
                       <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="user-filter" className="text-sm font-medium">Created By:</Label>
+                  <Select value={userFilter} onValueChange={setUserFilter}>
+                    <SelectTrigger className="w-40">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Users</SelectItem>
+                      <SelectItem value="me">Me</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -435,10 +543,14 @@ const Inventory = () => {
                                     variant="outline"
                                     size="sm"
                                     onClick={() => handlePrint(item)}
-                                    disabled={!item.sku}
+                                    disabled={!item.sku || printingItem === item.id || !selectedPrinter}
                                   >
-                                    <Printer className="w-4 h-4 mr-1" />
-                                    Print
+                                    {printingItem === item.id ? (
+                                      <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                                    ) : (
+                                      <Printer className="w-4 h-4 mr-1" />
+                                    )}
+                                    {printingItem === item.id ? 'Printing...' : 'Print'}
                                   </Button>
                                 )}
                                 <Button
