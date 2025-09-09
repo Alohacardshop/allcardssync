@@ -1,8 +1,8 @@
-import type { CgcCard, CgcLookupResponse } from "./types";
+import type { CgcCard, CgcLookupResult, CgcLookupResponse } from "./types";
 
 const TIMEOUT_MS = 20000;
 
-export async function lookupCert(certNumber: string): Promise<CgcCard> {
+export async function lookupCert(certNumber: string): Promise<CgcLookupResult> {
   console.log('[CGC:CLIENT] Starting CGC cert lookup:', certNumber.trim());
   
   const controller = new AbortController();
@@ -37,7 +37,7 @@ export async function lookupCert(certNumber: string): Promise<CgcCard> {
     }
 
     console.log('[CGC:CLIENT] Successfully retrieved CGC data for:', certNumber);
-    return data.data;
+    return { card: data.data, diagnostics: data.diagnostics };
     
   } catch (error) {
     clearTimeout(timeoutId);
@@ -52,7 +52,7 @@ export async function lookupCert(certNumber: string): Promise<CgcCard> {
   }
 }
 
-export async function lookupBarcode(_barcode: string): Promise<CgcCard> {
+export async function lookupBarcode(_barcode: string): Promise<CgcLookupResult> {
   console.warn('[CGC:CLIENT] Barcode lookup not supported via scraping');
   throw new Error('CGC barcode lookup not supported via scraping. Please enter the certificate number.');
 }

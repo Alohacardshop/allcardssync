@@ -41,4 +41,18 @@ export type CgcLookupResponse = {
   ok: boolean;
   data?: CgcCard;
   error?: string;
+  diagnostics?: {
+    used?: string;
+    firecrawlMs?: number;
+    totalMs?: number;
+  };
+};
+
+export type CgcLookupResult = {
+  card: CgcCard;
+  diagnostics?: {
+    used?: string;
+    firecrawlMs?: number;
+    totalMs?: number;
+  };
 };

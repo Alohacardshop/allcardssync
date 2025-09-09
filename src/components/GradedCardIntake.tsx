@@ -130,7 +130,9 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         
         try {
           // CGC only supports certificate lookup via scraping
-          const cgcCard = await lookupCert(inputValue);
+          const cgcResult = await lookupCert(inputValue);
+          const cgcCard = cgcResult.card;
+          const cgcDiagnostics = cgcResult.diagnostics;
           
           const endTime = Date.now();
           console.log(`[CGC:UI] CGC lookup completed in ${endTime - startTime}ms`);
@@ -153,6 +155,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
             imageUrl: cgcCard.images?.frontThumbnailUrl || cgcCard.images?.frontUrl || null,
             isValid: !!(cgcCard.certNumber && cgcCard.grade.displayGrade),
             source: 'cgc_scrape',
+            diagnostics: cgcDiagnostics,
             rawPayload: cgcCard
           };
           
@@ -1089,6 +1092,11 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
                cardData.source === 'cgc_scrape' ? 'CGC Scrape' :
                cardData.source === 'database_cache' ? 'Database Cache' : 'Unknown'}
             </span>
+            {cardData.source === 'cgc_scrape' && cardData.diagnostics?.used === 'direct' && (
+              <span className="px-2 py-1 rounded text-xs bg-green-100 text-green-800">
+                Parsed from CGC page
+              </span>
+            )}
           </div>
         )}
 
