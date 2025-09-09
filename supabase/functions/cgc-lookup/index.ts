@@ -251,9 +251,22 @@ function normalizeCgcCard(data: any, includeOptions?: string): NormalizedCard {
   return normalized;
 }
 
+console.log('CGC function starting up...', {
+  timestamp: new Date().toISOString(),
+  hasUsername: !!CGC_USERNAME,
+  hasPassword: !!CGC_PASSWORD
+});
+
 serve(async (req) => {
+  console.log('CGC function invoked:', {
+    method: req.method,
+    url: req.url,
+    timestamp: new Date().toISOString()
+  });
+
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
+    console.log('Returning CORS preflight response');
     return new Response(null, { headers: corsHeaders });
   }
 
