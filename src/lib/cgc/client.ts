@@ -14,6 +14,13 @@ export async function lookupCert(certNumber: string): Promise<CgcCard> {
     })
   });
   
+  
+  // Check if we got any response body (indicates function is running)
+  const hasBody = r.headers.get('content-type')?.includes('application/json');
+  
+  if (r.status === 404 && !hasBody) {
+    throw new Error("CGC lookup function not available - check deployment");
+  }
   if (r.status === 404) throw new Error("CGC certification not found");
   if (r.status === 401 || r.status === 403) throw new Error("CGC auth expired. Retrying...");
   if (r.status >= 500) throw new Error("CGC service unreachable, try again.");
@@ -39,6 +46,13 @@ export async function lookupBarcode(barcode: string): Promise<CgcCard> {
     })
   });
   
+  
+  // Check if we got any response body (indicates function is running)
+  const hasBody = r.headers.get('content-type')?.includes('application/json');
+  
+  if (r.status === 404 && !hasBody) {
+    throw new Error("CGC lookup function not available - check deployment");
+  }
   if (r.status === 404) throw new Error("CGC barcode not found");
   if (r.status === 401 || r.status === 403) throw new Error("CGC auth expired. Retrying...");
   if (r.status >= 500) throw new Error("CGC service unreachable, try again.");
