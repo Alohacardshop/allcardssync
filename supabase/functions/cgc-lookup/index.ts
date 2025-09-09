@@ -14,6 +14,17 @@ const CGC_PASSWORD = Deno.env.get('CGC_PASSWORD');
 // Token cache - simple in-memory cache with expiry
 let tokenCache: { token: string; expiresAt: number } | null = null;
 
+// Upstream fetch with timeout helper
+async function fetchWithTimeout(resource: string, options: RequestInit = {}, timeoutMs = 20000): Promise<Response> {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(resource, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(id);
+  }
+}
+
 type NormalizedCard = {
   gradingCompany: "CGC";
   certNumber: string;
@@ -76,7 +87,7 @@ async function fetchCGCToken(): Promise<string> {
 
   console.log('Fetching new CGC token');
   
-  const response = await fetch(`${CGC_API_BASE}/auth/login/CGC`, {
+  const response = await fetchWithTimeout(`${CGC_API_BASE}/auth/login/CGC`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -85,7 +96,7 @@ async function fetchCGCToken(): Promise<string> {
       Username: CGC_USERNAME,
       Password: CGC_PASSWORD,
     }),
-  });
+  }, 15000);
 
   if (!response.ok) {
     throw new Error(`CGC auth failed: ${response.status} ${response.statusText}`);
@@ -103,13 +114,13 @@ async function fetchCGCToken(): Promise<string> {
 async function makeAuthorizedRequest(url: string, retryOnAuth = true): Promise<Response> {
   const token = await fetchCGCToken();
   
-  const response = await fetch(url, {
+  const response = await fetchWithTimeout(url, {
     headers: {
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json',
       'Accept': 'application/json',
     },
-  });
+  }, 20000);
 
   // If 401 and retry allowed, clear cache and try once more
   if (response.status === 401 && retryOnAuth) {
@@ -369,14 +380,28 @@ serve(async (req) => {
     });
 
   } catch (error) {
+    const name = error instanceof Error ? error.name : 'Error';
+    const message = error instanceof Error ? error.message : 'Unknown error';
+
+    if (name === 'AbortError') {
+      console.error('CGC lookup error: Upstream timeout');
+      return new Response(JSON.stringify({
+        ok: false,
+        error: 'Upstream CGC request timed out'
+      }), {
+        status: 504,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     console.error('CGC lookup error:', {
-      message: error instanceof Error ? error.message : 'Unknown error',
+      message,
       stack: error instanceof Error ? error.stack : undefined
     });
     
     return new Response(JSON.stringify({
       ok: false,
-      error: error instanceof Error ? error.message : 'Unexpected error'
+      error: message
     }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

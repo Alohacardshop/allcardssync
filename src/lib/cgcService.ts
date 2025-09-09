@@ -57,9 +57,8 @@ export async function invokeCGCLookup(
     throw new Error('Either certNumber or barcode is required');
   }
 
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-
+  // Implement manual timeout since supabase.functions.invoke doesn't accept AbortController
+  let timeoutId: any;
   const started = Date.now();
   console.info("[cgc:invoke] start", {
     msTimeout: timeoutMs,
@@ -76,20 +75,23 @@ export async function invokeCGCLookup(
       include
     };
 
-    const { data, error } = await supabase.functions.invoke("cgc-lookup", {
+    const invokePromise = supabase.functions.invoke("cgc-lookup", {
       body: requestBody,
     });
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => reject(new Error(`CGC lookup timed out after ${timeoutMs}ms`)), timeoutMs);
+    });
+
+    const { data, error } = await Promise.race([invokePromise, timeoutPromise]) as any;
 
     const dt = Date.now() - started;
 
     if (error) {
-      console.error("[cgc:invoke] invoke ERROR", {
-        name: error.name,
-        message: error.message,
-        status: (error as any)?.status,
-        dt,
-      });
-      throw error;
+      const status = (error as any)?.status;
+      const name = (error as any)?.name;
+      const message = (error as any)?.message || 'Unknown error';
+      console.error("[cgc:invoke] invoke ERROR", { name, message, status, dt });
+      throw new Error(`[cgc-lookup] ${status ?? ''} ${message}`.trim());
     }
 
     console.info("[cgc:invoke] invoke OK", {
@@ -110,7 +112,7 @@ export async function invokeCGCLookup(
     console.error("[cgc:invoke] EXCEPTION", { name: e?.name, message: e?.message, dt });
     throw e;
   } finally {
-    clearTimeout(timer);
+    clearTimeout(timeoutId);
   }
 }
 
