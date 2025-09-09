@@ -119,12 +119,13 @@ Deno.serve(async (req) => {
       )
     }
 
-    // Query inventory totals per location
+    // Query inventory totals per location - scoped by store_key
     const queryStart = Date.now()
     const { data: locationBuckets, error: queryError } = await supabase
       .from('intake_items')
       .select('shopify_location_gid, quantity')
       .eq('sku', sku)
+      .eq('store_key', storeKey)
       .is('deleted_at', null)
       .not('removed_from_batch_at', 'is', null)
       .gt('quantity', 0)
@@ -151,11 +152,12 @@ Deno.serve(async (req) => {
     // Resolve inventory_item_id for this SKU
     let inventoryItemId: string | null = null
     
-    // Try to get from existing items first
+    // Try to get from existing items first - scoped by store_key
     const { data: existingItem } = await supabase
       .from('intake_items')
       .select('shopify_inventory_item_id')
       .eq('sku', sku)
+      .eq('store_key', storeKey)
       .not('shopify_inventory_item_id', 'is', null)
       .limit(1)
       .single()
@@ -187,12 +189,13 @@ Deno.serve(async (req) => {
     }
 
     if (!inventoryItemId) {
-      const message = `Could not resolve inventory_item_id for SKU: ${sku}`
-      log.warn(message, { sku, validateOnly })
+      const message = `Could not resolve inventory_item_id for SKU: ${sku} in store: ${storeKey}`
+      log.warn(message, { sku, storeKey, validateOnly })
       return new Response(
         JSON.stringify({ 
           [validateOnly ? 'validation_error' : 'warning']: message, 
           sku,
+          storeKey,
           valid: false 
         }),
         { status: validateOnly ? 400 : 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

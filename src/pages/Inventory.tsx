@@ -37,7 +37,7 @@ const Inventory = () => {
   const [showRemovalDialog, setShowRemovalDialog] = useState(false);
   const [selectedItemForRemoval, setSelectedItemForRemoval] = useState<any>(null);
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'sold' | 'deleted'>('active');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'sold' | 'deleted' | 'errors'>('active');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [selectedStoreKey, setSelectedStoreKey] = useState<string>('');
   const [selectedLocationGid, setSelectedLocationGid] = useState<string>('');
@@ -64,6 +64,8 @@ const Inventory = () => {
         query = query.is('deleted_at', null).eq('quantity', 0);
       } else if (statusFilter === 'deleted') {
         query = query.not('deleted_at', 'is', null);
+      } else if (statusFilter === 'errors') {
+        query = query.is('deleted_at', null).eq('shopify_sync_status', 'error');
       }
       // 'all' shows everything, no additional filters
 
@@ -312,6 +314,7 @@ const Inventory = () => {
                 <TabsList>
                   <TabsTrigger value="active">Active</TabsTrigger>
                   <TabsTrigger value="sold">Sold</TabsTrigger>
+                  <TabsTrigger value="errors">Errors</TabsTrigger>
                   <TabsTrigger value="deleted">Deleted</TabsTrigger>
                   <TabsTrigger value="all">All</TabsTrigger>
                 </TabsList>
