@@ -161,9 +161,9 @@ async function withAuthFetch(url: string): Promise<Response> {
 }
 
 serve(async (req) => {
-  console.log('CGC function invoked:', {
+  console.log('🚀 CGC function start:', {
     method: req.method,
-    url: req.url,
+    url: req.url.replace(/\/functions\/v1\/cgc-lookup/, '[BASE]'),
     timestamp: new Date().toISOString()
   });
 
@@ -177,17 +177,32 @@ serve(async (req) => {
 
     const url = new URL(req.url);
     const pathname = url.pathname;
+    
+    // Guardrail: Only allow /ccg/cards/ routes
+    const routePattern = pathname.replace(/^.*\/cgc-lookup/, '');
+    console.log('🛣️ Route matched:', routePattern);
+    
+    if (!routePattern.startsWith('/ccg/cards/')) {
+      console.log('❌ Invalid route - cards only');
+      return new Response(JSON.stringify({
+        ok: false,
+        error: 'Cards only'
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     let certNumber: string | null = null;
     let barcode: string | null = null;
-    let include = url.searchParams.get('include') || 'pop,images';
+    let include = url.searchParams.get('include') || 'pop,images'; // Default include
 
     // Handle GET routes: /ccg/cards/cert/:cert or /ccg/cards/barcode/:barcode
     if (req.method === 'GET') {
-      if (pathname.includes('/ccg/cards/cert/')) {
-        certNumber = pathname.split('/ccg/cards/cert/')[1];
-      } else if (pathname.includes('/ccg/cards/barcode/')) {
-        barcode = pathname.split('/ccg/cards/barcode/')[1];
+      if (routePattern.includes('/ccg/cards/cert/')) {
+        certNumber = routePattern.split('/ccg/cards/cert/')[1];
+      } else if (routePattern.includes('/ccg/cards/barcode/')) {
+        barcode = routePattern.split('/ccg/cards/barcode/')[1];
       }
     }
     // Handle POST with JSON body (current client format)
@@ -197,6 +212,12 @@ serve(async (req) => {
       barcode = body.barcode;
       include = body.include || include;
     }
+
+    console.log('📋 Request params:', { 
+      certNumber: certNumber ? `${certNumber.slice(0, 4)}...` : null, 
+      barcode: barcode ? `${barcode.slice(0, 4)}...` : null,
+      include 
+    });
 
     // Validate input
     if (!certNumber && !barcode) {
@@ -217,7 +238,13 @@ serve(async (req) => {
       apiUrl = `${CGC_BASE_URL}/cards/certifications/v3/barcode/${encodeURIComponent(barcode)}?include=${encodeURIComponent(include)}`;
     }
 
+    console.log('🔐 Auth attempt for CGC API...');
     const response = await withAuthFetch(apiUrl);
+    console.log('📡 CGC API response:', { 
+      status: response.status, 
+      statusText: response.statusText,
+      ok: response.ok 
+    });
 
     // Pass through 404 as "Not found"
     if (response.status === 404) {
@@ -233,10 +260,22 @@ serve(async (req) => {
     // Return exact status for other errors
     if (!response.ok) {
       const errorText = await response.text().catch(() => '');
-      console.error('CGC API error:', {
+      console.error('❌ CGC API error:', {
         status: response.status,
         error: errorText.substring(0, 200)
       });
+      
+      // Special handling for 403 errors
+      if (response.status === 403) {
+        console.log('CGC 403 (company/scope) after refresh');
+        return new Response(JSON.stringify({
+          ok: false,
+          error: 'CGC auth failed—verify username/password and company=CGC'
+        }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
       
       return new Response(JSON.stringify({
         ok: false,
@@ -249,6 +288,11 @@ serve(async (req) => {
 
     // Success - return the CGC data
     const data = await response.json();
+    console.log('✅ CGC API success:', { 
+      certNumber: data?.certNumber ? `${data.certNumber.slice(0, 4)}...` : 'none',
+      hasGrade: !!data?.grade?.displayGrade,
+      hasImage: !!data?.images?.frontUrl
+    });
     
     return new Response(JSON.stringify({
       ok: true,
