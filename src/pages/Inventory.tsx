@@ -46,20 +46,9 @@ const Inventory = () => {
   const [selectedStoreKey, setSelectedStoreKey] = useState<string>('');
   const [selectedLocationGid, setSelectedLocationGid] = useState<string>('');
   const [syncingAll, setSyncingAll] = useState(false);
-  const [userFilter, setUserFilter] = useState<string>('all');
-  const [currentUser, setCurrentUser] = useState<any>(null);
   const [printingItem, setPrintingItem] = useState<string | null>(null);
   
   const { printPNG, selectedPrinter } = usePrintNode();
-
-  // Get current user on mount
-  useEffect(() => {
-    const getCurrentUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      setCurrentUser(user);
-    };
-    getCurrentUser();
-  }, []);
 
   const fetchItems = async () => {
     setLoading(true);
@@ -87,13 +76,6 @@ const Inventory = () => {
       }
       // 'all' shows everything, no additional filters
 
-      // Apply user filter
-      if (userFilter === 'me' && currentUser) {
-        query = query.eq('created_by', currentUser.id);
-      } else if (userFilter !== 'all' && userFilter !== 'me') {
-        query = query.eq('created_by', userFilter);
-      }
-
       // Apply store/location filters
       if (selectedStoreKey) {
         query = query.eq('store_key', selectedStoreKey);
@@ -116,7 +98,7 @@ const Inventory = () => {
 
   useEffect(() => {
     fetchItems();
-  }, [statusFilter, selectedStoreKey, selectedLocationGid, userFilter, currentUser]);
+  }, [statusFilter, selectedStoreKey, selectedLocationGid]);
 
   // F) Manual sync retry function
   const retrySync = async (item: any) => {
@@ -390,19 +372,6 @@ const Inventory = () => {
                       <SelectItem value="graded">Graded</SelectItem>
                       <SelectItem value="bulk">Bulk</SelectItem>
                       <SelectItem value="other">Other</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <Label htmlFor="user-filter" className="text-sm font-medium">Created By:</Label>
-                  <Select value={userFilter} onValueChange={setUserFilter}>
-                    <SelectTrigger className="w-40">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Users</SelectItem>
-                      <SelectItem value="me">Me</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
