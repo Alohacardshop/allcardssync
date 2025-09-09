@@ -62,6 +62,7 @@ const Inventory = () => {
   const [inspectSku, setInspectSku] = useState<string>('');
   const [inspectResult, setInspectResult] = useState<any>(null);
   const [inspecting, setInspecting] = useState(false);
+  const [showSoldItems, setShowSoldItems] = useState(false);
   
   const { printPNG, selectedPrinter } = usePrintNode();
   const { selectedStore, selectedLocation } = useStore();
@@ -84,13 +85,17 @@ const Inventory = () => {
       if (statusFilter === 'active') {
         query = query.is('deleted_at', null).gt('quantity', 0);
       } else if (statusFilter === 'sold') {
-        query = query.is('deleted_at', null).eq('quantity', 0);
+        query = query.is('deleted_at', null).eq('quantity', 0).not('sold_at', 'is', null);
       } else if (statusFilter === 'deleted') {
         query = query.not('deleted_at', 'is', null);
       } else if (statusFilter === 'errors') {
         query = query.is('deleted_at', null).eq('shopify_sync_status', 'error');
       }
-      // 'all' shows everything, no additional filters
+      
+      // Show sold items toggle (only affects 'all' status)
+      if (statusFilter === 'all' && !showSoldItems) {
+        query = query.gt('quantity', 0);
+      }
 
       // Apply store/location filters
       if (selectedStoreLocations.length > 0) {
@@ -123,7 +128,7 @@ const Inventory = () => {
 
   useEffect(() => {
     fetchItems();
-  }, [statusFilter, typeFilter, selectedStoreKey, selectedLocationGid, selectedStoreLocations]);
+  }, [statusFilter, typeFilter, selectedStoreKey, selectedLocationGid, selectedStoreLocations, showSoldItems]);
 
   // Update legacy state when context changes (for backward compatibility)
   useEffect(() => {
@@ -426,15 +431,20 @@ const Inventory = () => {
       });
 
       if (error) throw error;
-      setInspectResult(data);
+      
+      // Handle new response format
+      if (data && !data.ok) {
+        setInspectResult(data); // Error response with code/message
+      } else {
+        setInspectResult(data); // Success response
+      }
     } catch (error) {
       console.error('Inspect failed:', error);
       toast.error('Failed to inspect SKU in Shopify');
       setInspectResult({ 
         ok: false, 
         code: 'CLIENT_ERROR',
-        message: error.message || 'Unknown error',
-        error: error.message 
+        message: error.message || 'Unknown error'
       });
     } finally {
       setInspecting(false);
@@ -444,7 +454,7 @@ const Inventory = () => {
   const handleResyncFromInspect = async (sku: string, storeKey: string) => {
     try {
       // First validate
-      const { error: validateError } = await supabase.functions.invoke('shopify-sync-inventory', {
+      const { data: validateData, error: validateError } = await supabase.functions.invoke('shopify-sync-inventory', {
         body: {
           storeKey,
           sku,
@@ -457,8 +467,13 @@ const Inventory = () => {
         return;
       }
 
+      if (validateData && !validateData.ok) {
+        toast.error(`Validation failed: ${validateData.message}`);
+        return;
+      }
+
       // Then sync
-      const { error: syncError } = await supabase.functions.invoke('shopify-sync-inventory', {
+      const { data: syncData, error: syncError } = await supabase.functions.invoke('shopify-sync-inventory', {
         body: {
           storeKey,
           sku,
@@ -468,12 +483,25 @@ const Inventory = () => {
 
       if (syncError) throw syncError;
 
+      if (syncData && !syncData.ok) {
+        throw new Error(syncData.message || 'Sync failed');
+      }
+
       toast.success('Re-sync completed successfully');
       fetchItems(); // Refresh inventory
-      setShowInspectDialog(false);
+      
+      // Re-run inspect to update dialog
+      setInspecting(true);
+      const { data: newInspectData } = await supabase.functions.invoke('shopify-inspect-sku', {
+        body: { storeKey, sku }
+      });
+      setInspectResult(newInspectData);
+      setInspecting(false);
+      
     } catch (error) {
       console.error('Re-sync failed:', error);
       toast.error('Re-sync failed: ' + error.message);
+      setInspecting(false);
     }
   };
 

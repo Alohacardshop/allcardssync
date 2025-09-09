@@ -1,5 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.56.0'
-import { resolveShopifyConfig } from './resolveConfig.ts'
+import { resolveShopifyConfig } from '../_shared/resolveShopifyConfig.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -53,13 +53,15 @@ interface LocationBucket {
 }
 
 Deno.serve(async (req) => {
+  const startTime = Date.now()
+  
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
   }
 
   try {
-    console.log('🔄 Shopify Sync Inventory - Starting request')
+    console.log('shopify-sync-inventory: Starting request')
     
     // Parse request
     const body = await req.json() as SyncRequest
@@ -81,32 +83,42 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-    console.log(`🔍 Processing sync request - Store: ${storeKey}, SKU: ${sku}, Validate: ${validateOnly}`)
+    console.log(`shopify-sync-inventory: Processing ${storeKey}/${sku}, validateOnly: ${validateOnly}`)
 
-    // Resolve Shopify credentials
+    // Resolve Shopify credentials using shared resolver
     const configResult = await resolveShopifyConfig(supabase, storeKey)
     
-    if (!configResult.success) {
-      console.error('❌ Shopify config resolution failed:', configResult.message)
+    if (!configResult.ok) {
+      console.error('shopify-sync-inventory: Config resolution failed:', configResult.message)
+      
+      // Update database with error status
+      try {
+        await supabase
+          .from('intake_items')
+          .update({
+            shopify_sync_status: 'error',
+            last_shopify_sync_error: configResult.message
+          })
+          .eq('sku', sku)
+          .eq('store_key', storeKey)
+      } catch (updateError) {
+        console.warn('Failed to update sync status for config error:', updateError)
+      }
+      
       return new Response(
-        JSON.stringify({
-          ok: false,
-          code: configResult.code,
-          message: configResult.message,
-          diagnostics: configResult.diagnostics
-        }),
+        JSON.stringify(configResult),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    const { domain, accessToken } = configResult.credentials
-    console.log('✅ Shopify credentials resolved:', configResult.diagnostics)
+    const { credentials, diagnostics } = configResult
+    console.log('shopify-sync-inventory: Credentials resolved:', diagnostics)
 
     // Query inventory totals per location - scoped by store_key
     const queryStart = Date.now()
     const { data: locationBuckets, error: queryError } = await supabase
       .from('intake_items')
-      .select('shopify_location_gid, quantity')
+      .select('shopify_location_gid, quantity, shopify_product_id, shopify_variant_id, shopify_inventory_item_id')
       .eq('sku', sku)
       .eq('store_key', storeKey)
       .is('deleted_at', null)
@@ -114,7 +126,7 @@ Deno.serve(async (req) => {
       .gt('quantity', 0)
 
     if (queryError) {
-      log.error('Failed to query inventory', { sku, error: queryError })
+      console.error('Failed to query inventory', { sku, error: queryError })
       return new Response(
         JSON.stringify({ error: 'Failed to query inventory' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -130,15 +142,17 @@ Deno.serve(async (req) => {
       return acc
     }, {} as Record<string, number>)
 
-    log.info(`${logPrefix} Computed location totals`, { sku, locationTotals, rowsConsidered: locationBuckets.length, queryMs, correlationId })
+    console.log(`shopify-sync-inventory: Computed location totals`, { sku, locationTotals, rowsConsidered: locationBuckets.length, queryMs, correlationId })
 
     // Resolve inventory_item_id for this SKU
     let inventoryItemId: string | null = null
+    let resolvedProductId: string | null = null
+    let resolvedVariantId: string | null = null
     
     // Try to get from existing items first - scoped by store_key
     const { data: existingItem } = await supabase
       .from('intake_items')
-      .select('shopify_inventory_item_id')
+      .select('shopify_inventory_item_id, shopify_product_id, shopify_variant_id')
       .eq('sku', sku)
       .eq('store_key', storeKey)
       .not('shopify_inventory_item_id', 'is', null)
@@ -147,14 +161,16 @@ Deno.serve(async (req) => {
 
     if (existingItem?.shopify_inventory_item_id) {
       inventoryItemId = existingItem.shopify_inventory_item_id
+      resolvedProductId = existingItem.shopify_product_id
+      resolvedVariantId = existingItem.shopify_variant_id
     } else {
       // Resolve via Shopify API
       try {
-        const variantResponse = await fetchWithRetry(
-          `https://${configMap.domain}/admin/api/2024-07/variants.json?sku=${encodeURIComponent(sku)}&limit=1`,
+        const variantResponse = await shopifyApiCall(
+          `https://${credentials.domain}/admin/api/2024-07/variants.json?sku=${encodeURIComponent(sku)}&limit=1`,
           {
             headers: {
-              'X-Shopify-Access-Token': configMap.access_token,
+              'X-Shopify-Access-Token': credentials.accessToken,
               'Content-Type': 'application/json',
             }
           }
@@ -162,18 +178,21 @@ Deno.serve(async (req) => {
 
         if (variantResponse.ok) {
           const variantData = await variantResponse.json()
-          if (variantData.variants?.[0]?.inventory_item_id) {
-            inventoryItemId = variantData.variants[0].inventory_item_id.toString()
+          if (variantData.variants?.[0]) {
+            const variant = variantData.variants[0]
+            inventoryItemId = variant.inventory_item_id?.toString()
+            resolvedProductId = variant.product_id?.toString()
+            resolvedVariantId = variant.id?.toString()
           }
         }
       } catch (e) {
-        log.warn('Failed to resolve inventory_item_id via Shopify API', { sku, error: e.message })
+        console.warn('Failed to resolve IDs via Shopify API', { sku, error: e.message })
       }
     }
 
     if (!inventoryItemId) {
       const message = `Could not resolve inventory_item_id for SKU: ${sku} in store: ${storeKey}`
-      log.warn(message, { sku, storeKey, validateOnly })
+      console.warn(message, { sku, storeKey, validateOnly })
       
       // Always persist error status to database
       try {
@@ -187,18 +206,20 @@ Deno.serve(async (req) => {
           .eq('store_key', storeKey)
 
         if (updateError) {
-          log.warn('Failed to update sync status for missing inventory_item_id', { updateError })
+          console.warn('Failed to update sync status for missing inventory_item_id', { updateError })
         }
       } catch (statusError) {
-        log.warn('Error updating sync status for missing inventory_item_id', { statusError })
+        console.warn('Error updating sync status for missing inventory_item_id', { statusError })
       }
       
       return new Response(
         JSON.stringify({ 
-          [validateOnly ? 'validation_error' : 'warning']: message, 
+          ok: false,
+          code: 'NOT_FOUND',
+          message, 
           sku,
           storeKey,
-          valid: false 
+          diagnostics
         }),
         { status: validateOnly ? 400 : 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
@@ -207,11 +228,11 @@ Deno.serve(async (req) => {
     // Get Shopify locations if needed
     let shopifyLocations: any[] = []
     try {
-      const locationsResponse = await fetchWithRetry(
-        `https://${configMap.domain}/admin/api/2024-07/locations.json`,
+      const locationsResponse = await shopifyApiCall(
+        `https://${credentials.domain}/admin/api/2024-07/locations.json`,
         {
           headers: {
-            'X-Shopify-Access-Token': configMap.access_token,
+            'X-Shopify-Access-Token': credentials.accessToken,
             'Content-Type': 'application/json',
           }
         }
@@ -222,7 +243,7 @@ Deno.serve(async (req) => {
         shopifyLocations = locationsData.locations || []
       }
     } catch (e) {
-      log.error('Failed to fetch Shopify locations', { error: e.message })
+      console.error('Failed to fetch Shopify locations', { error: e.message })
       return new Response(
         JSON.stringify({ error: 'Failed to fetch Shopify locations' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -233,33 +254,43 @@ Deno.serve(async (req) => {
     if (validateOnly) {
       // Update status to indicate validation passed
       try {
+        const updateData: any = {
+          shopify_sync_status: 'validated',
+          last_shopify_synced_at: new Date().toISOString(),
+          last_shopify_sync_error: null
+        }
+
+        // Persist discovered IDs for future syncs
+        if (resolvedProductId) updateData.shopify_product_id = resolvedProductId
+        if (resolvedVariantId) updateData.shopify_variant_id = resolvedVariantId
+        if (inventoryItemId) updateData.shopify_inventory_item_id = inventoryItemId
+
         const { error: updateError } = await supabase
           .from('intake_items')
-          .update({
-            shopify_sync_status: 'validated',
-            last_shopify_synced_at: new Date().toISOString()
-          })
+          .update(updateData)
           .eq('sku', sku)
           .eq('store_key', storeKey)
 
         if (updateError) {
-          log.warn('Failed to update validation status', { updateError })
+          console.warn('Failed to update validation status', { updateError })
         }
       } catch (statusError) {
-        log.warn('Error updating validation status', { statusError })
+        console.warn('Error updating validation status', { statusError })
       }
       
-      log.info(`${logPrefix} Validation completed successfully`, {
-        storeKey, sku, inventoryItemId, locationTotals, valid: true
+      console.log(`shopify-sync-inventory: Validation completed successfully`, {
+        storeKey, sku, inventoryItemId, locationTotals
       })
       return new Response(
         JSON.stringify({ 
+          ok: true,
           valid: true, 
           sku, 
           storeKey,
           inventory_item_id: inventoryItemId,
           location_totals: locationTotals,
-          message: 'Validation successful - ready for sync'
+          message: 'Validation successful - ready for sync',
+          diagnostics
         }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
@@ -300,12 +331,12 @@ Deno.serve(async (req) => {
 
       try {
         // Set inventory level in Shopify
-        const setResponse = await fetchWithRetry(
-          `https://${configMap.domain}/admin/api/2024-07/inventory_levels/set.json`,
+        const setResponse = await shopifyApiCall(
+          `https://${credentials.domain}/admin/api/2024-07/inventory_levels/set.json`,
           {
             method: 'POST',
             headers: {
-              'X-Shopify-Access-Token': configMap.access_token,
+              'X-Shopify-Access-Token': credentials.accessToken,
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
@@ -328,14 +359,14 @@ Deno.serve(async (req) => {
 
         if (!setResponse.ok) {
           const errorText = await setResponse.text()
-          log.error('Shopify inventory set failed', { 
+          console.error('Shopify inventory set failed', { 
             sku, locationId, inventoryItemId, total, 
             status: setResponse.status, 
             error: errorText 
           })
         }
       } catch (e) {
-        log.error('Exception during inventory set', { sku, locationId, inventoryItemId, total, error: e.message })
+        console.error('Exception during inventory set', { sku, locationId, inventoryItemId, total, error: e.message })
         syncResults.push({
           location_gid: locationKey,
           location_id: locationId,
@@ -349,7 +380,7 @@ Deno.serve(async (req) => {
     const shopifyCallsMs = Date.now() - shopifyCallsStart
     const totalMs = Date.now() - startTime
 
-    log.info(`${logPrefix} Inventory sync completed`, {
+    console.log(`shopify-sync-inventory: Inventory sync completed`, {
       storeKey,
       sku,
       correlationId,
@@ -360,22 +391,33 @@ Deno.serve(async (req) => {
       total_ms: totalMs
     })
 
-    // D) Update sync status in database - mark as synced or error
-    const locationResults = syncResults;
-    const hasErrors = locationResults.some(r => r.outcome && !r.outcome.includes('success'));
+    // Update sync status in database - mark as synced or error
+    const hasErrors = syncResults.some(r => r.outcome && !r.outcome.includes('success'));
     const syncStatus = hasErrors ? 'error' : 'synced';
     const errorMessage = hasErrors 
-      ? locationResults.filter(r => r.outcome && !r.outcome.includes('success')).map(r => r.outcome).join('; ')
+      ? syncResults.filter(r => r.outcome && !r.outcome.includes('success')).map(r => r.outcome).join('; ')
       : null;
 
     try {
+      const updateData: any = {
+        shopify_sync_status: syncStatus,
+        last_shopify_sync_error: errorMessage
+      }
+
+      // Always update synced timestamp on success
+      if (syncStatus === 'synced') {
+        updateData.last_shopify_synced_at = new Date().toISOString();
+        updateData.last_shopify_sync_error = null;
+      }
+
+      // Persist discovered IDs for future syncs
+      if (resolvedProductId) updateData.shopify_product_id = resolvedProductId;
+      if (resolvedVariantId) updateData.shopify_variant_id = resolvedVariantId;
+      if (inventoryItemId) updateData.shopify_inventory_item_id = inventoryItemId;
+
       const { error: updateError } = await supabase
         .from('intake_items')
-        .update({
-          shopify_sync_status: syncStatus,
-          last_shopify_synced_at: syncStatus === 'synced' ? new Date().toISOString() : undefined,
-          last_shopify_sync_error: errorMessage
-        })
+        .update(updateData)
         .eq('sku', sku)
         .eq('store_key', storeKey);
 
@@ -388,11 +430,13 @@ Deno.serve(async (req) => {
 
     return new Response(
       JSON.stringify({ 
+        ok: true,
         success: true, 
         sku, 
         storeKey,
         results: syncResults,
         syncStatus,
+        diagnostics,
         stats: {
           rowsConsidered: locationBuckets.length,
           queryMs,
@@ -407,7 +451,7 @@ Deno.serve(async (req) => {
     )
 
   } catch (error) {
-    log.error('Inventory sync failed', { error: error.message, stack: error.stack })
+    console.error('shopify-sync-inventory: Error -', error)
     
     // Extract request data for status update
     let sku: string | undefined
@@ -436,12 +480,20 @@ Deno.serve(async (req) => {
           .eq('sku', sku)
           .eq('store_key', storeKey)
       } catch (statusError) {
-        log.warn('Error updating sync status on exception', { statusError })
+        console.warn('Error updating sync status on exception', { statusError })
       }
     }
 
     return new Response(
-      JSON.stringify({ error: 'Internal server error' }),
+      JSON.stringify({ 
+        ok: false,
+        error: 'Internal server error',
+        message: error.message,
+        diagnostics: {
+          storeKey: storeKey || 'unknown',
+          ms: Date.now() - startTime
+        }
+      }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }

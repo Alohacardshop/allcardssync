@@ -1,41 +1,34 @@
 
+[project]
 project_id = "dmpoandoydaqxhzdjnmk"
 
-# SECURITY: All functions now require JWT authentication by default
-# Only public functions like health checks remain without JWT
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
 
-[functions.catalog-health]
-verify_jwt = false
+[db]
+port = 54322
 
-[functions.justtcg-health]  
-verify_jwt = false
+[studio]
+enabled = true
+port = 54323
 
-# Premium API monitoring (public for dashboard widgets)
-[functions.api-usage-monitor]
-verify_jwt = false
+[inbucket]
+enabled = true
+port = 54324
 
-# PSA scraping function (public - scrapes public pages)
-[functions.psa-scrape]
-verify_jwt = false
+[storage]
+enabled = true
+port = 54325
 
-# PSA scraping function v2 (public - Firecrawl-only with strict CORS)
-[functions.psa-scrape-v2]
-verify_jwt = false
+[auth]
+enabled = true
+port = 54326
 
-# CGC card lookup (public - Firecrawl scraping with CORS)
-[functions.cgc-lookup]
-verify_jwt = false
-
-# Shopify webhook handler (public - validates HMAC signature)
-[functions.shopify-webhook]
-verify_jwt = false
-
-# Shopify webhook test function (public - for development)
-[functions.shopify-webhook-test]
-verify_jwt = false
-
-# TCG card search with pricing (requires authentication)
-[functions.tcg-card-search]
+[functions]
 verify_jwt = true
 
 # SHOPIFY FUNCTIONS: All require JWT + admin/staff role verification
@@ -57,13 +50,10 @@ verify_jwt = true
 [functions.shopify-pull-products-by-tags]
 verify_jwt = true
 
-# All other critical functions require JWT authentication and admin role verification
-# These functions are secured by requiring authentication and admin role checks in code:
-# - bootstrap-admin (special case for first admin setup)
-# - daily-set-discovery
-# - get-printnode-key  
-# - get-system-setting
-# - render-label
-# - roles-admin
-# - set-system-setting
-# - user-assignment-admin
+# Shopify webhook handler (public - validates HMAC signature)
+[functions.shopify-webhook]
+verify_jwt = false
+
+# Shopify webhook test function (public - for development)
+[functions.shopify-webhook-test]
+verify_jwt = false
