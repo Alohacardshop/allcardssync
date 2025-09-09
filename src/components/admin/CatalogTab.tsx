@@ -1,6 +1,4 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { AlertTriangle, ExternalLink } from "lucide-react";
-import { catalogMovedDetails } from "@/sentinel/catalogMoved";
+import { ExternalLink } from "lucide-react";
 import { CatalogMigrationPlaceholder } from "@/components/CatalogMigrationPlaceholder";
 
 const CatalogTab = () => {
