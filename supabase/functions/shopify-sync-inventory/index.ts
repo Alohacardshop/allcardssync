@@ -1,10 +1,41 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { fetchWithRetry } from '../_shared/http.ts'
-import { log } from '../_shared/log.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.56.0'
+import { resolveShopifyConfig } from './resolveConfig.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
+// Exponential backoff for Shopify API calls
+async function shopifyApiCall(url: string, options: RequestInit, retries = 3): Promise<Response> {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const response = await fetch(url, options)
+      
+      if (response.status === 429) {
+        const retryAfter = response.headers.get('Retry-After') || '2'
+        const delay = Math.min(parseInt(retryAfter) * 1000, 5000)
+        console.log(`Rate limited, retrying after ${delay}ms`)
+        await new Promise(resolve => setTimeout(resolve, delay))
+        continue
+      }
+      
+      if (response.status >= 500 && i < retries - 1) {
+        const delay = Math.min(1000 * Math.pow(2, i), 10000)
+        console.log(`Server error ${response.status}, retrying after ${delay}ms`)
+        await new Promise(resolve => setTimeout(resolve, delay))
+        continue
+      }
+      
+      return response
+    } catch (error) {
+      if (i === retries - 1) throw error
+      const delay = Math.min(1000 * Math.pow(2, i), 10000)
+      console.log(`Network error, retrying after ${delay}ms:`, error)
+      await new Promise(resolve => setTimeout(resolve, delay))
+    }
+  }
+  throw new Error('All retries exhausted')
 }
 
 interface SyncRequest {
@@ -16,8 +47,9 @@ interface SyncRequest {
 }
 
 interface LocationBucket {
-  shopify_location_gid: string | null
-  total: number
+  locationId: string
+  locationName?: string
+  totalQuantity: number
 }
 
 Deno.serve(async (req) => {
@@ -27,14 +59,19 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { storeKey, sku, locationGid, correlationId, validateOnly }: SyncRequest = await req.json()
-    const logPrefix = correlationId ? `[${correlationId}]` : '[shopify-sync]'
-    const mode = validateOnly ? 'VALIDATE' : 'SYNC'
+    console.log('🔄 Shopify Sync Inventory - Starting request')
     
+    // Parse request
+    const body = await req.json() as SyncRequest
+    const { storeKey, sku, locationGid, correlationId, validateOnly = false } = body
+
     if (!storeKey || !sku) {
-      log.error('Missing required parameters', { storeKey, sku, correlationId })
       return new Response(
-        JSON.stringify({ error: 'storeKey and sku are required' }),
+        JSON.stringify({ 
+          ok: false, 
+          code: 'INVALID_REQUEST', 
+          message: 'Missing required fields: storeKey, sku' 
+        }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
@@ -44,80 +81,26 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-    log.info(`${logPrefix} Starting inventory ${mode.toLowerCase()}`, { storeKey, sku, locationGid, correlationId, validateOnly })
-    const startTime = Date.now()
+    console.log(`🔍 Processing sync request - Store: ${storeKey}, SKU: ${sku}, Validate: ${validateOnly}`)
 
-    // Get Shopify store configuration - standardized naming with fallbacks
-    const upper = storeKey.toUpperCase()
-    const domainKeys = [
-      `SHOPIFY_${upper}_STORE_DOMAIN`,     // New standard pattern
-      `SHOPIFY_${upper}_DOMAIN`,           // Legacy pattern
-      `SHOPIFY_STORE_DOMAIN_${upper}`,     // Another legacy pattern
-      'SHOPIFY_STORE_DOMAIN'               // Fallback pattern
-    ]
-    const tokenKeys = [
-      `SHOPIFY_${upper}_ACCESS_TOKEN`,     // New standard pattern
-      `SHOPIFY_ADMIN_ACCESS_TOKEN_${upper}`, // Legacy pattern
-      'SHOPIFY_ADMIN_ACCESS_TOKEN'         // Fallback pattern
-    ]
-
-    const { data: storeConfig, error: configError } = await supabase
-      .from('system_settings')
-      .select('key_name, key_value')
-      .in('key_name', [...domainKeys, ...tokenKeys])
-
-    if (configError) {
-      log.error('Failed to get store config', { storeKey, error: configError })
+    // Resolve Shopify credentials
+    const configResult = await resolveShopifyConfig(supabase, storeKey)
+    
+    if (!configResult.success) {
+      console.error('❌ Shopify config resolution failed:', configResult.message)
       return new Response(
-        JSON.stringify({ error: 'Failed to get store configuration' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
-
-    if (!storeConfig || storeConfig.length === 0) {
-      log.error('No Shopify configuration found', { storeKey, searchedKeys: [...domainKeys, ...tokenKeys] })
-      return new Response(
-        JSON.stringify({ 
-          error: `No Shopify store configuration found for '${storeKey}'. Please configure Shopify settings in Admin.`,
-          searched_keys: [...domainKeys, ...tokenKeys]
+        JSON.stringify({
+          ok: false,
+          code: configResult.code,
+          message: configResult.message,
+          diagnostics: configResult.diagnostics
         }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    // Find domain and token values from any matching pattern
-    const getSettingValue = (keys: string[]) => {
-      for (const key of keys) {
-        const setting = storeConfig.find(s => s.key_name === key)
-        if (setting?.key_value) return setting.key_value
-      }
-      return null
-    }
-
-    const configMap = {
-      domain: getSettingValue(domainKeys),
-      access_token: getSettingValue(tokenKeys)
-    }
-
-    if (!configMap.domain || !configMap.access_token) {
-      log.error('Missing Shopify configuration', { 
-        storeKey, 
-        hasDomain: !!configMap.domain, 
-        hasToken: !!configMap.access_token,
-        availableKeys: storeConfig.map(s => s.key_name)
-      })
-      return new Response(
-        JSON.stringify({ 
-          error: `Missing Shopify store configuration for '${storeKey}'.`,
-          missing: {
-            domain: !configMap.domain ? `Need one of: ${domainKeys.join(', ')}` : 'OK',
-            token: !configMap.access_token ? `Need one of: ${tokenKeys.join(', ')}` : 'OK'
-          },
-          found_keys: storeConfig.map(s => s.key_name)
-        }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
+    const { domain, accessToken } = configResult.credentials
+    console.log('✅ Shopify credentials resolved:', configResult.diagnostics)
 
     // Query inventory totals per location - scoped by store_key
     const queryStart = Date.now()

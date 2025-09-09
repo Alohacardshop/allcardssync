@@ -1564,6 +1564,24 @@ export type Database = {
           lot_number: string
         }[]
       }
+      get_or_create_active_lot_for_user: {
+        Args: { _location_gid: string; _store_key: string; _user_id: string }
+        Returns: {
+          created_at: string
+          created_by: string | null
+          id: string
+          lot_number: string
+          lot_type: string
+          notes: string | null
+          processing_data: Json | null
+          shopify_location_gid: string | null
+          status: string | null
+          store_key: string | null
+          total_items: number | null
+          total_value: number | null
+          updated_at: string
+        }
+      }
       gtrgm_compress: {
         Args: { "": unknown }
         Returns: unknown
