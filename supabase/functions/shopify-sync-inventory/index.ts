@@ -191,6 +191,25 @@ Deno.serve(async (req) => {
     if (!inventoryItemId) {
       const message = `Could not resolve inventory_item_id for SKU: ${sku} in store: ${storeKey}`
       log.warn(message, { sku, storeKey, validateOnly })
+      
+      // Always persist error status to database
+      try {
+        const { error: updateError } = await supabase
+          .from('intake_items')
+          .update({
+            shopify_sync_status: 'error',
+            last_shopify_sync_error: message
+          })
+          .eq('sku', sku)
+          .eq('store_key', storeKey)
+
+        if (updateError) {
+          log.warn('Failed to update sync status for missing inventory_item_id', { updateError })
+        }
+      } catch (statusError) {
+        log.warn('Error updating sync status for missing inventory_item_id', { statusError })
+      }
+      
       return new Response(
         JSON.stringify({ 
           [validateOnly ? 'validation_error' : 'warning']: message, 
@@ -227,8 +246,26 @@ Deno.serve(async (req) => {
       )
     }
 
-    // If validation only, return early with success
+    // If validation only, persist success status and return early
     if (validateOnly) {
+      // Update status to indicate validation passed
+      try {
+        const { error: updateError } = await supabase
+          .from('intake_items')
+          .update({
+            shopify_sync_status: 'validated',
+            last_shopify_synced_at: new Date().toISOString()
+          })
+          .eq('sku', sku)
+          .eq('store_key', storeKey)
+
+        if (updateError) {
+          log.warn('Failed to update validation status', { updateError })
+        }
+      } catch (statusError) {
+        log.warn('Error updating validation status', { statusError })
+      }
+      
       log.info(`${logPrefix} Validation completed successfully`, {
         storeKey, sku, inventoryItemId, locationTotals, valid: true
       })
@@ -389,18 +426,35 @@ Deno.serve(async (req) => {
   } catch (error) {
     log.error('Inventory sync failed', { error: error.message, stack: error.stack })
     
-    // D) Mark as error in database on exception
+    // Extract request data for status update
+    let sku: string | undefined
+    let storeKey: string | undefined
     try {
-      await supabase
-        .from('intake_items')
-        .update({
-          shopify_sync_status: 'error',
-          last_shopify_sync_error: error.message || 'Internal server error'
-        })
-        .eq('sku', sku)
-        .eq('store_key', storeKey);
-    } catch (statusError) {
-      console.warn('Error updating sync status on exception:', statusError);
+      const requestData = await req.clone().json() as SyncRequest
+      sku = requestData.sku
+      storeKey = requestData.storeKey
+    } catch (e) {
+      // Request already consumed or malformed
+    }
+    
+    // Mark as error in database on exception if we have the required data
+    if (sku && storeKey) {
+      try {
+        const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+        const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+        const supabase = createClient(supabaseUrl, supabaseServiceKey)
+        
+        await supabase
+          .from('intake_items')
+          .update({
+            shopify_sync_status: 'error',
+            last_shopify_sync_error: error.message || 'Internal server error'
+          })
+          .eq('sku', sku)
+          .eq('store_key', storeKey)
+      } catch (statusError) {
+        log.warn('Error updating sync status on exception', { statusError })
+      }
     }
 
     return new Response(
