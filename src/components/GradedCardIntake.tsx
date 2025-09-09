@@ -11,7 +11,7 @@ import { useStore } from "@/contexts/StoreContext";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { invokePSAScrapeV2 } from "@/lib/psaServiceV2";
 import { normalizePSAData } from "@/lib/psaNormalization";
-import { invokeCGCLookup, normalizeCGCForIntake } from "@/lib/cgcService";
+import { lookupCert, lookupBarcode } from "@/lib/cgc/client";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { StoreLocationSelector } from "@/components/StoreLocationSelector";
 import { parseFunctionError } from "@/lib/fns";
@@ -110,83 +110,49 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         // Use the enhanced PSA service
         data = await invokePSAScrapeV2({ cert: certInput.trim(), forceRefresh: true, includeRaw: true }, 45000);
       } else {
-        // Use CGC service
+        // Use new clean CGC client
         const startTime = Date.now();
-        console.log("[CGC:UI] Starting CGC lookup call...");
+        console.log("[CGC:UI] Starting CGC lookup with new client...");
         
-        // Test direct function URL first
-        console.log("[CGC:UI] Testing direct function access...");
         try {
-          const testResponse = await fetch('https://dmpoandoydaqxhzdjnmk.supabase.co/functions/v1/cgc-lookup', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              certNumber: /^\d+$/.test(certInput.trim()) ? certInput.trim() : undefined,
-              barcode: !/^\d+$/.test(certInput.trim()) ? certInput.trim() : undefined,
-              include: 'pop,images'
-            })
-          });
-          console.log("[CGC:UI] Direct fetch response:", {
-            ok: testResponse.ok,
-            status: testResponse.status,
-            statusText: testResponse.statusText
-          });
+          let cgcCard;
+          const isNumeric = /^\d+$/.test(certInput.trim());
           
-          if (testResponse.ok) {
-            const testData = await testResponse.json();
-            console.log("[CGC:UI] Direct fetch worked! Data:", testData);
-            
-            // Use the direct fetch result
-            const cgcResult = testData;
-            const endTime = Date.now();
-            console.log(`[CGC:UI] Direct fetch completed in ${endTime - startTime}ms`);
-        
-            if (cgcResult.ok && cgcResult.data) {
-              data = { ok: true, ...normalizeCGCForIntake(cgcResult.data) };
-            } else {
-              data = { ok: false, error: cgcResult.error || 'CGC lookup failed' };
-            }
+          if (isNumeric) {
+            cgcCard = await lookupCert(certInput.trim());
           } else {
-            const body = await testResponse.text().catch(() => '');
-            throw new Error(`Direct fetch failed: ${testResponse.status} ${testResponse.statusText} ${body}`);
+            cgcCard = await lookupBarcode(certInput.trim());
           }
-        } catch (directError) {
-          console.error("[CGC:UI] Direct fetch failed, falling back to supabase.functions.invoke:", directError);
-          
-          // Fallback to original method
-          const cgcResult = await invokeCGCLookup({ 
-            certNumber: /^\d+$/.test(certInput.trim()) ? certInput.trim() : undefined,
-            barcode: !/^\d+$/.test(certInput.trim()) ? certInput.trim() : undefined,
-            include: 'pop,images'
-          }, 30000);  // Allow enough time for edge function + CGC API
           
           const endTime = Date.now();
-          console.log(`[CGC:UI] CGC lookup completed in ${endTime - startTime}ms`, {
-            ok: cgcResult.ok,
-            hasData: !!cgcResult.data,
-            error: cgcResult.error
-          });
-        
-          if (cgcResult.ok && cgcResult.data) {
-            data = { ok: true, ...normalizeCGCForIntake(cgcResult.data) };
-          } else {
-            data = { ok: false, error: cgcResult.error || 'CGC lookup failed' };
-          }
-        }
-        
-        const endTime = Date.now();
-        console.log(`[CGC:UI] CGC lookup completed in ${endTime - startTime}ms`, {
-          ok: data?.ok,
-          hasData: !!data,
-          error: data?.error
-        });
-        
-        if (data && data.ok) {
-          // CGC data processing continues below...
-        } else {
-          data = { ok: false, error: data?.error || 'CGC lookup failed' };
+          console.log(`[CGC:UI] CGC lookup completed in ${endTime - startTime}ms`);
+          
+          // Convert CGC card to normalized format for intake
+          const normalizedForIntake = {
+            gradingCompany: 'CGC',
+            certNumber: cgcCard.certNumber,
+            brandTitle: cgcCard.collectible.setName || '',
+            subject: cgcCard.collectible.cardName || '',
+            category: cgcCard.collectible.game || 'Trading Cards',
+            variant: cgcCard.grade.displayGrade + (cgcCard.grade.autographType ? ` (${cgcCard.grade.autographType})` : ''),
+            cardNumber: cgcCard.collectible.cardNumber || '',
+            year: cgcCard.collectible.cardYear || '',
+            grade: cgcCard.grade.displayGrade,
+            gradeNumeric: cgcCard.grade.numeric?.toString() || '',
+            game: cgcCard.collectible.game?.toLowerCase().includes('pokemon') ? 'pokemon' : 
+                   cgcCard.collectible.game?.toLowerCase().includes('magic') ? 'mtg' : 
+                   cgcCard.collectible.game || '',
+            imageUrl: cgcCard.images?.frontUrl || null,
+            isValid: !!(cgcCard.certNumber && cgcCard.grade.displayGrade),
+            source: 'cgc_api',
+            rawPayload: cgcCard
+          };
+          
+          data = { ok: true, ...normalizedForIntake };
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'CGC lookup failed';
+          console.error('[CGC:UI] CGC lookup error:', errorMessage);
+          data = { ok: false, error: errorMessage };
         }
       }
 

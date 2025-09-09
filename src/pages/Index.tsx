@@ -14,7 +14,6 @@ import { RawCardIntake } from "@/components/RawCardIntake";
 import { BulkCardIntake } from "@/components/BulkCardIntake";
 import { CurrentBatchPanel } from "@/components/CurrentBatchPanel";
 import { StoreLocationSelector } from "@/components/StoreLocationSelector";
-import { CGCLookupPanel } from "@/components/CGCLookupPanel";
 
 interface IntakeItem {
   id: string;
@@ -479,11 +478,7 @@ const Index = () => {
 
         {/* Main Content Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="cgc" className="flex items-center gap-2">
-              <Award className="h-4 w-4" />
-              CGC Lookup
-            </TabsTrigger>
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="graded" className="flex items-center gap-2">
               <Award className="h-4 w-4" />
               Graded Cards
@@ -501,11 +496,6 @@ const Index = () => {
               Current Batch
             </TabsTrigger>
           </TabsList>
-
-          <TabsContent value="cgc" className="mt-6 space-y-6">
-            <CGCLookupPanel onBatchAdd={handleBatchAdd} />
-            <CurrentBatchPanel onViewFullBatch={() => setActiveTab("batch")} />
-          </TabsContent>
 
           <TabsContent value="graded" className="mt-6 space-y-6">
             <GradedCardIntake onBatchAdd={handleBatchAdd} />
