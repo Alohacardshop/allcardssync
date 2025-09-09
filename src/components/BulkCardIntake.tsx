@@ -25,6 +25,7 @@ export function BulkCardIntake({ onBatchAdd }: BulkCardIntakeProps) {
   
   // Form state
   const [selectedGame, setSelectedGame] = useState('');
+  const [description, setDescription] = useState('');
   const [amount, setAmount] = useState(1);
   const [totalPrice, setTotalPrice] = useState(0);
   const [addingBulk, setAddingBulk] = useState(false);
@@ -99,6 +100,11 @@ export function BulkCardIntake({ onBatchAdd }: BulkCardIntakeProps) {
       return;
     }
     
+    if (selectedGame === 'other' && !description.trim()) {
+      toast.error('Please enter a description for other cards');
+      return;
+    }
+    
     if (amount <= 0) {
       toast.error('Please enter a valid amount');
       return;
@@ -118,23 +124,25 @@ export function BulkCardIntake({ onBatchAdd }: BulkCardIntakeProps) {
     setAddingBulk(true);
 
     try {
+      const gameTitle = selectedGame === 'other' ? description.trim() : `${selectedGame.charAt(0).toUpperCase() + selectedGame.slice(1)} Bulk Cards`;
+      
       const rpcParams = {
         store_key_in: selectedStore!.trim(),
         shopify_location_gid_in: selectedLocation!.trim(),
         quantity_in: amount,
-        brand_title_in: `${selectedGame.charAt(0).toUpperCase() + selectedGame.slice(1)} Bulk Cards`,
-        subject_in: `${selectedGame.charAt(0).toUpperCase() + selectedGame.slice(1)} Bulk Cards`,
+        brand_title_in: gameTitle,
+        subject_in: gameTitle,
         category_in: 'Card Bulk',
         variant_in: 'Bulk',
         card_number_in: '',
         grade_in: '',
         price_in: totalPrice,
         cost_in: totalPrice, // Use same amount for cost
-        sku_in: `${selectedGame.toUpperCase()}-BULK-${Date.now()}`,
+        sku_in: `${selectedGame === 'other' ? 'OTHER' : selectedGame.toUpperCase()}-BULK-${Date.now()}`,
         source_provider_in: 'bulk_entry',
         catalog_snapshot_in: {
-          name: `${selectedGame.charAt(0).toUpperCase() + selectedGame.slice(1)} Bulk Cards`,
-          game: selectedGame,
+          name: gameTitle,
+          game: selectedGame === 'other' ? 'other' : selectedGame,
           type: 'card_bulk'
         },
         pricing_snapshot_in: {
@@ -143,7 +151,7 @@ export function BulkCardIntake({ onBatchAdd }: BulkCardIntakeProps) {
           price_per_item: totalPrice / amount,
           captured_at: new Date().toISOString()
         },
-        processing_notes_in: `Bulk card entry: ${amount} ${selectedGame} cards at $${totalPrice.toFixed(2)} total ($${(totalPrice / amount).toFixed(2)} each)`
+        processing_notes_in: `Bulk card entry: ${amount} ${selectedGame === 'other' ? description.trim() : selectedGame} cards at $${totalPrice.toFixed(2)} total ($${(totalPrice / amount).toFixed(2)} each)`
       };
 
       const response = await supabase.rpc('create_raw_intake_item', rpcParams);
@@ -166,6 +174,7 @@ export function BulkCardIntake({ onBatchAdd }: BulkCardIntakeProps) {
 
         // Reset form
         setSelectedGame('');
+        setDescription('');
         setAmount(1);
         setTotalPrice(0);
       }
@@ -248,6 +257,21 @@ export function BulkCardIntake({ onBatchAdd }: BulkCardIntakeProps) {
             </div>
           </div>
 
+          {/* Description field for "other" game */}
+          {selectedGame === 'other' && (
+            <div>
+              <Label htmlFor="description">Description</Label>
+              <Input
+                id="description"
+                type="text"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Enter description for other cards"
+                className="w-full"
+              />
+            </div>
+          )}
+
           {/* Price per item display */}
           {amount > 0 && totalPrice > 0 && (
             <div className="text-sm text-muted-foreground">
@@ -258,7 +282,7 @@ export function BulkCardIntake({ onBatchAdd }: BulkCardIntakeProps) {
           {/* Add to Batch Button */}
           <Button
             onClick={handleAddBulkToBatch}
-            disabled={addingBulk || !selectedGame || !selectedStore || !selectedLocation || amount <= 0 || totalPrice <= 0 || accessCheckLoading}
+            disabled={addingBulk || !selectedGame || (selectedGame === 'other' && !description.trim()) || !selectedStore || !selectedLocation || amount <= 0 || totalPrice <= 0 || accessCheckLoading}
             className="w-full"
           >
             {addingBulk || accessCheckLoading ? (
