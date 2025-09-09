@@ -11,6 +11,8 @@ import { useStore } from "@/contexts/StoreContext";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { invokePSAScrapeV2 } from "@/lib/psaServiceV2";
 import { normalizePSAData } from "@/lib/psaNormalization";
+import { invokeCGCLookup, normalizeCGCForIntake } from "@/lib/cgcService";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { StoreLocationSelector } from "@/components/StoreLocationSelector";
 import { parseFunctionError } from "@/lib/fns";
 import { useLogger } from "@/hooks/useLogger";
@@ -40,7 +42,8 @@ const parsePSAGrade = (gradeStr: string): { numeric: string; original: string; h
 
 export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => {
   const logger = useLogger();
-  const [psaCert, setPsaCert] = useState("");
+  const [gradingCompany, setGradingCompany] = useState<'PSA' | 'CGC'>('PSA');
+  const [certInput, setCertInput] = useState("");
   const [fetching, setFetching] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [cardData, setCardData] = useState<any>(null);
@@ -76,14 +79,14 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
     error?: string;
   } | null>(null);
 
-  const handleFetchPSA = async () => {
-    if (!psaCert.trim()) {
-      toast.error("Please enter a PSA certificate number");
+  const handleFetchCard = async () => {
+    if (!certInput.trim()) {
+      toast.error(`Please enter a ${gradingCompany} certificate number${gradingCompany === 'CGC' ? ' or barcode' : ''}`);
       return;
     }
 
-    // Validate certificate number format (8-9 digits)
-    if (!/^\d{8,9}$/.test(psaCert.trim())) {
+    // Validate certificate number format based on company
+    if (gradingCompany === 'PSA' && !/^\d{8,9}$/.test(certInput.trim())) {
       toast.error("PSA certificate numbers must be 8-9 digits");
       return;
     }
@@ -92,38 +95,63 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
     setAbortController(controller);
     setFetching(true);
     
-    logger.logInfo("PSA fetch started", { certNumber: psaCert.trim() });
+    logger.logInfo(`${gradingCompany} fetch started`, { certNumber: certInput.trim() });
     
     try {
-      // Use the enhanced PSA service with both markdown and HTML
-      const data = await invokePSAScrapeV2({ cert: psaCert.trim(), forceRefresh: true, includeRaw: true }, 45000);
+      let data: any;
+      
+      if (gradingCompany === 'PSA') {
+        // Use the enhanced PSA service
+        data = await invokePSAScrapeV2({ cert: certInput.trim(), forceRefresh: true, includeRaw: true }, 45000);
+      } else {
+        // Use CGC service
+        const cgcResult = await invokeCGCLookup({ 
+          certNumber: /^\d+$/.test(certInput.trim()) ? certInput.trim() : undefined,
+          barcode: !/^\d+$/.test(certInput.trim()) ? certInput.trim() : undefined,
+          include: 'pop,images'
+        }, 45000);
+        
+        if (cgcResult.ok && cgcResult.data) {
+          data = { ok: true, ...normalizeCGCForIntake(cgcResult.data) };
+        } else {
+          data = { ok: false, error: cgcResult.error || 'CGC lookup failed' };
+        }
+      }
 
       if (data && data.ok) {
-        console.log('PSA data received successfully:', JSON.stringify(data, null, 2));
+        console.log(`${gradingCompany} data received successfully:`, JSON.stringify(data, null, 2));
         
-        // Normalize the data to handle older cert formats
-        const normalizedData = normalizePSAData(data);
+        let normalizedData: any;
+        
+        if (gradingCompany === 'PSA') {
+          // Normalize PSA data
+          normalizedData = normalizePSAData(data);
+        } else {
+          // CGC data is already normalized
+          normalizedData = data;
+        }
+        
         setCardData(normalizedData);
         
         // Parse the grade to extract numeric value for the number input
-        const gradeInfo = parsePSAGrade(normalizedData.grade || "");
+        const gradeInfo = parsePSAGrade(normalizedData.grade || normalizedData.gradeNumeric || "");
         
         const newFormData = {
           brandTitle: normalizedData.brandTitle || "",
           subject: normalizedData.subject || "",
           category: normalizedData.category || "",
-          variant: normalizedData.varietyPedigree || "",
+          variant: normalizedData.variant || normalizedData.varietyPedigree || "",
           cardNumber: normalizedData.cardNumber || "",
           year: normalizedData.year || "",
-          grade: gradeInfo.numeric,
-          game: normalizedData.gameSport || 
+          grade: gradeInfo.numeric || normalizedData.gradeNumeric || "",
+          game: normalizedData.game || normalizedData.gameSport || 
                 (normalizedData.category?.toLowerCase().includes('pokemon') ? 'pokemon' : 
                  normalizedData.category?.toLowerCase().includes('magic') ? 'mtg' : ""),
-          certNumber: normalizedData.certNumber || psaCert.trim(),
+          certNumber: normalizedData.certNumber || certInput.trim(),
           price: "",
           cost: "",
           quantity: 1,
-          psaEstimate: ""
+          psaEstimate: normalizedData.psaEstimate || ""
         };
 
         setFormData(newFormData);
@@ -135,16 +163,16 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         setPopulatedFieldsCount(populatedCount);
 
         if (normalizedData.isValid) {
-          toast.success(`PSA certificate verified - ${populatedCount} fields populated`);
-          logger.logInfo("PSA fetch successful", { 
-            certNumber: psaCert.trim(), 
+          toast.success(`${gradingCompany} certificate verified - ${populatedCount} fields populated`);
+          logger.logInfo(`${gradingCompany} fetch successful`, { 
+            certNumber: certInput.trim(), 
             fieldsPopulated: populatedCount,
             cardData: { subject: normalizedData.subject, grade: normalizedData.grade }
           });
         } else {
-          toast.warning(`PSA certificate found but may have incomplete data - ${populatedCount} fields populated`);
-          logger.logWarn("PSA fetch returned incomplete data", { 
-            certNumber: psaCert.trim(), 
+          toast.warning(`${gradingCompany} certificate found but may have incomplete data - ${populatedCount} fields populated`);
+          logger.logWarn(`${gradingCompany} fetch returned incomplete data`, { 
+            certNumber: certInput.trim(), 
             fieldsPopulated: populatedCount 
           });
         }
@@ -154,20 +182,32 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
           toast.info(`Grade "${gradeInfo.original}" converted to numeric: ${gradeInfo.numeric}`);
         }
       } else {
-        const errorMsg = data?.error || 'Invalid response from PSA scraping service';
-        console.error('PSA fetch failed:', errorMsg);
-        logger.logError("PSA fetch failed", new Error(errorMsg), { certNumber: psaCert.trim() });
-        toast.error(`PSA fetch failed: ${errorMsg}`);
+        const errorMsg = data?.error || `Invalid response from ${gradingCompany} service`;
+        console.error(`${gradingCompany} fetch failed:`, errorMsg);
+        logger.logError(`${gradingCompany} fetch failed`, new Error(errorMsg), { certNumber: certInput.trim() });
+        
+        // Show appropriate error message based on grading company
+        if (gradingCompany === 'CGC') {
+          if (errorMsg.includes('404') || errorMsg.includes('Not found')) {
+            toast.error("CGC certification not found.");
+          } else if (errorMsg.includes('401') || errorMsg.includes('403') || errorMsg.includes('Unauthorized') || errorMsg.includes('Forbidden')) {
+            toast.error("CGC token expired or invalid—please check credentials.");
+          } else {
+            toast.error("CGC lookup failed.");
+          }
+        } else {
+          toast.error(`PSA fetch failed: ${errorMsg}`);
+        }
       }
     } catch (error) {
-      console.error('PSA fetch error:', error);
-      logger.logError("PSA fetch error", error instanceof Error ? error : new Error(error?.message || 'Unknown error'), { certNumber: psaCert.trim() });
+      console.error(`${gradingCompany} fetch error:`, error);
+      logger.logError(`${gradingCompany} fetch error`, error instanceof Error ? error : new Error(error?.message || 'Unknown error'), { certNumber: certInput.trim() });
       if (error?.message?.includes('timed out')) {
-        toast.error("PSA fetch timed out - try again");
+        toast.error(`${gradingCompany} fetch timed out - try again`);
       } else if (error?.message?.includes('cancelled')) {
-        toast.info("PSA fetch cancelled");
+        toast.info(`${gradingCompany} fetch cancelled`);
       } else {
-        toast.error(error instanceof Error ? error.message : 'Failed to fetch PSA data');
+        toast.error(error instanceof Error ? error.message : `Failed to fetch ${gradingCompany} data`);
       }
     } finally {
       setFetching(false);
@@ -180,7 +220,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
       abortController.abort();
       setAbortController(null);
       setFetching(false);
-      toast.info("PSA fetch cancelled");
+      toast.info(`${gradingCompany} fetch cancelled`);
     }
   };
 
@@ -265,14 +305,14 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         grade_in: formData.grade,
         price_in: formData.price ? parseFloat(formData.price) : 0,
         cost_in: formData.cost ? parseFloat(formData.cost) : null,
-        sku_in: formData.certNumber, // Use cert number directly as SKU for PSA cards
-        source_provider_in: 'psa',
+        sku_in: formData.certNumber, // Use cert number directly as SKU for graded cards
+        source_provider_in: gradingCompany.toLowerCase(),
         catalog_snapshot_in: cardData,
         pricing_snapshot_in: {
           price: formData.price ? parseFloat(formData.price) : 0,
           captured_at: new Date().toISOString()
         },
-        processing_notes_in: `Single graded card intake - PSA cert ${formData.certNumber}`
+        processing_notes_in: `Single graded card intake - ${gradingCompany} cert ${formData.certNumber}`
       };
 
       // Check exact access before insert
@@ -293,6 +333,33 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
       });
       
       const { data, error } = await Promise.race([rpcPromise, timeoutPromise]) as any;
+
+      // If successful, also update the grading company specific fields
+      if (!error && data) {
+        const responseData = Array.isArray(data) ? data[0] : data;
+        
+        if (responseData?.id && gradingCompany === 'CGC') {
+          // Update with CGC-specific fields
+          await supabase
+            .from('intake_items')
+            .update({
+              grading_company: 'CGC',
+              cgc_cert: formData.certNumber,
+              cgc_snapshot: cardData
+            })
+            .eq('id', responseData.id);
+        } else if (responseData?.id && gradingCompany === 'PSA') {
+          // Update with PSA-specific fields (ensure grading_company is set)
+          await supabase
+            .from('intake_items')
+            .update({
+              grading_company: 'PSA',
+              psa_cert: formData.certNumber,
+              psa_snapshot: cardData
+            })
+            .eq('id', responseData.id);
+        }
+      }
 
       const elapsed = Date.now() - startTime;
       console.log(`⏰ Database operation completed in ${elapsed}ms`);
@@ -346,7 +413,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         toast.success(`Added to batch ${lotNumber}!`);
         
         // Reset form on success
-        setPsaCert("");
+        setCertInput("");
         setCardData(null);
         setFormData({
           brandTitle: "",
@@ -561,30 +628,47 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
             )}
           </div>
         )}
-        {/* PSA Cert Input */}
+        
+        {/* Grading Company Selector */}
+        <div className="space-y-3">
+          <Label htmlFor="grading-company">Grading Company</Label>
+          <Select value={gradingCompany} onValueChange={(value: 'PSA' | 'CGC') => setGradingCompany(value)}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="PSA">PSA</SelectItem>
+              <SelectItem value="CGC">CGC</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Certificate Input */}
         <div className="flex gap-3 items-end">
           <div className="flex-1">
-            <Label htmlFor="psa-cert">Enter PSA Cert # to fetch details</Label>
+            <Label htmlFor="cert-input">
+              {gradingCompany === 'CGC' ? 'CGC Cert # or Barcode' : 'PSA Cert #'} to fetch details
+            </Label>
             <Input
-              id="psa-cert"
-              placeholder="e.g., 12345678"
-              value={psaCert}
-              onChange={(e) => setPsaCert(e.target.value)}
+              id="cert-input"
+              placeholder={gradingCompany === 'CGC' ? 'e.g., 12345678 or ABC123/DEF' : 'e.g., 12345678'}
+              value={certInput}
+              onChange={(e) => setCertInput(e.target.value)}
               disabled={fetching}
-              onKeyDown={(e) => e.key === 'Enter' && !fetching && handleFetchPSA()}
+              onKeyDown={(e) => e.key === 'Enter' && !fetching && handleFetchCard()}
             />
             <p className="text-xs text-muted-foreground mt-1">
-              SKU and barcode will be set to this certificate number on Shopify.
+              SKU and barcode will be set to this {gradingCompany === 'CGC' ? 'certificate number' : 'certificate number'} on Shopify.
             </p>
           </div>
           
           {!fetching ? (
             <Button 
-              onClick={handleFetchPSA} 
-              disabled={!psaCert.trim()}
+              onClick={handleFetchCard} 
+              disabled={!certInput.trim()}
               className="px-8"
             >
-              Fetch PSA
+              Fetch {gradingCompany}
             </Button>
           ) : (
             <div className="flex gap-2">

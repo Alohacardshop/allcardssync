@@ -133,12 +133,15 @@ export type Database = {
           card_number: string | null
           catalog_snapshot: Json | null
           category: string | null
+          cgc_cert: string | null
+          cgc_snapshot: Json | null
           cost: number | null
           created_at: string
           created_by: string | null
           deleted_at: string | null
           deleted_reason: string | null
           grade: string | null
+          grading_company: string
           grading_data: Json | null
           id: string
           image_urls: Json | null
@@ -185,12 +188,15 @@ export type Database = {
           card_number?: string | null
           catalog_snapshot?: Json | null
           category?: string | null
+          cgc_cert?: string | null
+          cgc_snapshot?: Json | null
           cost?: number | null
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
           deleted_reason?: string | null
           grade?: string | null
+          grading_company?: string
           grading_data?: Json | null
           id?: string
           image_urls?: Json | null
@@ -237,12 +243,15 @@ export type Database = {
           card_number?: string | null
           catalog_snapshot?: Json | null
           category?: string | null
+          cgc_cert?: string | null
+          cgc_snapshot?: Json | null
           cost?: number | null
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
           deleted_reason?: string | null
           grade?: string | null
+          grading_company?: string
           grading_data?: Json | null
           id?: string
           image_urls?: Json | null
@@ -1570,12 +1579,15 @@ export type Database = {
           card_number: string | null
           catalog_snapshot: Json | null
           category: string | null
+          cgc_cert: string | null
+          cgc_snapshot: Json | null
           cost: number | null
           created_at: string
           created_by: string | null
           deleted_at: string | null
           deleted_reason: string | null
           grade: string | null
+          grading_company: string
           grading_data: Json | null
           id: string
           image_urls: Json | null
