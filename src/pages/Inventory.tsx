@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Trash2, Package, Calendar, DollarSign, Eye, EyeOff, FileText, Tag, Printer, ExternalLink, RotateCcw, Loader2, Upload, Home } from 'lucide-react';
+import { Trash2, Package, Calendar, DollarSign, Eye, EyeOff, FileText, Tag, Printer, ExternalLink, RotateCcw, Loader2, Upload, Home, X, CheckSquare, Square } from 'lucide-react';
 import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -56,6 +56,8 @@ const Inventory = () => {
   }>>([]);
   const [syncingAll, setSyncingAll] = useState(false);
   const [printingItem, setPrintingItem] = useState<string | null>(null);
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   
   const { printPNG, selectedPrinter } = usePrintNode();
   const { selectedStore, selectedLocation } = useStore();
@@ -310,6 +312,101 @@ const Inventory = () => {
     setShowRemovalDialog(true);
   };
 
+  const toggleItemSelection = (itemId: string) => {
+    const newSelected = new Set(selectedItems);
+    if (newSelected.has(itemId)) {
+      newSelected.delete(itemId);
+    } else {
+      newSelected.add(itemId);
+    }
+    setSelectedItems(newSelected);
+  };
+
+  const selectAllVisible = () => {
+    const allVisibleIds = new Set(filteredItems.map(item => item.id));
+    setSelectedItems(allVisibleIds);
+  };
+
+  const clearSelection = () => {
+    setSelectedItems(new Set());
+  };
+
+  const handleBulkRemoval = () => {
+    const selectedItemsArray = filteredItems.filter(item => selectedItems.has(item.id));
+    setSelectedItemForRemoval(selectedItemsArray);
+    setShowRemovalDialog(true);
+  };
+
+  const handleDeleteAllVisibleGraded = () => {
+    const gradedItems = filteredItems.filter(item => 
+      item.type === 'Graded' && (item.shopify_product_id || item.sku)
+    );
+    if (gradedItems.length === 0) {
+      toast.error('No graded items found to delete');
+      return;
+    }
+    setSelectedItemForRemoval(gradedItems);
+    setShowRemovalDialog(true);
+  };
+
+  const onRemovalConfirm = async (mode: 'auto' | 'graded' | 'raw') => {
+    setBulkDeleting(true);
+    try {
+      const itemsToProcess = Array.isArray(selectedItemForRemoval) 
+        ? selectedItemForRemoval 
+        : [selectedItemForRemoval];
+
+      let successCount = 0;
+      let errorCount = 0;
+
+      // Process items in batches
+      const batchSize = 3;
+      for (let i = 0; i < itemsToProcess.length; i += batchSize) {
+        const batch = itemsToProcess.slice(i, i + batchSize);
+        
+        await Promise.all(
+          batch.map(async (item) => {
+            try {
+              const { error } = await supabase.functions.invoke('shopify-remove-or-zero', {
+                body: {
+                  storeKey: item.store_key,
+                  mode,
+                  productId: item.shopify_product_id,
+                  sku: item.sku,
+                  locationGid: item.shopify_location_gid
+                }
+              });
+
+              if (error) throw error;
+              successCount++;
+            } catch (error) {
+              console.error(`Removal failed for ${item.sku}:`, error);
+              errorCount++;
+            }
+          })
+        );
+
+        // Small delay between batches
+        if (i + batchSize < itemsToProcess.length) {
+          await new Promise(resolve => setTimeout(resolve, 200));
+        }
+      }
+
+      toast.success(`Removal completed: ${successCount} successful, ${errorCount} errors`);
+      
+      // Clear selection and refresh
+      setSelectedItems(new Set());
+      fetchItems();
+    } catch (error) {
+      console.error('Bulk removal failed:', error);
+      toast.error('Failed to process removals');
+    } finally {
+      setBulkDeleting(false);
+      setShowRemovalDialog(false);
+      setSelectedItemForRemoval(null);
+    }
+  };
+
   const toggleExpanded = (itemId: string) => {
     const newExpanded = new Set(expandedItems);
     if (newExpanded.has(itemId)) {
@@ -358,24 +455,41 @@ const Inventory = () => {
               <div className="flex items-center gap-2">
                 <Package className="w-5 h-5" />
                 Inventory ({filteredItems.length} items)
-              </div>
-              <Button
-                onClick={syncAllVisible}
-                disabled={syncingAll || filteredItems.length === 0}
-                className="ml-auto"
-              >
-                {syncingAll ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Syncing...
-                  </>
-                ) : (
-                  <>
-                    <Upload className="w-4 h-4 mr-2" />
-                    Sync All ({filteredItems.length})
-                  </>
+                {selectedItems.size > 0 && (
+                  <Badge variant="secondary">
+                    {selectedItems.size} selected
+                  </Badge>
                 )}
-              </Button>
+              </div>
+              <div className="flex items-center gap-2 ml-auto">
+                {filteredItems.filter(item => item.type === 'Graded' && (item.shopify_product_id || item.sku)).length > 0 && (
+                  <Button
+                    onClick={handleDeleteAllVisibleGraded}
+                    variant="destructive"
+                    size="sm"
+                    disabled={bulkDeleting}
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Delete All Graded ({filteredItems.filter(item => item.type === 'Graded' && (item.shopify_product_id || item.sku)).length})
+                  </Button>
+                )}
+                <Button
+                  onClick={syncAllVisible}
+                  disabled={syncingAll || filteredItems.length === 0}
+                >
+                  {syncingAll ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Syncing...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-4 h-4 mr-2" />
+                      Sync All ({filteredItems.length})
+                    </>
+                  )}
+                </Button>
+              </div>
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -436,6 +550,63 @@ const Inventory = () => {
                 </TabsList>
                 
                 <TabsContent value={statusFilter} className="mt-4">
+                  {/* Bulk Selection Toolbar */}
+                  {selectedItems.size > 0 && (
+                    <Card className="bg-muted/50 border-primary/20">
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-4">
+                            <span className="text-sm font-medium">
+                              {selectedItems.size} item{selectedItems.size !== 1 ? 's' : ''} selected
+                            </span>
+                            <Button
+                              onClick={clearSelection}
+                              variant="ghost"
+                              size="sm"
+                            >
+                              <X className="w-4 h-4 mr-2" />
+                              Clear Selection
+                            </Button>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              onClick={handleBulkRemoval}
+                              variant="destructive"
+                              size="sm"
+                              disabled={bulkDeleting}
+                            >
+                              {bulkDeleting ? (
+                                <>
+                                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                  Processing...
+                                </>
+                              ) : (
+                                <>
+                                  <Trash2 className="w-4 h-4 mr-2" />
+                                  Delete as Graded
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Select All Controls */}
+                  {filteredItems.length > 0 && (
+                    <div className="flex items-center gap-2 py-2">
+                      <Button
+                        onClick={selectAllVisible}
+                        variant="ghost"
+                        size="sm"
+                        disabled={selectedItems.size === filteredItems.length}
+                      >
+                        <CheckSquare className="w-4 h-4 mr-2" />
+                        Select All ({filteredItems.length})
+                      </Button>
+                    </div>
+                  )}
 
                   <div className="space-y-4">
                     {filteredItems.map((item) => (
@@ -445,101 +616,117 @@ const Inventory = () => {
                       )}>
                         <CardContent className="p-4">
                           <div className="flex items-start justify-between">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-2">
-                                <Badge variant="outline" className="font-mono text-xs">
-                                  {item.sku || 'No SKU'}
-                                </Badge>
-                                {item.grade && (
-                                  <Badge variant="secondary">
-                                    {item.grading_company || 'PSA'} {item.grade}
+                            <div className="flex items-start gap-3 flex-1 min-w-0">
+                              {/* Selection Checkbox */}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0 mt-1"
+                                onClick={() => toggleItemSelection(item.id)}
+                              >
+                                {selectedItems.has(item.id) ? (
+                                  <CheckSquare className="h-4 w-4 text-primary" />
+                                ) : (
+                                  <Square className="h-4 w-4" />
+                                )}
+                              </Button>
+                              
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <Badge variant="outline" className="font-mono text-xs">
+                                    {item.sku || 'No SKU'}
                                   </Badge>
-                                )}
-                                <Badge variant="outline">
-                                  Qty: {item.quantity || 0}
-                                </Badge>
-                                {item.deleted_at && (
-                                  <Badge variant="destructive">Deleted</Badge>
-                                )}
-                                {/* C) Show sold badge when sold */}
-                                {item.sold_at && (
-                                  <Badge variant="secondary">Sold</Badge>
-                                )}
-                              </div>
-
-                              <h3 className="font-medium text-lg mb-1">
-                                {[
-                                  item.year,
-                                  item.brand_title,
-                                  item.card_number ? `#${item.card_number}` : null,
-                                  item.subject,
-                                  item.variant
-                                ].filter(Boolean).join(' ')}
-                              </h3>
-
-                              <div className="flex items-center gap-4 text-sm text-muted-foreground mb-2">
-                                <div className="flex items-center gap-1">
-                                  <DollarSign className="w-4 h-4" />
-                                  ${item.price || '0'}
+                                  {item.grade && (
+                                    <Badge variant="secondary">
+                                      {item.grading_company || 'PSA'} {item.grade}
+                                    </Badge>
+                                  )}
+                                  <Badge variant="outline">
+                                    Qty: {item.quantity || 0}
+                                  </Badge>
+                                  {item.deleted_at && (
+                                    <Badge variant="destructive">Deleted</Badge>
+                                  )}
+                                  {/* C) Show sold badge when sold */}
+                                  {item.sold_at && (
+                                    <Badge variant="secondary">Sold</Badge>
+                                  )}
                                 </div>
-                                <div className="flex items-center gap-1">
-                                  <Calendar className="w-4 h-4" />
-                                  {new Date(item.created_at).toLocaleDateString()}
-                                </div>
-                                <div className="flex items-center gap-1">
-                                  <Tag className="w-4 h-4" />
-                                  {item.category || 'Uncategorized'}
-                                </div>
-                              </div>
 
-                              <div className="flex items-center gap-2 mb-2">
-                                <TooltipProvider>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <Badge 
-                                        variant={
-                                          item.shopify_sync_status === 'synced' ? 'default' : 
-                                          item.shopify_sync_status === 'error' ? 'destructive' : 
-                                          'secondary'
-                                        }
-                                      >
-                                        {item.shopify_sync_status || 'pending'}
-                                      </Badge>
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                      {item.shopify_sync_status === 'error' && item.last_shopify_sync_error ? (
-                                        <div className="max-w-xs">
-                                          <p className="font-medium">Sync Error:</p>
-                                          <p className="text-sm">{item.last_shopify_sync_error}</p>
-                                        </div>
-                                      ) : item.shopify_sync_status === 'pending' ? (
-                                        'Auto sync runs when moved to inventory. In manual mode, press Sync.'
-                                      ) : item.shopify_sync_status === 'synced' && item.last_shopify_synced_at ? (
-                                        `Synced ${formatDistanceToNow(new Date(item.last_shopify_synced_at), { addSuffix: true })}`
-                                      ) : (
-                                        'Sync status'
-                                      )}
-                                    </TooltipContent>
-                                  </Tooltip>
-                                </TooltipProvider>
-                                
-                                {/* F) Retry button for error status */}
-                                {item.shopify_sync_status === 'error' && (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => retrySync(item)}
-                                    className="h-6 w-6 p-0"
-                                  >
-                                    <RotateCcw className="h-3 w-3" />
-                                  </Button>
-                                )}
-                                
-                                {item.shopify_sync_status === 'synced' && item.last_shopify_synced_at && (
-                                  <span className="text-xs text-muted-foreground">
-                                    {formatDistanceToNow(new Date(item.last_shopify_synced_at), { addSuffix: true })}
-                                  </span>
-                                )}
+                                <h3 className="font-medium text-lg mb-1">
+                                  {[
+                                    item.year,
+                                    item.brand_title,
+                                    item.card_number ? `#${item.card_number}` : null,
+                                    item.subject,
+                                    item.variant
+                                  ].filter(Boolean).join(' ')}
+                                </h3>
+
+                                <div className="flex items-center gap-4 text-sm text-muted-foreground mb-2">
+                                  <div className="flex items-center gap-1">
+                                    <DollarSign className="w-4 h-4" />
+                                    ${item.price || '0'}
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <Calendar className="w-4 h-4" />
+                                    {new Date(item.created_at).toLocaleDateString()}
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <Tag className="w-4 h-4" />
+                                    {item.category || 'Uncategorized'}
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-2 mb-2">
+                                  <TooltipProvider>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Badge 
+                                          variant={
+                                            item.shopify_sync_status === 'synced' ? 'default' : 
+                                            item.shopify_sync_status === 'error' ? 'destructive' : 
+                                            'secondary'
+                                          }
+                                        >
+                                          {item.shopify_sync_status || 'pending'}
+                                        </Badge>
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        {item.shopify_sync_status === 'error' && item.last_shopify_sync_error ? (
+                                          <div className="max-w-xs">
+                                            <p className="font-medium">Sync Error:</p>
+                                            <p className="text-sm">{item.last_shopify_sync_error}</p>
+                                          </div>
+                                        ) : item.shopify_sync_status === 'pending' ? (
+                                          'Auto sync runs when moved to inventory. In manual mode, press Sync.'
+                                        ) : item.shopify_sync_status === 'synced' && item.last_shopify_synced_at ? (
+                                          `Synced ${formatDistanceToNow(new Date(item.last_shopify_synced_at), { addSuffix: true })}`
+                                        ) : (
+                                          'Sync status'
+                                        )}
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                  
+                                  {/* F) Retry button for error status */}
+                                  {item.shopify_sync_status === 'error' && (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => retrySync(item)}
+                                      className="h-6 w-6 p-0"
+                                    >
+                                      <RotateCcw className="h-3 w-3" />
+                                    </Button>
+                                  )}
+                                  
+                                  {item.shopify_sync_status === 'synced' && item.last_shopify_synced_at && (
+                                    <span className="text-xs text-muted-foreground">
+                                      {formatDistanceToNow(new Date(item.last_shopify_synced_at), { addSuffix: true })}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </div>
 
@@ -571,15 +758,40 @@ const Inventory = () => {
                                   Sync
                                 </Button>
                                 {!item.deleted_at && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleRemoveFromShopify(item)}
-                                  disabled={!item.sku && !item.shopify_product_id}
-                                >
-                                  <Trash2 className="w-4 h-4 mr-1" />
-                                  Remove
-                                </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleRemoveFromShopify(item)}
+                                    disabled={!item.sku && !item.shopify_product_id}
+                                  >
+                                    <Trash2 className="w-4 h-4 mr-1" />
+                                    Remove
+                                  </Button>
+                                )}
+
+                                {/* Quick Delete as Graded for individual items */}
+                                {item.type === 'Graded' && (item.shopify_product_id || item.sku) && (
+                                  <TooltipProvider>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Button
+                                          variant="destructive"
+                                          size="sm"
+                                          onClick={() => {
+                                            setSelectedItemForRemoval([item]);
+                                            setShowRemovalDialog(true);
+                                          }}
+                                          className="h-8"
+                                          disabled={bulkDeleting}
+                                        >
+                                          <Trash2 className="w-3 h-3" />
+                                        </Button>
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        <p>Delete as Graded</p>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
                                 )}
                               </div>
 
@@ -598,62 +810,43 @@ const Inventory = () => {
                           </div>
 
                           {expandedItems.has(item.id) && (
-                            <div className="mt-4 pt-4 border-t">
-                              <div className="grid grid-cols-2 gap-4">
+                            <div className="mt-4 pt-4 border-t space-y-3">
+                              <div className="grid grid-cols-2 gap-4 text-sm">
                                 <div>
-                                  <p className="text-sm font-medium text-muted-foreground">Price</p>
-                                  <p>${item.price}</p>
+                                  <span className="font-medium">Cost:</span> ${item.cost || '0'}
                                 </div>
                                 <div>
-                                  <p className="text-sm font-medium text-muted-foreground">Cost</p>
-                                  <p>${item.cost || 'N/A'}</p>
+                                  <span className="font-medium">Created:</span> {new Date(item.created_at).toLocaleString()}
                                 </div>
                                 <div>
-                                  <p className="text-sm font-medium text-muted-foreground">Created</p>
-                                  <p>{new Date(item.created_at).toLocaleDateString()}</p>
+                                  <span className="font-medium">Type:</span> {item.type || 'Raw'}
                                 </div>
-                                <div>
-                                  <p className="text-sm font-medium text-muted-foreground">Updated</p>
-                                  <p>{new Date(item.updated_at).toLocaleDateString()}</p>
-                                </div>
-                                {item.removed_from_batch_at && (
+                                {item.printed_at && (
                                   <div>
-                                    <p className="text-sm font-medium text-muted-foreground">Moved to Inventory</p>
-                                    <p>{new Date(item.removed_from_batch_at).toLocaleDateString()}</p>
+                                    <span className="font-medium">Printed:</span> {formatDistanceToNow(new Date(item.printed_at), { addSuffix: true })}
                                   </div>
                                 )}
-                                {/* B) Only show printed info for non-graded items */}
-                                {item.type !== 'Graded' && item.printed_at && (
+                                {item.pushed_at && (
                                   <div>
-                                    <p className="text-sm font-medium text-muted-foreground">Printed</p>
-                                    <p>{new Date(item.printed_at).toLocaleDateString()}</p>
+                                    <span className="font-medium">Pushed:</span> {formatDistanceToNow(new Date(item.pushed_at), { addSuffix: true })}
                                   </div>
                                 )}
-                                {/* C) Show sold information when present */}
                                 {item.sold_at && (
-                                  <>
-                                    <div>
-                                      <p className="text-sm font-medium text-muted-foreground">Sold Price</p>
-                                      <p>${item.sold_price || 'N/A'}</p>
-                                    </div>
-                                    <div>
-                                      <p className="text-sm font-medium text-muted-foreground">Sold Date</p>
-                                      <p>{new Date(item.sold_at).toLocaleDateString()}</p>
-                                    </div>
-                                    {item.shopify_order_id && (
-                                      <div className="col-span-2">
-                                        <p className="text-sm font-medium text-muted-foreground">Shopify Order</p>
-                                        <p className="text-sm text-blue-600">#{item.shopify_order_id}</p>
-                                      </div>
-                                    )}
-                                  </>
+                                  <div>
+                                    <span className="font-medium">Sold:</span> {formatDistanceToNow(new Date(item.sold_at), { addSuffix: true })}
+                                  </div>
+                                )}
+                                {item.sold_price && (
+                                  <div>
+                                    <span className="font-medium">Sold Price:</span> ${item.sold_price}
+                                  </div>
                                 )}
                               </div>
-
+                              
                               {item.processing_notes && (
-                                <div className="mt-4">
-                                  <p className="text-sm font-medium text-muted-foreground mb-1">Processing Notes</p>
-                                  <p className="text-sm bg-muted p-2 rounded">{item.processing_notes}</p>
+                                <div>
+                                  <span className="font-medium text-sm">Notes:</span>
+                                  <p className="text-sm text-muted-foreground mt-1">{item.processing_notes}</p>
                                 </div>
                               )}
                             </div>
@@ -664,7 +857,7 @@ const Inventory = () => {
 
                     {filteredItems.length === 0 && (
                       <div className="text-center py-8 text-muted-foreground">
-                        No inventory items found
+                        No inventory items found matching your filters.
                       </div>
                     )}
                   </div>
@@ -674,52 +867,16 @@ const Inventory = () => {
           </CardContent>
         </Card>
 
-        {showRemovalDialog && selectedItemForRemoval && (
-          <ShopifyRemovalDialog
-            isOpen={showRemovalDialog}
-            loading={isRemoving}
-            onClose={() => {
-              setShowRemovalDialog(false);
-              setSelectedItemForRemoval(null);
-            }}
-            items={[selectedItemForRemoval]}
-            onConfirm={async (mode) => {
-              setIsRemoving(true);
-              try {
-                const { data, error } = await supabase.functions.invoke('shopify-remove-or-zero', {
-                  body: {
-                    storeKey: selectedItemForRemoval.store_key,
-                    mode: mode,
-                    sku: selectedItemForRemoval.sku,
-                    productId: selectedItemForRemoval.shopify_product_id,
-                    locationGid: selectedItemForRemoval.shopify_location_gid
-                  }
-                });
-
-                if (error) throw error;
-                
-                console.debug('Shopify removal response:', data);
-                
-                const actionText = data?.mode === 'graded' ? 'deleted from' : 'zeroed in';
-                toast.success(`Item ${actionText} Shopify (mode: ${data?.mode})`);
-                
-                setShowRemovalDialog(false);
-                setSelectedItemForRemoval(null);
-                fetchItems();
-              } catch (error: any) {
-                console.error('Shopify removal failed:', error);
-                const errorMessage = error?.message || 'Failed to remove item from Shopify';
-                if (errorMessage.includes('Could not resolve product ID')) {
-                  toast.error('Item not found in Shopify. It may need to be synced first.');
-                } else {
-                  toast.error(errorMessage);
-                }
-              } finally {
-                setIsRemoving(false);
-              }
-            }}
-          />
-        )}
+        <ShopifyRemovalDialog
+          isOpen={showRemovalDialog}
+          onClose={() => {
+            setShowRemovalDialog(false);
+            setSelectedItemForRemoval(null);
+          }}
+          onConfirm={onRemovalConfirm}
+          items={Array.isArray(selectedItemForRemoval) ? selectedItemForRemoval : (selectedItemForRemoval ? [selectedItemForRemoval] : [])}
+          loading={bulkDeleting}
+        />
       </div>
     </>
   );
