@@ -231,22 +231,33 @@ Deno.serve(async (req) => {
           const allocateFromRow = Math.min(remainingQty, availableInRow);
           const newQty = availableInRow - allocateFromRow;
 
-          // Update the row
-          const { error: updateError } = await supabase
-            .from("intake_items")
-            .update({ quantity: newQty })
-            .eq("id", row.id);
+          // Execute the allocations
+          for (const allocation of allocations) {
+            const updateData: any = { quantity: allocation.newQuantity };
 
-          if (updateError) {
-            log.error("Failed to update intake item quantity", {
-              itemId: row.id,
-              sku,
-              originalQty: availableInRow,
-              attemptedDeduction: allocateFromRow,
-              error: updateError.message
-            });
-            throw updateError;
-          }
+            // C) Track sold information when quantity hits 0
+            if (allocation.newQuantity === 0) {
+              updateData.sold_price = parseFloat(lineItem.price) || 0;
+              updateData.sold_at = new Date().toISOString();
+              updateData.shopify_order_id = payload.id?.toString();
+              console.log(`Item ${allocation.itemId} fully sold - tracking sale info`);
+            }
+
+            const { error: updateError } = await supabase
+              .from("intake_items")
+              .update(updateData)
+              .eq("id", allocation.itemId);
+
+            if (updateError) {
+              console.error("Failed to update intake item quantity", {
+                itemId: allocation.itemId,
+                sku,
+                originalQty: allocation.originalQty,
+                attemptedDeduction: allocation.allocatedQty,
+                error: updateError.message
+              });
+              throw updateError;
+            }
 
           allocations.push({
             itemId: row.id,

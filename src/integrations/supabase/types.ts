@@ -167,11 +167,14 @@ export type Database = {
           removed_from_batch_at: string | null
           shopify_inventory_item_id: string | null
           shopify_location_gid: string | null
+          shopify_order_id: string | null
           shopify_product_id: string | null
           shopify_snapshot: Json | null
           shopify_sync_status: string | null
           shopify_variant_id: string | null
           sku: string | null
+          sold_at: string | null
+          sold_price: number | null
           source_payload: Json | null
           source_provider: string | null
           source_row_number: number | null
@@ -222,11 +225,14 @@ export type Database = {
           removed_from_batch_at?: string | null
           shopify_inventory_item_id?: string | null
           shopify_location_gid?: string | null
+          shopify_order_id?: string | null
           shopify_product_id?: string | null
           shopify_snapshot?: Json | null
           shopify_sync_status?: string | null
           shopify_variant_id?: string | null
           sku?: string | null
+          sold_at?: string | null
+          sold_price?: number | null
           source_payload?: Json | null
           source_provider?: string | null
           source_row_number?: number | null
@@ -277,11 +283,14 @@ export type Database = {
           removed_from_batch_at?: string | null
           shopify_inventory_item_id?: string | null
           shopify_location_gid?: string | null
+          shopify_order_id?: string | null
           shopify_product_id?: string | null
           shopify_snapshot?: Json | null
           shopify_sync_status?: string | null
           shopify_variant_id?: string | null
           sku?: string | null
+          sold_at?: string | null
+          sold_price?: number | null
           source_payload?: Json | null
           source_provider?: string | null
           source_row_number?: number | null
@@ -1613,11 +1622,14 @@ export type Database = {
           removed_from_batch_at: string | null
           shopify_inventory_item_id: string | null
           shopify_location_gid: string | null
+          shopify_order_id: string | null
           shopify_product_id: string | null
           shopify_snapshot: Json | null
           shopify_sync_status: string | null
           shopify_variant_id: string | null
           sku: string | null
+          sold_at: string | null
+          sold_price: number | null
           source_payload: Json | null
           source_provider: string | null
           source_row_number: number | null

@@ -24,7 +24,7 @@ export function InventorySyncSettings() {
 
       if (error) throw error;
       
-      setSyncMode(data?.key_value === 'auto' ? 'auto' : 'manual');
+      setSyncMode((data?.key_value as 'auto' | 'manual') || 'auto'); // A) fallback to auto
     } catch (error) {
       console.error('Failed to load sync mode:', error);
       toast.error('Failed to load inventory sync settings');

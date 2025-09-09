@@ -337,12 +337,39 @@ Deno.serve(async (req) => {
       total_ms: totalMs
     })
 
+    // D) Update sync status in database - mark as synced or error
+    const locationResults = syncResults;
+    const hasErrors = locationResults.some(r => r.outcome && !r.outcome.includes('success'));
+    const syncStatus = hasErrors ? 'error' : 'synced';
+    const errorMessage = hasErrors 
+      ? locationResults.filter(r => r.outcome && !r.outcome.includes('success')).map(r => r.outcome).join('; ')
+      : null;
+
+    try {
+      const { error: updateError } = await supabase
+        .from('intake_items')
+        .update({
+          shopify_sync_status: syncStatus,
+          last_shopify_synced_at: syncStatus === 'synced' ? new Date().toISOString() : undefined,
+          last_shopify_sync_error: errorMessage
+        })
+        .eq('sku', sku)
+        .eq('store_key', storeKey);
+
+      if (updateError) {
+        console.warn('Failed to update sync status:', updateError);
+      }
+    } catch (statusError) {
+      console.warn('Error updating sync status:', statusError);
+    }
+
     return new Response(
       JSON.stringify({ 
         success: true, 
         sku, 
         storeKey,
         results: syncResults,
+        syncStatus,
         stats: {
           rowsConsidered: locationBuckets.length,
           queryMs,
@@ -358,6 +385,21 @@ Deno.serve(async (req) => {
 
   } catch (error) {
     log.error('Inventory sync failed', { error: error.message, stack: error.stack })
+    
+    // D) Mark as error in database on exception
+    try {
+      await supabase
+        .from('intake_items')
+        .update({
+          shopify_sync_status: 'error',
+          last_shopify_sync_error: error.message || 'Internal server error'
+        })
+        .eq('sku', sku)
+        .eq('store_key', storeKey);
+    } catch (statusError) {
+      console.warn('Error updating sync status on exception:', statusError);
+    }
+
     return new Response(
       JSON.stringify({ error: 'Internal server error' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
