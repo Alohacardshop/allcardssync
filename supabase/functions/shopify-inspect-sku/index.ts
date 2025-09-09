@@ -1,65 +1,12 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { resolveShopifyConfig } from '../_shared/resolveShopifyConfig.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+};
 
-interface ShopifyCredentials {
-  domain: string;
-  accessToken: string;
-}
-
-async function getShopifyCredentials(supabase: any, storeKey: string): Promise<ShopifyCredentials> {
-  const upper = storeKey.toUpperCase();
-
-  // Prefer system_settings (align with other Shopify functions)
-  const domainKeys = [
-    `SHOPIFY_${upper}_STORE_DOMAIN`, // per-store
-    'SHOPIFY_STORE_DOMAIN'           // global fallback
-  ];
-  const tokenKeys = [
-    `SHOPIFY_${upper}_ACCESS_TOKEN`,           // current standard
-    `SHOPIFY_ADMIN_ACCESS_TOKEN_${upper}`,     // legacy pattern A
-    `SHOPIFY_${upper}_ADMIN_ACCESS_TOKEN`,     // legacy pattern B
-    'SHOPIFY_ADMIN_ACCESS_TOKEN',              // global fallback
-    `SHOPIFY_ACCESS_TOKEN_${upper}`            // legacy (our initial attempt)
-  ];
-
-  // Helper to read first non-empty value
-  const getSetting = async (keys: string[]) => {
-    for (const key of keys) {
-      const { data } = await supabase
-        .from('system_settings')
-        .select('key_value')
-        .eq('key_name', key)
-        .single();
-      const val = data?.key_value?.trim();
-      if (val) return val;
-    }
-    return undefined;
-  };
-
-  let domain = await getSetting(domainKeys);
-  let accessToken = await getSetting(tokenKeys);
-
-  // Fallback domain from shopify_stores table if not set in settings
-  if (!domain) {
-    const { data: storeData } = await supabase
-      .from('shopify_stores')
-      .select('domain')
-      .eq('key', storeKey)
-      .single();
-    domain = storeData?.domain;
-  }
-
-  if (!domain) throw new Error(`Store domain not found for store: ${storeKey}`);
-  if (!accessToken) throw new Error(`Access token not found for store: ${storeKey}`);
-
-  return { domain, accessToken };
-}
-
-async function inspectSkuInShopify(credentials: ShopifyCredentials, sku: string) {
+async function inspectSkuInShopify(domain: string, accessToken: string, sku: string) {
   const query = `
     query($query: String!) {
       productVariants(first: 5, query: $query) {
@@ -98,11 +45,11 @@ async function inspectSkuInShopify(credentials: ShopifyCredentials, sku: string)
     }
   `;
 
-  const response = await fetch(`https://${credentials.domain}/admin/api/2024-07/graphql.json`, {
+  const response = await fetch(`https://${domain}/admin/api/2024-07/graphql.json`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Shopify-Access-Token': credentials.accessToken,
+      'X-Shopify-Access-Token': accessToken,
     },
     body: JSON.stringify({
       query,
@@ -189,31 +136,84 @@ Deno.serve(async (req) => {
       });
     }
 
-    console.log(`Inspecting SKU ${sku} in store ${storeKey}`);
+    console.log(`shopify-inspect-sku: Inspecting SKU ${sku} in store ${storeKey}`);
 
-    // Get Shopify credentials
-    const credentials = await getShopifyCredentials(supabase, storeKey);
+    // Get Shopify credentials using shared resolver
+    const configResult = await resolveShopifyConfig(supabase, storeKey);
+    if (!configResult.ok) {
+      if (configResult.code === 'MISSING_DOMAIN' || configResult.code === 'MISSING_TOKEN') {
+        return new Response(JSON.stringify({
+          ok: false,
+          code: configResult.code,
+          message: configResult.message,
+          diagnostics: configResult.diagnostics
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+      
+      return new Response(JSON.stringify(configResult), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    const { credentials, diagnostics } = configResult;
     
     // Inspect SKU in Shopify
-    const variants = await inspectSkuInShopify(credentials, sku);
+    const variants = await inspectSkuInShopify(credentials.domain, credentials.accessToken, sku);
 
-    console.log(`Found ${variants.length} variants for SKU ${sku}`);
+    console.log(`shopify-inspect-sku: Found ${variants.length} variants for SKU ${sku}`);
+
+    if (variants.length === 0) {
+      return new Response(JSON.stringify({
+        ok: false,
+        code: 'NOT_FOUND',
+        message: `No variant with that SKU: ${sku}`,
+        diagnostics
+      }), {
+        status: 404,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Transform variants to match expected format
+    const transformedVariants = variants.map((variant: any) => ({
+      productId: variant.productId?.split('/').pop(),
+      variantId: variant.variantId?.split('/').pop(),
+      inventoryItemId: variant.inventoryItemId?.split('/').pop(),
+      productTitle: variant.productTitle,
+      productStatus: variant.productStatus,
+      published: !!variant.publishedAt,
+      locations: variant.inventoryLevels.map((level: any) => ({
+        gid: level.locationId,
+        name: level.locationName,
+        available: level.available
+      }))
+    }));
 
     return new Response(JSON.stringify({
-      success: true,
-      sku,
-      storeKey,
-      variantsFound: variants.length,
-      variants
+      ok: true,
+      variants: transformedVariants,
+      diagnostics
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
 
   } catch (error) {
-    console.error('Shopify inspect error:', error);
+    console.error('shopify-inspect-sku: Error -', error);
+    
+    // Map common HTTP errors
+    let code = 'SHOPIFY_ERROR';
+    if (error.message?.includes('401')) code = 'SHOPIFY_401';
+    else if (error.message?.includes('403')) code = 'SHOPIFY_403';
+    else if (error.message?.includes('404')) code = 'SHOPIFY_404';
+    
     return new Response(JSON.stringify({
-      success: false,
-      error: error.message
+      ok: false,
+      code,
+      message: error.message
     }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }

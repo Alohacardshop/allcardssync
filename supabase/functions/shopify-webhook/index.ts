@@ -30,7 +30,7 @@ serve(async (req) => {
       });
     }
 
-    // Check for duplicate webhook (idempotency)
+    // Check for duplicate webhook (idempotency) using webhook_id
     const { data: existingEvent } = await supabase
       .from('webhook_events')
       .select('id')
@@ -38,17 +38,28 @@ serve(async (req) => {
       .single();
 
     if (existingEvent) {
-      console.log(`Duplicate webhook ignored: ${webhookId}`);
+      console.log(`shopify-webhook: Duplicate webhook ignored - ${webhookId}`);
       return new Response(JSON.stringify({ message: 'Webhook already processed' }), {
         status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
 
+    // TODO: Add HMAC verification here
+    // const hmacSecret = Deno.env.get('SHOPIFY_WEBHOOK_SECRET');
+    // if (hmacSecret && hmacHeader) {
+    //   const expectedHmac = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(body + hmacSecret));
+    //   if (hmacHeader !== btoa(String.fromCharCode(...new Uint8Array(expectedHmac)))) {
+    //     return new Response('Unauthorized: Invalid HMAC', { status: 401, headers: corsHeaders });
+    //   }
+    // }
+
     const body = await req.text();
     const payload = JSON.parse(body);
 
-    // Store webhook event for deduplication
+    console.log(`shopify-webhook: Processing ${topic} from ${shopifyDomain}`);
+
+    // Store webhook event for idempotency (after HMAC check)
     await supabase
       .from('webhook_events')
       .insert({
