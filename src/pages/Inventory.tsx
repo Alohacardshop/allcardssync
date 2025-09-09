@@ -28,6 +28,8 @@ import { formatDistanceToNow } from 'date-fns';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { StoreLocationSelector } from '@/components/StoreLocationSelector';
+import { MultiStoreLocationSelector } from '@/components/MultiStoreLocationSelector';
+import { useStore } from '@/contexts/StoreContext';
 import { Navigation } from '@/components/Navigation';
 import BarcodeLabel from '@/components/BarcodeLabel';
 import { usePrintNode } from '@/hooks/usePrintNode';
@@ -46,10 +48,17 @@ const Inventory = () => {
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [selectedStoreKey, setSelectedStoreKey] = useState<string>('');
   const [selectedLocationGid, setSelectedLocationGid] = useState<string>('');
+  const [selectedStoreLocations, setSelectedStoreLocations] = useState<Array<{
+    storeKey: string;
+    storeName: string;
+    locationGid: string;
+    locationName: string;
+  }>>([]);
   const [syncingAll, setSyncingAll] = useState(false);
   const [printingItem, setPrintingItem] = useState<string | null>(null);
   
   const { printPNG, selectedPrinter } = usePrintNode();
+  const { selectedStore, selectedLocation } = useStore();
 
   const fetchItems = async () => {
     setLoading(true);
@@ -78,11 +87,20 @@ const Inventory = () => {
       // 'all' shows everything, no additional filters
 
       // Apply store/location filters
-      if (selectedStoreKey) {
-        query = query.eq('store_key', selectedStoreKey);
-      }
-      if (selectedLocationGid) {
-        query = query.eq('shopify_location_gid', selectedLocationGid);
+      if (selectedStoreLocations.length > 0) {
+        // Filter by selected store/location combinations
+        const conditions = selectedStoreLocations.map(sl => 
+          `(store_key.eq.${sl.storeKey},shopify_location_gid.eq.${sl.locationGid})`
+        ).join(',');
+        query = query.or(conditions);
+      } else {
+        // Fallback to single store/location selection for backward compatibility
+        if (selectedStoreKey) {
+          query = query.eq('store_key', selectedStoreKey);
+        }
+        if (selectedLocationGid) {
+          query = query.eq('shopify_location_gid', selectedLocationGid);
+        }
       }
 
       const { data, error } = await query.order('created_at', { ascending: false });
@@ -99,7 +117,13 @@ const Inventory = () => {
 
   useEffect(() => {
     fetchItems();
-  }, [statusFilter, selectedStoreKey, selectedLocationGid]);
+  }, [statusFilter, typeFilter, selectedStoreKey, selectedLocationGid, selectedStoreLocations]);
+
+  // Update legacy state when context changes (for backward compatibility)
+  useEffect(() => {
+    setSelectedStoreKey(selectedStore || '');
+    setSelectedLocationGid(selectedLocation || '');
+  }, [selectedStore, selectedLocation]);
 
   // F) Manual sync retry function
   const retrySync = async (item: any) => {
@@ -357,7 +381,21 @@ const Inventory = () => {
           <CardContent>
             <div className="space-y-6">
               {/* Store & Location Filter */}
-              <StoreLocationSelector className="max-w-md" showSetDefault={false} />
+              <div className="space-y-4">
+                <MultiStoreLocationSelector 
+                  className="max-w-lg"
+                  selectedItems={selectedStoreLocations}
+                  onChange={setSelectedStoreLocations}
+                />
+                
+                {/* Legacy single selection - only show if no multi-selections are made */}
+                {selectedStoreLocations.length === 0 && (
+                  <div className="text-sm text-muted-foreground border-t pt-4">
+                    <p className="mb-2">Or use single store/location selection:</p>
+                    <StoreLocationSelector className="max-w-md" showSetDefault={false} />
+                  </div>
+                )}
+              </div>
               
               {/* Filters Row */}
               <div className="flex flex-wrap items-center gap-4">
