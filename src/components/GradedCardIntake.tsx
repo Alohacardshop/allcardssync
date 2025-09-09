@@ -11,14 +11,14 @@ import { useStore } from "@/contexts/StoreContext";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { invokePSAScrapeV2 } from "@/lib/psaServiceV2";
 import { normalizePSAData } from "@/lib/psaNormalization";
-import { lookupCert, lookupBarcode } from "@/lib/cgc/client";
+import { lookupCert } from "@/lib/cgc/client";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { StoreLocationSelector } from "@/components/StoreLocationSelector";
 import { parseFunctionError } from "@/lib/fns";
 import { useLogger } from "@/hooks/useLogger";
 
-// Feature flag for CGC functionality - disabled for external testing
-const CGC_ENABLED = false;
+// Feature flag for CGC functionality - now enabled with Firecrawl scraping
+const CGC_ENABLED = true;
 
 interface GradedCardIntakeProps {
   onBatchAdd?: () => void;
@@ -45,7 +45,7 @@ const parsePSAGrade = (gradeStr: string): { numeric: string; original: string; h
 
 export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => {
   const logger = useLogger();
-  const [gradingCompany, setGradingCompany] = useState<'PSA' | 'CGC'>(CGC_ENABLED ? 'PSA' : 'PSA');
+  const [gradingCompany, setGradingCompany] = useState<'PSA' | 'CGC'>('PSA');
 
   // Enforce PSA-only when CGC is disabled
   useEffect(() => {
@@ -133,13 +133,8 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         console.log("[CGC:UI] Starting CGC lookup with new client...", { lookupType, inputValue });
         
         try {
-          let cgcCard;
-          
-          if (lookupType === 'cert') {
-            cgcCard = await lookupCert(inputValue);
-          } else {
-            cgcCard = await lookupBarcode(inputValue);
-          }
+          // CGC only supports certificate lookup via scraping
+          const cgcCard = await lookupCert(inputValue);
           
           const endTime = Date.now();
           console.log(`[CGC:UI] CGC lookup completed in ${endTime - startTime}ms`);
@@ -155,13 +150,13 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
             cardNumber: cgcCard.collectible.cardNumber || '',
             year: cgcCard.collectible.cardYear || '',
             grade: cgcCard.grade.displayGrade,
-            gradeNumeric: cgcCard.grade.numeric?.toString() || '',
+            gradeNumeric: '',
             game: cgcCard.collectible.game?.toLowerCase().includes('pokemon') ? 'pokemon' : 
                    cgcCard.collectible.game?.toLowerCase().includes('magic') ? 'mtg' : 
                    cgcCard.collectible.game || '',
             imageUrl: cgcCard.images?.frontThumbnailUrl || cgcCard.images?.frontUrl || null,
             isValid: !!(cgcCard.certNumber && cgcCard.grade.displayGrade),
-            source: 'cgc_api',
+            source: 'cgc_scrape',
             rawPayload: cgcCard
           };
           
@@ -807,39 +802,31 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
               )}
             </div>
 
-            {/* CGC Barcode Input */}
-            <div className="flex gap-3 items-end">
+            {/* CGC Barcode Input - Disabled (cert-based scraping only) */}
+            <div className="flex gap-3 items-end opacity-50">
               <div className="flex-1">
-                <Label htmlFor="barcode-input">CGC Barcode (Optional)</Label>
+                <Label htmlFor="barcode-input">CGC Barcode (Not supported via scraping)</Label>
                 <Input
                   id="barcode-input"
-                  placeholder="e.g., ABC123/DEF456"
-                  value={barcodeInput}
-                  onChange={(e) => setBarcodeInput(e.target.value)}
-                  disabled={fetching}
-                  onKeyDown={(e) => e.key === 'Enter' && !fetching && handleFetchCard('barcode')}
+                  placeholder="CGC barcode lookup not available - use certificate number"
+                  value=""
+                  disabled={true}
+                  className="cursor-not-allowed"
                 />
               </div>
               
-              {!fetching ? (
-                <Button 
-                  onClick={() => handleFetchCard('barcode')} 
-                  disabled={!barcodeInput.trim()}
-                  className="px-6"
-                >
-                  Lookup Barcode
-                </Button>
-              ) : (
-                <Button 
-                  variant="outline"
-                  disabled
-                  className="px-6"
-                >
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  Looking up...
-                </Button>
-              )}
+              <Button 
+                disabled={true}
+                variant="outline"
+                className="px-6 opacity-50 cursor-not-allowed"
+              >
+                Not Available
+              </Button>
             </div>
+
+            <p className="text-sm text-muted-foreground mt-2">
+              CGC barcode lookup is not supported via scraping. Please use the certificate number above.
+            </p>
 
             {fetching && (
               <div className="flex justify-center">
@@ -904,7 +891,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
             
             {populatedFieldsCount === 0 && (
               <div className="text-sm text-muted-foreground">
-                Limited data found - you may need to fill in the details manually. Try a different {gradingCompany === 'CGC' ? 'certificate number or barcode' : 'certificate number'} or check if the {gradingCompany} cert exists.
+                Limited data found - you may need to fill in the details manually. Try a different certificate number or check if the {gradingCompany} cert exists.
               </div>
             )}
           </div>
@@ -1079,8 +1066,8 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <span>Data source:</span>
             <span className="px-2 py-1 rounded text-xs bg-blue-100 text-blue-800">
-              {cardData.source === 'psa_api' ? 'PSA API' : 
-               cardData.source === 'cgc_api' ? 'CGC API' :
+              {cardData.source === 'psa_scrape' ? 'PSA Scrape' :
+               cardData.source === 'cgc_scrape' ? 'CGC Scrape' :
                cardData.source === 'database_cache' ? 'Database Cache' : 'Unknown'}
             </span>
           </div>
