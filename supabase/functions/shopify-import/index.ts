@@ -1,218 +1,213 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.56.0'
-import { resolveShopifyConfig } from '../_shared/resolveShopifyConfig.ts'
+// Shopify importer (SKU-first, idempotent)
+// - Reuse existing active variant by SKU or create single-variant product (status: active)
+// - Write product/variant/inventory_item IDs back to intake_items
+// - Do NOT set inventory here; if request includes locationGid, call existing shopify-sync-inventory
+// Request body:
+// {
+//   items: [{ id, sku, title?, description?, price?, barcode? }],
+//   storeKey: "hawaii" | "las_vegas",
+//   locationGid?: "gid://shopify/Location/#########"
+// }
+
+import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
+
+type ItemRow = {
+  id: string
+  sku: string
+  title?: string | null
+  description?: string | null
+  price?: number | null
+  barcode?: string | null
+}
+
+const API_VER = '2024-07'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-const json = (status: number, body: unknown) => new Response(JSON.stringify(body), {
-  status,
-  headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-})
-
-async function searchVariantBySku(domain: string, accessToken: string, sku: string) {
-  const response = await fetch(`https://${domain}/admin/api/2024-07/variants.json?sku=${encodeURIComponent(sku)}&limit=1`, {
-    headers: {
-      'X-Shopify-Access-Token': accessToken,
-      'Content-Type': 'application/json',
-    }
+function json(status: number, body: unknown) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   })
-
-  if (!response.ok) {
-    throw new Error(`Failed to search variants: ${response.status}`)
-  }
-
-  const data = await response.json()
-  return data.variants?.[0] || null
 }
 
-async function createProduct(domain: string, accessToken: string, item: any) {
-  const productData = {
-    product: {
-      title: item.title || item.subject || 'Untitled Item',
-      body_html: item.description || item.title || item.subject || '',
-      status: 'active',
-      variants: [{
-        title: 'Default Title',
-        price: (item.price || 0).toString(),
-        sku: item.sku,
-        barcode: item.barcode || item.sku,
-        inventory_management: 'shopify',
-        inventory_policy: 'deny'
-      }]
+async function fetchWithRetry(input: RequestInfo, init?: RequestInit, tries = 3) {
+  let lastErr: unknown = null
+  for (let i = 0; i < tries; i++) {
+    try {
+      const res = await fetch(input, init)
+      if (res.ok || (res.status >= 400 && res.status < 500)) return res
+      lastErr = new Error(`Bad status ${res.status}`)
+    } catch (e) {
+      lastErr = e
     }
+    await new Promise(r => setTimeout(r, 250 * (i + 1)))
   }
+  throw lastErr
+}
 
-  const response = await fetch(`https://${domain}/admin/api/2024-07/products.json`, {
-    method: 'POST',
-    headers: {
-      'X-Shopify-Access-Token': accessToken,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(productData)
+function up(s: string) { return (s || '').toUpperCase() }
+
+async function loadStoreConfig(supabase: any, storeKey: string) {
+  const U = up(storeKey)
+  const keys = [
+    `SHOPIFY_${U}_STORE_DOMAIN`,
+    `SHOPIFY_${U}_ACCESS_TOKEN`,
+  ]
+  const { data, error } = await supabase
+    .from('system_settings')
+    .select('key_name, key_value')
+    .in('key_name', keys)
+  if (error) throw new Error(`Failed to load store config: ${error.message}`)
+  const map = new Map<string, string>()
+  for (const row of data ?? []) map.set(row.key_name, row.key_value)
+  const domain = map.get(`SHOPIFY_${U}_STORE_DOMAIN`) || ''
+  const token  = map.get(`SHOPIFY_${U}_ACCESS_TOKEN`) || ''
+  if (!domain || !token) throw new Error(`Missing Shopify credentials for storeKey=${storeKey}`)
+  return { domain, token }
+}
+
+async function findVariantsBySKU(domain: string, token: string, sku: string) {
+  const url = `https://${domain}/admin/api/${API_VER}/variants.json?sku=${encodeURIComponent(sku)}&limit=50`
+  const res = await fetchWithRetry(url, { headers: { 'X-Shopify-Access-Token': token, 'Content-Type': 'application/json' }})
+  if (!res.ok) throw new Error(`Variant lookup failed: ${res.status}`)
+  const body = await res.json()
+  return (body.variants as any[]) || []
+}
+
+async function fetchProduct(domain: string, token: string, productId: string) {
+  const res = await fetchWithRetry(`https://${domain}/admin/api/${API_VER}/products/${productId}.json`, {
+    headers: { 'X-Shopify-Access-Token': token, 'Content-Type': 'application/json' },
   })
+  const body = await res.json()
+  if (!res.ok) throw new Error(`Fetch product failed: ${res.status}`)
+  return body.product
+}
 
-  if (!response.ok) {
-    const errorText = await response.text()
-    throw new Error(`Failed to create product: ${response.status} - ${errorText}`)
+async function publishProductIfNeeded(domain: string, token: string, productId: string) {
+  const product = await fetchProduct(domain, token, productId)
+  if (product?.status !== 'active') {
+    const up = await fetchWithRetry(`https://${domain}/admin/api/${API_VER}/products/${productId}.json`, {
+      method: 'PUT',
+      headers: { 'X-Shopify-Access-Token': token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ product: { id: productId, status: 'active' } }),
+    })
+    if (!up.ok) throw new Error(`Publish failed: ${up.status}`)
   }
+}
 
-  const result = await response.json()
-  return result.product
+async function createSingleVariantProduct(domain: string, token: string, item: ItemRow) {
+  const payload = {
+    product: {
+      title: item.title || item.sku,
+      body_html: item.description || undefined,
+      status: 'active',
+      variants: [
+        {
+          sku: item.sku,
+          price: item.price != null ? Number(item.price).toFixed(2) : undefined,
+          barcode: item.barcode || undefined,
+          inventory_management: 'shopify',
+        },
+      ],
+    },
+  }
+  const res = await fetchWithRetry(`https://${domain}/admin/api/${API_VER}/products.json`, {
+    method: 'POST',
+    headers: { 'X-Shopify-Access-Token': token, 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  const body = await res.json()
+  if (!res.ok) throw new Error(`Create product failed: ${res.status} ${JSON.stringify(body)}`)
+  return body.product
 }
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders })
-  }
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+
+  const { createClient } = await import('jsr:@supabase/supabase-js')
+  const supabase = createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_ANON_KEY')!,
+    { global: { headers: { Authorization: req.headers.get('Authorization') || '' } } },
+  )
 
   try {
-    const { items, storeKey, locationGid } = await req.json()
-
-    if (!items || !Array.isArray(items) || !storeKey) {
-      return json(400, {
-        ok: false,
-        code: 'MISSING_PARAMS',
-        message: 'Missing required parameters: items (array) and storeKey'
-      })
+    const { items, storeKey, locationGid } = await req.json().catch(() => ({}))
+    if (!Array.isArray(items) || !storeKey) {
+      return json(400, { error: 'Invalid payload. Expect { items: ItemRow[], storeKey, locationGid? }' })
     }
 
-    console.log(`shopify-import: Processing ${items.length} items for store ${storeKey}`)
+    const { domain, token } = await loadStoreConfig(supabase, storeKey)
+    const results: any[] = []
 
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    )
-
-    // Get Shopify credentials
-    const configResult = await resolveShopifyConfig(supabase, storeKey)
-    if (!configResult.ok) {
-      return json(400, configResult)
-    }
-
-    const { credentials } = configResult
-    const results = []
-    let successCount = 0
-    let errorCount = 0
-
-    for (const item of items) {
+    for (const raw of items as ItemRow[]) {
+      const ctx = { id: raw?.id, sku: raw?.sku }
       try {
-        console.log(`Processing item ${item.id} with SKU: ${item.sku}`)
+        if (!raw?.sku) throw new Error('Item missing SKU')
 
-        if (!item.sku) {
-          throw new Error('Item missing SKU')
-        }
+        const found = await findVariantsBySKU(domain, token, raw.sku)
 
-        let productId, variantId, inventoryItemId
+        let productId: string
+        let variantId: string
+        let inventoryItemId: string
 
-        // Search for existing variant by SKU
-        const existingVariant = await searchVariantBySku(
-          credentials.domain, 
-          credentials.accessToken, 
-          item.sku
-        )
-
-        if (existingVariant) {
-          // Reuse existing variant
-          productId = existingVariant.product_id
-          variantId = existingVariant.id
-          inventoryItemId = existingVariant.inventory_item_id
-          console.log(`Found existing variant ${variantId} for SKU ${item.sku}`)
+        if (found.length > 0) {
+          const candidate = found.find(v => v?.product?.status === 'active') || found[0]
+          productId = String(candidate.product_id)
+          variantId = String(candidate.id)
+          inventoryItemId = String(candidate.inventory_item_id)
+          await publishProductIfNeeded(domain, token, productId)
         } else {
-          // Create new product with single variant
-          const newProduct = await createProduct(
-            credentials.domain, 
-            credentials.accessToken, 
-            item
-          )
-          productId = newProduct.id
-          variantId = newProduct.variants[0].id
-          inventoryItemId = newProduct.variants[0].inventory_item_id
-          console.log(`Created new product ${productId} with variant ${variantId}`)
+          const product = await createSingleVariantProduct(domain, token, raw)
+          productId = String(product.id)
+          variantId = String(product.variants?.[0]?.id)
+          inventoryItemId = String(product.variants?.[0]?.inventory_item_id)
         }
 
-        // Update intake_items with Shopify IDs
-        const { error: updateError } = await supabase
+        // Write back IDs
+        await supabase
           .from('intake_items')
           .update({
-            shopify_product_id: productId.toString(),
-            shopify_variant_id: variantId.toString(),
-            shopify_inventory_item_id: inventoryItemId.toString(),
-            updated_at: new Date().toISOString()
+            shopify_product_id: productId,
+            shopify_variant_id: variantId,
+            shopify_inventory_item_id: inventoryItemId,
+            pushed_at: new Date().toISOString(),
           })
-          .eq('id', item.id)
+          .eq('id', raw.id)
 
-        if (updateError) {
-          throw new Error(`Failed to update intake_items: ${updateError.message}`)
-        }
-
-        results.push({
-          id: item.id,
-          sku: item.sku,
-          success: true,
-          shopify_product_id: productId,
-          shopify_variant_id: variantId,
-          shopify_inventory_item_id: inventoryItemId,
-          action: existingVariant ? 'reused_existing' : 'created_new'
-        })
-
-        successCount++
-
-        // If locationGid provided, trigger inventory sync
+        // If a locationGid was provided, chain to existing sync to maintain current per-location semantics
         if (locationGid) {
-          console.log(`Triggering inventory sync for SKU ${item.sku} at location ${locationGid}`)
-          
-          try {
-            const { error: syncError } = await supabase.functions.invoke('shopify-sync-inventory', {
-              body: {
-                storeKey,
-                sku: item.sku,
-                locationGid
-              }
-            })
-
-            if (syncError) {
-              console.warn(`Inventory sync failed for SKU ${item.sku}:`, syncError)
-              // Don't fail the import, just log the warning
-            }
-          } catch (syncError) {
-            console.warn(`Inventory sync error for SKU ${item.sku}:`, syncError)
-          }
+          await fetch(`${Deno.env.get('SUPABASE_URL')!}/functions/v1/shopify-sync-inventory`, {
+            method: 'POST',
+            headers: {
+              'Authorization': req.headers.get('Authorization') || '',
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ storeKey, sku: raw.sku, locationGid })
+          })
         }
 
-      } catch (error) {
-        console.error(`Error processing item ${item.id}:`, error)
-        
-        results.push({
-          id: item.id,
-          sku: item.sku,
-          success: false,
-          error: error.message
-        })
-        
-        errorCount++
+        results.push({ ...ctx, ok: true, productId, variantId, inventoryItemId })
+      } catch (e: any) {
+        console.error('shopify-import item error', { ...ctx, error: e?.message })
+        await supabase
+          .from('intake_items')
+          .update({
+            shopify_sync_status: 'error',
+            last_shopify_sync_error: e?.message || 'import failed',
+          })
+          .eq('id', raw.id)
+        results.push({ ...ctx, ok: false, error: e?.message || String(e) })
       }
     }
 
-    const response = {
-      ok: true,
-      processed: items.length,
-      success: successCount,
-      errors: errorCount,
-      results,
-      locationGid: locationGid || null
-    }
-
-    console.log(`shopify-import: Completed - ${successCount} success, ${errorCount} errors`)
-    return json(200, response)
-
-  } catch (error) {
-    console.error('shopify-import: Fatal error:', error)
-    return json(500, {
-      ok: false,
-      code: 'INTERNAL_ERROR',
-      message: error.message
-    })
+    return json(200, { ok: true, results })
+  } catch (e: any) {
+    console.error('shopify-import fatal', e?.message || e)
+    return json(500, { ok: false, error: e?.message || 'Internal error' })
   }
 })
