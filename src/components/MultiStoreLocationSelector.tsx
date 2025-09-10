@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -36,10 +37,7 @@ export function MultiStoreLocationSelector({
 }: MultiStoreLocationSelectorProps) {
   const { 
     availableStores, 
-    availableLocations,
     loadingStores,
-    loadingLocations,
-    refreshLocations,
     refreshStores,
     userAssignments
   } = useStore();
@@ -48,13 +46,15 @@ export function MultiStoreLocationSelector({
   const [storeSearch, setStoreSearch] = useState("");
   const [locationSearch, setLocationSearch] = useState("");
   const [selectedStoreKey, setSelectedStoreKey] = useState<string>("");
+  const [storeLocations, setStoreLocations] = useState<any[]>([]);
+  const [loadingLocations, setLoadingLocations] = useState(false);
 
   const filteredStores = availableStores.filter(store =>
     store.name.toLowerCase().includes(storeSearch.toLowerCase())
   );
 
   const filteredLocations = selectedStoreKey 
-    ? availableLocations.filter(location =>
+    ? storeLocations.filter(location =>
         location.name.toLowerCase().includes(locationSearch.toLowerCase())
       )
     : [];
@@ -67,7 +67,7 @@ export function MultiStoreLocationSelector({
 
   const handleStoreLocationToggle = (storeKey: string, locationGid: string) => {
     const store = availableStores.find(s => s.key === storeKey);
-    const location = availableLocations.find(l => l.gid === locationGid);
+    const location = storeLocations.find(l => l.gid === locationGid);
     
     if (!store || !location) return;
 
@@ -92,8 +92,6 @@ export function MultiStoreLocationSelector({
   const handleSelectAllForStore = (storeKey: string) => {
     const store = availableStores.find(s => s.key === storeKey);
     if (!store) return;
-
-    const storeLocations = availableLocations;
     const newSelections: SelectedStoreLocation[] = [];
     
     storeLocations.forEach(location => {
@@ -118,8 +116,11 @@ export function MultiStoreLocationSelector({
       if (!store) return;
 
       if (assignment.location_gid) {
-        // Specific location assignment
-        const location = availableLocations.find(l => l.gid === assignment.location_gid);
+        // Specific location assignment - find in current store locations if this is the selected store
+        let location = null;
+        if (assignment.store_key === selectedStoreKey) {
+          location = storeLocations.find(l => l.gid === assignment.location_gid);
+        }
         if (location && !isStoreLocationSelected(assignment.store_key, assignment.location_gid)) {
           allAssigned.push({
             storeKey: assignment.store_key,
@@ -144,13 +145,45 @@ export function MultiStoreLocationSelector({
     onChange([]);
   };
 
+  const loadLocationsForStore = async (storeKey: string) => {
+    setLoadingLocations(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("shopify-locations", {
+        body: { storeKey }
+      });
+      
+      if (error) throw error;
+      
+      if (data?.ok) {
+        const locations = (data.locations || []).map((loc: any) => ({
+          id: String(loc.id),
+          name: loc.name,
+          gid: `gid://shopify/Location/${loc.id}`
+        }));
+        setStoreLocations(locations);
+      } else {
+        throw new Error(data?.error || "Failed to load locations");
+      }
+    } catch (error) {
+      console.error("Error loading locations:", error);
+      setStoreLocations([]);
+    } finally {
+      setLoadingLocations(false);
+    }
+  };
+
   const handleStoreSelect = (storeKey: string) => {
     setSelectedStoreKey(storeKey);
     setLocationSearch("");
-    // Auto-refresh locations for the newly selected store
-    setTimeout(() => {
-      refreshLocations();
-    }, 0);
+    setStoreLocations([]);
+    // Load locations for the selected store
+    loadLocationsForStore(storeKey);
+  };
+
+  const refreshLocationsForSelectedStore = () => {
+    if (selectedStoreKey) {
+      loadLocationsForStore(selectedStoreKey);
+    }
   };
 
   return (
@@ -265,7 +298,7 @@ export function MultiStoreLocationSelector({
                   <Button 
                     variant="ghost" 
                     size="sm"
-                    onClick={refreshLocations}
+                    onClick={refreshLocationsForSelectedStore}
                     disabled={loadingLocations || !selectedStoreKey}
                   >
                     <RefreshCw className={`h-3 w-3 ${loadingLocations ? 'animate-spin' : ''}`} />
