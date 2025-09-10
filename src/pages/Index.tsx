@@ -204,6 +204,8 @@ const Index = () => {
       // Show success toast
       if (processedIds.length > 0) {
         toast.success(`Successfully sent ${processedIds.length} item(s) to inventory`);
+      } else if (itemIds.length > 0) {
+        toast.info(`No items were processed - they may already be in inventory`);
       }
 
       // Show rejection warnings if any

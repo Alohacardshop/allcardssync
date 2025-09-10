@@ -52,6 +52,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
   const [startingNewLot, setStartingNewLot] = useState(false);
   const [sendingBatchToInventory, setSendingBatchToInventory] = useState(false);
   const [batchSendProgress, setBatchSendProgress] = useState({ total: 0, completed: 0, failed: 0, inProgress: false });
+  const [sendingItemIds, setSendingItemIds] = useState<Set<string>>(new Set()); // Track individual item sends
   const { selectedStore, selectedLocation } = useStore();
 
   // Helper to determine if user can delete from current batch
@@ -126,9 +127,15 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
   };
 
   const handleSendToInventory = async (item: IntakeItem) => {
+    if (sendingItemIds.has(item.id)) {
+      console.log(`Item ${item.id} is already being sent, ignoring duplicate request`);
+      return; // Prevent double-clicks
+    }
+
     const correlationId = `single_send_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
     
     try {
+      setSendingItemIds(prev => new Set(prev.add(item.id))); // Mark as sending
       console.log(`🚀 [${correlationId}] Starting unified RPC send to inventory for single item:`, { itemId: item.id, sku: item.sku });
       const startTime = Date.now();
 
@@ -150,6 +157,9 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
 
       if (processedIds.length > 0) {
         toast.success('Item sent to inventory');
+      } else {
+        console.warn(`⚠️ [${correlationId}] No items processed (may already be in inventory)`);
+        toast.info('Item may already be in inventory');
       }
 
       if (rejectedItems.length > 0) {
@@ -158,24 +168,27 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
         return;
       }
 
-      if (processedIds.length === 0) {
-        console.warn(`⚠️ [${correlationId}] No items processed (may already be in inventory)`);
-        toast.warning('Item may already be in inventory');
-        return;
+      // Only update UI if item was actually processed
+      if (processedIds.length > 0) {
+        // Optimistic UI update for immediate feedback
+        setRecentItems((prev) => prev.filter((i) => i.id !== item.id));
+        setTotalCount((c) => Math.max(0, (c || 0) - 1));
+
+        // Small delay to allow DB triggers to run before refetching, then check if we should close empty lot
+        setTimeout(async () => {
+          await fetchRecentItems();
+          await checkAndCloseEmptyLot();
+        }, 150);
       }
-
-      // Optimistic UI update for immediate feedback
-      setRecentItems((prev) => prev.filter((i) => i.id !== item.id));
-      setTotalCount((c) => Math.max(0, (c || 0) - 1));
-
-      // Small delay to allow DB triggers to run before refetching, then check if we should close empty lot
-      setTimeout(async () => {
-        await fetchRecentItems();
-        await checkAndCloseEmptyLot();
-      }, 150);
     } catch (error: any) {
       console.error(`💥 [${correlationId}] Error sending item to inventory:`, error);
       toast.error(`Error sending item to inventory: ${error?.message || 'Unknown error'}`);
+    } finally {
+      setSendingItemIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(item.id);
+        return newSet;
+      }); // Remove from sending state
     }
   };
 
@@ -192,6 +205,11 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
     if (itemsToSend.length === 0) {
       toast.error('All items in batch have already been sent to inventory');
       return;
+    }
+
+    if (sendingBatchToInventory) {
+      console.log('Batch send already in progress, ignoring duplicate request');
+      return; // Prevent double-clicks
     }
 
     const correlationId = `batch_send_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
@@ -229,6 +247,8 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
       // Show success toast
       if (processedIds.length > 0) {
         toast.success(`Successfully sent ${processedIds.length} item(s) to inventory`);
+      } else if (itemIds.length > 0) {
+        toast.info(`No items were processed - they may already be in inventory`);
       }
 
       // Show rejection warnings if any
@@ -716,10 +736,11 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
                       size="sm"
                       variant="outline"
                       onClick={() => handleSendToInventory(item)}
-                      className="h-8 px-2 bg-green-50 hover:bg-green-100 border-green-200 text-green-700"
-                      title="Send to Inventory"
+                      disabled={sendingItemIds.has(item.id) || sendingBatchToInventory}
+                      className="h-8 px-2 bg-green-50 hover:bg-green-100 border-green-200 text-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      title={sendingItemIds.has(item.id) ? "Sending..." : "Send to Inventory"}
                     >
-                      <Send className="h-3 w-3" />
+                      <Send className={`h-3 w-3 ${sendingItemIds.has(item.id) ? 'animate-pulse' : ''}`} />
                     </Button>
                     
                      {(isAdmin || canDeleteFromBatch(item)) && (
