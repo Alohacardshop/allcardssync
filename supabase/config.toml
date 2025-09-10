@@ -55,12 +55,6 @@ verify_jwt = false
 [functions.shopify-webhook-test]
 verify_jwt = false
 
-[functions.shopify-publish-product]
-verify_jwt = true
-
-[functions.v2-shopify-send]
-verify_jwt = true
-
 [functions.v2-shopify-send-graded]
 verify_jwt = true
 

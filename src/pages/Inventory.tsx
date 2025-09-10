@@ -35,7 +35,7 @@ import { Navigation } from '@/components/Navigation';
 import BarcodeLabel from '@/components/BarcodeLabel';
 import { usePrintNode } from '@/hooks/usePrintNode';
 import { Link } from 'react-router-dom';
-import { sendToShopify } from '@/hooks/useShopifySend';
+import { sendGradedToShopify, sendRawToShopify } from '@/hooks/useShopifySend';
 import { FLAGS } from '@/lib/flags';
 
 const Inventory = () => {
@@ -311,16 +311,37 @@ const Inventory = () => {
     
     setSyncingRowId(row.id);
     try {
-      await sendToShopify({
-        storeKey: selectedStoreKey as "hawaii" | "las_vegas",
-        sku: row.sku,
-        title: row.brand_title || row.subject,
-        price: row.price ?? null,
-        barcode: row.sku,
-        locationGid: selectedLocationGid,
-        quantity: Number(row.quantity ?? 0),
-        intakeItemId: row.id
-      });
+      // Route to correct v2 sender based on item type
+      if (row.type === 'Graded' || row.psa_cert || row.grade) {
+        await sendGradedToShopify({
+          storeKey: selectedStoreKey as "hawaii" | "las_vegas",
+          locationGid: selectedLocationGid,
+          item: {
+            id: row.id,
+            sku: row.sku,
+            psa_cert: row.psa_cert,
+            barcode: row.barcode || row.sku,
+            title: row.brand_title || row.subject,
+            price: row.price ?? undefined,
+            grade: row.grade,
+            quantity: Number(row.quantity ?? 1)
+          }
+        });
+      } else {
+        await sendRawToShopify({
+          storeKey: selectedStoreKey as "hawaii" | "las_vegas",
+          locationGid: selectedLocationGid,
+          item: {
+            id: row.id,
+            sku: row.sku,
+            title: row.brand_title || row.subject,
+            price: row.price ?? undefined,
+            barcode: row.barcode,
+            condition: row.variant,
+            quantity: Number(row.quantity ?? 1)
+          }
+        });
+      }
       toast.success(`Synced ${row.sku} to Shopify`);
       fetchItems();
     } catch (e: any) {
