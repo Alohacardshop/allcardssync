@@ -83,14 +83,21 @@ Deno.serve(async (req) => {
           id: item.id,
           type: itemType,
           success: true,
-          shopify: shopifyResult
+          shopify: shopifyResult,
+          correlationId: shopifyResult?.correlationId,
+          productId: shopifyResult?.productId,
+          variantId: shopifyResult?.variantId,
+          inventoryItemId: shopifyResult?.inventoryItemId
         })
 
-        // Update sync status on success
-        await supabase.from('intake_items').update({
-          shopify_sync_status: 'synced',
-          last_shopify_synced_at: new Date().toISOString()
-        }).eq('id', item.id)
+        console.info('batch.send.item', { 
+          id: item.id, 
+          sku: item.sku, 
+          type: itemType, 
+          correlationId: shopifyResult?.correlationId 
+        })
+
+        // Note: Don't update sync status here - the sender functions already write their own status and snapshots
 
       } catch (error: any) {
         console.error(`Failed to sync item ${item.id}:`, error)
@@ -101,11 +108,7 @@ Deno.serve(async (req) => {
           error: error.message
         })
 
-        // Update sync status on failure
-        await supabase.from('intake_items').update({
-          shopify_sync_status: 'error',
-          last_shopify_sync_error: error.message
-        }).eq('id', item.id)
+        // Note: Don't update sync status here - the sender functions already write their own status and snapshots
       }
 
       // Rate limiting - small delay between items

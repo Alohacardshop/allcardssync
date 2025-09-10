@@ -24,6 +24,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { ShopifyRemovalDialog } from '@/components/ShopifyRemovalDialog';
+import { ShopifySyncDetailsDialog } from '@/components/ShopifySyncDetailsDialog';
 import { formatDistanceToNow } from 'date-fns';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -62,6 +63,7 @@ const Inventory = () => {
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [showSoldItems, setShowSoldItems] = useState(false);
   const [syncingRowId, setSyncingRowId] = useState<string | null>(null);
+  const [syncDetailsRow, setSyncDetailsRow] = useState<any>(null);
   
   const { printPNG, selectedPrinter } = usePrintNode();
   const { selectedStore, selectedLocation } = useStore();
@@ -809,19 +811,31 @@ const Inventory = () => {
                                     {printingItem === item.id ? 'Printing...' : 'Print'}
                                   </Button>
                                 )}
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => onSync(item)}
-                                  disabled={!item.sku || !item.store_key || !selectedLocationGid || syncingRowId === item.id}
-                                >
-                                  {syncingRowId === item.id ? (
-                                    <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                                  ) : (
-                                    <ExternalLink className="w-4 h-4 mr-1" />
-                                  )}
-                                  {syncingRowId === item.id ? 'Syncing...' : 'Sync'}
-                                </Button>
+                                 <Button
+                                   variant="outline"
+                                   size="sm"
+                                   onClick={() => onSync(item)}
+                                   disabled={!item.sku || !item.store_key || !selectedLocationGid || syncingRowId === item.id}
+                                 >
+                                   {syncingRowId === item.id ? (
+                                     <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                                   ) : (
+                                     <ExternalLink className="w-4 h-4 mr-1" />
+                                   )}
+                                   {syncingRowId === item.id ? 'Syncing...' : 'Sync'}
+                                 </Button>
+                                 
+                                 {/* View Sync Details button */}
+                                 {item.shopify_sync_snapshot && (
+                                   <Button
+                                     variant="outline"
+                                     size="sm"
+                                     onClick={() => setSyncDetailsRow(item)}
+                                   >
+                                     <FileText className="w-4 h-4 mr-1" />
+                                     View Sync Details
+                                   </Button>
+                                 )}
                                  {!item.deleted_at && (
                                    <Button
                                      variant="outline"
@@ -951,6 +965,12 @@ const Inventory = () => {
           onConfirm={onRemovalConfirm}
           items={Array.isArray(selectedItemForRemoval) ? selectedItemForRemoval : (selectedItemForRemoval ? [selectedItemForRemoval] : [])}
           loading={bulkDeleting}
+        />
+        
+        <ShopifySyncDetailsDialog
+          open={!!syncDetailsRow}
+          onOpenChange={(open) => !open && setSyncDetailsRow(null)}
+          row={syncDetailsRow}
         />
       </div>
     </>

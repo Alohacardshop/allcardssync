@@ -1,9 +1,6 @@
 // Raw card sender for Shopify (condition-specific SKUs, multi-quantity)
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
-import { API_VER, loadStore, findVariantsBySKU, publishIfNeeded, setInventory, parseIdFromGid, fetchRetry } from '../_shared/shopify-helpers.ts'
-
-const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' }
-const json = (s: number, b: unknown) => new Response(JSON.stringify(b), { status: s, headers: { ...CORS, 'Content-Type': 'application/json' } })
+import { CORS, json, loadStore, findVariantsBySKU, publishIfNeeded, setInventory, parseIdFromGid, fetchRetry, newRun, deriveStoreSlug, API_VER } from '../_shared/shopify-helpers.ts'
 
 async function createRawProduct(domain: string, token: string, sku: string, title?: string | null, price?: number | null, barcode?: string | null, tags: string[] = []) {
   const payload = {
@@ -37,13 +34,19 @@ Deno.serve(async (req) => {
     global: { headers: { Authorization: req.headers.get('Authorization') || '' } }
   })
   
+  const run = newRun()
+  
   try {
     const { storeKey, locationGid, item } = await req.json().catch(() => ({}))
     if (!storeKey || !locationGid || !item || !item.sku) {
       return json(400, { error: 'Expected { storeKey, locationGid, item: { sku, ... } }' })
     }
 
+    console.info('send.start', { correlationId: run.correlationId, storeKey, locationGid, sku: item.sku, quantity: item.quantity })
+
     const { domain, token } = await loadStore(supabase, storeKey)
+    const slug = deriveStoreSlug(domain)
+    run.add({ name: 'loadStore', ok: true, data: { domain, slug } })
 
     // Build tags
     const baseTags = [item.category, item.variant, item.lot_number ? `lot-${item.lot_number}` : null, 'intake', item.game]
@@ -53,40 +56,106 @@ Deno.serve(async (req) => {
     const allTags = [...baseTags.filter(Boolean), ...rawTags]
 
     // Find or create variant by SKU
-    const matches = await findVariantsBySKU(domain, token, item.sku)
     let productId: string, variantId: string, inventoryItemId: string
+    
+    try {
+      const matches = await findVariantsBySKU(domain, token, item.sku)
+      run.add({ name: 'findVariants', ok: true, data: { count: matches.length } })
 
-    if (matches.length) {
-      const v = matches.find((x: any) => x?.product?.status === 'active') || matches[0]
-      productId = String(v.product_id)
-      variantId = String(v.id)
-      inventoryItemId = String(v.inventory_item_id)
-      await publishIfNeeded(domain, token, productId)
-    } else {
-      const p = await createRawProduct(domain, token, item.sku, item.title, item.price, item.barcode, allTags)
-      productId = String(p.id)
-      variantId = String(p.variants?.[0]?.id)
-      inventoryItemId = String(p.variants?.[0]?.inventory_item_id)
+      if (matches.length) {
+        const v = matches.find((x: any) => x?.product?.status === 'active') || matches[0]
+        productId = String(v.product_id)
+        variantId = String(v.id)
+        inventoryItemId = String(v.inventory_item_id)
+        run.add({ name: 'reuseVariant', ok: true, data: { productId, variantId, inventoryItemId } })
+        
+        try {
+          await publishIfNeeded(domain, token, productId)
+          run.add({ name: 'publishIfNeeded', ok: true })
+        } catch (e: any) {
+          run.add({ name: 'publishIfNeeded', ok: false, note: e?.message })
+          throw e
+        }
+      } else {
+        try {
+          const p = await createRawProduct(domain, token, item.sku, item.title, item.price, item.barcode, allTags)
+          productId = String(p.id)
+          variantId = String(p.variants?.[0]?.id)
+          inventoryItemId = String(p.variants?.[0]?.inventory_item_id)
+          run.add({ name: 'createProduct', ok: true, data: { productId, variantId, inventoryItemId } })
+        } catch (e: any) {
+          run.add({ name: 'createProduct', ok: false, note: e?.message })
+          throw e
+        }
+      }
+    } catch (e: any) {
+      run.add({ name: 'findVariants', ok: false, note: e?.message })
+      throw e
     }
 
     // Set inventory at selected location
     const locationId = parseIdFromGid(locationGid)
     if (!locationId) throw new Error('Invalid locationGid')
-    await setInventory(domain, token, inventoryItemId, String(locationId), Number(item.quantity || 1))
+    
+    try {
+      await setInventory(domain, token, inventoryItemId, String(locationId), Number(item.quantity || 1))
+      run.add({ name: 'setInventory', ok: true, data: { locationId, quantity: item.quantity || 1 } })
+    } catch (e: any) {
+      run.add({ name: 'setInventory', ok: false, note: e?.message })
+      throw e
+    }
 
-    // Write back IDs to intake_items
+    // Write back IDs to intake_items with full snapshot
     if (item.id) {
       await supabase.from('intake_items').update({
         shopify_product_id: productId,
         shopify_variant_id: variantId,
         shopify_inventory_item_id: inventoryItemId,
         pushed_at: new Date().toISOString(),
+        shopify_sync_status: 'success',
+        last_shopify_synced_at: new Date().toISOString(),
+        last_shopify_correlation_id: run.correlationId,
+        last_shopify_location_gid: locationGid,
+        last_shopify_store_key: storeKey,
+        shopify_sync_snapshot: {
+          input: { storeKey, sku: item.sku, quantity: item.quantity || 1, locationGid, locationId },
+          store: { domain, slug },
+          result: { productId, variantId, inventoryItemId },
+          steps: run.steps,
+        },
       }).eq('id', item.id)
     }
 
-    return json(200, { ok: true, productId, variantId, inventoryItemId })
+    console.info('send.ok', { correlationId: run.correlationId, productId, variantId, locationId })
+
+    return json(200, { 
+      ok: true, 
+      productId, 
+      variantId, 
+      inventoryItemId,
+      locationId,
+      correlationId: run.correlationId,
+      productAdminUrl: `https://${slug}.myshopify.com/admin/products/${productId}`,
+      variantAdminUrl: `https://${slug}.myshopify.com/admin/products/${productId}/variants/${variantId}`
+    })
   } catch (e: any) {
-    console.error('v2-shopify-send-raw', e?.message || e)
-    return json(500, { ok: false, error: e?.message || 'Internal error' })
+    console.warn('send.fail', { correlationId: run.correlationId, message: e?.message })
+    
+    // Write partial snapshot on error
+    if (req.json && (await req.json().catch(() => ({})))?.item?.id) {
+      const { item } = await req.json().catch(() => ({}))
+      await supabase.from('intake_items').update({
+        shopify_sync_status: 'error',
+        last_shopify_sync_error: e?.message || 'Internal error',
+        last_shopify_correlation_id: run.correlationId,
+        shopify_sync_snapshot: {
+          input: { storeKey: (await req.json().catch(() => ({})))?.storeKey, sku: item?.sku, locationGid: (await req.json().catch(() => ({})))?.locationGid },
+          steps: run.steps,
+          error: e?.message || 'Internal error'
+        },
+      }).eq('id', item.id)
+    }
+    
+    return json(500, { ok: false, error: e?.message || 'Internal error', correlationId: run.correlationId })
   }
 })

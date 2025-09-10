@@ -177,7 +177,10 @@ export type Database = {
           image_urls: Json | null
           intake_batch_id: string | null
           label_snapshot: Json | null
+          last_shopify_correlation_id: string | null
+          last_shopify_location_gid: string | null
           last_shopify_removal_error: string | null
+          last_shopify_store_key: string | null
           last_shopify_sync_error: string | null
           last_shopify_synced_at: string | null
           lot_id: string | null
@@ -203,6 +206,7 @@ export type Database = {
           shopify_removal_mode: string | null
           shopify_removed_at: string | null
           shopify_snapshot: Json | null
+          shopify_sync_snapshot: Json | null
           shopify_sync_status: string | null
           shopify_variant_id: string | null
           sku: string | null
@@ -242,7 +246,10 @@ export type Database = {
           image_urls?: Json | null
           intake_batch_id?: string | null
           label_snapshot?: Json | null
+          last_shopify_correlation_id?: string | null
+          last_shopify_location_gid?: string | null
           last_shopify_removal_error?: string | null
+          last_shopify_store_key?: string | null
           last_shopify_sync_error?: string | null
           last_shopify_synced_at?: string | null
           lot_id?: string | null
@@ -268,6 +275,7 @@ export type Database = {
           shopify_removal_mode?: string | null
           shopify_removed_at?: string | null
           shopify_snapshot?: Json | null
+          shopify_sync_snapshot?: Json | null
           shopify_sync_status?: string | null
           shopify_variant_id?: string | null
           sku?: string | null
@@ -307,7 +315,10 @@ export type Database = {
           image_urls?: Json | null
           intake_batch_id?: string | null
           label_snapshot?: Json | null
+          last_shopify_correlation_id?: string | null
+          last_shopify_location_gid?: string | null
           last_shopify_removal_error?: string | null
+          last_shopify_store_key?: string | null
           last_shopify_sync_error?: string | null
           last_shopify_synced_at?: string | null
           lot_id?: string | null
@@ -333,6 +344,7 @@ export type Database = {
           shopify_removal_mode?: string | null
           shopify_removed_at?: string | null
           shopify_snapshot?: Json | null
+          shopify_sync_snapshot?: Json | null
           shopify_sync_status?: string | null
           shopify_variant_id?: string | null
           sku?: string | null
@@ -1749,7 +1761,10 @@ export type Database = {
           image_urls: Json | null
           intake_batch_id: string | null
           label_snapshot: Json | null
+          last_shopify_correlation_id: string | null
+          last_shopify_location_gid: string | null
           last_shopify_removal_error: string | null
+          last_shopify_store_key: string | null
           last_shopify_sync_error: string | null
           last_shopify_synced_at: string | null
           lot_id: string | null
@@ -1775,6 +1790,7 @@ export type Database = {
           shopify_removal_mode: string | null
           shopify_removed_at: string | null
           shopify_snapshot: Json | null
+          shopify_sync_snapshot: Json | null
           shopify_sync_status: string | null
           shopify_variant_id: string | null
           sku: string | null

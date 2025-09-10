@@ -1,7 +1,23 @@
 // Shared Shopify utilities for edge functions
 export const API_VER = '2024-07'
 
+export const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+export const json = (s: number, b: unknown) => new Response(JSON.stringify(b), { status: s, headers: { ...CORS, 'Content-Type': 'application/json' } })
+
 export function up(s: string) { return (s || '').toUpperCase() }
+export const deriveStoreSlug = (domain: string) => (domain || '').split('.')[0]
+
+// Simple run context to collect step logs for the snapshot
+export type Step = { name: string, ok: boolean, status?: number | null, note?: string | null, data?: any }
+export function newRun() { 
+  const correlationId = crypto.randomUUID()
+  const steps: Step[] = []
+  const add = (s: Step) => { steps.push(s); return s }
+  return { correlationId, steps, add }
+}
 
 export function parseIdFromGid(gid?: string | null) {
   if (!gid) return null
