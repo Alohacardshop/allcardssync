@@ -38,6 +38,12 @@ verify_jwt = true
 [functions.shopify-sync-inventory]
 verify_jwt = true
 
+[functions.shopify-import]
+verify_jwt = true
+
+[functions.shopify-delete-duplicates]
+verify_jwt = true
+
 [functions.shopify-locations]
 verify_jwt = true
 

@@ -305,11 +305,54 @@ const Admin = () => {
                                   <Button
                                     variant="outline"
                                     size="sm"
-                                    onClick={() => window.open(`https://${skuInspectorResult.diagnostics?.domainUsed}/admin/products/${variant.productId.replace('gid://shopify/Product/', '')}`, '_blank')}
+                                    onClick={() => window.open(`https://${skuInspectorResult.diagnostics?.domainUsed?.replace('.myshopify.com', '')}/admin/products/${variant.productId.replace('gid://shopify/Product/', '')}`, '_blank')}
                                   >
                                     <ExternalLink className="w-4 h-4 mr-2" />
-                                    View in Shopify
+                                    View Product
                                   </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => window.open(`https://${skuInspectorResult.diagnostics?.domainUsed?.replace('.myshopify.com', '')}/admin/variants/${variant.variantId.replace('gid://shopify/ProductVariant/', '')}`, '_blank')}
+                                  >
+                                    <ExternalLink className="w-4 h-4 mr-2" />
+                                    View Variant
+                                  </Button>
+                                  {skuInspectorResult.variants.length > 1 && (
+                                    <Button
+                                      variant="destructive"
+                                      size="sm"
+                                      onClick={async () => {
+                                        try {
+                                          const { data, error } = await supabase.functions.invoke('shopify-delete-duplicates', {
+                                            body: {
+                                              storeKey: skuInspectorStoreKey,
+                                              sku: skuInspectorSku,
+                                              variants: skuInspectorResult.variants.map((v: any) => ({
+                                                productId: v.productId,
+                                                variantId: v.variantId
+                                              }))
+                                            }
+                                          });
+                                          
+                                          if (error) throw error;
+                                          
+                                          if (data.ok) {
+                                            toast.success(`Deleted ${data.results.deleted} duplicates, unpublished ${data.results.unpublished}`);
+                                            // Re-inspect to show updated results
+                                            handleInspectSku();
+                                          } else {
+                                            throw new Error(data.message);
+                                          }
+                                        } catch (error) {
+                                          console.error('Delete duplicates failed:', error);
+                                          toast.error('Failed to delete duplicates: ' + error.message);
+                                        }
+                                      }}
+                                    >
+                                      Delete Duplicates
+                                    </Button>
+                                  )}
                                 </div>
                               </div>
                             ))}

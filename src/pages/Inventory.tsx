@@ -1260,6 +1260,32 @@ const Inventory = () => {
                               {/* Action buttons */}
                               <div className="flex gap-2 pt-2 border-t">
                                 <Button
+                                  onClick={() => {
+                                    const storeSlug = inspectResult.diagnostics?.domainUsed?.replace('.myshopify.com', '');
+                                    window.open(`https://admin.shopify.com/store/${storeSlug}/products/${variant.productId}`, '_blank');
+                                  }}
+                                  variant="outline"
+                                  size="sm"
+                                  className="gap-2"
+                                >
+                                  <ExternalLink className="w-4 h-4" />
+                                  View Product
+                                </Button>
+                                
+                                <Button
+                                  onClick={() => {
+                                    const storeSlug = inspectResult.diagnostics?.domainUsed?.replace('.myshopify.com', '');
+                                    window.open(`https://admin.shopify.com/store/${storeSlug}/variants/${variant.variantId}`, '_blank');
+                                  }}
+                                  variant="outline"
+                                  size="sm"
+                                  className="gap-2"
+                                >
+                                  <ExternalLink className="w-4 h-4" />
+                                  View Variant
+                                </Button>
+                                
+                                <Button
                                   onClick={() => handleAttachToVariant(variant)}
                                   variant="outline"
                                   size="sm"
@@ -1290,6 +1316,18 @@ const Inventory = () => {
                                   >
                                     <DollarSign className="w-4 h-4" />
                                     Set stock at target
+                                  </Button>
+                                )}
+                                
+                                {inspectResult.variants.length > 1 && i === 0 && (
+                                  <Button
+                                    onClick={() => handleDeleteDuplicates(inspectSku)}
+                                    variant="destructive"
+                                    size="sm"
+                                    className="gap-2"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                    Delete duplicates
                                   </Button>
                                 )}
                               </div>
