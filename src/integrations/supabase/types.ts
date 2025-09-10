@@ -71,6 +71,36 @@ export type Database = {
         }
         Relationships: []
       }
+      edge_function_logs: {
+        Row: {
+          created_at: string
+          details: Json
+          event: string
+          function_name: string
+          id: string
+          level: string
+          request_id: string
+        }
+        Insert: {
+          created_at?: string
+          details?: Json
+          event: string
+          function_name: string
+          id?: string
+          level: string
+          request_id: string
+        }
+        Update: {
+          created_at?: string
+          details?: Json
+          event?: string
+          function_name?: string
+          id?: string
+          level?: string
+          request_id?: string
+        }
+        Relationships: []
+      }
       games: {
         Row: {
           discovered_at: string | null
@@ -922,6 +952,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      shopify_location_cache: {
+        Row: {
+          cached_at: string
+          expires_at: string
+          location_gid: string
+          location_id: string
+          location_name: string | null
+          store_key: string
+        }
+        Insert: {
+          cached_at?: string
+          expires_at?: string
+          location_gid: string
+          location_id: string
+          location_name?: string | null
+          store_key: string
+        }
+        Update: {
+          cached_at?: string
+          expires_at?: string
+          location_gid?: string
+          location_id?: string
+          location_name?: string | null
+          store_key?: string
+        }
+        Relationships: []
       }
       shopify_stores: {
         Row: {

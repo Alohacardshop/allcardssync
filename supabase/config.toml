@@ -32,9 +32,6 @@ port = 54326
 verify_jwt = true
 
 # SHOPIFY FUNCTIONS: All require JWT + admin/staff role verification
-[functions.shopify-sync-inventory]
-verify_jwt = true
-
 [functions.shopify-delete-duplicates]
 verify_jwt = true
 
@@ -57,9 +54,6 @@ verify_jwt = false
 # Shopify webhook test function (public - for development)
 [functions.shopify-webhook-test]
 verify_jwt = false
-
-[functions.shopify-attach-variant]
-verify_jwt = true
 
 [functions.shopify-publish-product]
 verify_jwt = true

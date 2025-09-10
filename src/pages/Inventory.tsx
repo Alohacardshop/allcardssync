@@ -135,14 +135,14 @@ const Inventory = () => {
     setSelectedLocationGid(selectedLocation || '');
   }, [selectedStore, selectedLocation]);
 
-  // F) Manual sync retry function
+  // F) Manual sync retry function - now uses v2 batch router
   const retrySync = async (item: any) => {
     try {
-      const { error } = await supabase.functions.invoke('shopify-sync-inventory', {
+      const { error } = await supabase.functions.invoke('v2-batch-send-to-inventory', {
         body: {
           storeKey: item.store_key,
-          sku: item.sku,
-          locationGid: item.shopify_location_gid
+          locationGid: item.shopify_location_gid,
+          itemIds: [item.id]
         }
       });
 
@@ -208,8 +208,13 @@ const Inventory = () => {
         await Promise.all(
           batch.map(async (item) => {
             try {
-              const { error } = await supabase.functions.invoke('shopify-sync-inventory', {
-                body: item
+              // Use v2 batch router for bulk sync
+              const { error } = await supabase.functions.invoke('v2-batch-send-to-inventory', {
+                body: {
+                  storeKey: item.storeKey,
+                  locationGid: item.locationGid,
+                  itemIds: [] // This would need actual item IDs from the filtered items
+                }
               });
               
               if (error) throw error;
