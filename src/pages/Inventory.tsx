@@ -430,21 +430,31 @@ const Inventory = () => {
         body: { storeKey: item.store_key, sku: item.sku }
       });
 
-      if (error) throw error;
-      
-      // Handle new response format
-      if (data && !data.ok) {
-        setInspectResult(data); // Error response with code/message
-      } else {
-        setInspectResult(data); // Success response
+      let payload: any = data;
+      if (error) {
+        // Try to parse JSON envelope from non-2xx
+        const res: any = (error as any)?.context?.response;
+        if (res) {
+          try {
+            const text = await res.text();
+            try { payload = JSON.parse(text); }
+            catch {
+              payload = { ok: false, code: `HTTP_${res.status}`, message: text || res.statusText || 'Unknown error' };
+            }
+          } catch {}
+        } else {
+          payload = { ok: false, code: 'CLIENT_ERROR', message: (error as any)?.message || 'Unknown error' };
+        }
       }
-    } catch (error) {
+
+      setInspectResult(payload);
+    } catch (error: any) {
       console.error('Inspect failed:', error);
       toast.error('Failed to inspect SKU in Shopify');
       setInspectResult({ 
         ok: false, 
         code: 'CLIENT_ERROR',
-        message: error.message || 'Unknown error'
+        message: error?.message || 'Unknown error'
       });
     } finally {
       setInspecting(false);
@@ -492,10 +502,23 @@ const Inventory = () => {
       
       // Re-run inspect to update dialog
       setInspecting(true);
-      const { data: newInspectData } = await supabase.functions.invoke('shopify-inspect-sku', {
+      const { data: newInspectData, error: newInspectError } = await supabase.functions.invoke('shopify-inspect-sku', {
         body: { storeKey, sku }
       });
-      setInspectResult(newInspectData);
+      if (newInspectError) {
+        const res: any = (newInspectError as any)?.context?.response;
+        if (res) {
+          try {
+            const text = await res.text();
+            try { setInspectResult(JSON.parse(text)); }
+            catch { setInspectResult({ ok:false, code:`HTTP_${res.status}`, message: text || res.statusText || 'Unknown error' }); }
+          } catch { setInspectResult({ ok:false, code:'CLIENT_ERROR', message: (newInspectError as any)?.message || 'Unknown error' }); }
+        } else {
+          setInspectResult({ ok:false, code:'CLIENT_ERROR', message: (newInspectError as any)?.message || 'Unknown error' });
+        }
+      } else {
+        setInspectResult(newInspectData);
+      }
       setInspecting(false);
       
     } catch (error) {
