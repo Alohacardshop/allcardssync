@@ -57,3 +57,7 @@ verify_jwt = false
 # Shopify webhook test function (public - for development)
 [functions.shopify-webhook-test]
 verify_jwt = false
+
+# JustTCG refresh variants (requires admin role)
+[functions.justtcg-refresh-variants]
+verify_jwt = true
