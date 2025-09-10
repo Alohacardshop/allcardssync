@@ -15,6 +15,7 @@ import { Navigation } from "@/components/Navigation";
 import { useStore } from "@/contexts/StoreContext";
 import { buildTitleFromParts } from "@/lib/labelData";
 import { AlertTriangle, CheckCircle, Clock, ExternalLink, RefreshCw, Edit3, MapPin, Settings } from "lucide-react";
+import { FLAGS } from '@/lib/flags';
 
 function useSEO(opts: { title: string; description?: string; canonical?: string }) {
   useEffect(() => {
@@ -186,59 +187,19 @@ export default function ShopifyMapping() {
   };
 
   const handleBulkPush = async (itemIds: string[]) => {
-    if (itemIds.length === 0 || !selectedStore) {
-      toast.error("Please select a store first");
+    // Feature disabled for v2 rebuild
+    if (!FLAGS.SHOPIFY_IMPORT_V2_ENABLED) {
+      toast.error("Import functionality is being rebuilt. Coming soon!");
       return;
-    }
-    
-    setProcessingIds(prev => new Set([...prev, ...itemIds]));
-    
-    try {
-      // Fetch full item data for the selected IDs
-      const { data: fullItems, error: fetchError } = await supabase
-        .from("intake_items")
-        .select("*")
-        .in("id", itemIds)
-        .is("deleted_at", null);
-
-      if (fetchError) throw fetchError;
-      
-      if (!fullItems || fullItems.length === 0) {
-        throw new Error("No items found to push");
-      }
-
-      // Push to Shopify with correct payload
-      const { error } = await supabase.functions.invoke("shopify-import", { 
-        body: { 
-          items: fullItems,
-          storeKey: selectedStore 
-        }
-      });
-      
-      if (error) throw error;
-
-      toast.success(`Successfully pushed ${itemIds.length} items to Shopify`);
-      loadMappingData();
-    } catch (e) {
-      console.error(e);
-      toast.error("Failed to push items to Shopify: " + (e instanceof Error ? e.message : "Unknown error"));
-    } finally {
-      setProcessingIds(prev => {
-        const newSet = new Set(prev);
-        itemIds.forEach(id => newSet.delete(id));
-        return newSet;
-      });
     }
   };
 
   const handleGroupPush = async (group: ProductGroup) => {
-    const unmappedItems = group.items.filter(item => !item.shopify_product_id);
-    if (unmappedItems.length === 0) {
-      toast.info("All items in this group are already mapped");
+    // Feature disabled for v2 rebuild
+    if (!FLAGS.SHOPIFY_IMPORT_V2_ENABLED) {
+      toast.error("Import functionality is being rebuilt. Coming soon!");
       return;
     }
-    
-    await handleBulkPush(unmappedItems.map(item => item.id));
   };
 
   const clearMapping = async (itemId: string) => {
@@ -537,9 +498,9 @@ export default function ShopifyMapping() {
                           <Button
                             size="sm"
                             onClick={() => handleGroupPush(group)}
-                            disabled={processingIds.has(group.items[0]?.id) || !selectedStore}
+                            disabled={true}
                           >
-                            {processingIds.has(group.items[0]?.id) ? "Processing..." : "Push to Shopify"}
+                            Push (coming soon)
                           </Button>
                         </div>
                       </div>
@@ -589,10 +550,10 @@ export default function ShopifyMapping() {
                                         size="sm"
                                         variant="outline"
                                         onClick={() => handleBulkPush([item.id])}
-                                        disabled={processingIds.has(item.id) || !selectedStore}
+                                        disabled={true}
                                         title={!selectedStore ? "Select a store first" : "Push to Shopify"}
                                       >
-                                        Push
+                                         Push (coming soon)
                                       </Button>
                                     ) : (
                                       <Button

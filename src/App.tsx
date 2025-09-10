@@ -15,7 +15,6 @@ import NotFound from "./pages/NotFound";
 import Auth from "./pages/Auth";
 import PrintLogs from "./pages/PrintLogs";
 import ShopifyMapping from "./pages/ShopifyMapping";
-import ShopifyInspect from "./pages/ShopifyInspect";
 import BulkImport from "./pages/BulkImport";
 
 import { supabase } from "@/integrations/supabase/client";
@@ -105,7 +104,6 @@ const App = () => (
               <Route path="/bulk-import" element={<ProtectedRoute><BulkImport /></ProtectedRoute>} />
               <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
               <Route path="/admin/catalog" element={<ProtectedRoute><div className="p-8"><CatalogMigrationPlaceholder /></div></ProtectedRoute>} />
-              <Route path="/shopify-inspect" element={<ProtectedRoute><ShopifyInspect /></ProtectedRoute>} />
               <Route path="/shopify-mapping" element={<ProtectedRoute><ShopifyMapping /></ProtectedRoute>} />
               <Route path="/print-logs" element={<ProtectedRoute><PrintLogs /></ProtectedRoute>} />
               

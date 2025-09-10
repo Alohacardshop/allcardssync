@@ -24,7 +24,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { ShopifyRemovalDialog } from '@/components/ShopifyRemovalDialog';
-import { ShopifyInspectDrawer } from '@/components/ShopifyInspectDrawer';
 import { formatDistanceToNow } from 'date-fns';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -59,9 +58,6 @@ const Inventory = () => {
   const [printingItem, setPrintingItem] = useState<string | null>(null);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
-  const [showInspectDrawer, setShowInspectDrawer] = useState(false);
-  const [inspectSku, setInspectSku] = useState<string>('');
-  const [inspectItemId, setInspectItemId] = useState<string>('');
   const [showSoldItems, setShowSoldItems] = useState(false);
   
   const { printPNG, selectedPrinter } = usePrintNode();
@@ -420,143 +416,13 @@ const Inventory = () => {
   };
 
   const handleInspectInShopify = (item: any) => {
-    setInspectSku(item.sku);
-    setInspectItemId(item.id);
-    setShowInspectDrawer(true);
+    // Feature disabled for v2 rebuild
+    toast.error("Inspect functionality is being rebuilt. Coming soon!");
   };
 
-  const handleResyncFromInspect = async (sku: string, storeKey: string) => {
-    try {
-      // First validate
-      const { data: validateData, error: validateError } = await supabase.functions.invoke('shopify-sync-inventory', {
-        body: {
-          storeKey,
-          sku,
-          validateOnly: true
-        }
-      });
 
-      if (validateError) {
-        toast.error(`Validation failed: ${validateError.message}`);
-        return;
-      }
 
-      if (validateData && !validateData.ok) {
-        toast.error(`Validation failed: ${validateData.message}`);
-        return;
-      }
 
-      // Then sync
-      const { data: syncData, error: syncError } = await supabase.functions.invoke('shopify-sync-inventory', {
-        body: {
-          storeKey,
-          sku,
-          validateOnly: false
-        }
-      });
-
-      if (syncError) throw syncError;
-
-      if (syncData && !syncData.ok) {
-        throw new Error(syncData.message || 'Sync failed');
-      }
-
-      toast.success('Re-sync completed successfully');
-      fetchItems(); // Refresh inventory
-      
-    } catch (error) {
-      console.error('Re-sync failed:', error);
-      toast.error('Re-sync failed: ' + error.message);
-    }
-  };
-
-  const handleAttachToVariant = async (variant: any) => {
-    try {
-      const item = items.find(i => i.sku === inspectSku);
-      if (!item) {
-        toast.error('Could not find local item to attach');
-        return;
-      }
-
-      const { error } = await supabase
-        .from('intake_items')
-        .update({
-          shopify_product_id: variant.productId,
-          shopify_variant_id: variant.variantId,
-          shopify_inventory_item_id: variant.inventoryItemId,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', item.id);
-
-      if (error) throw error;
-
-      toast.success('Successfully attached to Shopify variant');
-      fetchItems(); // Refresh to show updated IDs
-    } catch (error) {
-      console.error('Error attaching to variant:', error);
-      toast.error('Failed to attach to variant');
-    }
-  };
-
-  const handlePublishProduct = async (productId: string) => {
-    try {
-      const item = items.find(i => i.sku === inspectSku);
-      if (!item) {
-        toast.error('Could not find local item');
-        return;
-      }
-
-      // Call Shopify function to publish the product
-      const { error } = await supabase.functions.invoke('shopify-publish-product', {
-        body: {
-          storeKey: item.store_key,
-          productId: productId
-        }
-      });
-
-      if (error) throw error;
-
-      toast.success('Product published successfully');
-      
-      // Refresh inspector results to show updated status
-      handleInspectInShopify(item);
-    } catch (error) {
-      console.error('Error publishing product:', error);
-      toast.error('Failed to publish product');
-    }
-  };
-
-  const handleSetStock = async (variant: any, locationGid: string) => {
-    try {
-      const item = items.find(i => i.sku === inspectSku);
-      if (!item) {
-        toast.error('Could not find local item');
-        return;
-      }
-
-      const quantity = item.quantity || 1;
-
-      // Call Shopify function to set inventory level
-      const { error } = await supabase.functions.invoke('shopify-sync-inventory', {
-        body: {
-          storeKey: item.store_key,
-          sku: item.sku,
-          locationGid: locationGid,
-          quantity: quantity
-        }
-      });
-
-      if (error) throw error;
-
-      toast.success(`Set stock to ${quantity} at target location`);
-      
-      // Refresh inspector results to show updated quantities
-      handleInspectInShopify(item);
-    } catch (error) {
-      console.error('Error setting stock:', error);
-      toast.error('Failed to set stock');
-    }
-  };
 
   const handleDeleteDuplicates = async (sku: string) => {
     try {
@@ -1060,16 +926,6 @@ const Inventory = () => {
           onConfirm={onRemovalConfirm}
           items={Array.isArray(selectedItemForRemoval) ? selectedItemForRemoval : (selectedItemForRemoval ? [selectedItemForRemoval] : [])}
           loading={bulkDeleting}
-        />
-
-        <ShopifyInspectDrawer
-          open={showInspectDrawer}
-          onOpenChange={setShowInspectDrawer}
-          sku={inspectSku}
-          intakeItemId={inspectItemId}
-          storeKey={selectedStoreLocations.length > 0 ? selectedStoreLocations[0]?.storeKey || selectedStoreKey : selectedStoreKey}
-          storeSlug="aloha-card-shop"
-          targetLocationGid={selectedStoreLocations.length > 0 ? selectedStoreLocations[0]?.locationGid || selectedLocationGid : selectedLocationGid}
         />
       </div>
     </>
