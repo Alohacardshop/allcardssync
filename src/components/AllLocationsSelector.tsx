@@ -61,9 +61,20 @@ export function AllLocationsSelector({
 
   const loadAllAccessibleLocations = async () => {
     setLoading(true);
+    
+    // Set a timeout to ensure loading state is cleared
+    const loadingTimeout = setTimeout(() => {
+      setLoading(false);
+      toast.error("Location loading timed out. Please try again.");
+    }, 30000); // 30 second timeout
+    
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        clearTimeout(loadingTimeout);
+        setLoading(false);
+        return;
+      }
 
       // Check if user is admin
       const { data: adminCheck } = await supabase.rpc("has_role", { 
@@ -83,16 +94,26 @@ export function AllLocationsSelector({
           .select("key, name")
           .order("name");
 
-        if (!stores) return;
+        if (!stores) {
+          clearTimeout(loadingTimeout);
+          setLoading(false);
+          return;
+        }
 
         const allLocations: LocationOption[] = [];
         
-        // Load locations for each store
-        for (const store of stores) {
+        // Load locations for each store with better error handling
+        const locationPromises = stores.map(async (store) => {
           try {
+            // Add timeout for individual store calls
+            const controller = new AbortController();
+            const storeTimeout = setTimeout(() => controller.abort(), 10000); // 10 second timeout per store
+            
             const { data, error } = await supabase.functions.invoke("shopify-locations", {
               body: { storeKey: store.key }
             });
+            
+            clearTimeout(storeTimeout);
             
             if (!error && data?.ok && data?.locations) {
               const storeLocations = data.locations.map((loc: any) => ({
@@ -107,12 +128,24 @@ export function AllLocationsSelector({
                   a.is_default
                 )
               }));
-              allLocations.push(...storeLocations);
+              return storeLocations;
             }
           } catch (error) {
             console.error(`Error loading locations for store ${store.key}:`, error);
+            // Don't let one store failure block others
           }
-        }
+          return [];
+        });
+
+        // Wait for all location calls to complete or timeout
+        const results = await Promise.allSettled(locationPromises);
+        
+        // Flatten successful results
+        results.forEach((result) => {
+          if (result.status === 'fulfilled' && Array.isArray(result.value)) {
+            allLocations.push(...result.value);
+          }
+        });
 
         setLocations(allLocations);
         setLastUpdated(new Date());
@@ -160,9 +193,11 @@ export function AllLocationsSelector({
       }
       
       setHasInitialLoad(true);
+      clearTimeout(loadingTimeout);
     } catch (error) {
       console.error("Error loading accessible locations:", error);
       toast.error("Failed to load locations. Please try again.");
+      clearTimeout(loadingTimeout);
     } finally {
       setLoading(false);
     }
