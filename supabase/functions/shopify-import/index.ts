@@ -213,49 +213,135 @@ serve(async (req) => {
         let existingVariant = null;
         let productId, variantId, inventoryItemId;
         
-        try {
-          // First try to find by SKU
-          let existingVariantsResponse = await fetch(`${shopifyUrl}variants.json?sku=${encodeURIComponent(productSku)}&limit=1&fields=id,product_id,inventory_item_id,inventory_quantity`, {
-            method: 'GET',
-            headers,
-          });
-          
-          if (existingVariantsResponse.ok) {
-            const variantsData = await existingVariantsResponse.json();
-            if (variantsData.variants && variantsData.variants.length > 0) {
-              existingVariant = variantsData.variants[0];
-              console.log(`Found existing variant by SKU: ${productSku}`);
-            }
-          }
-          
-          // If not found by SKU and barcode is different from SKU, try searching by barcode
-          if (!existingVariant && productBarcode && productBarcode !== productSku) {
-            existingVariantsResponse = await fetch(`${shopifyUrl}variants.json?barcode=${encodeURIComponent(productBarcode)}&limit=1&fields=id,product_id,inventory_item_id,inventory_quantity`, {
-              method: 'GET',
-              headers,
+        // Get import strategy setting (default to 'attach_or_create')
+        const { data: strategySetting } = await supabase
+          .from('system_settings')
+          .select('key_value')
+          .eq('key_name', 'SHOPIFY_IMPORT_STRATEGY')
+          .single();
+        
+        const importStrategy = strategySetting?.key_value || 'attach_or_create';
+        console.log(`Using import strategy: ${importStrategy}`);
+        
+        if (importStrategy === 'attach_or_create') {
+          try {
+            // First try GraphQL search by SKU for more comprehensive results
+            const graphqlQuery = `
+              query ($query: String!) {
+                productVariants(first: 5, query: $query) {
+                  edges {
+                    node {
+                      id
+                      sku
+                      inventoryQuantity
+                      inventoryItem {
+                        id
+                      }
+                      product {
+                        id
+                        title
+                        status
+                        handle
+                        vendor
+                        publishedOnCurrentPublication
+                      }
+                    }
+                  }
+                }
+              }
+            `;
+
+            const graphqlResponse = await fetch(`${shopifyUrl.replace('/admin/api/2024-07/', '/admin/api/2024-07/graphql.json')}`, {
+              method: 'POST',
+              headers: {
+                ...headers,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                query: graphqlQuery,
+                variables: { query: `sku:${productSku}` }
+              })
             });
+
+            if (graphqlResponse.ok) {
+              const graphqlResult = await graphqlResponse.json();
+              
+              if (graphqlResult.data?.productVariants?.edges?.length > 0) {
+                const variants = graphqlResult.data.productVariants.edges;
+                console.log(`Found ${variants.length} existing variants for SKU ${productSku} via GraphQL`);
+                
+                // Choose the best variant to attach to
+                let chosenVariant = variants[0].node; // Default to first
+                
+                // Prefer published products with matching vendor
+                const publishedWithVendor = variants.find(v => 
+                  v.node.product.publishedOnCurrentPublication && 
+                  v.node.product.vendor?.toLowerCase() === vendorName.toLowerCase()
+                );
+                
+                if (publishedWithVendor) {
+                  chosenVariant = publishedWithVendor.node;
+                  console.log(`Chose published variant with matching vendor: ${chosenVariant.id}`);
+                } else {
+                  // Prefer any published product
+                  const published = variants.find(v => v.node.product.publishedOnCurrentPublication);
+                  if (published) {
+                    chosenVariant = published.node;
+                    console.log(`Chose published variant: ${chosenVariant.id}`);
+                  }
+                }
+                
+                existingVariant = {
+                  id: chosenVariant.id.replace('gid://shopify/ProductVariant/', ''),
+                  product_id: chosenVariant.product.id.replace('gid://shopify/Product/', ''),
+                  inventory_item_id: chosenVariant.inventoryItem.id.replace('gid://shopify/InventoryItem/', ''),
+                  inventory_quantity: chosenVariant.inventoryQuantity || 0
+                };
+                
+                // Log warning if multiple variants found
+                if (variants.length > 1) {
+                  console.warn(`DUPLICATE_SKU warning: Found ${variants.length} variants for SKU ${productSku}. Attaching to ${chosenVariant.product.title} (${chosenVariant.product.id})`);
+                }
+              }
+            } else {
+              console.warn(`GraphQL search failed for SKU ${productSku}, falling back to REST`);
+            }
             
-            if (existingVariantsResponse.ok) {
-              const variantsData = await existingVariantsResponse.json();
-              if (variantsData.variants && variantsData.variants.length > 0) {
-                existingVariant = variantsData.variants[0];
-                console.log(`Found existing variant by barcode: ${productBarcode}`);
+            // Fallback to REST API search if GraphQL failed or found nothing
+            if (!existingVariant) {
+              const existingVariantsResponse = await fetch(`${shopifyUrl}variants.json?sku=${encodeURIComponent(productSku)}&limit=5&fields=id,product_id,inventory_item_id,inventory_quantity`, {
+                method: 'GET',
+                headers,
+              });
+              
+              if (existingVariantsResponse.ok) {
+                const variantsData = await existingVariantsResponse.json();
+                if (variantsData.variants && variantsData.variants.length > 0) {
+                  existingVariant = variantsData.variants[0];
+                  console.log(`Found existing variant by SKU via REST: ${productSku}`);
+                  
+                  if (variantsData.variants.length > 1) {
+                    console.warn(`DUPLICATE_SKU warning: Found ${variantsData.variants.length} variants for SKU ${productSku} via REST. Using first one.`);
+                  }
+                }
               }
             }
+            
+            if (existingVariant) {
+              productId = existingVariant.product_id;
+              variantId = existingVariant.id;
+              inventoryItemId = existingVariant.inventory_item_id;
+              console.log(`Found existing variant ${variantId} in product ${productId} with matching SKU`);
+            }
+          } catch (error) {
+            console.warn(`Error checking for existing variant with SKU ${productSku}:`, error);
+            // Continue with creating new product if check fails
           }
-          
-          if (existingVariant) {
-            productId = existingVariant.product_id;
-            variantId = existingVariant.id;
-            inventoryItemId = existingVariant.inventory_item_id;
-            console.log(`Found existing variant ${variantId} in product ${productId} with matching SKU/barcode`);
-          }
-        } catch (error) {
-          console.warn(`Error checking for existing variant with SKU ${productSku} or barcode ${productBarcode}:`, error);
-          // Continue with creating new product if check fails
+        } else {
+          console.log(`Import strategy is ${importStrategy}, skipping SKU search and creating new product`);
         }
 
-        if (existingVariant && variantId) {
+        if (existingVariant && variantId && importStrategy === 'attach_or_create') {
           // Update existing variant quantity
           const currentQuantity = existingVariant.inventory_quantity || 0;
           const newQuantity = currentQuantity + (item.quantity || 1);

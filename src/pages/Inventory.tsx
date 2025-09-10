@@ -528,6 +528,134 @@ const Inventory = () => {
     }
   };
 
+  const handleAttachToVariant = async (variant: any) => {
+    try {
+      const item = items.find(i => i.sku === inspectSku);
+      if (!item) {
+        toast.error('Could not find local item to attach');
+        return;
+      }
+
+      const { error } = await supabase
+        .from('intake_items')
+        .update({
+          shopify_product_id: variant.productId,
+          shopify_variant_id: variant.variantId,
+          shopify_inventory_item_id: variant.inventoryItemId,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', item.id);
+
+      if (error) throw error;
+
+      toast.success('Successfully attached to Shopify variant');
+      fetchItems(); // Refresh to show updated IDs
+    } catch (error) {
+      console.error('Error attaching to variant:', error);
+      toast.error('Failed to attach to variant');
+    }
+  };
+
+  const handlePublishProduct = async (productId: string) => {
+    try {
+      const item = items.find(i => i.sku === inspectSku);
+      if (!item) {
+        toast.error('Could not find local item');
+        return;
+      }
+
+      // Call Shopify function to publish the product
+      const { error } = await supabase.functions.invoke('shopify-publish-product', {
+        body: {
+          storeKey: item.store_key,
+          productId: productId
+        }
+      });
+
+      if (error) throw error;
+
+      toast.success('Product published successfully');
+      
+      // Refresh inspector results to show updated status
+      handleInspectInShopify(item);
+    } catch (error) {
+      console.error('Error publishing product:', error);
+      toast.error('Failed to publish product');
+    }
+  };
+
+  const handleSetStock = async (variant: any, locationGid: string) => {
+    try {
+      const item = items.find(i => i.sku === inspectSku);
+      if (!item) {
+        toast.error('Could not find local item');
+        return;
+      }
+
+      const quantity = item.quantity || 1;
+
+      // Call Shopify function to set inventory level
+      const { error } = await supabase.functions.invoke('shopify-sync-inventory', {
+        body: {
+          storeKey: item.store_key,
+          sku: item.sku,
+          locationGid: locationGid,
+          quantity: quantity
+        }
+      });
+
+      if (error) throw error;
+
+      toast.success(`Set stock to ${quantity} at target location`);
+      
+      // Refresh inspector results to show updated quantities
+      handleInspectInShopify(item);
+    } catch (error) {
+      console.error('Error setting stock:', error);
+      toast.error('Failed to set stock');
+    }
+  };
+
+  const handleDeleteDuplicates = async (sku: string) => {
+    if (!inspectResult || !inspectResult.variants || inspectResult.variants.length <= 1) {
+      toast.error('No duplicates to delete');
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Are you sure you want to delete ${inspectResult.variants.length - 1} duplicate products for SKU "${sku}"? This will keep the first variant and remove/unpublish the others.`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      const item = items.find(i => i.sku === sku);
+      if (!item) {
+        toast.error('Could not find local item');
+        return;
+      }
+
+      // Call Shopify function to delete duplicates
+      const { error } = await supabase.functions.invoke('shopify-delete-duplicates', {
+        body: {
+          storeKey: item.store_key,
+          sku: sku,
+          variants: inspectResult.variants
+        }
+      });
+
+      if (error) throw error;
+
+      toast.success('Duplicate products removed successfully');
+      
+      // Refresh inspector results
+      handleInspectInShopify(item);
+    } catch (error) {
+      console.error('Error deleting duplicates:', error);
+      toast.error('Failed to delete duplicates');
+    }
+  };
+
   const toggleExpanded = (itemId: string) => {
     const newExpanded = new Set(expandedItems);
     if (newExpanded.has(itemId)) {
@@ -1010,7 +1138,7 @@ const Inventory = () => {
         />
 
         <Dialog open={showInspectDialog} onOpenChange={setShowInspectDialog}>
-          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Inspect SKU in Shopify</DialogTitle>
               <DialogDescription>
@@ -1031,15 +1159,30 @@ const Inventory = () => {
                   {inspectResult.ok ? (
                     <>
                       <div className="p-3 bg-muted rounded-lg">
-                        <h4 className="font-medium">Search Results</h4>
-                        <p className="text-sm text-muted-foreground">
-                          Found {inspectResult.variants.length} variant{inspectResult.variants.length !== 1 ? 's' : ''} for SKU "{inspectSku}"
-                        </p>
-                        {inspectResult.diagnostics && (
-                          <p className="text-xs text-muted-foreground mt-2">
-                            Domain: {inspectResult.diagnostics.domainUsed} • Duration: {inspectResult.diagnostics.requestDurationMs}ms
-                          </p>
-                        )}
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <h4 className="font-medium">Search Results</h4>
+                            <p className="text-sm text-muted-foreground">
+                              Found {inspectResult.variants.length} variant{inspectResult.variants.length !== 1 ? 's' : ''} for SKU "{inspectSku}"
+                            </p>
+                            {inspectResult.diagnostics && (
+                              <p className="text-xs text-muted-foreground mt-2">
+                                Domain: {inspectResult.diagnostics.domainUsed} • Duration: {inspectResult.diagnostics.requestDurationMs}ms
+                              </p>
+                            )}
+                          </div>
+                          {inspectResult.variants.length > 1 && (
+                            <Button
+                              onClick={() => handleDeleteDuplicates(inspectSku)}
+                              variant="destructive"
+                              size="sm"
+                              className="gap-2"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                              Delete duplicates
+                            </Button>
+                          )}
+                        </div>
                       </div>
                       
                       {inspectResult.variants.length === 0 ? (
@@ -1066,7 +1209,7 @@ const Inventory = () => {
                       ) : (
                         <div className="space-y-3">
                           {inspectResult.variants.map((variant: any, i: number) => (
-                            <div key={i} className="p-4 border rounded-lg space-y-2">
+                            <div key={i} className="p-4 border rounded-lg space-y-3">
                               <div className="grid grid-cols-2 gap-2 text-sm">
                                 <div><strong>Product:</strong> {variant.productTitle}</div>
                                 <div><strong>Status:</strong> 
@@ -1080,26 +1223,76 @@ const Inventory = () => {
                                   </Badge>
                                 </div>
                                 <div><strong>Variant:</strong> {variant.variantTitle}</div>
-                                <div><strong>Product ID:</strong> {variant.productId.replace('gid://shopify/Product/', '')}</div>
-                                <div><strong>Variant ID:</strong> {variant.variantId.replace('gid://shopify/ProductVariant/', '')}</div>
-                                <div><strong>Inventory Item ID:</strong> {variant.inventoryItemId?.replace('gid://shopify/InventoryItem/', '')}</div>
+                                <div><strong>Product ID:</strong> {variant.productId}</div>
+                                <div><strong>Variant ID:</strong> {variant.variantId}</div>
+                                <div><strong>Inventory Item ID:</strong> {variant.inventoryItemId}</div>
                               </div>
                               
                               {variant.locations && variant.locations.length > 0 && (
                                 <div className="mt-3">
                                   <h5 className="text-sm font-medium mb-2">Inventory by Location:</h5>
                                   <div className="grid gap-2">
-                                    {variant.locations.map((location: any, j: number) => (
-                                      <div key={j} className="flex justify-between items-center text-sm bg-muted/50 p-2 rounded">
-                                        <span>{location.name}</span>
-                                        <Badge variant={location.available > 0 ? 'default' : 'secondary'}>
-                                          {location.available} available
-                                        </Badge>
-                                      </div>
-                                    ))}
+                                    {variant.locations.map((location: any, j: number) => {
+                                      const isTargetLocation = selectedLocationGid && location.gid === selectedLocationGid;
+                                      return (
+                                        <div key={j} className={cn(
+                                          "flex justify-between items-center text-sm p-2 rounded border",
+                                          isTargetLocation ? "border-primary bg-primary/10" : "bg-muted/50"
+                                        )}>
+                                          <div className="flex items-center gap-2">
+                                            <span className="font-medium">{location.name || location.gid}</span>
+                                            {isTargetLocation && (
+                                              <Badge variant="outline" className="text-xs">
+                                                Target location
+                                              </Badge>
+                                            )}
+                                          </div>
+                                          <Badge variant={location.available > 0 ? 'default' : 'secondary'}>
+                                            {location.available} available
+                                          </Badge>
+                                        </div>
+                                      );
+                                    })}
                                   </div>
                                 </div>
                               )}
+                              
+                              {/* Action buttons */}
+                              <div className="flex gap-2 pt-2 border-t">
+                                <Button
+                                  onClick={() => handleAttachToVariant(variant)}
+                                  variant="outline"
+                                  size="sm"
+                                  className="gap-2"
+                                >
+                                  <Package className="w-4 h-4" />
+                                  Attach to this variant
+                                </Button>
+                                
+                                {!variant.published && (
+                                  <Button
+                                    onClick={() => handlePublishProduct(variant.productId)}
+                                    variant="outline"
+                                    size="sm"
+                                    className="gap-2"
+                                  >
+                                    <ExternalLink className="w-4 h-4" />
+                                    Publish product
+                                  </Button>
+                                )}
+                                
+                                {selectedLocationGid && (
+                                  <Button
+                                    onClick={() => handleSetStock(variant, selectedLocationGid)}
+                                    variant="outline"
+                                    size="sm"
+                                    className="gap-2"
+                                  >
+                                    <DollarSign className="w-4 h-4" />
+                                    Set stock at target
+                                  </Button>
+                                )}
+                              </div>
                             </div>
                           ))}
                         </div>
