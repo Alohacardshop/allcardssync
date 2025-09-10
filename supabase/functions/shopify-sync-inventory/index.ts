@@ -1,9 +1,28 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.56.0'
 import { resolveShopifyConfig } from '../_shared/resolveShopifyConfig.ts'
 
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
+const INTERNAL_SYNC_SECRET = Deno.env.get("INTERNAL_SYNC_SECRET") || "";
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-internal-auth',
+}
+
+const json = (s: number, b: unknown) => new Response(JSON.stringify(b), {
+  status: s,
+  headers: { ...corsHeaders, "Content-Type": "application/json" }
+});
+
+async function allowViaJwt(req: Request) {
+  const auth = req.headers.get("Authorization");
+  if (!auth?.startsWith("Bearer ")) return false;
+  const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    global: { headers: { Authorization: auth } },
+  });
+  const { data } = await userClient.auth.getUser();
+  return !!data?.user; // (optionally check a role here later)
 }
 
 // Exponential backoff for Shopify API calls
@@ -60,32 +79,20 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders })
   }
 
-  // Validate internal authorization header
-  const internalAuthHeader = req.headers.get('X-Internal-Auth')
-  const expectedSecret = Deno.env.get('INTERNAL_SYNC_SECRET')
-  
-  const isAuthorizedCaller = internalAuthHeader && expectedSecret && internalAuthHeader === expectedSecret
-  
-  console.log('shopify-sync-inventory: Authorization check', { 
-    hasHeader: !!internalAuthHeader, 
-    hasSecret: !!expectedSecret, 
-    authorized: isAuthorizedCaller 
-  })
-  
-  if (!isAuthorizedCaller) {
-    console.warn('shopify-sync-inventory: Unauthorized request - missing or invalid X-Internal-Auth header')
-    return new Response(
-      JSON.stringify({ 
-        ok: false, 
-        code: 'UNAUTHORIZED', 
-        message: 'Missing or invalid authorization header' 
-      }),
-      { 
-        status: 401, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-      }
-    )
+  // ---- AUTH GUARD: JWT (browser) OR internal secret (server) ----
+  const internalOk = req.headers.get("X-Internal-Auth") === INTERNAL_SYNC_SECRET;
+  const jwtOk = await allowViaJwt(req);
+
+  if (!internalOk && !jwtOk) {
+    console.warn('shopify-sync-inventory: Unauthorized request - missing internal secret or valid JWT')
+    return json(401, { ok: false, code: "UNAUTHORIZED", message: "Missing internal secret or valid JWT" });
   }
+
+  console.log('shopify-sync-inventory: Authorization check', { 
+    internalOk, 
+    jwtOk, 
+    authorized: internalOk || jwtOk 
+  })
 
   try {
     console.log('shopify-sync-inventory: Starting authorized request')
