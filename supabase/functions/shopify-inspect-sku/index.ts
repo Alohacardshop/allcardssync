@@ -27,10 +27,7 @@ async function inspectSkuInShopify(domain: string, accessToken: string, sku: str
                       id
                       name
                     }
-                    quantities(names: ["available"]) {
-                      name
-                      quantity
-                    }
+                    available
                   }
                 }
               }
@@ -86,7 +83,7 @@ async function inspectSkuInShopify(domain: string, accessToken: string, sku: str
     inventoryLevels: edge.node.inventoryItem.inventoryLevels.edges.map((level: any) => ({
       locationId: level.node.location.id,
       locationName: level.node.location.name,
-      available: level.node.quantities.find((q: any) => q.name === "available")?.quantity || 0
+      available: level.node.available || 0
     }))
   }));
 }
