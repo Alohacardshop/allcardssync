@@ -221,12 +221,28 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
       setBatchSendProgress({ total: itemIds.length, completed: 0, failed: 0, inProgress: true });
 
       const startTime = Date.now();
-      const { data: result, error } = await supabase.rpc('send_intake_items_to_inventory', {
+      
+      // Add timeout to prevent hanging
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Operation timed out after 60 seconds')), 60000);
+      });
+      
+      const rpcPromise = supabase.rpc('send_intake_items_to_inventory', {
         item_ids: itemIds
       });
+      
+      console.log(`⏳ [${correlationId}] Calling RPC with timeout...`);
+      const { data: result, error } = await Promise.race([rpcPromise, timeoutPromise]) as any;
 
       if (error) {
         console.error(`❌ [${correlationId}] RPC call failed:`, error);
+        // Log specific error details for debugging
+        console.error(`❌ [${correlationId}] Error details:`, {
+          message: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint
+        });
         throw error;
       }
 
