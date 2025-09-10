@@ -60,8 +60,35 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders })
   }
 
+  // Validate internal authorization header
+  const internalAuthHeader = req.headers.get('X-Internal-Auth')
+  const expectedSecret = Deno.env.get('INTERNAL_SYNC_SECRET')
+  
+  const isAuthorizedCaller = internalAuthHeader && expectedSecret && internalAuthHeader === expectedSecret
+  
+  console.log('shopify-sync-inventory: Authorization check', { 
+    hasHeader: !!internalAuthHeader, 
+    hasSecret: !!expectedSecret, 
+    authorized: isAuthorizedCaller 
+  })
+  
+  if (!isAuthorizedCaller) {
+    console.warn('shopify-sync-inventory: Unauthorized request - missing or invalid X-Internal-Auth header')
+    return new Response(
+      JSON.stringify({ 
+        ok: false, 
+        code: 'UNAUTHORIZED', 
+        message: 'Missing or invalid authorization header' 
+      }),
+      { 
+        status: 401, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      }
+    )
+  }
+
   try {
-    console.log('shopify-sync-inventory: Starting request')
+    console.log('shopify-sync-inventory: Starting authorized request')
     
     // Parse request
     const body = await req.json() as SyncRequest
