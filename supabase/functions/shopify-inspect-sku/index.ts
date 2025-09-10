@@ -27,7 +27,14 @@ async function inspectSkuInShopify(domain: string, accessToken: string, sku: str
                       id
                       name
                     }
-                    available
+                    quantities(names: ["available"]) {
+                      edges {
+                        node {
+                          name
+                          quantity
+                        }
+                      }
+                    }
                   }
                 }
               }
@@ -83,7 +90,7 @@ async function inspectSkuInShopify(domain: string, accessToken: string, sku: str
     inventoryLevels: edge.node.inventoryItem.inventoryLevels.edges.map((level: any) => ({
       locationId: level.node.location.id,
       locationName: level.node.location.name,
-      available: level.node.available
+      available: level.node.quantities.edges.find((q: any) => q.node.name === "available")?.node.quantity || 0
     }))
   }));
 }
@@ -103,14 +110,22 @@ Deno.serve(async (req) => {
     // Get user from JWT
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
-      return new Response('Unauthorized', { status: 401, headers: corsHeaders });
+      return new Response(JSON.stringify({
+        ok: false,
+        code: 'UNAUTHORIZED', 
+        message: 'Authorization header required'
+      }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     const token = authHeader.replace('Bearer ', '');
     const { data: userData, error: userError } = await supabase.auth.getUser(token);
     
     if (userError || !userData.user) {
-      return new Response('Unauthorized', { status: 401, headers: corsHeaders });
+      return new Response(JSON.stringify({
+        ok: false,
+        code: 'UNAUTHORIZED',
+        message: 'Authentication required'
+      }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     // Check if user has admin or staff role
@@ -121,18 +136,26 @@ Deno.serve(async (req) => {
 
     const hasAccess = roles?.some(r => ['admin', 'staff'].includes(r.role));
     if (!hasAccess) {
-      return new Response('Forbidden: Admin or staff role required', { 
+      return new Response(JSON.stringify({
+        ok: false,
+        code: 'FORBIDDEN',
+        message: 'Admin or staff role required'
+      }), { 
         status: 403, 
-        headers: corsHeaders 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
 
     const { storeKey, sku } = await req.json();
 
     if (!storeKey || !sku) {
-      return new Response('Missing storeKey or sku', { 
-        status: 400, 
-        headers: corsHeaders 
+      return new Response(JSON.stringify({
+        ok: false,
+        code: 'MISSING_PARAMS',
+        message: 'Missing storeKey or sku'
+      }), { 
+        status: 200, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
 
@@ -173,7 +196,7 @@ Deno.serve(async (req) => {
         message: `No variant with that SKU: ${sku}`,
         diagnostics
       }), {
-        status: 404,
+        status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
@@ -215,7 +238,7 @@ Deno.serve(async (req) => {
       code,
       message: error.message
     }), {
-      status: 500,
+      status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
   }
