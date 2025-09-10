@@ -189,6 +189,7 @@ export type Database = {
           type: string | null
           unique_item_uid: string
           updated_at: string
+          updated_by: string | null
           variant: string | null
           year: string | null
         }
@@ -253,6 +254,7 @@ export type Database = {
           type?: string | null
           unique_item_uid?: string
           updated_at?: string
+          updated_by?: string | null
           variant?: string | null
           year?: string | null
         }
@@ -317,6 +319,7 @@ export type Database = {
           type?: string | null
           unique_item_uid?: string
           updated_at?: string
+          updated_by?: string | null
           variant?: string | null
           year?: string | null
         }
@@ -375,6 +378,30 @@ export type Database = {
           total_items?: number | null
           total_value?: number | null
           updated_at?: string
+        }
+        Relationships: []
+      }
+      inventory_reconciliation_queue: {
+        Row: {
+          created_at: string | null
+          details: Json
+          id: string
+          intake_item_id: string
+          reason: string
+        }
+        Insert: {
+          created_at?: string | null
+          details: Json
+          id?: string
+          intake_item_id: string
+          reason: string
+        }
+        Update: {
+          created_at?: string | null
+          details?: Json
+          id?: string
+          intake_item_id?: string
+          reason?: string
         }
         Relationships: []
       }
@@ -1707,9 +1734,14 @@ export type Database = {
           type: string | null
           unique_item_uid: string
           updated_at: string
+          updated_by: string | null
           variant: string | null
           year: string | null
         }
+      }
+      send_intake_items_to_inventory: {
+        Args: { item_ids: string[] }
+        Returns: Json
       }
       set_limit: {
         Args: { "": number }
