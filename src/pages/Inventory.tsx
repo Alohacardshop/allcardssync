@@ -34,6 +34,8 @@ import { Navigation } from '@/components/Navigation';
 import BarcodeLabel from '@/components/BarcodeLabel';
 import { usePrintNode } from '@/hooks/usePrintNode';
 import { Link } from 'react-router-dom';
+import { sendToShopify } from '@/hooks/useShopifySend';
+import { FLAGS } from '@/lib/flags';
 
 const Inventory = () => {
   const [items, setItems] = useState<any[]>([]);
@@ -59,6 +61,7 @@ const Inventory = () => {
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [showSoldItems, setShowSoldItems] = useState(false);
+  const [syncingRowId, setSyncingRowId] = useState<string | null>(null);
   
   const { printPNG, selectedPrinter } = usePrintNode();
   const { selectedStore, selectedLocation } = useStore();
@@ -293,23 +296,36 @@ const Inventory = () => {
     }
   };
 
-  const syncToShopify = async (item: any) => {
-    try {
-      const { error } = await supabase.functions.invoke('shopify-sync-inventory', {
-        body: {
-          storeKey: item.store_key,
-          sku: item.sku,
-          locationGid: item.shopify_location_gid
-        }
-      });
-
-      if (error) throw error;
-      toast.success('Sync to Shopify initiated');
-      fetchItems();
-    } catch (error) {
-      console.error('Sync failed:', error);
-      toast.error('Failed to sync to Shopify');
+  const onSync = async (row: any) => {
+    if (!selectedLocationGid) { 
+      toast.error("Pick a location first"); 
+      return;
     }
+    
+    setSyncingRowId(row.id);
+    try {
+      await sendToShopify({
+        storeKey: selectedStoreKey as "hawaii" | "las_vegas",
+        sku: row.sku,
+        title: row.brand_title || row.subject,
+        price: row.price ?? null,
+        barcode: row.sku,
+        locationGid: selectedLocationGid,
+        quantity: Number(row.quantity ?? 0),
+        intakeItemId: row.id
+      });
+      toast.success(`Synced ${row.sku} to Shopify`);
+      fetchItems();
+    } catch (e: any) {
+      toast.error(e?.message || "Sync failed");
+    } finally {
+      setSyncingRowId(null);
+    }
+  };
+
+  // Legacy function for existing retry button
+  const syncToShopify = async (item: any) => {
+    await onSync(item);
   };
 
   const handleRemoveFromShopify = (item: any) => {
@@ -791,11 +807,15 @@ const Inventory = () => {
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  onClick={() => syncToShopify(item)}
-                                  disabled={!item.sku || !item.store_key}
+                                  onClick={() => onSync(item)}
+                                  disabled={!item.sku || !item.store_key || !selectedLocationGid || syncingRowId === item.id}
                                 >
-                                  <ExternalLink className="w-4 h-4 mr-1" />
-                                  Sync
+                                  {syncingRowId === item.id ? (
+                                    <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                                  ) : (
+                                    <ExternalLink className="w-4 h-4 mr-1" />
+                                  )}
+                                  {syncingRowId === item.id ? 'Syncing...' : 'Sync'}
                                 </Button>
                                  {!item.deleted_at && (
                                    <Button

@@ -1,4 +1,5 @@
 export const FLAGS = {
   SHOPIFY_IMPORT_V2_ENABLED: false,
   SHOPIFY_INSPECT_V2_ENABLED: false,
+  SHOPIFY_AUTO_SYNC_ON_ACTIVE: true,
 };
