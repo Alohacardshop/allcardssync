@@ -133,6 +133,39 @@ Deno.serve(async (req) => {
       )
     }
 
+    // Validate required shopify_location_gid
+    const itemsWithoutLocation = locationBuckets.filter(item => !item.shopify_location_gid)
+    if (itemsWithoutLocation.length > 0) {
+      const message = `Items missing shopify_location_gid - choose a location before syncing`
+      console.warn(message, { sku, storeKey, missingLocationCount: itemsWithoutLocation.length })
+      
+      try {
+        await supabase
+          .from('intake_items')
+          .update({
+            shopify_sync_status: 'error',
+            last_shopify_sync_error: message
+          })
+          .eq('sku', sku)
+          .eq('store_key', storeKey)
+          .is('shopify_location_gid', null)
+      } catch (updateError) {
+        console.warn('Failed to update sync status for missing location', { updateError })
+      }
+      
+      return new Response(
+        JSON.stringify({ 
+          ok: false,
+          code: 'MISSING_LOCATION',
+          message, 
+          sku,
+          storeKey,
+          itemsWithoutLocation: itemsWithoutLocation.length
+        }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
     const queryMs = Date.now() - queryStart
 
     // Group by location and sum quantities
@@ -164,10 +197,10 @@ Deno.serve(async (req) => {
       resolvedProductId = existingItem.shopify_product_id
       resolvedVariantId = existingItem.shopify_variant_id
     } else {
-      // Resolve via Shopify API
+      // Resolve via Shopify API - check for duplicates first
       try {
         const variantResponse = await shopifyApiCall(
-          `https://${credentials.domain}/admin/api/2024-07/variants.json?sku=${encodeURIComponent(sku)}&limit=1`,
+          `https://${credentials.domain}/admin/api/2024-07/variants.json?sku=${encodeURIComponent(sku)}&limit=250`,
           {
             headers: {
               'X-Shopify-Access-Token': credentials.accessToken,
@@ -178,11 +211,64 @@ Deno.serve(async (req) => {
 
         if (variantResponse.ok) {
           const variantData = await variantResponse.json()
-          if (variantData.variants?.[0]) {
+          if (variantData.variants?.length > 1) {
+            // Multiple variants found - require explicit selection
+            const message = `Multiple variants found for SKU ${sku} - use inspector to attach to specific variant`
+            console.warn(message, { sku, storeKey, variantCount: variantData.variants.length })
+            
+            try {
+              await supabase
+                .from('intake_items')
+                .update({
+                  shopify_sync_status: 'error',
+                  last_shopify_sync_error: message
+                })
+                .eq('sku', sku)
+                .eq('store_key', storeKey)
+            } catch (updateError) {
+              console.warn('Failed to update sync status for duplicate SKU', { updateError })
+            }
+            
+            return new Response(
+              JSON.stringify({ 
+                ok: false,
+                code: 'DUPLICATE_SKU',
+                message, 
+                sku,
+                storeKey,
+                variantCount: variantData.variants.length,
+                variants: variantData.variants.map((v: any) => ({
+                  id: v.id,
+                  title: v.title,
+                  product_id: v.product_id
+                }))
+              }),
+              { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            )
+          } else if (variantData.variants?.[0]) {
             const variant = variantData.variants[0]
             inventoryItemId = variant.inventory_item_id?.toString()
             resolvedProductId = variant.product_id?.toString()
             resolvedVariantId = variant.id?.toString()
+            
+            // Persist IDs immediately after resolution
+            try {
+              const updateData: any = {}
+              if (resolvedProductId) updateData.shopify_product_id = resolvedProductId
+              if (resolvedVariantId) updateData.shopify_variant_id = resolvedVariantId
+              if (inventoryItemId) updateData.shopify_inventory_item_id = inventoryItemId
+              
+              if (Object.keys(updateData).length > 0) {
+                await supabase
+                  .from('intake_items')
+                  .update(updateData)
+                  .eq('sku', sku)
+                  .eq('store_key', storeKey)
+                console.log('Persisted resolved IDs:', { sku, storeKey, ...updateData })
+              }
+            } catch (persistError) {
+              console.warn('Failed to persist resolved IDs', { persistError })
+            }
           }
         }
       } catch (e) {
@@ -318,7 +404,7 @@ Deno.serve(async (req) => {
       }
 
       if (!locationId) {
-        log.error('Could not resolve location_id', { locationKey, sku })
+        console.error('Could not resolve location_id', { locationKey, sku })
         syncResults.push({
           location_gid: locationKey,
           location_id: null,
