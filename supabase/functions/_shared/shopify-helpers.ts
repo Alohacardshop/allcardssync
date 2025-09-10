@@ -25,6 +25,25 @@ export function parseIdFromGid(gid?: string | null) {
   return m ? m[1] : null
 }
 
+export async function shopifyGraphQL(domain: string, token: string, query: string, variables?: any) {
+  const r = await fetch(`https://${domain}/admin/api/2024-07/graphql.json`, {
+    method: 'POST',
+    headers: { 'X-Shopify-Access-Token': token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query, variables })
+  })
+  const body = await r.json()
+  return { ok: r.ok, status: r.status, body }
+}
+
+export function onlyDigits(s?: string | null) { 
+  return (s || '').replace(/\D+/g, '') 
+}
+
+export function parseNumericIdFromGid(gid?: string | null) { 
+  const m = String(gid || '').match(/\/(\d+)$/)
+  return m ? m[1] : null
+}
+
 export async function sleep(ms: number) {
   return new Promise(r => setTimeout(r, ms))
 }

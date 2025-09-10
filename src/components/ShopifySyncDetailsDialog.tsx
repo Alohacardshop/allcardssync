@@ -94,6 +94,40 @@ export function ShopifySyncDetailsDialog({ open, onOpenChange, row }: ShopifySyn
             </div>
           </div>
 
+          {/* Graded item barcode enforcement details */}
+          {snapshot.graded && (
+            <div className="border rounded-lg p-4 bg-muted/30">
+              <h4 className="font-medium text-sm mb-3">Graded Item Sync Details</h4>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-muted-foreground">Enforced Barcode</p>
+                  <p className="font-mono text-sm">{snapshot.graded.enforcedBarcode}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Decision</p>
+                  <p className="font-medium capitalize">{snapshot.graded.decision?.replace('-', ' ')}</p>
+                </div>
+              </div>
+              
+              {/* Show collisions if any */}
+              {snapshot.graded.collisions && (
+                <div className="mt-3 p-3 bg-destructive/10 border border-destructive/20 rounded">
+                  <p className="text-sm font-medium text-destructive-foreground mb-2">SKU Collisions Detected</p>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Found variants with SKU "{snapshot.graded.collisions.sku}" but different barcodes:
+                  </p>
+                  <div className="space-y-1">
+                    {snapshot.graded.collisions.candidates?.map((candidate: any, idx: number) => (
+                      <div key={idx} className="text-xs font-mono bg-background p-2 rounded">
+                        Product {candidate.productId}, Variant {candidate.variantId} - Barcode: {candidate.barcode || 'none'}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Target Location */}
           <div>
             <div className="text-sm font-medium text-muted-foreground">Target Location</div>
