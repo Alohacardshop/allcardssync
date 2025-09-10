@@ -170,96 +170,55 @@ const Index = () => {
     }
 
     const correlationId = `batch_send_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
-    console.log(`🚀 [${correlationId}] Starting bulk send to inventory:`, { itemCount: itemIds.length, itemIds });
+    console.log(`🚀 [${correlationId}] Starting unified RPC send to inventory:`, { itemCount: itemIds.length, itemIds });
     
     try {
       setActionLoading(true);
       setSendProgress({ total: itemIds.length, completed: 0, failed: 0, inProgress: true, correlationId });
 
-      // Process items concurrently with limited concurrency
-      const CONCURRENCY_LIMIT = 3;
-      const results = [];
-      
-      for (let i = 0; i < itemIds.length; i += CONCURRENCY_LIMIT) {
-        const batch = itemIds.slice(i, i + CONCURRENCY_LIMIT);
-        const batchPromises = batch.map(async (itemId) => {
-          try {
-            console.log(`📦 [${correlationId}] Processing item ${itemId}...`);
-            
-            const startTime = Date.now();
-            const { data, error } = await supabase.rpc('send_intake_item_to_inventory', {
-              item_id: itemId
-            });
-
-            if (error) {
-              console.error(`❌ [${correlationId}] Failed to send item ${itemId}:`, error);
-              return { success: false, itemId, error: error.message };
-            }
-
-            if (!data) {
-              console.warn(`⚠️ [${correlationId}] No data returned for item ${itemId}`);
-              return { success: false, itemId, error: 'No data returned (permission or not found)' };
-            }
-
-            const duration = Date.now() - startTime;
-            console.log(`✅ [${correlationId}] Successfully sent item ${itemId} (${duration}ms):`, data);
-
-            // Trigger Shopify sync in background (non-blocking) - skip for bulk items
-            const itemIsBulk = data.variant === 'Bulk' || 
-                              (data.catalog_snapshot && 
-                               typeof data.catalog_snapshot === 'object' && 
-                               data.catalog_snapshot !== null &&
-                               'type' in data.catalog_snapshot && 
-                               data.catalog_snapshot.type === 'card_bulk');
-            
-            if (data.sku && data.store_key && !itemIsBulk) {
-              supabase.functions.invoke('shopify-sync-inventory', {
-                body: {
-                  storeKey: data.store_key,
-                  sku: data.sku,
-                  locationGid: data.shopify_location_gid,
-                  correlationId
-                }
-              }).catch((syncError) => {
-                console.warn(`⚠️ [${correlationId}] Shopify sync failed for ${itemId} (non-critical):`, syncError);
-              });
-            } else if (itemIsBulk) {
-              console.log(`ℹ️ [${correlationId}] Skipping Shopify sync for bulk item ${itemId}`);
-            }
-
-            return { success: true, itemId, data };
-          } catch (error: any) {
-            console.error(`💥 [${correlationId}] Exception processing item ${itemId}:`, error);
-            return { success: false, itemId, error: error?.message || 'Unknown error' };
-          }
-        });
-
-        const batchResults = await Promise.all(batchPromises);
-        results.push(...batchResults);
-        
-        // Update progress
-        const completed = results.filter(r => r.success).length;
-        const failed = results.filter(r => !r.success).length;
-        setSendProgress(prev => ({ ...prev, completed, failed }));
-      }
-
-      const successful = results.filter(r => r.success);
-      const failed = results.filter(r => !r.success);
-
-      console.log(`📊 [${correlationId}] Bulk send completed:`, {
-        total: itemIds.length,
-        successful: successful.length,
-        failed: failed.length,
-        results
+      const startTime = Date.now();
+      const { data: result, error } = await supabase.rpc('send_intake_items_to_inventory', {
+        item_ids: itemIds
       });
 
-      if (failed.length === 0) {
-        toast.success(`Successfully sent ${successful.length} item(s) to inventory`);
-      } else if (successful.length === 0) {
-        toast.error(`Failed to send any items to inventory (${failed.length} failures)`);
-      } else {
-        toast.error(`Partially completed: ${successful.length} sent, ${failed.length} failed`);
+      if (error) {
+        console.error(`❌ [${correlationId}] RPC call failed:`, error);
+        throw error;
       }
+
+      const duration = Date.now() - startTime;
+      console.log(`✅ [${correlationId}] Unified RPC completed (${duration}ms):`, result);
+
+      const processedIds = (result as any)?.processed_ids || [];
+      const rejectedItems = (result as any)?.rejected || [];
+
+      // Update progress with final results
+      setSendProgress({ 
+        total: itemIds.length, 
+        completed: processedIds.length, 
+        failed: rejectedItems.length, 
+        inProgress: false, 
+        correlationId 
+      });
+
+      // Show success toast
+      if (processedIds.length > 0) {
+        toast.success(`Successfully sent ${processedIds.length} item(s) to inventory`);
+      }
+
+      // Show rejection warnings if any
+      if (rejectedItems.length > 0) {
+        const reasons = rejectedItems.map((r: any) => `${r.reason}`).join(', ');
+        toast.error(`${rejectedItems.length} item(s) rejected: ${reasons}`);
+      }
+
+      console.log(`📊 [${correlationId}] Send summary:`, {
+        total: itemIds.length,
+        processed: processedIds.length,
+        rejected: rejectedItems.length,
+        processedIds,
+        rejectedItems
+      });
       
       // Clear selection and refresh, then check for empty lot closure
       setSelectedItems(new Set());
@@ -267,13 +226,15 @@ const Index = () => {
       await fetchData();
       
       // Trigger empty lot check after successful batch send
-      window.dispatchEvent(new CustomEvent('batch:items-sent-to-inventory'));
+      if (processedIds.length > 0) {
+        window.dispatchEvent(new CustomEvent('batch:items-sent-to-inventory'));
+      }
     } catch (error: any) {
-      console.error(`💥 [${correlationId}] Bulk send failed:`, error);
+      console.error(`💥 [${correlationId}] Unified RPC send failed:`, error);
       toast.error(`Error sending items to inventory: ${error?.message || 'Unknown error'}`);
+      setSendProgress({ total: 0, completed: 0, failed: itemIds.length, inProgress: false });
     } finally {
       setActionLoading(false);
-      setSendProgress(prev => ({ ...prev, inProgress: false }));
     }
   };
 
