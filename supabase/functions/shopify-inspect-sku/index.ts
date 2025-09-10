@@ -8,7 +8,7 @@ const corsHeaders = {
 
 async function inspectSkuInShopify(domain: string, accessToken: string, sku: string) {
   const query = `
-    query($query: String!) {
+    query ($query: String!) {
       productVariants(first: 5, query: $query) {
         edges {
           node {
@@ -27,7 +27,9 @@ async function inspectSkuInShopify(domain: string, accessToken: string, sku: str
                       id
                       name
                     }
-                    available
+                    quantities(names: ["available"]) {
+                      edges { node { name quantity } }
+                    }
                   }
                 }
               }
@@ -64,6 +66,11 @@ async function inspectSkuInShopify(domain: string, accessToken: string, sku: str
   const result = await response.json();
   
   if (result.errors) {
+    const undefinedField = result.errors.some((e: any) => e?.extensions?.code === 'undefinedField');
+    if (undefinedField) {
+      // Fallback to REST if Shopify GraphQL schema changed
+      return await restInspectSku(domain, accessToken, sku);
+    }
     throw new Error(`GraphQL errors: ${JSON.stringify(result.errors)}`);
   }
 
@@ -80,12 +87,71 @@ async function inspectSkuInShopify(domain: string, accessToken: string, sku: str
     productStatus: edge.node.product.status,
     productHandle: edge.node.product.handle,
     publishedAt: edge.node.product.publishedAt,
-    inventoryLevels: edge.node.inventoryItem.inventoryLevels.edges.map((level: any) => ({
-      locationId: level.node.location.id,
-      locationName: level.node.location.name,
-      available: level.node.available || 0
-    }))
+    inventoryLevels: edge.node.inventoryItem.inventoryLevels.edges.map((level: any) => {
+      const qtyEdge = level.node.quantities?.edges?.find((e: any) => e?.node?.name === 'available');
+      const available = qtyEdge?.node?.quantity ?? (level.node as any).available ?? 0;
+      return {
+        locationId: level.node.location.id,
+        locationName: level.node.location.name,
+        available
+      };
+    })
   }));
+}
+
+async function restInspectSku(domain: string, accessToken: string, sku: string) {
+  // REST fallback: fetch variant and inventory levels by SKU
+  const variantsRes = await fetch(`https://${domain}/admin/api/2024-07/variants.json?sku=${encodeURIComponent(sku)}&limit=5`, {
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Shopify-Access-Token': accessToken,
+    },
+  });
+  if (!variantsRes.ok) {
+    throw new Error(`Shopify REST error (variants): ${variantsRes.status}`);
+  }
+  const variantsJson = await variantsRes.json();
+  const restVariants = (variantsJson.variants || []) as any[];
+
+  const results = [] as any[];
+  for (const v of restVariants) {
+    const invItemId = v.inventory_item_id;
+    let levels: any[] = [];
+    if (invItemId) {
+      const levelsRes = await fetch(`https://${domain}/admin/api/2024-07/inventory_levels.json?inventory_item_ids=${encodeURIComponent(invItemId)}`, {
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Shopify-Access-Token': accessToken,
+        },
+      });
+      if (levelsRes.ok) {
+        const levelsJson = await levelsRes.json();
+        levels = levelsJson.inventory_levels || [];
+      }
+    }
+
+    results.push({
+      variantId: `gid://shopify/ProductVariant/${v.id}`,
+      sku: v.sku,
+      variantTitle: v.title,
+      price: v.price,
+      inventoryQuantity: v.inventory_quantity ?? null,
+      inventoryItemId: `gid://shopify/InventoryItem/${invItemId}`,
+      tracked: true,
+      productId: `gid://shopify/Product/${v.product_id}`,
+      productTitle: undefined,
+      productStatus: undefined,
+      productHandle: undefined,
+      publishedAt: undefined,
+      inventoryLevels: levels.map((lvl: any) => ({
+        locationId: `gid://shopify/Location/${lvl.location_id}`,
+        locationName: undefined,
+        available: lvl.available ?? 0,
+      })),
+    });
+  }
+
+  return results;
 }
 
 Deno.serve(async (req) => {
