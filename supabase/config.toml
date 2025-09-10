@@ -64,6 +64,16 @@ verify_jwt = false
 [functions.shopify-webhook-test]
 verify_jwt = false
 
+# New Shopify inspect and action functions
+[functions.shopify-inspect]
+verify_jwt = true
+
+[functions.shopify-attach-variant]
+verify_jwt = true
+
+[functions.shopify-publish-product]
+verify_jwt = true
+
 # JustTCG refresh variants (requires admin role)
 [functions.justtcg-refresh-variants]
 verify_jwt = true

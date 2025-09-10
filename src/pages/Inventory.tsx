@@ -24,6 +24,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { ShopifyRemovalDialog } from '@/components/ShopifyRemovalDialog';
+import { ShopifyInspectDrawer } from '@/components/ShopifyInspectDrawer';
 import { formatDistanceToNow } from 'date-fns';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -58,10 +59,9 @@ const Inventory = () => {
   const [printingItem, setPrintingItem] = useState<string | null>(null);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
-  const [showInspectDialog, setShowInspectDialog] = useState(false);
+  const [showInspectDrawer, setShowInspectDrawer] = useState(false);
   const [inspectSku, setInspectSku] = useState<string>('');
-  const [inspectResult, setInspectResult] = useState<any>(null);
-  const [inspecting, setInspecting] = useState(false);
+  const [inspectItemId, setInspectItemId] = useState<string>('');
   const [showSoldItems, setShowSoldItems] = useState(false);
   
   const { printPNG, selectedPrinter } = usePrintNode();
@@ -419,46 +419,10 @@ const Inventory = () => {
     }
   };
 
-  const handleInspectInShopify = async (item: any) => {
+  const handleInspectInShopify = (item: any) => {
     setInspectSku(item.sku);
-    setInspecting(true);
-    setInspectResult(null);
-    setShowInspectDialog(true);
-
-    try {
-      const { data, error } = await supabase.functions.invoke('shopify-inspect-sku', {
-        body: { storeKey: item.store_key, sku: item.sku }
-      });
-
-      let payload: any = data;
-      if (error) {
-        // Try to parse JSON envelope from non-2xx
-        const res: any = (error as any)?.context?.response;
-        if (res) {
-          try {
-            const text = await res.text();
-            try { payload = JSON.parse(text); }
-            catch {
-              payload = { ok: false, code: `HTTP_${res.status}`, message: text || res.statusText || 'Unknown error' };
-            }
-          } catch {}
-        } else {
-          payload = { ok: false, code: 'CLIENT_ERROR', message: (error as any)?.message || 'Unknown error' };
-        }
-      }
-
-      setInspectResult(payload);
-    } catch (error: any) {
-      console.error('Inspect failed:', error);
-      toast.error('Failed to inspect SKU in Shopify');
-      setInspectResult({ 
-        ok: false, 
-        code: 'CLIENT_ERROR',
-        message: error?.message || 'Unknown error'
-      });
-    } finally {
-      setInspecting(false);
-    }
+    setInspectItemId(item.id);
+    setShowInspectDrawer(true);
   };
 
   const handleResyncFromInspect = async (sku: string, storeKey: string) => {
@@ -500,31 +464,9 @@ const Inventory = () => {
       toast.success('Re-sync completed successfully');
       fetchItems(); // Refresh inventory
       
-      // Re-run inspect to update dialog
-      setInspecting(true);
-      const { data: newInspectData, error: newInspectError } = await supabase.functions.invoke('shopify-inspect-sku', {
-        body: { storeKey, sku }
-      });
-      if (newInspectError) {
-        const res: any = (newInspectError as any)?.context?.response;
-        if (res) {
-          try {
-            const text = await res.text();
-            try { setInspectResult(JSON.parse(text)); }
-            catch { setInspectResult({ ok:false, code:`HTTP_${res.status}`, message: text || res.statusText || 'Unknown error' }); }
-          } catch { setInspectResult({ ok:false, code:'CLIENT_ERROR', message: (newInspectError as any)?.message || 'Unknown error' }); }
-        } else {
-          setInspectResult({ ok:false, code:'CLIENT_ERROR', message: (newInspectError as any)?.message || 'Unknown error' });
-        }
-      } else {
-        setInspectResult(newInspectData);
-      }
-      setInspecting(false);
-      
     } catch (error) {
       console.error('Re-sync failed:', error);
       toast.error('Re-sync failed: ' + error.message);
-      setInspecting(false);
     }
   };
 
@@ -617,41 +559,24 @@ const Inventory = () => {
   };
 
   const handleDeleteDuplicates = async (sku: string) => {
-    if (!inspectResult || !inspectResult.variants || inspectResult.variants.length <= 1) {
-      toast.error('No duplicates to delete');
-      return;
-    }
-
-    const confirmed = window.confirm(
-      `Are you sure you want to delete ${inspectResult.variants.length - 1} duplicate products for SKU "${sku}"? This will keep the first variant and remove/unpublish the others.`
-    );
-
-    if (!confirmed) return;
-
     try {
       const item = items.find(i => i.sku === sku);
       if (!item) {
-        toast.error('Could not find local item');
+        toast.error('Could not find item for SKU');
         return;
       }
 
-      // Call Shopify function to delete duplicates
-      const { error } = await supabase.functions.invoke('shopify-delete-duplicates', {
-        body: {
-          storeKey: item.store_key,
-          sku: sku,
-          variants: inspectResult.variants
-        }
+      const { data, error } = await supabase.functions.invoke('shopify-delete-duplicates', {
+        body: { storeKey: item.store_key, sku }
       });
 
       if (error) throw error;
 
-      toast.success('Duplicate products removed successfully');
+      const deletedCount = data?.deletedVariantIds?.length || 0;
+      toast.success(`Deleted ${deletedCount} duplicate variant${deletedCount !== 1 ? 's' : ''}`);
       
-      // Refresh inspector results
-      handleInspectInShopify(item);
     } catch (error) {
-      console.error('Error deleting duplicates:', error);
+      console.error('Delete duplicates failed:', error);
       toast.error('Failed to delete duplicates');
     }
   };
@@ -1137,271 +1062,15 @@ const Inventory = () => {
           loading={bulkDeleting}
         />
 
-        <Dialog open={showInspectDialog} onOpenChange={setShowInspectDialog}>
-          <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Inspect SKU in Shopify</DialogTitle>
-              <DialogDescription>
-                Checking what exists for SKU: {inspectSku}
-              </DialogDescription>
-            </DialogHeader>
-            
-            <div className="space-y-4">
-              {inspecting && (
-                <div className="text-center py-4">
-                  <div className="animate-spin inline-block w-6 h-6 border-2 border-current border-t-transparent rounded-full" />
-                  <p className="mt-2">Querying Shopify...</p>
-                </div>
-              )}
-              
-              {inspectResult && (
-                <div className="space-y-4">
-                  {inspectResult.ok ? (
-                    <>
-                      <div className="p-3 bg-muted rounded-lg">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <h4 className="font-medium">Search Results</h4>
-                            <p className="text-sm text-muted-foreground">
-                              Found {inspectResult.variants.length} variant{inspectResult.variants.length !== 1 ? 's' : ''} for SKU "{inspectSku}"
-                            </p>
-                            {inspectResult.diagnostics && (
-                              <p className="text-xs text-muted-foreground mt-2">
-                                Domain: {inspectResult.diagnostics.domainUsed} • Duration: {inspectResult.diagnostics.requestDurationMs}ms
-                              </p>
-                            )}
-                          </div>
-                          {inspectResult.variants.length > 1 && (
-                            <Button
-                              onClick={() => handleDeleteDuplicates(inspectSku)}
-                              variant="destructive"
-                              size="sm"
-                              className="gap-2"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                              Delete duplicates
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                      
-                      {inspectResult.variants.length === 0 ? (
-                        <div className="p-4 border border-amber-200 bg-amber-50 rounded-lg">
-                          <p className="text-amber-800 font-medium">❌ SKU not found in Shopify</p>
-                          <p className="text-sm text-amber-700 mt-1">
-                            This SKU does not exist in your Shopify store.
-                          </p>
-                          <Button
-                            onClick={() => {
-                              const item = items.find(i => i.sku === inspectSku);
-                              if (item) {
-                                handleResyncFromInspect(inspectSku, item.store_key);
-                              }
-                            }}
-                            variant="outline"
-                            size="sm"
-                            className="mt-3"
-                          >
-                            <RotateCcw className="w-4 h-4 mr-2" />
-                            Re-sync to Shopify
-                          </Button>
-                        </div>
-                      ) : (
-                        <div className="space-y-3">
-                          {inspectResult.variants.map((variant: any, i: number) => (
-                            <div key={i} className="p-4 border rounded-lg space-y-3">
-                              <div className="grid grid-cols-2 gap-2 text-sm">
-                                <div><strong>Product:</strong> {variant.productTitle}</div>
-                                <div><strong>Status:</strong> 
-                                  <Badge variant={variant.productStatus === 'ACTIVE' ? 'default' : 'secondary'} className="ml-1">
-                                    {variant.productStatus}
-                                  </Badge>
-                                </div>
-                                <div><strong>Published:</strong> 
-                                  <Badge variant={variant.published ? 'default' : 'secondary'} className="ml-1">
-                                    {variant.published ? 'Yes' : 'No'}
-                                  </Badge>
-                                </div>
-                                <div><strong>Variant:</strong> {variant.variantTitle}</div>
-                                <div><strong>Product ID:</strong> {variant.productId}</div>
-                                <div><strong>Variant ID:</strong> {variant.variantId}</div>
-                                <div><strong>Inventory Item ID:</strong> {variant.inventoryItemId}</div>
-                              </div>
-                              
-                              {variant.locations && variant.locations.length > 0 && (
-                                <div className="mt-3">
-                                  <h5 className="text-sm font-medium mb-2">Inventory by Location:</h5>
-                                  <div className="grid gap-2">
-                                    {variant.locations.map((location: any, j: number) => {
-                                      const isTargetLocation = selectedLocationGid && location.gid === selectedLocationGid;
-                                      return (
-                                        <div key={j} className={cn(
-                                          "flex justify-between items-center text-sm p-2 rounded border",
-                                          isTargetLocation ? "border-primary bg-primary/10" : "bg-muted/50"
-                                        )}>
-                                          <div className="flex items-center gap-2">
-                                            <span className="font-medium">{location.name || location.gid}</span>
-                                            {isTargetLocation && (
-                                              <Badge variant="outline" className="text-xs">
-                                                Target location
-                                              </Badge>
-                                            )}
-                                          </div>
-                                          <Badge variant={location.available > 0 ? 'default' : 'secondary'}>
-                                            {location.available} available
-                                          </Badge>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-                              )}
-                              
-                              {/* Action buttons */}
-                              <div className="flex gap-2 pt-2 border-t">
-                                <Button
-                                  onClick={() => {
-                                    const storeSlug = inspectResult.diagnostics?.domainUsed?.replace('.myshopify.com', '');
-                                    window.open(`https://admin.shopify.com/store/${storeSlug}/products/${variant.productId}`, '_blank');
-                                  }}
-                                  variant="outline"
-                                  size="sm"
-                                  className="gap-2"
-                                >
-                                  <ExternalLink className="w-4 h-4" />
-                                  View Product
-                                </Button>
-                                
-                                <Button
-                                  onClick={() => {
-                                    const storeSlug = inspectResult.diagnostics?.domainUsed?.replace('.myshopify.com', '');
-                                    window.open(`https://admin.shopify.com/store/${storeSlug}/variants/${variant.variantId}`, '_blank');
-                                  }}
-                                  variant="outline"
-                                  size="sm"
-                                  className="gap-2"
-                                >
-                                  <ExternalLink className="w-4 h-4" />
-                                  View Variant
-                                </Button>
-                                
-                                <Button
-                                  onClick={() => handleAttachToVariant(variant)}
-                                  variant="outline"
-                                  size="sm"
-                                  className="gap-2"
-                                >
-                                  <Package className="w-4 h-4" />
-                                  Attach to this variant
-                                </Button>
-                                
-                                {!variant.published && (
-                                  <Button
-                                    onClick={() => handlePublishProduct(variant.productId)}
-                                    variant="outline"
-                                    size="sm"
-                                    className="gap-2"
-                                  >
-                                    <ExternalLink className="w-4 h-4" />
-                                    Publish product
-                                  </Button>
-                                )}
-                                
-                                {selectedLocationGid && (
-                                  <Button
-                                    onClick={() => handleSetStock(variant, selectedLocationGid)}
-                                    variant="outline"
-                                    size="sm"
-                                    className="gap-2"
-                                  >
-                                    <DollarSign className="w-4 h-4" />
-                                    Set stock at target
-                                  </Button>
-                                )}
-                                
-                                {inspectResult.variants.length > 1 && i === 0 && (
-                                  <Button
-                                    onClick={() => handleDeleteDuplicates(inspectSku)}
-                                    variant="destructive"
-                                    size="sm"
-                                    className="gap-2"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                    Delete duplicates
-                                  </Button>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <div className="space-y-3">
-                      <div className="p-4 border border-red-200 bg-red-50 rounded-lg">
-                        <p className="text-red-800 font-medium">❌ {inspectResult.message}</p>
-                        <p className="text-sm text-red-700 mt-1">Error Code: {inspectResult.code}</p>
-                        
-                        {(inspectResult.code === 'MISSING_DOMAIN' || inspectResult.code === 'MISSING_TOKEN') && (
-                          <div className="mt-3">
-                            <Button
-                              onClick={() => {
-                                const item = items.find(i => i.sku === inspectSku);
-                                if (item) {
-                                  window.open(`/admin?tab=shopify&storeKey=${item.store_key}`, '_blank');
-                                }
-                              }}
-                              variant="outline"
-                              size="sm"
-                            >
-                              <ExternalLink className="w-4 h-4 mr-2" />
-                              Go to Shopify Configuration
-                            </Button>
-                          </div>
-                        )}
-                        
-                        {inspectResult.code === 'NOT_FOUND' && (
-                          <div className="mt-3">
-                            <Button
-                              onClick={() => {
-                                const item = items.find(i => i.sku === inspectSku);
-                                if (item) {
-                                  handleResyncFromInspect(inspectSku, item.store_key);
-                                }
-                              }}
-                              variant="outline"
-                              size="sm"
-                            >
-                              <RotateCcw className="w-4 h-4 mr-2" />
-                              Re-sync to Shopify
-                            </Button>
-                          </div>
-                        )}
-                        
-                        {inspectResult.diagnostics && (
-                          <details className="mt-3">
-                            <summary className="text-xs cursor-pointer text-red-700 hover:text-red-900">
-                              Show diagnostic details
-                            </summary>
-                            <pre className="text-xs mt-2 p-2 bg-red-100 rounded overflow-auto">
-                              {JSON.stringify(inspectResult.diagnostics, null, 2)}
-                            </pre>
-                          </details>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-            
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setShowInspectDialog(false)}>
-                Close
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <ShopifyInspectDrawer
+          open={showInspectDrawer}
+          onOpenChange={setShowInspectDrawer}
+          sku={inspectSku}
+          intakeItemId={inspectItemId}
+          storeKey={selectedStoreLocations.length > 0 ? selectedStoreLocations[0]?.storeKey || selectedStoreKey : selectedStoreKey}
+          storeSlug="aloha-card-shop"
+          targetLocationGid={selectedStoreLocations.length > 0 ? selectedStoreLocations[0]?.locationGid || selectedLocationGid : selectedLocationGid}
+        />
       </div>
     </>
   );
