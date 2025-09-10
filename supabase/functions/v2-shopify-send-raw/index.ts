@@ -135,8 +135,8 @@ Deno.serve(async (req) => {
       inventoryItemId,
       locationId,
       correlationId: run.correlationId,
-      productAdminUrl: `https://${slug}.myshopify.com/admin/products/${productId}`,
-      variantAdminUrl: `https://${slug}.myshopify.com/admin/products/${productId}/variants/${variantId}`
+      productAdminUrl: `https://admin.shopify.com/store/${slug}/products/${productId}`,
+      variantAdminUrl: `https://admin.shopify.com/store/${slug}/products/${productId}/variants/${variantId}`
     })
   } catch (e: any) {
     console.warn('send.fail', { correlationId: run.correlationId, message: e?.message })

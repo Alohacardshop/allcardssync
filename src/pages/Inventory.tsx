@@ -992,6 +992,12 @@ const Inventory = () => {
           open={!!syncDetailsRow}
           onOpenChange={(open) => !open && setSyncDetailsRow(null)}
           row={syncDetailsRow}
+          selectedStoreKey={selectedStoreKey}
+          selectedLocationGid={selectedLocationGid}
+          onRefresh={() => {
+            fetchItems();
+            setSyncDetailsRow(null);
+          }}
         />
       </div>
     </>

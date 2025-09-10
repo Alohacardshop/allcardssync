@@ -3,19 +3,24 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ExternalLink, ChevronDown, ChevronRight, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+import { ExternalLink, ChevronDown, ChevronRight, CheckCircle, XCircle, AlertCircle, RefreshCw, Link } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { formatDistanceToNow } from 'date-fns';
+import { toast } from '@/hooks/use-toast';
 
 interface ShopifySyncDetailsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   row: any;
+  selectedStoreKey?: string;
+  selectedLocationGid?: string;
+  onRefresh?: () => void;
 }
 
-export function ShopifySyncDetailsDialog({ open, onOpenChange, row }: ShopifySyncDetailsDialogProps) {
+export function ShopifySyncDetailsDialog({ open, onOpenChange, row, selectedStoreKey, selectedLocationGid, onRefresh }: ShopifySyncDetailsDialogProps) {
   const [locationName, setLocationName] = useState<string>('');
   const [expandedJson, setExpandedJson] = useState(false);
+  const [relinkingGraded, setRelinkingGraded] = useState(false);
 
   useEffect(() => {
     if (open && row?.last_shopify_store_key && row?.last_shopify_location_gid) {
@@ -61,6 +66,52 @@ export function ShopifySyncDetailsDialog({ open, onOpenChange, row }: ShopifySyn
     return step.ok ? 'OK' : 'FAIL';
   };
 
+  const handleRelinkGraded = async () => {
+    if (!row || !selectedStoreKey || !selectedLocationGid) {
+      toast({ title: 'Error', description: 'Missing store or location selection', variant: 'destructive' });
+      return;
+    }
+
+    const psaCert = row.psa_cert || row.barcode || row.sku;
+    if (!psaCert) {
+      toast({ title: 'Error', description: 'No PSA cert number available for relinking', variant: 'destructive' });
+      return;
+    }
+
+    setRelinkingGraded(true);
+    try {
+      const { error, data } = await supabase.functions.invoke('admin-relink-graded-by-cert', {
+        body: {
+          storeKey: selectedStoreKey,
+          locationGid: selectedLocationGid,
+          itemId: row.id,
+          psaCert,
+          quantity: row.quantity || 1
+        }
+      });
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      toast({ 
+        title: 'Success', 
+        description: `Relinked graded item to PSA cert ${data.enforcedBarcode}. Decision: ${data.decision}`
+      });
+      
+      if (onRefresh) onRefresh();
+    } catch (e: any) {
+      console.error('Relink failed:', e);
+      toast({ 
+        title: 'Relink Failed', 
+        description: e?.message || 'Failed to relink graded item',
+        variant: 'destructive'
+      });
+    } finally {
+      setRelinkingGraded(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
@@ -97,7 +148,25 @@ export function ShopifySyncDetailsDialog({ open, onOpenChange, row }: ShopifySyn
           {/* Graded item barcode enforcement details */}
           {snapshot.graded && (
             <div className="border rounded-lg p-4 bg-muted/30">
-              <h4 className="font-medium text-sm mb-3">Graded Item Sync Details</h4>
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="font-medium text-sm">Graded Item Sync Details</h4>
+                {selectedStoreKey && selectedLocationGid && (row.psa_cert || row.barcode || row.sku) && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRelinkGraded}
+                    disabled={relinkingGraded}
+                    className="flex items-center gap-2"
+                  >
+                    {relinkingGraded ? (
+                      <RefreshCw className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <Link className="w-3 h-3" />
+                    )}
+                    {relinkingGraded ? 'Relinking...' : 'Relink to PSA Barcode'}
+                  </Button>
+                )}
+              </div>
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <p className="text-muted-foreground">Enforced Barcode</p>
@@ -108,6 +177,12 @@ export function ShopifySyncDetailsDialog({ open, onOpenChange, row }: ShopifySyn
                   <p className="font-medium capitalize">{snapshot.graded.decision?.replace('-', ' ')}</p>
                 </div>
               </div>
+              
+              {snapshot.graded.relinked && (
+                <div className="mt-3 p-2 bg-green-50 border border-green-200 rounded">
+                  <p className="text-sm text-green-800 font-medium">✓ Relinked via Admin Tool</p>
+                </div>
+              )}
               
               {/* Show collisions if any */}
               {snapshot.graded.collisions && (
@@ -120,6 +195,26 @@ export function ShopifySyncDetailsDialog({ open, onOpenChange, row }: ShopifySyn
                     {snapshot.graded.collisions.candidates?.map((candidate: any, idx: number) => (
                       <div key={idx} className="text-xs font-mono bg-background p-2 rounded">
                         Product {candidate.productId}, Variant {candidate.variantId} - Barcode: {candidate.barcode || 'none'}
+                        {snapshot.store?.slug && (
+                          <div className="mt-1 flex gap-2">
+                            <a
+                              href={`https://admin.shopify.com/store/${snapshot.store.slug}/products/${candidate.productId}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:underline"
+                            >
+                              View Product
+                            </a>
+                            <a
+                              href={`https://admin.shopify.com/store/${snapshot.store.slug}/products/${candidate.productId}/variants/${candidate.variantId}`}
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:underline"
+                            >
+                              View Variant
+                            </a>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -161,34 +256,34 @@ export function ShopifySyncDetailsDialog({ open, onOpenChange, row }: ShopifySyn
                   <div className="flex items-center justify-between">
                     <span className="text-sm">Product ID: <code>{snapshot.result.productId}</code></span>
                     {snapshot.store?.slug && (
-                      <Button variant="outline" size="sm" asChild>
-                        <a 
-                          href={`https://${snapshot.store.slug}.myshopify.com/admin/products/${snapshot.result.productId}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          <ExternalLink className="w-3 h-3 mr-1" />
-                          Open Product
-                        </a>
-                      </Button>
+                       <Button variant="outline" size="sm" asChild>
+                         <a 
+                           href={`https://admin.shopify.com/store/${snapshot.store.slug}/products/${snapshot.result.productId}`}
+                           target="_blank"
+                           rel="noopener noreferrer"
+                         >
+                           <ExternalLink className="w-3 h-3 mr-1" />
+                           Open Product
+                         </a>
+                       </Button>
                     )}
                   </div>
                 )}
                 {snapshot.result.variantId && (
                   <div className="flex items-center justify-between">
                     <span className="text-sm">Variant ID: <code>{snapshot.result.variantId}</code></span>
-                    {snapshot.store?.slug && snapshot.result.productId && (
-                      <Button variant="outline" size="sm" asChild>
-                        <a 
-                          href={`https://${snapshot.store.slug}.myshopify.com/admin/products/${snapshot.result.productId}/variants/${snapshot.result.variantId}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          <ExternalLink className="w-3 h-3 mr-1" />
-                          Open Variant
-                        </a>
-                      </Button>
-                    )}
+                     {snapshot.store?.slug && snapshot.result.productId && (
+                       <Button variant="outline" size="sm" asChild>
+                         <a 
+                           href={`https://admin.shopify.com/store/${snapshot.store.slug}/products/${snapshot.result.productId}/variants/${snapshot.result.variantId}`}
+                           target="_blank"
+                           rel="noopener noreferrer"
+                         >
+                           <ExternalLink className="w-3 h-3 mr-1" />
+                           Open Variant
+                         </a>
+                       </Button>
+                     )}
                   </div>
                 )}
                 {snapshot.result.inventoryItemId && (

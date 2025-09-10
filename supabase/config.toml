@@ -64,6 +64,9 @@ verify_jwt = true
 [functions.v2-batch-send-to-inventory]
 verify_jwt = true
 
+[functions.admin-relink-graded-by-cert]
+verify_jwt = true
+
 # JustTCG refresh variants (requires admin role)
 [functions.justtcg-refresh-variants]
 verify_jwt = true
