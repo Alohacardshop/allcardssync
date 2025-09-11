@@ -330,12 +330,16 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
           // Prioritize TCGPlayer ID as SKU using new helper function
           const generatedSku = generateTCGSKU(row.id, gameKey, variantId, cardId);
            
-          const formattedTitle = (() => {
-            // Format title as: Game,Set,Name - Number,Condition
+          // Separate brand_title (set info) and subject (card name) to avoid duplication
+          const brandTitle = (() => {
             const parts = [];
             if (row.line) parts.push(row.line);
             if (row.set) parts.push(row.set);
-            
+            return parts.join(',');
+          })();
+
+          const cardName = (() => {
+            const parts = [];
             // Use the card name as-is (it may already contain the number)
             parts.push(row.name);
             
@@ -349,8 +353,8 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
             store_key_in: selectedStore!.trim(),
             shopify_location_gid_in: selectedLocation!.trim(),
             quantity_in: row.quantity,
-            brand_title_in: formattedTitle,
-            subject_in: formattedTitle,
+            brand_title_in: brandTitle,
+            subject_in: cardName,
             category_in: 'Trading Cards', // Generic category for TCGplayer imports
             variant_in: row.title || 'Normal',
             card_number_in: row.number || '',

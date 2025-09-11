@@ -115,7 +115,7 @@ export function OtherItemsEntry({ onBatchAdd }: OtherItemsEntryProps) {
         store_key_in: selectedStore!.trim(),
         shopify_location_gid_in: selectedLocation!.trim(),
         quantity_in: amount,
-        brand_title_in: description.trim(),
+        brand_title_in: 'Other Items',
         subject_in: description.trim(),
         category_in: 'Other Items',
         variant_in: 'Other',

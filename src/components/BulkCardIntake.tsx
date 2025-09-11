@@ -125,7 +125,7 @@ export function BulkCardIntake({ onBatchAdd }: BulkCardIntakeProps) {
         shopify_location_gid_in: selectedLocation!.trim(),
         quantity_in: amount,
         brand_title_in: gameTitle,
-        subject_in: gameTitle,
+        subject_in: 'Bulk Cards',
         category_in: 'Card Bulk',
         variant_in: 'Bulk',
         card_number_in: '',
