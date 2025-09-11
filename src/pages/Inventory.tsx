@@ -804,14 +804,14 @@ const Inventory = () => {
                                   <TooltipProvider>
                                     <Tooltip>
                                       <TooltipTrigger asChild>
-                                        <Badge 
-                                          variant={
-                                            item.shopify_sync_status === 'synced' ? 'default' : 
-                                            item.shopify_sync_status === 'error' ? 'destructive' : 
-                                            'secondary'
-                                          }
-                                        >
-                                          {item.shopify_sync_status || 'pending'}
+                                         <Badge 
+                                           variant={
+                                             (item.shopify_sync_status === 'synced' || item.shopify_sync_status === 'success') ? 'default' : 
+                                             item.shopify_sync_status === 'error' ? 'destructive' : 
+                                             'secondary'
+                                           }
+                                         >
+                                           {(item.shopify_sync_status === 'success') ? 'synced' : (item.shopify_sync_status || 'pending')}
                                         </Badge>
                                       </TooltipTrigger>
                                       <TooltipContent>
