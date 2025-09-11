@@ -12,6 +12,15 @@ export type SendGradedArgs = {
     price?: number
     grade?: string
     quantity?: number
+    // Extended metadata for graded title/description/images
+    year?: string
+    brand_title?: string
+    subject?: string
+    card_number?: string
+    variant?: string
+    category_tag?: string
+    image_url?: string
+    cost?: number
   }
 }
 

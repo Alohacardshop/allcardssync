@@ -323,8 +323,16 @@ const Inventory = () => {
             sku: row.sku,
             psa_cert: row.psa_cert,
             barcode: row.barcode || row.sku,
-            title: row.brand_title || row.subject,
+            // Rich metadata for proper Shopify title/description
+            year: row.year,
+            brand_title: row.brand_title,
+            subject: row.subject,
+            card_number: row.card_number,
+            variant: row.variant,
+            category_tag: row.game || 'Pokemon',
+            image_url: row.catalog_snapshot?.imageUrl || row.psa_snapshot?.imageUrl || undefined,
             price: row.price ?? undefined,
+            cost: row.cost ?? undefined,
             grade: row.grade,
             quantity: Number(row.quantity ?? 1)
           }
