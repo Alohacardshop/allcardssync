@@ -301,11 +301,11 @@ on conflict (user_id, role) do nothing;`}
                 variant="outline" 
                 size="sm" 
                 onClick={() => {
-                  setSearch('shopify-sync-inventory');
+                  setSearch('v2-shopify');
                   setSourceFilter('all');
                 }}
               >
-                Shopify Sync
+                Shopify v2 Sync
               </Button>
               <Button 
                 variant="outline" 

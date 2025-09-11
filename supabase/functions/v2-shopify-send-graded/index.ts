@@ -1,6 +1,6 @@
-// Graded card sender for Shopify (PSA certs, unique single-variant products)
+// Graded card sender for Shopify - STRICT PSA barcode enforcement
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
-import { CORS, json, loadStore, findVariantsBySKU, publishIfNeeded, setInventory, parseIdFromGid, fetchRetry, newRun, deriveStoreSlug, API_VER, shopifyGraphQL, onlyDigits, parseNumericIdFromGid, getProduct } from '../_shared/shopify-helpers.ts'
+import { CORS, json, loadStore, parseIdFromGid, fetchRetry, newRun, deriveStoreSlug, API_VER, shopifyGraphQL, onlyDigits, parseNumericIdFromGid } from '../_shared/shopify-helpers.ts'
 
 function extractGradeNumber(grade?: string | null): string | null {
   if (!grade) return null
@@ -55,11 +55,13 @@ Deno.serve(async (req) => {
     const slug = deriveStoreSlug(domain)
     run.add({ name: 'loadStore', ok: true, data: { domain, slug } })
 
-    // Derive the canonical cert number (barcode enforcement for graded items)
-    const cert = onlyDigits(item.psa_cert || item.barcode || '')
+    // STRICT: barcode MUST equal PSA cert (digits only)
+    const cert = onlyDigits(item.psa_cert || item.barcode || item.sku || '')
     if (!cert) return json(400, { ok: false, error: 'Missing PSA cert/barcode for graded item' })
     
     const skuToUse = item.sku || cert  // SKU can be anything; falls back to cert
+    const locationId = parseIdFromGid(locationGid)
+    if (!locationId) return json(400, { ok: false, error: 'Invalid locationGid' })
 
     // Build tags
     const baseTags = [item.category, item.variant, item.lot_number ? `lot-${item.lot_number}` : null, 'intake', item.game]
@@ -229,8 +231,10 @@ Deno.serve(async (req) => {
       productId, 
       variantId, 
       inventoryItemId,
-      locationId,
+      locationId: String(locationId),
       correlationId: run.correlationId,
+      enforcedBarcode: cert,
+      decision: barcodeHits.length ? 'reuse-barcode' : (run.steps.find(s => s.name === 'reuseVariant' && s.data?.reason === 'sku+barcode') ? 'reuse-sku+barcode' : 'created'),
       productAdminUrl: `https://admin.shopify.com/store/${slug}/products/${productId}`,
       variantAdminUrl: `https://admin.shopify.com/store/${slug}/products/${productId}/variants/${variantId}`
     })
