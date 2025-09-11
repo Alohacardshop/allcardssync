@@ -51,6 +51,20 @@ async function createRawProduct(domain: string, token: string, item: any) {
     condition.toLowerCase().replace(/\s+/g, '')
   ].filter(Boolean).join(', ')
 
+  // Enhanced image object with required Shopify properties
+  const images = item.image_url ? [{
+    src: item.image_url,
+    alt: `${item.subject || 'Trading Card'} - ${item.sku}`,
+    position: 1
+  }] : []
+  
+  console.info('image.payload', { 
+    correlationId: run.correlationId, 
+    hasImage: !!item.image_url, 
+    imageUrl: item.image_url,
+    imageObject: images[0] || null 
+  })
+
   const payload = {
     product: {
       title,
@@ -58,7 +72,7 @@ async function createRawProduct(domain: string, token: string, item: any) {
       status: 'active',
       product_type: item.category || 'Trading Card',
       tags,
-      images: item.image_url ? [{ src: item.image_url }] : [],
+      images,
       variants: [{
         sku: item.sku,
         price: item.price != null ? Number(item.price).toFixed(2) : undefined,
