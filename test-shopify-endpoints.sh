@@ -29,7 +29,7 @@ curl -s -X POST "$SUPABASE_URL/functions/v1/shopify-inspect-sku" \
   -d "{\"storeKey\":\"$STORE_KEY\",\"sku\":\"$SKU\"}" | jq
 
 echo "3. Deleting..."
-curl -s -X POST "$SUPABASE_URL/functions/v1/shopify-remove-or-zero" \
+curl -s -X POST "$SUPABASE_URL/functions/v1/v2-shopify-remove" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -d "{\"storeKey\":\"$STORE_KEY\",\"sku\":\"$SKU\",\"mode\":\"delete\"}" | jq

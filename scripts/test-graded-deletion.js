@@ -43,7 +43,7 @@ async function testGradedDeletion() {
     // Step 2: Test deletion via shopify-remove-or-zero function
     console.log('🗑️ Step 2: Testing deletion via remove function');
     
-    const { data: deleteData, error: deleteError } = await supabase.functions.invoke("shopify-remove-or-zero", {
+    const { data: deleteData, error: deleteError } = await supabase.functions.invoke("v2-shopify-remove", {
       body: {
         storeKey,
         productId: createData.productId,

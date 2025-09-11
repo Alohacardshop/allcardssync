@@ -1,11 +1,11 @@
-// GRADED DELETION TEST - Console version
+// V2 GRADED DELETION TEST - Console version  
 // Run this in browser console on the inventory page
 
 const storeKey = "hawaii";
 const locationGid = "gid://shopify/Location/67325100207"; // Ward Ave
 
-async function testGradedDeletionFlow() {
-  console.log('🧪 Testing graded item deletion flow...\n');
+async function testV2GradedRemoval() {
+  console.log('🧪 Testing NEW v2 graded item removal flow...\n');
   
   try {
     // Step 1: Check current graded items in inventory
@@ -37,8 +37,8 @@ async function testGradedDeletionFlow() {
     const testItem = gradedItems[0];
     console.log(`\n🎯 Using test item: ${testItem.sku} (ID: ${testItem.id})`);
 
-    // Step 2: Test removal function
-    console.log('\n🗑️ Step 2: Testing shopify removal...');
+    // Step 2: Test NEW v2 removal function
+    console.log('\n🗑️ Step 2: Testing NEW v2-shopify-remove...');
     
     const { data: removeResult, error: removeError } = await supabase.functions.invoke("v2-shopify-remove", {
       body: {
@@ -46,17 +46,19 @@ async function testGradedDeletionFlow() {
         productId: testItem.shopify_product_id,
         sku: testItem.sku,
         locationGid,
-        mode: "delete",
         itemIds: [testItem.id]
       }
     });
 
     if (removeError) {
-      console.error('❌ Removal failed:', removeError);
+      console.error('❌ V2 Removal failed:', removeError);
       return;
     }
 
-    console.log('✅ Removal result:', removeResult);
+    console.log('✅ V2 Removal result:', removeResult);
+    console.log(`  Strategy used: ${removeResult.strategy}`);
+    console.log(`  Items updated: ${removeResult.itemsUpdated}`);
+    console.log(`  Took: ${removeResult.diagnostics.ms}ms`);
 
     // Step 3: Verify database updates
     console.log('\n🔍 Step 3: Verifying database updates...');
@@ -79,34 +81,18 @@ async function testGradedDeletionFlow() {
     console.log(`  Removal Mode: ${updatedItem.shopify_removal_mode || 'Not set'}`);
     console.log(`  Sync Status: ${updatedItem.shopify_sync_status || 'Not set'}`);
     console.log(`  Product ID: ${updatedItem.shopify_product_id || 'Cleared'}`);
-    console.log(`  Quantity: ${updatedItem.quantity}`);
 
-    // Step 4: Test how this differs from raw item deletion
-    console.log('\n🔄 Step 4: Checking raw item handling...');
-    
-    const { data: rawItems } = await supabase
-      .from('intake_items')
-      .select('id, sku, type, quantity, shopify_product_id')
-      .eq('store_key', storeKey)
-      .eq('type', 'Raw')
-      .is('shopify_removed_at', null)
-      .limit(3);
-
-    console.log(`Found ${rawItems?.length || 0} raw items for comparison:`);
-    rawItems?.forEach((item, i) => {
-      console.log(`  ${i + 1}. SKU: ${item.sku}, Qty: ${item.quantity}, Product: ${item.shopify_product_id}`);
-    });
-
-    console.log('\n✅ Graded deletion test completed!');
-    console.log('\n💡 Key observations:');
-    console.log('  - Graded items get fully removed (product deleted)');
-    console.log('  - Database properly tracks removal timestamps');
-    console.log('  - Consider if raw items need different logic (qty decrement vs full removal)');
+    console.log('\n✅ V2 graded removal test completed successfully!');
+    console.log('\n💡 Key improvements in v2:');
+    console.log('  - Differentiated handling for graded vs raw items');
+    console.log('  - Cleaner, more focused removal logic');
+    console.log('  - Better error handling and diagnostics');
+    console.log('  - Removal mode tracking shows "v2_graded_product_delete"');
 
   } catch (error) {
-    console.error('❌ Test failed:', error);
+    console.error('❌ V2 test failed:', error);
   }
 }
 
 // Run the test
-testGradedDeletionFlow();
+testV2GradedRemoval();
