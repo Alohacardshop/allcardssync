@@ -12,7 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Separator } from "@/components/ui/separator";
-import { Users, Plus, Pencil, Trash2, ShieldCheck, Store, MapPin, KeyRound } from "lucide-react";
+import { Users, Plus, Pencil, Trash2, ShieldCheck, Store, MapPin, KeyRound, RotateCcw } from "lucide-react";
 import { logger } from "@/lib/logger";
 
 interface UserAssignment {
@@ -58,6 +58,7 @@ export function UserAssignmentManager() {
   const [loading, setLoading] = useState(true);
   const [loadingLocations, setLoadingLocations] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Dialog state
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -87,11 +88,14 @@ export function UserAssignmentManager() {
 
   const loadData = async () => {
     setLoading(true);
+    setError(null);
     try {
       await Promise.all([loadUsers(), loadStores()]);
     } catch (error) {
       console.error("Failed to load data:", error);
-      toast.error("Failed to load data");
+      const errorMessage = error instanceof Error ? error.message : "Failed to load data";
+      setError(errorMessage);
+      toast.error(`Failed to load data: ${errorMessage}`);
     } finally {
       setLoading(false);
     }
@@ -99,19 +103,40 @@ export function UserAssignmentManager() {
 
   const loadUsers = async () => {
     try {
+      console.log("Loading users from roles-admin function...");
+      
       // Load users from auth system with bootstrap fallback
       let authData: any = null;
       let resp = await supabase.functions.invoke("roles-admin", { body: { action: "list" } });
 
+      console.log("roles-admin response:", resp);
+
       if (resp.error || !resp.data?.ok) {
+        console.log("Initial call failed, attempting bootstrap...");
         // Attempt to restore admin role if missing, then retry once
-        try { await supabase.functions.invoke("bootstrap-admin", { body: {} }); } catch {}
+        try { 
+          const bootstrapResp = await supabase.functions.invoke("bootstrap-admin", { body: {} }); 
+          console.log("bootstrap response:", bootstrapResp);
+        } catch (bootstrapError) {
+          console.error("Bootstrap failed:", bootstrapError);
+        }
         resp = await supabase.functions.invoke("roles-admin", { body: { action: "list" } });
+        console.log("retry roles-admin response:", resp);
       }
 
-      if (resp.error) throw resp.error;
+      if (resp.error) {
+        console.error("roles-admin error:", resp.error);
+        throw resp.error;
+      }
+      
       authData = resp.data;
-      if (!authData?.ok) throw new Error(authData?.error || "Failed to load users");
+      if (!authData?.ok) {
+        const errorMsg = authData?.error || "Failed to load users";
+        console.error("Auth data error:", errorMsg);
+        throw new Error(errorMsg);
+      }
+
+      console.log("Successfully loaded users:", authData.users?.length || 0, "users");
 
       // Load assignments
       const { data: assignments, error: assignError } = await supabase
@@ -120,7 +145,10 @@ export function UserAssignmentManager() {
           id, user_id, store_key, location_gid, location_name, is_default
         `);
 
-      if (assignError) throw assignError;
+      if (assignError) {
+        console.error("Assignment loading error:", assignError);
+        throw assignError;
+      }
 
       // Combine data
       const usersWithDetails: UserWithDetails[] = [];
@@ -157,6 +185,8 @@ export function UserAssignmentManager() {
       setUsers(usersWithDetails);
     } catch (error) {
       console.error("Failed to load users:", error);
+      // Re-throw the error so loadData can handle it properly
+      throw error;
     }
   };
 
@@ -171,6 +201,8 @@ export function UserAssignmentManager() {
       setStores(data || []);
     } catch (error) {
       console.error("Failed to load stores:", error);
+      // Re-throw the error so loadData can handle it properly
+      throw error;
     }
   };
 
@@ -452,8 +484,21 @@ export function UserAssignmentManager() {
 
   if (loading) {
     return (
-      <div className="text-center text-muted-foreground">
+      <div className="text-center text-muted-foreground py-8">
         Loading users and assignments...
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-8">
+        <div className="text-destructive mb-2">Error loading users</div>
+        <div className="text-sm text-muted-foreground mb-4">{error}</div>
+        <Button onClick={loadData} variant="outline">
+          <RotateCcw className="w-4 h-4 mr-2" />
+          Retry
+        </Button>
       </div>
     );
   }
