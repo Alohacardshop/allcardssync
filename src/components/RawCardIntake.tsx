@@ -266,11 +266,17 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
       if (i === index) {
         const updatedRow = { ...row, [field]: value };
         
-        // Only allow updating cost and other non-price fields
-        if (field === 'cost') {
+        // Handle price updates and auto-calculate cost
+        if (field === 'price') {
+          updatedRow.price = typeof value === 'string' ? parseFloat(value) || 0 : value;
+          // Auto-calculate cost when price changes
+          if (updatedRow.price > 0) {
+            updatedRow.cost = calculateCost(updatedRow.price);
+          }
+        } else if (field === 'cost') {
           updatedRow.cost = typeof value === 'string' ? parseFloat(value) || 0 : value;
-        } else if (field !== 'price' && field !== 'marketPrice') {
-          // Allow updating other fields like condition, quantity, etc.
+        } else if (field !== 'marketPrice') {
+          // Allow updating other fields like condition, quantity, etc. but not marketPrice
           (updatedRow as any)[field] = value;
         }
         
@@ -278,7 +284,7 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
       }
       return row;
     }));
-  }, []);
+  }, [calculateCost]);
 
   // Remove row
   const removeRow = useCallback((index: number) => {
@@ -686,9 +692,14 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div className="text-sm font-medium">
-                            ${(row.price || 0).toFixed(2)}
-                          </div>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={row.price || ''}
+                            onChange={(e) => updateRow(index, 'price', e.target.value)}
+                            className="w-20"
+                          />
                         </TableCell>
                         <TableCell>
                           <Input
