@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useContext, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Loader2, Plus, AlertCircle, Trash2, FileText, RotateCcw } from 'lucide-react';
+import { Slider } from "@/components/ui/slider";
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useStore } from '@/contexts/StoreContext';
@@ -17,6 +18,7 @@ import { NormalizedCard } from '@/lib/csv/normalize';
 import { generateSKU, generateTCGSKU } from '@/lib/sku';
 import { fetchCardPricing } from '@/hooks/useTCGData';
 import { tcgSupabase } from '@/lib/tcg-supabase';
+import { useRawIntakeSettings } from '@/hooks/useRawIntakeSettings';
 
 interface RawCardWithPricing extends NormalizedCard {
   cost: number;
@@ -109,6 +111,7 @@ const resolveVariantId = async (card: NormalizedCard): Promise<{ cardId?: string
 };
 
 export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
+  const { settings, updateCostSettings } = useRawIntakeSettings();
   const { selectedStore, selectedLocation, availableStores, availableLocations } = useStore();
   
   // Paste workflow state
@@ -125,7 +128,49 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
   const [currentProcessingItem, setCurrentProcessingItem] = useState<string>('');
   
+  // Cost calculation settings
+  const [tempCostPercentage, setTempCostPercentage] = useState(settings.costPercentage);
+  const [tempCostMode, setTempCostMode] = useState(settings.costCalculationMode);
+  
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Update temp settings when main settings change
+  useEffect(() => {
+    setTempCostPercentage(settings.costPercentage);
+    setTempCostMode(settings.costCalculationMode);
+  }, [settings.costPercentage, settings.costCalculationMode]);
+
+  // Calculate cost based on settings
+  const calculateCost = useCallback((card: RawCardWithPricing): number => {
+    const basePrice = tempCostMode === 'market' && card.marketPrice 
+      ? card.marketPrice 
+      : (card.price || 0);
+    return Math.round((basePrice * tempCostPercentage / 100) * 100) / 100;
+  }, [tempCostMode, tempCostPercentage]);
+
+  // Calculate margin percentage
+  const calculateMargin = useCallback((price: number, cost: number): number => {
+    if (price <= 0) return 0;
+    return Math.round(((price - cost) / price * 100) * 100) / 100;
+  }, []);
+
+  // Apply cost settings to all rows
+  const applyCostSettings = async () => {
+    try {
+      await updateCostSettings(tempCostPercentage, tempCostMode);
+      
+      // Recalculate costs for all rows
+      const updatedRows = parsedRows.map(row => ({
+        ...row,
+        cost: calculateCost(row)
+      }));
+      setParsedRows(updatedRows);
+      
+      toast.success(`All costs recalculated using ${tempCostPercentage}% of ${tempCostMode === 'market' ? 'market price' : 'listed price'}`);
+    } catch (error) {
+      toast.error("Failed to update cost settings");
+    }
+  };
 
   // Access check function
   const checkAccessAndShowToast = async (): Promise<boolean> => {
@@ -215,10 +260,10 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
         printing: card.title || 'Normal' // Map title to printing for UI compatibility
       }));
 
-      // Auto-calculate cost at 70% of price for rows with price
+      // Auto-calculate cost based on current settings
       rowsWithCostAndPrice.forEach(row => {
         if (row.price && row.price > 0) {
-          row.cost = Math.round(row.price * 0.7 * 100) / 100; // Round to 2 decimal places
+          row.cost = calculateCost(row);
         }
       });
 
@@ -234,7 +279,7 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
     } finally {
       setParsing(false);
     }
-  }, [pasteText]);
+  }, [pasteText, calculateCost]);
 
   // Clear all data
   const handleClear = useCallback(() => {
@@ -249,16 +294,24 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
       if (i === index) {
         const updatedRow = { ...row, [field]: value };
         
-        // Auto-calculate cost when price changes (70% of price)
-        if (field === 'price' && value && value > 0) {
-          updatedRow.cost = Math.round(value * 0.7 * 100) / 100; // Round to 2 decimal places
+        // Auto-calculate cost based on current settings when price or marketPrice changes
+        if (field === 'price') {
+          updatedRow.price = typeof value === 'string' ? parseFloat(value) || 0 : value;
+          updatedRow.cost = calculateCost(updatedRow);
+        } else if (field === 'marketPrice') {
+          updatedRow.marketPrice = typeof value === 'string' ? parseFloat(value) || 0 : value;
+          if (tempCostMode === 'market') {
+            updatedRow.cost = calculateCost(updatedRow);
+          }
+        } else if (field === 'cost') {
+          updatedRow.cost = typeof value === 'string' ? parseFloat(value) || 0 : value;
         }
         
         return updatedRow;
       }
       return row;
     }));
-  }, []);
+  }, [calculateCost, tempCostMode]);
 
   // Remove row
   const removeRow = useCallback((index: number) => {
@@ -434,329 +487,336 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
 
   // Check if all rows have valid costs and prices
   const allRowsHaveValidCostsAndPrices = parsedRows.every(row => row.cost && row.cost > 0 && row.price && row.price > 0);
-  const canAddToBatch = parsedRows.length > 0 && allRowsHaveValidCostsAndPrices && selectedStore && selectedLocation && !addingToBatch;
 
   return (
     <div className="space-y-6">
-      {/* Store & Location Selection */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-3xl font-bold tracking-tight">Raw Card Intake</h2>
+      </div>
+
       <StoreLocationSelector />
 
-      {/* Access Alert */}
-      {(!selectedStore || !selectedLocation) && (
-        <Alert className="border-orange-200 bg-orange-50">
-          <AlertCircle className="h-4 w-4 text-orange-600" />
-          <AlertDescription className="text-orange-800">
-            Please select both a store and location above to add cards to your batch.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* Paste Input Panel */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5" />
-            Paste from TCGplayer
-          </CardTitle>
+          <CardTitle>Paste TCGplayer Export</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div>
-            <Label htmlFor="pasteText">TCGplayer Export Data</Label>
+          <div className="space-y-2">
+            <Label htmlFor="paste-area">Paste your TCGplayer export here</Label>
             <Textarea
               ref={textareaRef}
-              id="pasteText"
-              placeholder={`Paste TCGplayer export here...\n\nExample:\n${EXAMPLE_TEXT}`}
+              id="paste-area"
+              placeholder="Paste your TCGplayer inventory export here..."
               value={pasteText}
               onChange={(e) => setPasteText(e.target.value)}
               onKeyDown={handleTextareaKeyDown}
-              className="min-h-[150px] mt-2 font-mono text-sm"
+              className="min-h-[200px] font-mono text-sm"
             />
-            <div className="text-xs text-muted-foreground mt-1">
-              Tip: Press Enter to parse, Ctrl+Enter to add all to batch
+            <div className="flex flex-wrap gap-2 items-center">
+              <Button
+                onClick={handleParse}
+                disabled={parsing || !pasteText.trim()}
+                size="sm"
+              >
+                {parsing ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Parsing...
+                  </>
+                ) : (
+                  <>
+                    <FileText className="mr-2 h-4 w-4" />
+                    Parse Cards (Enter)
+                  </>
+                )}
+              </Button>
+              
+              <Button
+                onClick={() => setPasteText(EXAMPLE_TEXT)}
+                variant="outline"
+                size="sm"
+              >
+                Try Example
+              </Button>
+              
+              <Button
+                onClick={handleClear}
+                variant="outline"
+                size="sm"
+                disabled={parsing}
+              >
+                <RotateCcw className="mr-2 h-4 w-4" />
+                Clear
+              </Button>
             </div>
           </div>
 
-          <div className="flex gap-2">
-            <Button onClick={handleParse} disabled={parsing || !pasteText.trim()}>
-              {parsing ? (
+          {/* Access Check */}
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={checkAccessAndShowToast}
+              disabled={accessCheckLoading || !selectedStore || !selectedLocation}
+              variant="outline"
+              size="sm"
+            >
+              {accessCheckLoading ? (
                 <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Parsing...
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Checking...
                 </>
               ) : (
-                'Parse'
+                'Check Access'
               )}
             </Button>
-            <Button variant="ghost" onClick={handleClear} disabled={!pasteText && parsedRows.length === 0}>
-              <RotateCcw className="h-4 w-4 mr-2" />
-              Clear
-            </Button>
+            {!selectedStore || !selectedLocation ? (
+              <span className="text-sm text-muted-foreground">Select store and location first</span>
+            ) : null}
           </div>
+
+          {/* Parse Results Summary */}
+          {parseResult && (
+            <div className="border rounded-lg p-4 bg-muted/50">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="text-sm font-medium">Parse Results</div>
+                <div className={`text-xs px-2 py-1 rounded ${
+                  parseResult.confidence >= 80 ? 'bg-green-100 text-green-800' :
+                  parseResult.confidence >= 60 ? 'bg-yellow-100 text-yellow-800' :
+                  'bg-red-100 text-red-800'
+                }`}>
+                  {parseResult.confidence}% confidence
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div>
+                  <div className="text-muted-foreground">Cards Found</div>
+                  <div className="font-medium">{parseResult.data.length}</div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground">Parse Errors</div>
+                  <div className="font-medium text-red-600">{parseResult.errors.length}</div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground">Total Quantity</div>
+                  <div className="font-medium">{parseResult.data.reduce((sum, card) => sum + (card.quantity || 1), 0)}</div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground">Total Value</div>
+                  <div className="font-medium">${parseResult.data.reduce((sum, card) => sum + ((card.marketPrice || 0) * (card.quantity || 1)), 0).toFixed(2)}</div>
+                </div>
+              </div>
+
+              {parseResult.errors.length > 0 && (
+                <details className="mt-3">
+                  <summary className="cursor-pointer text-sm text-red-600 hover:text-red-800">
+                    View {parseResult.errors.length} parsing errors
+                  </summary>
+                  <div className="mt-2 space-y-1 text-xs">
+                    {parseResult.errors.slice(0, 10).map((error, index) => (
+                      <div key={index} className="text-red-700 bg-red-50 p-2 rounded border-l-2 border-red-200">
+                        {error.reason}
+                      </div>
+                    ))}
+                    {parseResult.errors.length > 10 && (
+                      <div className="text-muted-foreground">... and {parseResult.errors.length - 10} more errors</div>
+                    )}
+                  </div>
+                </details>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {/* Parsed Results Table */}
+      {/* Cost Calculation Settings */}
       {parsedRows.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Parsed Cards</CardTitle>
+            <CardTitle>Cost Calculation Settings</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+              <div className="space-y-2">
+                <Label htmlFor="cost-mode">Calculate Cost From</Label>
+                <Select value={tempCostMode} onValueChange={(value: 'market' | 'price') => setTempCostMode(value)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="market">Market Price</SelectItem>
+                    <SelectItem value="price">Listed Price</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="cost-percentage">Cost Percentage: {tempCostPercentage}%</Label>
+                <Slider
+                  id="cost-percentage"
+                  min={40}
+                  max={90}
+                  step={5}
+                  value={[tempCostPercentage]}
+                  onValueChange={(value) => setTempCostPercentage(value[0])}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>40%</span>
+                  <span>90%</span>
+                </div>
+              </div>
+              
+              <Button onClick={applyCostSettings} variant="outline">
+                Apply to All ({parsedRows.length} items)
+              </Button>
+            </div>
+            
+            <div className="text-sm text-muted-foreground">
+              Preview: {tempCostMode === 'market' ? 'Market' : 'Listed'} price × {tempCostPercentage}% = Cost
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Parsed Data Table */}
+      {parsedRows.length > 0 && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle>Parsed Cards ({parsedRows.length})</CardTitle>
+              
+              {/* Add to batch section */}
+              <div className="flex items-center gap-2">
+                {addingToBatch && (
+                  <div className="text-sm text-muted-foreground">
+                    {batchProgress.current}/{batchProgress.total} - {currentProcessingItem}
+                  </div>
+                )}
+                
+                <Button
+                  onClick={handleAddAllToBatch}
+                  disabled={addingToBatch || parsedRows.length === 0 || !allRowsHaveValidCostsAndPrices}
+                  className="gap-2"
+                >
+                  {addingToBatch ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Adding {batchProgress.current}/{batchProgress.total}
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="h-4 w-4" />
+                      Add All to Batch (Ctrl+Enter)
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="rounded-md border">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-16">Qty</TableHead>
-                    <TableHead>Name</TableHead>
-                    <TableHead className="w-20">Game</TableHead>
-                    <TableHead className="w-24">Set</TableHead>
-                    <TableHead className="w-20">Number</TableHead>
-                    <TableHead className="w-24">Rarity</TableHead>
-                    <TableHead className="w-32">Printing</TableHead>
-                    <TableHead className="w-32">Condition</TableHead>
-                    <TableHead className="w-24">Language</TableHead>
-                    <TableHead className="w-20">TCG ID</TableHead>
-                    <TableHead className="w-20">Image</TableHead>
-                    <TableHead className="w-24">Market $ (ref)</TableHead>
-                    <TableHead className="w-24">Price $ *</TableHead>
-                    <TableHead className="w-24">Cost $ *</TableHead>
-                    <TableHead className="w-16">Actions</TableHead>
+                    <TableHead className="w-[50px]">#</TableHead>
+                    <TableHead className="min-w-[200px]">Name</TableHead>
+                    <TableHead>Set</TableHead>
+                    <TableHead>Condition</TableHead>
+                    <TableHead>Qty</TableHead>
+                    <TableHead>Market Price</TableHead>
+                    <TableHead>Price</TableHead>
+                    <TableHead>Cost</TableHead>
+                    <TableHead>Margin</TableHead>
+                    <TableHead className="w-[50px]"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {parsedRows.map((row, index) => (
-                    <TableRow key={index}>
-                      <TableCell>
-                        <Input
-                          type="number"
-                          min="1"
-                          value={row.quantity}
-                          onChange={(e) => updateRow(index, 'quantity', parseInt(e.target.value) || 1)}
-                          className="w-16"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          value={(() => {
-                            // Format title as: Game,Set,Name - Number,Condition
-                            const parts = [];
-                            if (row.line) parts.push(row.line);
-                            if (row.set) parts.push(row.set);
-                            
-                            let cardPart = row.name;
-                            if (row.number) cardPart += ` - ${row.number}`;
-                            parts.push(cardPart);
-                            
-                            if (row.condition && row.condition !== 'Near Mint') parts.push(row.condition);
-                            else parts.push('Near Mint');
-                            
-                            return parts.join(',');
-                          })()}
-                          onChange={(e) => updateRow(index, 'name', e.target.value)}
-                          className="min-w-[200px]"
-                        />
-                      </TableCell>
-                      <TableCell>
-                         <div className="text-sm text-muted-foreground w-20 truncate" title={row.line || 'Unknown'}>
-                           {row.line || '—'}
-                         </div>
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          value={row.set || ''}
-                          onChange={(e) => updateRow(index, 'set', e.target.value)}
-                          className="w-24"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          value={row.number || ''}
-                          onChange={(e) => updateRow(index, 'number', e.target.value)}
-                          className="w-20"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-sm w-24 truncate" title={row.rarity || 'Unknown'}>
-                          {row.rarity || '—'}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Select 
-                          value={row.printing || 'Normal'} 
-                          onValueChange={(value) => updateRow(index, 'printing', value)}
-                        >
-                          <SelectTrigger className="w-32">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Normal">Normal</SelectItem>
-                            <SelectItem value="Holofoil">Holofoil</SelectItem>
-                            <SelectItem value="Reverse Holofoil">Reverse Holofoil</SelectItem>
-                            <SelectItem value="1st Edition">1st Edition</SelectItem>
-                            <SelectItem value="1st Edition Holofoil">1st Edition Holofoil</SelectItem>
-                            <SelectItem value="unlimited">unlimited</SelectItem>
-                            <SelectItem value="unlimited Holofoil">unlimited Holofoil</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </TableCell>
-                      <TableCell>
-                        <Select 
-                          value={row.condition || 'Near Mint'} 
-                          onValueChange={(value) => updateRow(index, 'condition', value)}
-                        >
-                          <SelectTrigger className="w-32">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Sealed">Sealed</SelectItem>
-                            <SelectItem value="Near Mint">Near Mint</SelectItem>
-                            <SelectItem value="Lightly Played">Lightly Played</SelectItem>
-                            <SelectItem value="Moderately Played">Moderately Played</SelectItem>
-                            <SelectItem value="Heavily Played">Heavily Played</SelectItem>
-                            <SelectItem value="Damaged">Damaged</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </TableCell>
-                      <TableCell>
-                        <Select 
-                          value={row.language || 'English'} 
-                          onValueChange={(value) => updateRow(index, 'language', value)}
-                        >
-                          <SelectTrigger className="w-24">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="English">English</SelectItem>
-                            <SelectItem value="Japanese">Japanese</SelectItem>
-                            <SelectItem value="Korean">Korean</SelectItem>
-                            <SelectItem value="Chinese">Chinese</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </TableCell>
-                      <TableCell>
-                         <Input
-                           value={row.id || ''}
-                           onChange={(e) => updateRow(index, 'id', e.target.value)}
-                           className="w-20"
-                           placeholder="ID"
-                         />
-                      </TableCell>
-                      <TableCell>
-                        {row.photoUrl ? (
-                          <div className="flex items-center space-x-2">
-                            <img 
-                              src={row.photoUrl} 
-                              alt={row.name} 
-                              className="w-8 h-8 object-cover rounded border"
-                              onError={(e) => {
-                                (e.target as HTMLImageElement).style.display = 'none';
-                              }}
-                            />
-                            <Input
-                              value={row.photoUrl || ''}
-                              onChange={(e) => updateRow(index, 'photoUrl', e.target.value)}
-                              className="w-16 text-xs"
-                              placeholder="URL"
-                            />
-                          </div>
-                        ) : (
+                  {parsedRows.map((row, index) => {
+                    const hasValidCostAndPrice = row.cost && row.cost > 0 && row.price && row.price > 0;
+                    const margin = calculateMargin(row.price || 0, row.cost || 0);
+                    
+                    return (
+                      <TableRow key={index} className={!hasValidCostAndPrice ? 'bg-red-50 border-red-200' : ''}>
+                        <TableCell className="font-mono text-xs">{index + 1}</TableCell>
+                        <TableCell>
+                          <div className="font-medium">{row.name}</div>
+                          {row.number && <div className="text-xs text-muted-foreground">#{row.number}</div>}
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-sm">{row.set}</div>
+                          {row.line && <div className="text-xs text-muted-foreground">{row.line}</div>}
+                        </TableCell>
+                        <TableCell>
                           <Input
-                            value={row.photoUrl || ''}
-                            onChange={(e) => updateRow(index, 'photoUrl', e.target.value)}
-                            className="w-20"
-                            placeholder="Image URL"
+                            value={row.condition || ''}
+                            onChange={(e) => updateRow(index, 'condition', e.target.value)}
+                            className="w-24"
                           />
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-sm">
-                          ${row.marketPrice?.toFixed(2) || '0.00'}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={row.price || ''}
-                          onChange={(e) => updateRow(index, 'price', parseFloat(e.target.value) || 0)}
-                          className={`w-24 ${(!row.price || row.price <= 0) ? 'border-red-500' : ''}`}
-                          placeholder="0.00"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={row.cost || ''}
-                          onChange={(e) => updateRow(index, 'cost', parseFloat(e.target.value) || 0)}
-                          className={`w-24 ${(!row.cost || row.cost <= 0) ? 'border-red-500' : ''}`}
-                          placeholder="0.00"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removeRow(index)}
-                          className="text-red-600 hover:text-red-700"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            min="1"
+                            value={row.quantity || 1}
+                            onChange={(e) => updateRow(index, 'quantity', parseInt(e.target.value) || 1)}
+                            className="w-16"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={row.marketPrice || ''}
+                            onChange={(e) => updateRow(index, 'marketPrice', e.target.value)}
+                            className="w-20"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={row.price || ''}
+                            onChange={(e) => updateRow(index, 'price', e.target.value)}
+                            className="w-20"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={row.cost || ''}
+                            onChange={(e) => updateRow(index, 'cost', e.target.value)}
+                            className="w-20"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <div className={`text-sm font-medium ${
+                            margin < 20 
+                              ? 'text-destructive' 
+                              : margin > 40 
+                              ? 'text-green-600' 
+                              : 'text-foreground'
+                          }`}>
+                            {margin.toFixed(1)}%
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            onClick={() => removeRow(index)}
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
 
-            {/* Summary and Controls */}
-            <div className="flex justify-between items-center mt-4 pt-4 border-t">
-              <div className="text-sm text-muted-foreground">
-                Parsed: {parsedRows.length} items • Total Market ${parsedRows.reduce((sum, row) => sum + ((row.marketPrice || 0) * row.quantity), 0).toFixed(2)}
-                {parseResult?.confidence && ` • Confidence: ${parseResult.confidence.toFixed(0)}%`}
-              </div>
-              
-              <Button 
-                onClick={handleAddAllToBatch}
-                disabled={!canAddToBatch || accessCheckLoading}
-                className="flex items-center gap-2"
-              >
-                {addingToBatch ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Plus className="h-4 w-4" />
-                )}
-                Add All to Batch
-              </Button>
-            </div>
-            
-            {/* Progress indicator during batch add */}
-            {addingToBatch && batchProgress.total > 0 && (
-              <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-blue-900">
-                    Processing Items...
-                  </span>
-                  <span className="text-sm text-blue-700">
-                    {batchProgress.current} / {batchProgress.total}
-                  </span>
-                </div>
-                <div className="w-full bg-blue-200 rounded-full h-2 mb-2">
-                  <div 
-                    className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
-                    style={{ width: `${(batchProgress.current / batchProgress.total) * 100}%` }}
-                  />
-                </div>
-                {currentProcessingItem && (
-                  <div className="text-sm text-blue-700 truncate">
-                    Current: {currentProcessingItem}
-                  </div>
-                )}
-              </div>
-            )}
-            
             {/* Cost and price validation warning */}
             {parsedRows.length > 0 && !allRowsHaveValidCostsAndPrices && (
               <Alert className="mt-4 border-red-200 bg-red-50">
@@ -772,3 +832,5 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
     </div>
   );
 }
+
+export default RawCardIntake;
