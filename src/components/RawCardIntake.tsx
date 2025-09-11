@@ -45,17 +45,33 @@ const mapProductLineToGame = (productLine: string): string => {
   return 'pokemon'; // Default fallback
 };
 
-// Helper function to resolve variant ID for a card
+// Timeout wrapper for async operations
+const withTimeout = (promise: PromiseLike<any>, timeoutMs: number): Promise<any> => {
+  return Promise.race([
+    Promise.resolve(promise),
+    new Promise((_, reject) => 
+      setTimeout(() => reject(new Error(`Operation timed out after ${timeoutMs}ms`)), timeoutMs)
+    )
+  ]);
+};
+
+// Helper function to resolve variant ID for a card with timeout protection
 const resolveVariantId = async (card: NormalizedCard): Promise<{ cardId?: string; variantId?: string }> => {
   try {
     const gameSlug = mapProductLineToGame(card.line || '');
     
-    // Search for the card first
-    const { data: cards } = await tcgSupabase
+    // Search for the card first with 5 second timeout
+    const cardsPromise = tcgSupabase
       .from('cards')
       .select('id, name, sets!inner(name)')
       .ilike('name', `%${card.name}%`)
-      .limit(10);
+      .limit(10)
+      .then(result => result);
+      
+    const { data: cards } = await withTimeout(
+      cardsPromise,
+      5000
+    );
 
     if (!cards?.length) return {};
 
@@ -68,8 +84,11 @@ const resolveVariantId = async (card: NormalizedCard): Promise<{ cardId?: string
 
     if (!cardMatch) return {};
 
-    // Get pricing data to find variant
-    const pricingData = await fetchCardPricing(cardMatch.id);
+    // Get pricing data to find variant with 3 second timeout
+    const pricingData = await withTimeout(
+      fetchCardPricing(cardMatch.id),
+      3000
+    );
     
     if (pricingData?.variants?.length) {
       // Find matching variant by condition 
@@ -101,6 +120,10 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
   const [parsing, setParsing] = useState(false);
   const [addingToBatch, setAddingToBatch] = useState(false);
   const [accessCheckLoading, setAccessCheckLoading] = useState(false);
+  
+  // Progress tracking for batch add
+  const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
+  const [currentProcessingItem, setCurrentProcessingItem] = useState<string>('');
   
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -242,7 +265,7 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
     setParsedRows(prev => prev.filter((_, i) => i !== index));
   }, []);
 
-  // Add all rows to batch
+  // Add all rows to batch with progress tracking and timeout protection
   const handleAddAllToBatch = async () => {
     // Validate all rows have costs and prices
     const invalidRows = parsedRows.filter((row, index) => 
@@ -261,74 +284,95 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
     }
 
     setAddingToBatch(true);
+    setBatchProgress({ current: 0, total: parsedRows.length });
     let successCount = 0;
     let errorCount = 0;
 
     try {
-      // Process rows sequentially to avoid overwhelming the database
+      // Process rows sequentially with progress feedback
       for (const [index, row] of parsedRows.entries()) {
+        // Update progress
+        setCurrentProcessingItem(`${row.name} (${index + 1}/${parsedRows.length})`);
+        setBatchProgress({ current: index + 1, total: parsedRows.length });
+
         try {
-           // Resolve variant ID first
-           const { cardId, variantId } = await resolveVariantId(row);
+          // Resolve variant ID with timeout protection
+          let cardId: string | undefined;
+          let variantId: string | undefined;
+          
+          try {
+            const variantResult = await resolveVariantId(row);
+            cardId = variantResult.cardId;
+            variantId = variantResult.variantId;
+          } catch (error) {
+            console.warn(`Skipping variant resolution for ${row.name}:`, error);
+            // Continue without variant data
+          }
            
-           // Map product line to game key
-           const gameKey = mapProductLineToGame(row.line || '');
+          // Map product line to game key
+          const gameKey = mapProductLineToGame(row.line || '');
            
-            // Prioritize TCGPlayer ID as SKU using new helper function
-            const generatedSku = generateTCGSKU(row.id, gameKey, variantId, cardId);
+          // Prioritize TCGPlayer ID as SKU using new helper function
+          const generatedSku = generateTCGSKU(row.id, gameKey, variantId, cardId);
            
-           const formattedTitle = (() => {
-              // Format title as: Game,Set,Name - Number,Condition
-              const parts = [];
-              if (row.line) parts.push(row.line);
-              if (row.set) parts.push(row.set);
-              
-              // Use the card name as-is (it may already contain the number)
-              parts.push(row.name);
-              
-              if (row.condition && row.condition !== 'Near Mint') parts.push(row.condition);
-              else parts.push('Near Mint');
-              
-              return parts.join(',');
-            })();
+          const formattedTitle = (() => {
+            // Format title as: Game,Set,Name - Number,Condition
+            const parts = [];
+            if (row.line) parts.push(row.line);
+            if (row.set) parts.push(row.set);
+            
+            // Use the card name as-is (it may already contain the number)
+            parts.push(row.name);
+            
+            if (row.condition && row.condition !== 'Near Mint') parts.push(row.condition);
+            else parts.push('Near Mint');
+            
+            return parts.join(',');
+          })();
 
-            const rpcParams = {
-              store_key_in: selectedStore!.trim(),
-              shopify_location_gid_in: selectedLocation!.trim(),
-              quantity_in: row.quantity,
-              brand_title_in: formattedTitle,
-              subject_in: formattedTitle,
-              category_in: 'Trading Cards', // Generic category for TCGplayer imports
-              variant_in: row.title || 'Normal',
-              card_number_in: row.number || '',
-              grade_in: '', // leave empty so the DB marks item as Raw
-              price_in: row.price || 0,
-              cost_in: row.cost,
-              sku_in: generatedSku,
-              source_provider_in: 'tcgplayer_paste',
-             catalog_snapshot_in: {
-               name: row.name,
-               set: row.set,
-               number: row.number,
-               language: 'English', // Default for smart parser
-               tcgplayer_id: row.id,
-               image_url: row.photoUrl,
-               card_id: cardId,
-               variant_id: variantId,
-               game: gameKey
-             },
-             pricing_snapshot_in: {
-               market_price: row.marketPrice,
-               condition: row.condition,
-               printing: row.title || 'Normal',
-               language: 'English', // Default for smart parser
-               captured_at: new Date().toISOString(),
-               market_as_of: parseResult?.suggestions?.[0] || null
-             },
-             processing_notes_in: `TCGplayer paste import: ${row.name} from ${row.set || 'Unknown Set'}`
-           };
+          const rpcParams = {
+            store_key_in: selectedStore!.trim(),
+            shopify_location_gid_in: selectedLocation!.trim(),
+            quantity_in: row.quantity,
+            brand_title_in: formattedTitle,
+            subject_in: formattedTitle,
+            category_in: 'Trading Cards', // Generic category for TCGplayer imports
+            variant_in: row.title || 'Normal',
+            card_number_in: row.number || '',
+            grade_in: '', // leave empty so the DB marks item as Raw
+            price_in: row.price || 0,
+            cost_in: row.cost,
+            sku_in: generatedSku,
+            source_provider_in: 'tcgplayer_paste',
+            catalog_snapshot_in: {
+              name: row.name,
+              set: row.set,
+              number: row.number,
+              language: 'English', // Default for smart parser
+              tcgplayer_id: row.id,
+              image_url: row.photoUrl,
+              card_id: cardId,
+              variant_id: variantId,
+              game: gameKey
+            },
+            pricing_snapshot_in: {
+              market_price: row.marketPrice,
+              condition: row.condition,
+              printing: row.title || 'Normal',
+              language: 'English', // Default for smart parser
+              captured_at: new Date().toISOString(),
+              market_as_of: parseResult?.suggestions?.[0] || null
+            },
+            processing_notes_in: `TCGplayer paste import: ${row.name} from ${row.set || 'Unknown Set'}`
+          };
 
-          const response = await supabase.rpc('create_raw_intake_item', rpcParams);
+          // Create intake item with timeout protection
+          const rpcPromise = supabase.rpc('create_raw_intake_item', rpcParams)
+            .then(result => result);
+          const response = await withTimeout(
+            rpcPromise,
+            10000 // 10 second timeout for database operations
+          );
 
           if (response.error) {
             console.error(`Row ${index + 1} error:`, response.error);
@@ -349,7 +393,10 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
           }
         } catch (error: any) {
           console.error(`Row ${index + 1} error:`, error);
-          toast.error(`Row ${index + 1} (${row.name}): ${error.message}`);
+          const errorMsg = error.message.includes('timed out') 
+            ? `Timeout - ${row.name} took too long to process`
+            : `${row.name}: ${error.message}`;
+          toast.error(`Row ${index + 1}: ${errorMsg}`);
           errorCount++;
         }
       }
@@ -359,7 +406,7 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
         toast.success(`Successfully added ${successCount} items to batch`);
       }
       if (errorCount > 0) {
-        toast.error(`Failed to add ${errorCount} items`);
+        toast.error(`Failed to add ${errorCount} items - you can retry individual items later`);
       }
 
     } catch (error: any) {
@@ -367,6 +414,8 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
       toast.error(`Batch add failed: ${error.message}`);
     } finally {
       setAddingToBatch(false);
+      setBatchProgress({ current: 0, total: 0 });
+      setCurrentProcessingItem('');
     }
   };
 
@@ -682,6 +731,31 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
                 Add All to Batch
               </Button>
             </div>
+            
+            {/* Progress indicator during batch add */}
+            {addingToBatch && batchProgress.total > 0 && (
+              <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-blue-900">
+                    Processing Items...
+                  </span>
+                  <span className="text-sm text-blue-700">
+                    {batchProgress.current} / {batchProgress.total}
+                  </span>
+                </div>
+                <div className="w-full bg-blue-200 rounded-full h-2 mb-2">
+                  <div 
+                    className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                    style={{ width: `${(batchProgress.current / batchProgress.total) * 100}%` }}
+                  />
+                </div>
+                {currentProcessingItem && (
+                  <div className="text-sm text-blue-700 truncate">
+                    Current: {currentProcessingItem}
+                  </div>
+                )}
+              </div>
+            )}
             
             {/* Cost and price validation warning */}
             {parsedRows.length > 0 && !allRowsHaveValidCostsAndPrices && (
