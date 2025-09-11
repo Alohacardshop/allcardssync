@@ -1,4 +1,4 @@
-// Graded card sender for Shopify - STRICT PSA barcode enforcement
+// Graded card sender for Shopify - STRICT PSA barcode enforcement with rich metadata
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { CORS, json, loadStore, parseIdFromGid, fetchRetry, newRun, deriveStoreSlug, API_VER, shopifyGraphQL, onlyDigits, parseNumericIdFromGid } from '../_shared/shopify-helpers.ts'
 
@@ -8,21 +8,79 @@ function extractGradeNumber(grade?: string | null): string | null {
   return match ? match[1] : null
 }
 
-async function createGradedProduct(domain: string, token: string, sku: string, barcode: string, title?: string | null, price?: number | null, tags: string[] = []) {
+const upper = (s?: string) => (s || "").toUpperCase().trim();
+
+function formatGradedTitle(it: any) {
+  const year = it.year ?? '';
+  const set  = upper(it.set_name ?? '');
+  const num  = it.number ? `#${String(it.number).trim()}` : '';
+  const nm   = upper(it.card_name ?? '');
+  const holo = it.is_holo ? '-HOLO' : '';
+  const grd  = it.grade ? ` PSA ${String(it.grade).trim()}` : '';
+  // e.g. 1997 POKEMON JAPANESE ROCKET #9 DARK BLASTOISE-HOLO PSA 5
+  return `${year} ${set} ${num} ${nm}${holo}${grd}`.replace(/\s+/g,' ').trim();
+}
+
+function formatGradedDescription(it: any, cert: string) {
+  const base = `${it.year ?? ''} ${upper(it.set_name ?? '')} ${it.number ? `#${it.number}` : ''} ${upper(it.card_name ?? '')}${it.is_holo ? '-HOLO' : ''}`.replace(/\s+/g,' ').trim();
+  return `${base} with the cert number ${cert}`;
+}
+
+function buildTags(it: any) {
+  const tags = new Set<string>([
+    'graded',
+    'PSA',
+    it.grade ? `Grade ${it.grade}` : '',
+    it.category_tag || 'Pokemon',
+  ].filter(Boolean) as string[]);
+  // Explicitly remove tags we don't want
+  tags.delete('graded-5');
+  tags.delete('intake');
+  return Array.from(tags).join(', ');
+}
+
+async function updateInventoryItemCost(domain: string, token: string, inventoryItemId: string, cost: number) {
+  const payload = {
+    inventory_item: {
+      id: inventoryItemId,
+      cost: cost.toFixed(2)
+    }
+  }
+  const r = await fetchRetry(`https://${domain}/admin/api/${API_VER}/inventory_items/${inventoryItemId}.json`, {
+    method: 'PUT',
+    headers: { 'X-Shopify-Access-Token': token, 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  })
+  if (!r.ok) throw new Error(`Update cost failed: ${r.status} ${await r.text()}`)
+  return await r.json()
+}
+
+async function createGradedProduct(domain: string, token: string, item: any, cert: string) {
+  const title = formatGradedTitle(item) || `Graded Card — PSA ${cert}`
+  const description = formatGradedDescription(item, cert)
+  const tags = buildTags(item)
+  
   const payload = {
     product: {
-      title: title || sku,
+      title,
+      body_html: description,
       status: 'active',
-      tags: tags.filter(Boolean).join(', '),
+      product_type: item.category_tag || 'Pokemon',
+      tags,
+      images: item.image_url ? [{ src: item.image_url }] : [],
       variants: [{
-        sku,
-        barcode,
-        price: price != null ? Number(price).toFixed(2) : undefined,
+        sku: item.sku || cert,
+        barcode: cert,
+        price: item.price != null ? Number(item.price).toFixed(2) : undefined,
         inventory_management: 'shopify',
-        inventory_policy: 'deny'
+        inventory_policy: 'deny',
+        weight: 3,
+        weight_unit: 'oz',
+        requires_shipping: true
       }]
     }
   }
+  
   const r = await fetchRetry(`https://${domain}/admin/api/${API_VER}/products.json`, {
     method: 'POST',
     headers: { 'X-Shopify-Access-Token': token, 'Content-Type': 'application/json' },
@@ -30,7 +88,107 @@ async function createGradedProduct(domain: string, token: string, sku: string, b
   })
   const b = await r.json()
   if (!r.ok) throw new Error(`Create graded product failed: ${r.status} ${JSON.stringify(b)}`)
+  
+  // Update cost if provided
+  if (item.cost != null && b.product?.variants?.[0]?.inventory_item_id) {
+    try {
+      await updateInventoryItemCost(domain, token, String(b.product.variants[0].inventory_item_id), Number(item.cost))
+    } catch (e) {
+      console.warn('Failed to set cost on new product:', e)
+    }
+  }
+  
   return b.product
+}
+
+async function updateExistingProduct(domain: string, token: string, productId: string, variantId: string, inventoryItemId: string, item: any, cert: string) {
+  const title = formatGradedTitle(item) || `Graded Card — PSA ${cert}`
+  const description = formatGradedDescription(item, cert)
+  const tags = buildTags(item)
+  
+  // Update product
+  const productPayload = {
+    product: {
+      id: productId,
+      title,
+      body_html: description,
+      tags,
+      product_type: item.category_tag || 'Pokemon'
+    }
+  }
+  
+  if (item.image_url) {
+    productPayload.product.images = [{ src: item.image_url }]
+  }
+  
+  const pr = await fetchRetry(`https://${domain}/admin/api/${API_VER}/products/${productId}.json`, {
+    method: 'PUT',
+    headers: { 'X-Shopify-Access-Token': token, 'Content-Type': 'application/json' },
+    body: JSON.stringify(productPayload)
+  })
+  
+  if (!pr.ok) {
+    console.warn(`Product update failed: ${pr.status}`)
+  }
+  
+  // Update variant
+  const variantPayload = {
+    variant: {
+      id: variantId,
+      weight: 3,
+      weight_unit: 'oz',
+      requires_shipping: true
+    }
+  }
+  
+  const vr = await fetchRetry(`https://${domain}/admin/api/${API_VER}/variants/${variantId}.json`, {
+    method: 'PUT',
+    headers: { 'X-Shopify-Access-Token': token, 'Content-Type': 'application/json' },
+    body: JSON.stringify(variantPayload)
+  })
+  
+  if (!vr.ok) {
+    console.warn(`Variant update failed: ${vr.status}`)
+  }
+  
+  // Update cost if provided
+  if (item.cost != null) {
+    try {
+      await updateInventoryItemCost(domain, token, inventoryItemId, Number(item.cost))
+    } catch (e) {
+      console.warn('Failed to update cost:', e)
+    }
+  }
+}
+
+async function getProduct(domain: string, token: string, id: string) {
+  const r = await fetchRetry(`https://${domain}/admin/api/${API_VER}/products/${id}.json`, {
+    headers: { 'X-Shopify-Access-Token': token, 'Content-Type': 'application/json' }
+  })
+  const b = await r.json()
+  if (!r.ok) throw new Error(`Fetch product failed: ${r.status}`)
+  return b.product
+}
+
+async function publishIfNeeded(domain: string, token: string, productId: string) {
+  const p = await getProduct(domain, token, productId)
+  if (p?.status !== 'active') {
+    const r = await fetchRetry(`https://${domain}/admin/api/${API_VER}/products/${productId}.json`, {
+      method: 'PUT',
+      headers: { 'X-Shopify-Access-Token': token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ product: { id: productId, status: 'active' } })
+    })
+    if (!r.ok) throw new Error(`Publish failed: ${r.status}`)
+  }
+}
+
+async function setInventory(domain: string, token: string, inventory_item_id: string, location_id: string, available: number) {
+  const r = await fetchRetry(`https://${domain}/admin/api/${API_VER}/inventory_levels/set.json`, {
+    method: 'POST',
+    headers: { 'X-Shopify-Access-Token': token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ inventory_item_id, location_id, available })
+  })
+  if (!r.ok) throw new Error(`Inventory set failed: ${r.status} ${await r.text()}`)
 }
 
 Deno.serve(async (req) => {
@@ -62,16 +220,6 @@ Deno.serve(async (req) => {
     const skuToUse = item.sku || cert  // SKU can be anything; falls back to cert
     const locationId = parseIdFromGid(locationGid)
     if (!locationId) return json(400, { ok: false, error: 'Invalid locationGid' })
-
-    // Build tags
-    const baseTags = [item.category, item.variant, item.lot_number ? `lot-${item.lot_number}` : null, 'intake', item.game]
-    const gradedTags = ['graded']
-    if (item.psa_cert) gradedTags.push('PSA')
-    const gradeNum = extractGradeNumber(item.grade)
-    if (gradeNum) gradedTags.push(`grade-${gradeNum}`)
-    gradedTags.push(`cert-${cert}`)
-    
-    const allTags = [...baseTags.filter(Boolean), ...gradedTags]
 
     // A) GraphQL search by barcode first
     const GQL = `
@@ -138,38 +286,42 @@ Deno.serve(async (req) => {
 
     // D) Create new canonical graded product when no strict match
     let productId: string, variantId: string, inventoryItemId: string
+    let resultMeta: any = {}
     
     if (!chosen) {
-      const payload = {
-        product: {
-          status: 'active',
-          title: item.title || `Graded Card — PSA ${cert}`,
-          tags: allTags.filter(Boolean).join(', '),
-          variants: [{
-            sku: skuToUse,
-            barcode: cert,  // MUST equal cert
-            price: item.price != null ? Number(item.price).toFixed(2) : undefined,
-            inventory_management: 'shopify',
-            inventory_policy: 'deny',
-          }]
-        }
-      }
-      const cr = await fetchRetry(`https://${domain}/admin/api/${API_VER}/products.json`, {
-        method: 'POST', 
-        headers: { 'X-Shopify-Access-Token': token, 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      })
-      const cb = await cr.json()
-      if (!cr.ok) throw new Error(`Create failed ${cr.status}: ${JSON.stringify(cb)}`)
-      
+      const newProduct = await createGradedProduct(domain, token, item, cert)
       chosen = {
-        id: `gid://shopify/ProductVariant/${cb.product?.variants?.[0]?.id}`,
-        product: { id: `gid://shopify/Product/${cb.product?.id}`, status: cb.product?.status, tags: cb.product?.tags, title: cb.product?.title },
+        id: `gid://shopify/ProductVariant/${newProduct?.variants?.[0]?.id}`,
+        product: { id: `gid://shopify/Product/${newProduct?.id}`, status: newProduct?.status, tags: newProduct?.tags, title: newProduct?.title },
         barcode: cert,
-        sku: cb.product?.variants?.[0]?.sku,
-        inventoryItem: { id: `gid://shopify/InventoryItem/${cb.product?.variants?.[0]?.inventory_item_id}` }
+        sku: newProduct?.variants?.[0]?.sku,
+        inventoryItem: { id: `gid://shopify/InventoryItem/${newProduct?.variants?.[0]?.inventory_item_id}` }
       }
-      run.add({ name: 'createdCanonical', ok: true, data: { productId: cb.product?.id, variantId: cb.product?.variants?.[0]?.id, barcode: cert } })
+      run.add({ name: 'createdCanonical', ok: true, data: { productId: newProduct?.id, variantId: newProduct?.variants?.[0]?.id, barcode: cert } })
+      
+      resultMeta = {
+        appliedTitle: newProduct?.title,
+        appliedTags: newProduct?.tags,
+        weight: '3 oz',
+        costPushed: item.cost != null,
+        imageAttached: !!item.image_url
+      }
+    } else {
+      // Update existing product/variant with new metadata
+      const pId = parseNumericIdFromGid(chosen.product.id) || ''
+      const vId = parseNumericIdFromGid(chosen.id) || ''
+      const iId = parseNumericIdFromGid(chosen.inventoryItem.id) || ''
+      
+      await updateExistingProduct(domain, token, pId, vId, iId, item, cert)
+      run.add({ name: 'updatedExisting', ok: true, data: { productId: pId, variantId: vId } })
+      
+      resultMeta = {
+        appliedTitle: formatGradedTitle(item) || `Graded Card — PSA ${cert}`,
+        appliedTags: buildTags(item),
+        weight: '3 oz',
+        costPushed: item.cost != null,
+        imageAttached: !!item.image_url
+      }
     }
 
     // Parse numeric IDs for further operations
@@ -219,6 +371,7 @@ Deno.serve(async (req) => {
             decision: barcodeHits.length ? 'reuse-barcode' : (run.steps.find(s => s.name === 'reuseVariant' && s.data?.reason === 'sku+barcode') ? 'reuse-sku+barcode' : 'created'),
             collisions: run.steps.find(s => s.name === 'collision')?.data || null
           },
+          resultMeta,
           steps: run.steps,
         },
       }).eq('id', item.id)
@@ -236,7 +389,8 @@ Deno.serve(async (req) => {
       enforcedBarcode: cert,
       decision: barcodeHits.length ? 'reuse-barcode' : (run.steps.find(s => s.name === 'reuseVariant' && s.data?.reason === 'sku+barcode') ? 'reuse-sku+barcode' : 'created'),
       productAdminUrl: `https://admin.shopify.com/store/${slug}/products/${productId}`,
-      variantAdminUrl: `https://admin.shopify.com/store/${slug}/products/${productId}/variants/${variantId}`
+      variantAdminUrl: `https://admin.shopify.com/store/${slug}/products/${productId}/variants/${variantId}`,
+      resultMeta
     })
   } catch (e: any) {
     console.warn('send.fail', { correlationId: run.correlationId, message: e?.message })

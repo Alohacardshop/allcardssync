@@ -304,8 +304,6 @@ const Inventory = () => {
   };
 
   const onSync = async (row: any) => {
-    console.log('🔄 onSync called for row:', { id: row.id, type: row.type, sku: row.sku, psa_cert: row.psa_cert });
-    
     if (!selectedLocationGid) { 
       toast.error("Pick a location first"); 
       return;
@@ -315,24 +313,8 @@ const Inventory = () => {
     try {
       // Route to correct v2 sender based on item type
       const isGraded = row.type === 'Graded' || row.psa_cert || row.grade;
-      console.log('📦 Routing decision:', { isGraded, type: row.type, psa_cert: row.psa_cert, grade: row.grade });
       
       if (isGraded) {
-        console.log('📤 Calling sendGradedToShopify with:', {
-          storeKey: selectedStoreKey,
-          locationGid: selectedLocationGid,
-          item: {
-            id: row.id,
-            sku: row.sku,
-            psa_cert: row.psa_cert,
-            barcode: row.barcode || row.sku,
-            title: row.brand_title || row.subject,
-            price: row.price ?? undefined,
-            grade: row.grade,
-            quantity: Number(row.quantity ?? 1)
-          }
-        });
-        
         await sendGradedToShopify({
           storeKey: selectedStoreKey as "hawaii" | "las_vegas",
           locationGid: selectedLocationGid,
@@ -348,20 +330,6 @@ const Inventory = () => {
           }
         });
       } else {
-        console.log('📤 Calling sendRawToShopify with:', {
-          storeKey: selectedStoreKey,
-          locationGid: selectedLocationGid,
-          item: {
-            id: row.id,
-            sku: row.sku,
-            title: row.brand_title || row.subject,
-            price: row.price ?? undefined,
-            barcode: row.barcode,
-            condition: row.variant,
-            quantity: Number(row.quantity ?? 1)
-          }
-        });
-        
         await sendRawToShopify({
           storeKey: selectedStoreKey as "hawaii" | "las_vegas",
           locationGid: selectedLocationGid,
@@ -376,11 +344,9 @@ const Inventory = () => {
           }
         });
       }
-      console.log('✅ Sync successful for:', row.sku);
       toast.success(`Synced ${row.sku} to Shopify`);
       fetchItems();
     } catch (e: any) {
-      console.error('❌ Sync failed:', e);
       toast.error(e?.message || "Sync failed");
     } finally {
       setSyncingRowId(null);
