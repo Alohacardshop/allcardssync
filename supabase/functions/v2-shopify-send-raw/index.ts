@@ -5,16 +5,39 @@ import { CORS, json, loadStore, parseIdFromGid, fetchRetry, newRun, deriveStoreS
 async function createRawProduct(domain: string, token: string, item: any) {
   // Construct title in format: Game,Set #Number CardName,Condition
   let title = ''
-  if (item.brand_title && item.subject) {
-    const parts = [item.brand_title]
-    if (item.card_number) {
-      parts.push(`#${item.card_number}`)
+  
+  // Handle potential duplication - if brand_title and subject are the same or similar, use brand_title as base
+  if (item.brand_title) {
+    // Parse the brand_title to extract game, set, and card name
+    const titleParts = item.brand_title.split(',')
+    
+    if (titleParts.length >= 3) {
+      // Format: Game,Set,CardName or Game,Set,CardName,Condition
+      const game = titleParts[0].trim()
+      const set = titleParts[1].trim()
+      const cardName = titleParts[2].trim()
+      
+      // Build title: Game,Set #Number CardName,Condition
+      const parts = [game, set]
+      if (item.card_number) {
+        parts.push(`#${item.card_number}`)
+      }
+      parts.push(cardName)
+      if (item.condition && item.condition.toLowerCase() !== 'normal') {
+        parts.push(item.condition)
+      }
+      title = parts.join(',')
+    } else {
+      // Fallback to original brand_title with card number if available
+      const parts = [item.brand_title]
+      if (item.card_number) {
+        parts.push(`#${item.card_number}`)
+      }
+      if (item.condition && item.condition.toLowerCase() !== 'normal') {
+        parts.push(item.condition)
+      }
+      title = parts.join(',')
     }
-    parts.push(item.subject)
-    if (item.condition && item.condition !== 'Normal') {
-      parts.push(item.condition)
-    }
-    title = parts.join(',')
   } else {
     title = item.title || item.sku || 'Raw Card'
   }
@@ -54,8 +77,8 @@ async function createRawProduct(domain: string, token: string, item: any) {
         inventory_management: 'shopify',
         inventory_policy: 'deny',
         requires_shipping: true,
-        weight: 1.0,
-        weight_unit: 'oz'
+        weight: 0.0625, // 1 oz in pounds (1/16)
+        weight_unit: 'lb'
       }]
     }
   }
