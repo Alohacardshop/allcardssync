@@ -12,10 +12,19 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useStore } from '@/contexts/StoreContext';
 import { StoreLocationSelector } from '@/components/StoreLocationSelector';
-import { parseTcgplayerPaste, sumMarketPrice, type ParsedTcgplayerRow } from '@/lib/tcgplayerPasteParser';
+import { parseSmartTcgplayerCsv, type SmartParseResult } from '@/lib/csv/smartTcgplayerParser';
+import { NormalizedCard } from '@/lib/csv/normalize';
 import { generateSKU, generateTCGSKU } from '@/lib/sku';
 import { fetchCardPricing } from '@/hooks/useTCGData';
 import { tcgSupabase } from '@/lib/tcg-supabase';
+
+interface RawCardWithPricing extends NormalizedCard {
+  cost: number;
+  price: number;
+  // Additional fields for UI that aren't in base NormalizedCard
+  language?: string;
+  printing?: string;
+}
 
 interface RawCardIntakeProps {
   onBatchAdd?: (item: any) => void;
@@ -36,25 +45,25 @@ const mapProductLineToGame = (productLine: string): string => {
   return 'pokemon'; // Default fallback
 };
 
-// Helper function to resolve variant ID for a row
-const resolveVariantId = async (row: ParsedTcgplayerRow): Promise<{ cardId?: string; variantId?: string }> => {
+// Helper function to resolve variant ID for a card
+const resolveVariantId = async (card: NormalizedCard): Promise<{ cardId?: string; variantId?: string }> => {
   try {
-    const gameSlug = mapProductLineToGame(row.productLine || '');
+    const gameSlug = mapProductLineToGame(card.line || '');
     
     // Search for the card first
     const { data: cards } = await tcgSupabase
       .from('cards')
       .select('id, name, sets!inner(name)')
-      .ilike('name', `%${row.name}%`)
+      .ilike('name', `%${card.name}%`)
       .limit(10);
 
     if (!cards?.length) return {};
 
     // Find best match based on name and set
-    const cardMatch = cards.find(card => {
-      const setName = (card.sets as any)?.name;
-      return card.name.toLowerCase().includes(row.name.toLowerCase()) &&
-             setName?.toLowerCase().includes((row.set || '').toLowerCase());
+    const cardMatch = cards.find(c => {
+      const setName = (c.sets as any)?.name;
+      return c.name.toLowerCase().includes(card.name.toLowerCase()) &&
+             setName?.toLowerCase().includes((card.set || '').toLowerCase());
     }) || cards[0];
 
     if (!cardMatch) return {};
@@ -63,10 +72,9 @@ const resolveVariantId = async (row: ParsedTcgplayerRow): Promise<{ cardId?: str
     const pricingData = await fetchCardPricing(cardMatch.id);
     
     if (pricingData?.variants?.length) {
-      // Find matching variant by condition and printing
+      // Find matching variant by condition 
       const variant = pricingData.variants.find(v => 
-        v.condition?.toLowerCase() === (row.condition || 'near mint').toLowerCase() &&
-        v.printing?.toLowerCase().includes((row.printing || 'normal').toLowerCase())
+        v.condition?.toLowerCase() === (card.condition || 'near mint').toLowerCase()
       ) || pricingData.variants[0];
 
       if (variant?.id) {
@@ -86,10 +94,8 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
   
   // Paste workflow state
   const [pasteText, setPasteText] = useState('');
-  const [parsedRows, setParsedRows] = useState<ParsedTcgplayerRow[]>([]);
-  const [marketAsOf, setMarketAsOf] = useState<string | undefined>();
-  const [totalMarketValue, setTotalMarketValue] = useState<number | undefined>();
-  const [cardCount, setCardCount] = useState<number | undefined>();
+  const [parsedRows, setParsedRows] = useState<RawCardWithPricing[]>([]);
+  const [parseResult, setParseResult] = useState<SmartParseResult | null>(null);
   
   // UI state
   const [parsing, setParsing] = useState(false);
@@ -169,18 +175,21 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
 
     setParsing(true);
     try {
-      const result = parseTcgplayerPaste(pasteText);
+      const result = parseSmartTcgplayerCsv(pasteText);
+      setParseResult(result);
       
-      if (result.rows.length === 0) {
-        toast.error('No valid cards found in the pasted text');
+      if (result.data.length === 0) {
+        toast.error(result.errors.length > 0 ? result.errors[0].reason : 'No valid cards found');
         return;
       }
 
-      // Add cost and price fields to each row (required for batch add)
-      const rowsWithCostAndPrice = result.rows.map(row => ({
-        ...row,
+      // Add cost and price fields to each card (required for batch add)
+      const rowsWithCostAndPrice: RawCardWithPricing[] = result.data.map(card => ({
+        ...card,
         cost: 0, // Will be auto-calculated when price is set
-        price: row.marketPrice || 0 // Start with market price if available
+        price: card.marketPrice || 0, // Start with market price if available
+        language: 'English', // Default language
+        printing: card.title || 'Normal' // Map title to printing for UI compatibility
       }));
 
       // Auto-calculate cost at 70% of price for rows with price
@@ -191,11 +200,11 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
       });
 
       setParsedRows(rowsWithCostAndPrice);
-      setMarketAsOf(result.marketAsOf);
-      setTotalMarketValue(result.totalMarketValue);
-      setCardCount(result.cardCount);
       
-      toast.success(`Parsed ${result.rows.length} cards successfully`);
+      const confidenceText = result.confidence >= 80 ? 'high confidence' : 
+                            result.confidence >= 60 ? 'medium confidence' : 'low confidence';
+      
+      toast.success(`Parsed ${result.data.length} cards (${confidenceText})`);
     } catch (error: any) {
       console.error('Parse error:', error);
       toast.error(`Parse failed: ${error.message}`);
@@ -208,13 +217,11 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
   const handleClear = useCallback(() => {
     setPasteText('');
     setParsedRows([]);
-    setMarketAsOf(undefined);
-    setTotalMarketValue(undefined);
-    setCardCount(undefined);
+    setParseResult(null);
   }, []);
 
   // Update parsed row
-  const updateRow = useCallback((index: number, field: keyof ParsedTcgplayerRow | 'cost', value: any) => {
+  const updateRow = useCallback((index: number, field: keyof RawCardWithPricing, value: any) => {
     setParsedRows(prev => prev.map((row, i) => {
       if (i === index) {
         const updatedRow = { ...row, [field]: value };
@@ -265,15 +272,15 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
            const { cardId, variantId } = await resolveVariantId(row);
            
            // Map product line to game key
-           const gameKey = mapProductLineToGame(row.productLine || '');
+           const gameKey = mapProductLineToGame(row.line || '');
            
             // Prioritize TCGPlayer ID as SKU using new helper function
-            const generatedSku = generateTCGSKU(row.tcgplayerId, gameKey, variantId, cardId);
+            const generatedSku = generateTCGSKU(row.id, gameKey, variantId, cardId);
            
            const formattedTitle = (() => {
               // Format title as: Game,Set,Name - Number,Condition
               const parts = [];
-              if (row.productLine) parts.push(row.productLine);
+              if (row.line) parts.push(row.line);
               if (row.set) parts.push(row.set);
               
               // Use the card name as-is (it may already contain the number)
@@ -292,7 +299,7 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
               brand_title_in: formattedTitle,
               subject_in: formattedTitle,
               category_in: 'Trading Cards', // Generic category for TCGplayer imports
-              variant_in: row.printing || 'Normal',
+              variant_in: row.title || 'Normal',
               card_number_in: row.number || '',
               grade_in: '', // leave empty so the DB marks item as Raw
               price_in: row.price || 0,
@@ -303,8 +310,8 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
                name: row.name,
                set: row.set,
                number: row.number,
-               language: row.language,
-               tcgplayer_id: row.tcgplayerId,
+               language: 'English', // Default for smart parser
+               tcgplayer_id: row.id,
                image_url: row.photoUrl,
                card_id: cardId,
                variant_id: variantId,
@@ -313,10 +320,10 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
              pricing_snapshot_in: {
                market_price: row.marketPrice,
                condition: row.condition,
-               printing: row.printing,
-               language: row.language,
+               printing: row.title || 'Normal',
+               language: 'English', // Default for smart parser
                captured_at: new Date().toISOString(),
-               market_as_of: marketAsOf
+               market_as_of: parseResult?.suggestions?.[0] || null
              },
              processing_notes_in: `TCGplayer paste import: ${row.name} from ${row.set || 'Unknown Set'}`
            };
@@ -484,7 +491,7 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
                           value={(() => {
                             // Format title as: Game,Set,Name - Number,Condition
                             const parts = [];
-                            if (row.productLine) parts.push(row.productLine);
+                            if (row.line) parts.push(row.line);
                             if (row.set) parts.push(row.set);
                             
                             let cardPart = row.name;
@@ -501,9 +508,9 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
                         />
                       </TableCell>
                       <TableCell>
-                        <div className="text-sm text-muted-foreground w-20 truncate" title={row.productLine || 'Unknown'}>
-                          {row.productLine || '—'}
-                        </div>
+                         <div className="text-sm text-muted-foreground w-20 truncate" title={row.line || 'Unknown'}>
+                           {row.line || '—'}
+                         </div>
                       </TableCell>
                       <TableCell>
                         <Input
@@ -575,12 +582,12 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
                         </Select>
                       </TableCell>
                       <TableCell>
-                        <Input
-                          value={row.tcgplayerId || ''}
-                          onChange={(e) => updateRow(index, 'tcgplayerId', e.target.value)}
-                          className="w-20"
-                          placeholder="ID"
-                        />
+                         <Input
+                           value={row.id || ''}
+                           onChange={(e) => updateRow(index, 'id', e.target.value)}
+                           className="w-20"
+                           placeholder="ID"
+                         />
                       </TableCell>
                       <TableCell>
                         {row.photoUrl ? (
@@ -655,8 +662,8 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
             {/* Summary and Controls */}
             <div className="flex justify-between items-center mt-4 pt-4 border-t">
               <div className="text-sm text-muted-foreground">
-                Parsed: {parsedRows.length} items • Total Market ${sumMarketPrice(parsedRows).toFixed(2)}
-                {marketAsOf && ` • Market as-of: ${marketAsOf}`}
+                Parsed: {parsedRows.length} items • Total Market ${parsedRows.reduce((sum, row) => sum + ((row.marketPrice || 0) * row.quantity), 0).toFixed(2)}
+                {parseResult?.confidence && ` • Confidence: ${parseResult.confidence.toFixed(0)}%`}
               </div>
               
               <Button 

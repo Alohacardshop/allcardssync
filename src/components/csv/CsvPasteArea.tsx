@@ -6,7 +6,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ChevronDown, AlertTriangle, CheckCircle, FileText, Zap } from 'lucide-react';
-import { parseTcgplayerCsv, ParseResult } from '@/lib/csv/parseTcgplayerCsv';
+import { parseSmartTcgplayerCsv, SmartParseResult } from '@/lib/csv/smartTcgplayerParser';
 import { NormalizedCard } from '@/lib/csv/normalize';
 import { toast } from 'sonner';
 
@@ -16,7 +16,7 @@ interface CsvPasteAreaProps {
 
 export const CsvPasteArea: React.FC<CsvPasteAreaProps> = ({ onParsed }) => {
   const [csvText, setCsvText] = useState('');
-  const [parseResult, setParseResult] = useState<ParseResult | null>(null);
+  const [parseResult, setParseResult] = useState<SmartParseResult | null>(null);
   const [showErrors, setShowErrors] = useState(false);
 
   const handleParse = () => {
@@ -25,22 +25,25 @@ export const CsvPasteArea: React.FC<CsvPasteAreaProps> = ({ onParsed }) => {
       return;
     }
 
-    const result = parseTcgplayerCsv(csvText);
+    const result = parseSmartTcgplayerCsv(csvText);
     setParseResult(result);
 
     if (result.data.length === 0) {
       if (result.errors.length > 0) {
         toast.error(result.errors[0].reason);
       } else {
-        toast.error('No rows parsed. Check headers or try our example.');
+        toast.error('No rows parsed. Check format or try our examples.');
       }
       return;
     }
 
+    const confidenceText = result.confidence >= 80 ? 'High confidence' : 
+                          result.confidence >= 60 ? 'Medium confidence' : 'Low confidence';
+    
     if (result.errors.length > 0) {
-      toast.error(`Parsed ${result.data.length} rows, skipped ${result.skippedRows} (see details)`);
+      toast.error(`Parsed ${result.data.length} rows (${confidenceText}), skipped ${result.skippedRows}`);
     } else {
-      toast.success(`Successfully parsed ${result.data.length} cards`);
+      toast.success(`Successfully parsed ${result.data.length} cards (${confidenceText})`);
     }
 
     onParsed(result.data);
@@ -66,8 +69,12 @@ export const CsvPasteArea: React.FC<CsvPasteAreaProps> = ({ onParsed }) => {
   };
 
   const totals = calculateTotals();
-  const exampleCsv = `TCGplayer Id,Product Line,Set Name,Product Name,Title,Number,Rarity,Condition,TCG Market Price,TCG Low Price,Total Quantity,Photo URL
+  
+  const exampleWithHeaders = `TCGplayer Id,Product Line,Set Name,Product Name,Title,Number,Rarity,Condition,TCG Market Price,TCG Low Price,Total Quantity,Photo URL
 226594,Pokemon,SWSH04: Vivid Voltage,Rayquaza,,138/185,Amazing Rare,Near Mint,19.10,,2,https://tcgplayer-cdn.tcgplayer.com/product/226594_in_400x400.jpg
+246719,Pokemon,SWSH07: Evolving Skies,Umbreon V (Alternate Full Art),,189/203,Ultra Rare,Near Mint,350.91,,1,https://tcgplayer-cdn.tcgplayer.com/product/246719_in_400x400.jpg`;
+
+  const exampleHeaderless = `226594,Pokemon,SWSH04: Vivid Voltage,Rayquaza,,138/185,Amazing Rare,Near Mint,19.10,,2,https://tcgplayer-cdn.tcgplayer.com/product/226594_in_400x400.jpg
 246719,Pokemon,SWSH07: Evolving Skies,Umbreon V (Alternate Full Art),,189/203,Ultra Rare,Near Mint,350.91,,1,https://tcgplayer-cdn.tcgplayer.com/product/246719_in_400x400.jpg`;
 
   return (
@@ -91,15 +98,24 @@ export const CsvPasteArea: React.FC<CsvPasteAreaProps> = ({ onParsed }) => {
             />
             <div className="flex items-center justify-between mt-2">
               <p className="text-xs text-muted-foreground">
-                Supports both 13-column and 16-column TCGPlayer formats. Press Ctrl+Enter to parse.
+                Smart parser supports headers, headerless, and various TCGPlayer formats. Press Ctrl+Enter to parse.
               </p>
-              <Button
-                variant="outline" 
-                size="sm"
-                onClick={() => setCsvText(exampleCsv)}
-              >
-                Load Example
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => setCsvText(exampleWithHeaders)}
+                >
+                  Headers Example
+                </Button>
+                <Button
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => setCsvText(exampleHeaderless)}
+                >
+                  Headerless Example
+                </Button>
+              </div>
             </div>
           </div>
 
@@ -127,9 +143,14 @@ export const CsvPasteArea: React.FC<CsvPasteAreaProps> = ({ onParsed }) => {
                 )}
                 Parse Results
               </CardTitle>
-              <Badge variant={parseResult.schema === 'unknown' ? 'destructive' : 'secondary'}>
-                {parseResult.schema} format
-              </Badge>
+              <div className="flex gap-2">
+                <Badge variant={parseResult.schema === 'unknown' ? 'destructive' : 'secondary'}>
+                  {parseResult.schema} format
+                </Badge>
+                <Badge variant={parseResult.confidence >= 80 ? 'default' : parseResult.confidence >= 60 ? 'secondary' : 'destructive'}>
+                  {parseResult.confidence.toFixed(0)}% confidence
+                </Badge>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -181,12 +202,27 @@ export const CsvPasteArea: React.FC<CsvPasteAreaProps> = ({ onParsed }) => {
               </Alert>
             )}
 
+            {/* Suggestions */}
+            {parseResult.suggestions && parseResult.suggestions.length > 0 && (
+              <Alert>
+                <CheckCircle className="h-4 w-4" />
+                <AlertDescription>
+                  <div className="font-medium mb-1">Parser Notes:</div>
+                  <ul className="text-sm space-y-1">
+                    {parseResult.suggestions.map((suggestion, index) => (
+                      <li key={index}>• {suggestion}</li>
+                    ))}
+                  </ul>
+                </AlertDescription>
+              </Alert>
+            )}
+
             {/* Success message with add to batch action */}
             {parseResult.data.length > 0 && (
               <Alert>
                 <CheckCircle className="h-4 w-4" />
                 <AlertDescription>
-                  Ready to add {parseResult.data.length} cards to batch. Press Ctrl+Enter in the text area or use the Add to Batch button.
+                  Ready to add {parseResult.data.length} cards to batch. Confidence: {parseResult.confidence.toFixed(0)}%
                 </AlertDescription>
               </Alert>
             )}
