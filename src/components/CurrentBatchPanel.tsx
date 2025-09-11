@@ -57,6 +57,42 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
   const { selectedStore, selectedLocation } = useStore();
   const { sendBatchToShopify, isSending } = useBatchSendToShopify();
 
+  // Helper to format card name like "1996 POKEMON JAPANESE BASIC #150 MEWTWO-HOLO PSA 8"
+  const formatCardName = (item: IntakeItem) => {
+    const parts = []
+    
+    // Add year if available
+    if (item.year) {
+      parts.push(item.year)
+    }
+    
+    // Add brand/set name
+    if (item.brand_title) {
+      parts.push(item.brand_title)
+    }
+    
+    // Add card number with # prefix
+    if (item.card_number) {
+      parts.push(`#${item.card_number}`)
+    }
+    
+    // Add subject (card name)
+    if (item.subject) {
+      parts.push(item.subject)
+    }
+    
+    // Add grade info
+    if (item.grade && item.psa_cert) {
+      parts.push(`PSA ${item.grade}`)
+    } else if (item.grade) {
+      parts.push(`Grade ${item.grade}`)
+    } else if (item.psa_cert) {
+      parts.push(`PSA ${item.psa_cert}`)
+    }
+    
+    return parts.length > 0 ? parts.join(' ') : (item.sku || 'Unknown Item')
+  }
+
   // Helper to determine if user can delete from current batch
   const canDeleteFromBatch = (item: IntakeItem) => {
     return !!currentLotId && item.lot_id === currentLotId && !item.removed_from_batch_at;
@@ -686,23 +722,22 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
           <div className="space-y-3">
             {recentItems.map((item) => (
               <div key={item.id} className="flex items-center justify-between p-3 border rounded-lg bg-muted/20">
-                <div className="flex-1">
-                   <div className="font-medium text-sm">
-                     {item.brand_title || item.subject || item.sku || 'Unknown Item'}
+                 <div className="flex-1">
+                    <div className="font-medium text-sm">
+                      {formatCardName(item)}
+                    </div>
+                   <div className="text-xs text-muted-foreground space-y-1">
+                     <div>
+                       Qty: {item.quantity} • ${(item.price || 0).toFixed(2)}
+                       {item.cost && ` (Cost: $${item.cost.toFixed(2)})`}
+                     </div>
+                     {item.sku && (
+                       <div className="text-muted-foreground">
+                         SKU: {item.sku}
+                       </div>
+                     )}
                    </div>
-                  <div className="text-xs text-muted-foreground space-y-1">
-                    <div>
-                      Qty: {item.quantity} • ${(item.price || 0).toFixed(2)}
-                      {item.cost && ` (Cost: $${item.cost.toFixed(2)})`}
-                    </div>
-                    <div>
-                      {item.year && `${item.year} • `}
-                      {item.variant && `${item.variant} • `}
-                      {item.grade && `Condition: ${item.grade} • `}
-                      {item.psa_cert && `PSA ${item.psa_cert}`}
-                    </div>
-                  </div>
-                </div>
+                 </div>
                 <div className="flex items-center gap-2">
                   {item.printed_at && (
                     <Badge variant="secondary" className="text-xs">Printed</Badge>
