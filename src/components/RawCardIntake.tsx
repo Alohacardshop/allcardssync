@@ -133,9 +133,9 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
   
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Calculate cost based on hardcoded percentage
-  const calculateCost = useCallback((price: number): number => {
-    return Math.round((price * COST_PERCENTAGE / 100) * 100) / 100;
+  // Calculate cost based on market price (what you paid)
+  const calculateCost = useCallback((marketPrice: number): number => {
+    return Math.round((marketPrice * COST_PERCENTAGE / 100) * 100) / 100;
   }, []);
 
   // Calculate margin percentage
@@ -226,18 +226,11 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
       // Add cost and price fields to each card (required for batch add)
       const rowsWithCostAndPrice: RawCardWithPricing[] = result.data.map(card => ({
         ...card,
-        cost: 0, // Will be auto-calculated when price is set
-        price: card.marketPrice || 0, // Start with market price if available
+        cost: card.marketPrice ? calculateCost(card.marketPrice) : 0, // Calculate cost from market price
+        price: card.marketPrice || 0, // Start with market price if available  
         language: 'English', // Default language
         printing: card.title || 'Normal' // Map title to printing for UI compatibility
       }));
-
-      // Auto-calculate cost based on price using hardcoded percentage
-      rowsWithCostAndPrice.forEach(row => {
-        if (row.price && row.price > 0) {
-          row.cost = calculateCost(row.price);
-        }
-      });
 
       setParsedRows(rowsWithCostAndPrice);
       
@@ -266,13 +259,9 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
       if (i === index) {
         const updatedRow = { ...row, [field]: value };
         
-        // Handle price updates and auto-calculate cost
+        // Handle field updates
         if (field === 'price') {
           updatedRow.price = typeof value === 'string' ? parseFloat(value) || 0 : value;
-          // Auto-calculate cost when price changes
-          if (updatedRow.price > 0) {
-            updatedRow.cost = calculateCost(updatedRow.price);
-          }
         } else if (field === 'cost') {
           updatedRow.cost = typeof value === 'string' ? parseFloat(value) || 0 : value;
         } else if (field !== 'marketPrice') {
