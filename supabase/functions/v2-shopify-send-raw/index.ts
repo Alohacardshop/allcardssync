@@ -3,41 +3,28 @@ import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { CORS, json, loadStore, parseIdFromGid, fetchRetry, newRun, deriveStoreSlug, API_VER, shopifyGraphQL, parseNumericIdFromGid } from '../_shared/shopify-helpers.ts'
 
 async function createRawProduct(domain: string, token: string, item: any) {
-  // Construct title in format: Game,Set #Number CardName,Condition
+  // Construct title in format: Brand_Title #Card_Number Subject,Condition
   let title = ''
   
-  // Handle potential duplication - if brand_title and subject are the same or similar, use brand_title as base
   if (item.brand_title) {
-    // Parse the brand_title to extract game, set, and card name
-    const titleParts = item.brand_title.split(',')
+    const parts = [item.brand_title]
     
-    if (titleParts.length >= 3) {
-      // Format: Game,Set,CardName or Game,Set,CardName,Condition
-      const game = titleParts[0].trim()
-      const set = titleParts[1].trim()
-      const cardName = titleParts[2].trim()
-      
-      // Build title: Game,Set #Number CardName,Condition
-      const parts = [game, set]
-      if (item.card_number) {
-        parts.push(`#${item.card_number}`)
-      }
-      parts.push(cardName)
-      if (item.condition && item.condition.toLowerCase() !== 'normal') {
-        parts.push(item.condition)
-      }
-      title = parts.join(',')
-    } else {
-      // Fallback to original brand_title with card number if available
-      const parts = [item.brand_title]
-      if (item.card_number) {
-        parts.push(`#${item.card_number}`)
-      }
-      if (item.condition && item.condition.toLowerCase() !== 'normal') {
-        parts.push(item.condition)
-      }
-      title = parts.join(',')
+    // Add card number with # prefix if available
+    if (item.card_number) {
+      parts.push(`#${item.card_number}`)
     }
+    
+    // Add subject if available
+    if (item.subject) {
+      parts.push(item.subject)
+    }
+    
+    // Add condition if not 'normal'
+    if (item.condition && item.condition.toLowerCase() !== 'normal') {
+      parts.push(item.condition)
+    }
+    
+    title = parts.join(' ')
   } else {
     title = item.title || item.sku || 'Raw Card'
   }
@@ -68,7 +55,7 @@ async function createRawProduct(domain: string, token: string, item: any) {
       status: 'active',
       product_type: item.category || 'Trading Card',
       tags,
-      images: item.image_url ? [{ src: item.image_url }] : undefined,
+      images: item.image_url ? [{ src: item.image_url }] : [],
       variants: [{
         sku: item.sku,
         price: item.price != null ? Number(item.price).toFixed(2) : undefined,
