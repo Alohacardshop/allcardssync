@@ -740,13 +740,41 @@ const Inventory = () => {
                                 </div>
 
                                 <h3 className="font-medium text-lg mb-1">
-                                  {[
-                                    item.year,
-                                    item.brand_title,
-                                    item.card_number ? `#${item.card_number}` : null,
-                                    item.subject,
-                                    item.variant
-                                  ].filter(Boolean).join(' ')}
+                                  {(() => {
+                                    const parts = [];
+                                    
+                                    // Add year
+                                    if (item.year) parts.push(item.year);
+                                    
+                                    // Add brand/set name
+                                    if (item.brand_title) parts.push(item.brand_title);
+                                    
+                                    // Add card number with # prefix
+                                    if (item.card_number) parts.push(`#${item.card_number}`);
+                                    
+                                    // Add subject (card name)
+                                    if (item.subject) parts.push(item.subject);
+                                    
+                                    // Add variant with dash prefix for graded items, or just variant for raw
+                                    if (item.variant && item.variant !== 'Raw') {
+                                      if (item.type === 'Graded' || item.grade || item.psa_cert) {
+                                        parts.push(`-${item.variant}`);
+                                      } else {
+                                        parts.push(item.variant);
+                                      }
+                                    }
+                                    
+                                    // Add grade info for graded items
+                                    if (item.grade && item.psa_cert) {
+                                      parts.push(`PSA ${item.grade}`);
+                                    } else if (item.grade) {
+                                      parts.push(`Grade ${item.grade}`);
+                                    } else if (item.psa_cert) {
+                                      parts.push(`PSA ${item.psa_cert}`);
+                                    }
+                                    
+                                    return parts.length > 0 ? parts.join(' ') : (item.sku || 'Unknown Item');
+                                  })()}
                                 </h3>
 
                                 <div className="flex items-center gap-4 text-sm text-muted-foreground mb-2">
