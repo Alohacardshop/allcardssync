@@ -28,66 +28,57 @@ Deno.serve(async (req) => {
     // Load Shopify credentials
     const { domain, token } = await loadStore(supabase, storeKey)
     
-    // TODO: Implement intelligent raw card handling
-    // For now, we'll delete the entire product (same as graded)
-    // In the future, this should:
-    // 1. Check current inventory quantity
-    // 2. Decrement by the item quantity
-    // 3. Only delete product if quantity reaches 0
+    // Get location ID for inventory updates
+    let locationId = locationGid ? locationGid.split('/').pop() : null
     
-    console.log(`⚠️ RAW CARD REMOVAL - Currently using full deletion`)
-    console.log(`🔄 TODO: Implement quantity decrement logic`)
+    // Find variant, current quantity, and inventory item ID
+    let variantId: string | null = null
+    let inventoryItemId: string | null = null
+    let currentQuantity = 0
     
-    let resolvedProductId = productId
+    console.log(`🔍 Finding raw variant by SKU: ${sku}`)
     
-    // Find product by SKU if not provided
-    if (!resolvedProductId && sku) {
-      console.log(`🔍 Finding raw product by SKU: ${sku}`)
-      
-      const query = `
-        query($q: String!) {
-          productVariants(first: 1, query: $q) {
-            edges {
-              node {
+    const query = `
+      query($q: String!) {
+        productVariants(first: 1, query: $q) {
+          edges {
+            node {
+              id
+              product { 
+                id 
+                title
+                status
+              }
+              inventoryItem {
                 id
-                product { 
-                  id 
-                  title
-                  status
-                }
-                inventoryQuantity
               }
             }
           }
         }
-      `
-      
-      const response = await fetchRetry(`https://${domain}/admin/api/2024-07/graphql.json`, {
-        method: 'POST',
-        headers: {
-          'X-Shopify-Access-Token': token,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          query,
-          variables: { q: `sku:${sku}` }
-        })
-      })
-      
-      if (response.ok) {
-        const result = await response.json()
-        if (result.data?.productVariants?.edges?.[0]) {
-          const variantNode = result.data.productVariants.edges[0].node
-          resolvedProductId = variantNode.product.id.split('/').pop()
-          console.log(`✅ Found raw product: ${variantNode.product.title} (qty: ${variantNode.inventoryQuantity})`)
-        }
       }
+    `
+    
+    const response = await fetchRetry(`https://${domain}/admin/api/2024-07/graphql.json`, {
+      method: 'POST',
+      headers: {
+        'X-Shopify-Access-Token': token,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        query,
+        variables: { q: `sku:${sku}` }
+      })
+    })
+    
+    if (!response.ok) {
+      throw new Error(`Failed to find variant: ${response.status}`)
     }
     
-    if (!resolvedProductId) {
-      console.log(`⚠️ No raw product found for SKU ${sku}`)
+    const result = await response.json()
+    if (!result.data?.productVariants?.edges?.[0]) {
+      console.log(`⚠️ No raw variant found for SKU ${sku}`)
       
-      // Update database - mark as removed
+      // Update database - mark as removed since nothing to reduce
       if (itemId) {
         await supabase
           .from('intake_items')
@@ -105,54 +96,115 @@ Deno.serve(async (req) => {
       return json(200, {
         ok: true,
         action: 'not_found',
-        message: 'Raw product not found in Shopify',
+        message: 'Raw variant not found in Shopify',
         diagnostics: { storeKey, domain, sku, ms: Date.now() - startTime }
       })
     }
     
-    // For now: Delete entire product (temporary solution)
-    console.log(`🗑️ Deleting raw product: ${resolvedProductId} (TEMP: should be qty decrement)`)
+    const variantNode = result.data.productVariants.edges[0].node
+    variantId = variantNode.id.split('/').pop()
+    inventoryItemId = variantNode.inventoryItem.id.split('/').pop()
     
-    const deleteResponse = await fetchRetry(`https://${domain}/admin/api/2024-07/products/${resolvedProductId}.json`, {
-      method: 'DELETE',
-      headers: { 'X-Shopify-Access-Token': token }
+    console.log(`✅ Found raw variant: ${variantNode.product.title}`)
+    console.log(`📦 VariantId: ${variantId}, InventoryItemId: ${inventoryItemId}`)
+    
+    // Get current inventory level at this location
+    if (locationId) {
+      const inventoryQuery = `
+        query($inventoryItemId: ID!, $locationIds: [ID!]!) {
+          inventoryItem(id: $inventoryItemId) {
+            inventoryLevels(locationIds: $locationIds, first: 1) {
+              edges {
+                node {
+                  available
+                }
+              }
+            }
+          }
+        }
+      `
+      
+      const inventoryResponse = await fetchRetry(`https://${domain}/admin/api/2024-07/graphql.json`, {
+        method: 'POST',
+        headers: {
+          'X-Shopify-Access-Token': token,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          query: inventoryQuery,
+          variables: { 
+            inventoryItemId: `gid://shopify/InventoryItem/${inventoryItemId}`,
+            locationIds: [`gid://shopify/Location/${locationId}`]
+          }
+        })
+      })
+      
+      if (inventoryResponse.ok) {
+        const inventoryResult = await inventoryResponse.json()
+        const level = inventoryResult.data?.inventoryItem?.inventoryLevels?.edges?.[0]?.node
+        if (level) {
+          currentQuantity = level.available || 0
+        }
+      }
+    }
+    
+    console.log(`📊 Current inventory: ${currentQuantity}, Removing: ${quantity}`)
+    
+    // Calculate new quantity (don't go below 0)
+    const newQuantity = Math.max(0, currentQuantity - quantity)
+    
+    console.log(`📉 Setting inventory to: ${newQuantity} (keeping product info)`)
+    
+    // Update inventory level using REST API
+    const inventoryUpdateResponse = await fetchRetry(`https://${domain}/admin/api/2024-07/inventory_levels/set.json`, {
+      method: 'POST',
+      headers: {
+        'X-Shopify-Access-Token': token,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        location_id: locationId,
+        inventory_item_id: inventoryItemId,
+        available: newQuantity
+      })
     })
     
-    if (deleteResponse.ok || deleteResponse.status === 404) {
-      console.log(`✅ Successfully deleted raw product ${resolvedProductId}`)
-      
-      // Update database
-      if (itemId) {
-        await supabase
-          .from('intake_items')
-          .update({
-            shopify_removed_at: new Date().toISOString(),
-            shopify_removal_mode: 'raw_product_delete_temp',
-            shopify_product_id: null,
-            shopify_variant_id: null,
-            shopify_inventory_item_id: null,
-            shopify_sync_status: 'removed',
-            last_shopify_removal_error: null
-          })
-          .eq('id', itemId)
-      }
-      
-      return json(200, {
-        ok: true,
-        action: 'deleted',
-        message: 'Raw card product deleted (temporary - should implement quantity decrement)',
-        diagnostics: {
-          storeKey,
-          domain,
-          sku,
-          quantity,
-          productId: resolvedProductId,
-          ms: Date.now() - startTime
-        }
-      })
-    } else {
-      throw new Error(`Failed to delete raw product: ${deleteResponse.status}`)
+    if (!inventoryUpdateResponse.ok) {
+      throw new Error(`Failed to update inventory: ${inventoryUpdateResponse.status}`)
     }
+    
+    console.log(`✅ Successfully reduced raw inventory to ${newQuantity} (product kept in Shopify)`)
+    
+    // Update database - mark as quantity reduced, keep product references
+    if (itemId) {
+      await supabase
+        .from('intake_items')
+        .update({
+          shopify_removed_at: new Date().toISOString(),
+          shopify_removal_mode: 'raw_quantity_reduced',
+          // Keep shopify_product_id and shopify_variant_id since product still exists
+          shopify_sync_status: 'removed',
+          last_shopify_removal_error: null
+        })
+        .eq('id', itemId)
+    }
+    
+    return json(200, {
+      ok: true,
+      action: 'quantity_reduced',
+      message: `Raw inventory reduced by ${quantity} (product kept in Shopify)`,
+      diagnostics: {
+        storeKey,
+        domain,
+        sku,
+        variantId,
+        inventoryItemId,
+        previousQuantity: currentQuantity,
+        newQuantity,
+        reducedBy: quantity,
+        ms: Date.now() - startTime
+      }
+    })
     
   } catch (error: any) {
     console.error('🚨 Raw removal error:', error)
