@@ -38,9 +38,6 @@ verify_jwt = true
 [functions.shopify-locations]
 verify_jwt = true
 
-[functions.v2-shopify-remove]
-verify_jwt = true
-
 [functions.shopify-config-check]
 verify_jwt = true
 

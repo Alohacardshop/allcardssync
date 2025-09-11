@@ -28,11 +28,16 @@ curl -s -X POST "$SUPABASE_URL/functions/v1/shopify-inspect-sku" \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -d "{\"storeKey\":\"$STORE_KEY\",\"sku\":\"$SKU\"}" | jq
 
-echo "3. Deleting..."
-curl -s -X POST "$SUPABASE_URL/functions/v1/v2-shopify-remove" \
+echo "3. Testing removal functions..."
+echo "  Testing graded removal:"
+curl -s -X POST "$SUPABASE_URL/functions/v1/v2-shopify-remove-graded" \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  -d "{\"storeKey\":\"$STORE_KEY\",\"sku\":\"$SKU\",\"mode\":\"delete\"}" | jq
+  -d "{\"storeKey\":\"$STORE_KEY\",\"sku\":\"$SKU\"}" | jq
+
+echo "  Testing raw removal:"
+curl -s -X POST "$SUPABASE_URL/functions/v1/v2-shopify-remove-raw" \
+  -H "Content-Type: application/json" \
+  -d "{\"storeKey\":\"$STORE_KEY\",\"sku\":\"$SKU\"}" | jq
 
 echo "4. Re-syncing (should recreate cleanly)..."
 curl -s -X POST "$SUPABASE_URL/functions/v1/shopify-sync-inventory" \

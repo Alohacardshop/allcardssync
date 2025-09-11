@@ -40,26 +40,41 @@ async function testGradedDeletion() {
     // Wait a moment for the item to be fully synced
     await new Promise(resolve => setTimeout(resolve, 2000));
 
-    // Step 2: Test deletion via shopify-remove-or-zero function
-    console.log('🗑️ Step 2: Testing deletion via remove function');
+    // Step 2: Find the created item in database and soft delete it
+    console.log('🗑️ Step 2: Finding and soft-deleting the created item');
     
-    const { data: deleteData, error: deleteError } = await supabase.functions.invoke("v2-shopify-remove", {
-      body: {
-        storeKey,
-        productId: createData.productId,
-        sku: testCert,
-        locationGid,
-        mode: "delete",
-        itemIds: [] // Add actual item IDs here if you have them
-      }
-    });
+    const { data: foundItem, error: findError } = await supabase
+      .from('intake_items')
+      .select('id')
+      .eq('sku', testCert)
+      .eq('store_key', storeKey)
+      .eq('shopify_product_id', createData.productId)
+      .single();
 
-    if (deleteError) {
-      console.error('❌ Deletion failed:', deleteError);
+    if (findError) {
+      console.error('❌ Could not find created item:', findError);
       return;
     }
 
-    console.log('✅ Deletion result:', deleteData);
+    const { data: deleteResult, error: deleteError } = await supabase
+      .from('intake_items')
+      .update({
+        deleted_at: new Date().toISOString(),
+        deleted_reason: 'Test graded deletion'
+      })
+      .eq('id', foundItem.id)
+      .select()
+      .single();
+
+    if (deleteError) {
+      console.error('❌ Soft delete failed:', deleteError);
+      return;
+    }
+
+    console.log('✅ Soft delete result:', deleteResult);
+    
+    // Wait for async trigger to complete
+    await new Promise(resolve => setTimeout(resolve, 2000));
 
     // Step 3: Verify the item was properly marked as removed in database
     console.log('🔍 Step 3: Verifying database updates');

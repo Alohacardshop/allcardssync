@@ -147,7 +147,8 @@ Deno.serve(async (req) => {
         }
       })
     } else {
-      throw new Error(`Failed to delete product: ${deleteResponse.status} ${deleteResponse.statusText}`)
+      const errorText = await deleteResponse.text().catch(() => 'Unknown error')
+      throw new Error(`Failed to delete product: ${deleteResponse.status} ${deleteResponse.statusText} - ${errorText}`)
     }
     
   } catch (error: any) {

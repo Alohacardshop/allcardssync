@@ -37,28 +37,28 @@ async function testV2GradedRemoval() {
     const testItem = gradedItems[0];
     console.log(`\n🎯 Using test item: ${testItem.sku} (ID: ${testItem.id})`);
 
-    // Step 2: Test NEW v2 removal function
-    console.log('\n🗑️ Step 2: Testing NEW v2-shopify-remove...');
+    // Step 2: Test NEW v2 removal by soft-deleting (triggers database trigger)
+    console.log('\n🗑️ Step 2: Testing NEW v2 removal via soft delete...');
     
-    const { data: removeResult, error: removeError } = await supabase.functions.invoke("v2-shopify-remove", {
-      body: {
-        storeKey,
-        productId: testItem.shopify_product_id,
-        sku: testItem.sku,
-        locationGid,
-        itemIds: [testItem.id]
-      }
-    });
+    const { data: updateResult, error: updateError } = await supabase
+      .from('intake_items')
+      .update({
+        deleted_at: new Date().toISOString(),
+        deleted_reason: 'Test v2 graded deletion'
+      })
+      .eq('id', testItem.id)
+      .select()
+      .single();
 
-    if (removeError) {
-      console.error('❌ V2 Removal failed:', removeError);
+    if (updateError) {
+      console.error('❌ V2 Soft delete failed:', updateError);
       return;
     }
 
-    console.log('✅ V2 Removal result:', removeResult);
-    console.log(`  Strategy used: ${removeResult.strategy}`);
-    console.log(`  Items updated: ${removeResult.itemsUpdated}`);
-    console.log(`  Took: ${removeResult.diagnostics.ms}ms`);
+    console.log('✅ V2 Soft delete triggered removal:', updateResult);
+    
+    // Wait for async trigger to complete
+    await new Promise(resolve => setTimeout(resolve, 2000));
 
     // Step 3: Verify database updates
     console.log('\n🔍 Step 3: Verifying database updates...');

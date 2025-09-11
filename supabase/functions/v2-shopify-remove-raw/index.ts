@@ -109,6 +109,35 @@ Deno.serve(async (req) => {
     console.log(`✅ Found raw variant: ${variantNode.product.title}`)
     console.log(`📦 VariantId: ${variantId}, InventoryItemId: ${inventoryItemId}`)
     
+    // Skip if locationGid is missing (can't update inventory without location)
+    if (!locationGid) {
+      console.log(`⚠️ Missing location GID for SKU ${sku}`)
+      
+      if (itemId) {
+        await supabase
+          .from('intake_items')
+          .update({
+            shopify_removed_at: new Date().toISOString(),
+            shopify_removal_mode: 'raw_missing_location',
+            shopify_sync_status: 'removed',
+            last_shopify_removal_error: 'Missing location GID for inventory update'
+          })
+          .eq('id', itemId)
+      }
+      
+      return json(200, {
+        ok: true,
+        action: 'missing_location',
+        message: 'Location GID missing - cannot update inventory',
+        diagnostics: {
+          storeKey,
+          domain,
+          sku,
+          ms: Date.now() - startTime
+        }
+      })
+    }
+    
     // Get current inventory level at this location
     if (locationId) {
       const inventoryQuery = `
@@ -171,7 +200,8 @@ Deno.serve(async (req) => {
     })
     
     if (!inventoryUpdateResponse.ok) {
-      throw new Error(`Failed to update inventory: ${inventoryUpdateResponse.status}`)
+      const errorText = await inventoryUpdateResponse.text().catch(() => 'Unknown error')
+      throw new Error(`Failed to update inventory: ${inventoryUpdateResponse.status} ${inventoryUpdateResponse.statusText} - ${errorText}`)
     }
     
     console.log(`✅ Successfully reduced raw inventory to ${newQuantity} (product kept in Shopify)`)
