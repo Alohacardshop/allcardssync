@@ -111,7 +111,7 @@ const resolveVariantId = async (card: NormalizedCard): Promise<{ cardId?: string
 };
 
 export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
-  const { settings, updateCostSettings } = useRawIntakeSettings();
+  const { settings } = useRawIntakeSettings();
   const { selectedStore, selectedLocation, availableStores, availableLocations } = useStore();
   
   // Paste workflow state
@@ -128,49 +128,21 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
   const [currentProcessingItem, setCurrentProcessingItem] = useState<string>('');
   
-  // Cost calculation settings
-  const [tempCostPercentage, setTempCostPercentage] = useState(settings.costPercentage);
-  const [tempCostMode, setTempCostMode] = useState(settings.costCalculationMode);
+  // Hardcoded cost calculation percentage
+  const COST_PERCENTAGE = 70;
   
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Update temp settings when main settings change
-  useEffect(() => {
-    setTempCostPercentage(settings.costPercentage);
-    setTempCostMode(settings.costCalculationMode);
-  }, [settings.costPercentage, settings.costCalculationMode]);
-
-  // Calculate cost based on settings
-  const calculateCost = useCallback((card: RawCardWithPricing): number => {
-    const basePrice = tempCostMode === 'market' && card.marketPrice 
-      ? card.marketPrice 
-      : (card.price || 0);
-    return Math.round((basePrice * tempCostPercentage / 100) * 100) / 100;
-  }, [tempCostMode, tempCostPercentage]);
+  // Calculate cost based on hardcoded percentage
+  const calculateCost = useCallback((price: number): number => {
+    return Math.round((price * COST_PERCENTAGE / 100) * 100) / 100;
+  }, []);
 
   // Calculate margin percentage
   const calculateMargin = useCallback((price: number, cost: number): number => {
     if (price <= 0) return 0;
     return Math.round(((price - cost) / price * 100) * 100) / 100;
   }, []);
-
-  // Apply cost settings to all rows
-  const applyCostSettings = async () => {
-    try {
-      await updateCostSettings(tempCostPercentage, tempCostMode);
-      
-      // Recalculate costs for all rows
-      const updatedRows = parsedRows.map(row => ({
-        ...row,
-        cost: calculateCost(row)
-      }));
-      setParsedRows(updatedRows);
-      
-      toast.success(`All costs recalculated using ${tempCostPercentage}% of ${tempCostMode === 'market' ? 'market price' : 'listed price'}`);
-    } catch (error) {
-      toast.error("Failed to update cost settings");
-    }
-  };
 
   // Access check function
   const checkAccessAndShowToast = async (): Promise<boolean> => {
@@ -260,10 +232,10 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
         printing: card.title || 'Normal' // Map title to printing for UI compatibility
       }));
 
-      // Auto-calculate cost based on current settings
+      // Auto-calculate cost based on price using hardcoded percentage
       rowsWithCostAndPrice.forEach(row => {
         if (row.price && row.price > 0) {
-          row.cost = calculateCost(row);
+          row.cost = calculateCost(row.price);
         }
       });
 
@@ -294,24 +266,19 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
       if (i === index) {
         const updatedRow = { ...row, [field]: value };
         
-        // Auto-calculate cost based on current settings when price or marketPrice changes
-        if (field === 'price') {
-          updatedRow.price = typeof value === 'string' ? parseFloat(value) || 0 : value;
-          updatedRow.cost = calculateCost(updatedRow);
-        } else if (field === 'marketPrice') {
-          updatedRow.marketPrice = typeof value === 'string' ? parseFloat(value) || 0 : value;
-          if (tempCostMode === 'market') {
-            updatedRow.cost = calculateCost(updatedRow);
-          }
-        } else if (field === 'cost') {
+        // Only allow updating cost and other non-price fields
+        if (field === 'cost') {
           updatedRow.cost = typeof value === 'string' ? parseFloat(value) || 0 : value;
+        } else if (field !== 'price' && field !== 'marketPrice') {
+          // Allow updating other fields like condition, quantity, etc.
+          (updatedRow as any)[field] = value;
         }
         
         return updatedRow;
       }
       return row;
     }));
-  }, [calculateCost, tempCostMode]);
+  }, []);
 
   // Remove row
   const removeRow = useCallback((index: number) => {
@@ -628,55 +595,6 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
         </CardContent>
       </Card>
 
-      {/* Cost Calculation Settings */}
-      {parsedRows.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Cost Calculation Settings</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-              <div className="space-y-2">
-                <Label htmlFor="cost-mode">Calculate Cost From</Label>
-                <Select value={tempCostMode} onValueChange={(value: 'market' | 'price') => setTempCostMode(value)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="market">Market Price</SelectItem>
-                    <SelectItem value="price">Listed Price</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="cost-percentage">Cost Percentage: {tempCostPercentage}%</Label>
-                <Slider
-                  id="cost-percentage"
-                  min={40}
-                  max={90}
-                  step={5}
-                  value={[tempCostPercentage]}
-                  onValueChange={(value) => setTempCostPercentage(value[0])}
-                  className="w-full"
-                />
-                <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>40%</span>
-                  <span>90%</span>
-                </div>
-              </div>
-              
-              <Button onClick={applyCostSettings} variant="outline">
-                Apply to All ({parsedRows.length} items)
-              </Button>
-            </div>
-            
-            <div className="text-sm text-muted-foreground">
-              Preview: {tempCostMode === 'market' ? 'Market' : 'Listed'} price × {tempCostPercentage}% = Cost
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Parsed Data Table */}
       {parsedRows.length > 0 && (
@@ -763,22 +681,14 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
                           />
                         </TableCell>
                         <TableCell>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            value={row.marketPrice || ''}
-                            onChange={(e) => updateRow(index, 'marketPrice', e.target.value)}
-                            className="w-20"
-                          />
+                          <div className="text-sm font-medium">
+                            ${(row.marketPrice || 0).toFixed(2)}
+                          </div>
                         </TableCell>
                         <TableCell>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            value={row.price || ''}
-                            onChange={(e) => updateRow(index, 'price', e.target.value)}
-                            className="w-20"
-                          />
+                          <div className="text-sm font-medium">
+                            ${(row.price || 0).toFixed(2)}
+                          </div>
                         </TableCell>
                         <TableCell>
                           <Input
@@ -817,12 +727,13 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
               </Table>
             </div>
 
-            {/* Cost and price validation warning */}
+            {/* Cost validation warning */}
             {parsedRows.length > 0 && !allRowsHaveValidCostsAndPrices && (
               <Alert className="mt-4 border-red-200 bg-red-50">
                 <AlertCircle className="h-4 w-4 text-red-600" />
                 <AlertDescription className="text-red-800">
-                  Please set valid costs and prices (greater than $0.00) for all rows highlighted in red before adding to batch.
+                  Please set valid costs (greater than $0.00) for all rows highlighted in red before adding to batch. 
+                  Costs are auto-calculated at {COST_PERCENTAGE}% of price but can be manually adjusted.
                 </AlertDescription>
               </Alert>
             )}
