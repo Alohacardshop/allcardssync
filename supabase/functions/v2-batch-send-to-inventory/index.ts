@@ -32,7 +32,7 @@ Deno.serve(async (req) => {
     // Fetch the processed items to determine routing
     const { data: items, error: fetchError } = await supabase
       .from('intake_items')
-      .select('id, type, sku, psa_cert, grade, price, cost, quantity, category, variant, lot_number, game, brand_title, subject, year, card_number, psa_snapshot, catalog_snapshot')
+      .select('id, type, sku, psa_cert, grade, price, cost, quantity, category, variant, lot_number, brand_title, subject, year, card_number, psa_snapshot, catalog_snapshot')
       .in('id', processedIds)
     
     if (fetchError) throw new Error(`Fetch items failed: ${fetchError.message}`)
@@ -48,6 +48,10 @@ Deno.serve(async (req) => {
           itemType = (item.psa_cert || item.grade) ? 'Graded' : 'Raw'
         }
 
+        // Derive game from available data
+        const derivedGame = item.catalog_snapshot?.game || 
+                          (item.brand_title?.toLowerCase().includes('pokemon') ? 'pokemon' : 'pokemon')
+
         const shopifyPayload = {
           storeKey,
           locationGid,
@@ -60,12 +64,11 @@ Deno.serve(async (req) => {
             category: item.category,
             variant: item.variant,
             lot_number: item.lot_number,
-            game: item.game,
             brand_title: item.brand_title,
             subject: item.subject,
             year: item.year,
             card_number: item.card_number,
-            category_tag: item.game || 'Pokemon',
+            category_tag: derivedGame || 'Pokemon',
             image_url: item.psa_snapshot?.imageUrl || item.catalog_snapshot?.imageUrl,
             ...(itemType === 'Graded' ? {
               psa_cert: item.psa_cert,
