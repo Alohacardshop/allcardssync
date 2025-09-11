@@ -369,7 +369,7 @@ const Inventory = () => {
             brand_title: row.brand_title,
             subject: row.subject,
             card_number: row.card_number,
-            image_url: row.catalog_snapshot?.imageUrl || row.image_urls?.[0] || undefined,
+            image_url: row.catalog_snapshot?.image_url || row.image_urls?.[0] || undefined,
             price: row.price ?? undefined,
             cost: row.cost ?? undefined,
             barcode: row.barcode,
