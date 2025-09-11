@@ -437,8 +437,7 @@ const Inventory = () => {
         ? selectedItemForRemoval 
         : [selectedItemForRemoval];
 
-      // Bulk update deleted_at to archive items locally
-      // The database trigger will handle Shopify removal asynchronously
+      // First, archive items locally
       const itemIds = itemsToProcess.map(item => item.id);
       
       const { error } = await supabase
@@ -451,8 +450,55 @@ const Inventory = () => {
 
       if (error) throw error;
 
+      // Now handle Shopify removal for each item
+      const removalPromises = itemsToProcess.map(async (item) => {
+        try {
+          // Skip if no Shopify data
+          if (!item.sku && !item.shopify_product_id) {
+            console.log(`⏭️ Skipping Shopify removal for item ${item.id} - no SKU or product ID`);
+            return;
+          }
+
+          // Determine item type and call appropriate function
+          const isGraded = item.type === 'Graded' || 
+                          (item.psa_cert && item.psa_cert.trim() !== '') || 
+                          (item.grade && item.grade.trim() !== '' && item.grade !== '0');
+
+          if (isGraded) {
+            console.log(`🏆 Removing graded item ${item.id} from Shopify`);
+            await supabase.functions.invoke('v2-shopify-remove-graded', {
+              body: {
+                storeKey: item.store_key,
+                productId: item.shopify_product_id,
+                sku: item.sku,
+                locationGid: item.shopify_location_gid,
+                itemId: item.id
+              }
+            });
+          } else {
+            console.log(`📦 Reducing raw item ${item.id} quantity in Shopify`);
+            await supabase.functions.invoke('v2-shopify-remove-raw', {
+              body: {
+                storeKey: item.store_key,
+                productId: item.shopify_product_id,
+                sku: item.sku,
+                locationGid: item.shopify_location_gid,
+                itemId: item.id,
+                quantity: item.quantity || 1
+              }
+            });
+          }
+        } catch (shopifyError) {
+          console.error(`Failed to remove item ${item.id} from Shopify:`, shopifyError);
+          // Don't throw here - we want to continue with other items
+        }
+      });
+
+      // Wait for all Shopify removals to complete (or fail)
+      await Promise.allSettled(removalPromises);
+
       toast.success(
-        `Archived ${itemIds.length} item${itemIds.length !== 1 ? 's' : ''} locally. Shopify removal in progress.`,
+        `Archived ${itemIds.length} item${itemIds.length !== 1 ? 's' : ''} and removed from Shopify.`,
         {
           action: {
             label: "Undo",
