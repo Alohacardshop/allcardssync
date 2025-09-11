@@ -32,7 +32,7 @@ Deno.serve(async (req) => {
     // Fetch the processed items to determine routing
     const { data: items, error: fetchError } = await supabase
       .from('intake_items')
-      .select('id, type, sku, psa_cert, grade, title, price, cost, barcode, quantity, category, variant, lot_number, game, brand_title, subject, year, card_number')
+      .select('id, type, sku, psa_cert, grade, price, cost, barcode, quantity, category, variant, lot_number, game, brand_title, subject, year, card_number')
       .in('id', processedIds)
     
     if (fetchError) throw new Error(`Fetch items failed: ${fetchError.message}`)
@@ -54,7 +54,6 @@ Deno.serve(async (req) => {
           item: {
             id: item.id,
             sku: item.sku,
-            title: item.title,
             price: item.price,
             cost: item.cost,
             barcode: item.barcode,
