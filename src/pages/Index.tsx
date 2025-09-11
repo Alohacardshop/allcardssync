@@ -14,6 +14,8 @@ import { RawCardIntake } from "@/components/RawCardIntake";
 import { BulkCardIntake } from "@/components/BulkCardIntake";
 import { CurrentBatchPanel } from "@/components/CurrentBatchPanel";
 import { StoreLocationSelector } from "@/components/StoreLocationSelector";
+import { useBatchSendToShopify } from "@/hooks/useBatchSendToShopify";
+import { useStore } from "@/contexts/StoreContext";
 
 interface IntakeItem {
   id: string;
@@ -61,6 +63,8 @@ const Index = () => {
   }>({ total: 0, completed: 0, failed: 0, inProgress: false });
   
   const { defaultTemplate } = useTemplates('raw');
+  const { selectedStore, selectedLocation } = useStore();
+  const { sendBatchToShopify, isSending } = useBatchSendToShopify();
 
   const fetchData = async () => {
     try {
@@ -169,57 +173,96 @@ const Index = () => {
       return;
     }
 
-    const correlationId = `batch_send_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
-    console.log(`🚀 [${correlationId}] Starting unified RPC send to inventory:`, { itemCount: itemIds.length, itemIds });
+    if (!selectedStore || !selectedLocation) {
+      toast.error('Please select a store and location first');
+      return;
+    }
+
+    const correlationId = `selected_send_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+    console.log(`🚀 [${correlationId}] Starting chunked selected items send to inventory:`, { 
+      itemCount: itemIds.length, 
+      store: selectedStore,
+      location: selectedLocation 
+    });
     
     try {
       setActionLoading(true);
       setSendProgress({ total: itemIds.length, completed: 0, failed: 0, inProgress: true, correlationId });
 
-      const startTime = Date.now();
-      const { data: result, error } = await supabase.rpc('send_intake_items_to_inventory', {
-        item_ids: itemIds
-      });
-
-      if (error) {
-        console.error(`❌ [${correlationId}] RPC call failed:`, error);
-        throw error;
+      const CHUNK_SIZE = 8; // Process 8 items at a time
+      const chunks = [];
+      
+      // Create chunks of item IDs
+      for (let i = 0; i < itemIds.length; i += CHUNK_SIZE) {
+        chunks.push(itemIds.slice(i, i + CHUNK_SIZE));
       }
-
-      const duration = Date.now() - startTime;
-      console.log(`✅ [${correlationId}] Unified RPC completed (${duration}ms):`, result);
-
-      const processedIds = (result as any)?.processed_ids || [];
-      const rejectedItems = (result as any)?.rejected || [];
-
-      // Update progress with final results
+      
+      console.log(`📦 [${correlationId}] Created ${chunks.length} chunks for processing`);
+      
+      let totalCompleted = 0;
+      let totalFailed = 0;
+      
+      // Process chunks sequentially
+      for (let i = 0; i < chunks.length; i++) {
+        const chunkIds = chunks[i];
+        console.log(`🔄 [${correlationId}] Processing chunk ${i + 1}/${chunks.length} with ${chunkIds.length} items`);
+        
+        try {
+          const response = await sendBatchToShopify(
+            chunkIds,
+            selectedStore as "hawaii" | "las_vegas",
+            selectedLocation
+          );
+          
+          const chunkCompleted = response.shopify_success || 0;
+          const chunkFailed = response.shopify_errors || 0;
+          
+          totalCompleted += chunkCompleted;
+          totalFailed += chunkFailed;
+          
+          // Update progress after each chunk
+          setSendProgress({ 
+            total: itemIds.length, 
+            completed: totalCompleted, 
+            failed: totalFailed, 
+            inProgress: true, 
+            correlationId 
+          });
+          
+          console.log(`✅ [${correlationId}] Chunk ${i + 1} completed:`, {
+            chunkSize: chunkIds.length,
+            chunkCompleted,
+            chunkFailed,
+            runningTotals: { totalCompleted, totalFailed }
+          });
+          
+        } catch (chunkError: any) {
+          console.error(`❌ [${correlationId}] Chunk ${i + 1} failed:`, chunkError);
+          totalFailed += chunkIds.length;
+          setSendProgress({ 
+            total: itemIds.length, 
+            completed: totalCompleted, 
+            failed: totalFailed, 
+            inProgress: true, 
+            correlationId 
+          });
+        }
+      }
+      
+      // Final progress update
       setSendProgress({ 
         total: itemIds.length, 
-        completed: processedIds.length, 
-        failed: rejectedItems.length, 
+        completed: totalCompleted, 
+        failed: totalFailed, 
         inProgress: false, 
         correlationId 
       });
 
-      // Show success toast
-      if (processedIds.length > 0) {
-        toast.success(`Successfully sent ${processedIds.length} item(s) to inventory`);
-      } else if (itemIds.length > 0) {
-        toast.info(`No items were processed - they may already be in inventory`);
-      }
-
-      // Show rejection warnings if any
-      if (rejectedItems.length > 0) {
-        const reasons = rejectedItems.map((r: any) => `${r.reason}`).join(', ');
-        toast.error(`${rejectedItems.length} item(s) rejected: ${reasons}`);
-      }
-
-      console.log(`📊 [${correlationId}] Send summary:`, {
+      console.log(`📊 [${correlationId}] Chunked selected send completed:`, {
         total: itemIds.length,
-        processed: processedIds.length,
-        rejected: rejectedItems.length,
-        processedIds,
-        rejectedItems
+        completed: totalCompleted,
+        failed: totalFailed,
+        chunks: chunks.length
       });
       
       // Clear selection and refresh, then check for empty lot closure
@@ -228,11 +271,11 @@ const Index = () => {
       await fetchData();
       
       // Trigger empty lot check after successful batch send
-      if (processedIds.length > 0) {
+      if (totalCompleted > 0) {
         window.dispatchEvent(new CustomEvent('batch:items-sent-to-inventory'));
       }
     } catch (error: any) {
-      console.error(`💥 [${correlationId}] Unified RPC send failed:`, error);
+      console.error(`💥 [${correlationId}] Selected send failed:`, error);
       toast.error(`Error sending items to inventory: ${error?.message || 'Unknown error'}`);
       setSendProgress({ total: 0, completed: 0, failed: itemIds.length, inProgress: false });
     } finally {

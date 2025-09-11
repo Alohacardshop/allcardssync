@@ -205,6 +205,11 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
 
   // Send entire batch to inventory
   const handleSendBatchToInventory = async () => {
+    if (!selectedStore || !selectedLocation) {
+      toast.error('Please select a store and location first');
+      return;
+    }
+
     if (recentItems.length === 0) {
       toast.error('No items in batch to send to inventory');
       return;
@@ -218,91 +223,106 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
       return;
     }
 
-    if (sendingBatchToInventory) {
+    if (isSending || sendingBatchToInventory) {
       console.log('Batch send already in progress, ignoring duplicate request');
       return; // Prevent double-clicks
     }
 
+    setSendingBatchToInventory(true);
+    setBatchSendProgress({ total: itemsToSend.length, completed: 0, failed: 0, inProgress: true });
+
     const correlationId = `batch_send_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
-    const itemIds = itemsToSend.map(item => item.id);
-    console.log(`🚀 [${correlationId}] Starting unified RPC batch send to inventory:`, { itemCount: itemIds.length, itemIds });
+    console.log(`🚀 [${correlationId}] Starting chunked batch send to inventory:`, { 
+      itemCount: itemsToSend.length, 
+      store: selectedStore,
+      location: selectedLocation 
+    });
     
     try {
-      setSendingBatchToInventory(true);
-      setBatchSendProgress({ total: itemIds.length, completed: 0, failed: 0, inProgress: true });
-
-      const startTime = Date.now();
+      const CHUNK_SIZE = 8; // Process 8 items at a time
+      const chunks = [];
       
-      // Add timeout to prevent hanging
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Operation timed out after 60 seconds')), 60000);
-      });
-      
-      const rpcPromise = supabase.rpc('send_intake_items_to_inventory', {
-        item_ids: itemIds
-      });
-      
-      console.log(`⏳ [${correlationId}] Calling RPC with timeout...`);
-      const { data: result, error } = await Promise.race([rpcPromise, timeoutPromise]) as any;
-
-      if (error) {
-        console.error(`❌ [${correlationId}] RPC call failed:`, error);
-        // Log specific error details for debugging
-        console.error(`❌ [${correlationId}] Error details:`, {
-          message: error.message,
-          code: error.code,
-          details: error.details,
-          hint: error.hint
-        });
-        throw error;
+      // Create chunks of item IDs
+      for (let i = 0; i < itemsToSend.length; i += CHUNK_SIZE) {
+        chunks.push(itemsToSend.slice(i, i + CHUNK_SIZE).map(item => item.id));
       }
-
-      const duration = Date.now() - startTime;
-      const processedIds = (result as any)?.processed_ids || [];
-      const rejectedItems = (result as any)?.rejected || [];
-
-      console.log(`✅ [${correlationId}] Unified RPC batch completed (${duration}ms):`, { processedIds, rejectedItems });
-
-      // Update progress with final results
+      
+      console.log(`📦 [${correlationId}] Created ${chunks.length} chunks for processing`);
+      
+      let totalCompleted = 0;
+      let totalFailed = 0;
+      
+      // Process chunks sequentially
+      for (let i = 0; i < chunks.length; i++) {
+        const chunkIds = chunks[i];
+        console.log(`🔄 [${correlationId}] Processing chunk ${i + 1}/${chunks.length} with ${chunkIds.length} items`);
+        
+        try {
+          const response = await sendBatchToShopify(
+            chunkIds,
+            selectedStore as "hawaii" | "las_vegas",
+            selectedLocation
+          );
+          
+          const chunkCompleted = response.shopify_success || 0;
+          const chunkFailed = response.shopify_errors || 0;
+          
+          totalCompleted += chunkCompleted;
+          totalFailed += chunkFailed;
+          
+          // Update progress after each chunk
+          setBatchSendProgress({ 
+            total: itemsToSend.length, 
+            completed: totalCompleted, 
+            failed: totalFailed, 
+            inProgress: true
+          });
+          
+          console.log(`✅ [${correlationId}] Chunk ${i + 1} completed:`, {
+            chunkSize: chunkIds.length,
+            chunkCompleted,
+            chunkFailed,
+            runningTotals: { totalCompleted, totalFailed }
+          });
+          
+        } catch (chunkError: any) {
+          console.error(`❌ [${correlationId}] Chunk ${i + 1} failed:`, chunkError);
+          totalFailed += chunkIds.length;
+          setBatchSendProgress({ 
+            total: itemsToSend.length, 
+            completed: totalCompleted, 
+            failed: totalFailed, 
+            inProgress: true
+          });
+        }
+      }
+      
+      // Final progress update
       setBatchSendProgress({ 
-        total: itemIds.length, 
-        completed: processedIds.length, 
-        failed: rejectedItems.length, 
+        total: itemsToSend.length, 
+        completed: totalCompleted, 
+        failed: totalFailed, 
         inProgress: false
       });
 
-      // Show success toast
-      if (processedIds.length > 0) {
-        toast.success(`Successfully sent ${processedIds.length} item(s) to inventory`);
-      } else if (itemIds.length > 0) {
-        toast.info(`No items were processed - they may already be in inventory`);
-      }
-
-      // Show rejection warnings if any
-      if (rejectedItems.length > 0) {
-        const reasons = rejectedItems.map((r: any) => `${r.reason}`).join(', ');
-        toast.error(`${rejectedItems.length} item(s) rejected: ${reasons}`);
-      }
-
-      console.log(`📊 [${correlationId}] Batch send summary:`, {
-        total: itemIds.length,
-        processed: processedIds.length,
-        rejected: rejectedItems.length,
-        processedIds,
-        rejectedItems
+      console.log(`📊 [${correlationId}] Chunked batch send completed:`, {
+        total: itemsToSend.length,
+        completed: totalCompleted,
+        failed: totalFailed,
+        chunks: chunks.length
       });
       
       // Refresh the batch view
       await fetchRecentItems();
       
       // Trigger empty lot check after successful batch send
-      if (processedIds.length > 0) {
+      if (totalCompleted > 0) {
         window.dispatchEvent(new CustomEvent('batch:items-sent-to-inventory'));
       }
+      
     } catch (error: any) {
-      console.error('Error sending batch:', error);
-      toast.error(`Error sending batch: ${error?.message || 'Unknown error'}`);
-      setBatchSendProgress({ total: 0, completed: 0, failed: itemIds.length, inProgress: false });
+      console.error(`💥 [${correlationId}] Batch send failed:`, error);
+      setBatchSendProgress({ total: 0, completed: 0, failed: itemsToSend.length, inProgress: false });
     } finally {
       setSendingBatchToInventory(false);
     }
