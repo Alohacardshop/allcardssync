@@ -1,5 +1,5 @@
 export type GameKey = 'pokemon' | 'pokemon_japan' | 'mtg';
-export type Printing = 'Normal' | 'Foil';
+export type Printing = 'Normal' | 'Foil' | 'Holofoil' | 'Reverse Holofoil' | '1st Edition' | '1st Edition Holofoil' | 'unlimited' | 'unlimited Holofoil';
 
 export const GAME_OPTIONS = [
   { value: 'pokemon', label: 'Pokémon' },

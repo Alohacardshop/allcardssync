@@ -542,8 +542,11 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
                           <SelectContent>
                             <SelectItem value="Normal">Normal</SelectItem>
                             <SelectItem value="Holofoil">Holofoil</SelectItem>
+                            <SelectItem value="Reverse Holofoil">Reverse Holofoil</SelectItem>
                             <SelectItem value="1st Edition">1st Edition</SelectItem>
                             <SelectItem value="1st Edition Holofoil">1st Edition Holofoil</SelectItem>
+                            <SelectItem value="unlimited">unlimited</SelectItem>
+                            <SelectItem value="unlimited Holofoil">unlimited Holofoil</SelectItem>
                           </SelectContent>
                         </Select>
                       </TableCell>
