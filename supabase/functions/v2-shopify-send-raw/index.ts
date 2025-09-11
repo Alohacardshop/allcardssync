@@ -3,7 +3,19 @@ import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { CORS, json, loadStore, parseIdFromGid, fetchRetry, newRun, deriveStoreSlug, API_VER, shopifyGraphQL, parseNumericIdFromGid } from '../_shared/shopify-helpers.ts'
 
 async function createRawProduct(domain: string, token: string, item: any) {
-  const title = item.title || `${item.brand_title || ''} ${item.subject || ''} ${item.card_number || ''}`.trim() || item.sku || 'Raw Card'
+  // Clean title construction - avoid duplicate "Normal" and ensure proper card number format
+  let title = item.title
+  if (!title) {
+    const parts = [item.brand_title, item.subject].filter(Boolean)
+    if (item.card_number && !item.card_number.toLowerCase().includes('normal')) {
+      parts.push(`#${item.card_number}`)
+    }
+    title = parts.join(',') || item.sku || 'Raw Card'
+  } else {
+    // Clean existing title - remove "Normal" suffix if present
+    title = title.replace(/,\s*Normal\s*$/, '').replace(/\s+Normal\s*$/, '')
+  }
+  
   const description = title // Same as title with all available info
   
   // Build tags without "normal" variants and with proper condition mapping
