@@ -4,29 +4,43 @@ import { CORS, json, loadStore, parseIdFromGid, fetchRetry, newRun, deriveStoreS
 
 async function createRawProduct(domain: string, token: string, item: any) {
   const title = item.title || `${item.brand_title || ''} ${item.subject || ''} ${item.card_number || ''}`.trim() || item.sku || 'Raw Card'
+  const description = title // Same as title with all available info
+  
+  // Build tags without "normal" variants and with proper condition mapping
+  const condition = item.condition && item.condition.toLowerCase() !== 'normal' ? item.condition : 'Near mint'
+  const variant = item.variant && item.variant.toLowerCase() !== 'normal' ? item.variant : null
+  const game = item.brand_title?.toLowerCase().includes('pokemon') || item.category?.toLowerCase().includes('pokemon') ? 'pokemon' : null
+  
   const tags = [
     'raw',
     'single',
     item.category,
-    item.variant,
-    item.condition ? `condition-${item.condition}` : null,
+    variant,
+    `condition-${condition}`,
+    game,
     item.lot_number ? `lot-${item.lot_number}` : null,
+    'weight-1oz',
     'intake'
   ].filter(Boolean).join(', ')
 
   const payload = {
     product: {
       title,
+      body_html: description,
       status: 'active',
       product_type: item.category || 'Trading Card',
       tags,
+      images: item.image_url ? [{ src: item.image_url }] : undefined,
       variants: [{
         sku: item.sku,
         price: item.price != null ? Number(item.price).toFixed(2) : undefined,
+        cost: item.cost != null ? Number(item.cost).toFixed(2) : undefined,
         barcode: item.barcode || undefined,
         inventory_management: 'shopify',
         inventory_policy: 'deny',
-        requires_shipping: true
+        requires_shipping: true,
+        weight: 1,
+        weight_unit: 'oz'
       }]
     }
   }
