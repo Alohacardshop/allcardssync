@@ -37,13 +37,16 @@ async function createRawProduct(domain: string, token: string, item: any) {
     condition = 'Near Mint'
   }
   
-  // Extract game from brand_title
-  const game = item.brand_title?.split(',')[0]?.toLowerCase() || 'pokemon'
+  // Extract game and set from brand_title
+  const titleParts = item.brand_title?.split(',') || []
+  const game = titleParts[0]?.toLowerCase() || 'pokemon'
+  const set = titleParts[1]?.trim() || null
   
-  // Simple tags: raw, game, single, condition
+  // Simple tags: raw, game, set, single, condition
   const tags = [
     'raw',
     game,
+    set,
     'single',
     condition.toLowerCase().replace(/\s+/g, '')
   ].filter(Boolean).join(', ')
