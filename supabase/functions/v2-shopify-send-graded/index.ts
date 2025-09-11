@@ -12,18 +12,18 @@ const upper = (s?: string) => (s || "").toUpperCase().trim();
 
 function formatGradedTitle(it: any) {
   const year = it.year ?? '';
-  const set  = upper(it.set_name ?? '');
-  const num  = it.number ? `#${String(it.number).trim()}` : '';
-  const nm   = upper(it.card_name ?? '');
-  const holo = it.is_holo ? '-HOLO' : '';
-  const grd  = it.grade ? ` PSA ${String(it.grade).trim()}` : '';
-  // e.g. 1997 POKEMON JAPANESE ROCKET #9 DARK BLASTOISE-HOLO PSA 5
-  return `${year} ${set} ${num} ${nm}${holo}${grd}`.replace(/\s+/g,' ').trim();
+  const brand = upper(it.brand_title ?? '');
+  const num = it.card_number ? `#${String(it.card_number).trim()}` : '';
+  const subject = upper(it.subject ?? '');
+  const variant = it.variant && it.variant !== 'Raw' ? `-${upper(it.variant)}` : '';
+  const grade = it.grade ? ` PSA ${String(it.grade).trim()}` : '';
+  // e.g. 2025 POKEMON JTG EN-JOURNEY TOGETHER #176 HOP'S ZACIAN EX-ULTRA RARE PSA 10
+  return `${year} ${brand} ${num} ${subject}${variant}${grade}`.replace(/\s+/g,' ').trim();
 }
 
 function formatGradedDescription(it: any, cert: string) {
-  const base = `${it.year ?? ''} ${upper(it.set_name ?? '')} ${it.number ? `#${it.number}` : ''} ${upper(it.card_name ?? '')}${it.is_holo ? '-HOLO' : ''}`.replace(/\s+/g,' ').trim();
-  return `${base} with the cert number ${cert}`;
+  const title = formatGradedTitle(it);
+  return `${title} — Cert ${cert}`;
 }
 
 function buildTags(it: any) {
