@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import EditIntakeItemDialog, { IntakeItemDetails } from "@/components/EditIntakeItemDialog";
 import { useStore } from "@/contexts/StoreContext";
+import { useBatchSendToShopify } from "@/hooks/useBatchSendToShopify";
 
 interface IntakeItem {
   id: string;
@@ -54,6 +55,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
   const [batchSendProgress, setBatchSendProgress] = useState({ total: 0, completed: 0, failed: 0, inProgress: false });
   const [sendingItemIds, setSendingItemIds] = useState<Set<string>>(new Set()); // Track individual item sends
   const { selectedStore, selectedLocation } = useStore();
+  const { sendBatchToShopify, isSending } = useBatchSendToShopify();
 
   // Helper to determine if user can delete from current batch
   const canDeleteFromBatch = (item: IntakeItem) => {
@@ -127,62 +129,35 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
   };
 
   const handleSendToInventory = async (item: IntakeItem) => {
+    if (!selectedStore || !selectedLocation) {
+      toast.error("Please select a store and location first");
+      return;
+    }
+
     if (sendingItemIds.has(item.id)) {
       console.log(`Item ${item.id} is already being sent, ignoring duplicate request`);
       return; // Prevent double-clicks
     }
 
-    const correlationId = `single_send_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
-    
     try {
       setSendingItemIds(prev => new Set(prev.add(item.id))); // Mark as sending
-      console.log(`🚀 [${correlationId}] Starting unified RPC send to inventory for single item:`, { itemId: item.id, sku: item.sku });
-      const startTime = Date.now();
-
-      const { data: result, error } = await supabase.rpc('send_intake_items_to_inventory', {
-        item_ids: [item.id]
-      });
-
-      if (error) {
-        console.error(`❌ [${correlationId}] Send to inventory error:`, error);
-        toast.error(`Error sending item to inventory: ${error.message || 'Unknown error'}`);
-        return;
-      }
-
-      const duration = Date.now() - startTime;
-      const processedIds = (result as any)?.processed_ids || [];
-      const rejectedItems = (result as any)?.rejected || [];
-
-      console.log(`✅ [${correlationId}] Unified RPC completed (${duration}ms):`, { processedIds, rejectedItems });
-
-      if (processedIds.length > 0) {
-        toast.success('Item sent to inventory');
-      } else {
-        console.warn(`⚠️ [${correlationId}] No items processed (may already be in inventory)`);
-        toast.info('Item may already be in inventory');
-      }
-
-      if (rejectedItems.length > 0) {
-        const reason = rejectedItems[0]?.reason || 'Unknown validation error';
-        toast.error(`Item rejected: ${reason}`);
-        return;
-      }
-
-      // Only update UI if item was actually processed
-      if (processedIds.length > 0) {
+      
+      const result = await sendBatchToShopify([item.id], selectedStore as "hawaii" | "las_vegas", selectedLocation);
+      
+      if (result.shopify_success > 0) {
         // Optimistic UI update for immediate feedback
         setRecentItems((prev) => prev.filter((i) => i.id !== item.id));
         setTotalCount((c) => Math.max(0, (c || 0) - 1));
 
-        // Small delay to allow DB triggers to run before refetching, then check if we should close empty lot
+        // Small delay to allow DB triggers to run before refetching
         setTimeout(async () => {
           await fetchRecentItems();
           await checkAndCloseEmptyLot();
-        }, 150);
+        }, 1000);
       }
     } catch (error: any) {
-      console.error(`💥 [${correlationId}] Error sending item to inventory:`, error);
-      toast.error(`Error sending item to inventory: ${error?.message || 'Unknown error'}`);
+      console.error('Error sending item:', error);
+      toast.error(`Error sending item: ${error?.message || 'Unknown error'}`);
     } finally {
       setSendingItemIds(prev => {
         const newSet = new Set(prev);
@@ -289,8 +264,8 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
         window.dispatchEvent(new CustomEvent('batch:items-sent-to-inventory'));
       }
     } catch (error: any) {
-      console.error(`💥 [${correlationId}] Unified RPC batch send failed:`, error);
-      toast.error(`Error sending batch to inventory: ${error?.message || 'Unknown error'}`);
+      console.error('Error sending batch:', error);
+      toast.error(`Error sending batch: ${error?.message || 'Unknown error'}`);
       setBatchSendProgress({ total: 0, completed: 0, failed: itemIds.length, inProgress: false });
     } finally {
       setSendingBatchToInventory(false);

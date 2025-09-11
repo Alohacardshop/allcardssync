@@ -339,7 +339,6 @@ Deno.serve(async (req) => {
     }
 
     // Set inventory at selected location
-    const locationId = parseIdFromGid(locationGid)
     if (!locationId) throw new Error('Invalid locationGid')
     
     try {
