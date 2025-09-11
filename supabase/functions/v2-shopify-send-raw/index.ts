@@ -3,36 +3,39 @@ import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { CORS, json, loadStore, parseIdFromGid, fetchRetry, newRun, deriveStoreSlug, API_VER, shopifyGraphQL, parseNumericIdFromGid } from '../_shared/shopify-helpers.ts'
 
 async function createRawProduct(domain: string, token: string, item: any) {
-  // Clean title construction - avoid duplicate "Normal" and ensure proper card number format
-  let title = item.title
-  if (!title) {
-    const parts = [item.brand_title, item.subject].filter(Boolean)
-    if (item.card_number && !item.card_number.toLowerCase().includes('normal')) {
+  // Construct title in format: Game,Set #Number CardName,Condition
+  let title = ''
+  if (item.brand_title && item.subject) {
+    const parts = [item.brand_title]
+    if (item.card_number) {
       parts.push(`#${item.card_number}`)
     }
-    title = parts.join(',') || item.sku || 'Raw Card'
+    parts.push(item.subject)
+    if (item.condition && item.condition !== 'Normal') {
+      parts.push(item.condition)
+    }
+    title = parts.join(',')
   } else {
-    // Clean existing title - remove "Normal" suffix if present
-    title = title.replace(/,\s*Normal\s*$/, '').replace(/\s+Normal\s*$/, '')
+    title = item.title || item.sku || 'Raw Card'
   }
   
   const description = title // Same as title with all available info
   
-  // Build tags without "normal" variants and with proper condition mapping
-  const condition = item.condition && item.condition.toLowerCase() !== 'normal' ? item.condition : 'Near mint'
-  const variant = item.variant && item.variant.toLowerCase() !== 'normal' ? item.variant : null
-  const game = item.brand_title?.toLowerCase().includes('pokemon') || item.category?.toLowerCase().includes('pokemon') ? 'pokemon' : null
+  // Clean condition mapping - remove "Normal" and convert to proper format
+  let condition = item.condition || 'Near Mint'
+  if (condition.toLowerCase() === 'normal') {
+    condition = 'Near Mint'
+  }
   
+  // Extract game from brand_title
+  const game = item.brand_title?.split(',')[0]?.toLowerCase() || 'pokemon'
+  
+  // Simple tags: raw, game, single, condition
   const tags = [
     'raw',
-    'single',
-    item.category,
-    variant,
-    `condition-${condition}`,
     game,
-    item.lot_number ? `lot-${item.lot_number}` : null,
-    'weight-1oz',
-    'intake'
+    'single',
+    condition.toLowerCase().replace(/\s+/g, '')
   ].filter(Boolean).join(', ')
 
   const payload = {
@@ -51,7 +54,7 @@ async function createRawProduct(domain: string, token: string, item: any) {
         inventory_management: 'shopify',
         inventory_policy: 'deny',
         requires_shipping: true,
-        weight: 1,
+        weight: 1.0,
         weight_unit: 'oz'
       }]
     }

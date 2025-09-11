@@ -30,6 +30,11 @@ export type SendRawArgs = {
   item: {
     id?: string
     sku: string
+    brand_title?: string
+    subject?: string
+    card_number?: string
+    image_url?: string
+    cost?: number
     title?: string
     price?: number
     barcode?: string

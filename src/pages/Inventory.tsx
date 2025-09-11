@@ -366,10 +366,14 @@ const Inventory = () => {
           item: {
             id: row.id,
             sku: row.sku,
-            title: row.brand_title || row.subject,
+            brand_title: row.brand_title,
+            subject: row.subject,
+            card_number: row.card_number,
+            image_url: row.catalog_snapshot?.imageUrl || row.image_urls?.[0] || undefined,
             price: row.price ?? undefined,
+            cost: row.cost ?? undefined,
             barcode: row.barcode,
-            condition: row.variant,
+            condition: row.variant === 'Normal' ? 'Near Mint' : row.variant,
             quantity: Number(row.quantity ?? 1)
           }
         });
@@ -890,14 +894,14 @@ const Inventory = () => {
                                     // Add subject (card name)
                                     if (item.subject) parts.push(item.subject);
                                     
-                                    // Add variant with dash prefix for graded items, or just variant for raw
-                                    if (item.variant && item.variant !== 'Raw') {
-                                      if (item.type === 'Graded' || item.grade || item.psa_cert) {
-                                        parts.push(`-${item.variant}`);
-                                      } else {
-                                        parts.push(item.variant);
-                                      }
-                                    }
+                                     // Add variant with dash prefix for graded items, or just variant for raw (skip Normal)
+                                     if (item.variant && item.variant !== 'Raw' && item.variant !== 'Normal') {
+                                       if (item.type === 'Graded' || item.grade || item.psa_cert) {
+                                         parts.push(`-${item.variant}`);
+                                       } else {
+                                         parts.push(item.variant);
+                                       }
+                                     }
                                     
                                     // Add grade info for graded items
                                     if (item.grade && item.psa_cert) {
