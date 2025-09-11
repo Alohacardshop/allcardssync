@@ -69,7 +69,7 @@ Deno.serve(async (req) => {
             year: item.year,
             card_number: item.card_number,
             category_tag: derivedGame || 'Pokemon',
-            image_url: item.psa_snapshot?.imageUrl || item.catalog_snapshot?.imageUrl,
+            image_url: item.psa_snapshot?.image_url || item.catalog_snapshot?.image_url,
             ...(itemType === 'Graded' ? {
               psa_cert: item.psa_cert,
               grade: item.grade
