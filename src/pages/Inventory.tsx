@@ -64,9 +64,31 @@ const Inventory = () => {
   const [showSoldItems, setShowSoldItems] = useState(false);
   const [syncingRowId, setSyncingRowId] = useState<string | null>(null);
   const [syncDetailsRow, setSyncDetailsRow] = useState<any>(null);
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
+  const [forceDeleting, setForceDeleting] = useState(false);
   
   const { printPNG, selectedPrinter } = usePrintNode();
   const { selectedStore, selectedLocation } = useStore();
+
+  // Check admin role on mount
+  useEffect(() => {
+    const checkAdminRole = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data } = await supabase.rpc("has_role", { 
+            _user_id: user.id, 
+            _role: "admin" as any 
+          });
+          setIsAdmin(Boolean(data));
+        }
+      } catch (error) {
+        console.error('Error checking admin role:', error);
+        setIsAdmin(false);
+      }
+    };
+    checkAdminRole();
+  }, []);
 
   const fetchItems = async () => {
     setLoading(true);
@@ -501,6 +523,44 @@ const Inventory = () => {
     }
   };
 
+  // Admin-only force delete that bypasses Shopify
+  const handleForceDelete = async (itemsToDelete: any[]) => {
+    if (!isAdmin) {
+      toast.error('Admin access required for force delete');
+      return;
+    }
+
+    setForceDeleting(true);
+    try {
+      const itemIds = itemsToDelete.map(item => item.id);
+      
+      // Direct database deletion without Shopify interaction
+      const { error } = await supabase
+        .from('intake_items')
+        .update({ 
+          deleted_at: new Date().toISOString(),
+          deleted_reason: 'Force deleted by admin - bypassed Shopify removal',
+          shopify_sync_status: 'force_deleted'
+        })
+        .in('id', itemIds);
+
+      if (error) throw error;
+
+      toast.success(
+        `Force deleted ${itemIds.length} item${itemIds.length !== 1 ? 's' : ''} from inventory (bypassed Shopify)`
+      );
+      
+      // Clear selection and refresh
+      setSelectedItems(new Set());
+      fetchItems();
+    } catch (error) {
+      console.error('Force delete failed:', error);
+      toast.error('Failed to force delete items');
+    } finally {
+      setForceDeleting(false);
+    }
+  };
+
   const toggleExpanded = (itemId: string) => {
     const newExpanded = new Set(expandedItems);
     if (newExpanded.has(itemId)) {
@@ -662,26 +722,47 @@ const Inventory = () => {
                               Clear Selection
                             </Button>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <Button
-                              onClick={handleBulkRemoval}
-                              variant="destructive"
-                              size="sm"
-                              disabled={bulkDeleting}
-                            >
-                              {bulkDeleting ? (
-                                <>
-                                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                  Processing...
-                                </>
-                              ) : (
-                                <>
-                                  <Trash2 className="w-4 h-4 mr-2" />
-                                  Delete as Graded
-                                </>
-                              )}
-                            </Button>
-                          </div>
+                           <div className="flex items-center gap-2">
+                             <Button
+                               onClick={handleBulkRemoval}
+                               variant="destructive"
+                               size="sm"
+                               disabled={bulkDeleting}
+                             >
+                               {bulkDeleting ? (
+                                 <>
+                                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                   Processing...
+                                 </>
+                               ) : (
+                                 <>
+                                   <Trash2 className="w-4 h-4 mr-2" />
+                                   Delete from Shopify
+                                 </>
+                               )}
+                             </Button>
+                             {isAdmin && (
+                               <Button
+                                 onClick={() => handleForceDelete(filteredItems.filter(item => selectedItems.has(item.id)))}
+                                 variant="destructive"
+                                 size="sm"
+                                 disabled={forceDeleting}
+                                 className="bg-red-600 hover:bg-red-700"
+                               >
+                                 {forceDeleting ? (
+                                   <>
+                                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                     Force Deleting...
+                                   </>
+                                 ) : (
+                                   <>
+                                     <X className="w-4 h-4 mr-2" />
+                                     Force Delete (Admin)
+                                   </>
+                                 )}
+                               </Button>
+                             )}
+                           </div>
                         </div>
                       </CardContent>
                     </Card>
@@ -907,40 +988,66 @@ const Inventory = () => {
                                    </Button>
                                  )}
                                  
-                                 <Button
-                                   variant="ghost"
-                                   size="sm"
-                                   onClick={() => handleInspectInShopify(item)}
-                                   disabled={!item.sku}
-                                 >
-                                   <Search className="w-4 h-4 mr-1" />
-                                   Inspect
-                                 </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleInspectInShopify(item)}
+                                    disabled={!item.sku}
+                                  >
+                                    <Search className="w-4 h-4 mr-1" />
+                                    Inspect
+                                  </Button>
 
-                                {/* Quick Delete as Graded for individual items */}
-                                {item.type === 'Graded' && (item.shopify_product_id || item.sku) && (
-                                  <TooltipProvider>
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <Button
-                                          variant="destructive"
-                                          size="sm"
-                                          onClick={() => {
-                                            setSelectedItemForRemoval([item]);
-                                            setShowRemovalDialog(true);
-                                          }}
-                                          className="h-8"
-                                          disabled={bulkDeleting}
-                                        >
-                                          <Trash2 className="w-3 h-3" />
-                                        </Button>
-                                      </TooltipTrigger>
-                                      <TooltipContent>
-                                        <p>Delete as Graded</p>
-                                      </TooltipContent>
-                                    </Tooltip>
-                                  </TooltipProvider>
-                                )}
+                                 {/* Admin Force Delete Button */}
+                                 {isAdmin && !item.deleted_at && (
+                                   <TooltipProvider>
+                                     <Tooltip>
+                                       <TooltipTrigger asChild>
+                                         <Button
+                                           variant="destructive"
+                                           size="sm"
+                                           onClick={() => handleForceDelete([item])}
+                                           disabled={forceDeleting}
+                                           className="bg-red-600 hover:bg-red-700"
+                                         >
+                                           {forceDeleting ? (
+                                             <Loader2 className="w-4 h-4" />
+                                           ) : (
+                                             <X className="w-4 h-4" />
+                                           )}
+                                         </Button>
+                                       </TooltipTrigger>
+                                       <TooltipContent>
+                                         <p>Force Delete (Admin) - Bypasses Shopify</p>
+                                       </TooltipContent>
+                                     </Tooltip>
+                                   </TooltipProvider>
+                                 )}
+
+                                 {/* Quick Delete as Graded for individual items */}
+                                 {item.type === 'Graded' && (item.shopify_product_id || item.sku) && (
+                                   <TooltipProvider>
+                                     <Tooltip>
+                                       <TooltipTrigger asChild>
+                                         <Button
+                                           variant="destructive"
+                                           size="sm"
+                                           onClick={() => {
+                                             setSelectedItemForRemoval([item]);
+                                             setShowRemovalDialog(true);
+                                           }}
+                                           className="h-8"
+                                           disabled={bulkDeleting}
+                                         >
+                                           <Trash2 className="w-3 h-3" />
+                                         </Button>
+                                       </TooltipTrigger>
+                                       <TooltipContent>
+                                         <p>Delete as Graded</p>
+                                       </TooltipContent>
+                                     </Tooltip>
+                                   </TooltipProvider>
+                                 )}
                               </div>
 
                               <Button
