@@ -70,3 +70,10 @@ verify_jwt = true
 # JustTCG refresh variants (requires admin role)
 [functions.justtcg-refresh-variants]
 verify_jwt = true
+
+# Shopify removal functions (public - called by database triggers)
+[functions.v2-shopify-remove-graded]
+verify_jwt = false
+
+[functions.v2-shopify-remove-raw]
+verify_jwt = false

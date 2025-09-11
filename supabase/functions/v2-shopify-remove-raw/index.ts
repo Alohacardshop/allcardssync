@@ -12,9 +12,10 @@ Deno.serve(async (req) => {
   const startTime = Date.now()
   
   const { createClient } = await import('jsr:@supabase/supabase-js')
-  const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {
-    global: { headers: { Authorization: req.headers.get('Authorization') || '' } }
-  })
+  const supabase = createClient(
+    Deno.env.get('SUPABASE_URL')!, 
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+  )
   
   try {
     const { storeKey, productId, sku, locationGid, itemId, quantity = 1 } = await req.json().catch(() => ({}))
