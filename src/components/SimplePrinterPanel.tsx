@@ -11,9 +11,11 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Printer, Settings, TestTube, Wifi, AlertCircle } from 'lucide-react';
 import { useSimplePrinting } from '@/hooks/useSimplePrinting';
 import { generateTestLabelZPL } from '@/lib/simpleZPLTemplates';
+import { PrintNodeSettings } from '@/components/PrintNodeSettings';
 import type { PrinterConnection } from '@/lib/directLocalPrint';
 
 export function SimplePrinterPanel() {
@@ -105,57 +107,69 @@ export function SimplePrinterPanel() {
               Printer Settings
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Zebra Printer Settings</DialogTitle>
+              <DialogTitle>Printer Configuration</DialogTitle>
             </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="printer-name">Printer Name</Label>
-                <Input
-                  id="printer-name"
-                  placeholder="Zebra ZD410"
-                  value={tempPrinter.name || ''}
-                  onChange={(e) => setTempPrinter(prev => ({ ...prev, name: e.target.value }))}
-                />
-              </div>
+            
+            <Tabs defaultValue="direct" className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="direct">Direct Printing</TabsTrigger>
+                <TabsTrigger value="printnode">PrintNode (Cloud)</TabsTrigger>
+              </TabsList>
               
-              <div>
-                <Label htmlFor="printer-ip">IP Address *</Label>
-                <Input
-                  id="printer-ip"
-                  placeholder="192.168.1.70"
-                  value={tempPrinter.ip}
-                  onChange={(e) => setTempPrinter(prev => ({ ...prev, ip: e.target.value }))}
-                />
-                <div className="text-xs text-muted-foreground mt-1">
-                  Find this in your printer's network settings
+              <TabsContent value="direct" className="space-y-4">
+                <div>
+                  <Label htmlFor="printer-name">Printer Name</Label>
+                  <Input
+                    id="printer-name"
+                    placeholder="Zebra ZD410"
+                    value={tempPrinter.name || ''}
+                    onChange={(e) => setTempPrinter(prev => ({ ...prev, name: e.target.value }))}
+                  />
                 </div>
-              </div>
-              
-              <div>
-                <Label htmlFor="printer-port">Port</Label>
-                <Input
-                  id="printer-port"
-                  placeholder="9100"
-                  type="number"
-                  value={tempPrinter.port}
-                  onChange={(e) => setTempPrinter(prev => ({ ...prev, port: parseInt(e.target.value) || 9100 }))}
-                />
-                <div className="text-xs text-muted-foreground mt-1">
-                  Standard Zebra port is 9100
+                
+                <div>
+                  <Label htmlFor="printer-ip">IP Address *</Label>
+                  <Input
+                    id="printer-ip"
+                    placeholder="192.168.1.70"
+                    value={tempPrinter.ip}
+                    onChange={(e) => setTempPrinter(prev => ({ ...prev, ip: e.target.value }))}
+                  />
+                  <div className="text-xs text-muted-foreground mt-1">
+                    Find this in your printer's network settings
+                  </div>
                 </div>
-              </div>
+                
+                <div>
+                  <Label htmlFor="printer-port">Port</Label>
+                  <Input
+                    id="printer-port"
+                    placeholder="9100"
+                    type="number"
+                    value={tempPrinter.port}
+                    onChange={(e) => setTempPrinter(prev => ({ ...prev, port: parseInt(e.target.value) || 9100 }))}
+                  />
+                  <div className="text-xs text-muted-foreground mt-1">
+                    Standard Zebra port is 9100
+                  </div>
+                </div>
+                
+                <div className="flex gap-2 pt-4">
+                  <Button variant="outline" onClick={() => setShowSettings(false)} className="flex-1">
+                    Cancel
+                  </Button>
+                  <Button onClick={handleSavePrinter} className="flex-1">
+                    Save Settings
+                  </Button>
+                </div>
+              </TabsContent>
               
-              <div className="flex gap-2 pt-4">
-                <Button variant="outline" onClick={() => setShowSettings(false)} className="flex-1">
-                  Cancel
-                </Button>
-                <Button onClick={handleSavePrinter} className="flex-1">
-                  Save Settings
-                </Button>
-              </div>
-            </div>
+              <TabsContent value="printnode">
+                <PrintNodeSettings />
+              </TabsContent>
+            </Tabs>
           </DialogContent>
         </Dialog>
 

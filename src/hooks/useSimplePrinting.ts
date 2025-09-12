@@ -7,6 +7,7 @@ import { useState, useCallback } from 'react';
 import { toast } from 'sonner';
 import { printZPLDirect, testPrinterConnection, DEFAULT_ZD410_PRINTER, type PrinterConnection, type PrintResult } from '@/lib/directLocalPrint';
 import { printViaLocalBridge, testLocalBridge, DEFAULT_BRIDGE_CONFIG, type LocalBridgeConfig } from '@/lib/localPrintBridge';
+import { printNodeService } from '@/lib/printNodeService';
 
 export interface PrintState {
   isLoading: boolean;
@@ -28,7 +29,9 @@ export function useSimplePrinting() {
         return {
           ip: parsed.ip || DEFAULT_ZD410_PRINTER.ip,
           port: parsed.port || DEFAULT_ZD410_PRINTER.port,
-          name: parsed.name || DEFAULT_ZD410_PRINTER.name
+          name: parsed.name || DEFAULT_ZD410_PRINTER.name,
+          printNodeId: parsed.printNodeId,
+          userintNode: parsed.userintNode || false
         };
       }
     } catch (error) {
@@ -46,7 +49,7 @@ export function useSimplePrinting() {
     }
   }, []);
 
-  // Print ZPL with fallback to local bridge
+  // Print ZPL with PrintNode or fallback to direct/bridge
   const print = useCallback(async (zpl: string, copies: number = 1): Promise<PrintResult> => {
     console.log('🖨️ Starting print process...', { copies, zplLength: zpl.length });
     setPrintState(prev => ({ ...prev, isLoading: true }));
@@ -57,7 +60,26 @@ export function useSimplePrinting() {
     try {
       toast.info(`Sending ${copies} label(s) to ${printer.name || printer.ip}...`);
       
-      // Try direct HTTP first
+      // Try PrintNode first if configured
+      if (printer.userintNode && printer.printNodeId) {
+        console.log('🖨️ Attempting PrintNode print...');
+        const printNodeResult = await printNodeService.printZPL(zpl, printer.printNodeId, copies);
+        console.log('🖨️ PrintNode result:', printNodeResult);
+        
+        if (printNodeResult.success) {
+          const result: PrintResult = { success: true };
+          setPrintState({
+            isLoading: false,
+            lastResult: result
+          });
+          toast.success(`Successfully sent ${copies} label(s) to PrintNode`);
+          return result;
+        } else {
+          toast.warning('PrintNode failed, trying direct printing...');
+        }
+      }
+      
+      // Fallback to direct HTTP
       console.log('🖨️ Attempting direct HTTP print...');
       let result = await printZPLDirect(zpl, printer, copies);
       console.log('🖨️ Direct HTTP result:', result);
