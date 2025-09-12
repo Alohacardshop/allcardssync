@@ -78,3 +78,7 @@ verify_jwt = false
 # Zebra TCP communication (requires authentication)
 [functions.zebra-tcp]
 verify_jwt = true
+
+# TCG card search (requires authentication)
+[functions.tcg-card-search]
+verify_jwt = true
