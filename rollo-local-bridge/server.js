@@ -43,7 +43,7 @@ app.options('*', (req, res) => {
   res.sendStatus(204);
 });
 
-// Accept raw TSPL as text
+// Accept raw TSPL/ZPL as text
 app.use(bodyParser.text({ type: ['text/plain', '*/*'], limit: '1mb' }));
 
 app.use(express.json());
@@ -70,14 +70,14 @@ app.get("/printers", (req, res) => {
   }
 });
 
-// Print TSPL data
+// Print TSPL/ZPL data
 app.post("/print", (req, res) => {
   const data = req.body;
   const printerName = req.query.printerName || printer.getDefaultPrinterName();
   const copies = parseInt(req.query.copies || "1", 10);
   
   if (!data) {
-    return res.status(400).json({ error: "No TSPL data provided" });
+    return res.status(400).json({ error: "No TSPL/ZPL data provided" });
   }
 
   if (!printerName) {
@@ -146,7 +146,7 @@ app.post('/rawtcp', async (req, res) => {
   const ip = (req.query.ip || '192.168.0.248').toString();
   const port = parseInt(req.query.port || '9100', 10);
 
-  if (!data) return res.status(400).json({ error: 'No TSPL data provided' });
+  if (!data) return res.status(400).json({ error: 'No TSPL/ZPL data provided' });
 
   const socket = new net.Socket();
   socket.setTimeout(15000);          // Increased timeout to 15s
@@ -160,7 +160,7 @@ app.post('/rawtcp', async (req, res) => {
         socket.write(data, 'utf8', () => {
           socket.end();
           // Respond immediately after sending data
-          res.json({ success: true, message: `TSPL sent to ${ip}:${port}` });
+          res.json({ success: true, message: `TSPL/ZPL sent to ${ip}:${port}` });
           resolve();
         });
       });
@@ -202,6 +202,6 @@ app.get('/check-tcp', async (req, res) => {
 
 const PORT = process.env.PORT || 17777;
 app.listen(PORT, '127.0.0.1', () => {
-  console.log(`[${new Date().toISOString()}] Rollo Local Bridge listening on http://127.0.0.1:${PORT}`);
+  console.log(`[${new Date().toISOString()}] Zebra Network Bridge listening on http://127.0.0.1:${PORT}`);
   console.log(`Available printers: ${printer.getPrinters().map(p => p.name).join(', ') || 'None'}`);
 });
