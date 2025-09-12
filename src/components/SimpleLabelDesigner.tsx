@@ -15,7 +15,6 @@ import { Badge } from '@/components/ui/badge';
 import { Printer, Eye } from 'lucide-react';
 import { useSimplePrinting } from '@/hooks/useSimplePrinting';
 import { ZPL_TEMPLATES, type LabelData, type ZPLOptions, type TemplateType } from '@/lib/simpleZPLTemplates';
-import { SimplePrinterPanel } from './SimplePrinterPanel';
 import { PrintNodeSettings } from './PrintNodeSettings';
 
 export function SimpleLabelDesigner() {
@@ -289,7 +288,7 @@ export function SimpleLabelDesigner() {
                 size="lg"
               >
                 <Printer className="h-4 w-4" />
-                {isLoading ? 'Printing...' : `Print ${printOptions.copies || 1} Label(s)`}
+                {isLoading ? 'Printing...' : `Test Print ${printOptions.copies || 1} Label(s)`}
               </Button>
               
               <div className="text-xs text-center text-muted-foreground">
@@ -299,11 +298,8 @@ export function SimpleLabelDesigner() {
           </CardContent>
         </Card>
 
-        {/* Printer Panel */}
-        <div className="space-y-4">
-          <SimplePrinterPanel />
-          <PrintNodeSettings />
-        </div>
+        {/* Printer Configuration - PrintNode Only */}
+        <PrintNodeSettings />
       </div>
 
       {/* ZPL Preview */}
