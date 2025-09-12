@@ -15,11 +15,12 @@ import { useZebraNetwork } from "@/hooks/useZebraNetwork";
 import { ZebraPrinterSelectionDialog } from '@/components/ZebraPrinterSelectionDialog';
 import { useLocalStorageString } from "@/hooks/useLocalStorage";
 import { buildZPLWithCut, generateBoxedLayoutZPL, type LabelFieldConfig, mmToDots } from "@/lib/zpl";
+import { ZPLUtilities } from "@/lib/zplUtilities";
 import { zebraNetworkService } from "@/lib/zebraNetworkService";
 import { testDirectPrinting } from "@/lib/zebraTestUtils";
 import { LabelPreviewCanvas } from "@/components/LabelPreviewCanvas";
 import { supabase } from "@/integrations/supabase/client";
-import { Settings, Eye, Printer, ChevronDown, Home, Save } from "lucide-react";
+import { Settings, Eye, Printer, ChevronDown, Home, Save, Wrench, Zap, Globe, TestTube } from "lucide-react";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useRawTemplates } from "@/hooks/useRawTemplates";
 
@@ -244,6 +245,114 @@ export default function LabelDesigner() {
     } finally {
       setPrintLoading(false);
     }
+  };
+
+  // Utility functions for printer diagnostics
+  const sendZPLCommand = async (zpl: string, description: string) => {
+    if (!printerIp.trim()) {
+      toast.error('Please enter a printer IP address');
+      return;
+    }
+
+    try {
+      const result = await zebraNetworkService.printZPLDirect(
+        zpl,
+        printerIp.trim(),
+        parseInt(printerPort),
+        { timeoutMs: 10000 }
+      );
+
+      if (result.success) {
+        toast.success(`${description} sent successfully`);
+      } else {
+        throw new Error(result.error || 'Command failed');
+      }
+    } catch (error) {
+      console.error(`${description} failed:`, error);
+      toast.error(`${description} failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  const handlePrintConfigLabel = async () => {
+    if (!printerIp.trim()) {
+      toast.error('Please enter a printer IP address');
+      return;
+    }
+
+    try {
+      const result = await ZPLUtilities.printConfiguration({
+        ip: printerIp.trim(),
+        port: parseInt(printerPort),
+        timeoutMs: 10000
+      });
+
+      if (result.success) {
+        toast.success(result.message || 'Configuration printed successfully');
+      } else {
+        throw new Error(result.error || 'Command failed');
+      }
+    } catch (error) {
+      console.error('Config print failed:', error);
+      toast.error(`Config print failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  const handleCalibrateGap = async () => {
+    if (!printerIp.trim()) {
+      toast.error('Please enter a printer IP address');
+      return;
+    }
+
+    try {
+      toast.info('Starting gap calibration sequence...');
+      
+      const result = await ZPLUtilities.calibrateGapSensor({
+        ip: printerIp.trim(),
+        port: parseInt(printerPort),
+        timeoutMs: 15000
+      });
+
+      if (result.success) {
+        toast.success(result.message || 'Gap calibration completed');
+      } else {
+        throw new Error(result.error || 'Calibration failed');
+      }
+    } catch (error) {
+      console.error('Calibration failed:', error);
+      toast.error(`Calibration failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  const handleNetworkPing = async () => {
+    if (!printerIp.trim()) {
+      toast.error('Please enter a printer IP address');
+      return;
+    }
+
+    try {
+      const response = await fetch(`http://127.0.0.1:17777/ping?ip=${printerIp.trim()}`);
+      const result = await response.json();
+      
+      if (result.success) {
+        toast.success(`Ping successful: ${result.latency}ms`);
+      } else {
+        toast.error(`Ping failed: ${result.error || 'No response'}`);
+      }
+    } catch (error) {
+      console.error('Ping failed:', error);
+      toast.error('Ping failed: Bridge service not available');
+    }
+  };
+
+  const handleOpenWebUI = () => {
+    if (!printerIp.trim()) {
+      toast.error('Please enter a printer IP address');
+      return;
+    }
+    
+    const url = `http://${printerIp.trim()}`;
+    window.open(url, '_blank');
+    toast.info(`Opening printer web interface: ${url}`);
   };
 
   // Zebra printer print (using printer object)
@@ -639,6 +748,63 @@ export default function LabelDesigner() {
                       </div>
                     </div>
                   )}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Printer Utilities */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Wrench className="h-5 w-5" />
+                  Printer Utilities
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <Button
+                    onClick={handlePrintConfigLabel}
+                    variant="outline"
+                    size="sm"
+                    className="w-full justify-start gap-2"
+                    disabled={!printerIp.trim()}
+                  >
+                    <TestTube className="h-4 w-4" />
+                    Print Config Label
+                  </Button>
+                  
+                  <Button
+                    onClick={handleCalibrateGap}
+                    variant="outline"
+                    size="sm"
+                    className="w-full justify-start gap-2"
+                    disabled={!printerIp.trim()}
+                  >
+                    <Zap className="h-4 w-4" />
+                    Calibrate Gap Sensor
+                  </Button>
+                  
+                  <Button
+                    onClick={handleNetworkPing}
+                    variant="outline"
+                    size="sm"
+                    className="w-full justify-start gap-2"
+                    disabled={!printerIp.trim()}
+                  >
+                    <Zap className="h-4 w-4" />
+                    Network Ping Test
+                  </Button>
+                  
+                  <Button
+                    onClick={handleOpenWebUI}
+                    variant="outline"
+                    size="sm"
+                    className="w-full justify-start gap-2"
+                    disabled={!printerIp.trim()}
+                  >
+                    <Globe className="h-4 w-4" />
+                    Open Printer WebUI
+                  </Button>
                 </div>
               </CardContent>
             </Card>

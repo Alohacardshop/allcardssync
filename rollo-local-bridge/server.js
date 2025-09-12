@@ -30,7 +30,8 @@ app.get('/', (req, res) => {
       '/system-printers - Get locally connected printers',
       '/system-print - Print ZPL to system printer', 
       '/rawtcp - Send raw data to network printer',
-      '/check-tcp - Test network printer connection'
+      '/check-tcp - Test network printer connection',
+      '/ping - ICMP ping test to IP address'
     ]
   });
 });
@@ -237,6 +238,73 @@ app.get('/check-tcp', (req, res) => {
   });
 });
 
+// ICMP Ping test endpoint
+app.get('/ping', (req, res) => {
+  const ip = req.query.ip;
+
+  if (!ip) {
+    return res.json({ success: false, error: 'Missing IP parameter' });
+  }
+
+  try {
+    let pingCommand;
+    const startTime = Date.now();
+    
+    if (os.platform() === 'win32') {
+      // Windows ping command
+      pingCommand = `ping -n 1 -w 3000 ${ip}`;
+    } else {
+      // macOS/Linux ping command
+      pingCommand = `ping -c 1 -W 3000 ${ip}`;
+    }
+
+    exec(pingCommand, (error, stdout, stderr) => {
+      const endTime = Date.now();
+      const latency = endTime - startTime;
+
+      if (error) {
+        res.json({ 
+          success: false, 
+          error: 'Host unreachable or timeout',
+          latency: latency 
+        });
+        return;
+      }
+
+      // Parse ping output for more accurate timing if available
+      let actualLatency = latency;
+      
+      if (os.platform() === 'win32') {
+        // Windows: look for "time=XXXms" or "time<1ms"
+        const timeMatch = stdout.match(/time[<=](\d+)ms/);
+        if (timeMatch) {
+          actualLatency = parseInt(timeMatch[1]) || 1;
+        }
+      } else {
+        // macOS/Linux: look for "time=XX.X ms"
+        const timeMatch = stdout.match(/time=(\d+\.?\d*) ms/);
+        if (timeMatch) {
+          actualLatency = Math.round(parseFloat(timeMatch[1]));
+        }
+      }
+
+      res.json({ 
+        success: true, 
+        latency: actualLatency,
+        ip: ip,
+        message: `Ping successful in ${actualLatency}ms`
+      });
+    });
+    
+  } catch (error) {
+    res.json({ 
+      success: false, 
+      error: error.message,
+      latency: Date.now() - Date.now()
+    });
+  }
+});
+
 app.listen(port, '127.0.0.1', () => {
   console.log(`🖨️  Zebra Network Bridge running on http://127.0.0.1:${port}`);
   console.log(`📡 Supports both USB/system printers and network TCP/IP printers`);
@@ -246,6 +314,7 @@ app.listen(port, '127.0.0.1', () => {
   console.log(`   POST /system-print - Print ZPL to system printer`);
   console.log(`   POST /rawtcp?ip=X&port=Y - Send raw data to network printer`);
   console.log(`   GET  /check-tcp?ip=X&port=Y - Test network printer connection`);
+  console.log(`   GET  /ping?ip=X - ICMP ping test to IP address`);
 });
 
 module.exports = app;
