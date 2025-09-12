@@ -22,7 +22,96 @@ interface PrintJobResult {
 
 class ZebraNetworkService {
   private bridgeUrl = 'http://127.0.0.1:17777';
+  private readonly maxRetries = 3;
+  private readonly retryDelayMs = 500;
   
+  // Direct ZPL printing to host:port (new simplified API as requested)
+  async printZPLDirect(
+    zpl: string, 
+    host: string, 
+    port: number = 9100, 
+    opts?: { timeoutMs?: number }
+  ): Promise<PrintJobResult> {
+    const timeoutMs = opts?.timeoutMs || 5000;
+    
+    for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+        
+        const response = await fetch(`${this.bridgeUrl}/rawtcp?ip=${host}&port=${port}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'text/plain',
+          },
+          body: zpl,
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          return {
+            success: true,
+            message: `Successfully printed to ${host}:${port}`
+          };
+        } else {
+          throw new Error(this.parseNetworkError(result.error || 'Print failed'));
+        }
+        
+      } catch (error) {
+        const isLastAttempt = attempt === this.maxRetries;
+        const errorMsg = this.parseNetworkError(error);
+        
+        if (isLastAttempt) {
+          return {
+            success: false,
+            error: `Failed after ${this.maxRetries} attempts: ${errorMsg}`
+          };
+        }
+        
+        // Wait before retry (with exponential backoff)
+        await new Promise(resolve => setTimeout(resolve, this.retryDelayMs * attempt));
+      }
+    }
+    
+    return {
+      success: false,
+      error: 'Unexpected error in retry loop'
+    };
+  }
+  
+  private parseNetworkError(error: any): string {
+    const errorStr = error instanceof Error ? error.message : String(error);
+    
+    if (errorStr.includes('ENOTFOUND') || errorStr.includes('getaddrinfo')) {
+      return 'DNS resolution failed - check hostname/IP address';
+    }
+    if (errorStr.includes('ECONNREFUSED')) {
+      return 'Connection refused - printer may be offline or port blocked';
+    }
+    if (errorStr.includes('timeout') || errorStr.includes('ETIMEDOUT')) {
+      return 'Connection timeout - printer not responding';
+    }
+    if (errorStr.includes('EHOSTUNREACH')) {
+      return 'Host unreachable - check network connectivity';
+    }
+    if (errorStr.includes('ENETUNREACH')) {
+      return 'Network unreachable - check routing/firewall';
+    }
+    if (errorStr.includes('aborted')) {
+      return 'Request timed out';
+    }
+    
+    return errorStr;
+  }
+
   async testConnection(ip: string, port: number = 9100): Promise<boolean> {
     try {
       const response = await fetch(`${this.bridgeUrl}/check-tcp?ip=${ip}&port=${port}`);
@@ -34,6 +123,7 @@ class ZebraNetworkService {
     }
   }
 
+  // Enhanced ZPL printing with printer object (existing API compatibility)
   async printZPL(
     zplData: string,
     printer: ZebraPrinter,
@@ -106,27 +196,13 @@ class ZebraNetworkService {
     let allSuccess = true;
     const errors: string[] = [];
     
-    // Send each copy individually for better error handling
+    // Send each copy individually with retry logic
     for (let i = 0; i < copies; i++) {
-      try {
-        const response = await fetch(`${this.bridgeUrl}/rawtcp?ip=${printerIp}&port=${port}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'text/plain',
-          },
-          body: zplData,
-        });
-
-        const result = await response.json();
-        
-        if (!result.success) {
-          allSuccess = false;
-          errors.push(`Copy ${i + 1}: ${result.error || 'Unknown error'}`);
-        }
-      } catch (error) {
+      const result = await this.printZPLDirect(zplData, printerIp, port);
+      
+      if (!result.success) {
         allSuccess = false;
-        const errorMsg = error instanceof Error ? error.message : 'Network error';
-        errors.push(`Copy ${i + 1}: ${errorMsg}`);
+        errors.push(`Copy ${i + 1}: ${result.error}`);
       }
     }
 
