@@ -34,6 +34,7 @@ import { useStore } from '@/contexts/StoreContext';
 import { Navigation } from '@/components/Navigation';
 import BarcodeLabel from '@/components/BarcodeLabel';
 import { usePrintNode } from '@/hooks/usePrintNode';
+import { PrinterSelectionDialog } from '@/components/PrinterSelectionDialog';
 import { Link } from 'react-router-dom';
 import { sendGradedToShopify, sendRawToShopify } from '@/hooks/useShopifySend';
 import { FLAGS } from '@/lib/flags';
@@ -66,6 +67,8 @@ const Inventory = () => {
   const [syncDetailsRow, setSyncDetailsRow] = useState<any>(null);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [forceDeleting, setForceDeleting] = useState(false);
+  const [showPrinterDialog, setShowPrinterDialog] = useState(false);
+  const [printData, setPrintData] = useState<{ blob: Blob; item: any } | null>(null);
   
   const { printPNG, selectedPrinter } = usePrintNode();
   const { selectedStore, selectedLocation } = useStore();
@@ -272,12 +275,6 @@ const Inventory = () => {
       return;
     }
 
-    if (!selectedPrinter) {
-      toast.error('No printer selected');
-      return;
-    }
-
-    setPrintingItem(item.id);
     try {
       // Generate barcode as PNG
       const canvas = document.createElement('canvas');
@@ -303,9 +300,25 @@ const Inventory = () => {
         }, 'image/png');
       });
 
-      // Print using PrintNode
-      await printPNG(blob, { 
-        title: `Barcode-${item.sku}`,
+      // Store data and show printer dialog
+      setPrintData({ blob, item });
+      setShowPrinterDialog(true);
+    } catch (error) {
+      console.error('Error preparing print:', error);
+      toast.error('Failed to prepare barcode for printing');
+    }
+  };
+
+  const handlePrintWithPrinter = async (printerId: number) => {
+    if (!printData) return;
+    
+    setPrintingItem(printData.item.id);
+    try {
+      // Get the print service and print with selected printer
+      const { printNodeService } = await import('@/lib/printNodeService');
+      
+      await printNodeService.printPNG(printData.blob, printerId, { 
+        title: `Barcode-${printData.item.sku}`,
         copies: 1 
       });
 
@@ -313,15 +326,16 @@ const Inventory = () => {
       await supabase
         .from('intake_items')
         .update({ printed_at: new Date().toISOString() })
-        .eq('id', item.id);
+        .eq('id', printData.item.id);
 
       toast.success('Barcode printed successfully');
       fetchItems(); // Refresh to show updated printed_at
     } catch (error) {
-      console.error('Print failed:', error);
-      toast.error('Print failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      console.error('Print error:', error);
+      toast.error('Failed to print barcode');
     } finally {
       setPrintingItem(null);
+      setPrintData(null);
     }
   };
 
@@ -1193,6 +1207,13 @@ const Inventory = () => {
             fetchItems();
             setSyncDetailsRow(null);
           }}
+        />
+        
+        <PrinterSelectionDialog
+          open={showPrinterDialog}
+          onOpenChange={setShowPrinterDialog}
+          onPrint={handlePrintWithPrinter}
+          title="Select Printer for Barcode"
         />
       </div>
     </>

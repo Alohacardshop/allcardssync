@@ -1,5 +1,6 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { PrinterSelectionDialog } from '@/components/PrinterSelectionDialog';
 
 interface BarcodeLabelProps {
   value: string;
@@ -10,6 +11,8 @@ interface BarcodeLabelProps {
 
 const BarcodeLabel = ({ value, label, className, showPrintButton = true }: BarcodeLabelProps) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [showPrinterDialog, setShowPrinterDialog] = useState(false);
+  const [barcodeBlob, setBarcodeBlob] = useState<Blob | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -34,7 +37,41 @@ const BarcodeLabel = ({ value, label, className, showPrintButton = true }: Barco
     };
   }, [value]);
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
+    try {
+      if (!canvasRef.current) return;
+      
+      // Convert canvas to blob for PrintNode
+      const blob = await new Promise<Blob>((resolve) => {
+        canvasRef.current?.toBlob((blob) => {
+          if (blob) resolve(blob);
+        }, 'image/png');
+      });
+      
+      setBarcodeBlob(blob);
+      setShowPrinterDialog(true);
+    } catch (error) {
+      console.error('Error preparing barcode for print:', error);
+    }
+  };
+
+  const handlePrintWithPrinter = async (printerId: number) => {
+    if (!barcodeBlob) return;
+    
+    try {
+      const { printNodeService } = await import('@/lib/printNodeService');
+      await printNodeService.printPNG(barcodeBlob, printerId, { 
+        title: `Barcode-${value}`,
+        copies: 1 
+      });
+    } catch (error) {
+      console.error('Print error:', error);
+    } finally {
+      setBarcodeBlob(null);
+    }
+  };
+
+  const handleLegacyPrint = () => {
     try {
       if (!canvasRef.current) return;
       const dataUrl = canvasRef.current.toDataURL("image/png");
@@ -88,6 +125,13 @@ const BarcodeLabel = ({ value, label, className, showPrintButton = true }: Barco
           <Button size="sm" variant="secondary" onClick={handlePrint}>Print Label</Button>
         </div>
       )}
+      
+      <PrinterSelectionDialog
+        open={showPrinterDialog}
+        onOpenChange={setShowPrinterDialog}
+        onPrint={handlePrintWithPrinter}
+        title="Select Printer for Barcode"
+      />
     </div>
   );
 };

@@ -14,6 +14,7 @@ import { Link, useLocation } from "react-router-dom";
 import { Navigation } from "@/components/Navigation";
 import { PrinterPanel } from "@/components/PrinterPanel";
 import { usePrintNode } from "@/hooks/usePrintNode";
+import { PrinterSelectionDialog } from '@/components/PrinterSelectionDialog';
 import { useLocalStorageString } from "@/hooks/useLocalStorage";
 import { generateBoxedLayoutTSPL, type LabelFieldConfig } from "@/lib/tspl";
 import { LabelPreviewCanvas } from "@/components/LabelPreviewCanvas";
@@ -50,6 +51,8 @@ export default function LabelDesigner() {
   const [printLoading, setPrintLoading] = useState(false);
   const [hasPrinted, setHasPrinted] = useState(false);
   const [saveLoading, setSaveLoading] = useState(false);
+  const [showPrinterDialog, setShowPrinterDialog] = useState(false);
+  const [pendingPrintData, setPendingPrintData] = useState<string | null>(null);
 
   // Raw templates for Label Designer persistence
   const { templates: rawTemplates, defaultTemplate, saveTemplate, setAsDefault, loading: templatesLoading } = useRawTemplates();
@@ -204,53 +207,60 @@ export default function LabelDesigner() {
 
   // PrintNode printing function with format selection
   const handlePrintNodePrint = async (isTest = false) => {
-    if (!selectedPrinterId) {
-      toast.error('Select a PrintNode printer first');
-      return;
-    }
+    const testData = isTest ? {
+      title: "TEST LABEL",
+      sku: "TEST-001", 
+      price: "99.99",
+      lot: "TEST-LOT",
+      condition: "Test",
+      barcode: "123456789"
+    } : labelData;
 
+    const testConfig = isTest ? {
+      includeTitle: true,
+      includeSku: true,
+      includePrice: true,
+      includeLot: false, // Force lot to false
+      includeCondition: true,
+      barcodeMode: 'qr' as const
+    } : fieldConfig;
+
+    try {
+      // Generate PDF
+      const pdfBase64 = await generatePDFFromCanvas(testData, testConfig);
+      setPendingPrintData(pdfBase64);
+      setShowPrinterDialog(true);
+    } catch (error) {
+      console.error('PDF generation failed:', error);
+      toast.error('Failed to generate PDF for printing');
+    }
+  };
+
+  const handlePrintWithSelectedPrinter = async (printerId: number) => {
+    if (!pendingPrintData) return;
+    
     setPrintLoading(true);
     try {
-      const testData = isTest ? {
-        title: "TEST LABEL",
-        sku: "TEST-001", 
-        price: "99.99",
-        lot: "TEST-LOT",
-        condition: "Test",
-        barcode: "123456789"
-      } : labelData;
-
-      const testConfig = isTest ? {
-        includeTitle: true,
-        includeSku: true,
-        includePrice: true,
-        includeLot: false, // Force lot to false
-        includeCondition: true,
-        barcodeMode: 'qr' as const
-      } : fieldConfig;
-
-      let result;
-      const jobTitle = isTest ? 'Test Label' : 'Label Print';
-
-      // PDF printing from canvas
-      const pdfBase64 = await generatePDFFromCanvas(testData, testConfig);
-      result = await printPDF(pdfBase64, {
-        title: jobTitle,
+      // Get the print service and print with selected printer
+      const { printNodeService } = await import('@/lib/printNodeService');
+      
+      const result = await printNodeService.printPDF(pendingPrintData, printerId, {
+        title: 'Label Print',
         copies: 1
       });
 
       if (result?.success) {
         setHasPrinted(true);
-        toast.success(`${isTest ? 'Test' : 'Label'} sent to printer successfully (Job ID: ${result.jobId})`);
+        toast.success(`Label sent to printer successfully (Job ID: ${result.jobId})`);
       } else {
         throw new Error(result?.error || 'Print failed');
       }
-      
-    } catch (e) {
-      console.error("PrintNode print failed:", e);
-      toast.error(`PrintNode print failed: ${e instanceof Error ? e.message : 'Unknown error'}`);
+    } catch (error) {
+      console.error('Print failed:', error);
+      toast.error(`Print failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setPrintLoading(false);
+      setPendingPrintData(null);
     }
   };
 
@@ -564,6 +574,13 @@ export default function LabelDesigner() {
           </div>
         </div>
       </div>
+      
+      <PrinterSelectionDialog
+        open={showPrinterDialog}
+        onOpenChange={setShowPrinterDialog}
+        onPrint={handlePrintWithSelectedPrinter}
+        title="Select Printer for Label"
+      />
     </div>
   );
 }
