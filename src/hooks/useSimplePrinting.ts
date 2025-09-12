@@ -5,7 +5,7 @@
 
 import { useState, useCallback } from 'react';
 import { toast } from 'sonner';
-import { printZPLDirect, testPrinterConnection, DEFAULT_ZD410_PRINTER, type PrinterConnection, type PrintResult } from '@/lib/directZebraPrint';
+import { printZPLDirect, testPrinterConnection, DEFAULT_ZD410_PRINTER, type PrinterConnection, type PrintResult } from '@/lib/directLocalPrint';
 
 export interface PrintState {
   isLoading: boolean;
@@ -66,13 +66,13 @@ export function useSimplePrinting() {
       } else {
         toast.error(`Print failed: ${result.error}`);
         
-        // Offer quick actions on error
+        // Offer quick troubleshooting
         setTimeout(() => {
           toast.info('Troubleshooting:', {
-            description: 'Check printer connection and power',
-            duration: 8000,
+            description: 'Check: 1) Printer power 2) Network connection 3) Same WiFi network',
+            duration: 10000,
             action: {
-              label: 'Open Web UI',
+              label: 'Open Printer Web UI',
               onClick: () => window.open(`http://${printer.ip}`, '_blank')
             }
           });

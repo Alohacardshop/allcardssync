@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Printer, Settings, TestTube, Wifi, AlertCircle } from 'lucide-react';
 import { useSimplePrinting } from '@/hooks/useSimplePrinting';
 import { generateTestLabelZPL } from '@/lib/simpleZPLTemplates';
-import type { PrinterConnection } from '@/lib/directZebraPrint';
+import type { PrinterConnection } from '@/lib/directLocalPrint';
 
 export function SimplePrinterPanel() {
   const { currentPrinter, isLoading, testConnection, updatePrinter, print } = useSimplePrinting();
