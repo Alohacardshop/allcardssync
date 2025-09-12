@@ -18,6 +18,7 @@ import { PrinterSelectionDialog } from '@/components/PrinterSelectionDialog';
 import { useLocalStorageString } from "@/hooks/useLocalStorage";
 import { generateBoxedLayoutTSPL, type LabelFieldConfig } from "@/lib/tspl";
 import { LabelPreviewCanvas } from "@/components/LabelPreviewCanvas";
+import { supabase } from "@/integrations/supabase/client";
 import { Settings, Eye, Printer, ChevronDown, Home, Save } from "lucide-react";
 import jsPDF from "jspdf";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -205,7 +206,31 @@ export default function LabelDesigner() {
     }
   };
 
-  // PrintNode printing function with format selection
+  // Generate TSPL for thermal printing
+  const generateTSPLFromData = async (data: any): Promise<string> => {
+    try {
+      const { data: tsplResult, error } = await supabase.functions.invoke('render-label', {
+        body: {
+          title: data.title || '',
+          sku: data.sku || data.barcode || '',
+          price: data.price || '',
+          lot_number: data.lot || '',
+          grade: data.condition || '',
+          id: data.barcode || data.sku || ''
+        }
+      });
+
+      if (error) throw error;
+      if (!tsplResult?.program) throw new Error('No TSPL program returned');
+
+      return tsplResult.program;
+    } catch (error) {
+      console.error('TSPL generation failed:', error);
+      throw error;
+    }
+  };
+
+  // PrintNode printing function with TSPL for thermal printers
   const handlePrintNodePrint = async (isTest = false) => {
     const testData = isTest ? {
       title: "TEST LABEL",
@@ -216,23 +241,14 @@ export default function LabelDesigner() {
       barcode: "123456789"
     } : labelData;
 
-    const testConfig = isTest ? {
-      includeTitle: true,
-      includeSku: true,
-      includePrice: true,
-      includeLot: false, // Force lot to false
-      includeCondition: true,
-      barcodeMode: 'qr' as const
-    } : fieldConfig;
-
     try {
-      // Generate PDF
-      const pdfBase64 = await generatePDFFromCanvas(testData, testConfig);
-      setPendingPrintData(pdfBase64);
+      // Generate TSPL for thermal printer (proper 2x1 inch sizing)
+      const tsplProgram = await generateTSPLFromData(testData);
+      setPendingPrintData(tsplProgram);
       setShowPrinterDialog(true);
     } catch (error) {
-      console.error('PDF generation failed:', error);
-      toast.error('Failed to generate PDF for printing');
+      console.error('TSPL generation failed:', error);
+      toast.error('Failed to generate label for printing');
     }
   };
 
@@ -244,8 +260,9 @@ export default function LabelDesigner() {
       // Get the print service and print with selected printer
       const { printNodeService } = await import('@/lib/printNodeService');
       
-      const result = await printNodeService.printPDF(pendingPrintData, printerId, {
-        title: 'Label Print',
+      // Use RAW TSPL commands for thermal printers (proper 2x1 sizing)
+      const result = await printNodeService.printRAW(pendingPrintData, printerId, {
+        title: 'Label Print (TSPL)',
         copies: 1
       });
 
@@ -406,10 +423,10 @@ export default function LabelDesigner() {
                   {saveLoading ? 'Saving...' : 'Save Template'}
                 </Button>
 
-                {/* Note: PDF printing only */}
-                <div className="p-2 bg-blue-50 border border-blue-200 rounded-md">
-                  <p className="text-xs text-blue-700">
-                    🔵 PDF printing only - Settings automatically optimized for Rollo printers
+                {/* Note: TSPL printing for exact sizing */}
+                <div className="p-2 bg-green-50 border border-green-200 rounded-md">
+                  <p className="text-xs text-green-700">
+                    ✅ TSPL printing - Ensures exact 2×1 inch sizing on thermal printers
                   </p>
                 </div>
               </CardContent>
@@ -484,14 +501,14 @@ export default function LabelDesigner() {
                       </p>
                     </div>
 
-                    {/* PDF Only Notice */}
-                    <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
+                    {/* TSPL Format Notice */}
+                    <div className="p-3 bg-green-50 border border-green-200 rounded-md">
                       <div className="flex items-center gap-2 mb-1">
-                        <div className="h-2 w-2 rounded-full bg-blue-500" />
-                        <span className="text-sm font-medium text-blue-800">PDF Format Only</span>
+                        <div className="h-2 w-2 rounded-full bg-green-500" />
+                        <span className="text-sm font-medium text-green-800">TSPL Format</span>
                       </div>
-                      <p className="text-xs text-blue-700">
-                        Optimized for Rollo thermal printers with scannable Code128 barcodes
+                      <p className="text-xs text-green-700">
+                        Raw TSPL commands ensure exact 2×1 inch sizing on thermal printers
                       </p>
                     </div>
                     
@@ -554,7 +571,7 @@ export default function LabelDesigner() {
                 <div className="space-y-3 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Format:</span>
-                    <span>PDF (2×1 inch)</span>
+                    <span>TSPL (2×1 inch)</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Barcode:</span>
