@@ -22,6 +22,16 @@ interface PrintJobResult {
   suggestions?: string[];
 }
 
+interface PrinterStatus {
+  ready: boolean;
+  paused: boolean;
+  headOpen: boolean;
+  mediaOut: boolean;
+  ipAddr?: string;
+  ssid?: string;
+  raw: string;
+}
+
 // Raw network printing service - sends ZPL directly to TCP port 9100
 export async function printZPL(
   zpl: string, 
@@ -38,15 +48,17 @@ export async function printZPL(
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
       
-      const response = await fetch('http://127.0.0.1:17777/rawtcp', {
+      const response = await fetch('/functions/v1/zebra-tcp', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          ip: host,
+          host: host,
           port: port,
-          data: zpl
+          data: zpl,
+          expectReply: false,
+          timeoutMs: timeoutMs
         }),
         signal: controller.signal
       });
@@ -59,13 +71,13 @@ export async function printZPL(
       
       const result = await response.json();
       
-      if (result.success) {
+      if (result.ok) {
         return {
           success: true,
           message: `Successfully printed to ${host}:${port}`
         };
       } else {
-        throw new Error(parseNetworkError(result.error || 'Print failed'));
+        throw new Error(result.error || 'Print failed');
       }
       
     } catch (error) {
@@ -86,34 +98,94 @@ export async function printZPL(
   };
 }
 
-function parseNetworkError(error: any): string {
-  const errorStr = error instanceof Error ? error.message : String(error);
-  
-  if (errorStr.includes('ENOTFOUND') || errorStr.includes('getaddrinfo')) {
-    return 'DNS resolution failed - check hostname/IP address';
+// Status query and parsing functions
+export async function queryStatus(host: string, port: number = 9100): Promise<PrinterStatus> {
+  try {
+    const response = await fetch('/functions/v1/zebra-tcp', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        host: host,
+        port: port,
+        data: '~HS\r\n',
+        expectReply: true,
+        timeoutMs: 5000
+      }),
+    });
+
+    const result = await response.json();
+    
+    if (result.ok && result.reply) {
+      return parseStatusReply(result.reply);
+    } else {
+      throw new Error(result.error || 'Failed to get status');
+    }
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    return {
+      ready: false,
+      paused: false,
+      headOpen: false,
+      mediaOut: false,
+      raw: `Error: ${errorMsg}`
+    };
   }
-  if (errorStr.includes('ECONNREFUSED')) {
-    return `Printer not reachable at ${errorStr.includes(':') ? errorStr.split(':')[0] : 'IP'}:9100`;
-  }
-  if (errorStr.includes('timeout') || errorStr.includes('ETIMEDOUT')) {
-    return 'Network timeout - check Wi-Fi signal and network connectivity';
-  }
-  if (errorStr.includes('EHOSTUNREACH')) {
-    return 'Bad IP/Host or network down - check network connectivity';
-  }
-  if (errorStr.includes('ENETUNREACH')) {
-    return 'Network unreachable - check routing/firewall settings';
-  }
-  if (errorStr.includes('aborted')) {
-    return 'Request timed out - printer took too long to respond';
-  }
-  
-  return errorStr;
 }
 
-// Enhanced error handling with actionable suggestions
+function parseStatusReply(reply: string): PrinterStatus {
+  const lines = reply.split(/\r?\n/);
+  let paused = false;
+  let headOpen = false;
+  let mediaOut = false;
+  let ipAddr: string | undefined;
+  let ssid: string | undefined;
+
+  for (const line of lines) {
+    const upperLine = line.toUpperCase();
+    
+    if (upperLine.includes('PRINTER STATUS') && upperLine.includes('PAUSED')) {
+      paused = true;
+    }
+    
+    if (upperLine.includes('HEAD OPEN')) {
+      headOpen = true;
+    }
+    
+    if (upperLine.includes('MEDIA OUT') || upperLine.includes('PAPER OUT')) {
+      mediaOut = true;
+    }
+    
+    // Extract IP address
+    const ipMatch = line.match(/IP ADDRESS[:\s]+(\d+\.\d+\.\d+\.\d+)/i);
+    if (ipMatch) {
+      ipAddr = ipMatch[1];
+    }
+    
+    // Extract SSID
+    const ssidMatch = line.match(/WLAN SSID[:\s]+(.+)/i);
+    if (ssidMatch) {
+      ssid = ssidMatch[1].trim();
+    }
+  }
+
+  const ready = !paused && !headOpen && !mediaOut;
+
+  return {
+    ready,
+    paused,
+    headOpen,
+    mediaOut,
+    ipAddr,
+    ssid,
+    raw: reply
+  };
+}
+
+// Enhanced error handling with actionable suggestions  
 function createActionableError(error: any, printerIp: string, printerPort: number): PrintJobResult {
-  const errorMsg = parseNetworkError(error);
+  const errorMsg = error instanceof Error ? error.message : String(error);
   const suggestions: string[] = [];
   
   if (errorMsg.includes('not reachable') || errorMsg.includes('timeout')) {
@@ -137,23 +209,12 @@ function createActionableError(error: any, printerIp: string, printerPort: numbe
 
 async function testConnection(ip: string, port: number = 9100): Promise<boolean> {
   try {
-    // First try the TCP test endpoint if available
-    const response = await fetch(`http://127.0.0.1:17777/check-tcp?ip=${ip}&port=${port}`, {
-      signal: AbortSignal.timeout(3000) // 3 second timeout
-    });
-    const result = await response.json();
-    return result.ok === true;
+    // Use the status query to test connection
+    const status = await queryStatus(ip, port);
+    return status.ready !== undefined; // If we got any status, connection works
   } catch (error) {
-    console.log('Bridge TCP test unavailable, trying direct ZPL ping:', (error as Error).message);
-    
-    // Fallback: try sending a simple ZPL status command
-    try {
-      const result = await printZPL('^XA^FO10,10^A0N,20,20^FDPing^FS^XZ', ip, port, { timeoutMs: 2000 });
-      return result.success;
-    } catch (fallbackError) {
-      console.error('Connection test failed:', fallbackError);
-      return false;
-    }
+    console.log('Connection test failed:', (error as Error).message);
+    return false;
   }
 }
 
@@ -267,7 +328,11 @@ class ZebraNetworkService {
   ): Promise<PrintJobResult> {
     return printZPL(zpl, host, port, opts);
   }
+
+  async queryStatus(host: string, port: number = 9100): Promise<PrinterStatus> {
+    return queryStatus(host, port);
+  }
 }
 
 export const zebraNetworkService = new ZebraNetworkService();
-export type { ZebraPrinter, PrintJobOptions, PrintJobResult };
+export type { ZebraPrinter, PrintJobOptions, PrintJobResult, PrinterStatus };
