@@ -17,10 +17,45 @@ export function PrintNodeSettings() {
   const [isLoading, setIsLoading] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
+  const [isLoadingKey, setIsLoadingKey] = useState(false);
 
   useEffect(() => {
-    testConnection();
+    loadExistingSettings();
   }, []);
+
+  const loadExistingSettings = async () => {
+    setIsLoadingKey(true);
+    try {
+      // Load existing API key
+      const { data: keyData } = await supabase.functions.invoke('get-system-setting', {
+        body: { keyName: 'PRINTNODE_API_KEY' }
+      });
+      
+      if (keyData?.value) {
+        setApiKey(keyData.value);
+      }
+
+      // Load saved printer from localStorage
+      const savedConfig = localStorage.getItem('zebra-printer-config');
+      if (savedConfig) {
+        try {
+          const config = JSON.parse(savedConfig);
+          if (config.printNodeId && config.usePrintNode) {
+            setSelectedPrinterId(config.printNodeId.toString());
+          }
+        } catch (error) {
+          console.error('Failed to parse saved printer config:', error);
+        }
+      }
+
+      // Test connection after loading settings
+      await testConnection();
+    } catch (error) {
+      console.error('Failed to load existing settings:', error);
+    } finally {
+      setIsLoadingKey(false);
+    }
+  };
 
   const testConnection = async () => {
     setIsTesting(true);
