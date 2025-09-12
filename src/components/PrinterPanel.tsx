@@ -153,9 +153,9 @@ export function PrinterPanel() {
         {/* Connection Status */}
         <div className="flex items-center justify-between">
           <span className="text-sm font-medium">Network Status:</span>
-          <Badge variant={isConnected ? "default" : "destructive"} className="gap-1">
-            {isConnected ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
-            {isConnected ? "Connected" : "No Printers"}
+          <Badge variant={printers.length > 0 ? "default" : "destructive"} className="gap-1">
+            {printers.length > 0 ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
+            {printers.length > 0 ? "Ready" : "No Printers"}
           </Badge>
         </div>
 
@@ -189,8 +189,19 @@ export function PrinterPanel() {
                   }
                 </div>
               </div>
-              <Badge variant={selectedPrinter.isConnected ? "default" : "destructive"}>
-                {selectedPrinter.isConnected ? "Online" : "Offline"}
+              <Badge variant={
+                selectedPrinter.isConnected === true 
+                  ? "default" 
+                  : selectedPrinter.isConnected === false 
+                    ? "destructive" 
+                    : "secondary"
+              }>
+                {selectedPrinter.isConnected === true 
+                  ? "Online" 
+                  : selectedPrinter.isConnected === false 
+                    ? "Offline" 
+                    : "Unknown"
+                }
               </Badge>
             </div>
           </div>
@@ -229,8 +240,19 @@ export function PrinterPanel() {
                   </div>
                 </div>
                 
-                <Badge variant={printer.isConnected ? "default" : "secondary"} className="text-xs">
-                  {printer.isConnected ? "Online" : "Offline"}
+                <Badge variant={
+                  printer.isConnected === true 
+                    ? "default" 
+                    : printer.isConnected === false 
+                      ? "secondary" 
+                      : "outline"
+                } className="text-xs">
+                  {printer.isConnected === true 
+                    ? "Online" 
+                    : printer.isConnected === false 
+                      ? "Offline" 
+                      : "Unknown"
+                  }
                 </Badge>
               </div>
             ))}
@@ -339,7 +361,7 @@ export function PrinterPanel() {
           <Button 
             className="w-full gap-2" 
             onClick={runTestPrint}
-            disabled={!isConnected || !selectedPrinter}
+            disabled={!selectedPrinter}
           >
             <TestTube className="h-4 w-4" />
             Test Print (ZPL)

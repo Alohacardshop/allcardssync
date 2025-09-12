@@ -118,8 +118,13 @@ export function useZebraNetwork() {
               name: setting.printer_name || `Zebra (${setting.printer_ip})`,
             };
             
-            // Test connection
-            printer.isConnected = await zebraNetworkService.testConnection(printer.ip, printer.port);
+            // Test connection (but don't let it fail the whole process)
+            try {
+              printer.isConnected = await zebraNetworkService.testConnection(printer.ip, printer.port);
+            } catch (error) {
+              console.log('Connection test failed for', printer.ip, '- marking as unknown status');
+              printer.isConnected = undefined; // Unknown status
+            }
             savedPrinters.push(printer);
           }
         }
@@ -182,8 +187,14 @@ export function useZebraNetwork() {
   }, [selectedPrinter]);
 
   const addManualPrinter = useCallback(async (ip: string, port: number = 9100, name?: string) => {
-    // Test connection first
-    const isConnected = await zebraNetworkService.testConnection(ip, port);
+    // Test connection first (but don't let it fail)
+    let isConnected;
+    try {
+      isConnected = await zebraNetworkService.testConnection(ip, port);
+    } catch (error) {
+      console.log('Connection test failed for new printer - will show as unknown status');
+      isConnected = undefined;
+    }
     
     const printer: ZebraPrinter = {
       id: `zebra-${ip}`,

@@ -136,12 +136,23 @@ class ZebraNetworkService {
 
   async testConnection(ip: string, port: number = 9100): Promise<boolean> {
     try {
-      const response = await fetch(`${this.bridgeUrl}/check-tcp?ip=${ip}&port=${port}`);
+      // First try the TCP test endpoint if available
+      const response = await fetch(`${this.bridgeUrl}/check-tcp?ip=${ip}&port=${port}`, {
+        signal: AbortSignal.timeout(3000) // 3 second timeout
+      });
       const result = await response.json();
       return result.ok === true;
     } catch (error) {
-      console.error('TCP connection test failed:', error);
-      return false;
+      console.log('Bridge TCP test unavailable, trying direct ZPL ping:', error.message);
+      
+      // Fallback: try sending a simple ZPL status command
+      try {
+        const result = await this.printZPLDirect('^XA^FO10,10^A0N,20,20^FDPing^FS^XZ', ip, port, { timeoutMs: 2000 });
+        return result.success;
+      } catch (fallbackError) {
+        console.error('Connection test failed:', fallbackError);
+        return false;
+      }
     }
   }
 
