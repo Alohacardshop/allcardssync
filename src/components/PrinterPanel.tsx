@@ -1,15 +1,16 @@
-import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Printer, Wifi, WifiOff, TestTube, Plus, RefreshCw, Settings } from "lucide-react";
-import { toast } from "sonner";
-import { useZebraNetwork } from "@/hooks/useZebraNetwork";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { generateBoxedLayoutZPL } from "@/lib/zpl";
+import { useState, useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Separator } from '@/components/ui/separator';
+import { toast } from 'sonner';
+import { Printer, WifiOff, Wifi, Settings, TestTube, RefreshCw } from 'lucide-react';
+import { useZebraNetwork } from '@/hooks/useZebraNetwork';
+import { generateSampleZPL } from '@/lib/zplSamples';
+import { usePrinterNames } from '@/hooks/usePrinterNames';
 import { PrinterSelectionDialog } from '@/components/PrinterSelectionDialog';
 
 export function PrinterPanel() {
@@ -55,24 +56,18 @@ export function PrinterPanel() {
   }, []);
 
   const handleAddPrinter = async () => {
-    if (!newPrinterIp.trim()) {
+    const ip = newPrinterIp.trim();
+    const port = parseInt(newPrinterPort) || 9100;
+    const name = newPrinterName.trim() || `Zebra (${ip})`;
+
+    if (!ip) {
       toast.error("IP address is required");
       return;
     }
 
     try {
-      const printer = await addManualPrinter(
-        newPrinterIp.trim(),
-        parseInt(newPrinterPort) || 9100,
-        newPrinterName.trim() || undefined
-      );
-      
-      if (printer.isConnected) {
-        toast.success(`Printer added: ${printer.name}`);
-      } else {
-        toast.warning(`Printer added but connection failed: ${printer.name}`);
-      }
-      
+      await addManualPrinter(ip, port, name);
+      toast.success(`Printer ${name} added successfully`);
       setShowAddDialog(false);
       setNewPrinterIp('');
       setNewPrinterPort('9100');
@@ -90,14 +85,14 @@ export function PrinterPanel() {
 
     setTestingConnection(true);
     try {
-      const connected = await testConnection(selectedPrinter);
-      if (connected) {
-        toast.success("Connection successful");
+      const result = await testConnection(selectedPrinter);
+      if (result) {
+        toast.success("Connection test successful");
       } else {
-        toast.error("Connection failed");
+        toast.error("Connection test failed - printer not reachable");
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Test failed");
+      toast.error(error instanceof Error ? error.message : "Connection test failed");
     } finally {
       setTestingConnection(false);
     }
@@ -110,33 +105,16 @@ export function PrinterPanel() {
     }
 
     try {
-      const testZPL = generateBoxedLayoutZPL({
-        title: 'TEST PRINT',
-        sku: 'TEST-001',
-        price: '$1.00',
-        condition: 'TEST',
-        barcode: 'TEST123'
-      }, {
-        includeTitle: true,
-        includeSku: true,
-        includePrice: true,
-        includeLot: false,
-        includeCondition: true,
-        barcodeMode: 'barcode'
-      });
-
-      const result = await printZPL(testZPL, { 
-        title: `Test Print - ${new Date().toLocaleTimeString()}`,
-        copies: 1
-      });
-
+      const testZPL = generateSampleZPL();
+      const result = await printZPL(testZPL, { title: "Test Print" });
+      
       if (result.success) {
-        toast.success(result.message || "Test print sent successfully");
+        toast.success("Test print sent successfully!");
       } else {
-        throw new Error(result.error || 'Print failed');
+        toast.error(result.error || "Test print failed");
       }
     } catch (error) {
-      console.error('Test print error:', error);
+      console.error("Test print error:", error);
       toast.error(error instanceof Error ? error.message : "Test print failed");
     }
   };
@@ -273,20 +251,23 @@ export function PrinterPanel() {
               size="sm" 
               onClick={() => refreshPrinters(true)}
               disabled={isLoading}
-              className="gap-2"
             >
-              <RefreshCw className={`h-3 w-3 ${isLoading ? "animate-spin" : ""}`} />
-              {isLoading ? "Scanning..." : "Scan"}
+              <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+              Scan
             </Button>
             
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => setShowAddDialog(true)}
+            >
+              <Printer className="h-4 w-4 mr-2" />
+              Add Printer
+            </Button>
+
+            {/* Add Printer Dialog */}
             <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-              <DialogTrigger asChild>
-                <Button variant="outline" size="sm" className="gap-2">
-                  <Plus className="h-3 w-3" />
-                  Add Network Printer
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-md">
+              <DialogContent>
                 <DialogHeader>
                   <DialogTitle>Add Network Printer</DialogTitle>
                 </DialogHeader>

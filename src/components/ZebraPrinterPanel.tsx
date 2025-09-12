@@ -9,7 +9,7 @@ import { Printer, Wifi, WifiOff, TestTube, Plus, RefreshCw, Settings } from "luc
 import { toast } from "sonner";
 import { useZebraNetwork } from "@/hooks/useZebraNetwork";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { generateBoxedLayoutZPL } from "@/lib/zpl";
+import { generateSampleZPL } from '@/lib/zplSamples';
 
 export function ZebraPrinterPanel() {
   const [workstationId, setWorkstationId] = useState<string>('');
@@ -47,24 +47,18 @@ export function ZebraPrinterPanel() {
   }, []);
 
   const handleAddPrinter = async () => {
-    if (!newPrinterIp.trim()) {
+    const ip = newPrinterIp.trim();
+    const port = parseInt(newPrinterPort) || 9100;
+    const name = newPrinterName.trim() || `Zebra (${ip})`;
+
+    if (!ip) {
       toast.error("IP address is required");
       return;
     }
 
     try {
-      const printer = await addManualPrinter(
-        newPrinterIp.trim(),
-        parseInt(newPrinterPort) || 9100,
-        newPrinterName.trim() || undefined
-      );
-      
-      if (printer.isConnected) {
-        toast.success(`Printer added: ${printer.name}`);
-      } else {
-        toast.warning(`Printer added but connection failed: ${printer.name}`);
-      }
-      
+      await addManualPrinter(ip, port, name);
+      toast.success(`Printer ${name} added successfully`);
       setShowAddDialog(false);
       setNewPrinterIp('');
       setNewPrinterPort('9100');
@@ -82,14 +76,14 @@ export function ZebraPrinterPanel() {
 
     setTestingConnection(true);
     try {
-      const connected = await testConnection(selectedPrinter);
-      if (connected) {
-        toast.success("Connection successful");
+      const result = await testConnection(selectedPrinter);
+      if (result) {
+        toast.success("Connection test successful");
       } else {
-        toast.error("Connection failed");
+        toast.error("Connection test failed - printer not reachable");
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Test failed");
+      toast.error(error instanceof Error ? error.message : "Connection test failed");
     } finally {
       setTestingConnection(false);
     }
@@ -102,23 +96,9 @@ export function ZebraPrinterPanel() {
     }
 
     try {
-      const testZPL = generateBoxedLayoutZPL({
-        title: 'TEST PRINT',
-        sku: 'TEST-001',
-        price: '$1.00',
-        condition: 'TEST',
-        barcode: 'TEST123'
-      }, {
-        includeTitle: true,
-        includeSku: true,
-        includePrice: true,
-        includeLot: false,
-        includeCondition: true,
-        barcodeMode: 'barcode'
-      });
-
-      const result = await printZPL(testZPL, { 
-        title: `Test Print - ${new Date().toLocaleTimeString()}`,
+      const testZPL = generateSampleZPL();
+      const result = await printZPL(testZPL, {
+        title: "ZPL Test Print",
         copies: 1
       });
 
@@ -145,9 +125,9 @@ export function ZebraPrinterPanel() {
         {/* Connection Status */}
         <div className="flex items-center justify-between">
           <span className="text-sm font-medium">Network Status:</span>
-          <Badge variant={isConnected ? "default" : "destructive"} className="gap-1">
-            {isConnected ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
-            {isConnected ? "Connected" : "No Printers"}
+          <Badge variant={printers.length > 0 ? "default" : "destructive"} className="gap-1">
+            {printers.length > 0 ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
+            {printers.length > 0 ? "Connected" : "No Printers"}
           </Badge>
         </div>
 
@@ -175,7 +155,10 @@ export function ZebraPrinterPanel() {
               <div>
                 <div className="font-medium text-sm">{selectedPrinter.name}</div>
                 <div className="text-xs text-muted-foreground">
-                  {selectedPrinter.ip}:{selectedPrinter.port}
+                  {selectedPrinter.isSystemPrinter 
+                    ? 'USB/Local Printer' 
+                    : `${selectedPrinter.ip}:${selectedPrinter.port}`
+                  }
                 </div>
               </div>
               <Badge variant={selectedPrinter.isConnected ? "default" : "destructive"}>
@@ -185,50 +168,6 @@ export function ZebraPrinterPanel() {
           </div>
         )}
 
-        {/* Printer List */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <label className="text-sm font-medium">Available Printers:</label>
-          </div>
-          
-          <div className="space-y-2 max-h-32 overflow-y-auto">
-            {printers.map((printer) => (
-              <div key={printer.id} className="flex items-center gap-2 p-2 border rounded-md">
-                <input
-                  type="radio"
-                  id={`printer-${printer.id}`}
-                  name="selectedPrinter"
-                  checked={selectedPrinter?.id === printer.id}
-                  onChange={() => setSelectedPrinterId(printer)}
-                  className="h-4 w-4"
-                />
-                
-                <div className="flex-1 min-w-0">
-                  <label 
-                    htmlFor={`printer-${printer.id}`}
-                    className="font-medium text-sm cursor-pointer block"
-                  >
-                    {printer.name}
-                  </label>
-                  <div className="text-xs text-muted-foreground">
-                    {printer.ip}:{printer.port}
-                  </div>
-                </div>
-                
-                <Badge variant={printer.isConnected ? "default" : "secondary"} className="text-xs">
-                  {printer.isConnected ? "Online" : "Offline"}
-                </Badge>
-              </div>
-            ))}
-            
-            {printers.length === 0 && (
-              <div className="text-sm text-muted-foreground text-center py-4">
-                No printers found. Add a printer manually.
-              </div>
-            )}
-          </div>
-        </div>
-
         {/* Actions */}
         <div className="space-y-2">
           <div className="flex gap-2">
@@ -237,20 +176,19 @@ export function ZebraPrinterPanel() {
               size="sm" 
               onClick={() => refreshPrinters(true)}
               disabled={isLoading}
-              className="gap-2"
             >
-              <RefreshCw className={`h-3 w-3 ${isLoading ? "animate-spin" : ""}`} />
-              {isLoading ? "Scanning..." : "Scan"}
+              <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+              Scan
             </Button>
             
             <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
               <DialogTrigger asChild>
-                <Button variant="outline" size="sm" className="gap-2">
-                  <Plus className="h-3 w-3" />
-                  Add Printer
+                <Button variant="outline" size="sm">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Network Printer
                 </Button>
               </DialogTrigger>
-              <DialogContent className="sm:max-w-md">
+              <DialogContent>
                 <DialogHeader>
                   <DialogTitle>Add Network Printer</DialogTitle>
                 </DialogHeader>
@@ -323,11 +261,58 @@ export function ZebraPrinterPanel() {
           </Button>
         </div>
 
+        {/* Printer List */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-medium">Available Printers:</label>
+          </div>
+          
+          <div className="space-y-2 max-h-32 overflow-y-auto">
+            {printers.map((printer) => (
+              <div key={printer.id} className="flex items-center gap-2 p-2 border rounded-md">
+                <input
+                  type="radio"
+                  id={`printer-${printer.id}`}
+                  name="selectedPrinter"
+                  checked={selectedPrinter?.id === printer.id}
+                  onChange={() => setSelectedPrinterId(printer)}
+                  className="h-4 w-4"
+                />
+                
+                <div className="flex-1 min-w-0">
+                  <label 
+                    htmlFor={`printer-${printer.id}`}
+                    className="font-medium text-sm cursor-pointer block"
+                  >
+                    {printer.name}
+                  </label>
+                  <div className="text-xs text-muted-foreground">
+                    {printer.isSystemPrinter 
+                      ? 'USB/Local' 
+                      : `${printer.ip}:${printer.port}`
+                    }
+                  </div>
+                </div>
+                
+                <Badge variant={printer.isConnected ? "default" : "secondary"} className="text-xs">
+                  {printer.isConnected ? "Online" : "Offline"}
+                </Badge>
+              </div>
+            ))}
+            
+            {printers.length === 0 && (
+              <div className="text-sm text-muted-foreground text-center py-4">
+                No printers found. Add a printer manually or check USB connection.
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Info */}
         <div className="text-xs text-muted-foreground pt-2 border-t">
-          Direct network printing to Zebra printers using ZPL.
+          Supports both USB-connected and network Zebra printers using ZPL.
           <br />
-          Default port: 9100 (Raw TCP/IP)
+          USB printers are auto-detected, network printers use TCP/IP port 9100.
         </div>
       </CardContent>
     </Card>

@@ -1,6 +1,6 @@
 // Test utilities for Zebra printer functionality
 import { zebraNetworkService } from './zebraNetworkService';
-import { simpleTestLabel, generatedTestLabel, testPattern } from './zplSamples';
+import { simpleTestLabel, generateSampleZPL, testPattern } from './zplSamples';
 
 /**
  * Test direct ZPL printing to a network printer
@@ -67,7 +67,7 @@ export async function runPrinterTests(host: string, port: number = 9100) {
   const simpleTest = await testDirectPrinting(host, port, simpleTestLabel);
   
   console.log('Testing generated label...');
-  const generatedTest = await testDirectPrinting(host, port, generatedTestLabel);
+  const generatedTest = await testDirectPrinting(host, port, generateSampleZPL());
   
   console.log('Testing pattern...');
   const patternTest = await testDirectPrinting(host, port, testPattern);
@@ -91,7 +91,7 @@ if (typeof window !== 'undefined') {
     runPrinterTests,
     samples: {
       simpleTestLabel,
-      generatedTestLabel, 
+      generateSampleZPL: generateSampleZPL(), 
       testPattern
     }
   };

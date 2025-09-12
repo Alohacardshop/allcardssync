@@ -14,7 +14,6 @@ import { buildZPLWithCut, getLabelSizeInDots, mmToDots, type ZPLElement, type Dp
 import { priceTag, type PriceTagData } from '@/lib/templates/priceTag';
 import { barcodeLabel, type BarcodeData } from '@/lib/templates/barcode';
 import { qrShelfLabel, type QRShelfData } from '@/lib/templates/qrShelf';
-import { sendZPLPing, sendZPLCalibrate, sendZPLConfigLabel } from '@/lib/zplUtilities';
 
 export function LabelDesigner() {
   // Settings state
@@ -97,10 +96,22 @@ export function LabelDesigner() {
     }
   };
 
-  // Utility functions
-  const handleConfigLabel = () => sendZPLConfigLabel(selectedPrinter);
-  const handleCalibrate = () => sendZPLCalibrate(selectedPrinter);
-  const handlePing = () => sendZPLPing(selectedPrinter);
+  // Utility functions - simple implementations
+  const handleConfigLabel = () => {
+    if (selectedPrinter) {
+      printZPL('^XA^HH^XZ', { title: 'Config Label' });
+    }
+  };
+  const handleCalibrate = () => {
+    if (selectedPrinter) {
+      toast.info('Calibration feature coming soon');
+    }
+  };
+  const handlePing = () => {
+    if (selectedPrinter) {
+      toast.info('Network ping feature coming soon');
+    }
+  };
   const handleOpenWebUI = () => {
     if (selectedPrinter) {
       window.open(`http://${selectedPrinter.ip}`, '_blank');

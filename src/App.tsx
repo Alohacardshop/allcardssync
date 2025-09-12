@@ -9,7 +9,7 @@ import { StoreProvider } from "@/contexts/StoreContext";
 import Index from "./pages/Index";
 import Inventory from "./pages/Inventory";
 import Batches from "./pages/Batches";
-import LabelDesigner from "./pages/LabelDesigner";
+import { LabelDesigner } from "./pages/LabelDesigner";
 import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
 import Auth from "./pages/Auth";
