@@ -16,6 +16,8 @@ import { CurrentBatchPanel } from "@/components/CurrentBatchPanel";
 import { StoreLocationSelector } from "@/components/StoreLocationSelector";
 import { useBatchSendToShopify } from "@/hooks/useBatchSendToShopify";
 import { useStore } from "@/contexts/StoreContext";
+import { PrintQueueStatus } from "@/components/PrintQueueStatus";
+import { usePrintQueue } from "@/hooks/usePrintQueue";
 
 interface IntakeItem {
   id: string;
@@ -65,6 +67,7 @@ const Index = () => {
   const { defaultTemplate } = useTemplates('raw');
   const { selectedStore, selectedLocation } = useStore();
   const { sendBatchToShopify, isSending } = useBatchSendToShopify();
+  const { queueStatus } = usePrintQueue();
 
   const fetchData = async () => {
     try {
@@ -361,9 +364,12 @@ const Index = () => {
 
   const handlePrintLabels = async (itemIds: string[]) => {
     if (itemIds.length === 0) return;
-    if (!defaultTemplate) {
-      toast.error('No default template found. Please set a default template first.');
-      return;
+
+    // Get workstation ID (same method as print queue)
+    let workstationId = localStorage.getItem('workstation-id');
+    if (!workstationId) {
+      workstationId = crypto.randomUUID().substring(0, 8);
+      localStorage.setItem('workstation-id', workstationId);
     }
 
     try {
@@ -371,9 +377,9 @@ const Index = () => {
 
       // Create print jobs for selected items
       const printJobs = itemIds.map(itemId => ({
-        workstation_id: 'dashboard',
-        template_id: defaultTemplate.id,
-        status: 'queued' as const,
+        workstation_id: workstationId,
+        template_id: defaultTemplate?.id || null,
+        status: 'queued',
         data: { intake_item_id: itemId },
         target: { type: 'intake_item', id: itemId },
         copies: 1
@@ -385,7 +391,7 @@ const Index = () => {
 
       if (printError) throw printError;
 
-      // Update items as printed
+      // Update items as printed (optimistic update - will be handled by print queue)
       const { error: updateError } = await supabase
         .from('intake_items')
         .update({ 
@@ -481,6 +487,9 @@ const Index = () => {
             </p>
           </Card>
         </div>
+
+        {/* Print Queue Status */}
+        <PrintQueueStatus />
 
         {/* Main Content Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
