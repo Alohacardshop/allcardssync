@@ -43,47 +43,17 @@ export function useLabelSettings() {
     return id;
   };
 
-  // Load settings from database first, then localStorage
+  // Load settings from localStorage only for now (database types not available yet)
   const loadSettings = useCallback(async () => {
     setIsLoading(true);
     
-    try {
-      // Try database first
-      const workstationId = getWorkstationId();
-      const { data: dbSettings } = await supabase
-        .from('label_settings')
-        .select('*')
-        .eq('workstation_id', workstationId)
-        .order('updated_at', { ascending: false })
-        .maybeSingle();
-      
-      if (dbSettings) {
-        const loadedSettings: LabelSettings = {
-          printerIp: dbSettings.printer_ip || DEFAULT_SETTINGS.printerIp,
-          printerPort: dbSettings.printer_port || DEFAULT_SETTINGS.printerPort,
-          hasCutter: dbSettings.has_cutter ?? DEFAULT_SETTINGS.hasCutter,
-          dpi: (dbSettings.dpi as Dpi) || DEFAULT_SETTINGS.dpi,
-          speed: dbSettings.speed || DEFAULT_SETTINGS.speed,
-          darkness: dbSettings.darkness || DEFAULT_SETTINGS.darkness,
-          copies: dbSettings.copies || DEFAULT_SETTINGS.copies,
-          cutMode: (dbSettings.cut_mode as LabelSettings['cutMode']) || DEFAULT_SETTINGS.cutMode
-        };
-        setSettings(loadedSettings);
-        
-        // Sync to localStorage for consistency
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(loadedSettings));
-        return;
-      }
-    } catch (error) {
-      console.log('No database settings found, checking localStorage');
-    }
-
-    // Fallback to localStorage
     try {
       const savedSettings = localStorage.getItem(STORAGE_KEY);
       if (savedSettings) {
         const parsed = JSON.parse(savedSettings) as LabelSettings;
         setSettings({ ...DEFAULT_SETTINGS, ...parsed });
+      } else {
+        setSettings(DEFAULT_SETTINGS);
       }
     } catch (error) {
       console.error('Failed to load settings from localStorage:', error);
@@ -93,36 +63,16 @@ export function useLabelSettings() {
     setIsLoading(false);
   }, []);
 
-  // Save settings to both localStorage and database
+  // Save settings to localStorage only for now 
   const saveSettings = useCallback(async (newSettings: Partial<LabelSettings>) => {
     const updatedSettings = { ...settings, ...newSettings };
     setSettings(updatedSettings);
     
-    // Save to localStorage immediately
+    // Save to localStorage
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedSettings));
     
-    // Save to database (async, non-blocking)
-    try {
-      const workstationId = getWorkstationId();
-      await supabase
-        .from('label_settings')
-        .upsert({
-          workstation_id: workstationId,
-          printer_ip: updatedSettings.printerIp,
-          printer_port: updatedSettings.printerPort,
-          has_cutter: updatedSettings.hasCutter,
-          dpi: updatedSettings.dpi,
-          speed: updatedSettings.speed,
-          darkness: updatedSettings.darkness,
-          copies: updatedSettings.copies,
-          cut_mode: updatedSettings.cutMode,
-        }, {
-          onConflict: 'workstation_id'
-        });
-    } catch (error) {
-      console.log('Could not sync settings to database:', error);
-      // Non-blocking - settings are still saved to localStorage
-    }
+    // TODO: Save to database when types are available
+    console.log('Settings saved to localStorage:', updatedSettings);
   }, [settings]);
 
   // Initialize on mount

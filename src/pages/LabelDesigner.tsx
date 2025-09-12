@@ -16,6 +16,7 @@ import { priceTag, type PriceTagData } from '@/lib/templates/priceTag';
 import { barcodeLabel, type BarcodeData } from '@/lib/templates/barcode';
 import { qrShelfLabel, type QRShelfData } from '@/lib/templates/qrShelf';
 import { ZebraDiagnosticsPanel } from '@/components/ZebraDiagnosticsPanel';
+import { ZebraPrinterPanel } from '@/components/ZebraPrinterPanel';
 
 export function LabelDesigner() {
   const { selectedPrinter, printZPL } = useZebraNetwork();
@@ -185,7 +186,10 @@ export function LabelDesigner() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>DPI</Label>
-                <Select value={dpi.toString()} onValueChange={(value) => setDpi(Number(value) as Dpi)}>
+                <Select 
+                  value={settings.dpi.toString()} 
+                  onValueChange={(value) => updatePrintSettings({ dpi: Number(value) as Dpi })}
+                >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -201,31 +205,39 @@ export function LabelDesigner() {
                   type="number" 
                   min="2" 
                   max="6" 
-                  value={speed} 
-                  onChange={(e) => setSpeed(Number(e.target.value))} 
+                  value={settings.speed} 
+                  onChange={(e) => updatePrintSettings({ speed: Number(e.target.value) })} 
                 />
               </div>
             </div>
 
             <div>
-              <Label>Darkness (0-30): {darkness}</Label>
+              <Label>Darkness (0-30): {settings.darkness}</Label>
               <input
                 type="range"
                 min="0"
                 max="30"
-                value={darkness}
-                onChange={(e) => setDarkness(Number(e.target.value))}
+                value={settings.darkness}
+                onChange={(e) => updatePrintSettings({ darkness: Number(e.target.value) })}
                 className="w-full"
               />
             </div>
 
             <div className="flex items-center space-x-2">
-              <Switch checked={cutAtEnd} onCheckedChange={setCutAtEnd} />
+              <Switch 
+                checked={settings.cutMode === 'end-of-job'} 
+                onCheckedChange={(checked) => updatePrintSettings({ 
+                  cutMode: checked ? 'end-of-job' : 'none' 
+                })} 
+              />
               <Label>Cut at end of job</Label>
             </div>
 
             <div className="flex items-center space-x-2">
-              <Switch checked={hasCutter} onCheckedChange={setHasCutter} />
+              <Switch 
+                checked={settings.hasCutter} 
+                onCheckedChange={(checked) => updatePrinterSettings({ hasCutter: checked })} 
+              />
               <Label>Printer has cutter</Label>
             </div>
 
@@ -235,8 +247,8 @@ export function LabelDesigner() {
                 type="number" 
                 min="1" 
                 max="99" 
-                value={copies} 
-                onChange={(e) => setCopies(Number(e.target.value))} 
+                value={settings.copies} 
+                onChange={(e) => updatePrintSettings({ copies: Number(e.target.value) })} 
               />
             </div>
           </CardContent>
@@ -285,6 +297,11 @@ export function LabelDesigner() {
       {/* Diagnostics Panel */}
       <div className="lg:col-span-2">
         <ZebraDiagnosticsPanel />
+      </div>
+
+      {/* Printer Panel */}
+      <div className="lg:col-span-2">
+        <ZebraPrinterPanel />
       </div>
 
       {/* ZPL Preview */}

@@ -569,6 +569,51 @@ export type Database = {
         }
         Relationships: []
       }
+      label_settings: {
+        Row: {
+          copies: number | null
+          created_at: string
+          cut_mode: string | null
+          darkness: number | null
+          dpi: number | null
+          has_cutter: boolean | null
+          id: string
+          printer_ip: string | null
+          printer_port: number | null
+          speed: number | null
+          updated_at: string
+          workstation_id: string
+        }
+        Insert: {
+          copies?: number | null
+          created_at?: string
+          cut_mode?: string | null
+          darkness?: number | null
+          dpi?: number | null
+          has_cutter?: boolean | null
+          id?: string
+          printer_ip?: string | null
+          printer_port?: number | null
+          speed?: number | null
+          updated_at?: string
+          workstation_id: string
+        }
+        Update: {
+          copies?: number | null
+          created_at?: string
+          cut_mode?: string | null
+          darkness?: number | null
+          dpi?: number | null
+          has_cutter?: boolean | null
+          id?: string
+          printer_ip?: string | null
+          printer_port?: number | null
+          speed?: number | null
+          updated_at?: string
+          workstation_id?: string
+        }
+        Relationships: []
+      }
       label_templates: {
         Row: {
           canvas: Json
