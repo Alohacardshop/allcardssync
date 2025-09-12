@@ -8,23 +8,18 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
-import { Printer, Settings, TestTube, Zap, Eye, Globe, Activity } from 'lucide-react';
+import { Printer, Settings, AlertTriangle, Wifi, WifiOff } from 'lucide-react';
 import { useZebraNetwork } from '@/hooks/useZebraNetwork';
-import { buildZPLWithCut, getLabelSizeInDots, mmToDots, type ZPLElement, type Dpi } from '@/lib/zpl';
+import { useLabelSettings } from '@/hooks/useLabelSettings';
+import { buildZPLWithCut, getLabelSizeInDots, type Dpi } from '@/lib/zpl';
 import { priceTag, type PriceTagData } from '@/lib/templates/priceTag';
 import { barcodeLabel, type BarcodeData } from '@/lib/templates/barcode';
 import { qrShelfLabel, type QRShelfData } from '@/lib/templates/qrShelf';
+import { ZebraDiagnosticsPanel } from '@/components/ZebraDiagnosticsPanel';
 
 export function LabelDesigner() {
-  // Settings state
-  const [labelWidth, setLabelWidth] = useState('50.8');  // 2 inches in mm
-  const [labelHeight, setLabelHeight] = useState('25.4'); // 1 inch in mm
-  const [dpi, setDpi] = useState<Dpi>(203);
-  const [speed, setSpeed] = useState(4);
-  const [darkness, setDarkness] = useState(10);
-  const [copies, setCopies] = useState(1);
-  const [cutAtEnd, setCutAtEnd] = useState(true);
-  const [hasCutter, setHasCutter] = useState(false);
+  const { selectedPrinter, printZPL } = useZebraNetwork();
+  const { settings, updatePrintSettings, updatePrinterSettings, isLoading: settingsLoading } = useLabelSettings();
   
   // Template selection
   const [selectedTemplate, setSelectedTemplate] = useState<'price' | 'barcode' | 'qr'>('price');
@@ -50,17 +45,15 @@ export function LabelDesigner() {
     section: 'Electronics'
   });
 
-  const { selectedPrinter, printZPL, testConnection } = useZebraNetwork();
-
   // Generate current ZPL based on selected template
   const generateCurrentZPL = (): string => {
     const baseOptions = {
-      dpi,
-      speedIps: speed,
-      darkness,
-      copies,
-      cutAtEnd,
-      hasCutter
+      dpi: settings.dpi,
+      speedIps: settings.speed,
+      darkness: settings.darkness,
+      copies: settings.copies,
+      cutAtEnd: settings.cutMode !== 'none',
+      hasCutter: settings.hasCutter
     };
 
     switch (selectedTemplate) {
@@ -78,45 +71,42 @@ export function LabelDesigner() {
   // Print current label
   const handlePrint = async () => {
     if (!selectedPrinter) {
-      toast.error('No printer selected');
+      toast.error('Select a Zebra printer first');
       return;
     }
 
     try {
       const zpl = generateCurrentZPL();
-      const result = await printZPL(zpl, { title: 'Label Print', copies });
+      const result = await printZPL(zpl, { title: 'Label Designer Print', copies: settings.copies });
       
       if (result.success) {
         toast.success('Label sent to printer successfully!');
       } else {
         toast.error(result.error || 'Print failed');
+        
+        // Provide actionable CTAs on error
+        if (result.suggestions?.length) {
+          setTimeout(() => {
+            result.suggestions!.forEach(suggestion => {
+              toast.info(suggestion, { duration: 5000 });
+            });
+          }, 1000);
+        }
       }
     } catch (error) {
       toast.error('Print failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
     }
   };
 
-  // Utility functions - simple implementations
-  const handleConfigLabel = () => {
-    if (selectedPrinter) {
-      printZPL('^XA^HH^XZ', { title: 'Config Label' });
-    }
+  // Connection status helper
+  const getConnectionStatus = () => {
+    if (!selectedPrinter) return { status: 'no-printer', message: 'No printer selected' };
+    if (selectedPrinter.isConnected) return { status: 'connected', message: 'Ready to print' };
+    if (selectedPrinter.isConnected === false) return { status: 'offline', message: 'Printer offline' };
+    return { status: 'unknown', message: 'Connection status unknown' };
   };
-  const handleCalibrate = () => {
-    if (selectedPrinter) {
-      toast.info('Calibration feature coming soon');
-    }
-  };
-  const handlePing = () => {
-    if (selectedPrinter) {
-      toast.info('Network ping feature coming soon');
-    }
-  };
-  const handleOpenWebUI = () => {
-    if (selectedPrinter) {
-      window.open(`http://${selectedPrinter.ip}`, '_blank');
-    }
-  };
+
+  const connectionStatus = getConnectionStatus();
 
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -253,51 +243,63 @@ export function LabelDesigner() {
         </Card>
       </div>
 
-      {/* Actions */}
+      {/* Print Actions */}
       <Card>
         <CardContent className="pt-6">
-          <div className="flex flex-wrap gap-2">
-            <Button onClick={handlePrint} disabled={!selectedPrinter} className="flex items-center gap-2">
+          {/* Connection Status */}
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-sm font-medium">Printer Status:</span>
+            <div className="flex items-center gap-2">
+              {connectionStatus.status === 'connected' && <Wifi className="h-4 w-4 text-green-600" />}
+              {connectionStatus.status === 'offline' && <WifiOff className="h-4 w-4 text-red-600" />}
+              {connectionStatus.status === 'unknown' && <AlertTriangle className="h-4 w-4 text-yellow-600" />}
+              <Badge variant={
+                connectionStatus.status === 'connected' ? 'default' :
+                connectionStatus.status === 'offline' ? 'destructive' : 'secondary'
+              }>
+                {connectionStatus.message}
+              </Badge>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Button 
+              onClick={handlePrint} 
+              disabled={connectionStatus.status === 'no-printer'}
+              className="w-full flex items-center gap-2"
+              title={connectionStatus.status === 'no-printer' ? 'Select a Zebra printer first' : ''}
+            >
               <Printer className="h-4 w-4" />
               Print Label
             </Button>
             
-            <Separator orientation="vertical" className="h-8" />
-            
-            <Button variant="outline" onClick={handleConfigLabel} disabled={!selectedPrinter}>
-              <Eye className="h-4 w-4 mr-2" />
-              Config Label
-            </Button>
-            
-            <Button variant="outline" onClick={handleCalibrate} disabled={!selectedPrinter}>
-              <Zap className="h-4 w-4 mr-2" />
-              Calibrate
-            </Button>
-            
-            <Button variant="outline" onClick={handlePing} disabled={!selectedPrinter}>
-              <Activity className="h-4 w-4 mr-2" />
-              Network Ping
-            </Button>
-            
-            <Button variant="outline" onClick={handleOpenWebUI} disabled={!selectedPrinter}>
-              <Globe className="h-4 w-4 mr-2" />
-              Open WebUI
-            </Button>
+            {connectionStatus.status === 'no-printer' && (
+              <div className="text-sm text-muted-foreground text-center">
+                Select a printer in the Zebra Network Printing panel below
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
 
-      {/* Preview */}
-      <Card>
-        <CardHeader>
-          <CardTitle>ZPL Preview</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <pre className="bg-muted p-4 rounded-md text-sm overflow-auto max-h-64">
-            {generateCurrentZPL()}
-          </pre>
-        </CardContent>
-      </Card>
+      {/* Diagnostics Panel */}
+      <div className="lg:col-span-2">
+        <ZebraDiagnosticsPanel />
+      </div>
+
+      {/* ZPL Preview */}
+      <div className="lg:col-span-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>ZPL Preview</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <pre className="bg-muted p-4 rounded-md text-sm overflow-auto max-h-64 font-mono">
+              {generateCurrentZPL()}
+            </pre>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
