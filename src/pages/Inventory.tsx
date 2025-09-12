@@ -309,6 +309,11 @@ const Inventory = () => {
     }
   };
 
+  const handleDummyPrint = async (printerId: number) => {
+    // This function is never called when allowDefaultOnly=true
+    return Promise.resolve();
+  };
+
   const handlePrintWithPrinter = async (printerId: number) => {
     if (!printData) return;
     
@@ -660,6 +665,19 @@ const Inventory = () => {
               </Link>
               <div className="h-6 w-px bg-border" />
               <h1 className="text-lg font-semibold">Inventory</h1>
+              
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => {
+                  setPrintData(null);
+                  setShowPrinterDialog(true);
+                }}
+                className="ml-auto"
+              >
+                <Printer className="w-4 h-4 mr-2" />
+                Printer Settings
+              </Button>
             </div>
             <Navigation showMobileMenu={true} />
           </div>
@@ -1212,8 +1230,9 @@ const Inventory = () => {
         <PrinterSelectionDialog
           open={showPrinterDialog}
           onOpenChange={setShowPrinterDialog}
-          onPrint={handlePrintWithPrinter}
-          title="Select Printer for Barcode"
+          onPrint={printData ? handlePrintWithPrinter : handleDummyPrint}
+          title={printData ? "Select Printer for Barcode" : "Select Default Printer"}
+          allowDefaultOnly={!printData}
         />
       </div>
     </>
