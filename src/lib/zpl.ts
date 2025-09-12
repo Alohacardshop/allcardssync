@@ -1,13 +1,274 @@
-// ZPL (Zebra Programming Language) generator for 2x1 inch labels
+// ZPL (Zebra Programming Language) generator - Single source of truth
 
+// Element types for ZPL generation
+export interface TextElement {
+  type: 'text';
+  x: number;
+  y: number;
+  text: string;
+  font?: string; // A, B, C, D, E, F, G, H, 0
+  size?: number;
+  rotation?: 0 | 90 | 180 | 270;
+}
+
+export interface BarcodeElement {
+  type: 'barcode';
+  x: number;
+  y: number;
+  data: string;
+  height?: number;
+  width?: number;
+  showText?: boolean;
+  barcodeType?: 'CODE128' | 'CODE39' | 'EAN13' | 'EAN8';
+}
+
+export interface QRElement {
+  type: 'qr';
+  x: number;
+  y: number;
+  data: string;
+  size?: number;
+  errorLevel?: 'L' | 'M' | 'Q' | 'H';
+}
+
+export interface BoxElement {
+  type: 'box';
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  thickness?: number;
+}
+
+export interface LineElement {
+  type: 'line';
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  thickness?: number;
+}
+
+export type ZPLElement = TextElement | BarcodeElement | QRElement | BoxElement | LineElement;
+
+// ZPL Options interface
+export interface ZPLOptions {
+  widthMm?: number;
+  heightMm?: number;
+  widthDots?: number;
+  heightDots?: number;
+  dpi?: 203 | 300;
+  speedIps?: number; // Print speed in inches per second (1-14)
+  darkness?: number; // 0-30
+  copies?: number;
+  elements?: ZPLElement[];
+}
+
+// Helper function: Convert mm to dots
+export function mmToDots(mm: number, dpi: number = 203): number {
+  return Math.round((mm / 25.4) * dpi);
+}
+
+// Helper function: Convert points to dots (keeping for compatibility)
+export function ptToDots(mm: number, dpi: number = 203): number {
+  return mmToDots(mm, dpi);
+}
+
+// Helper function: Create text element
+export function text(
+  x: number, 
+  y: number, 
+  text: string, 
+  font: string = 'A', 
+  size: number = 30, 
+  rotation: 0 | 90 | 180 | 270 = 0
+): TextElement {
+  return {
+    type: 'text',
+    x,
+    y,
+    text,
+    font,
+    size,
+    rotation
+  };
+}
+
+// Helper function: Create CODE128 barcode element
+export function barcode128(
+  x: number,
+  y: number,
+  data: string,
+  height: number = 80,
+  width: number = 2,
+  showText: boolean = true
+): BarcodeElement {
+  return {
+    type: 'barcode',
+    x,
+    y,
+    data,
+    height,
+    width,
+    showText,
+    barcodeType: 'CODE128'
+  };
+}
+
+// Helper function: Create QR code element
+export function qr(
+  x: number,
+  y: number,
+  data: string,
+  size: number = 5,
+  errorLevel: 'L' | 'M' | 'Q' | 'H' = 'M'
+): QRElement {
+  return {
+    type: 'qr',
+    x,
+    y,
+    data,
+    size,
+    errorLevel
+  };
+}
+
+// Helper function: Create box element
+export function box(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  thickness: number = 1
+): BoxElement {
+  return {
+    type: 'box',
+    x,
+    y,
+    width,
+    height,
+    thickness
+  };
+}
+
+// Helper function: Create line element
+export function line(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  thickness: number = 1
+): LineElement {
+  return {
+    type: 'line',
+    x,
+    y,
+    width,
+    height,
+    thickness
+  };
+}
+
+// Main ZPL generation function
+export function buildZPL(options: ZPLOptions = {}): string {
+  const {
+    widthMm,
+    heightMm,
+    widthDots,
+    heightDots,
+    dpi = 203,
+    speedIps = 4,
+    darkness = 10,
+    copies = 1,
+    elements = []
+  } = options;
+
+  // Calculate label dimensions in dots
+  const labelWidthDots = widthDots ?? (widthMm ? mmToDots(widthMm, dpi) : mmToDots(50.8, dpi)); // Default 2 inches
+  const labelHeightDots = heightDots ?? (heightMm ? mmToDots(heightMm, dpi) : mmToDots(25.4, dpi)); // Default 1 inch
+
+  const commands: string[] = [];
+
+  // Header commands (always emit these)
+  commands.push('^XA'); // Start format
+  commands.push(`^MD${darkness}`); // Media darkness
+  commands.push(`^PR${speedIps}`); // Print rate (speed)
+  commands.push(`^LL${labelHeightDots}`); // Label length
+
+  // Process elements
+  elements.forEach(element => {
+    switch (element.type) {
+      case 'text':
+        commands.push(`^FO${element.x},${element.y}`); // Field origin
+        const rotChar = element.rotation === 90 ? 'R' : element.rotation === 180 ? 'I' : element.rotation === 270 ? 'B' : 'N';
+        commands.push(`^A${element.font || 'A'}${rotChar},${element.size || 30},${element.size || 30}`); // Font
+        commands.push(`^FD${element.text}^FS`); // Field data
+        break;
+
+      case 'barcode':
+        commands.push(`^FO${element.x},${element.y}`); // Field origin
+        let barcodeCmd = '^BC'; // Default to CODE128
+        switch (element.barcodeType) {
+          case 'CODE39': barcodeCmd = '^B3'; break;
+          case 'EAN13': barcodeCmd = '^BE'; break;
+          case 'EAN8': barcodeCmd = '^B8'; break;
+        }
+        const showTextFlag = element.showText !== false ? 'Y' : 'N';
+        commands.push(`${barcodeCmd}N,${element.height || 80},${showTextFlag},N,N`);
+        commands.push(`^FD${element.data}^FS`);
+        break;
+
+      case 'qr':
+        commands.push(`^FO${element.x},${element.y}`); // Field origin
+        commands.push(`^BQN,2,${element.size || 5}`); // QR code
+        commands.push(`^FDMM,A${element.errorLevel || 'M'},${element.data}^FS`);
+        break;
+
+      case 'box':
+        commands.push(`^FO${element.x},${element.y}`); // Field origin
+        commands.push(`^GB${element.width},${element.height},${element.thickness || 1}^FS`);
+        break;
+
+      case 'line':
+        commands.push(`^FO${element.x},${element.y}`); // Field origin
+        commands.push(`^GB${element.width},${element.height},${element.thickness || 1}^FS`);
+        break;
+    }
+  });
+
+  // Footer commands (always emit these)
+  commands.push(`^PQ${copies}`); // Print quantity
+  commands.push('^XZ'); // End format
+
+  return commands.join('\n');
+}
+
+// ZPL generation with optional cut at end
+export function buildZPLWithCut(options: ZPLOptions = {}, cutAtEnd: boolean = false): string {
+  const zpl = buildZPL(options);
+  
+  if (cutAtEnd) {
+    // Insert ^MMB before ^XZ
+    const lines = zpl.split('\n');
+    const xzIndex = lines.findIndex(line => line === '^XZ');
+    if (xzIndex !== -1) {
+      lines.splice(xzIndex, 0, '^MMB'); // Insert cut command before ^XZ
+    }
+    return lines.join('\n');
+  }
+  
+  return zpl;
+}
+
+// Legacy compatibility exports (keep existing functionality working)
 export const LABEL_WIDTH_IN = 2;
 export const LABEL_HEIGHT_IN = 1;
 export const DPI = 203;
 
-// Convert inches to dots at 203 DPI
 export const dots = (inches: number): number => Math.round(inches * DPI);
 
-export interface ZPLOptions {
+// Legacy ZPL Options interface for backward compatibility
+export interface LegacyZPLOptions {
   textLines?: Array<{
     text: string;
     x?: number;
@@ -37,107 +298,12 @@ export interface ZPLOptions {
     width: number;
     height: number;
   }>;
-  printDensity?: number; // 0-30, default 8
-  printSpeed?: number; // 1-14, default 6
+  printDensity?: number;
+  printSpeed?: number;
   labelLength?: number;
 }
 
-export function buildZPL(options: ZPLOptions = {}): string {
-  const {
-    textLines = [],
-    qrcode,
-    barcode,
-    lines = [],
-    printDensity = 8,
-    printSpeed = 6,
-    labelLength = dots(LABEL_HEIGHT_IN)
-  } = options;
-
-  const commands: string[] = [];
-
-  // Header commands
-  commands.push('^XA'); // Start format
-  commands.push(`^LH0,0`); // Label home position
-  commands.push(`^LL${labelLength}`); // Label length
-  commands.push(`^PR${printSpeed}`); // Print rate (speed)
-  commands.push(`^MD${printDensity}`); // Media darkness (density)
-
-  // Add text elements
-  textLines.forEach(({ text, x = 10, y = 20, fontSize = 30, rotation = 0, font = 'A' }) => {
-    // ZPL field commands
-    commands.push(`^FO${x},${y}`); // Field origin
-    if (rotation !== 0) {
-      commands.push(`^A${font}${rotation === 90 ? 'R' : rotation === 180 ? 'I' : rotation === 270 ? 'B' : 'N'},${fontSize},${fontSize}`);
-    } else {
-      commands.push(`^A${font}N,${fontSize},${fontSize}`); // Font
-    }
-    commands.push(`^FD${text}^FS`); // Field data
-  });
-
-  // Add QR code if specified
-  if (qrcode) {
-    const { data, x = 10, y = 80, size = 5, errorLevel = 'M' } = qrcode;
-    commands.push(`^FO${x},${y}`);
-    commands.push(`^BQN,2,${size}`); // QR code with normal orientation, model 2, size
-    commands.push(`^FDMM,A${errorLevel},${data}^FS`);
-  }
-
-  // Add barcode if specified
-  if (barcode) {
-    const { data, x = 10, y = 80, width = 2, height = 50, type = 'CODE128' } = barcode;
-    commands.push(`^FO${x},${y}`);
-    
-    let barcodeCmd = '^BC';
-    switch (type) {
-      case 'CODE128':
-        barcodeCmd = '^BC';
-        break;
-      case 'CODE39':
-        barcodeCmd = '^B3';
-        break;
-      case 'EAN13':
-        barcodeCmd = '^BE';
-        break;
-      case 'EAN8':
-        barcodeCmd = '^B8';
-        break;
-    }
-    
-    commands.push(`${barcodeCmd}N,${height},Y,N,N`);
-    commands.push(`^FD${data}^FS`);
-  }
-
-  // Add horizontal/vertical lines (graphic boxes)
-  lines.forEach(({ x, y, width, height }) => {
-    commands.push(`^FO${x},${y}`);
-    commands.push(`^GB${width},${height},${height < width ? height : width}^FS`);
-  });
-
-  // Print command
-  commands.push('^PQ1,0,1,Y'); // Print quantity
-  commands.push('^XZ'); // End format
-
-  return commands.join('\n');
-}
-
-export function buildSampleLabel(): string {
-  return buildZPL({
-    textLines: [
-      { text: 'ALOHA CARD SHOP', x: 10, y: 20, fontSize: 25 }
-    ],
-    qrcode: {
-      data: 'https://alohacardshop.com',
-      x: 10,
-      y: 80,
-      size: 4
-    },
-    lines: [
-      { x: 10, y: 190, width: 386, height: 2 }
-    ]
-  });
-}
-
-// Unified ZPL generator with field selection
+// Keep existing layout interfaces for compatibility
 export interface LabelFieldConfig {
   includeTitle: boolean;
   includeSku: boolean;
@@ -147,7 +313,6 @@ export interface LabelFieldConfig {
   barcodeMode: 'qr' | 'barcode' | 'none';
 }
 
-// Layout-based ZPL generation
 export interface LabelFieldLayout {
   visible: boolean;
   x: number;
@@ -179,6 +344,88 @@ export interface LabelLayout {
   };
 }
 
+// Legacy buildZPL function for existing code compatibility 
+function buildLegacyZPL(options: LegacyZPLOptions = {}): string {
+  const {
+    textLines = [],
+    qrcode,
+    barcode,
+    lines = [],
+    printDensity = 8,
+    printSpeed = 6,
+    labelLength = dots(LABEL_HEIGHT_IN)
+  } = options;
+
+  const elements: ZPLElement[] = [];
+
+  // Convert legacy textLines to new format
+  textLines.forEach(({ text, x = 10, y = 20, fontSize = 30, rotation = 0, font = 'A' }) => {
+    elements.push({
+      type: 'text',
+      x,
+      y,
+      text,
+      font,
+      size: fontSize,
+      rotation
+    });
+  });
+
+  // Convert legacy qrcode to new format
+  if (qrcode) {
+    elements.push({
+      type: 'qr',
+      x: qrcode.x || 10,
+      y: qrcode.y || 80,
+      data: qrcode.data,
+      size: qrcode.size || 5,
+      errorLevel: qrcode.errorLevel || 'M'
+    });
+  }
+
+  // Convert legacy barcode to new format
+  if (barcode) {
+    elements.push({
+      type: 'barcode',
+      x: barcode.x || 10,
+      y: barcode.y || 80,
+      data: barcode.data,
+      height: barcode.height || 50,
+      width: barcode.width || 2,
+      barcodeType: barcode.type || 'CODE128',
+      showText: true
+    });
+  }
+
+  // Convert legacy lines to new format
+  lines.forEach(({ x, y, width, height }) => {
+    elements.push({
+      type: 'line',
+      x,
+      y,
+      width,
+      height,
+      thickness: height < width ? height : width
+    });
+  });
+
+  return buildZPL({
+    heightDots: labelLength,
+    darkness: printDensity,
+    speedIps: printSpeed,
+    elements
+  });
+}
+
+export function buildSampleLabel(): string {
+  return buildZPL({
+    elements: [
+      text(20, 20, 'ALOHA CARD SHOP', 'A', 30),
+      barcode128(50, 80, '123456789012', 80, 2, true)
+    ]
+  });
+}
+
 export function generateZPLFromLayout(
   layout: LabelLayout,
   data: {
@@ -191,7 +438,7 @@ export function generateZPLFromLayout(
   },
   zplSettings?: { printDensity?: number; printSpeed?: number; labelLength?: number }
 ): string {
-  const textLines: ZPLOptions['textLines'] = [];
+  const textLines: LegacyZPLOptions['textLines'] = [];
 
   // Add text fields based on layout
   if (layout.title.visible && data.title) {
@@ -242,18 +489,16 @@ export function generateZPLFromLayout(
     });
   }
 
-  // Use layout printer settings if no overrides provided
   const effectiveSettings = {
     ...layout.printer,
     ...zplSettings
   };
 
-  const options: ZPLOptions = {
+  const options: LegacyZPLOptions = {
     textLines,
     ...effectiveSettings
   };
 
-  // Add barcode/QR based on layout
   if (layout.barcode.mode !== 'none' && data.barcode) {
     if (layout.barcode.mode === 'qr') {
       options.qrcode = {
@@ -274,18 +519,16 @@ export function generateZPLFromLayout(
     }
   }
 
-  return buildZPL(options);
+  return buildLegacyZPL(options);
 }
 
-// Calculate optimal font size for text to fit within given width (ZPL version)
 function calculateOptimalFontSize(
   text: string,
   maxWidth: number,
   maxFontSize: number = 50,
   minFontSize: number = 15
 ): number {
-  // Approximate character width per font size (in dots at 203 DPI for ZPL)
-  const charWidthRatio = 0.6; // ZPL font width ratio
+  const charWidthRatio = 0.6;
   
   for (let fontSize = maxFontSize; fontSize >= minFontSize; fontSize -= 5) {
     const estimatedWidth = text.length * fontSize * charWidthRatio;
@@ -309,21 +552,16 @@ export function generateBoxedLayoutZPL(
   fieldConfig: LabelFieldConfig,
   zplSettings?: { printDensity?: number; printSpeed?: number; labelLength?: number }
 ): string {
-  const textLines: ZPLOptions['textLines'] = [];
+  const textLines: LegacyZPLOptions['textLines'] = [];
   
-  // Label dimensions in dots (2"x1" at 203 DPI)
-  const labelWidth = dots(LABEL_WIDTH_IN);  // 406 dots
-  const labelHeight = dots(LABEL_HEIGHT_IN); // 203 dots
+  const labelWidth = dots(LABEL_WIDTH_IN);
+  const labelHeight = dots(LABEL_HEIGHT_IN);
   
-  // Box dimensions and positions
   const topBoxHeight = 50;
   const titleBoxHeight = 60;
   const barcodeBoxHeight = labelHeight - topBoxHeight - titleBoxHeight;
-  
-  // Top row boxes (condition and price)
   const topBoxWidth = Math.floor(labelWidth / 2) - 5;
   
-  // Condition box (top left)
   if (fieldConfig.includeCondition && data.condition) {
     const conditionFontSize = calculateOptimalFontSize(data.condition, topBoxWidth - 10, 40, 15);
     textLines.push({
@@ -334,7 +572,6 @@ export function generateBoxedLayoutZPL(
     });
   }
   
-  // Price box (top right)
   if (fieldConfig.includePrice && data.price) {
     const priceText = data.price.startsWith('$') ? data.price : `$${data.price}`;
     const priceFontSize = calculateOptimalFontSize(priceText, topBoxWidth - 10, 40, 15);
@@ -346,7 +583,6 @@ export function generateBoxedLayoutZPL(
     });
   }
 
-  // Title box (bottom)
   if (fieldConfig.includeTitle && data.title) {
     const titleFontSize = calculateOptimalFontSize(data.title, labelWidth - 10, 35, 15);
     textLines.push({
@@ -357,12 +593,11 @@ export function generateBoxedLayoutZPL(
     });
   }
 
-  const options: ZPLOptions = {
+  const options: LegacyZPLOptions = {
     textLines,
     ...zplSettings
   };
 
-  // Barcode in middle section
   if (fieldConfig.barcodeMode !== 'none' && data.barcode) {
     const barcodeY = topBoxHeight + 5;
     const barcodeX = 35;
@@ -392,7 +627,6 @@ export function generateBoxedLayoutZPL(
       };
     }
     
-    // Add SKU below barcode if included
     if (fieldConfig.includeSku && data.sku) {
       textLines.push({
         text: `SKU: ${data.sku}`,
@@ -403,5 +637,5 @@ export function generateBoxedLayoutZPL(
     }
   }
   
-  return buildZPL(options);
+  return buildLegacyZPL(options);
 }
