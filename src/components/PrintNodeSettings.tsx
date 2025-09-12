@@ -47,8 +47,10 @@ export function PrintNodeSettings() {
     try {
       const { error } = await supabase.functions.invoke('set-system-setting', {
         body: { 
-          key: 'PRINTNODE_API_KEY',
-          value: apiKey.trim()
+          keyName: 'PRINTNODE_API_KEY',
+          keyValue: apiKey.trim(),
+          description: 'PrintNode API key for cloud printing',
+          category: 'printing'
         }
       });
 
