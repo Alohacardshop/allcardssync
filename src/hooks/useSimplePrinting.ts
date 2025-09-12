@@ -6,6 +6,7 @@
 import { useState, useCallback } from 'react';
 import { toast } from 'sonner';
 import { printZPLDirect, testPrinterConnection, DEFAULT_ZD410_PRINTER, type PrinterConnection, type PrintResult } from '@/lib/directLocalPrint';
+import { printViaLocalBridge, testLocalBridge, DEFAULT_BRIDGE_CONFIG, type LocalBridgeConfig } from '@/lib/localPrintBridge';
 
 export interface PrintState {
   isLoading: boolean;
@@ -45,7 +46,7 @@ export function useSimplePrinting() {
     }
   }, []);
 
-  // Print ZPL directly
+  // Print ZPL with fallback to local bridge
   const print = useCallback(async (zpl: string, copies: number = 1): Promise<PrintResult> => {
     setPrintState(prev => ({ ...prev, isLoading: true }));
     
@@ -54,7 +55,22 @@ export function useSimplePrinting() {
     try {
       toast.info(`Sending ${copies} label(s) to ${printer.name || printer.ip}...`);
       
-      const result = await printZPLDirect(zpl, printer, copies);
+      // Try direct HTTP first
+      let result = await printZPLDirect(zpl, printer, copies);
+      
+      // If direct fails due to CORS, try local bridge
+      if (!result.success && (result.error?.includes('CORS') || result.error?.includes('Failed to fetch'))) {
+        toast.info('Direct printing blocked, trying local bridge...');
+        
+        const bridgeConfig: LocalBridgeConfig = {
+          ...DEFAULT_BRIDGE_CONFIG,
+          printerIp: printer.ip,
+          printerPort: printer.port
+        };
+        
+        const bridgeResult = await printViaLocalBridge(zpl, bridgeConfig, copies);
+        result = bridgeResult;
+      }
       
       setPrintState({
         isLoading: false,
@@ -66,16 +82,27 @@ export function useSimplePrinting() {
       } else {
         toast.error(`Print failed: ${result.error}`);
         
-        // Offer quick troubleshooting
+        // Offer troubleshooting based on error type
         setTimeout(() => {
-          toast.info('Troubleshooting:', {
-            description: 'Check: 1) Printer power 2) Network connection 3) Same WiFi network',
-            duration: 10000,
-            action: {
-              label: 'Open Printer Web UI',
-              onClick: () => window.open(`http://${printer.ip}`, '_blank')
-            }
-          });
+          if (result.error?.includes('Bridge not running')) {
+            toast.info('Local Print Bridge needed:', {
+              description: 'Run: cd local-print-bridge && npm install && npm start',
+              duration: 15000,
+              action: {
+                label: 'Open Printer Web UI',
+                onClick: () => window.open(`http://${printer.ip}`, '_blank')
+              }
+            });
+          } else {
+            toast.info('Troubleshooting:', {
+              description: 'Check: 1) Printer power 2) Network connection 3) Same WiFi network',
+              duration: 10000,
+              action: {
+                label: 'Open Printer Web UI',
+                onClick: () => window.open(`http://${printer.ip}`, '_blank')
+              }
+            });
+          }
         }, 1000);
       }
       
