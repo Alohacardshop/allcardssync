@@ -1,5 +1,24 @@
-// Sample ZPL strings for testing
-import { buildZPL, text, barcode128 } from './zpl';
+// ZPL sample generation for testing
+import { buildZPL, type ZPLOptions, type ZPLElement, mmToDots } from './zpl';
+
+export function generateSampleZPL(): string {
+  const elements: ZPLElement[] = [
+    { kind: 'text', x: 20, y: 20, data: 'TEST LABEL', font: 'A', height: 30, width: 30 },
+    { kind: 'text', x: 20, y: 60, data: 'Zebra ZD410', font: 'A', height: 20, width: 20 },
+    { kind: 'barcode128', x: 20, y: 100, height: 60, humanReadable: true, data: '123456789' }
+  ];
+
+  const options: ZPLOptions = {
+    dpi: 203,
+    widthDots: mmToDots(50.8, 203), // 2 inches
+    heightDots: mmToDots(25.4, 203), // 1 inch
+    speedIps: 4,
+    darkness: 10,
+    elements
+  };
+
+  return buildZPL(options);
+}
 
 // Simple test label
 export const simpleTestLabel = `^XA
@@ -8,17 +27,6 @@ export const simpleTestLabel = `^XA
 ^FO20,70^BCN,80,Y,N,N^FD123456789012^FS
 ^PQ1
 ^XZ`;
-
-// Generated test label using new ZPL builder
-export const generatedTestLabel = buildZPL({
-  heightDots: 203,
-  speedIps: 4,
-  darkness: 10,
-  elements: [
-    text(20, 20, 'ALOHA CARD SHOP', 'A', 30),
-    barcode128(20, 70, '123456789012', 80, 2, true)
-  ]
-});
 
 // Status query command
 export const printerStatusQuery = '^XA^HH^XZ';

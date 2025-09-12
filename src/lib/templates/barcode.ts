@@ -1,5 +1,5 @@
 // Barcode label template for 2×1 inch labels
-import { buildZPLWithCut, text, barcode128, mmToDots } from '../zpl';
+import { buildZPLWithCut, getLabelSizeInDots, type ZPLElement, type Dpi } from '../zpl';
 
 export interface BarcodeData {
   barcode: string;
@@ -10,11 +10,12 @@ export interface BarcodeData {
 }
 
 export interface BarcodeOptions {
-  dpi?: 203 | 300;
+  dpi?: Dpi;
   speedIps?: number;
   darkness?: number;
   copies?: number;
   cutAtEnd?: boolean;
+  hasCutter?: boolean;
   barcodeHeight?: number;
 }
 
@@ -25,47 +26,84 @@ export function barcodeLabel(data: BarcodeData, opts: BarcodeOptions = {}): stri
     darkness = 10,
     copies = 1,
     cutAtEnd = true,
+    hasCutter = false,
     barcodeHeight = 60
   } = opts;
 
-  const labelWidth = mmToDots(50.8, dpi); // 2 inches
-  const labelHeight = mmToDots(25.4, dpi); // 1 inch
+  const { widthDots, heightDots } = getLabelSizeInDots('2x1', dpi);
+
+  const elements: ZPLElement[] = [];
+
+  // Title (if provided)
+  if (data.title) {
+    elements.push({
+      kind: 'text',
+      x: 10,
+      y: 10,
+      font: 'A',
+      height: 24,
+      width: 24,
+      data: data.title.substring(0, 30)
+    });
+  }
+
+  // Main barcode (centered)
+  const barcodeX = Math.max(10, (widthDots - 200) / 2);
+  const barcodeY = data.title ? 35 : 20;
+  elements.push({
+    kind: 'barcode128',
+    x: barcodeX,
+    y: barcodeY,
+    height: barcodeHeight,
+    humanReadable: true,
+    data: data.barcode
+  });
+
+  // Description (bottom)
+  if (data.description) {
+    elements.push({
+      kind: 'text',
+      x: 10,
+      y: heightDots - 25,
+      font: 'A',
+      height: 16,
+      width: 16,
+      data: data.description.substring(0, 35)
+    });
+  }
+
+  // SKU (bottom right)
+  if (data.sku) {
+    elements.push({
+      kind: 'text',
+      x: widthDots - 100,
+      y: heightDots - 25,
+      font: 'A',
+      height: 16,
+      width: 16,
+      data: data.sku
+    });
+  }
 
   return buildZPLWithCut({
-    widthMm: 50.8,
-    heightMm: 25.4,
     dpi,
+    widthDots,
+    heightDots,
     speedIps,
     darkness,
     copies,
-    elements: [
-      // Title (if provided)
-      ...(data.title ? [text(10, 10, data.title.substring(0, 30), 'A', 24, 0)] : []),
-      
-      // Main barcode (centered)
-      barcode128(
-        Math.max(10, (labelWidth - 200) / 2), 
-        data.title ? 35 : 20, 
-        data.barcode, 
-        barcodeHeight, 
-        3, 
-        true
-      ),
-      
-      // Description (bottom)
-      ...(data.description ? [text(10, labelHeight - 25, data.description.substring(0, 35), 'A', 16, 0)] : []),
-      
-      // SKU (bottom right)
-      ...(data.sku ? [text(labelWidth - 100, labelHeight - 25, data.sku, 'A', 16, 0)] : [])
-    ]
-  }, cutAtEnd);
+    elements
+  }, cutAtEnd ? 'end-of-job' : 'none', hasCutter);
 }
+
+// Preset functions for common use cases
 
 // Large barcode variant for warehouse use
 export function largeBarcodeLabel(data: BarcodeData, opts: BarcodeOptions = {}): string {
   return barcodeLabel(data, {
     barcodeHeight: 80,
     darkness: 15,
+    hasCutter: true,
     ...opts
   });
 }
@@ -75,6 +113,7 @@ export function compactBarcodeLabel(data: BarcodeData, opts: BarcodeOptions = {}
   return barcodeLabel(data, {
     barcodeHeight: 45,
     darkness: 10,
+    hasCutter: false,
     ...opts
   });
 }

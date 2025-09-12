@@ -1,5 +1,5 @@
 // Price tag template for 2×1 inch labels
-import { buildZPLWithCut, text, barcode128, mmToDots } from '../zpl';
+import { buildZPLWithCut, getLabelSizeInDots, type ZPLElement, type Dpi } from '../zpl';
 
 export interface PriceTagData {
   title: string;
@@ -11,11 +11,12 @@ export interface PriceTagData {
 }
 
 export interface PriceTagOptions {
-  dpi?: 203 | 300;
+  dpi?: Dpi;
   speedIps?: number;
   darkness?: number;
   copies?: number;
   cutAtEnd?: boolean;
+  hasCutter?: boolean;
 }
 
 export function priceTag(data: PriceTagData, opts: PriceTagOptions = {}): string {
@@ -24,45 +25,85 @@ export function priceTag(data: PriceTagData, opts: PriceTagOptions = {}): string
     speedIps = 4,
     darkness = 10,
     copies = 1,
-    cutAtEnd = true
+    cutAtEnd = true,
+    hasCutter = false
   } = opts;
 
-  const labelWidth = mmToDots(50.8, dpi); // 2 inches
-  const labelHeight = mmToDots(25.4, dpi); // 1 inch
+  const { widthDots, heightDots } = getLabelSizeInDots('2x1', dpi);
+
+  const elements: ZPLElement[] = [
+    // Title (top section)
+    { kind: 'text', x: 10, y: 10, font: 'A', height: 28, width: 28, data: data.title.substring(0, 25) },
+    
+    // Price (large, prominent)
+    { 
+      kind: 'text', 
+      x: widthDots - 120, 
+      y: 15, 
+      font: '0', 
+      height: 35, 
+      width: 35, 
+      data: data.price.startsWith('$') ? data.price : `$${data.price}` 
+    }
+  ];
+
+  // Add condition if provided
+  if (data.condition) {
+    elements.push({
+      kind: 'text',
+      x: widthDots - 120,
+      y: 55,
+      font: 'A',
+      height: 18,
+      width: 18,
+      data: data.condition
+    });
+  }
+
+  // Add SKU if provided  
+  if (data.sku) {
+    elements.push({
+      kind: 'text',
+      x: 10,
+      y: heightDots - 30,
+      font: 'A',
+      height: 16,
+      width: 16,
+      data: `SKU: ${data.sku}`
+    });
+  }
+
+  // Add barcode if provided
+  if (data.barcode) {
+    elements.push({
+      kind: 'barcode128',
+      x: 10,
+      y: heightDots - 80,
+      height: 40,
+      humanReadable: false,
+      data: data.barcode
+    });
+  }
 
   return buildZPLWithCut({
-    widthMm: 50.8,
-    heightMm: 25.4,
     dpi,
+    widthDots,
+    heightDots,
     speedIps,
     darkness,
     copies,
-    elements: [
-      // Title (top section)
-      text(10, 10, data.title.substring(0, 25), 'A', 28, 0),
-      
-      // Price (large, prominent)
-      text(labelWidth - 80, 15, data.price.startsWith('$') ? data.price : `$${data.price}`, 'B', 35, 0),
-      
-      // Condition (small, top right)
-      ...(data.condition ? [text(labelWidth - 80, 45, data.condition, 'A', 18, 0)] : []),
-      
-      // SKU (bottom left)
-      ...(data.sku ? [text(10, labelHeight - 30, `SKU: ${data.sku}`, 'A', 16, 0)] : []),
-      
-      // Barcode (bottom center)
-      ...(data.barcode ? [barcode128(10, labelHeight - 60, data.barcode, 40, 2, false)] : [])
-    ]
-  }, cutAtEnd);
+    elements
+  }, cutAtEnd ? 'end-of-job' : 'none', hasCutter);
 }
 
-// Preset for common price tag
+// Standard preset functions for common use cases
 export function standardPriceTag(data: PriceTagData, opts: PriceTagOptions = {}): string {
   return priceTag(data, {
     dpi: 203,
     speedIps: 4,
     darkness: 12,
     cutAtEnd: true,
+    hasCutter: true,
     ...opts
   });
 }
