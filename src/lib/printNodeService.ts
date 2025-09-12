@@ -26,7 +26,7 @@ class PrintNodeService {
   private async getApiKey(): Promise<string | null> {
     try {
       const { data, error } = await supabase.functions.invoke('get-system-setting', {
-        body: { key: 'PRINTNODE_API_KEY' }
+        body: { keyName: 'PRINTNODE_API_KEY' }
       });
 
       if (error) {
