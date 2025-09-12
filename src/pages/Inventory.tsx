@@ -352,7 +352,7 @@ const Inventory = () => {
             card_number: row.card_number,
             variant: row.variant,
             category_tag: row.game || 'Pokemon',
-            image_url: row.catalog_snapshot?.imageUrl || row.psa_snapshot?.imageUrl || undefined,
+            image_url: row.catalog_snapshot?.image_url || row.psa_snapshot?.image_url || undefined,
             price: row.price ?? undefined,
             cost: row.cost ?? undefined,
             grade: row.grade,
