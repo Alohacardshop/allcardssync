@@ -48,18 +48,23 @@ export function useSimplePrinting() {
 
   // Print ZPL with fallback to local bridge
   const print = useCallback(async (zpl: string, copies: number = 1): Promise<PrintResult> => {
+    console.log('🖨️ Starting print process...', { copies, zplLength: zpl.length });
     setPrintState(prev => ({ ...prev, isLoading: true }));
     
     const printer = getSavedPrinter();
+    console.log('🖨️ Using printer:', printer);
     
     try {
       toast.info(`Sending ${copies} label(s) to ${printer.name || printer.ip}...`);
       
       // Try direct HTTP first
+      console.log('🖨️ Attempting direct HTTP print...');
       let result = await printZPLDirect(zpl, printer, copies);
+      console.log('🖨️ Direct HTTP result:', result);
       
       // If direct fails due to CORS, try local bridge
       if (!result.success && (result.error?.includes('CORS') || result.error?.includes('Failed to fetch'))) {
+        console.log('🖨️ Direct failed, trying local bridge...');
         toast.info('Direct printing blocked, trying local bridge...');
         
         const bridgeConfig: LocalBridgeConfig = {
@@ -69,6 +74,7 @@ export function useSimplePrinting() {
         };
         
         const bridgeResult = await printViaLocalBridge(zpl, bridgeConfig, copies);
+        console.log('🖨️ Bridge result:', bridgeResult);
         result = bridgeResult;
       }
       

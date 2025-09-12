@@ -29,6 +29,7 @@ export async function printZPLDirect(
     
     // Prepare ZPL with copies
     const finalZPL = copies > 1 ? zpl.repeat(copies) : zpl;
+    console.log('🖨️ Attempting HTTP POST to:', printUrl);
     
     const response = await fetch(printUrl, {
       method: 'POST',
@@ -53,6 +54,7 @@ export async function printZPLDirect(
     }
 
   } catch (error) {
+    console.log('🖨️ Direct print error:', error);
     if (error instanceof Error && error.message.includes('Failed to fetch')) {
       return {
         success: false,
