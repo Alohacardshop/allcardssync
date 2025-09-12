@@ -53,11 +53,11 @@ export async function printZPLDirect(
     }
 
   } catch (error) {
-    if (error instanceof Error && error.name === 'TypeError' && error.message.includes('CORS')) {
+    if (error instanceof Error && error.message.includes('Failed to fetch')) {
       return {
         success: false,
-        error: 'CORS blocked - try raw TCP connection',
-        details: `Browser blocked connection to ${printer.ip}`
+        error: 'CORS/Network blocked',
+        details: `Browser security blocks direct access to ${printer.ip}. Try: 1) Use printer's web interface at http://${printer.ip} 2) Install Zebra Browser Print 3) Use local print bridge`
       };
     }
     
@@ -95,11 +95,11 @@ export async function testPrinterConnection(printer: PrinterConnection): Promise
     }
 
   } catch (error) {
-    if (error instanceof Error && error.name === 'TypeError' && error.message.includes('CORS')) {
+    if (error instanceof Error && error.message.includes('Failed to fetch')) {
       return {
         success: false,
-        error: 'CORS blocked - printer may still work for printing',
-        details: `Cannot test ${printer.ip} due to browser security`
+        error: 'CORS/Network blocked - this is normal',
+        details: `Browser security prevents testing ${printer.ip}, but printing may still work. Try printing a test label.`
       };
     }
     

@@ -108,7 +108,11 @@ export function useSimplePrinting() {
       if (result.success) {
         toast.success('Printer connection test successful!');
       } else {
-        toast.error(`Connection test failed: ${result.error}`);
+        if (result.error?.includes('CORS') || result.error?.includes('Failed to fetch')) {
+          toast.info('Connection test blocked by browser security - this is normal. Try printing a test label to verify the printer works.');
+        } else {
+          toast.error(`Connection test failed: ${result.error}`);
+        }
       }
       
       return result;
