@@ -5,9 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { Link, useLocation } from "react-router-dom";
@@ -16,11 +14,12 @@ import { ZebraPrinterPanel } from "@/components/ZebraPrinterPanel";
 import { useZebraNetwork } from "@/hooks/useZebraNetwork";
 import { ZebraPrinterSelectionDialog } from '@/components/ZebraPrinterSelectionDialog';
 import { useLocalStorageString } from "@/hooks/useLocalStorage";
-import { generateBoxedLayoutZPL, type LabelFieldConfig } from "@/lib/zpl";
+import { buildZPLWithCut, generateBoxedLayoutZPL, type LabelFieldConfig, mmToDots } from "@/lib/zpl";
+import { zebraNetworkService } from "@/lib/zebraNetworkService";
+import { testDirectPrinting } from "@/lib/zebraTestUtils";
 import { LabelPreviewCanvas } from "@/components/LabelPreviewCanvas";
 import { supabase } from "@/integrations/supabase/client";
 import { Settings, Eye, Printer, ChevronDown, Home, Save } from "lucide-react";
-import jsPDF from "jspdf";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useRawTemplates } from "@/hooks/useRawTemplates";
 
@@ -43,8 +42,8 @@ function useSEO(opts: { title: string; description?: string; canonical?: string 
 
 export default function LabelDesigner() {
   useSEO({ 
-    title: "Label Designer 2x1 in | Aloha", 
-    description: "Design and print 2x1 inch labels with barcode, SKU, price, and condition using TSPL for Rollo printers." 
+    title: "ZPL Label Designer 2x1 in | Aloha", 
+    description: "Design and print 2x1 inch labels with ZPL commands for Zebra thermal printers." 
   });
 
   const location = useLocation();
@@ -57,21 +56,26 @@ export default function LabelDesigner() {
 
   // Raw templates for Label Designer persistence
   const { templates: rawTemplates, defaultTemplate, saveTemplate, setAsDefault, loading: templatesLoading } = useRawTemplates();
-
-  // PDF is the only print format now
-  const printFormat = 'pdf';
   
   // Ref for accessing canvas export function
   const previewCanvasRef = useRef<any>(null);
 
-  // TSPL settings are no longer used for PDF printing
-  const tsplSettings = { density: 10, speed: 4, gapInches: 0 };
+  // ZPL Settings with localStorage persistence
+  const [labelWidthMm, setLabelWidthMm] = useLocalStorageString('zpl-width-mm', '50.8'); // 2 inches
+  const [labelHeightMm, setLabelHeightMm] = useLocalStorageString('zpl-height-mm', '25.4'); // 1 inch
+  const [zplDpi, setZplDpi] = useLocalStorageString('zpl-dpi', '203');
+  const [zplSpeed, setZplSpeed] = useLocalStorageString('zpl-speed', '4');
+  const [zplDarkness, setZplDarkness] = useLocalStorageString('zpl-darkness', '10');
+  const [zplCopies, setZplCopies] = useLocalStorageString('zpl-copies', '1');
+  const [cutAtEnd, setCutAtEnd] = useLocalStorageString('zpl-cut-at-end', 'true');
+  const [printerIp, setPrinterIp] = useLocalStorageString('zpl-printer-ip', '192.168.1.70');
+  const [printerPort, setPrinterPort] = useLocalStorageString('zpl-printer-port', '9100');
 
   // Field configuration with localStorage persistence
   const [includeTitle, setIncludeTitle] = useLocalStorageString('field-title', 'true');
   const [includeSku, setIncludeSku] = useLocalStorageString('field-sku', 'true');
   const [includePrice, setIncludePrice] = useLocalStorageString('field-price', 'true');
-  const [includeLot, setIncludeLot] = useLocalStorageString('field-lot', 'true');
+  const [includeLot, setIncludeLot] = useLocalStorageString('field-lot', 'false');
   const [includeCondition, setIncludeCondition] = useLocalStorageString('field-condition', 'true');
   const [barcodeMode, setBarcodeMode] = useLocalStorageString('barcode-mode', 'barcode');
   
@@ -86,8 +90,8 @@ export default function LabelDesigner() {
   const [condition, setCondition] = useState(location.state?.condition || "Near Mint");
   const [barcodeValue, setBarcodeValue] = useState(location.state?.barcode || location.state?.sku || "120979260");
   
-  // Preview TSPL
-  const [previewTspl, setPreviewTspl] = useState("");
+  // Preview ZPL
+  const [previewZpl, setPreviewZpl] = useState("");
 
   const labelData = {
     title,
@@ -102,24 +106,27 @@ export default function LabelDesigner() {
     includeTitle: includeTitle === 'true',
     includeSku: includeSku === 'true',
     includePrice: includePrice === 'true',
-    includeLot: false, // Lot numbers removed
+    includeLot: includeLot === 'true',
     includeCondition: includeCondition === 'true',
     barcodeMode: barcodeMode as 'qr' | 'barcode' | 'none'
   };
 
-  const zplSettings = { printDensity: 10, printSpeed: 4, labelLength: 203 };
+  const zplSettings = { 
+    printDensity: parseInt(zplDarkness), 
+    printSpeed: parseInt(zplSpeed), 
+    labelLength: mmToDots(parseFloat(labelHeightMm), parseInt(zplDpi)) 
+  };
 
   // Update preview when data or config changes
   useEffect(() => {
     try {
-      // Always use boxed layout
-      const tspl = generateBoxedLayoutZPL(labelData, fieldConfig, zplSettings);
-      setPreviewTspl(tspl);
+      const zpl = generateBoxedLayoutZPL(labelData, fieldConfig, zplSettings);
+      setPreviewZpl(zpl);
     } catch (error) {
-      console.error('Failed to generate TSPL preview:', error);
-      setPreviewTspl('// Error generating preview');
+      console.error('Failed to generate ZPL preview:', error);
+      setPreviewZpl('// Error generating preview');
     }
-  }, [labelData, fieldConfig, tsplSettings]);
+  }, [labelData, fieldConfig, zplSettings]);
 
   // Load default template settings on mount
   useEffect(() => {
@@ -129,7 +136,7 @@ export default function LabelDesigner() {
         setIncludeTitle(config.includeTitle ? 'true' : 'false');
         setIncludeSku(config.includeSku ? 'true' : 'false'); 
         setIncludePrice(config.includePrice ? 'true' : 'false');
-        setIncludeLot('false'); // Force lot to false
+        setIncludeLot(config.includeLot ? 'true' : 'false');
         setIncludeCondition(config.includeCondition ? 'true' : 'false');
         setBarcodeMode(config.barcodeMode || 'barcode');
       }
@@ -151,10 +158,10 @@ export default function LabelDesigner() {
     setSaveLoading(true);
     try {
       const result = await saveTemplate(
-        'Optimized Barcode Template',
+        'ZPL Barcode Template',
         fieldConfig,
         labelData,
-        tsplSettings,
+        zplSettings,
         defaultTemplate?.id
       );
 
@@ -171,67 +178,8 @@ export default function LabelDesigner() {
     }
   };
 
-  // Generate PDF from canvas
-  const generatePDFFromCanvas = async (testData?: any, testConfig?: any): Promise<string> => {
-    try {
-      const canvas = previewCanvasRef.current;
-      if (!canvas || !canvas.exportToPNG) {
-        throw new Error('Canvas export function not available');
-      }
-
-      // Get high-DPI PNG from canvas
-      const pngBlob = await canvas.exportToPNG(203); // 203 DPI for thermal printing
-      
-      // Convert blob to data URL for jsPDF
-      const pngDataUrl = await new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.readAsDataURL(pngBlob);
-      });
-
-      // Create PDF with exact 2x1 inch dimensions
-      const pdf = new jsPDF({
-        orientation: 'landscape',
-        unit: 'in',
-        format: [2, 1] // 2x1 inches
-      });
-
-      // Add the image to fill the entire PDF
-      pdf.addImage(pngDataUrl, 'PNG', 0, 0, 2, 1);
-      
-      return pdf.output('datauristring').split(',')[1]; // Return base64 part only
-    } catch (error) {
-      console.error('PDF generation failed:', error);
-      throw error;
-    }
-  };
-
-  // Generate TSPL for thermal printing
-  const generateTSPLFromData = async (data: any): Promise<string> => {
-    try {
-      const { data: tsplResult, error } = await supabase.functions.invoke('render-label', {
-        body: {
-          title: data.title || '',
-          sku: data.sku || data.barcode || '',
-          price: data.price || '',
-          lot_number: data.lot || '',
-          grade: data.condition || '',
-          id: data.barcode || data.sku || ''
-        }
-      });
-
-      if (error) throw error;
-      if (!tsplResult?.program) throw new Error('No TSPL program returned');
-
-      return tsplResult.program;
-    } catch (error) {
-      console.error('TSPL generation failed:', error);
-      throw error;
-    }
-  };
-
-  // PrintNode printing function with TSPL for thermal printers
-  const handlePrintNodePrint = async (isTest = false) => {
+  // Generate ZPL with current settings
+  const generateCurrentZPL = (isTest = false): string => {
     const testData = isTest ? {
       title: "TEST LABEL",
       sku: "TEST-001", 
@@ -241,33 +189,91 @@ export default function LabelDesigner() {
       barcode: "123456789"
     } : labelData;
 
+    return buildZPLWithCut({
+      widthMm: parseFloat(labelWidthMm),
+      heightMm: parseFloat(labelHeightMm),
+      dpi: parseInt(zplDpi) as 203 | 300,
+      speedIps: parseInt(zplSpeed),
+      darkness: parseInt(zplDarkness),
+      copies: parseInt(zplCopies),
+      elements: []
+    }, cutAtEnd === 'true');
+  };
+
+  // Direct network print using new ZPL service
+  const handleDirectPrint = async (isTest = false) => {
+    if (!printerIp.trim()) {
+      toast.error('Please enter a printer IP address');
+      return;
+    }
+
+    setPrintLoading(true);
     try {
-      // Generate TSPL for thermal printer (proper 2x1 inch sizing)
-      const tsplProgram = await generateTSPLFromData(testData);
-      setPendingPrintData(tsplProgram);
-      setShowPrinterDialog(true);
+      const zpl = isTest ? 
+        generateCurrentZPL(true) : 
+        generateBoxedLayoutZPL(labelData, fieldConfig, zplSettings);
+      
+      const finalZpl = cutAtEnd === 'true' ? 
+        buildZPLWithCut({
+          widthMm: parseFloat(labelWidthMm),
+          heightMm: parseFloat(labelHeightMm),
+          dpi: parseInt(zplDpi) as 203 | 300,
+          speedIps: parseInt(zplSpeed),
+          darkness: parseInt(zplDarkness),
+          copies: parseInt(zplCopies),
+          elements: []
+        }, true) :
+        zpl;
+
+      const result = await zebraNetworkService.printZPLDirect(
+        finalZpl, 
+        printerIp.trim(), 
+        parseInt(printerPort),
+        { timeoutMs: 10000 }
+      );
+
+      if (result.success) {
+        setHasPrinted(true);
+        toast.success(`Label printed successfully: ${result.message}`);
+      } else {
+        throw new Error(result.error || 'Print failed');
+      }
     } catch (error) {
-      console.error('TSPL generation failed:', error);
-      toast.error('Failed to generate label for printing');
+      console.error('Print failed:', error);
+      toast.error(`Print failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setPrintLoading(false);
     }
   };
 
-  const handlePrintWithSelectedPrinter = async (printerId: number) => {
-    if (!pendingPrintData) return;
-    
+  // Zebra printer print (using printer object)
+  const handleZebraPrint = async (isTest = false) => {
+    if (!selectedPrinter) {
+      toast.error('No Zebra printer selected');
+      return;
+    }
+
     setPrintLoading(true);
     try {
-      // Get the print service and print with selected printer
-      // Use ZPL for Zebra printing
-      
-      // Use ZPL for Zebra printers
-      if (!selectedPrinter) {
-        toast.error('No printer selected');
-        return;
-      }
-      const result = await printZPL(pendingPrintData, {
-        title: 'Label Print (ZPL)',
-        copies: 1
+      const zpl = isTest ?
+        generateCurrentZPL(true) :
+        generateBoxedLayoutZPL(labelData, fieldConfig, zplSettings);
+
+      const finalZpl = cutAtEnd === 'true' ? 
+        buildZPLWithCut({
+          widthMm: parseFloat(labelWidthMm),
+          heightMm: parseFloat(labelHeightMm),
+          dpi: parseInt(zplDpi) as 203 | 300,
+          speedIps: parseInt(zplSpeed),
+          darkness: parseInt(zplDarkness),
+          copies: parseInt(zplCopies),
+          elements: []
+        }, true) :
+        zpl;
+
+      const result = await printZPL(finalZpl, {
+        title: isTest ? 'ZPL Test Label' : 'ZPL Label Print',
+        copies: parseInt(zplCopies)
       });
 
       if (result?.success) {
@@ -281,49 +287,6 @@ export default function LabelDesigner() {
       toast.error(`Print failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setPrintLoading(false);
-      setPendingPrintData(null);
-    }
-  };
-
-  // Test print the actual preview layout
-  const handleTestPrintLayout = async () => {
-    if (!selectedPrinter) {
-      toast.error('Select a PrintNode printer first');
-      return;
-    }
-
-    setPrintLoading(true);
-    try {
-      const timestamp = new Date().toLocaleTimeString();
-      
-      if (!selectedPrinter) {
-        toast.error('No printer selected');
-        return;
-      }
-      const testZPL = generateBoxedLayoutZPL({
-        title: 'TEST LAYOUT',
-        sku: 'TEST-001',
-        price: '$1.00',
-        condition: 'TEST',
-        barcode: 'TEST123'
-      }, fieldConfig);
-      
-      const result = await printZPL(testZPL, {
-        title: `Layout Test ZPL - ${timestamp}`,
-        copies: 1
-      });
-
-      if (result.success) {
-        toast.success(`Layout test sent to printer: ${result.message || 'Success'}`);
-      } else {
-        throw new Error(result.error || 'Print failed');
-      }
-      
-    } catch (e) {
-      console.error("Layout test print failed:", e);
-      toast.error(`Layout test failed: ${e instanceof Error ? e.message : 'Unknown error'}`);
-    } finally {
-      setPrintLoading(false);
     }
   };
 
@@ -333,8 +296,8 @@ export default function LabelDesigner() {
       <header className="border-b">
         <div className="container mx-auto px-6 py-4 flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Label Designer</h1>
-            <p className="text-muted-foreground mt-1">Design and print 2x1 inch labels with barcode, SKU, price, and condition.</p>
+            <h1 className="text-2xl font-bold text-foreground">ZPL Label Designer</h1>
+            <p className="text-muted-foreground mt-1">Design and print 2x1 inch labels using ZPL commands for Zebra thermal printers.</p>
           </div>
           <Navigation />
         </div>
@@ -421,6 +384,120 @@ export default function LabelDesigner() {
 
                 <Separator />
 
+                {/* ZPL Settings */}
+                <div className="space-y-4">
+                  <h3 className="text-sm font-semibold text-foreground">ZPL Settings</h3>
+                  
+                  {/* Size */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Width (mm)</Label>
+                      <Input 
+                        type="number"
+                        value={labelWidthMm} 
+                        onChange={(e) => setLabelWidthMm(e.target.value)}
+                        className="text-xs h-8"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Height (mm)</Label>
+                      <Input 
+                        type="number"
+                        value={labelHeightMm} 
+                        onChange={(e) => setLabelHeightMm(e.target.value)}
+                        className="text-xs h-8"
+                      />
+                    </div>
+                  </div>
+
+                  {/* DPI & Speed */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label className="text-xs text-muted-foreground">DPI</Label>
+                      <Select value={zplDpi} onValueChange={setZplDpi}>
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="203">203 DPI</SelectItem>
+                          <SelectItem value="300">300 DPI</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Speed (IPS)</Label>
+                      <Input 
+                        type="number"
+                        min="1"
+                        max="14"
+                        value={zplSpeed} 
+                        onChange={(e) => setZplSpeed(e.target.value)}
+                        className="text-xs h-8"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Darkness & Copies */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Darkness (0-30)</Label>
+                      <Input 
+                        type="number"
+                        min="0"
+                        max="30"
+                        value={zplDarkness} 
+                        onChange={(e) => setZplDarkness(e.target.value)}
+                        className="text-xs h-8"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Copies</Label>
+                      <Input 
+                        type="number"
+                        min="1"
+                        value={zplCopies} 
+                        onChange={(e) => setZplCopies(e.target.value)}
+                        className="text-xs h-8"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Cut at End */}
+                  <div className="flex items-center space-x-2">
+                    <Checkbox 
+                      id="cut-at-end" 
+                      checked={cutAtEnd === 'true'} 
+                      onCheckedChange={(checked) => setCutAtEnd(checked ? 'true' : 'false')}
+                    />
+                    <Label htmlFor="cut-at-end" className="text-xs">Cut at end (after all copies)</Label>
+                  </div>
+
+                  {/* Direct Print Settings */}
+                  <div className="space-y-2 p-3 bg-muted/50 rounded-lg">
+                    <Label className="text-xs font-medium text-muted-foreground">Direct Network Print</Label>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="col-span-2">
+                        <Input 
+                          value={printerIp} 
+                          onChange={(e) => setPrinterIp(e.target.value)}
+                          placeholder="192.168.1.70"
+                          className="text-xs h-7"
+                        />
+                      </div>
+                      <div>
+                        <Input 
+                          value={printerPort} 
+                          onChange={(e) => setPrinterPort(e.target.value)}
+                          placeholder="9100"
+                          className="text-xs h-7"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <Separator />
+
                 {/* Save Template Button */}
                 <Button 
                   onClick={handleSaveTemplate}
@@ -432,16 +509,16 @@ export default function LabelDesigner() {
                   {saveLoading ? 'Saving...' : 'Save Template'}
                 </Button>
 
-                {/* Note: TSPL printing for exact sizing */}
-                <div className="p-2 bg-green-50 border border-green-200 rounded-md">
-                  <p className="text-xs text-green-700">
-                    ✅ TSPL printing - Ensures exact 2×1 inch sizing on thermal printers
+                {/* ZPL Format Notice */}
+                <div className="p-2 bg-blue-50 border border-blue-200 rounded-md">
+                  <p className="text-xs text-blue-700">
+                    ✅ ZPL format - Native Zebra language for precise printing
                   </p>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Printer Panel */}
+            {/* Zebra Printer Panel */}
             <ZebraPrinterPanel />
           </div>
 
@@ -478,7 +555,7 @@ export default function LabelDesigner() {
             </Card>
           </div>
 
-          {/* Right: Print & Code */}
+          {/* Right: Print Controls */}
           <div className="lg:col-span-1 space-y-4">
             {/* Print Controls */}
             <Card>
@@ -498,80 +575,75 @@ export default function LabelDesigner() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {zebraConnected && selectedPrinter ? (
-                  <div className="space-y-3">
-                    <div className="p-3 rounded-lg bg-green-50 border border-green-200">
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className="h-2 w-2 rounded-full bg-green-500" />
-                        <span className="text-sm font-medium text-green-800">Printer Ready</span>
-                      </div>
-                      <p className="text-xs text-green-700">
-                        {selectedPrinter?.name || 'PrintNode printer selected'}
-                      </p>
+                <div className="space-y-3">
+                  
+                  {/* Direct Network Print */}
+                  <div className="p-3 rounded-lg border border-border">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="h-2 w-2 rounded-full bg-blue-500" />
+                      <span className="text-sm font-medium">Direct Network Print</span>
                     </div>
-
-                    {/* TSPL Format Notice */}
-                    <div className="p-3 bg-green-50 border border-green-200 rounded-md">
-                      <div className="flex items-center gap-2 mb-1">
-                        <div className="h-2 w-2 rounded-full bg-green-500" />
-                        <span className="text-sm font-medium text-green-800">TSPL Format</span>
-                      </div>
-                      <p className="text-xs text-green-700">
-                        Raw TSPL commands ensure exact 2×1 inch sizing on thermal printers
-                      </p>
-                    </div>
-                    
-                    <div className="space-y-2">
+                    <p className="text-xs text-muted-foreground mb-3">
+                      Print directly to {printerIp}:{printerPort} via TCP
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
                       <Button 
-                        onClick={() => handlePrintNodePrint(true)}
+                        onClick={() => handleDirectPrint(true)}
                         disabled={printLoading}
                         variant="outline"
                         size="sm"
-                        className="w-full"
                       >
                         {printLoading ? "Testing..." : "Test Print"}
                       </Button>
                       <Button 
-                        onClick={handleTestPrintLayout}
-                        disabled={printLoading}
-                        variant="outline"
-                        size="sm"
-                        className="w-full gap-2"
-                      >
-                        <Printer className="h-3 w-3" />
-                        {printLoading ? "Testing..." : "Test Print Layout"}
-                      </Button>
-                      <Button 
-                        onClick={() => handlePrintNodePrint(false)}
+                        onClick={() => handleDirectPrint(false)}
                         disabled={printLoading}
                         size="sm"
-                        className={`w-full ${
-                          hasPrinted 
-                            ? 'bg-orange-600 hover:bg-orange-700' 
-                            : 'bg-primary hover:bg-primary/90'
-                        }`}
+                        className={hasPrinted 
+                          ? 'bg-orange-600 hover:bg-orange-700' 
+                          : 'bg-primary hover:bg-primary/90'
+                        }
                       >
-                        {printLoading ? "Printing..." : hasPrinted ? "Print Again" : "Print Label"}
+                        {printLoading ? "Printing..." : hasPrinted ? "Print Again" : "Print"}
                       </Button>
                     </div>
                   </div>
-                ) : (
-                  <div className="p-3 rounded-lg bg-red-50 border border-red-200">
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className="h-2 w-2 rounded-full bg-red-500" />
-                      <span className="text-sm font-medium text-red-800">Printer Offline</span>
+
+                  {/* Zebra Printer Print */}
+                  {zebraConnected && selectedPrinter && (
+                    <div className="p-3 rounded-lg bg-green-50 border border-green-200">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="h-2 w-2 rounded-full bg-green-500" />
+                        <span className="text-sm font-medium text-green-800">Zebra Printer Ready</span>
+                      </div>
+                      <p className="text-xs text-green-700 mb-3">
+                        {selectedPrinter?.name || 'Zebra printer selected'}
+                      </p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button 
+                          onClick={() => handleZebraPrint(true)}
+                          disabled={printLoading}
+                          variant="outline"
+                          size="sm"
+                        >
+                          {printLoading ? "Testing..." : "Test Print"}
+                        </Button>
+                        <Button 
+                          onClick={() => handleZebraPrint(false)}
+                          disabled={printLoading}
+                          size="sm"
+                          className="bg-green-600 hover:bg-green-700"
+                        >
+                          {printLoading ? "Printing..." : "Print"}
+                        </Button>
+                      </div>
                     </div>
-                    <p className="text-xs text-red-700">
-                      {!zebraConnected ? 
-                        "Configure Zebra network connection" :
-                        "Select a printer below"}
-                    </p>
-                  </div>
-                )}
+                  )}
+                </div>
               </CardContent>
             </Card>
 
-            {/* PDF Info */}
+            {/* ZPL Info */}
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-lg">Print Information</CardTitle>
@@ -580,19 +652,27 @@ export default function LabelDesigner() {
                 <div className="space-y-3 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Format:</span>
-                    <span>TSPL (2×1 inch)</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Barcode:</span>
-                    <span>Code128 (scannable)</span>
+                    <span>ZPL ({(parseFloat(labelWidthMm)/25.4).toFixed(1)}×{(parseFloat(labelHeightMm)/25.4).toFixed(1)} inch)</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Resolution:</span>
-                    <span>203 DPI</span>
+                    <span>{zplDpi} DPI</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Printer:</span>
-                    <span>Thermal (Rollo optimized)</span>
+                    <span className="text-muted-foreground">Speed:</span>
+                    <span>{zplSpeed} IPS</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Darkness:</span>
+                    <span>{zplDarkness}/30</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Copies:</span>
+                    <span>{zplCopies}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Cut at end:</span>
+                    <span>{cutAtEnd === 'true' ? 'Yes' : 'No'}</span>
                   </div>
                 </div>
               </CardContent>
@@ -604,7 +684,7 @@ export default function LabelDesigner() {
       <ZebraPrinterSelectionDialog
         open={showPrinterDialog}
         onOpenChange={setShowPrinterDialog}
-        onPrint={handlePrintWithSelectedPrinter}
+        onPrint={async () => {}}
         title="Select Printer for Label"
       />
     </div>
