@@ -15,6 +15,7 @@ import { useZebraNetwork } from "@/hooks/useZebraNetwork";
 import { ZebraPrinterSelectionDialog } from '@/components/ZebraPrinterSelectionDialog';
 import { useLocalStorageString } from "@/hooks/useLocalStorage";
 import { buildZPLWithCut, generateBoxedLayoutZPL, type LabelFieldConfig, mmToDots } from "@/lib/zpl";
+import { LABEL_TEMPLATES, type TemplateKey } from "@/lib/templates";
 import { ZPLUtilities } from "@/lib/zplUtilities";
 import { zebraNetworkService } from "@/lib/zebraNetworkService";
 import { testDirectPrinting } from "@/lib/zebraTestUtils";
@@ -71,6 +72,7 @@ export default function LabelDesigner() {
   const [cutAtEnd, setCutAtEnd] = useLocalStorageString('zpl-cut-at-end', 'true');
   const [printerIp, setPrinterIp] = useLocalStorageString('zpl-printer-ip', '192.168.1.70');
   const [printerPort, setPrinterPort] = useLocalStorageString('zpl-printer-port', '9100');
+  const [selectedTemplate, setSelectedTemplate] = useLocalStorageString('zpl-selected-template', 'priceTag');
 
   // Field configuration with localStorage persistence
   const [includeTitle, setIncludeTitle] = useLocalStorageString('field-title', 'true');
@@ -201,6 +203,26 @@ export default function LabelDesigner() {
     }, cutAtEnd === 'true');
   };
 
+  // Enhanced error handling with actionable UI
+  const showActionableError = (result: { success: boolean; error?: string; suggestions?: string[] }) => {
+    if (result.error) {
+      toast.error(result.error);
+      
+      // Show suggestions as additional toasts
+      if (result.suggestions && result.suggestions.length > 0) {
+        setTimeout(() => {
+          result.suggestions?.forEach((suggestion, index) => {
+            setTimeout(() => {
+              toast.info(suggestion, {
+                duration: 5000,
+              });
+            }, index * 1000);
+          });
+        }, 1000);
+      }
+    }
+  };
+
   // Direct network print using new ZPL service
   const handleDirectPrint = async (isTest = false) => {
     if (!printerIp.trim()) {
@@ -237,7 +259,7 @@ export default function LabelDesigner() {
         setHasPrinted(true);
         toast.success(`Label printed successfully: ${result.message}`);
       } else {
-        throw new Error(result.error || 'Print failed');
+        showActionableError(result);
       }
     } catch (error) {
       console.error('Print failed:', error);
@@ -353,6 +375,64 @@ export default function LabelDesigner() {
     const url = `http://${printerIp.trim()}`;
     window.open(url, '_blank');
     toast.info(`Opening printer web interface: ${url}`);
+  };
+
+  // Template-based printing
+  const handleTemplatePrint = async (isTest = false) => {
+    if (!printerIp.trim()) {
+      toast.error('Please enter a printer IP address');
+      return;
+    }
+
+    try {
+      const templateConfig = LABEL_TEMPLATES[selectedTemplate as TemplateKey];
+      if (!templateConfig) {
+        toast.error('Invalid template selected');
+        return;
+      }
+
+      const generator = await templateConfig.generator();
+      const testData = isTest ? {
+        title: "TEST LABEL", 
+        price: "99.99",
+        sku: "TEST-001",
+        barcode: "123456789",
+        qrData: "TEST-QR-DATA",
+        condition: "Test"
+      } : {
+        title,
+        price,
+        sku,
+        barcode: barcodeValue,
+        qrData: barcodeValue, // Use barcode data for QR
+        condition
+      };
+
+      const zpl = generator(testData, {
+        dpi: parseInt(zplDpi) as 203 | 300,
+        speedIps: parseInt(zplSpeed),
+        darkness: parseInt(zplDarkness),
+        copies: parseInt(zplCopies),
+        cutAtEnd: cutAtEnd === 'true'
+      });
+
+      const result = await zebraNetworkService.printZPLDirect(
+        zpl,
+        printerIp.trim(),
+        parseInt(printerPort),
+        { timeoutMs: 10000 }
+      );
+
+      if (result.success) {
+        setHasPrinted(true);
+        toast.success(`Template printed successfully: ${result.message}`);
+      } else {
+        showActionableError(result);
+      }
+    } catch (error) {
+      console.error('Template print failed:', error);
+      toast.error(`Template print failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   };
 
   // Zebra printer print (using printer object)
@@ -581,6 +661,23 @@ export default function LabelDesigner() {
                     <Label htmlFor="cut-at-end" className="text-xs">Cut at end (after all copies)</Label>
                   </div>
 
+                  {/* Template Selection */}
+                  <div className="space-y-2 p-3 bg-muted/50 rounded-lg">
+                    <Label className="text-xs font-medium text-muted-foreground">Template</Label>
+                    <Select value={selectedTemplate} onValueChange={setSelectedTemplate}>
+                      <SelectTrigger className="text-xs h-7">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(LABEL_TEMPLATES).map(([key, template]) => (
+                          <SelectItem key={key} value={key}>
+                            {template.name} ({template.size})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
                   {/* Direct Print Settings */}
                   <div className="space-y-2 p-3 bg-muted/50 rounded-lg">
                     <Label className="text-xs font-medium text-muted-foreground">Direct Network Print</Label>
@@ -697,12 +794,33 @@ export default function LabelDesigner() {
                     </p>
                     <div className="grid grid-cols-2 gap-2">
                       <Button 
+                        onClick={() => handleTemplatePrint(true)}
+                        disabled={printLoading}
+                        variant="outline"
+                        size="sm"
+                      >
+                        {printLoading ? "Testing..." : "Test Template"}
+                      </Button>
+                      <Button 
+                        onClick={() => handleTemplatePrint(false)}
+                        disabled={printLoading}
+                        size="sm"
+                        className={hasPrinted 
+                          ? 'bg-blue-600 hover:bg-blue-700' 
+                          : 'bg-blue-600 hover:bg-blue-700'
+                        }
+                      >
+                        {printLoading ? "Printing..." : "Print Template"}
+                      </Button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button 
                         onClick={() => handleDirectPrint(true)}
                         disabled={printLoading}
                         variant="outline"
                         size="sm"
                       >
-                        {printLoading ? "Testing..." : "Test Print"}
+                        {printLoading ? "Testing..." : "Test Custom"}
                       </Button>
                       <Button 
                         onClick={() => handleDirectPrint(false)}
@@ -713,7 +831,7 @@ export default function LabelDesigner() {
                           : 'bg-primary hover:bg-primary/90'
                         }
                       >
-                        {printLoading ? "Printing..." : hasPrinted ? "Print Again" : "Print"}
+                        {printLoading ? "Printing..." : "Print Custom"}
                       </Button>
                     </div>
                   </div>

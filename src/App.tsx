@@ -14,6 +14,7 @@ import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
 import Auth from "./pages/Auth";
 import PrintLogs from "./pages/PrintLogs";
+import ZPLSettings from "./pages/ZPLSettings";
 import ShopifyMapping from "./pages/ShopifyMapping";
 import BulkImport from "./pages/BulkImport";
 

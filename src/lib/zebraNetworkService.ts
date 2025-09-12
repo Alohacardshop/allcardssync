@@ -18,6 +18,7 @@ interface PrintJobResult {
   success: boolean;
   error?: string;
   message?: string;
+  suggestions?: string[];
 }
 
 class ZebraNetworkService {
@@ -70,10 +71,7 @@ class ZebraNetworkService {
         const errorMsg = this.parseNetworkError(error);
         
         if (isLastAttempt) {
-          return {
-            success: false,
-            error: `Failed after ${this.maxRetries} attempts: ${errorMsg}`
-          };
+          return this.createActionableError(error, host, port);
         }
         
         // Wait before retry (with exponential backoff)
@@ -91,25 +89,49 @@ class ZebraNetworkService {
     const errorStr = error instanceof Error ? error.message : String(error);
     
     if (errorStr.includes('ENOTFOUND') || errorStr.includes('getaddrinfo')) {
-      return 'DNS resolution failed - check hostname/IP address';
+      return 'DNS resolution failed - check hostname/IP address. Try using the IP address directly instead of a hostname.';
     }
     if (errorStr.includes('ECONNREFUSED')) {
-      return 'Connection refused - printer may be offline or port blocked';
+      return 'Connection refused - printer may be offline or port blocked. Check if printer is on and connected to network.';
     }
     if (errorStr.includes('timeout') || errorStr.includes('ETIMEDOUT')) {
-      return 'Connection timeout - printer not responding';
+      return 'Connection timeout - printer not responding. Check Wi-Fi signal strength and network connectivity.';
     }
     if (errorStr.includes('EHOSTUNREACH')) {
-      return 'Host unreachable - check network connectivity';
+      return 'Host unreachable - check network connectivity. Ensure printer and computer are on the same network.';
     }
     if (errorStr.includes('ENETUNREACH')) {
-      return 'Network unreachable - check routing/firewall';
+      return 'Network unreachable - check routing/firewall settings. Try disabling VPN if active.';
     }
     if (errorStr.includes('aborted')) {
-      return 'Request timed out';
+      return 'Request timed out - printer took too long to respond.';
     }
     
     return errorStr;
+  }
+
+  // Enhanced error handling with actionable suggestions
+  private createActionableError(error: any, printerIp: string, printerPort: number): PrintJobResult {
+    const errorMsg = this.parseNetworkError(error);
+    const suggestions: string[] = [];
+    
+    if (errorMsg.includes('Connection refused') || errorMsg.includes('timeout')) {
+      suggestions.push(`Open printer WebUI: http://${printerIp}`);
+      suggestions.push('Try pinging the printer');
+      suggestions.push('Check printer power and network connection');
+    }
+    
+    if (errorMsg.includes('DNS') || errorMsg.includes('Host unreachable')) {
+      suggestions.push('Verify IP address is correct');
+      suggestions.push('Check network settings');
+      suggestions.push('Try a different IP address');
+    }
+    
+    return {
+      success: false,
+      error: errorMsg,
+      suggestions
+    };
   }
 
   async testConnection(ip: string, port: number = 9100): Promise<boolean> {
