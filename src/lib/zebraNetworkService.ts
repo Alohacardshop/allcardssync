@@ -1,3 +1,5 @@
+import { supabase } from "@/integrations/supabase/client";
+
 interface ZebraPrinter {
   id: string;
   ip: string;
@@ -48,36 +50,29 @@ export async function printZPL(
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
       
-      const response = await fetch('/functions/v1/zebra-tcp', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+      const { data: response, error: supabaseError } = await supabase.functions.invoke('zebra-tcp', {
+        body: {
           host: host,
           port: port,
           data: zpl,
           expectReply: false,
           timeoutMs: timeoutMs
-        }),
-        signal: controller.signal
+        }
       });
       
       clearTimeout(timeoutId);
       
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      if (supabaseError) {
+        throw new Error(`Supabase error: ${supabaseError.message}`);
       }
       
-      const result = await response.json();
-      
-      if (result.ok) {
+      if (response?.ok) {
         return {
           success: true,
           message: `Successfully printed to ${host}:${port}`
         };
       } else {
-        throw new Error(result.error || 'Print failed');
+        throw new Error(response?.error || 'Print failed');
       }
       
     } catch (error) {
@@ -101,26 +96,24 @@ export async function printZPL(
 // Status query and parsing functions
 export async function queryStatus(host: string, port: number = 9100): Promise<PrinterStatus> {
   try {
-    const response = await fetch('/functions/v1/zebra-tcp', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
+    const { data: response, error: supabaseError } = await supabase.functions.invoke('zebra-tcp', {
+      body: {
         host: host,
         port: port,
         data: '~HS\r\n',
         expectReply: true,
         timeoutMs: 5000
-      }),
+      }
     });
 
-    const result = await response.json();
+    if (supabaseError) {
+      throw new Error(`Supabase error: ${supabaseError.message}`);
+    }
     
-    if (result.ok && result.reply) {
-      return parseStatusReply(result.reply);
+    if (response?.ok && response?.reply) {
+      return parseStatusReply(response.reply);
     } else {
-      throw new Error(result.error || 'Failed to get status');
+      throw new Error(response?.error || 'Failed to get status');
     }
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
