@@ -21,16 +21,11 @@ import { ZebraDiagnosticsPanel } from '@/components/ZebraDiagnosticsPanel';
 import { ZebraPrinterPanel } from '@/components/ZebraPrinterPanel';
 
 export function LabelDesigner() {
-  const { selectedPrinter, printZPL } = useZebraNetwork();
+  const { selectedPrinter, printZPL, printerStatus } = useZebraNetwork();
   const { settings, updatePrintSettings, updatePrinterSettings, isLoading: settingsLoading } = useLabelSettings();
   
   // Template selection
   const [selectedTemplate, setSelectedTemplate] = useState<'price' | 'barcode' | 'qr'>('price');
-  
-  // Printer status state
-  const [printerStatus, setPrinterStatus] = useState<PrinterStatus | null>(null);
-  const [isQueryingStatus, setIsQueryingStatus] = useState(false);
-  
   // Sample data for templates
   const [priceData, setPriceData] = useState<PriceTagData>({
     title: 'Pokemon Card',
@@ -51,37 +46,6 @@ export function LabelDesigner() {
     location: 'Warehouse',
     section: 'Electronics'
   });
-
-  // Query printer status when printer changes
-  useEffect(() => {
-    if (selectedPrinter) {
-      queryPrinterStatus();
-    } else {
-      setPrinterStatus(null);
-    }
-  }, [selectedPrinter]);
-
-  // Query printer status function
-  const queryPrinterStatus = async () => {
-    if (!selectedPrinter) return;
-    
-    setIsQueryingStatus(true);
-    try {
-      const status = await zebraNetworkService.queryStatus(selectedPrinter.ip, selectedPrinter.port);
-      setPrinterStatus(status);
-    } catch (error) {
-      console.warn('Status query failed:', error);
-      setPrinterStatus({
-        ready: false,
-        paused: false,
-        headOpen: false,
-        mediaOut: false,
-        raw: `Error: ${error instanceof Error ? error.message : 'Status unavailable'}`
-      });
-    } finally {
-      setIsQueryingStatus(false);
-    }
-  };
   const generateCurrentZPL = (): string => {
     const baseOptions = {
       dpi: settings.dpi,
@@ -331,11 +295,10 @@ export function LabelDesigner() {
               <Button 
                 variant="ghost" 
                 size="sm"
-                onClick={queryPrinterStatus}
-                disabled={isQueryingStatus}
+                onClick={() => window.location.reload()} // Simple refresh for now
                 className="h-6"
               >
-                <RefreshCw className={`h-3 w-3 ${isQueryingStatus ? 'animate-spin' : ''}`} />
+                <RefreshCw className="h-3 w-3" />
               </Button>
             </div>
           )}

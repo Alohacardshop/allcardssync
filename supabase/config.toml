@@ -74,3 +74,7 @@ verify_jwt = false
 
 [functions.v2-shopify-remove-raw]
 verify_jwt = false
+
+# Zebra TCP communication (requires authentication)
+[functions.zebra-tcp]
+verify_jwt = true

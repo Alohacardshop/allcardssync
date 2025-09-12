@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { zebraNetworkService, type ZebraPrinter } from '@/lib/zebraNetworkService';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { zebraNetworkService, type ZebraPrinter, type PrinterStatus } from '@/lib/zebraNetworkService';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -9,6 +9,8 @@ export function useZebraNetwork() {
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [connectionError, setConnectionError] = useState<string>('');
+  const [printerStatus, setPrinterStatus] = useState<PrinterStatus | null>(null);
+  const statusPollingRef = useRef<NodeJS.Timeout | null>(null);
 
   // Get or create consistent workstation ID
   const getWorkstationId = () => {
@@ -234,16 +236,83 @@ export function useZebraNetwork() {
     return printer;
   }, []);
 
+  // Polling for printer status
+  const startStatusPolling = useCallback((printer: ZebraPrinter) => {
+    // Clear any existing polling
+    if (statusPollingRef.current) {
+      clearInterval(statusPollingRef.current);
+    }
+
+    const pollStatus = async () => {
+      try {
+        const status = await zebraNetworkService.queryStatus(printer.ip, printer.port);
+        setPrinterStatus(prevStatus => {
+          // Check for status changes and show notifications
+          if (prevStatus && prevStatus.ready !== status.ready) {
+            if (!status.ready) {
+              const issues = [];
+              if (status.paused) issues.push('paused');
+              if (status.headOpen) issues.push('head open');
+              if (status.mediaOut) issues.push('media out');
+              toast.warning(`Printer issue detected: ${issues.join(', ')}`);
+            } else {
+              toast.success('Printer is now ready');
+            }
+          }
+          return { ...status, lastSeenAt: Date.now() };
+        });
+      } catch (error) {
+        setPrinterStatus(prev => prev ? { ...prev, ready: false, lastSeenAt: Date.now() } : null);
+      }
+    };
+
+    // Initial status check
+    pollStatus();
+    
+    // Set up polling every 25 seconds
+    statusPollingRef.current = setInterval(pollStatus, 25000);
+  }, []);
+
+  const stopStatusPolling = useCallback(() => {
+    if (statusPollingRef.current) {
+      clearInterval(statusPollingRef.current);
+      statusPollingRef.current = null;
+    }
+  }, []);
+
+  // Enhanced setSelectedPrinterId with status polling
+  const setSelectedPrinterIdWithPolling = useCallback((printer: ZebraPrinter | null) => {
+    // Stop existing polling
+    stopStatusPolling();
+    setPrinterStatus(null);
+    
+    // Set the printer
+    setSelectedPrinterId(printer);
+    
+    // Start polling for the new printer
+    if (printer) {
+      startStatusPolling(printer);
+    }
+  }, [setSelectedPrinterId, startStatusPolling, stopStatusPolling]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      stopStatusPolling();
+    };
+  }, [stopStatusPolling]);
+
   return {
     printers,
     selectedPrinter,
-    setSelectedPrinterId,
+    setSelectedPrinterId: setSelectedPrinterIdWithPolling,
     isConnected,
     isLoading,
     connectionError,
     refreshPrinters,
     printZPL,
     testConnection,
-    addManualPrinter
+    addManualPrinter,
+    printerStatus
   };
 }

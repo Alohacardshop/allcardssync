@@ -39,8 +39,17 @@ const ZPL_COMMANDS = {
   testPattern: '^XA^FO50,50^A0N,30,30^FDTest Pattern^FS^XZ'
 };
 
+// Helper function to get status text
+function getStatusText(status: PrinterStatus): string {
+  const issues = [];
+  if (status.paused) issues.push('Paused');
+  if (status.headOpen) issues.push('Head Open');
+  if (status.mediaOut) issues.push('Media Out');
+  return issues.length > 0 ? issues.join(', ') : 'Not Ready';
+}
+
 export function ZebraDiagnosticsPanel() {
-  const { selectedPrinter, testConnection } = useZebraNetwork();
+  const { selectedPrinter, testConnection, printerStatus: hookPrinterStatus } = useZebraNetwork();
   const { settings } = useLabelSettings();
   const [editIp, setEditIp] = useState('');
   const [editPort, setEditPort] = useState('9100');
@@ -51,13 +60,14 @@ export function ZebraDiagnosticsPanel() {
   const [lastPingMs, setLastPingMs] = useState<number | null>(null);
   const [printerStatus, setPrinterStatus] = useState<PrinterStatus | null>(null);
 
+  // Use hook status as primary, local status as override
+  const currentStatus = printerStatus || hookPrinterStatus;
+
   // Initialize edit fields when printer changes
   useEffect(() => {
     if (selectedPrinter) {
       setEditIp(selectedPrinter.ip);
       setEditPort(selectedPrinter.port.toString());
-      // Query status on printer selection
-      handleQueryStatus();
     }
   }, [selectedPrinter]);
 
@@ -246,6 +256,9 @@ export function ZebraDiagnosticsPanel() {
               <div className="font-medium">{selectedPrinter.name}</div>
               <div className="text-sm text-muted-foreground">
                 {selectedPrinter.ip}:{selectedPrinter.port}
+                {currentStatus?.ssid && (
+                  <span className="ml-2">• WiFi: {currentStatus.ssid}</span>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -255,17 +268,17 @@ export function ZebraDiagnosticsPanel() {
                   {lastPingMs}ms
                 </Badge>
               )}
-              {printerStatus && (
+              {currentStatus && (
                 <Badge 
-                  variant={printerStatus.ready ? "default" : "destructive"}
+                  variant={currentStatus.ready ? "default" : "destructive"}
                   className="flex items-center gap-1"
                 >
-                  {printerStatus.ready ? (
+                  {currentStatus.ready ? (
                     <CheckCircle2 className="h-3 w-3" />
                   ) : (
                     <XCircle className="h-3 w-3" />
                   )}
-                  {printerStatus.ready ? "Ready" : "Not Ready"}
+                  {currentStatus.ready ? "Ready" : getStatusText(currentStatus)}
                 </Badge>
               )}
               <Badge variant={selectedPrinter.isConnected ? "default" : "secondary"}>
@@ -337,7 +350,7 @@ export function ZebraDiagnosticsPanel() {
             <Button 
               variant="outline" 
               onClick={() => setShowStatusModal(true)}
-              disabled={isLoading || !printerStatus}
+              disabled={isLoading || !currentStatus}
               className="flex items-center gap-2"
             >
               <Info className="h-4 w-4" />
@@ -439,7 +452,7 @@ export function ZebraDiagnosticsPanel() {
         <PrinterStatusModal
           open={showStatusModal}
           onOpenChange={setShowStatusModal}
-          status={printerStatus}
+          status={currentStatus}
           printerIp={selectedPrinter.ip}
         />
       </CardContent>
