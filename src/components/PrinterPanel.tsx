@@ -11,6 +11,7 @@ import { printNodeService } from "@/lib/printNodeService";
 import { supabase } from "@/integrations/supabase/client";
 import { usePrinterNames } from "@/hooks/usePrinterNames";
 import jsPDF from 'jspdf';
+import { PrinterSelectionDialog } from '@/components/PrinterSelectionDialog';
 
 interface PrintNodePrinter {
   id: number;
@@ -40,8 +41,15 @@ export function PrinterPanel() {
   const [editingPrinterId, setEditingPrinterId] = useState<number | null>(null);
   const [editingName, setEditingName] = useState<string>('');
   const [lastChecked, setLastChecked] = useState<Date | null>(null);
+  const [showPrinterDialog, setShowPrinterDialog] = useState(false);
   
   const { getDisplayName, setCustomName, resetName, hasCustomName } = usePrinterNames();
+
+  // Dummy function for printer selection dialog when just setting default
+  const handleDummyPrint = async (printerId: number) => {
+    // This function is never called when allowDefaultOnly=true
+    return Promise.resolve();
+  };
 
   useEffect(() => {
     loadPrinterSettings();
@@ -427,6 +435,15 @@ export function PrinterPanel() {
             <Button 
               variant="outline" 
               size="sm" 
+              onClick={() => setShowPrinterDialog(true)}
+            >
+              <Printer className="h-4 w-4 mr-2" />
+              Change Printer
+            </Button>
+            
+            <Button 
+              variant="outline" 
+              size="sm" 
               onClick={savePrinterSettings}
               disabled={!selectedPrinter}
             >
@@ -475,6 +492,14 @@ export function PrinterPanel() {
           {printers.length > 0 && `${printers.length} printer(s) available`}
         </div>
       </CardContent>
+      
+      <PrinterSelectionDialog
+        open={showPrinterDialog}
+        onOpenChange={setShowPrinterDialog}
+        onPrint={handleDummyPrint}
+        title="Select Default Printer"
+        allowDefaultOnly={true}
+      />
     </Card>
   );
 }

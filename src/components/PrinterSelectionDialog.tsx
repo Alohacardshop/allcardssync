@@ -18,13 +18,15 @@ interface PrinterSelectionDialogProps {
   onOpenChange: (open: boolean) => void;
   onPrint: (printerId: number) => Promise<void>;
   title?: string;
+  allowDefaultOnly?: boolean; // Allow setting default without printing
 }
 
 export function PrinterSelectionDialog({
   open,
   onOpenChange,
   onPrint,
-  title = "Select Printer"
+  title = "Select Printer",
+  allowDefaultOnly = false
 }: PrinterSelectionDialogProps) {
   const { 
     printers, 
@@ -53,6 +55,34 @@ export function PrinterSelectionDialog({
       refreshPrinters();
     }
   }, [open, printers.length, refreshPrinters]);
+
+  const handleSetDefaultOnly = async () => {
+    if (!selectedPrinterId) {
+      toast({
+        title: "No printer selected",
+        description: "Please select a printer first.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      setDefaultPrinter(selectedPrinterId);
+      onOpenChange(false);
+      
+      toast({
+        title: "Default printer set",
+        description: "Your default printer has been updated.",
+      });
+    } catch (error) {
+      console.error('Error setting default printer:', error);
+      toast({
+        title: "Failed to set default",
+        description: error instanceof Error ? error.message : "Failed to set default printer",
+        variant: "destructive"
+      });
+    }
+  };
 
   const handlePrint = async () => {
     if (!selectedPrinterId) {
@@ -175,19 +205,31 @@ export function PrinterSelectionDialog({
             )}
           </div>
 
-          {selectedPrinterId && selectedPrinter?.id !== selectedPrinterId && (
-            <div className="flex items-center space-x-2">
-              <Checkbox 
-                id="set-default"
-                checked={setAsDefault}
-                onCheckedChange={(checked) => setSetAsDefault(checked as boolean)}
-              />
-              <label 
-                htmlFor="set-default" 
-                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-              >
-                Set as default printer
-              </label>
+          {selectedPrinterId && (
+            <div className="space-y-3">
+              {selectedPrinter?.id !== selectedPrinterId && !allowDefaultOnly && (
+                <div className="flex items-center space-x-2">
+                  <Checkbox 
+                    id="set-default"
+                    checked={setAsDefault}
+                    onCheckedChange={(checked) => setSetAsDefault(checked as boolean)}
+                  />
+                  <label 
+                    htmlFor="set-default" 
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                  >
+                    Set as default printer
+                  </label>
+                </div>
+              )}
+              
+              {allowDefaultOnly && selectedPrinter?.id !== selectedPrinterId && (
+                <div className="p-3 bg-muted/50 rounded-lg">
+                  <p className="text-sm text-muted-foreground">
+                    Click "Set as Default" to save this printer as your default choice for future prints.
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -196,23 +238,37 @@ export function PrinterSelectionDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button 
-            onClick={handlePrint}
-            disabled={!selectedPrinterId || printing || !isConnected}
-            className="min-w-[100px]"
-          >
-            {printing ? (
-              <>
-                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                Printing...
-              </>
-            ) : (
-              <>
-                <Printer className="h-4 w-4 mr-2" />
-                Print
-              </>
-            )}
-          </Button>
+          
+          {allowDefaultOnly && selectedPrinterId && selectedPrinter?.id !== selectedPrinterId && (
+            <Button 
+              onClick={handleSetDefaultOnly}
+              disabled={!selectedPrinterId}
+              variant="default"
+            >
+              <CheckCircle className="h-4 w-4 mr-2" />
+              Set as Default
+            </Button>
+          )}
+          
+          {!allowDefaultOnly && (
+            <Button 
+              onClick={handlePrint}
+              disabled={!selectedPrinterId || printing || !isConnected}
+              className="min-w-[100px]"
+            >
+              {printing ? (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  Printing...
+                </>
+              ) : (
+                <>
+                  <Printer className="h-4 w-4 mr-2" />
+                  Print
+                </>
+              )}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
