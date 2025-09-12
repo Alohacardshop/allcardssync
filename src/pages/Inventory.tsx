@@ -327,7 +327,7 @@ const Inventory = () => {
         return;
       }
       const zpl = `^XA^LH0,0^LL203^PR6^MD8^FO50,30^A0N,25,25^FDLabel Print^FS^PQ1,0,1,Y^XZ`;
-      const result = await zebraNetworkService.printZPL(zpl, selectedPrinter.ip, selectedPrinter.port, {
+      const result = await zebraNetworkService.printZPL(zpl, selectedPrinter, {
         title: `Barcode-${printData.item.sku}`,
         copies: 1 
       });

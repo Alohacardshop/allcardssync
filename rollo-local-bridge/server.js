@@ -1,207 +1,251 @@
 const express = require('express');
-const cors = require('cors');
-const bodyParser = require('body-parser');
 const net = require('net');
-const printer = require("printer");
-
+const { execSync, exec } = require('child_process');
+const os = require('os');
 const app = express();
+const port = 17777;
 
-// Always advertise Private Network Access (Chrome)
+// CORS middleware for browser requests
 app.use((req, res, next) => {
-  res.setHeader('Access-Control-Allow-Private-Network', 'true');
-  next();
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(200);
+  } else {
+    next();
+  }
 });
-
-// Allow localhost and Lovable origins
-app.use(cors({
-  origin(origin, cb) {
-    if (!origin) return cb(null, true); // curl/DevTools
-    try {
-      const host = new URL(origin).host;
-      const ok =
-        /^localhost(:\d+)?$/i.test(host) ||
-        /^127\.0\.0\.1(:\d+)?$/i.test(host) ||
-        /(^|\.)lovable(app|dev|project)\.com$/i.test(host);
-      cb(null, ok);
-    } catch {
-      cb(null, false);
-    }
-  },
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type'],
-  credentials: false,
-  optionsSuccessStatus: 204,
-}));
-
-// Preflight for everything
-app.options('*', (req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
-  res.setHeader('Vary', 'Origin');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  res.setHeader('Access-Control-Allow-Private-Network', 'true');
-  res.sendStatus(204);
-});
-
-// Accept raw TSPL/ZPL as text
-app.use(bodyParser.text({ type: ['text/plain', '*/*'], limit: '1mb' }));
 
 app.use(express.json());
+app.use(express.text());
 
-app.get('/', (_req, res) => {
-  res.json({ status: 'ok', version: 'minimal', time: new Date().toISOString() });
+// Health check endpoint
+app.get('/', (req, res) => {
+  res.json({ 
+    status: 'ok', 
+    service: 'Zebra Network Bridge',
+    version: '2.0.0',
+    endpoints: [
+      '/system-printers - Get locally connected printers',
+      '/system-print - Print ZPL to system printer', 
+      '/rawtcp - Send raw data to network printer',
+      '/check-tcp - Test network printer connection'
+    ]
+  });
 });
 
-// Get list of available printers
-app.get("/printers", (req, res) => {
+// Get system printers (USB/locally connected)
+app.get('/system-printers', (req, res) => {
   try {
-    const printers = printer.getPrinters();
-    const printerNames = printers.map(p => ({
-      name: p.name,
-      status: p.status || 'unknown',
-      isDefault: p.name === printer.getDefaultPrinterName()
-    }));
+    let printers = [];
     
-    console.log(`[${new Date().toISOString()}] Printers requested: ${printerNames.length} found`);
-    res.json(printerNames);
+    if (os.platform() === 'win32') {
+      // Windows - use wmic to get printer list
+      const command = 'wmic printer get name,status,driverName /format:csv';
+      const output = execSync(command, { encoding: 'utf8' });
+      
+      printers = output.split('\n')
+        .slice(1) // Skip header
+        .filter(line => line.trim() && !line.startsWith('Node'))
+        .map(line => {
+          const parts = line.split(',');
+          const name = parts[2]?.trim();
+          const status = parts[3]?.trim();
+          
+          if (name && name !== 'Name') {
+            return {
+              name: name,
+              status: status === 'OK' ? 'ready' : 'offline',
+              model: 'System Printer',
+              driverName: parts[1]?.trim()
+            };
+          }
+          return null;
+        })
+        .filter(Boolean);
+        
+    } else if (os.platform() === 'darwin') {
+      // macOS - use lpstat to get printer list
+      const command = 'lpstat -p';
+      const output = execSync(command, { encoding: 'utf8' });
+      
+      printers = output.split('\n')
+        .filter(line => line.startsWith('printer'))
+        .map(line => {
+          const match = line.match(/printer (.+?) is (.+)/);
+          if (match) {
+            return {
+              name: match[1],
+              status: match[2].includes('idle') ? 'ready' : 'offline',
+              model: 'System Printer'
+            };
+          }
+          return null;
+        })
+        .filter(Boolean);
+        
+    } else {
+      // Linux - use lpstat to get printer list  
+      const command = 'lpstat -p';
+      const output = execSync(command, { encoding: 'utf8' });
+      
+      printers = output.split('\n')
+        .filter(line => line.startsWith('printer'))
+        .map(line => {
+          const match = line.match(/printer (.+?) is (.+)/);
+          if (match) {
+            return {
+              name: match[1],
+              status: match[2].includes('idle') ? 'ready' : 'offline',
+              model: 'System Printer'
+            };
+          }
+          return null;
+        })
+        .filter(Boolean);
+    }
+    
+    res.json({ 
+      success: true, 
+      printers: printers,
+      platform: os.platform()
+    });
+    
   } catch (error) {
-    console.error(`[${new Date().toISOString()}] Error getting printers:`, error);
-    res.status(500).json({ error: error.message });
+    console.error('Failed to get system printers:', error);
+    res.json({ 
+      success: false, 
+      error: error.message,
+      printers: []
+    });
   }
 });
 
-// Print TSPL/ZPL data
-app.post("/print", (req, res) => {
-  const data = req.body;
-  const printerName = req.query.printerName || printer.getDefaultPrinterName();
-  const copies = parseInt(req.query.copies || "1", 10);
+// Print ZPL to system printer
+app.post('/system-print', (req, res) => {
+  const { printerName, zplData, copies = 1 } = req.body;
   
-  if (!data) {
-    return res.status(400).json({ error: "No TSPL/ZPL data provided" });
+  if (!printerName || !zplData) {
+    return res.json({ 
+      success: false, 
+      error: 'Missing printerName or zplData' 
+    });
   }
-
-  if (!printerName) {
-    return res.status(400).json({ error: "No printer available" });
-  }
-
-  console.log(`[${new Date().toISOString()}] Print job: ${copies} copies to ${printerName}`);
   
   try {
-    let jobsSent = 0;
-    let errors = [];
-
-    for (let i = 0; i < copies; i++) {
-      printer.printDirect({
-        data,
-        printer: printerName,
-        type: "RAW",
-        success: (jobID) => {
-          jobsSent++;
-          console.log(`[${new Date().toISOString()}] Job ${i + 1}/${copies} sent successfully, ID: ${jobID}`);
-          
-          // Send response after all jobs are processed
-          if (jobsSent + errors.length === copies) {
-            if (errors.length === 0) {
-              res.json({ 
-                success: true, 
-                jobsSent,
-                message: `${jobsSent} print job(s) sent successfully`
-              });
-            } else {
-              res.status(207).json({
-                success: false,
-                jobsSent,
-                errors,
-                message: `${jobsSent}/${copies} jobs sent, ${errors.length} failed`
-              });
-            }
+    if (os.platform() === 'win32') {
+      // Windows - save ZPL to temp file and print using copy command
+      const fs = require('fs');
+      const path = require('path');
+      const tempFile = path.join(os.tmpdir(), `zpl_${Date.now()}.txt`);
+      
+      fs.writeFileSync(tempFile, zplData);
+      
+      for (let i = 0; i < copies; i++) {
+        execSync(`copy "${tempFile}" "\\\\${os.hostname()}\\${printerName}"`, { stdio: 'ignore' });
+      }
+      
+      fs.unlinkSync(tempFile);
+      
+    } else {
+      // macOS/Linux - use lpr command
+      for (let i = 0; i < copies; i++) {
+        const child = exec(`lpr -P "${printerName}" -o raw`, (error) => {
+          if (error) {
+            console.error('Print error:', error);
           }
-        },
-        error: (err) => {
-          const errorMsg = `Job ${i + 1}/${copies} failed: ${err}`;
-          errors.push(errorMsg);
-          console.error(`[${new Date().toISOString()}] ${errorMsg}`);
-          
-          // Send response after all jobs are processed
-          if (jobsSent + errors.length === copies) {
-            res.status(500).json({
-              success: false,
-              jobsSent,
-              errors,
-              message: `${errors.length}/${copies} jobs failed`
-            });
-          }
-        }
-      });
-    }
-  } catch (e) {
-    const errorMsg = `Print error: ${e.message}`;
-    console.error(`[${new Date().toISOString()}] ${errorMsg}`);
-    res.status(500).json({ error: errorMsg });
-  }
-});
-
-app.post('/rawtcp', async (req, res) => {
-  const data = typeof req.body === 'string' ? req.body : '';
-  const ip = (req.query.ip || '192.168.0.248').toString();
-  const port = parseInt(req.query.port || '9100', 10);
-
-  if (!data) return res.status(400).json({ error: 'No TSPL/ZPL data provided' });
-
-  const socket = new net.Socket();
-  socket.setTimeout(15000);          // Increased timeout to 15s
-  socket.setKeepAlive(true, 3000);
-
-  console.log(`[${new Date().toISOString()}] TCP print to ${ip}:${port}, bytes=${Buffer.byteLength(data, 'utf8')}`);
-
-  try {
-    await new Promise((resolve, reject) => {
-      socket.once('connect', () => {
-        socket.write(data, 'utf8', () => {
-          socket.end();
-          // Respond immediately after sending data
-          res.json({ success: true, message: `TSPL/ZPL sent to ${ip}:${port}` });
-          resolve();
         });
-      });
-      socket.once('timeout', () => { socket.destroy(new Error('timeout')); });
-      socket.once('error', reject);
-      socket.connect(port, ip);
-    });
-  } catch (e) {
-    console.error('TCP error:', e.message);
-    if (!res.headersSent) {
-      res.status(504).json({ error: `TCP ${e.message || 'failure'} — check Raw/JetDirect 9100, IP, and power.` });
+        
+        child.stdin.write(zplData);
+        child.stdin.end();
+      }
     }
-  }
-});
-
-// Check TCP connectivity endpoint
-app.get('/check-tcp', async (req, res) => {
-  const ip = (req.query.ip || '192.168.0.248').toString();
-  const port = parseInt(req.query.port || '9100', 10);
-
-  const socket = new net.Socket();
-  socket.setTimeout(5000);
-
-  try {
-    await new Promise((resolve, reject) => {
-      socket.once('connect', () => {
-        socket.end();
-        resolve();
-      });
-      socket.once('timeout', () => { socket.destroy(new Error('timeout')); });
-      socket.once('error', reject);
-      socket.connect(port, ip);
+    
+    res.json({ 
+      success: true, 
+      message: `Sent ${copies} copy(ies) to ${printerName}` 
     });
-    res.json({ ok: true, message: `TCP connection to ${ip}:${port} successful` });
-  } catch (e) {
-    res.json({ ok: false, error: `TCP connection failed: ${e.message}` });
+    
+  } catch (error) {
+    console.error('System print failed:', error);
+    res.json({ 
+      success: false, 
+      error: error.message 
+    });
   }
 });
 
-const PORT = process.env.PORT || 17777;
-app.listen(PORT, '127.0.0.1', () => {
-  console.log(`[${new Date().toISOString()}] Zebra Network Bridge listening on http://127.0.0.1:${PORT}`);
-  console.log(`Available printers: ${printer.getPrinters().map(p => p.name).join(', ') || 'None'}`);
+// Send raw data to network printer (TCP/IP)
+app.post('/rawtcp', (req, res) => {
+  const ip = req.query.ip;
+  const port = parseInt(req.query.port) || 9100;
+  const data = req.body;
+
+  if (!ip || !data) {
+    return res.json({ success: false, error: 'Missing IP or data' });
+  }
+
+  const client = new net.Socket();
+  
+  client.setTimeout(5000);
+  
+  client.connect(port, ip, () => {
+    client.write(data);
+    client.end();
+  });
+
+  client.on('close', () => {
+    res.json({ success: true, message: `Data sent to ${ip}:${port}` });
+  });
+
+  client.on('error', (err) => {
+    res.json({ success: false, error: err.message });
+  });
+
+  client.on('timeout', () => {
+    client.destroy();
+    res.json({ success: false, error: 'Connection timeout' });
+  });
 });
+
+// Test TCP connection to network printer
+app.get('/check-tcp', (req, res) => {
+  const ip = req.query.ip;
+  const port = parseInt(req.query.port) || 9100;
+
+  if (!ip) {
+    return res.json({ ok: false, error: 'Missing IP' });
+  }
+
+  const client = new net.Socket();
+  
+  client.setTimeout(3000);
+  
+  client.connect(port, ip, () => {
+    client.end();
+    res.json({ ok: true });
+  });
+
+  client.on('error', () => {
+    res.json({ ok: false });
+  });
+
+  client.on('timeout', () => {
+    client.destroy();
+    res.json({ ok: false });
+  });
+});
+
+app.listen(port, '127.0.0.1', () => {
+  console.log(`🖨️  Zebra Network Bridge running on http://127.0.0.1:${port}`);
+  console.log(`📡 Supports both USB/system printers and network TCP/IP printers`);
+  console.log(`🔗 Endpoints available:`);
+  console.log(`   GET  / - Service status and info`);
+  console.log(`   GET  /system-printers - List USB/system printers`);
+  console.log(`   POST /system-print - Print ZPL to system printer`);
+  console.log(`   POST /rawtcp?ip=X&port=Y - Send raw data to network printer`);
+  console.log(`   GET  /check-tcp?ip=X&port=Y - Test network printer connection`);
+});
+
+module.exports = app;

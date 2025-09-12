@@ -6,6 +6,7 @@ interface ZebraPrinter {
   model?: string;
   isDefault?: boolean;
   isConnected?: boolean;
+  isSystemPrinter?: boolean; // USB/locally connected printer
 }
 
 interface PrintJobOptions {
@@ -35,46 +36,19 @@ class ZebraNetworkService {
 
   async printZPL(
     zplData: string,
-    printerIp: string,
-    port: number = 9100,
+    printer: ZebraPrinter,
     options: PrintJobOptions = {}
   ): Promise<PrintJobResult> {
     try {
       const copies = options.copies || 1;
-      let allSuccess = true;
-      const errors: string[] = [];
       
-      // Send each copy individually for better error handling
-      for (let i = 0; i < copies; i++) {
-        try {
-          const response = await fetch(`${this.bridgeUrl}/rawtcp?ip=${printerIp}&port=${port}`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'text/plain',
-            },
-            body: zplData,
-          });
-
-          const result = await response.json();
-          
-          if (!result.success) {
-            allSuccess = false;
-            errors.push(`Copy ${i + 1}: ${result.error || 'Unknown error'}`);
-          }
-        } catch (error) {
-          allSuccess = false;
-          const errorMsg = error instanceof Error ? error.message : 'Network error';
-          errors.push(`Copy ${i + 1}: ${errorMsg}`);
-        }
+      if (printer.isSystemPrinter) {
+        // Print to system printer (USB/local)
+        return this.printToSystemPrinter(zplData, printer, copies);
+      } else {
+        // Print to network printer (IP)
+        return this.printToNetworkPrinter(zplData, printer.ip, printer.port, copies);
       }
-
-      return {
-        success: allSuccess,
-        error: errors.length > 0 ? errors.join('; ') : undefined,
-        message: allSuccess 
-          ? `Successfully sent ${copies} copy(ies) to ${printerIp}:${port}` 
-          : `Sent ${copies - errors.length}/${copies} copies successfully`
-      };
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
       return {
@@ -84,9 +58,132 @@ class ZebraNetworkService {
     }
   }
 
+  private async printToSystemPrinter(
+    zplData: string,
+    printer: ZebraPrinter,
+    copies: number
+  ): Promise<PrintJobResult> {
+    try {
+      const response = await fetch(`${this.bridgeUrl}/system-print`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          printerName: printer.name,
+          zplData: zplData,
+          copies: copies
+        }),
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        return {
+          success: true,
+          message: `Successfully sent ${copies} copy(ies) to ${printer.name}`
+        };
+      } else {
+        return {
+          success: false,
+          error: result.error || 'System print failed'
+        };
+      }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'System print failed'
+      };
+    }
+  }
+
+  private async printToNetworkPrinter(
+    zplData: string,
+    printerIp: string,
+    port: number,
+    copies: number
+  ): Promise<PrintJobResult> {
+    let allSuccess = true;
+    const errors: string[] = [];
+    
+    // Send each copy individually for better error handling
+    for (let i = 0; i < copies; i++) {
+      try {
+        const response = await fetch(`${this.bridgeUrl}/rawtcp?ip=${printerIp}&port=${port}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'text/plain',
+          },
+          body: zplData,
+        });
+
+        const result = await response.json();
+        
+        if (!result.success) {
+          allSuccess = false;
+          errors.push(`Copy ${i + 1}: ${result.error || 'Unknown error'}`);
+        }
+      } catch (error) {
+        allSuccess = false;
+        const errorMsg = error instanceof Error ? error.message : 'Network error';
+        errors.push(`Copy ${i + 1}: ${errorMsg}`);
+      }
+    }
+
+    return {
+      success: allSuccess,
+      error: errors.length > 0 ? errors.join('; ') : undefined,
+      message: allSuccess 
+        ? `Successfully sent ${copies} copy(ies) to ${printerIp}:${port}` 
+        : `Sent ${copies - errors.length}/${copies} copies successfully`
+    };
+  }
+
   async discoverPrinters(networkBase: string = '192.168.0'): Promise<ZebraPrinter[]> {
-    // Simple discovery by testing common IP ranges
-    // In a real implementation, you might want to use SNMP or other discovery methods
+    const printers: ZebraPrinter[] = [];
+    
+    try {
+      // First, try to get system/USB printers via the bridge
+      const systemPrinters = await this.getSystemPrinters();
+      printers.push(...systemPrinters);
+      
+      // Then scan for network printers if requested
+      const networkPrinters = await this.scanNetworkPrinters(networkBase);
+      printers.push(...networkPrinters);
+      
+    } catch (error) {
+      console.error('Printer discovery failed:', error);
+    }
+    
+    return printers;
+  }
+
+  async getSystemPrinters(): Promise<ZebraPrinter[]> {
+    try {
+      const response = await fetch(`${this.bridgeUrl}/system-printers`);
+      const result = await response.json();
+      
+      if (result.success && result.printers) {
+        return result.printers.map((printer: any) => ({
+          id: `system-${printer.name.replace(/\s+/g, '-')}`,
+          ip: 'localhost', // System printer
+          port: 0, // Not applicable for system printers
+          name: printer.name,
+          model: printer.model || 'System Printer',
+          isConnected: printer.status === 'ready',
+          isSystemPrinter: true
+        }));
+      }
+      
+      return [];
+    } catch (error) {
+      console.error('System printer discovery failed:', error);
+      return [];
+    }
+  }
+
+  async scanNetworkPrinters(networkBase: string): Promise<ZebraPrinter[]> {
+    // Network IP scanning (existing logic)
     const printers: ZebraPrinter[] = [];
     const commonIps = [
       `${networkBase}.100`,
@@ -102,12 +199,13 @@ class ZebraNetworkService {
       const isConnected = await this.testConnection(ip);
       if (isConnected) {
         return {
-          id: `zebra-${ip}`,
+          id: `network-${ip}`,
           ip,
           port: 9100,
-          name: `Zebra Printer (${ip})`,
-          model: 'Unknown',
-          isConnected: true
+          name: `Network Zebra (${ip})`,
+          model: 'Network Printer',
+          isConnected: true,
+          isSystemPrinter: false
         };
       }
       return null;

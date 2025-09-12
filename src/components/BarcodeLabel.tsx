@@ -56,7 +56,7 @@ const BarcodeLabel = ({ value, label, className, showPrintButton = true }: Barco
 ^PQ1,0,1,Y
 ^XZ`;
 
-      const result = await zebraNetworkService.printZPL(zpl, printer.ip, printer.port, {
+      const result = await zebraNetworkService.printZPL(zpl, printer, {
         title: `Barcode: ${value}`,
         copies: 1
       });

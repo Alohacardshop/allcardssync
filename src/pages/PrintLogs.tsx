@@ -142,12 +142,14 @@ export default function PrintLogs() {
           throw new Error('No printers available');
         }
         
-        // Use first available printer or saved selection from localStorage
-        const savedPrinterId = localStorage.getItem('printnode-selected-printer');
-        const printerId = savedPrinterId ? parseInt(savedPrinterId) : printers[0].id;
+        // Use first available printer or find by saved name
+        const savedPrinterName = localStorage.getItem('zebra-selected-printer-name');
+        const printer = savedPrinterName 
+          ? printers.find(p => p.name === savedPrinterName) || printers[0]
+          : printers[0];
         
-        // Send to printer using PrintNode
-        await zebraNetworkService.printZPL(job.payload, '192.168.0.100', 9100, { 
+        // Send to printer using Zebra service
+        await zebraNetworkService.printZPL(job.payload, printer, { 
           title: `Reprint Job ${job.id}`, 
           copies: job.copies 
         });

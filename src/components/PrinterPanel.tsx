@@ -1,27 +1,40 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
-import { Printer, Cloud, WifiOff, TestTube, FileText, Edit2, Check, X, RefreshCw } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { Printer, Wifi, WifiOff, TestTube, Plus, RefreshCw, Settings } from "lucide-react";
 import { toast } from "sonner";
-import { zebraNetworkService } from "@/lib/zebraNetworkService";
-import { supabase } from "@/integrations/supabase/client";
-import { usePrinterNames } from "@/hooks/usePrinterNames";
-import jsPDF from 'jspdf';
+import { useZebraNetwork } from "@/hooks/useZebraNetwork";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { generateBoxedLayoutZPL } from "@/lib/zpl";
 import { PrinterSelectionDialog } from '@/components/PrinterSelectionDialog';
-
-interface PrintNodePrinter {
-  id: number;
-  name: string;
-}
 
 export function PrinterPanel() {
   const [workstationId, setWorkstationId] = useState<string>('');
+  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [newPrinterIp, setNewPrinterIp] = useState('');
+  const [newPrinterPort, setNewPrinterPort] = useState('9100');
+  const [newPrinterName, setNewPrinterName] = useState('');
+  const [testingConnection, setTestingConnection] = useState(false);
+  const [showPrinterDialog, setShowPrinterDialog] = useState(false);
   
-  // Get or create consistent workstation ID (same logic as usePrintNode)
+  const {
+    printers,
+    selectedPrinter,
+    setSelectedPrinterId,
+    isConnected,
+    isLoading,
+    connectionError,
+    refreshPrinters,
+    addManualPrinter,
+    testConnection,
+    printZPL
+  } = useZebraNetwork();
+
+  // Get or create consistent workstation ID
   const getWorkstationId = () => {
     let id = localStorage.getItem('workstation-id');
     if (!id) {
@@ -30,20 +43,6 @@ export function PrinterPanel() {
     }
     return id;
   };
-  const [printers, setPrinters] = useState<PrintNodePrinter[]>([]);
-  const [selectedPrinter, setSelectedPrinter] = useState<PrintNodePrinter | null>(null);
-  const [printNodeOnline, setPrintNodeOnline] = useState<boolean>(false);
-  const [loading, setLoading] = useState<boolean>(false);
-  const [testPrinting, setTestPrinting] = useState<boolean>(false);
-  const [testingPDF, setTestingPDF] = useState<boolean>(false);
-  const [keySource, setKeySource] = useState<string>('');
-  const [connectionError, setConnectionError] = useState<string>('');
-  const [editingPrinterId, setEditingPrinterId] = useState<number | null>(null);
-  const [editingName, setEditingName] = useState<string>('');
-  const [lastChecked, setLastChecked] = useState<Date | null>(null);
-  const [showPrinterDialog, setShowPrinterDialog] = useState(false);
-  
-  const { getDisplayName, setCustomName, resetName, hasCustomName } = usePrinterNames();
 
   // Dummy function for printer selection dialog when just setting default
   const handleDummyPrint = async (printerId: string) => {
@@ -52,204 +51,93 @@ export function PrinterPanel() {
   };
 
   useEffect(() => {
-    loadPrinterSettings();
-    // Immediately check PrintNode status on mount
-    refreshPrinters();
+    setWorkstationId(getWorkstationId());
   }, []);
 
-  const loadPrinterSettings = async () => {
-    try {
-      const id = getWorkstationId();
-      setWorkstationId(id);
-      
-      const { data: settings } = await supabase
-        .from('printer_settings')
-        .select('*')
-        .eq('workstation_id', id)
-        .order('updated_at', { ascending: false })
-        .maybeSingle();
-        
-      if (settings && settings.selected_printer_id && settings.selected_printer_name) {
-        setSelectedPrinter({
-          id: settings.selected_printer_id,
-          name: settings.selected_printer_name
-        });
-      }
-    } catch (error) {
-      console.error('Failed to load printer settings:', error);
-    }
-  };
-
-  const savePrinterSettings = async () => {
-    if (!selectedPrinter) return;
-    
-    try {
-      await supabase
-        .from('printer_settings')
-        .upsert({
-          workstation_id: workstationId,
-          selected_printer_id: selectedPrinter.id,
-          selected_printer_name: selectedPrinter.name,
-          use_printnode: true,
-        }, {
-          onConflict: 'workstation_id'
-        });
-      
-      // Also sync to localStorage for consistency with usePrintNode hook
-      localStorage.setItem('printnode-selected-printer', selectedPrinter.id.toString());
-        
-      toast.success(`Default printer set to ${getDisplayName(selectedPrinter.id, selectedPrinter.name)}`);
-    } catch (error) {
-      console.error('Failed to save printer settings:', error);
-      toast.error("Failed to save settings");
-    }
-  };
-
-  const refreshPrinters = async () => {
-    setLoading(true);
-    setConnectionError('');
-    try {
-      // Using Zebra network service instead of PrintNode
-      const discoveredPrinters = await zebraNetworkService.discoverPrinters();
-      const formattedPrinters = discoveredPrinters.map(p => ({id: parseInt(p.id.replace('zebra-', '')), name: p.name}));
-      setPrinters(formattedPrinters);
-      setPrintNodeOnline(discoveredPrinters.length > 0);
-      setLastChecked(new Date());
-      
-      // No initialization needed for Zebra network service
-      
-      toast.success(`Found ${formattedPrinters.length} printer(s)`);
-    } catch (error) {
-      setPrintNodeOnline(false);
-      setPrinters([]);
-      setLastChecked(new Date());
-      const errorMessage = error instanceof Error ? error.message : "Failed to connect to PrintNode";
-      setConnectionError(errorMessage);
-      toast.error(errorMessage);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const generateTestPDF = (): string => {
-    const doc = new jsPDF({
-      unit: 'in',
-      format: [2.0, 1.0], // Exact 2.0" x 1.0" 
-      orientation: 'landscape',
-      putOnlyUsedFonts: true,
-      compress: false
-    });
-
-    // Set PDF metadata for single label
-    doc.setProperties({
-      title: 'Single Label Print',
-      subject: 'Test Label',
-      creator: 'Label Designer'
-    });
-
-    doc.setTextColor(0, 0, 0);
-    doc.setFontSize(12);
-    doc.text('2x1" TEST', 0.1, 0.3);
-    doc.setFontSize(10);
-    doc.text('Rollo Label', 0.1, 0.5);
-    doc.setFontSize(8);
-    doc.text(`${new Date().toLocaleTimeString()}`, 0.1, 0.7);
-
-    return doc.output('datauristring').split(',')[1];
-  };
-
-  const runPDFTest = async () => {
-    if (!selectedPrinter) {
-      toast.error("No printer selected");
+  const handleAddPrinter = async () => {
+    if (!newPrinterIp.trim()) {
+      toast.error("IP address is required");
       return;
     }
 
-    setTestingPDF(true);
     try {
-      // Generate ZPL for Zebra printer instead of PDF
-      const testZPL = `^XA^LH0,0^LL203^PR6^MD8^FO50,30^A0N,25,25^FDPDF TEST^FS^FO50,60^A0N,20,20^FD${new Date().toLocaleTimeString()}^FS^PQ1,0,1,Y^XZ`;
-      const result = await zebraNetworkService.printZPL(
-        testZPL,
-        '192.168.0.100', // Default test IP
-        9100,
-        { title: `PDF Test - ${new Date().toLocaleTimeString()}`, copies: 1 }
+      const printer = await addManualPrinter(
+        newPrinterIp.trim(),
+        parseInt(newPrinterPort) || 9100,
+        newPrinterName.trim() || undefined
       );
-
-      if (result.success) {
-        toast.success(`ZPL Test Sent: ${result.message || 'Success'}`);
+      
+      if (printer.isConnected) {
+        toast.success(`Printer added: ${printer.name}`);
       } else {
-        throw new Error(result.error || 'PDF print failed');
+        toast.warning(`Printer added but connection failed: ${printer.name}`);
       }
+      
+      setShowAddDialog(false);
+      setNewPrinterIp('');
+      setNewPrinterPort('9100');
+      setNewPrinterName('');
     } catch (error) {
-      console.error('PDF test error:', error);
-      toast.error(error instanceof Error ? error.message : "PDF test failed");
-    } finally {
-      setTestingPDF(false);
+      toast.error(error instanceof Error ? error.message : "Failed to add printer");
     }
   };
 
-  const runSmokeTest = async () => {
+  const handleTestConnection = async () => {
     if (!selectedPrinter) {
       toast.error("No printer selected");
       return;
     }
 
-    setTestPrinting(true);
-    
+    setTestingConnection(true);
     try {
-      // Create print job record
-      const { data: printJob } = await supabase
-        .from('print_jobs')
-        .insert({
-          workstation_id: workstationId,
-          target: {
-            printer_name: selectedPrinter.name,
-            printer_id: selectedPrinter.id,
-            type: 'printnode'
-          },
-          data: {
-            test_print: true,
-            timestamp: new Date().toISOString()
-          },
-          status: 'queued'
-        })
-        .select()
-        .single();
+      const connected = await testConnection(selectedPrinter);
+      if (connected) {
+        toast.success("Connection successful");
+      } else {
+        toast.error("Connection failed");
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Test failed");
+    } finally {
+      setTestingConnection(false);
+    }
+  };
 
-      if (!printJob) throw new Error('Failed to create print job record');
+  const runTestPrint = async () => {
+    if (!selectedPrinter) {
+      toast.error("No printer selected");
+      return;
+    }
 
-      // Generate and send ZPL for Zebra printer
-      const testZPL = `^XA^LH0,0^LL203^PR6^MD8^FO50,30^A0N,25,25^FDTEST PRINT^FS^FO50,60^A0N,20,20^FD${new Date().toLocaleTimeString()}^FS^PQ1,0,1,Y^XZ`;
-      const result = await zebraNetworkService.printZPL(
-        testZPL,
-        '192.168.0.100', // Default test IP  
-        9100,
-        { title: `Test Print - ${new Date().toLocaleTimeString()}` }
-      );
+    try {
+      const testZPL = generateBoxedLayoutZPL({
+        title: 'TEST PRINT',
+        sku: 'TEST-001',
+        price: '$1.00',
+        condition: 'TEST',
+        barcode: 'TEST123'
+      }, {
+        includeTitle: true,
+        includeSku: true,
+        includePrice: true,
+        includeLot: false,
+        includeCondition: true,
+        barcodeMode: 'barcode'
+      });
+
+      const result = await printZPL(testZPL, { 
+        title: `Test Print - ${new Date().toLocaleTimeString()}`,
+        copies: 1
+      });
 
       if (result.success) {
-        // Update print job with PrintNode job ID
-        await supabase
-          .from('print_jobs')
-          .update({
-            status: 'sent',
-            data: {
-              ...(printJob.data as Record<string, any>),
-              zebra_job_id: 'ZPL_TEST'
-            }
-          })
-          .eq('id', printJob.id);
-
-        toast.success(`ZPL Test Sent: ${result.message || 'Success'}`);
+        toast.success(result.message || "Test print sent successfully");
       } else {
         throw new Error(result.error || 'Print failed');
       }
-      
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Smoke test failed';
-      toast.error(errorMsg);
-    } finally {
-      setTestPrinting(false);
+      console.error('Test print error:', error);
+      toast.error(error instanceof Error ? error.message : "Test print failed");
     }
   };
 
@@ -258,36 +146,27 @@ export function PrinterPanel() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Printer className="h-5 w-5" />
-          PrintNode Cloud Printing
+          Zebra Network Printing
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* PrintNode Status */}
+        {/* Connection Status */}
         <div className="flex items-center justify-between">
-          <span className="text-sm font-medium">PrintNode Status:</span>
-          <Badge variant={printNodeOnline ? "default" : "destructive"} className="gap-1">
-            {printNodeOnline ? <Cloud className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
-            {printNodeOnline ? "Connected" : "Not Connected"}
+          <span className="text-sm font-medium">Network Status:</span>
+          <Badge variant={isConnected ? "default" : "destructive"} className="gap-1">
+            {isConnected ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
+            {isConnected ? "Connected" : "No Printers"}
           </Badge>
         </div>
 
-        {!printNodeOnline && (
+        {!isConnected && connectionError && (
           <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-md">
             <div className="flex items-center gap-2 text-destructive font-medium text-sm mb-1">
               <WifiOff className="h-4 w-4" />
-              PrintNode Not Available
+              Network Issue
             </div>
             <p className="text-sm text-muted-foreground">
-              {connectionError || "Check your PrintNode API key configuration in Supabase secrets."}
-            </p>
-          </div>
-        )}
-
-        {/* API Key Source Indicator */}
-        {printNodeOnline && keySource && (
-          <div className="p-2 bg-green-50 border border-green-200 rounded-md">
-            <p className="text-xs text-green-700">
-              Using {keySource} API key
+              {connectionError}
             </p>
           </div>
         )}
@@ -297,19 +176,33 @@ export function PrinterPanel() {
           Workstation: {workstationId}
         </div>
 
-         {/* Printer Selection */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <label className="text-sm font-medium">Printers:</label>
-            {selectedPrinter && (
-              <Badge variant="secondary" className="text-xs">
-                Default: {getDisplayName(selectedPrinter.id, selectedPrinter.name)}
+        {/* Selected Printer Info */}
+        {selectedPrinter && (
+          <div className="p-3 bg-muted rounded-md">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="font-medium text-sm">{selectedPrinter.name}</div>
+                <div className="text-xs text-muted-foreground">
+                  {selectedPrinter.isSystemPrinter 
+                    ? 'USB/Local Printer' 
+                    : `${selectedPrinter.ip}:${selectedPrinter.port}`
+                  }
+                </div>
+              </div>
+              <Badge variant={selectedPrinter.isConnected ? "default" : "destructive"}>
+                {selectedPrinter.isConnected ? "Online" : "Offline"}
               </Badge>
-            )}
+            </div>
+          </div>
+        )}
+
+        {/* Printer List */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-medium">Available Printers:</label>
           </div>
           
-          {/* Available Printers List */}
-          <div className="space-y-2 max-h-48 overflow-y-auto">
+          <div className="space-y-2 max-h-32 overflow-y-auto">
             {printers.map((printer) => (
               <div key={printer.id} className="flex items-center gap-2 p-2 border rounded-md">
                 <input
@@ -317,100 +210,34 @@ export function PrinterPanel() {
                   id={`printer-${printer.id}`}
                   name="selectedPrinter"
                   checked={selectedPrinter?.id === printer.id}
-                  onChange={() => setSelectedPrinter(printer)}
+                  onChange={() => setSelectedPrinterId(printer)}
                   className="h-4 w-4"
                 />
                 
                 <div className="flex-1 min-w-0">
-                  {editingPrinterId === printer.id ? (
-                    <div className="flex items-center gap-2">
-                      <Input
-                        value={editingName}
-                        onChange={(e) => setEditingName(e.target.value)}
-                        className="h-7 text-sm"
-                        autoFocus
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            setCustomName(printer.id, editingName);
-                            setEditingPrinterId(null);
-                            toast.success('Printer name updated');
-                          } else if (e.key === 'Escape') {
-                            setEditingPrinterId(null);
-                          }
-                        }}
-                      />
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 w-7 p-0"
-                        onClick={() => {
-                          setCustomName(printer.id, editingName);
-                          setEditingPrinterId(null);
-                          toast.success('Printer name updated');
-                        }}
-                      >
-                        <Check className="h-3 w-3" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 w-7 p-0"
-                        onClick={() => setEditingPrinterId(null)}
-                      >
-                        <X className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <label 
-                          htmlFor={`printer-${printer.id}`}
-                          className="font-medium text-sm cursor-pointer"
-                        >
-                          {getDisplayName(printer.id, printer.name)}
-                        </label>
-                        {hasCustomName(printer.id) && (
-                          <div className="text-xs text-muted-foreground">
-                            Original: {printer.name}
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 w-7 p-0"
-                          onClick={() => {
-                            setEditingPrinterId(printer.id);
-                            setEditingName(getDisplayName(printer.id, printer.name));
-                          }}
-                        >
-                          <Edit2 className="h-3 w-3" />
-                        </Button>
-                        {hasCustomName(printer.id) && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-7 w-7 p-0 text-muted-foreground"
-                            onClick={() => {
-                              resetName(printer.id);
-                              toast.success('Printer name reset');
-                            }}
-                            title="Reset to original name"
-                          >
-                            <X className="h-3 w-3" />
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  )}
+                  <label 
+                    htmlFor={`printer-${printer.id}`}
+                    className="font-medium text-sm cursor-pointer block"
+                  >
+                    {printer.name}
+                  </label>
+                  <div className="text-xs text-muted-foreground">
+                    {printer.isSystemPrinter 
+                      ? 'USB/Local' 
+                      : `${printer.ip}:${printer.port}`
+                    }
+                  </div>
                 </div>
+                
+                <Badge variant={printer.isConnected ? "default" : "secondary"} className="text-xs">
+                  {printer.isConnected ? "Online" : "Offline"}
+                </Badge>
               </div>
             ))}
             
-            {printers.length === 0 && printNodeOnline && (
+            {printers.length === 0 && (
               <div className="text-sm text-muted-foreground text-center py-4">
-                No printers found
+                No printers found. Add a printer manually or check USB connection.
               </div>
             )}
           </div>
@@ -422,13 +249,64 @@ export function PrinterPanel() {
             <Button 
               variant="outline" 
               size="sm" 
-              onClick={refreshPrinters}
-              disabled={loading}
+              onClick={() => refreshPrinters(true)}
+              disabled={isLoading}
               className="gap-2"
             >
-              <RefreshCw className={`h-3 w-3 ${loading ? "animate-spin" : ""}`} />
-              {loading ? "Checking..." : "Refresh"}
+              <RefreshCw className={`h-3 w-3 ${isLoading ? "animate-spin" : ""}`} />
+              {isLoading ? "Scanning..." : "Scan"}
             </Button>
+            
+            <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+              <DialogTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-2">
+                  <Plus className="h-3 w-3" />
+                  Add Network Printer
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Add Network Printer</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="printer-ip">IP Address *</Label>
+                    <Input
+                      id="printer-ip"
+                      placeholder="192.168.0.100"
+                      value={newPrinterIp}
+                      onChange={(e) => setNewPrinterIp(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="printer-port">Port</Label>
+                    <Input
+                      id="printer-port"
+                      placeholder="9100"
+                      value={newPrinterPort}
+                      onChange={(e) => setNewPrinterPort(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="printer-name">Name (optional)</Label>
+                    <Input
+                      id="printer-name"
+                      placeholder="Main Zebra Printer"
+                      value={newPrinterName}
+                      onChange={(e) => setNewPrinterName(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex gap-2 pt-4">
+                    <Button variant="outline" onClick={() => setShowAddDialog(false)}>
+                      Cancel
+                    </Button>
+                    <Button onClick={handleAddPrinter}>
+                      Add Printer
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
             
             <Button 
               variant="outline" 
@@ -436,58 +314,43 @@ export function PrinterPanel() {
               onClick={() => setShowPrinterDialog(true)}
             >
               <Printer className="h-4 w-4 mr-2" />
-              Change Printer
-            </Button>
-            
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={savePrinterSettings}
-              disabled={!selectedPrinter}
-            >
-              Set as Default
+              Change Default
             </Button>
           </div>
-          
-          {lastChecked && (
-            <div className="text-xs text-muted-foreground">
-              Last checked: {lastChecked.toLocaleTimeString()}
-            </div>
-          )}
         </div>
 
         <Separator className="my-4" />
 
-        {/* Test Printing */}
+        {/* Test Functions */}
         <div className="space-y-3">
-          <label className="text-sm font-medium">Test Printing:</label>
+          <label className="text-sm font-medium">Test Functions:</label>
           
           <Button 
             variant="outline"
             size="sm"
-            onClick={runPDFTest} 
-            disabled={!printNodeOnline || !selectedPrinter || testingPDF}
+            onClick={handleTestConnection} 
+            disabled={!selectedPrinter || testingConnection}
             className="w-full"
           >
-            <FileText className="w-4 h-4 mr-2" />
-            {testingPDF ? "Testing..." : "Quick PDF Test"}
+            <Settings className="w-4 h-4 mr-2" />
+            {testingConnection ? "Testing..." : "Test Connection"}
           </Button>
 
           <Button 
             className="w-full gap-2" 
-            onClick={runSmokeTest}
-            disabled={!printNodeOnline || !selectedPrinter || testPrinting}
+            onClick={runTestPrint}
+            disabled={!isConnected || !selectedPrinter}
           >
             <TestTube className="h-4 w-4" />
-            {testPrinting ? "Testing..." : "Full Test Print"}
+            Test Print (ZPL)
           </Button>
         </div>
 
-        {/* PrintNode Info */}
+        {/* Info */}
         <div className="text-xs text-muted-foreground pt-2 border-t">
-          Optimized for Rollo label printers using PDF format.
+          Supports both USB-connected and network Zebra printers using ZPL.
           <br />
-          {printers.length > 0 && `${printers.length} printer(s) available`}
+          USB printers are auto-detected, network printers use TCP/IP port 9100.
         </div>
       </CardContent>
       

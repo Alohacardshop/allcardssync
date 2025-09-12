@@ -169,7 +169,8 @@ export function useZebraNetwork() {
     if (!selectedPrinter) {
       throw new Error('No printer selected');
     }
-    return zebraNetworkService.printZPL(zplData, selectedPrinter.ip, selectedPrinter.port, options);
+    const result = await zebraNetworkService.printZPL(zplData, selectedPrinter, options);
+    return result;
   }, [selectedPrinter]);
 
   const testConnection = useCallback(async (printer?: ZebraPrinter) => {
