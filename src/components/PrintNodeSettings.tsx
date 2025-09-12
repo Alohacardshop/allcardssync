@@ -80,7 +80,7 @@ export function PrintNodeSettings() {
     // Save to current printer config
     const printer = printers.find(p => p.id.toString() === printerId);
     if (printer) {
-      const currentPrinter = localStorage.getItem('zebraPrinterConfig');
+      const currentPrinter = localStorage.getItem('zebra-printer-config');
       const config = currentPrinter ? JSON.parse(currentPrinter) : {};
       
       const updatedConfig = {
@@ -90,7 +90,7 @@ export function PrintNodeSettings() {
         usePrintNode: true
       };
       
-      localStorage.setItem('zebraPrinterConfig', JSON.stringify(updatedConfig));
+      localStorage.setItem('zebra-printer-config', JSON.stringify(updatedConfig));
       toast.success(`Selected PrintNode printer: ${printer.name}`);
     }
   };
