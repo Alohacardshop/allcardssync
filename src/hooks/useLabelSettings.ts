@@ -8,10 +8,10 @@ export interface LabelSettings {
   printerPort: number;
   hasCutter: boolean;
   
-  // Print settings
+  // Print settings  
   dpi: Dpi;
-  speed: number;
-  darkness: number;
+  speed: number; // IPS (inches per second)
+  darkness: number; // 1-30 scale
   copies: number;
   cutMode: 'none' | 'every-label' | 'end-of-job';
 }
@@ -21,10 +21,10 @@ const DEFAULT_SETTINGS: LabelSettings = {
   printerPort: 9100,
   hasCutter: false,
   dpi: 203,
-  speed: 4,
-  darkness: 10,
+  speed: 4, // 4 IPS is a common default
+  darkness: 15, // Mid-range darkness
   copies: 1,
-  cutMode: 'end-of-job'
+  cutMode: 'end-of-job' // Default to end-of-job if cutter available
 };
 
 const STORAGE_KEY = 'label-settings';

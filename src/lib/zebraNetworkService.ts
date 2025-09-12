@@ -145,26 +145,29 @@ function parseStatusReply(reply: string): PrinterStatus {
   for (const line of lines) {
     const upperLine = line.toUpperCase();
     
-    if (upperLine.includes('PRINTER STATUS') && upperLine.includes('PAUSED')) {
+    // More comprehensive status parsing
+    if (upperLine.includes('PAUSE') && !upperLine.includes('UNPAUSE')) {
       paused = true;
     }
     
-    if (upperLine.includes('HEAD OPEN')) {
+    if (upperLine.includes('HEAD') && upperLine.includes('OPEN')) {
       headOpen = true;
     }
     
-    if (upperLine.includes('MEDIA OUT') || upperLine.includes('PAPER OUT')) {
+    if (upperLine.includes('MEDIA OUT') || 
+        upperLine.includes('PAPER OUT') || 
+        upperLine.includes('RIBBON OUT')) {
       mediaOut = true;
     }
     
-    // Extract IP address
-    const ipMatch = line.match(/IP ADDRESS[:\s]+(\d+\.\d+\.\d+\.\d+)/i);
+    // Extract IP address - more flexible patterns
+    const ipMatch = line.match(/IP\s*ADDRESS[:\s]*(\d+\.\d+\.\d+\.\d+)/i);
     if (ipMatch) {
       ipAddr = ipMatch[1];
     }
     
-    // Extract SSID
-    const ssidMatch = line.match(/WLAN SSID[:\s]+(.+)/i);
+    // Extract SSID - more flexible patterns  
+    const ssidMatch = line.match(/(?:WLAN\s*)?SSID[:\s]*([^\r\n]+)/i);
     if (ssidMatch) {
       ssid = ssidMatch[1].trim();
     }

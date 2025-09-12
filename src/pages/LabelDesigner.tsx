@@ -7,14 +7,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { toast } from 'sonner';
-import { Printer, Settings, AlertTriangle, Wifi, WifiOff } from 'lucide-react';
+import { Printer, Settings, AlertTriangle, Wifi, WifiOff, Target, RefreshCw } from 'lucide-react';
 import { useZebraNetwork } from '@/hooks/useZebraNetwork';
 import { useLabelSettings } from '@/hooks/useLabelSettings';
 import { buildZPLWithCut, getLabelSizeInDots, type Dpi } from '@/lib/zpl';
 import { priceTag, type PriceTagData } from '@/lib/templates/priceTag';
 import { barcodeLabel, type BarcodeData } from '@/lib/templates/barcode';
 import { qrShelfLabel, type QRShelfData } from '@/lib/templates/qrShelf';
+import { zebraNetworkService, type PrinterStatus } from '@/lib/zebraNetworkService';
 import { ZebraDiagnosticsPanel } from '@/components/ZebraDiagnosticsPanel';
 import { ZebraPrinterPanel } from '@/components/ZebraPrinterPanel';
 
@@ -24,6 +26,10 @@ export function LabelDesigner() {
   
   // Template selection
   const [selectedTemplate, setSelectedTemplate] = useState<'price' | 'barcode' | 'qr'>('price');
+  
+  // Printer status state
+  const [printerStatus, setPrinterStatus] = useState<PrinterStatus | null>(null);
+  const [isQueryingStatus, setIsQueryingStatus] = useState(false);
   
   // Sample data for templates
   const [priceData, setPriceData] = useState<PriceTagData>({
@@ -46,7 +52,36 @@ export function LabelDesigner() {
     section: 'Electronics'
   });
 
-  // Generate current ZPL based on selected template
+  // Query printer status when printer changes
+  useEffect(() => {
+    if (selectedPrinter) {
+      queryPrinterStatus();
+    } else {
+      setPrinterStatus(null);
+    }
+  }, [selectedPrinter]);
+
+  // Query printer status function
+  const queryPrinterStatus = async () => {
+    if (!selectedPrinter) return;
+    
+    setIsQueryingStatus(true);
+    try {
+      const status = await zebraNetworkService.queryStatus(selectedPrinter.ip, selectedPrinter.port);
+      setPrinterStatus(status);
+    } catch (error) {
+      console.warn('Status query failed:', error);
+      setPrinterStatus({
+        ready: false,
+        paused: false,
+        headOpen: false,
+        mediaOut: false,
+        raw: `Error: ${error instanceof Error ? error.message : 'Status unavailable'}`
+      });
+    } finally {
+      setIsQueryingStatus(false);
+    }
+  };
   const generateCurrentZPL = (): string => {
     const baseOptions = {
       dpi: settings.dpi,
@@ -69,6 +104,21 @@ export function LabelDesigner() {
     }
   };
 
+  // Determine if print is allowed
+  const canPrint = selectedPrinter && printerStatus?.ready;
+  const getPrintDisabledReason = (): string | null => {
+    if (!selectedPrinter) return 'Select a Zebra printer first';
+    if (!printerStatus) return 'Checking printer status...';
+    if (!printerStatus.ready) {
+      const issues = [];
+      if (printerStatus.paused) issues.push('printer is paused');
+      if (printerStatus.headOpen) issues.push('print head is open'); 
+      if (printerStatus.mediaOut) issues.push('media/ribbon is out');
+      return issues.length > 0 ? `Cannot print: ${issues.join(', ')}` : 'Printer not ready';
+    }
+    return null;
+  };
+
   // Print current label
   const handlePrint = async () => {
     if (!selectedPrinter) {
@@ -76,23 +126,35 @@ export function LabelDesigner() {
       return;
     }
 
+    if (!printerStatus?.ready) {
+      const reason = getPrintDisabledReason();
+      toast.error(reason || 'Printer not ready');
+      return;
+    }
+
+    // Show print start toast with target info
+    toast.info(`Sending ${settings.copies} label(s) to ${selectedPrinter.ip}:${selectedPrinter.port}...`);
+
     try {
       const zpl = generateCurrentZPL();
       const result = await printZPL(zpl, { title: 'Label Designer Print', copies: settings.copies });
       
       if (result.success) {
-        toast.success('Label sent to printer successfully!');
+        toast.success(`Label sent to ${selectedPrinter.ip} successfully!`);
       } else {
         toast.error(result.error || 'Print failed');
         
         // Provide actionable CTAs on error
-        if (result.suggestions?.length) {
-          setTimeout(() => {
-            result.suggestions!.forEach(suggestion => {
-              toast.info(suggestion, { duration: 5000 });
-            });
-          }, 1000);
-        }
+        setTimeout(() => {
+          toast.info('Try these actions:', {
+            description: 'Query Status, Open Web UI, or Check Connection',
+            duration: 8000,
+            action: {
+              label: 'Open Web UI',
+              onClick: () => window.open(`http://${selectedPrinter.ip}`, '_blank')
+            }
+          });
+        }, 1000);
       }
     } catch (error) {
       toast.error('Print failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
@@ -258,36 +320,88 @@ export function LabelDesigner() {
       {/* Print Actions */}
       <Card>
         <CardContent className="pt-6">
-          {/* Connection Status */}
+          {/* Target Printer Info */}
+          {selectedPrinter && (
+            <div className="flex items-center justify-between mb-4 p-2 bg-muted rounded">
+              <div className="flex items-center gap-2">
+                <Target className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Target:</span>
+                <code className="text-xs px-2 py-1 bg-background rounded">{selectedPrinter.ip}:{selectedPrinter.port}</code>
+              </div>
+              <Button 
+                variant="ghost" 
+                size="sm"
+                onClick={queryPrinterStatus}
+                disabled={isQueryingStatus}
+                className="h-6"
+              >
+                <RefreshCw className={`h-3 w-3 ${isQueryingStatus ? 'animate-spin' : ''}`} />
+              </Button>
+            </div>
+          )}
+
+          {/* Printer Status */}
           <div className="flex items-center justify-between mb-4">
             <span className="text-sm font-medium">Printer Status:</span>
             <div className="flex items-center gap-2">
-              {connectionStatus.status === 'connected' && <Wifi className="h-4 w-4 text-green-600" />}
-              {connectionStatus.status === 'offline' && <WifiOff className="h-4 w-4 text-red-600" />}
-              {connectionStatus.status === 'unknown' && <AlertTriangle className="h-4 w-4 text-yellow-600" />}
-              <Badge variant={
-                connectionStatus.status === 'connected' ? 'default' :
-                connectionStatus.status === 'offline' ? 'destructive' : 'secondary'
-              }>
-                {connectionStatus.message}
-              </Badge>
+              {!selectedPrinter ? (
+                <>
+                  <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                  <Badge variant="secondary">No printer selected</Badge>
+                </>
+              ) : !printerStatus ? (
+                <>
+                  <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                  <Badge variant="secondary">Checking...</Badge>
+                </>
+              ) : printerStatus.ready ? (
+                <>
+                  <Wifi className="h-4 w-4 text-green-600" />
+                  <Badge variant="default">Ready</Badge>
+                </>
+              ) : (
+                <>
+                  <WifiOff className="h-4 w-4 text-red-600" />
+                  <Badge variant="destructive">Not Ready</Badge>
+                </>
+              )}
             </div>
           </div>
 
+          {/* Print Button */}
           <div className="space-y-2">
-            <Button 
-              onClick={handlePrint} 
-              disabled={connectionStatus.status === 'no-printer'}
-              className="w-full flex items-center gap-2"
-              title={connectionStatus.status === 'no-printer' ? 'Select a Zebra printer first' : ''}
-            >
-              <Printer className="h-4 w-4" />
-              Print Label
-            </Button>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button 
+                    onClick={handlePrint} 
+                    disabled={!canPrint}
+                    className="w-full flex items-center gap-2"
+                  >
+                    <Printer className="h-4 w-4" />
+                    Print Label ({settings.copies} {settings.copies === 1 ? 'copy' : 'copies'})
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {getPrintDisabledReason() || 'Print label to selected printer'}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             
-            {connectionStatus.status === 'no-printer' && (
+            {!selectedPrinter && (
               <div className="text-sm text-muted-foreground text-center">
                 Select a printer in the Zebra Network Printing panel below
+              </div>
+            )}
+            
+            {selectedPrinter && !printerStatus?.ready && printerStatus && (
+              <div className="text-sm text-yellow-700 text-center space-y-1">
+                <div>Printer issues detected:</div>
+                <div className="text-xs space-x-2">
+                  {printerStatus.paused && <Badge variant="outline" className="text-xs">Paused</Badge>}
+                  {printerStatus.headOpen && <Badge variant="outline" className="text-xs">Head Open</Badge>}
+                  {printerStatus.mediaOut && <Badge variant="outline" className="text-xs">Media Out</Badge>}
+                </div>
               </div>
             )}
           </div>

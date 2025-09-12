@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,11 +16,17 @@ import {
   Send,
   TestTube,
   Eye,
-  Timer
+  Timer,
+  Info,
+  CheckCircle2,
+  XCircle,
+  AlertTriangle
 } from 'lucide-react';
 import { useZebraNetwork } from '@/hooks/useZebraNetwork';
-import { zebraNetworkService } from '@/lib/zebraNetworkService';
+import { zebraNetworkService, type PrinterStatus } from '@/lib/zebraNetworkService';
+import { useLabelSettings } from '@/hooks/useLabelSettings';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { PrinterStatusModal } from '@/components/PrinterStatusModal';
 
 // ZPL Commands for diagnostics
 const ZPL_COMMANDS = {
@@ -35,20 +41,60 @@ const ZPL_COMMANDS = {
 
 export function ZebraDiagnosticsPanel() {
   const { selectedPrinter, testConnection } = useZebraNetwork();
+  const { settings } = useLabelSettings();
   const [editIp, setEditIp] = useState('');
   const [editPort, setEditPort] = useState('9100');
   const [rawZpl, setRawZpl] = useState('');
   const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showStatusModal, setShowStatusModal] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [lastPingMs, setLastPingMs] = useState<number | null>(null);
+  const [printerStatus, setPrinterStatus] = useState<PrinterStatus | null>(null);
 
   // Initialize edit fields when printer changes
-  React.useEffect(() => {
+  useEffect(() => {
     if (selectedPrinter) {
       setEditIp(selectedPrinter.ip);
       setEditPort(selectedPrinter.port.toString());
+      // Query status on printer selection
+      handleQueryStatus();
     }
   }, [selectedPrinter]);
+
+  // Query printer status
+  const handleQueryStatus = async () => {
+    if (!selectedPrinter) {
+      toast.error('No printer selected');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const status = await zebraNetworkService.queryStatus(selectedPrinter.ip, selectedPrinter.port);
+      setPrinterStatus(status);
+      
+      if (status.ready) {
+        toast.success('Printer status retrieved - Ready');
+      } else {
+        const issues = [];
+        if (status.paused) issues.push('paused');
+        if (status.headOpen) issues.push('head open');
+        if (status.mediaOut) issues.push('media out');
+        toast.warning(`Printer status retrieved - Issues: ${issues.join(', ')}`);
+      }
+    } catch (error) {
+      toast.error(`Status query failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setPrinterStatus({
+        ready: false,
+        paused: false,
+        headOpen: false,
+        mediaOut: false,
+        raw: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handlePing = async () => {
     if (!selectedPrinter) {
@@ -144,13 +190,13 @@ export function ZebraDiagnosticsPanel() {
 
     setIsLoading(true);
     try {
-      // Enable cutter mode and cut now
-      await zebraNetworkService.printZPLDirect(ZPL_COMMANDS.cutterEnable, selectedPrinter.ip, selectedPrinter.port);
-      await new Promise(resolve => setTimeout(resolve, 300));
+      // Send the updated cut now sequence
+      const cutZPL = '^XA\n^MMC\n^XZ';
+      await zebraNetworkService.printZPLDirect(cutZPL, selectedPrinter.ip, selectedPrinter.port);
       
-      await zebraNetworkService.printZPLDirect(ZPL_COMMANDS.cutNow, selectedPrinter.ip, selectedPrinter.port);
-      
-      toast.success('Cutter test sent - check if printer cut the media');
+      toast.success('Cut now command sent - check if printer cut the media', {
+        description: 'If no cut occurred, your printer may not support cutter mode or needs SGD commands'
+      });
     } catch (error) {
       toast.error(`Cutter test failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
@@ -209,6 +255,19 @@ export function ZebraDiagnosticsPanel() {
                   {lastPingMs}ms
                 </Badge>
               )}
+              {printerStatus && (
+                <Badge 
+                  variant={printerStatus.ready ? "default" : "destructive"}
+                  className="flex items-center gap-1"
+                >
+                  {printerStatus.ready ? (
+                    <CheckCircle2 className="h-3 w-3" />
+                  ) : (
+                    <XCircle className="h-3 w-3" />
+                  )}
+                  {printerStatus.ready ? "Ready" : "Not Ready"}
+                </Badge>
+              )}
               <Badge variant={selectedPrinter.isConnected ? "default" : "secondary"}>
                 {selectedPrinter.isConnected ? "Online" : selectedPrinter.isConnected === false ? "Offline" : "Unknown"}
               </Badge>
@@ -264,7 +323,7 @@ export function ZebraDiagnosticsPanel() {
         {/* Network Actions */}
         <div className="space-y-2">
           <Label className="font-medium">Network Actions</Label>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             <Button 
               variant="outline" 
               onClick={handlePing}
@@ -277,6 +336,16 @@ export function ZebraDiagnosticsPanel() {
             
             <Button 
               variant="outline" 
+              onClick={() => setShowStatusModal(true)}
+              disabled={isLoading || !printerStatus}
+              className="flex items-center gap-2"
+            >
+              <Info className="h-4 w-4" />
+              Status
+            </Button>
+            
+            <Button 
+              variant="outline" 
               onClick={handleOpenWebUI}
               className="flex items-center gap-2"
             >
@@ -284,6 +353,16 @@ export function ZebraDiagnosticsPanel() {
               Web UI
             </Button>
           </div>
+          
+          <Button 
+            variant="outline" 
+            onClick={handleQueryStatus}
+            disabled={isLoading}
+            className="w-full flex items-center gap-2"
+          >
+            <Activity className="h-4 w-4" />
+            Query Status (~HS)
+          </Button>
         </div>
 
         <Separator />
@@ -312,15 +391,17 @@ export function ZebraDiagnosticsPanel() {
               Calibrate (Gap Sensor)
             </Button>
             
-            <Button 
-              variant="outline" 
-              onClick={handleTestCutter}
-              disabled={isLoading}
-              className="w-full flex items-center gap-2"
-            >
-              <Scissors className="h-4 w-4" />
-              Test Cutter Mode & Cut
-            </Button>
+            {settings.hasCutter && (
+              <Button 
+                variant="outline" 
+                onClick={handleTestCutter}
+                disabled={isLoading}
+                className="w-full flex items-center gap-2"
+              >
+                <Scissors className="h-4 w-4" />
+                Cut Now (Diagnose)
+              </Button>
+            )}
           </div>
         </div>
 
@@ -351,8 +432,16 @@ export function ZebraDiagnosticsPanel() {
           <div className="font-medium">Quick Examples:</div>
           <div>Config: <code>^XA^HH^XZ</code></div>
           <div>Test: <code>^XA^FO50,50^A0N,30^FDTest^FS^XZ</code></div>
-          <div>Cut: <code>^XA^CN1^XZ</code></div>
+          <div>Cut: <code>^XA^MMC^XZ</code></div>
         </div>
+        
+        {/* Status Modal */}
+        <PrinterStatusModal
+          open={showStatusModal}
+          onOpenChange={setShowStatusModal}
+          status={printerStatus}
+          printerIp={selectedPrinter.ip}
+        />
       </CardContent>
     </Card>
   );
