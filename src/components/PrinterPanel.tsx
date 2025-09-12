@@ -7,7 +7,7 @@ import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Printer, Cloud, WifiOff, TestTube, FileText, Edit2, Check, X, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
-import { printNodeService } from "@/lib/printNodeService";
+import { zebraNetworkService } from "@/lib/zebraNetworkService";
 import { supabase } from "@/integrations/supabase/client";
 import { usePrinterNames } from "@/hooks/usePrinterNames";
 import jsPDF from 'jspdf';

@@ -12,11 +12,11 @@ import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { Link, useLocation } from "react-router-dom";
 import { Navigation } from "@/components/Navigation";
-import { PrinterPanel } from "@/components/PrinterPanel";
-import { usePrintNode } from "@/hooks/usePrintNode";
-import { PrinterSelectionDialog } from '@/components/PrinterSelectionDialog';
+import { ZebraPrinterPanel } from "@/components/ZebraPrinterPanel";
+import { useZebraNetwork } from "@/hooks/useZebraNetwork";
+import { ZebraPrinterSelectionDialog } from '@/components/ZebraPrinterSelectionDialog';
 import { useLocalStorageString } from "@/hooks/useLocalStorage";
-import { generateBoxedLayoutTSPL, type LabelFieldConfig } from "@/lib/tspl";
+import { generateBoxedLayoutZPL, type LabelFieldConfig } from "@/lib/zpl";
 import { LabelPreviewCanvas } from "@/components/LabelPreviewCanvas";
 import { supabase } from "@/integrations/supabase/client";
 import { Settings, Eye, Printer, ChevronDown, Home, Save } from "lucide-react";
@@ -48,7 +48,7 @@ export default function LabelDesigner() {
   });
 
   const location = useLocation();
-  const { printPDF, isConnected: printNodeConnected, selectedPrinterId, selectedPrinter } = usePrintNode();
+  const { printZPL, isConnected: zebraConnected, selectedPrinter } = useZebraNetwork();
   const [printLoading, setPrintLoading] = useState(false);
   const [hasPrinted, setHasPrinted] = useState(false);
   const [saveLoading, setSaveLoading] = useState(false);
@@ -258,7 +258,7 @@ export default function LabelDesigner() {
     setPrintLoading(true);
     try {
       // Get the print service and print with selected printer
-      const { printNodeService } = await import('@/lib/printNodeService');
+      // Use ZPL for Zebra printing
       
       // Use RAW TSPL commands for thermal printers (proper 2x1 sizing)
       const result = await printNodeService.printRAW(pendingPrintData, printerId, {
@@ -283,7 +283,7 @@ export default function LabelDesigner() {
 
   // Test print the actual preview layout
   const handleTestPrintLayout = async () => {
-    if (!selectedPrinterId) {
+    if (!selectedPrinter) {
       toast.error('Select a PrintNode printer first');
       return;
     }
@@ -433,7 +433,7 @@ export default function LabelDesigner() {
             </Card>
 
             {/* Printer Panel */}
-            <PrinterPanel />
+            <ZebraPrinterPanel />
           </div>
 
           {/* Center: Preview */}
@@ -592,7 +592,7 @@ export default function LabelDesigner() {
         </div>
       </div>
       
-      <PrinterSelectionDialog
+      <ZebraPrinterSelectionDialog
         open={showPrinterDialog}
         onOpenChange={setShowPrinterDialog}
         onPrint={handlePrintWithSelectedPrinter}

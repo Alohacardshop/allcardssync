@@ -114,7 +114,7 @@ class ZebraNetworkService {
     });
 
     const results = await Promise.all(testPromises);
-    return results.filter((printer): printer is ZebraPrinter => printer !== null);
+    return results.filter((printer) => printer !== null) as ZebraPrinter[];
   }
 
   async getPrinterStatus(ip: string, port: number = 9100): Promise<{ 

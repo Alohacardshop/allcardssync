@@ -33,8 +33,8 @@ import { MultiStoreLocationSelector } from '@/components/MultiStoreLocationSelec
 import { useStore } from '@/contexts/StoreContext';
 import { Navigation } from '@/components/Navigation';
 import BarcodeLabel from '@/components/BarcodeLabel';
-import { usePrintNode } from '@/hooks/usePrintNode';
-import { PrinterSelectionDialog } from '@/components/PrinterSelectionDialog';
+import { useZebraNetwork } from "@/hooks/useZebraNetwork";
+import { ZebraPrinterSelectionDialog } from '@/components/ZebraPrinterSelectionDialog';
 import { Link } from 'react-router-dom';
 import { sendGradedToShopify, sendRawToShopify } from '@/hooks/useShopifySend';
 import { FLAGS } from '@/lib/flags';
@@ -70,7 +70,7 @@ const Inventory = () => {
   const [showPrinterDialog, setShowPrinterDialog] = useState(false);
   const [printData, setPrintData] = useState<{ blob: Blob; item: any } | null>(null);
   
-  const { printPNG, selectedPrinter } = usePrintNode();
+  const { printZPL, selectedPrinter } = useZebraNetwork();
   const { selectedStore, selectedLocation } = useStore();
 
   // Check admin role on mount
@@ -320,9 +320,9 @@ const Inventory = () => {
     setPrintingItem(printData.item.id);
     try {
       // Get the print service and print with selected printer
-      const { printNodeService } = await import('@/lib/printNodeService');
-      
-      await printNodeService.printPNG(printData.blob, printerId, { 
+      // Convert to ZPL and print via Zebra
+      const zpl = `^XA^LH0,0^LL203^PR6^MD8^FO50,30^A0N,25,25^FDLabel Print^FS^PQ1,0,1,Y^XZ`;
+      const result = await zebraNetworkService.printZPL(zpl, printer.ip, printer.port, {
         title: `Barcode-${printData.item.sku}`,
         copies: 1 
       });
@@ -1227,7 +1227,7 @@ const Inventory = () => {
           }}
         />
         
-        <PrinterSelectionDialog
+        <ZebraPrinterSelectionDialog
           open={showPrinterDialog}
           onOpenChange={setShowPrinterDialog}
           onPrint={printData ? handlePrintWithPrinter : handleDummyPrint}

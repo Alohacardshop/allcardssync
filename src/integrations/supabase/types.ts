@@ -724,6 +724,9 @@ export type Database = {
           bridge_port: number | null
           created_at: string | null
           id: string
+          printer_ip: string | null
+          printer_name: string | null
+          printer_port: number | null
           selected_printer_id: number | null
           selected_printer_name: string | null
           updated_at: string | null
@@ -734,6 +737,9 @@ export type Database = {
           bridge_port?: number | null
           created_at?: string | null
           id?: string
+          printer_ip?: string | null
+          printer_name?: string | null
+          printer_port?: number | null
           selected_printer_id?: number | null
           selected_printer_name?: string | null
           updated_at?: string | null
@@ -744,6 +750,9 @@ export type Database = {
           bridge_port?: number | null
           created_at?: string | null
           id?: string
+          printer_ip?: string | null
+          printer_name?: string | null
+          printer_port?: number | null
           selected_printer_id?: number | null
           selected_printer_name?: string | null
           updated_at?: string | null

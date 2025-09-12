@@ -10,7 +10,7 @@ import { Printer, Eye, RotateCcw, Filter, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Navigation } from "@/components/Navigation";
-import { printNodeService } from "@/lib/printNodeService";
+import { zebraNetworkService } from "@/lib/zebraNetworkService";
 
 interface PrintJob {
   id: string;
@@ -150,7 +150,7 @@ export default function PrintLogs() {
         const printerId = savedPrinterId ? parseInt(savedPrinterId) : printers[0].id;
         
         // Send to printer using PrintNode
-        await printNodeService.printRAW(job.payload, printerId, { 
+        await zebraNetworkService.printZPL(job.payload, '192.168.0.100', 9100, { 
           title: `Reprint Job ${job.id}`, 
           copies: job.copies 
         });

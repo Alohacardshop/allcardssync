@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { PrinterSelectionDialog } from '@/components/PrinterSelectionDialog';
+import { ZebraPrinterSelectionDialog } from '@/components/ZebraPrinterSelectionDialog';
+import { zebraNetworkService } from '@/lib/zebraNetworkService';
 
 interface BarcodeLabelProps {
   value: string;
@@ -12,7 +13,6 @@ interface BarcodeLabelProps {
 const BarcodeLabel = ({ value, label, className, showPrintButton = true }: BarcodeLabelProps) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [showPrinterDialog, setShowPrinterDialog] = useState(false);
-  const [barcodeBlob, setBarcodeBlob] = useState<Blob | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -38,36 +38,34 @@ const BarcodeLabel = ({ value, label, className, showPrintButton = true }: Barco
   }, [value]);
 
   const handlePrint = async () => {
-    try {
-      if (!canvasRef.current) return;
-      
-      // Convert canvas to blob for PrintNode
-      const blob = await new Promise<Blob>((resolve) => {
-        canvasRef.current?.toBlob((blob) => {
-          if (blob) resolve(blob);
-        }, 'image/png');
-      });
-      
-      setBarcodeBlob(blob);
-      setShowPrinterDialog(true);
-    } catch (error) {
-      console.error('Error preparing barcode for print:', error);
-    }
+    setShowPrinterDialog(true);
   };
 
-  const handlePrintWithPrinter = async (printerId: number) => {
-    if (!barcodeBlob) return;
+  const handlePrintWithPrinter = async (printer: any) => {
+    if (!value) return;
     
     try {
-      const { printNodeService } = await import('@/lib/printNodeService');
-      await printNodeService.printPNG(barcodeBlob, printerId, { 
-        title: `Barcode-${value}`,
-        copies: 1 
+      // Generate ZPL for barcode
+      const zpl = `^XA
+^LH0,0
+^LL203
+^PR6
+^MD8
+^FO50,30^A0N,30,30^FD${label || 'Barcode'}^FS
+^FO50,80^BCN,80,Y,N,N^FD${value}^FS
+^PQ1,0,1,Y
+^XZ`;
+
+      const result = await zebraNetworkService.printZPL(zpl, printer.ip, printer.port, {
+        title: `Barcode: ${value}`,
+        copies: 1
       });
+
+      if (!result.success) {
+        throw new Error(result.error);
+      }
     } catch (error) {
-      console.error('Print error:', error);
-    } finally {
-      setBarcodeBlob(null);
+      throw error;
     }
   };
 
@@ -126,7 +124,7 @@ const BarcodeLabel = ({ value, label, className, showPrintButton = true }: Barco
         </div>
       )}
       
-      <PrinterSelectionDialog
+      <ZebraPrinterSelectionDialog
         open={showPrinterDialog}
         onOpenChange={setShowPrinterDialog}
         onPrint={handlePrintWithPrinter}

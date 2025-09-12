@@ -9,7 +9,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { RefreshCw, Printer, CheckCircle, AlertCircle } from 'lucide-react';
-import { usePrintNode } from '@/hooks/usePrintNode';
+import { useZebraNetwork } from '@/hooks/useZebraNetwork';
 import { usePrinterNames } from '@/hooks/usePrinterNames';
 import { toast } from '@/hooks/use-toast';
 
