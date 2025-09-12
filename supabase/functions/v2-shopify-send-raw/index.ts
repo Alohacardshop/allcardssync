@@ -57,13 +57,6 @@ async function createRawProduct(domain: string, token: string, item: any) {
     alt: `${item.subject || 'Trading Card'} - ${item.sku}`,
     position: 1
   }] : []
-  
-  console.info('image.payload', { 
-    correlationId: run.correlationId, 
-    hasImage: !!item.image_url, 
-    imageUrl: item.image_url,
-    imageObject: images[0] || null 
-  })
 
   const payload = {
     product: {
@@ -166,6 +159,20 @@ Deno.serve(async (req) => {
     }
 
     console.info('send.start', { correlationId: run.correlationId, storeKey, locationGid, sku: item.sku, quantity: item.quantity })
+
+    // Enhanced image object with required Shopify properties
+    const images = item.image_url ? [{
+      src: item.image_url,
+      alt: `${item.subject || 'Trading Card'} - ${item.sku}`,
+      position: 1
+    }] : []
+    
+    console.info('image.payload', { 
+      correlationId: run.correlationId, 
+      hasImage: !!item.image_url, 
+      imageUrl: item.image_url,
+      imageObject: images[0] || null 
+    })
 
     const { domain, token } = await loadStore(supabase, storeKey)
     const slug = deriveStoreSlug(domain)
