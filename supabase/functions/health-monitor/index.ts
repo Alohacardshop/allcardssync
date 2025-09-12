@@ -59,7 +59,7 @@ serve(async (req) => {
     const dbStart = Date.now()
     try {
       const { error } = await supabase
-        .from('sync_v3.jobs')
+        .from('intake_items')
         .select('id')
         .limit(1)
       
@@ -94,14 +94,23 @@ serve(async (req) => {
       }
     })
 
-    // Record health checks in database
-    for (const check of checks) {
-      await supabase.rpc('sync_v3.record_health_check', {
-        service: check.service,
-        health_status: check.status,
-        response_ms: check.responseTime || null,
-        check_details: check.details || {}
-      })
+    // Log health checks to system logs
+    try {
+      for (const check of checks) {
+        await supabase.rpc('add_system_log', {
+          level_in: check.status === 'healthy' ? 'info' : 'warning',
+          message_in: `Health check for ${check.service}: ${check.status}`,
+          context_in: {
+            service: check.service,
+            status: check.status,
+            response_time_ms: check.responseTime || null,
+            details: check.details || {}
+          },
+          source_in: 'health-monitor'
+        })
+      }
+    } catch (logError) {
+      console.warn('Failed to log health checks:', logError.message)
     }
 
     // Calculate overall health
