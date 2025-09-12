@@ -31,7 +31,7 @@ export function useSimplePrinting() {
           port: parsed.port || DEFAULT_ZD410_PRINTER.port,
           name: parsed.name || DEFAULT_ZD410_PRINTER.name,
           printNodeId: parsed.printNodeId,
-          userintNode: parsed.userintNode || false
+          usePrintNode: parsed.usePrintNode || false
         };
       }
     } catch (error) {
@@ -61,7 +61,7 @@ export function useSimplePrinting() {
       toast.info(`Sending ${copies} label(s) to ${printer.name || printer.ip}...`);
       
       // Try PrintNode first if configured
-      if (printer.userintNode && printer.printNodeId) {
+      if (printer.usePrintNode && printer.printNodeId) {
         console.log('🖨️ Attempting PrintNode print...');
         const printNodeResult = await printNodeService.printZPL(zpl, printer.printNodeId, copies);
         console.log('🖨️ PrintNode result:', printNodeResult);

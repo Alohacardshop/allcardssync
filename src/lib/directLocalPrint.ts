@@ -7,6 +7,8 @@ export interface PrinterConnection {
   ip: string;
   port?: number;
   name?: string;
+  printNodeId?: number;
+  usePrintNode?: boolean;
 }
 
 export interface PrintResult {

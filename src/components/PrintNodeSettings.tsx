@@ -87,7 +87,7 @@ export function PrintNodeSettings() {
         ...config,
         name: printer.name,
         printNodeId: printer.id,
-        userintNode: true
+        usePrintNode: true
       };
       
       localStorage.setItem('zebraPrinterConfig', JSON.stringify(updatedConfig));
