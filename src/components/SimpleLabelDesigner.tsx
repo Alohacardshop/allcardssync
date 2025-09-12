@@ -16,6 +16,7 @@ import { Printer, Eye } from 'lucide-react';
 import { useSimplePrinting } from '@/hooks/useSimplePrinting';
 import { ZPL_TEMPLATES, type LabelData, type ZPLOptions, type TemplateType } from '@/lib/simpleZPLTemplates';
 import { SimplePrinterPanel } from './SimplePrinterPanel';
+import { PrintNodeSettings } from './PrintNodeSettings';
 
 export function SimpleLabelDesigner() {
   const { print, isLoading, currentPrinter } = useSimplePrinting();
@@ -299,7 +300,10 @@ export function SimpleLabelDesigner() {
         </Card>
 
         {/* Printer Panel */}
-        <SimplePrinterPanel />
+        <div className="space-y-4">
+          <SimplePrinterPanel />
+          <PrintNodeSettings />
+        </div>
       </div>
 
       {/* ZPL Preview */}
