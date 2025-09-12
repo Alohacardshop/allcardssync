@@ -93,3 +93,7 @@ verify_jwt = true
 # Health monitoring (requires authentication)
 [functions.health-monitor]
 verify_jwt = true
+
+# CGC certificate lookup (requires authentication)
+[functions.cgc-lookup]
+verify_jwt = true
