@@ -16,7 +16,7 @@ import { toast } from '@/hooks/use-toast';
 interface PrinterSelectionDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onPrint: (printerId: number) => Promise<void>;
+  onPrint: (printerId: string) => Promise<void>;
   title?: string;
   allowDefaultOnly?: boolean; // Allow setting default without printing
 }
@@ -35,10 +35,10 @@ export function PrinterSelectionDialog({
     isLoading, 
     refreshPrinters,
     setSelectedPrinterId: setDefaultPrinter 
-  } = usePrintNode();
+  } = useZebraNetwork();
   
   const { getDisplayName } = usePrinterNames();
-  const [selectedPrinterId, setSelectedPrinterId] = useState<number | null>(null);
+  const [selectedPrinterId, setSelectedPrinterId] = useState<string | null>(null);
   const [setAsDefault, setSetAsDefault] = useState(false);
   const [printing, setPrinting] = useState(false);
 
@@ -67,7 +67,10 @@ export function PrinterSelectionDialog({
     }
 
     try {
-      setDefaultPrinter(selectedPrinterId);
+      const selectedZebraPrinter = printers.find(p => p.id === selectedPrinterId);
+      if (selectedZebraPrinter) {
+        setDefaultPrinter(selectedZebraPrinter);
+      }
       onOpenChange(false);
       
       toast({
@@ -98,7 +101,10 @@ export function PrinterSelectionDialog({
     try {
       // Set as default if requested
       if (setAsDefault) {
-        setDefaultPrinter(selectedPrinterId);
+        const selectedZebraPrinter = printers.find(p => p.id === selectedPrinterId);
+        if (selectedZebraPrinter) {
+          setDefaultPrinter(selectedZebraPrinter);
+        }
       }
       
       await onPrint(selectedPrinterId);
@@ -139,7 +145,7 @@ export function PrinterSelectionDialog({
             <div className="flex items-center gap-2 p-3 bg-destructive/10 rounded-lg">
               <AlertCircle className="h-4 w-4 text-destructive" />
               <span className="text-sm text-destructive">
-                PrintNode not connected. Check your connection.
+                Zebra network not connected. Check your connection.
               </span>
             </div>
           )}
@@ -185,7 +191,7 @@ export function PrinterSelectionDialog({
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="font-medium truncate">
-                        {getDisplayName(printer.id, printer.name)}
+                        {printer.name}
                       </span>
                       {selectedPrinter?.id === printer.id && (
                         <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded">
@@ -195,9 +201,9 @@ export function PrinterSelectionDialog({
                     </div>
                     <div className="flex items-center gap-1 text-xs text-muted-foreground">
                       <div className={`w-2 h-2 rounded-full ${
-                        printer.state === 'online' ? 'bg-green-500' : 'bg-gray-400'
+                        printer.isConnected ? 'bg-green-500' : 'bg-gray-400'
                       }`} />
-                      {printer.state}
+                      {printer.isConnected ? 'Online' : 'Offline'}
                     </div>
                   </div>
                 </div>

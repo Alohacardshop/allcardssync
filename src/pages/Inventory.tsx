@@ -35,6 +35,7 @@ import { Navigation } from '@/components/Navigation';
 import BarcodeLabel from '@/components/BarcodeLabel';
 import { useZebraNetwork } from "@/hooks/useZebraNetwork";
 import { ZebraPrinterSelectionDialog } from '@/components/ZebraPrinterSelectionDialog';
+import { zebraNetworkService } from "@/lib/zebraNetworkService";
 import { Link } from 'react-router-dom';
 import { sendGradedToShopify, sendRawToShopify } from '@/hooks/useShopifySend';
 import { FLAGS } from '@/lib/flags';
@@ -321,8 +322,12 @@ const Inventory = () => {
     try {
       // Get the print service and print with selected printer
       // Convert to ZPL and print via Zebra
+      if (!selectedPrinter) {
+        toast.error('No printer selected');
+        return;
+      }
       const zpl = `^XA^LH0,0^LL203^PR6^MD8^FO50,30^A0N,25,25^FDLabel Print^FS^PQ1,0,1,Y^XZ`;
-      const result = await zebraNetworkService.printZPL(zpl, printer.ip, printer.port, {
+      const result = await zebraNetworkService.printZPL(zpl, selectedPrinter.ip, selectedPrinter.port, {
         title: `Barcode-${printData.item.sku}`,
         copies: 1 
       });

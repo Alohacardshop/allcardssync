@@ -46,7 +46,7 @@ export function PrinterPanel() {
   const { getDisplayName, setCustomName, resetName, hasCustomName } = usePrinterNames();
 
   // Dummy function for printer selection dialog when just setting default
-  const handleDummyPrint = async (printerId: number) => {
+  const handleDummyPrint = async (printerId: string) => {
     // This function is never called when allowDefaultOnly=true
     return Promise.resolve();
   };
@@ -109,19 +109,14 @@ export function PrinterPanel() {
     setLoading(true);
     setConnectionError('');
     try {
-      const printerList = await printNodeService.getPrinters();
-      const formattedPrinters = printerList.map(p => ({id: p.id, name: p.name}));
+      // Using Zebra network service instead of PrintNode
+      const discoveredPrinters = await zebraNetworkService.discoverPrinters();
+      const formattedPrinters = discoveredPrinters.map(p => ({id: parseInt(p.id.replace('zebra-', '')), name: p.name}));
       setPrinters(formattedPrinters);
-      setPrintNodeOnline(true);
+      setPrintNodeOnline(discoveredPrinters.length > 0);
       setLastChecked(new Date());
       
-      // Try to get key source info from the service initialization
-      try {
-        await printNodeService.initialize();
-        // This will log which key source is being used
-      } catch (initError) {
-        console.log('Key source detection failed:', JSON.stringify(initError, null, 2));
-      }
+      // No initialization needed for Zebra network service
       
       toast.success(`Found ${formattedPrinters.length} printer(s)`);
     } catch (error) {
@@ -171,15 +166,17 @@ export function PrinterPanel() {
 
     setTestingPDF(true);
     try {
-      const pdfBase64 = generateTestPDF();
-      const result = await printNodeService.printPDF(
-        pdfBase64,
-        selectedPrinter.id,
+      // Generate ZPL for Zebra printer instead of PDF
+      const testZPL = `^XA^LH0,0^LL203^PR6^MD8^FO50,30^A0N,25,25^FDPDF TEST^FS^FO50,60^A0N,20,20^FD${new Date().toLocaleTimeString()}^FS^PQ1,0,1,Y^XZ`;
+      const result = await zebraNetworkService.printZPL(
+        testZPL,
+        '192.168.0.100', // Default test IP
+        9100,
         { title: `PDF Test - ${new Date().toLocaleTimeString()}`, copies: 1 }
       );
 
       if (result.success) {
-        toast.success(`PDF Test Sent - Job ID: ${result.jobId}`);
+        toast.success(`ZPL Test Sent: ${result.message || 'Success'}`);
       } else {
         throw new Error(result.error || 'PDF print failed');
       }
@@ -221,11 +218,12 @@ export function PrinterPanel() {
 
       if (!printJob) throw new Error('Failed to create print job record');
 
-      // Generate and send PDF
-      const pdfBase64 = generateTestPDF();
-      const result = await printNodeService.printPDF(
-        pdfBase64,
-        selectedPrinter.id,
+      // Generate and send ZPL for Zebra printer
+      const testZPL = `^XA^LH0,0^LL203^PR6^MD8^FO50,30^A0N,25,25^FDTEST PRINT^FS^FO50,60^A0N,20,20^FD${new Date().toLocaleTimeString()}^FS^PQ1,0,1,Y^XZ`;
+      const result = await zebraNetworkService.printZPL(
+        testZPL,
+        '192.168.0.100', // Default test IP  
+        9100,
         { title: `Test Print - ${new Date().toLocaleTimeString()}` }
       );
 
@@ -237,12 +235,12 @@ export function PrinterPanel() {
             status: 'sent',
             data: {
               ...(printJob.data as Record<string, any>),
-              printnode_job_id: result.jobId
+              zebra_job_id: 'ZPL_TEST'
             }
           })
           .eq('id', printJob.id);
 
-        toast.success(`PDF Test Sent - Job ID: ${result.jobId}`);
+        toast.success(`ZPL Test Sent: ${result.message || 'Success'}`);
       } else {
         throw new Error(result.error || 'Print failed');
       }

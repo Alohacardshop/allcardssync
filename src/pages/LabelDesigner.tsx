@@ -107,13 +107,13 @@ export default function LabelDesigner() {
     barcodeMode: barcodeMode as 'qr' | 'barcode' | 'none'
   };
 
-  // tsplSettings already defined above
+  const zplSettings = { printDensity: 10, printSpeed: 4, labelLength: 203 };
 
   // Update preview when data or config changes
   useEffect(() => {
     try {
       // Always use boxed layout
-      const tspl = generateBoxedLayoutTSPL(labelData, fieldConfig, tsplSettings);
+      const tspl = generateBoxedLayoutZPL(labelData, fieldConfig, zplSettings);
       setPreviewTspl(tspl);
     } catch (error) {
       console.error('Failed to generate TSPL preview:', error);
@@ -260,15 +260,19 @@ export default function LabelDesigner() {
       // Get the print service and print with selected printer
       // Use ZPL for Zebra printing
       
-      // Use RAW TSPL commands for thermal printers (proper 2x1 sizing)
-      const result = await printNodeService.printRAW(pendingPrintData, printerId, {
-        title: 'Label Print (TSPL)',
+      // Use ZPL for Zebra printers
+      if (!selectedPrinter) {
+        toast.error('No printer selected');
+        return;
+      }
+      const result = await printZPL(pendingPrintData, {
+        title: 'Label Print (ZPL)',
         copies: 1
       });
 
       if (result?.success) {
         setHasPrinted(true);
-        toast.success(`Label sent to printer successfully (Job ID: ${result.jobId})`);
+        toast.success(`Label sent to printer successfully: ${result.message || 'Success'}`);
       } else {
         throw new Error(result?.error || 'Print failed');
       }
@@ -290,22 +294,27 @@ export default function LabelDesigner() {
 
     setPrintLoading(true);
     try {
-      let result;
       const timestamp = new Date().toLocaleTimeString();
       
-      if (!previewCanvasRef.current?.exportToPDF) {
-        toast.error('PDF export not available');
+      if (!selectedPrinter) {
+        toast.error('No printer selected');
         return;
       }
+      const testZPL = generateBoxedLayoutZPL({
+        title: 'TEST LAYOUT',
+        sku: 'TEST-001',
+        price: '$1.00',
+        condition: 'TEST',
+        barcode: 'TEST123'
+      }, fieldConfig);
       
-      const pdfBase64 = await previewCanvasRef.current.exportToPDF();
-      result = await printPDF(pdfBase64, {
-        title: `Layout Test PDF - ${timestamp}`,
+      const result = await printZPL(testZPL, {
+        title: `Layout Test ZPL - ${timestamp}`,
         copies: 1
       });
 
       if (result.success) {
-        toast.success(`Layout test sent to printer - Job ID: ${result.jobId}`);
+        toast.success(`Layout test sent to printer: ${result.message || 'Success'}`);
       } else {
         throw new Error(result.error || 'Print failed');
       }
@@ -477,7 +486,7 @@ export default function LabelDesigner() {
                 <CardTitle className="text-lg flex items-center gap-2">
                   <Printer className="h-5 w-5" />
                   Print Control
-                  {printNodeConnected ? (
+                  {zebraConnected ? (
                     <Badge variant="default" className="ml-auto text-xs bg-green-600">
                       Ready
                     </Badge>
@@ -489,7 +498,7 @@ export default function LabelDesigner() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {printNodeConnected && selectedPrinterId ? (
+                {zebraConnected && selectedPrinter ? (
                   <div className="space-y-3">
                     <div className="p-3 rounded-lg bg-green-50 border border-green-200">
                       <div className="flex items-center gap-2 mb-2">
@@ -553,8 +562,8 @@ export default function LabelDesigner() {
                       <span className="text-sm font-medium text-red-800">Printer Offline</span>
                     </div>
                     <p className="text-xs text-red-700">
-                      {!printNodeConnected ? 
-                        "Configure PrintNode connection" :
+                      {!zebraConnected ? 
+                        "Configure Zebra network connection" :
                         "Select a printer below"}
                     </p>
                   </div>

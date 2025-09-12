@@ -136,11 +136,8 @@ export default function PrintLogs() {
       if (insertError) throw insertError;
 
       try {
-        // Initialize PrintNode service first
-        await printNodeService.initialize();
-        
-        // Get available printers
-        const printers = await printNodeService.getPrinters();
+        // Use Zebra network service for reprinting
+        const printers = await zebraNetworkService.discoverPrinters();
         if (printers.length === 0) {
           throw new Error('No printers available');
         }
