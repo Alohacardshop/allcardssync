@@ -225,8 +225,8 @@ export function ZPLVisualEditor({
 
       onElementSelect(updatedElement);
     } else if (isResizing && resizeHandle && selectedElement && selectedElement.type === 'text' && selectedElement.boundingBox) {
-      const rect = (e.target as Element).closest('.canvas-container')?.getBoundingClientRect();
-      if (!rect) return;
+      const canvasContainer = e.currentTarget as HTMLElement;
+      const rect = canvasContainer.getBoundingClientRect();
 
       const mouseX = (e.clientX - rect.left) / scale;
       const mouseY = (e.clientY - rect.top) / scale;
@@ -236,6 +236,8 @@ export function ZPLVisualEditor({
 
       let newWidth = selectedElement.boundingBox.width;
       let newHeight = selectedElement.boundingBox.height;
+      let newX = elementX;
+      let newY = elementY;
 
       switch (resizeHandle) {
         case 'se': // southeast
@@ -245,31 +247,38 @@ export function ZPLVisualEditor({
         case 'sw': // southwest
           newWidth = Math.max(20, elementX + selectedElement.boundingBox.width - mouseX);
           newHeight = Math.max(15, mouseY - elementY);
+          newX = mouseX;
           break;
         case 'ne': // northeast
           newWidth = Math.max(20, mouseX - elementX);
           newHeight = Math.max(15, elementY + selectedElement.boundingBox.height - mouseY);
+          newY = mouseY;
           break;
         case 'nw': // northwest
           newWidth = Math.max(20, elementX + selectedElement.boundingBox.width - mouseX);
           newHeight = Math.max(15, elementY + selectedElement.boundingBox.height - mouseY);
+          newX = mouseX;
+          newY = mouseY;
           break;
         case 'e': // east
           newWidth = Math.max(20, mouseX - elementX);
           break;
         case 'w': // west
           newWidth = Math.max(20, elementX + selectedElement.boundingBox.width - mouseX);
+          newX = mouseX;
           break;
         case 's': // south
           newHeight = Math.max(15, mouseY - elementY);
           break;
         case 'n': // north
           newHeight = Math.max(15, elementY + selectedElement.boundingBox.height - mouseY);
+          newY = mouseY;
           break;
       }
 
       const updatedElement = {
         ...selectedElement,
+        position: { x: Math.round(newX), y: Math.round(newY) },
         boundingBox: {
           width: Math.round(newWidth),
           height: Math.round(newHeight)
@@ -297,6 +306,7 @@ export function ZPLVisualEditor({
   const handleResizeStart = useCallback((e: React.MouseEvent, handle: string) => {
     e.stopPropagation();
     e.preventDefault();
+    console.log('Starting resize with handle:', handle);
     setIsResizing(true);
     setResizeHandle(handle);
   }, []);
@@ -481,12 +491,14 @@ export function ZPLVisualEditor({
                                   width: `${size}px`,
                                   height: `${size}px`,
                                   backgroundColor: 'rgb(59, 130, 246)',
-                                  border: '1px solid white',
+                                  border: '2px solid white',
                                   borderRadius: isCorner ? '50%' : '2px',
                                   cursor,
-                                  zIndex: 10
+                                  zIndex: 10,
+                                  boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
                                 }}
                                 onMouseDown={(e) => handleResizeStart(e, handle)}
+                                onMouseEnter={() => console.log('Hovering resize handle:', handle)}
                               />
                             );
                           })}
