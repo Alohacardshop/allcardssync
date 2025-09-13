@@ -1,11 +1,13 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { useInventoryAnalytics } from "@/hooks/useInventoryAnalytics";
+import { useInventoryAnalytics, usePrefetchAnalytics } from "@/hooks/useInventoryAnalytics";
 import { useStore } from "@/contexts/StoreContext";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { Package, DollarSign, PrinterIcon, TrendingUp } from "lucide-react";
 
 export function SystemStats() {
+  // Prefetch analytics for all user stores for instant switching
+  usePrefetchAnalytics();
   const { selectedStore, selectedLocation } = useStore();
   const { data: analytics, isLoading, error } = useInventoryAnalytics(
     selectedStore, 

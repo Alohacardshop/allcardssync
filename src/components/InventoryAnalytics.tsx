@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { useInventoryAnalytics } from '@/hooks/useInventoryAnalytics';
+import { useInventoryAnalytics, usePrefetchAnalytics } from '@/hooks/useInventoryAnalytics';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { 
   DollarSign, 
@@ -17,6 +17,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useStore } from '@/contexts/StoreContext';
 
 export function InventoryAnalytics() {
+  // Prefetch analytics for all user stores for instant switching
+  usePrefetchAnalytics();
   const { selectedStore, selectedLocation } = useStore();
   const { data: analytics, isLoading, error } = useInventoryAnalytics(
     selectedStore, 
