@@ -1,30 +1,33 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { Printer, Save, RotateCcw, Star, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { LabelPreviewCanvas } from '@/components/LabelPreviewCanvas';
-import { PrintNodeSettings } from '@/components/PrintNodeSettings';
+import { ZPLVisualEditor } from '@/components/ZPLVisualEditor';
+import { ZPLElementEditor } from '@/components/ZPLElementEditor';
+import { ZPLPreview } from '@/components/ZPLPreview';
 import { useRawTemplates } from '@/hooks/useRawTemplates';
 import { useSimplePrinting } from '@/hooks/useSimplePrinting';
-import { AVAILABLE_TEMPLATES } from '@/lib/labelTemplates';
-import { LabelFieldConfig, LabelData, generateZPLFromLabelData } from '@/lib/labelRenderer';
+import { 
+  ZPLElement, 
+  ZPLLabel, 
+  createDefaultLabelTemplate,
+  generateZPLFromElements
+} from '@/lib/zplElements';
 
 interface AdvancedLabelDesignerProps {
   className?: string;
 }
 
 export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerProps) {
-  const canvasRef = useRef<any>(null);
-  const { print, isLoading: isPrinting, testConnection } = useSimplePrinting();
+  const { print, isLoading: isPrinting } = useSimplePrinting();
   
   // Template management
   const {
@@ -36,104 +39,63 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
     loading: templatesLoading
   } = useRawTemplates();
 
-  // Field configuration state
-  const [fieldConfig, setFieldConfig] = useState<LabelFieldConfig>({
-    includeTitle: true,
-    includeSku: true,
-    includePrice: true,
-    includeLot: false,
-    includeCondition: true,
-    barcodeMode: 'barcode'
-  });
-
-  // Label data state
-  const [labelData, setLabelData] = useState<LabelData>({
-    title: "POKEMON GENGAR VMAX #020",
-    sku: "120979260",
-    price: "$15.99",
-    lot: "LOT-000001", 
-    condition: "Near Mint",
-    barcode: "120979260"
-  });
-
-  // Template and settings
-  const [selectedTemplateId, setSelectedTemplateId] = useState('graded-card');
+  // ZPL Label state
+  const [label, setLabel] = useState<ZPLLabel>(createDefaultLabelTemplate());
+  const [selectedElement, setSelectedElement] = useState<ZPLElement | null>(null);
+  const [showGrid, setShowGrid] = useState(true);
+  
+  // Template name for saving
   const [templateName, setTemplateName] = useState('');
-  const [showGuides, setShowGuides] = useState(false);
+  
+  // Print settings
   const [copies, setCopies] = useState(1);
-  const [cutAfter, setCutAfter] = useState(true);
-
-  // ZPL settings
+  const [cutAfter, setCutAfter] = useState(false);
   const [zplSettings, setZplSettings] = useState({
     darkness: 10,
     speed: 4
   });
 
-  // Load settings from localStorage on mount
-  useEffect(() => {
-    const savedFieldConfig = localStorage.getItem('labelDesigner_fieldConfig');
-    const savedLabelData = localStorage.getItem('labelDesigner_labelData');
-    const savedShowGuides = localStorage.getItem('labelDesigner_showGuides');
-    
-    if (savedFieldConfig) {
-      try {
-        setFieldConfig(JSON.parse(savedFieldConfig));
-      } catch (error) {
-        console.error('Failed to parse saved field config:', error);
-      }
-    }
-    
-    if (savedLabelData) {
-      try {
-        setLabelData(JSON.parse(savedLabelData));
-      } catch (error) {
-        console.error('Failed to parse saved label data:', error);
-      }
-    }
-    
-    setShowGuides(savedShowGuides === 'true');
-  }, []);
-
-  // Save settings to localStorage when they change
-  useEffect(() => {
-    localStorage.setItem('labelDesigner_fieldConfig', JSON.stringify(fieldConfig));
-  }, [fieldConfig]);
-
-  useEffect(() => {
-    localStorage.setItem('labelDesigner_labelData', JSON.stringify(labelData));
-  }, [labelData]);
-
-  useEffect(() => {
-    localStorage.setItem('labelDesigner_showGuides', showGuides.toString());
-  }, [showGuides]);
-
-  // Load default template
+  // Load default template on component mount
   useEffect(() => {
     if (defaultTemplate && !templatesLoading) {
-      setFieldConfig(defaultTemplate.canvas.fieldConfig);
-      setLabelData(defaultTemplate.canvas.labelData);
-      if (defaultTemplate.canvas.tsplSettings) {
-        setZplSettings({
-          darkness: defaultTemplate.canvas.tsplSettings.density,
-          speed: defaultTemplate.canvas.tsplSettings.speed
-        });
+      try {
+        // Convert old template format to ZPL format if needed
+        if (defaultTemplate.canvas && defaultTemplate.canvas.labelData) {
+          const convertedLabel = createDefaultLabelTemplate();
+          
+          // Update elements with template data
+          convertedLabel.elements = convertedLabel.elements.map(element => {
+            switch (element.id) {
+              case 'condition':
+                return { ...element, text: defaultTemplate.canvas.labelData.condition || 'Near Mint' };
+              case 'price':
+                return { ...element, text: `$${defaultTemplate.canvas.labelData.price}` || '$15.99' };
+              case 'barcode':
+                if (element.type === 'barcode') {
+                  return { ...element, data: defaultTemplate.canvas.labelData.barcode || '120979260' };
+                }
+                return element;
+              case 'title':
+                return { ...element, text: defaultTemplate.canvas.labelData.title || 'POKEMON GENGAR VMAX #020' };
+              default:
+                return element;
+            }
+          });
+          
+          setLabel(convertedLabel);
+        }
+        
+        if (defaultTemplate.canvas?.tsplSettings) {
+          setZplSettings({
+            darkness: defaultTemplate.canvas.tsplSettings.density || 10,
+            speed: defaultTemplate.canvas.tsplSettings.speed || 4
+          });
+        }
+      } catch (error) {
+        console.error('Error loading default template:', error);
       }
     }
   }, [defaultTemplate, templatesLoading]);
-
-  const handleFieldConfigChange = (field: keyof LabelFieldConfig, value: boolean | string) => {
-    setFieldConfig(prev => ({
-      ...prev,
-      [field]: value
-    }));
-  };
-
-  const handleLabelDataChange = (field: keyof LabelData, value: string) => {
-    setLabelData(prev => ({
-      ...prev,
-      [field]: value
-    }));
-  };
 
   const handleSaveTemplate = async () => {
     if (!templateName.trim()) {
@@ -141,17 +103,45 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
       return;
     }
 
-    console.log('Attempting to save template:', templateName);
-    console.log('Field config:', fieldConfig);
-    console.log('Label data:', labelData);
+    console.log('Attempting to save ZPL template:', templateName);
+    console.log('Label:', label);
     console.log('ZPL settings:', zplSettings);
 
     try {
+      // Convert ZPL label to old format for compatibility with type guards
+      const titleElement = label.elements.find(e => e.id === 'title' && e.type === 'text');
+      const priceElement = label.elements.find(e => e.id === 'price' && e.type === 'text');
+      const conditionElement = label.elements.find(e => e.id === 'condition' && e.type === 'text');
+      const barcodeElement = label.elements.find(e => e.id === 'barcode' && e.type === 'barcode');
+      
+      const templateData = {
+        fieldConfig: {
+          includeTitle: true,
+          includeSku: true,
+          includePrice: true,
+          includeLot: false,
+          includeCondition: true,
+          barcodeMode: 'barcode' as const
+        },
+        labelData: {
+          title: (titleElement && titleElement.type === 'text') ? titleElement.text : 'POKEMON GENGAR VMAX #020',
+          sku: (barcodeElement && barcodeElement.type === 'barcode') ? barcodeElement.data : '120979260',
+          price: (priceElement && priceElement.type === 'text') ? priceElement.text.replace('$', '') : '15.99',
+          lot: 'LOT-000001',
+          condition: (conditionElement && conditionElement.type === 'text') ? conditionElement.text : 'Near Mint',
+          barcode: (barcodeElement && barcodeElement.type === 'barcode') ? barcodeElement.data : '120979260'
+        }
+      };
+
       const result = await saveTemplate(
         templateName,
-        fieldConfig,
-        labelData,
-        { density: zplSettings.darkness, speed: zplSettings.speed, gapInches: 0 }
+        templateData.fieldConfig,
+        templateData.labelData,
+        { 
+          density: zplSettings.darkness, 
+          speed: zplSettings.speed, 
+          gapInches: 0
+        }
       );
 
       console.log('Save template result:', result);
@@ -171,199 +161,137 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
   const handleLoadTemplate = (templateId: string) => {
     const template = templates.find(t => t.id === templateId);
     if (template) {
-      setFieldConfig(template.canvas.fieldConfig);
-      setLabelData(template.canvas.labelData);
-      if (template.canvas.tsplSettings) {
-        setZplSettings({
-          darkness: template.canvas.tsplSettings.density,
-          speed: template.canvas.tsplSettings.speed
-        });
+      try {
+        // Check if template has ZPL data
+        if (template.canvas?.zplLabel) {
+          setLabel(template.canvas.zplLabel);
+        } else {
+          // Convert old format to ZPL
+          const convertedLabel = createDefaultLabelTemplate();
+          
+          if (template.canvas?.labelData) {
+            convertedLabel.elements = convertedLabel.elements.map(element => {
+              switch (element.id) {
+                case 'condition':
+                  return { ...element, text: template.canvas.labelData.condition || 'Near Mint' };
+                case 'price':
+                  return { ...element, text: `$${template.canvas.labelData.price}` || '$15.99' };
+                case 'barcode':
+                  if (element.type === 'barcode') {
+                    return { ...element, data: template.canvas.labelData.barcode || '120979260' };
+                  }
+                  return element;
+                case 'title':
+                  return { ...element, text: template.canvas.labelData.title || 'POKEMON GENGAR VMAX #020' };
+                default:
+                  return element;
+              }
+            });
+          }
+          
+          setLabel(convertedLabel);
+        }
+        
+        if (template.canvas?.tsplSettings) {
+          setZplSettings({
+            darkness: template.canvas.tsplSettings.density || 10,
+            speed: template.canvas.tsplSettings.speed || 4
+          });
+        }
+        
+        toast.success(`Loaded template: ${template.name}`);
+      } catch (error) {
+        console.error('Error loading template:', error);
+        toast.error('Failed to load template');
       }
-      toast.success(`Loaded template: ${template.name}`);
     }
   };
 
   const handlePrint = async () => {
     try {
-      const zplCode = generateZPLFromLabelData(
-        fieldConfig,
-        labelData,
-        copies,
-        cutAfter,
-        zplSettings.darkness,
-        zplSettings.speed
-      );
+      const zplCode = generateZPLFromElements(label);
+      console.log('Generated ZPL for printing:', zplCode);
       
-      await print(zplCode, 1); // copies handled in ZPL generation
+      await print(zplCode, copies);
+      toast.success('Label sent to printer');
     } catch (error) {
       console.error('Print failed:', error);
       toast.error('Failed to print label');
     }
   };
 
-
   const resetToDefaults = () => {
-    setFieldConfig({
-      includeTitle: true,
-      includeSku: true,
-      includePrice: true,
-      includeLot: false,
-      includeCondition: true,
-      barcodeMode: 'barcode'
-    });
-    setLabelData({
-      title: "POKEMON GENGAR VMAX #020",
-      sku: "120979260",
-      price: "$15.99",
-      lot: "LOT-000001",
-      condition: "Near Mint",
-      barcode: "120979260"
-    });
+    setLabel(createDefaultLabelTemplate());
+    setSelectedElement(null);
     setZplSettings({
       darkness: 10,
       speed: 4
     });
+    setCopies(1);
+    setCutAfter(false);
     toast.success('Reset to defaults');
+  };
+
+  const handleElementUpdate = (updatedElement: ZPLElement) => {
+    setLabel(prev => ({
+      ...prev,
+      elements: prev.elements.map(el => 
+        el.id === updatedElement.id ? updatedElement : el
+      )
+    }));
+    setSelectedElement(updatedElement);
+  };
+
+  const handleElementDelete = (elementId: string) => {
+    setLabel(prev => ({
+      ...prev,
+      elements: prev.elements.filter(el => el.id !== elementId)
+    }));
+    if (selectedElement?.id === elementId) {
+      setSelectedElement(null);
+    }
+    toast.success('Element deleted');
   };
 
   return (
     <div className={`space-y-6 ${className}`}>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Configuration Panel */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        {/* Main Editor */}
+        <div className="xl:col-span-2 space-y-4">
+          <ZPLVisualEditor
+            label={label}
+            onLabelChange={setLabel}
+            selectedElement={selectedElement}
+            onElementSelect={setSelectedElement}
+            showGrid={showGrid}
+            onToggleGrid={() => setShowGrid(!showGrid)}
+          />
+          
+          <ZPLPreview label={label} />
+        </div>
+
+        {/* Right Panel */}
         <div className="space-y-4">
           <Card>
             <CardHeader>
               <CardTitle>Label Designer</CardTitle>
             </CardHeader>
             <CardContent>
-              <Tabs defaultValue="fields" className="w-full">
+              <Tabs defaultValue="element" className="w-full">
                 <TabsList className="grid w-full grid-cols-4">
-                  <TabsTrigger value="fields">Fields</TabsTrigger>
-                  <TabsTrigger value="data">Data</TabsTrigger>
-                  <TabsTrigger value="template">Template</TabsTrigger>
-                  <TabsTrigger value="print">Print & Settings</TabsTrigger>
+                  <TabsTrigger value="element">Element</TabsTrigger>
+                  <TabsTrigger value="template">Templates</TabsTrigger>
+                  <TabsTrigger value="print">Print</TabsTrigger>
+                  <TabsTrigger value="settings">Settings</TabsTrigger>
                 </TabsList>
 
-                {/* Field Configuration */}
-                <TabsContent value="fields" className="space-y-4">
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="title-toggle">Include Title</Label>
-                      <Switch
-                        id="title-toggle"
-                        checked={fieldConfig.includeTitle}
-                        onCheckedChange={(checked) => handleFieldConfigChange('includeTitle', checked)}
-                      />
-                    </div>
-                    
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="sku-toggle">Include SKU</Label>
-                      <Switch
-                        id="sku-toggle"
-                        checked={fieldConfig.includeSku}
-                        onCheckedChange={(checked) => handleFieldConfigChange('includeSku', checked)}
-                      />
-                    </div>
-                    
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="price-toggle">Include Price</Label>
-                      <Switch
-                        id="price-toggle"
-                        checked={fieldConfig.includePrice}
-                        onCheckedChange={(checked) => handleFieldConfigChange('includePrice', checked)}
-                      />
-                    </div>
-                    
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="condition-toggle">Include Condition</Label>
-                      <Switch
-                        id="condition-toggle"
-                        checked={fieldConfig.includeCondition}
-                        onCheckedChange={(checked) => handleFieldConfigChange('includeCondition', checked)}
-                      />
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor="barcode-mode">Barcode Mode</Label>
-                      <Select
-                        value={fieldConfig.barcodeMode}
-                        onValueChange={(value) => handleFieldConfigChange('barcodeMode', value as 'qr' | 'barcode' | 'none')}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="barcode">Barcode</SelectItem>
-                          <SelectItem value="qr">QR Code</SelectItem>
-                          <SelectItem value="none">None</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="guides-toggle">Show Guides</Label>
-                      <Switch
-                        id="guides-toggle"
-                        checked={showGuides}
-                        onCheckedChange={setShowGuides}
-                      />
-                    </div>
-                  </div>
-                </TabsContent>
-
-                {/* Data Input */}
-                <TabsContent value="data" className="space-y-4">
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="title-input">Title</Label>
-                      <Input
-                        id="title-input"
-                        value={labelData.title}
-                        onChange={(e) => handleLabelDataChange('title', e.target.value)}
-                        placeholder="Enter card title"
-                      />
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor="sku-input">SKU</Label>
-                      <Input
-                        id="sku-input"
-                        value={labelData.sku}
-                        onChange={(e) => handleLabelDataChange('sku', e.target.value)}
-                        placeholder="Enter SKU"
-                      />
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor="price-input">Price</Label>
-                      <Input
-                        id="price-input"
-                        value={labelData.price}
-                        onChange={(e) => handleLabelDataChange('price', e.target.value)}
-                        placeholder="Enter price"
-                      />
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor="condition-input">Condition</Label>
-                      <Input
-                        id="condition-input"
-                        value={labelData.condition}
-                        onChange={(e) => handleLabelDataChange('condition', e.target.value)}
-                        placeholder="Enter condition"
-                      />
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor="barcode-input">Barcode Data</Label>
-                      <Input
-                        id="barcode-input"
-                        value={labelData.barcode}
-                        onChange={(e) => handleLabelDataChange('barcode', e.target.value)}
-                        placeholder="Enter barcode data"
-                      />
-                    </div>
-                  </div>
+                {/* Element Editor */}
+                <TabsContent value="element" className="space-y-4">
+                  <ZPLElementEditor
+                    element={selectedElement}
+                    onUpdate={handleElementUpdate}
+                    onDelete={handleElementDelete}
+                  />
                 </TabsContent>
 
                 {/* Template Management */}
@@ -440,7 +368,7 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
                         </Button>
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        This will save your current field settings, label data, and print settings
+                        This will save your current label design and print settings
                       </p>
                     </div>
 
@@ -466,120 +394,115 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
                   </div>
                 </TabsContent>
 
-                {/* Print & Settings */}
+                {/* Print Settings */}
                 <TabsContent value="print" className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-4">
-                      <h4 className="text-sm font-medium">Print Settings</h4>
-                      
-                      <div className="space-y-2">
-                        <Label htmlFor="copies">Copies</Label>
-                        <Input
-                          id="copies"
-                          type="number"
-                          min="1"
-                          max="99"
-                          value={copies}
-                          onChange={(e) => setCopies(Number(e.target.value))}
-                        />
-                      </div>
-
-                      <div className="flex items-center space-x-2">
-                        <Switch 
-                          id="cut-after"
-                          checked={cutAfter} 
-                          onCheckedChange={setCutAfter} 
-                        />
-                        <Label htmlFor="cut-after">Cut after printing</Label>
-                      </div>
-
-                      <Separator />
-
-                      <h4 className="text-sm font-medium">ZPL Settings</h4>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="darkness">Darkness (0-30)</Label>
-                        <Input
-                          id="darkness"
-                          type="number"
-                          min="0"
-                          max="30"
-                          value={zplSettings.darkness}
-                          onChange={(e) => setZplSettings(prev => ({
-                            ...prev,
-                            darkness: Number(e.target.value)
-                          }))}
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="speed">Speed (2-8 IPS)</Label>
-                        <Input
-                          id="speed"
-                          type="number"
-                          min="2"
-                          max="8"
-                          value={zplSettings.speed}
-                          onChange={(e) => setZplSettings(prev => ({
-                            ...prev,
-                            speed: Number(e.target.value)
-                          }))}
-                        />
-                      </div>
+                  <div className="space-y-4">
+                    <h4 className="text-sm font-medium">Print Settings</h4>
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="copies">Copies</Label>
+                      <Input
+                        id="copies"
+                        type="number"
+                        min="1"
+                        max="99"
+                        value={copies}
+                        onChange={(e) => setCopies(Number(e.target.value))}
+                      />
                     </div>
 
-                    <div className="space-y-4">
-                      <h4 className="text-sm font-medium">Printer Configuration</h4>
-                      <PrintNodeSettings />
+                    <div className="flex items-center space-x-2">
+                      <Switch 
+                        id="cut-after"
+                        checked={cutAfter} 
+                        onCheckedChange={setCutAfter} 
+                      />
+                      <Label htmlFor="cut-after">Cut after printing</Label>
+                    </div>
+
+                    <Separator />
+
+                    <h4 className="text-sm font-medium">ZPL Settings</h4>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="darkness">Darkness (0-30)</Label>
+                      <Input
+                        id="darkness"
+                        type="number"
+                        min="0"
+                        max="30"
+                        value={zplSettings.darkness}
+                        onChange={(e) => setZplSettings(prev => ({
+                          ...prev,
+                          darkness: Number(e.target.value)
+                        }))}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="speed">Print Speed (1-14)</Label>
+                      <Input
+                        id="speed"
+                        type="number"
+                        min="1"
+                        max="14"
+                        value={zplSettings.speed}
+                        onChange={(e) => setZplSettings(prev => ({
+                          ...prev,
+                          speed: Number(e.target.value)
+                        }))}
+                      />
                     </div>
                   </div>
+                </TabsContent>
 
-                  <Separator />
-
-                  <div className="flex flex-col gap-2">
-                    <Button 
-                      onClick={handlePrint} 
-                      disabled={isPrinting}
-                      className="w-full"
-                      size="lg"
-                    >
-                      {isPrinting ? 'Printing...' : `Print ${copies} Label${copies > 1 ? 's' : ''}`}
-                    </Button>
+                {/* Settings */}
+                <TabsContent value="settings" className="space-y-4">
+                  <div className="space-y-4">
+                    <h4 className="text-sm font-medium">Display Settings</h4>
                     
-                    <Button 
-                      onClick={resetToDefaults} 
-                      variant="outline" 
-                      className="w-full"
-                    >
-                      Reset to Defaults
-                    </Button>
+                    <div className="flex items-center space-x-2">
+                      <Switch 
+                        id="show-grid"
+                        checked={showGrid} 
+                        onCheckedChange={setShowGrid} 
+                      />
+                      <Label htmlFor="show-grid">Show grid</Label>
+                    </div>
+
+                    <Separator />
+
+                    <div className="space-y-2">
+                      <Label>Label Information</Label>
+                      <div className="text-sm text-muted-foreground space-y-1">
+                        <div>Size: 2" × 1" (406 × 203 dots)</div>
+                        <div>DPI: 203</div>
+                        <div>Elements: {label.elements.length}</div>
+                      </div>
+                    </div>
                   </div>
                 </TabsContent>
               </Tabs>
             </CardContent>
           </Card>
-        </div>
 
-        {/* Preview Panel */}
-        <div className="space-y-4">
-          <LabelPreviewCanvas
-            ref={canvasRef}
-            fieldConfig={fieldConfig}
-            labelData={labelData}
-            showGuides={showGuides}
-          />
-
-          <div className="flex flex-col gap-4">
+          {/* Action Buttons */}
+          <div className="flex gap-2">
             <Button 
               onClick={handlePrint} 
               disabled={isPrinting}
-              className="w-full"
-              size="lg"
+              className="flex-1"
             >
               <Printer className="w-4 h-4 mr-2" />
-              {isPrinting ? 'Printing...' : `Print ${copies} Label${copies > 1 ? 's' : ''}`}
+              {isPrinting ? 'Printing...' : 'Print Label'}
             </Button>
-            
+            <Button 
+              onClick={resetToDefaults}
+              variant="outline"
+              size="icon"
+            >
+              <RotateCcw className="w-4 h-4" />
+            </Button>
           </div>
         </div>
       </div>

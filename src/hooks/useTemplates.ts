@@ -27,7 +27,9 @@ export interface LabelTemplate {
       density: number;
       speed: number;
       gapInches: number;
+      zplLabel?: any; // Allow ZPL label data
     };
+    zplLabel?: any; // Allow ZPL label at canvas level too
   };
   is_default: boolean;
   created_at: string;
