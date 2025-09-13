@@ -15,6 +15,7 @@ import { ZPLElementEditor } from '@/components/ZPLElementEditor';
 import { ZPLPreview } from '@/components/ZPLPreview';
 import { useRawTemplates } from '@/hooks/useRawTemplates';
 import { useTemplateDefault } from '@/hooks/useTemplateDefault';
+import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { useSimplePrinting } from '@/hooks/useSimplePrinting';
 import { 
   ZPLElement, 
@@ -51,14 +52,14 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
   const [templateName, setTemplateName] = useState('');
   const [currentTemplateId, setCurrentTemplateId] = useState<string | null>(null);
   
-  // Print settings
+  // Print settings with persistent calibration
   const [copies, setCopies] = useState(1);
   const [cutAfter, setCutAfter] = useState(false);
+  const [xOffset, setXOffset] = useLocalStorage('printer-x-offset', 0);
+  const [yOffset, setYOffset] = useLocalStorage('printer-y-offset', 0);
   const [zplSettings, setZplSettings] = useState({
     darkness: 10,
-    speed: 4,
-    xOffset: 0,
-    yOffset: 0
+    speed: 4
   });
 
   // Load default template on component mount and when selectedTemplateId changes
@@ -106,9 +107,7 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
         if (templateToLoad.canvas?.tsplSettings) {
           setZplSettings({
             darkness: templateToLoad.canvas.tsplSettings.density || 10,
-            speed: templateToLoad.canvas.tsplSettings.speed || 4,
-            xOffset: 0,
-            yOffset: 0
+            speed: templateToLoad.canvas.tsplSettings.speed || 4
           });
         }
       } catch (error) {
@@ -164,7 +163,14 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
         labelData,
         tsplSettings,
         currentTemplateId,
-        { zplLabel: label, zplSettings: zplSettings } // Pass ZPL data as separate parameter
+        { 
+          zplLabel: label, 
+          zplSettings: { 
+            ...zplSettings, 
+            xOffset: xOffset, 
+            yOffset: yOffset 
+          } 
+        } // Pass ZPL data with global offsets
       );
 
       console.log('Save template result:', result);
@@ -227,9 +233,7 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
         if (template.canvas?.tsplSettings) {
           setZplSettings({
             darkness: template.canvas.tsplSettings.density || 10,
-            speed: template.canvas.tsplSettings.speed || 4,
-            xOffset: 0,
-            yOffset: 0
+            speed: template.canvas.tsplSettings.speed || 4
           });
         }
         
@@ -243,7 +247,7 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
 
   const handlePrint = async () => {
     try {
-      const zplCode = generateZPLFromElements(label, zplSettings.xOffset, zplSettings.yOffset);
+      const zplCode = generateZPLFromElements(label, xOffset, yOffset);
       console.log('Generated ZPL for printing:', zplCode);
       
       await print(zplCode, copies);
@@ -259,9 +263,7 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
     setSelectedElement(null);
     setZplSettings({
       darkness: 10,
-      speed: 4,
-      xOffset: 0,
-      yOffset: 0
+      speed: 4
     });
     setCopies(1);
     setCutAfter(false);
@@ -521,11 +523,8 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
                           type="number"
                           min="-50"
                           max="50"
-                          value={zplSettings.xOffset}
-                          onChange={(e) => setZplSettings(prev => ({
-                            ...prev,
-                            xOffset: Number(e.target.value)
-                          }))}
+                          value={xOffset}
+                          onChange={(e) => setXOffset(Number(e.target.value))}
                         />
                       </div>
 
@@ -536,11 +535,8 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
                           type="number"
                           min="-50"
                           max="50"
-                          value={zplSettings.yOffset}
-                          onChange={(e) => setZplSettings(prev => ({
-                            ...prev,
-                            yOffset: Number(e.target.value)
-                          }))}
+                          value={yOffset}
+                          onChange={(e) => setYOffset(Number(e.target.value))}
                         />
                       </div>
                     </div>
