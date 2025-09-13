@@ -109,6 +109,14 @@ const Inventory = () => {
         `)
         .not('removed_from_batch_at', 'is', null);
 
+      // Apply store/location filters from StoreContext
+      if (selectedStore) {
+        query = query.eq('store_key', selectedStore);
+      }
+      if (selectedLocation) {
+        query = query.eq('shopify_location_gid', selectedLocation);
+      }
+
       // Apply status filters
       if (statusFilter === 'active') {
         query = query.is('deleted_at', null).gt('quantity', 0);
@@ -125,23 +133,6 @@ const Inventory = () => {
         query = query.gt('quantity', 0);
       }
 
-      // Apply store/location filters
-      if (selectedStoreLocations.length > 0) {
-        // Filter by selected store/location combinations
-        const conditions = selectedStoreLocations.map(sl => 
-          `(store_key.eq.${sl.storeKey},shopify_location_gid.eq.${sl.locationGid})`
-        ).join(',');
-        query = query.or(conditions);
-      } else {
-        // Fallback to single store/location selection for backward compatibility
-        if (selectedStoreKey) {
-          query = query.eq('store_key', selectedStoreKey);
-        }
-        if (selectedLocationGid) {
-          query = query.eq('shopify_location_gid', selectedLocationGid);
-        }
-      }
-
       const { data, error } = await query.order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -156,13 +147,7 @@ const Inventory = () => {
 
   useEffect(() => {
     fetchItems();
-  }, [statusFilter, typeFilter, selectedStoreKey, selectedLocationGid, selectedStoreLocations, showSoldItems]);
-
-  // Update legacy state when context changes (for backward compatibility)
-  useEffect(() => {
-    setSelectedStoreKey(selectedStore || '');
-    setSelectedLocationGid(selectedLocation || '');
-  }, [selectedStore, selectedLocation]);
+  }, [statusFilter, typeFilter, selectedStore, selectedLocation, showSoldItems]); // Updated dependencies
 
   // F) Manual sync retry function - now uses v2 batch router
   const retrySync = async (item: any) => {

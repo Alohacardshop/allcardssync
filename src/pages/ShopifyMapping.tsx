@@ -76,7 +76,7 @@ export default function ShopifyMapping() {
     description: "Manage how inventory items map to Shopify products and variants." 
   });
 
-  const { selectedStore, availableLocations } = useStore();
+  const { selectedStore, selectedLocation, availableLocations } = useStore();
   const [items, setItems] = useState<MappingItem[]>([]);
   const [productGroups, setProductGroups] = useState<ProductGroup[]>([]);
   const [loading, setLoading] = useState(false);
@@ -89,11 +89,20 @@ export default function ShopifyMapping() {
   const loadMappingData = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from("intake_items")
         .select("*")
-        .is("deleted_at", null)
-        .order("created_at", { ascending: false });
+        .is("deleted_at", null);
+
+      // Filter by selected store and location
+      if (selectedStore) {
+        query = query.eq('store_key', selectedStore);
+      }
+      if (selectedLocation) {
+        query = query.eq('shopify_location_gid', selectedLocation);
+      }
+
+      const { data, error } = await query.order("created_at", { ascending: false });
 
       if (error) throw error;
 
@@ -265,7 +274,7 @@ export default function ShopifyMapping() {
 
   useEffect(() => {
     loadMappingData();
-  }, []);
+  }, [selectedStore, selectedLocation]); // Re-fetch when store/location changes
 
   const filteredGroups = productGroups.filter(group => {
     // Apply filter

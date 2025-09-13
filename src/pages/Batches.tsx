@@ -21,6 +21,7 @@ import { Navigation } from "@/components/Navigation";
 import { StoreToggle } from "@/components/StoreToggle";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useStore } from "@/contexts/StoreContext";
 import { Search, Package, DollarSign, Calendar, Eye, History, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -82,6 +83,7 @@ export default function Batches() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [deletingBatch, setDeletingBatch] = useState<string | null>(null);
   const { toast } = useToast();
+  const { selectedStore, selectedLocation } = useStore();
 
   // Check if user is admin
   useEffect(() => {
@@ -109,10 +111,19 @@ export default function Batches() {
   const fetchLots = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      let query = supabase
         .from('intake_lots')
-        .select('*')
-        .order('created_at', { ascending: false });
+        .select('*');
+
+      // Filter by selected store and location
+      if (selectedStore) {
+        query = query.eq('store_key', selectedStore);
+      }
+      if (selectedLocation) {
+        query = query.eq('shopify_location_gid', selectedLocation);
+      }
+
+      const { data, error } = await query.order('created_at', { ascending: false });
       
       if (error) throw error;
       setLots(data || []);
@@ -153,7 +164,7 @@ export default function Batches() {
 
   useEffect(() => {
     fetchLots();
-  }, []);
+  }, [selectedStore, selectedLocation]); // Re-fetch when store/location changes
 
   const handleDeleteBatch = async (lotId: string, lotNumber: string) => {
     if (!isAdmin) {
