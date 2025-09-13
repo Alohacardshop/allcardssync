@@ -18,7 +18,6 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Navigation } from "@/components/Navigation";
-import { StoreToggle } from "@/components/StoreToggle";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useStore } from "@/contexts/StoreContext";
@@ -258,8 +257,6 @@ export default function Batches() {
         </div>
       </header>
 
-      {/* Store Toggle */}
-      <StoreToggle />
 
       <div className="container mx-auto px-6 py-6">
         {/* Stats Cards */}
