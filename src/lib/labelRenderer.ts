@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf';
 import JsBarcode from 'jsbarcode';
+import { ZPLElement, ZPLOptions, buildZPLWithCut, getLabelSizeInDots } from './zpl';
 
 export interface LabelData {
   title: string;
@@ -342,4 +343,126 @@ export const generateLabelPNG = async (
       }
     }, 'image/png');
   });
+};
+
+export const generateZPLFromLabelData = (
+  fieldConfig: LabelFieldConfig,
+  labelData: LabelData,
+  copies: number = 1,
+  cutAfter: boolean = true,
+  darkness: number = 10,
+  speed: number = 4
+): string => {
+  const elements: ZPLElement[] = [];
+  const { widthDots, heightDots } = getLabelSizeInDots('2x1', 203);
+  
+  // Constants matching canvas layout
+  const padding = 10;
+  const topRowHeight = 60;
+  const topLeftWidth = 120;
+  const topRightWidth = widthDots - topLeftWidth - padding * 3;
+
+  // Top left content (Condition) - positioned and sized to match canvas
+  if (fieldConfig.includeCondition && labelData.condition) {
+    elements.push({
+      kind: 'text',
+      x: padding + topLeftWidth/2,
+      y: padding + topRowHeight/2 - 10, // Adjust for center alignment
+      font: 'A',
+      height: 30,
+      width: 20,
+      data: labelData.condition
+    });
+  }
+
+  // Top right content (Price) - positioned to match canvas
+  if (fieldConfig.includePrice && labelData.price) {
+    const topRightX = padding + topLeftWidth + padding;
+    elements.push({
+      kind: 'text',
+      x: topRightX + topRightWidth/2,
+      y: padding + topRowHeight/2 - 10, // Adjust for center alignment
+      font: 'A',
+      height: 30,
+      width: 20,
+      data: labelData.price
+    });
+  }
+
+  // Barcode section - positioned to match canvas layout
+  if (fieldConfig.barcodeMode !== 'none') {
+    const barcodeY = padding + topRowHeight + 5;
+    const barcodeX = padding * 2;
+    
+    if (fieldConfig.barcodeMode === 'barcode') {
+      elements.push({
+        kind: 'barcode128',
+        x: barcodeX,
+        y: barcodeY,
+        height: 50,
+        humanReadable: false,
+        data: labelData.barcode
+      });
+    } else if (fieldConfig.barcodeMode === 'qr') {
+      elements.push({
+        kind: 'qrcode',
+        x: barcodeX,
+        y: barcodeY,
+        model: 2,
+        mag: 3,
+        data: labelData.barcode
+      });
+    }
+
+    // Add SKU below barcode if included
+    if (fieldConfig.includeSku && labelData.sku) {
+      elements.push({
+        kind: 'text',
+        x: widthDots / 2,
+        y: barcodeY + 50 + 8,
+        font: 'A',
+        height: 15,
+        width: 10,
+        data: `SKU: ${labelData.sku}`
+      });
+    }
+  }
+
+  // Title section - positioned to match canvas layout
+  if (fieldConfig.includeTitle && labelData.title) {
+    const barcodeEndY = fieldConfig.barcodeMode !== 'none' ? 
+      (padding + topRowHeight + 5 + 50 + 15) : 
+      (padding + topRowHeight + 5);
+    
+    const titleY = barcodeEndY + 10;
+    
+    // Split title into lines if needed (simplified for ZPL)
+    const titleLines = labelData.title.length > 25 ? 
+      [labelData.title.substring(0, 25), labelData.title.substring(25, 50)] : 
+      [labelData.title];
+    
+    titleLines.forEach((line, index) => {
+      elements.push({
+        kind: 'text',
+        x: widthDots / 2,
+        y: titleY + (index * 25),
+        font: 'A',
+        height: 20,
+        width: 15,
+        data: line
+      });
+    });
+  }
+
+  const zplOptions: ZPLOptions = {
+    dpi: 203,
+    widthDots,
+    heightDots,
+    speedIps: speed,
+    darkness,
+    copies,
+    elements
+  };
+
+  return buildZPLWithCut(zplOptions, cutAfter ? 'every-label' : 'none', true);
 };

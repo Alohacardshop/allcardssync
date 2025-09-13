@@ -2,7 +2,6 @@ import React, { useRef, useEffect, useImperativeHandle, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { 
   renderLabelToCanvas, 
-  generateLabelPDF, 
   generateLabelPNG, 
   LABEL_WIDTH, 
   LABEL_HEIGHT,
@@ -20,23 +19,7 @@ export const LabelPreviewCanvas = React.forwardRef<any, LabelPreviewCanvasProps>
   const [previewImageUrl, setPreviewImageUrl] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
 
-  // Export function to get high-DPI PNG for printing
-  const exportToPNG = (dpi: number = 203): Promise<Blob> => {
-    return generateLabelPNG(fieldConfig, labelData, dpi);
-  };
-
-  // Export function to get PDF for printing
-  const exportToPDF = async (): Promise<string> => {
-    return generateLabelPDF(fieldConfig, labelData, 203);
-  };
-
-  // Expose the export functions through the ref
-  useImperativeHandle(ref, () => ({
-    exportToPNG,
-    exportToPDF
-  }));
-
-  // Generate PNG preview (same as what gets printed)
+  // Generate PNG preview (for visual display only)
   useEffect(() => {
     const generatePreviewImage = async () => {
       setIsLoading(true);
@@ -91,7 +74,7 @@ export const LabelPreviewCanvas = React.forwardRef<any, LabelPreviewCanvasProps>
           )}
         </div>
         <p className="text-sm text-muted-foreground mt-2 text-center">
-          This preview shows exactly what will be printed. Update settings in the Label Designer to change how labels appear.
+          This preview shows exactly what will be printed as ZPL. Update settings in the Label Designer to change how labels appear.
         </p>
       </CardContent>
     </Card>

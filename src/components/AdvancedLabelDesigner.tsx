@@ -7,15 +7,15 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
-import { Download, Printer, Save, RotateCcw } from 'lucide-react';
+import { Printer, Save, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { LabelPreviewCanvas } from '@/components/LabelPreviewCanvas';
 import { PrintNodeSettings } from '@/components/PrintNodeSettings';
 import { useRawTemplates } from '@/hooks/useRawTemplates';
 import { useSimplePrinting } from '@/hooks/useSimplePrinting';
-import { AVAILABLE_TEMPLATES, generateLabelTSPL } from '@/lib/labelTemplates';
-import { LabelFieldConfig, LabelData } from '@/lib/labelRenderer';
+import { AVAILABLE_TEMPLATES } from '@/lib/labelTemplates';
+import { LabelFieldConfig, LabelData, generateZPLFromLabelData } from '@/lib/labelRenderer';
 
 interface AdvancedLabelDesignerProps {
   className?: string;
@@ -61,11 +61,10 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
   const [copies, setCopies] = useState(1);
   const [cutAfter, setCutAfter] = useState(true);
 
-  // TSPL settings
-  const [tsplSettings, setTsplSettings] = useState({
-    density: 10,
-    speed: 4,
-    gapInches: 0
+  // ZPL settings
+  const [zplSettings, setZplSettings] = useState({
+    darkness: 10,
+    speed: 4
   });
 
   // Load settings from localStorage on mount
@@ -111,7 +110,12 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
     if (defaultTemplate && !templatesLoading) {
       setFieldConfig(defaultTemplate.canvas.fieldConfig);
       setLabelData(defaultTemplate.canvas.labelData);
-      setTsplSettings(defaultTemplate.canvas.tsplSettings);
+      if (defaultTemplate.canvas.tsplSettings) {
+        setZplSettings({
+          darkness: defaultTemplate.canvas.tsplSettings.density,
+          speed: defaultTemplate.canvas.tsplSettings.speed
+        });
+      }
     }
   }, [defaultTemplate, templatesLoading]);
 
@@ -139,7 +143,7 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
       templateName,
       fieldConfig,
       labelData,
-      tsplSettings
+      { density: zplSettings.darkness, speed: zplSettings.speed, gapInches: 0 }
     );
 
     if (result) {
@@ -153,58 +157,34 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
     if (template) {
       setFieldConfig(template.canvas.fieldConfig);
       setLabelData(template.canvas.labelData);
-      setTsplSettings(template.canvas.tsplSettings);
+      if (template.canvas.tsplSettings) {
+        setZplSettings({
+          darkness: template.canvas.tsplSettings.density,
+          speed: template.canvas.tsplSettings.speed
+        });
+      }
       toast.success(`Loaded template: ${template.name}`);
     }
   };
 
   const handlePrint = async () => {
     try {
-      const zplCode = generateLabelTSPL(selectedTemplateId, labelData, tsplSettings);
+      const zplCode = generateZPLFromLabelData(
+        fieldConfig,
+        labelData,
+        copies,
+        cutAfter,
+        zplSettings.darkness,
+        zplSettings.speed
+      );
       
-      // Add cut after functionality to TSPL
-      const finalCode = cutAfter ? zplCode.replace(/^PRINT/, 'CUT\nPRINT') : zplCode;
-      
-      await print(finalCode, copies);
+      await print(zplCode, 1); // copies handled in ZPL generation
     } catch (error) {
       console.error('Print failed:', error);
       toast.error('Failed to print label');
     }
   };
 
-  const handleExportPNG = async () => {
-    if (canvasRef.current?.exportToPNG) {
-      try {
-        const blob = await canvasRef.current.exportToPNG(203);
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'label.png';
-        a.click();
-        URL.revokeObjectURL(url);
-        toast.success('Label exported as PNG');
-      } catch (error) {
-        console.error('Export failed:', error);
-        toast.error('Failed to export PNG');
-      }
-    }
-  };
-
-  const handleExportPDF = async () => {
-    if (canvasRef.current?.exportToPDF) {
-      try {
-        const pdfDataUri = await canvasRef.current.exportToPDF();
-        const a = document.createElement('a');
-        a.href = pdfDataUri;
-        a.download = 'label.pdf';
-        a.click();
-        toast.success('Label exported as PDF');
-      } catch (error) {
-        console.error('Export failed:', error);
-        toast.error('Failed to export PDF');
-      }
-    }
-  };
 
   const resetToDefaults = () => {
     setFieldConfig({
@@ -223,10 +203,9 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
       condition: "Near Mint",
       barcode: "120979260"
     });
-    setTsplSettings({
-      density: 10,
-      speed: 4,
-      gapInches: 0
+    setZplSettings({
+      darkness: 10,
+      speed: 4
     });
     toast.success('Reset to defaults');
   };
@@ -457,50 +436,34 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
 
                       <Separator />
 
-                      <h4 className="text-sm font-medium">TSPL Settings</h4>
+                      <h4 className="text-sm font-medium">ZPL Settings</h4>
 
                       <div className="space-y-2">
-                        <Label htmlFor="density">Density (0-15)</Label>
+                        <Label htmlFor="darkness">Darkness (0-30)</Label>
                         <Input
-                          id="density"
+                          id="darkness"
                           type="number"
                           min="0"
-                          max="15"
-                          value={tsplSettings.density}
-                          onChange={(e) => setTsplSettings(prev => ({
+                          max="30"
+                          value={zplSettings.darkness}
+                          onChange={(e) => setZplSettings(prev => ({
                             ...prev,
-                            density: Number(e.target.value)
+                            darkness: Number(e.target.value)
                           }))}
                         />
                       </div>
 
                       <div className="space-y-2">
-                        <Label htmlFor="speed">Speed (2-8)</Label>
+                        <Label htmlFor="speed">Speed (2-8 IPS)</Label>
                         <Input
                           id="speed"
                           type="number"
                           min="2"
                           max="8"
-                          value={tsplSettings.speed}
-                          onChange={(e) => setTsplSettings(prev => ({
+                          value={zplSettings.speed}
+                          onChange={(e) => setZplSettings(prev => ({
                             ...prev,
                             speed: Number(e.target.value)
-                          }))}
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="gap">Gap (inches)</Label>
-                        <Input
-                          id="gap"
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          max="1"
-                          value={tsplSettings.gapInches}
-                          onChange={(e) => setTsplSettings(prev => ({
-                            ...prev,
-                            gapInches: Number(e.target.value)
                           }))}
                         />
                       </div>
@@ -558,15 +521,6 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
               {isPrinting ? 'Printing...' : `Print ${copies} Label${copies > 1 ? 's' : ''}`}
             </Button>
             
-            <Button onClick={handleExportPNG} variant="outline" className="w-full">
-              <Download className="w-4 h-4 mr-2" />
-              Export PNG
-            </Button>
-            
-            <Button onClick={handleExportPDF} variant="outline" className="w-full">
-              <Download className="w-4 h-4 mr-2" />
-              Export PDF
-            </Button>
           </div>
         </div>
       </div>
