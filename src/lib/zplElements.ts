@@ -112,6 +112,38 @@ export function calculateOptimalFontSize(text: string, boundingBox: ZPLSize, fon
   };
 }
 
+// Helper function to wrap text into multiple lines
+export function wrapTextToLines(text: string, maxCharsPerLine: number): string[] {
+  if (maxCharsPerLine <= 0) return [text];
+  
+  const words = text.split(' ');
+  const lines: string[] = [];
+  let currentLine = '';
+  
+  for (const word of words) {
+    const testLine = currentLine ? `${currentLine} ${word}` : word;
+    
+    if (testLine.length <= maxCharsPerLine) {
+      currentLine = testLine;
+    } else {
+      if (currentLine) {
+        lines.push(currentLine);
+        currentLine = word;
+      } else {
+        // Word is longer than max line length, force break
+        lines.push(word.substring(0, maxCharsPerLine));
+        currentLine = word.substring(maxCharsPerLine);
+      }
+    }
+  }
+  
+  if (currentLine) {
+    lines.push(currentLine);
+  }
+  
+  return lines.length > 0 ? lines : [text];
+}
+
 // Helper function to process text with overflow handling
 export function processTextOverflow(text: string, maxLength: number, overflow: string): string {
   if (text.length <= maxLength) return text;
@@ -157,11 +189,30 @@ export function generateZPLFromElements(label: ZPLLabel): string {
           }
         }
         
-        // Handle text overflow if bounding box is defined
+        // Handle text overflow and wrapping if bounding box is defined
         if (element.boundingBox && element.textOverflow) {
           const fontInfo = ZPL_FONTS[element.font];
-          const maxChars = Math.floor(element.boundingBox.width / (fontInfo.baseWidth * (fontSize / fontInfo.baseHeight)));
-          processedText = processTextOverflow(element.text, maxChars, element.textOverflow);
+          const charWidth = fontInfo.baseWidth * (fontSize / fontInfo.baseHeight);
+          const maxCharsPerLine = Math.floor(element.boundingBox.width / charWidth);
+          const maxLines = Math.floor(element.boundingBox.height / fontSize);
+          
+          if (element.textOverflow === 'wrap') {
+            const lines = wrapTextToLines(element.text, maxCharsPerLine);
+            const limitedLines = lines.slice(0, maxLines);
+            
+            // Generate ZPL for each line
+            limitedLines.forEach((line, index) => {
+              const yOffset = element.position.y + (index * fontSize);
+              zpl.push(
+                `^FO${element.position.x},${yOffset}`,
+                `^A${element.font}${element.rotation === 0 ? 'N' : 'R'},${fontSize},${fontWidth}`,
+                `^FD${line}^FS`
+              );
+            });
+            return; // Skip the single-line generation below
+          } else {
+            processedText = processTextOverflow(element.text, maxCharsPerLine, element.textOverflow);
+          }
         }
         
         zpl.push(

@@ -35,6 +35,8 @@ export function ZPLVisualEditor({
   const [activeTool, setActiveTool] = useState<Tool>('select');
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [resizeHandle, setResizeHandle] = useState<string | null>(null);
+  const [isResizing, setIsResizing] = useState(false);
 
   const scale = 2; // Scale factor for display
 
@@ -222,12 +224,81 @@ export function ZPLVisualEditor({
       });
 
       onElementSelect(updatedElement);
+    } else if (isResizing && resizeHandle && selectedElement && selectedElement.type === 'text' && selectedElement.boundingBox) {
+      const rect = (e.target as Element).closest('.canvas-container')?.getBoundingClientRect();
+      if (!rect) return;
+
+      const mouseX = (e.clientX - rect.left) / scale;
+      const mouseY = (e.clientY - rect.top) / scale;
+
+      const elementX = selectedElement.position.x;
+      const elementY = selectedElement.position.y;
+
+      let newWidth = selectedElement.boundingBox.width;
+      let newHeight = selectedElement.boundingBox.height;
+
+      switch (resizeHandle) {
+        case 'se': // southeast
+          newWidth = Math.max(20, mouseX - elementX);
+          newHeight = Math.max(15, mouseY - elementY);
+          break;
+        case 'sw': // southwest
+          newWidth = Math.max(20, elementX + selectedElement.boundingBox.width - mouseX);
+          newHeight = Math.max(15, mouseY - elementY);
+          break;
+        case 'ne': // northeast
+          newWidth = Math.max(20, mouseX - elementX);
+          newHeight = Math.max(15, elementY + selectedElement.boundingBox.height - mouseY);
+          break;
+        case 'nw': // northwest
+          newWidth = Math.max(20, elementX + selectedElement.boundingBox.width - mouseX);
+          newHeight = Math.max(15, elementY + selectedElement.boundingBox.height - mouseY);
+          break;
+        case 'e': // east
+          newWidth = Math.max(20, mouseX - elementX);
+          break;
+        case 'w': // west
+          newWidth = Math.max(20, elementX + selectedElement.boundingBox.width - mouseX);
+          break;
+        case 's': // south
+          newHeight = Math.max(15, mouseY - elementY);
+          break;
+        case 'n': // north
+          newHeight = Math.max(15, elementY + selectedElement.boundingBox.height - mouseY);
+          break;
+      }
+
+      const updatedElement = {
+        ...selectedElement,
+        boundingBox: {
+          width: Math.round(newWidth),
+          height: Math.round(newHeight)
+        }
+      };
+
+      onLabelChange({
+        ...label,
+        elements: label.elements.map(el => 
+          el.id === selectedElement.id ? updatedElement : el
+        )
+      });
+
+      onElementSelect(updatedElement);
     }
-  }, [isDragging, dragStart, selectedElement, label, onLabelChange, onElementSelect, scale]);
+  }, [isDragging, dragStart, selectedElement, label, onLabelChange, onElementSelect, scale, isResizing, resizeHandle]);
 
   const handleMouseUp = useCallback(() => {
     setIsDragging(false);
     setDragStart(null);
+    setIsResizing(false);
+    setResizeHandle(null);
+  }, []);
+
+  const handleResizeStart = useCallback((e: React.MouseEvent, handle: string) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setIsResizing(true);
+    setResizeHandle(handle);
   }, []);
 
   const tools = [
@@ -278,7 +349,7 @@ export function ZPLVisualEditor({
         {/* Canvas */}
         <div className="flex justify-center">
           <div 
-            className="relative bg-white border-2 border-gray-300 cursor-crosshair"
+            className="canvas-container relative bg-white border-2 border-gray-300 cursor-crosshair"
             style={{
               width: `${LABEL_DIMENSIONS.width * scale}px`,
               height: `${LABEL_DIMENSIONS.height * scale}px`,
@@ -320,6 +391,34 @@ export function ZPLVisualEditor({
 
               switch (element.type) {
                 case 'text':
+                  const renderTextContent = () => {
+                    if (element.boundingBox && element.textOverflow === 'wrap') {
+                      // Calculate wrapped lines for display
+                      const fontSize = element.fontSize || 20;
+                      const charWidth = fontSize * 0.6;
+                      const maxCharsPerLine = Math.floor(element.boundingBox.width / charWidth);
+                      const lines = element.text.split(' ').reduce((acc: string[], word) => {
+                        if (acc.length === 0) return [word];
+                        const lastLine = acc[acc.length - 1];
+                        if ((lastLine + ' ' + word).length <= maxCharsPerLine) {
+                          acc[acc.length - 1] = lastLine + ' ' + word;
+                        } else {
+                          acc.push(word);
+                        }
+                        return acc;
+                      }, []);
+
+                      return (
+                        <div style={{ lineHeight: '1.2' }}>
+                          {lines.map((line, index) => (
+                            <div key={index}>{line}</div>
+                          ))}
+                        </div>
+                      );
+                    }
+                    return element.text;
+                  };
+
                   return (
                     <React.Fragment key={element.id}>
                       <div
@@ -330,28 +429,68 @@ export function ZPLVisualEditor({
                           overflow: 'hidden',
                           padding: '2px',
                           backgroundColor: isSelected ? 'rgba(59, 130, 246, 0.1)' : 'rgba(229, 231, 235, 0.3)',
-                          border: isSelected ? '2px solid rgb(59, 130, 246)' : '1px solid rgb(156, 163, 175)'
+                          border: isSelected ? '2px solid rgb(59, 130, 246)' : '1px solid rgb(156, 163, 175)',
+                          display: 'flex',
+                          alignItems: 'flex-start'
                         }}
                         className={`${selectionClass} rounded`}
                         onMouseDown={(e) => handleElementMouseDown(e, element)}
                       >
-                        {element.text}
+                        {renderTextContent()}
                       </div>
                       {/* Show bounding box when selected */}
                       {isSelected && element.boundingBox && (
-                        <div
-                          style={{
-                            position: 'absolute',
-                            left: `${element.position.x * scale}px`,
-                            top: `${element.position.y * scale}px`,
-                            width: `${element.boundingBox.width * scale}px`,
-                            height: `${element.boundingBox.height * scale}px`,
-                            border: '2px dashed rgb(59, 130, 246)',
-                            backgroundColor: 'rgba(59, 130, 246, 0.05)',
-                            pointerEvents: 'none',
-                            borderRadius: '4px'
-                          }}
-                        />
+                        <>
+                          <div
+                            style={{
+                              position: 'absolute',
+                              left: `${element.position.x * scale}px`,
+                              top: `${element.position.y * scale}px`,
+                              width: `${element.boundingBox.width * scale}px`,
+                              height: `${element.boundingBox.height * scale}px`,
+                              border: '2px dashed rgb(59, 130, 246)',
+                              backgroundColor: 'rgba(59, 130, 246, 0.05)',
+                              pointerEvents: 'none',
+                              borderRadius: '4px'
+                            }}
+                          />
+                          {/* Resize handles */}
+                          {['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'].map((handle) => {
+                            const isCorner = ['nw', 'ne', 'se', 'sw'].includes(handle);
+                            const size = 8;
+                            let left = 0, top = 0, cursor = '';
+
+                            switch (handle) {
+                              case 'nw': left = -size/2; top = -size/2; cursor = 'nw-resize'; break;
+                              case 'n': left = element.boundingBox!.width * scale / 2 - size/2; top = -size/2; cursor = 'n-resize'; break;
+                              case 'ne': left = element.boundingBox!.width * scale - size/2; top = -size/2; cursor = 'ne-resize'; break;
+                              case 'e': left = element.boundingBox!.width * scale - size/2; top = element.boundingBox!.height * scale / 2 - size/2; cursor = 'e-resize'; break;
+                              case 'se': left = element.boundingBox!.width * scale - size/2; top = element.boundingBox!.height * scale - size/2; cursor = 'se-resize'; break;
+                              case 's': left = element.boundingBox!.width * scale / 2 - size/2; top = element.boundingBox!.height * scale - size/2; cursor = 's-resize'; break;
+                              case 'sw': left = -size/2; top = element.boundingBox!.height * scale - size/2; cursor = 'sw-resize'; break;
+                              case 'w': left = -size/2; top = element.boundingBox!.height * scale / 2 - size/2; cursor = 'w-resize'; break;
+                            }
+
+                            return (
+                              <div
+                                key={handle}
+                                style={{
+                                  position: 'absolute',
+                                  left: `${element.position.x * scale + left}px`,
+                                  top: `${element.position.y * scale + top}px`,
+                                  width: `${size}px`,
+                                  height: `${size}px`,
+                                  backgroundColor: 'rgb(59, 130, 246)',
+                                  border: '1px solid white',
+                                  borderRadius: isCorner ? '50%' : '2px',
+                                  cursor,
+                                  zIndex: 10
+                                }}
+                                onMouseDown={(e) => handleResizeStart(e, handle)}
+                              />
+                            );
+                          })}
+                        </>
                       )}
                     </React.Fragment>
                   );
