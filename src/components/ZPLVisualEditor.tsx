@@ -418,22 +418,24 @@ export function ZPLVisualEditor({
 
                     const maxWidth = element.boundingBox.width * scale * 0.9; // 90% of box width for padding
                     const maxHeight = element.boundingBox.height * scale * 0.8; // 80% of box height for padding
-                    let fontSize = (element.fontSize || 20) * scale / 2;
+                    const text = element.text || '';
                     
-                    // Measure text with current font size
+                    if (!text) return 8;
+                    
+                    // Start with a larger font size and scale down/up to fit
+                    let fontSize = Math.min(maxWidth / text.length * 2, maxHeight);
+                    
+                    // Measure text with calculated font size
                     ctx.font = `${fontSize}px monospace`;
-                    let textWidth = ctx.measureText(element.text || '').width;
-                    let textHeight = fontSize;
+                    let textWidth = ctx.measureText(text).width;
                     
-                    // Scale font size to fit width
-                    if (textWidth > maxWidth && textWidth > 0) {
+                    // Scale to fit width exactly (grow or shrink as needed)
+                    if (textWidth > 0) {
                       fontSize = (fontSize * maxWidth) / textWidth;
                     }
                     
-                    // Scale font size to fit height
-                    if (textHeight > maxHeight && textHeight > 0) {
-                      fontSize = Math.min(fontSize, maxHeight);
-                    }
+                    // Ensure it doesn't exceed height
+                    fontSize = Math.min(fontSize, maxHeight);
                     
                     return Math.max(fontSize, 8); // Minimum font size of 8px
                   };
