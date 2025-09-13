@@ -152,9 +152,13 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
 
       if (result) {
         toast.success(currentTemplateId ? 'Template updated successfully' : 'Template saved successfully');
+        
         if (!currentTemplateId) {
-          setTemplateName('');
+          // For new templates, set the current template to the saved one
+          setCurrentTemplateId(result.id);
+          setTemplateName(result.name || templateName);
         }
+        // Keep the user on their template instead of clearing
       } else {
         toast.error('Failed to save template - no result returned');
       }
