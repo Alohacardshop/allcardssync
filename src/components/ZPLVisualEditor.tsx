@@ -189,6 +189,9 @@ export function ZPLVisualEditor({
   }, [activeTool, label, onLabelChange, onElementSelect, scale]);
 
   const handleElementMouseDown = useCallback((e: React.MouseEvent, element: ZPLElement) => {
+    // Don't start dragging if we're already resizing
+    if (isResizing) return;
+    
     e.stopPropagation();
     e.preventDefault();
     
@@ -204,27 +207,10 @@ export function ZPLVisualEditor({
       });
       setIsDragging(true);
     }
-  }, [activeTool, onElementSelect, scale]);
+  }, [activeTool, onElementSelect, scale, isResizing]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (isDragging && dragStart && selectedElement) {
-      const newX = Math.max(0, Math.min(LABEL_DIMENSIONS.width - 10, (e.clientX - dragStart.x) / scale));
-      const newY = Math.max(0, Math.min(LABEL_DIMENSIONS.height - 10, (e.clientY - dragStart.y) / scale));
-
-      const updatedElement = {
-        ...selectedElement,
-        position: { x: Math.round(newX), y: Math.round(newY) }
-      };
-
-      onLabelChange({
-        ...label,
-        elements: label.elements.map(el => 
-          el.id === selectedElement.id ? updatedElement : el
-        )
-      });
-
-      onElementSelect(updatedElement);
-    } else if (isResizing && resizeHandle && selectedElement && selectedElement.type === 'text' && selectedElement.boundingBox) {
+    if (isResizing && resizeHandle && selectedElement && selectedElement.type === 'text' && selectedElement.boundingBox) {
       const canvasContainer = e.currentTarget as HTMLElement;
       const rect = canvasContainer.getBoundingClientRect();
 
@@ -283,6 +269,23 @@ export function ZPLVisualEditor({
           width: Math.round(newWidth),
           height: Math.round(newHeight)
         }
+      };
+
+      onLabelChange({
+        ...label,
+        elements: label.elements.map(el => 
+          el.id === selectedElement.id ? updatedElement : el
+        )
+      });
+
+      onElementSelect(updatedElement);
+    } else if (isDragging && dragStart && selectedElement && !isResizing) {
+      const newX = Math.max(0, Math.min(LABEL_DIMENSIONS.width - 10, (e.clientX - dragStart.x) / scale));
+      const newY = Math.max(0, Math.min(LABEL_DIMENSIONS.height - 10, (e.clientY - dragStart.y) / scale));
+
+      const updatedElement = {
+        ...selectedElement,
+        position: { x: Math.round(newX), y: Math.round(newY) }
       };
 
       onLabelChange({
@@ -467,7 +470,7 @@ export function ZPLVisualEditor({
                           {/* Resize handles */}
                           {['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'].map((handle) => {
                             const isCorner = ['nw', 'ne', 'se', 'sw'].includes(handle);
-                            const size = 8;
+                            const size = 10;
                             let left = 0, top = 0, cursor = '';
 
                             switch (handle) {
@@ -494,10 +497,14 @@ export function ZPLVisualEditor({
                                   border: '2px solid white',
                                   borderRadius: isCorner ? '50%' : '2px',
                                   cursor,
-                                  zIndex: 10,
-                                  boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                                  zIndex: 1000,
+                                  boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                                  pointerEvents: 'auto'
                                 }}
-                                onMouseDown={(e) => handleResizeStart(e, handle)}
+                                onMouseDown={(e) => {
+                                  console.log('Resize handle clicked:', handle);
+                                  handleResizeStart(e, handle);
+                                }}
                                 onMouseEnter={() => console.log('Hovering resize handle:', handle)}
                               />
                             );
