@@ -73,7 +73,12 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
         setTemplateName(templateToLoad.name);
         
         // Convert old template format to ZPL format if needed
-        if (templateToLoad.canvas && templateToLoad.canvas.labelData) {
+        if (templateToLoad.canvas && templateToLoad.canvas.zplLabel) {
+          // Load from new ZPL format
+          console.log('Loading from ZPL format:', templateToLoad.canvas.zplLabel);
+          setLabel(templateToLoad.canvas.zplLabel);
+        } else if (templateToLoad.canvas && templateToLoad.canvas.labelData) {
+          // Fallback: convert old template format to ZPL format
           const convertedLabel = createDefaultLabelTemplate();
           
           // Update elements with template data
