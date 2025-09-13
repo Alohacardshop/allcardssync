@@ -40,6 +40,7 @@ import { ZebraPrinterSelectionDialog } from '@/components/ZebraPrinterSelectionD
 import { zebraNetworkService } from "@/lib/zebraNetworkService";
 import { Link } from 'react-router-dom';
 import { sendGradedToShopify, sendRawToShopify } from '@/hooks/useShopifySend';
+import { useBatchSendToShopify } from '@/hooks/useBatchSendToShopify';
 import { FLAGS } from '@/lib/flags';
 
 const Inventory = () => {
@@ -75,6 +76,7 @@ const Inventory = () => {
   
   const { printZPL, selectedPrinter } = useZebraNetwork();
   const { selectedStore, selectedLocation } = useStore();
+  const { sendBatchToShopify, isSending: isBatchSending } = useBatchSendToShopify();
 
   // Check admin role on mount
   useEffect(() => {
@@ -153,15 +155,11 @@ const Inventory = () => {
   // F) Manual sync retry function - now uses v2 batch router
   const retrySync = async (item: any) => {
     try {
-      const { error } = await supabase.functions.invoke('v2-batch-send-to-inventory', {
-        body: {
-          storeKey: item.store_key,
-          locationGid: item.shopify_location_gid,
-          itemIds: [item.id]
-        }
-      });
-
-      if (error) throw error;
+      await sendBatchToShopify(
+        [item.id],
+        item.store_key as "hawaii" | "las_vegas",
+        item.shopify_location_gid
+      );
       toast.success('Sync retry initiated');
       fetchItems(); // Refresh to see updated status
     } catch (error) {
@@ -195,63 +193,71 @@ const Inventory = () => {
   const syncAllVisible = async () => {
     setSyncingAll(true);
     try {
-      // Group items by store + SKU to deduplicate
-      const itemGroups = new Map();
-      
-      filteredItems.forEach(item => {
-        if (!item.sku || !item.store_key) return;
-        
-        const key = `${item.store_key}-${item.sku}`;
-        if (!itemGroups.has(key)) {
-          itemGroups.set(key, {
-            storeKey: item.store_key,
-            sku: item.sku,
-            locationGid: item.shopify_location_gid,
-          });
-        }
-      });
-
-      const uniqueItems = Array.from(itemGroups.values());
-      let successCount = 0;
-      let errorCount = 0;
-
-      // Process in batches with concurrency limit
-      const batchSize = 5;
-      for (let i = 0; i < uniqueItems.length; i += batchSize) {
-        const batch = uniqueItems.slice(i, i + batchSize);
-        
-        await Promise.all(
-          batch.map(async (item) => {
-            try {
-              // Use v2 batch router for bulk sync
-              const { error } = await supabase.functions.invoke('v2-batch-send-to-inventory', {
-                body: {
-                  storeKey: item.storeKey,
-                  locationGid: item.locationGid,
-                  itemIds: [] // This would need actual item IDs from the filtered items
-                }
-              });
-              
-              if (error) throw error;
-              successCount++;
-            } catch (error) {
-              console.error(`Sync failed for ${item.sku}:`, error);
-              errorCount++;
-            }
-          })
-        );
-        
-        // Small delay between batches
-        if (i + batchSize < uniqueItems.length) {
-          await new Promise(resolve => setTimeout(resolve, 100));
-        }
+      if (!selectedStore || !selectedLocation) {
+        toast.error('Please select a store and location first');
+        return;
       }
 
-      toast.success(`Sync completed: ${successCount} successful, ${errorCount} errors`);
+      // Collect item IDs for sync
+      const itemIdsToSync = filteredItems
+        .filter(item => item.sku && item.store_key && item.shopify_location_gid)
+        .map(item => item.id);
+
+      if (itemIdsToSync.length === 0) {
+        toast.error('No items available for sync');
+        return;
+      }
+
+      console.log(`🔄 [syncAllVisible] Syncing ${itemIdsToSync.length} items`);
+      
+      await sendBatchToShopify(
+        itemIdsToSync,
+        selectedStore as "hawaii" | "las_vegas",
+        selectedLocation
+      );
+
       fetchItems(); // Refresh to see updated statuses
     } catch (error) {
       console.error('Sync all failed:', error);
       toast.error('Failed to sync items');
+    } finally {
+      setSyncingAll(false);
+    }
+  };
+
+  const syncPendingOnly = async () => {
+    setSyncingAll(true);
+    try {
+      if (!selectedStore || !selectedLocation) {
+        toast.error('Please select a store and location first');
+        return;
+      }
+
+      // Filter for only pending items
+      const pendingItems = filteredItems.filter(item => 
+        item.shopify_sync_status === 'pending' && 
+        item.sku && 
+        item.store_key && 
+        item.shopify_location_gid
+      );
+
+      if (pendingItems.length === 0) {
+        toast.info('No pending items found');
+        return;
+      }
+
+      console.log(`🟡 [syncPendingOnly] Syncing ${pendingItems.length} pending items`);
+      
+      await sendBatchToShopify(
+        pendingItems.map(item => item.id),
+        selectedStore as "hawaii" | "las_vegas",
+        selectedLocation
+      );
+
+      fetchItems(); // Refresh to see updated statuses
+    } catch (error) {
+      console.error('Sync pending failed:', error);
+      toast.error('Failed to sync pending items');
     } finally {
       setSyncingAll(false);
     }
@@ -702,9 +708,32 @@ const Inventory = () => {
                     Delete All from Shopify ({filteredItems.filter(item => item.type === 'Graded' && (item.shopify_product_id || item.sku)).length})
                   </Button>
                 )}
+                
+                {/* Sync Pending Only Button */}
+                {filteredItems.filter(item => item.shopify_sync_status === 'pending').length > 0 && (
+                  <Button
+                    onClick={syncPendingOnly}
+                    disabled={syncingAll || isBatchSending}
+                    variant="outline"
+                    size="sm"
+                  >
+                    {syncingAll ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Syncing...
+                      </>
+                    ) : (
+                      <>
+                        <RotateCcw className="w-4 h-4 mr-2" />
+                        Sync Pending ({filteredItems.filter(item => item.shopify_sync_status === 'pending').length})
+                      </>
+                    )}
+                  </Button>
+                )}
+                
                 <Button
                   onClick={syncAllVisible}
-                  disabled={syncingAll || filteredItems.length === 0}
+                  disabled={syncingAll || isBatchSending || filteredItems.length === 0}
                 >
                   {syncingAll ? (
                     <>
@@ -1032,13 +1061,14 @@ const Inventory = () => {
                                     </Tooltip>
                                   </TooltipProvider>
                                   
-                                  {/* F) Retry button for error status */}
-                                  {item.shopify_sync_status === 'error' && (
+                                  {/* F) Retry button for error and pending status */}
+                                  {(item.shopify_sync_status === 'error' || item.shopify_sync_status === 'pending') && (
                                     <Button
                                       variant="ghost"
                                       size="sm"
                                       onClick={() => retrySync(item)}
                                       className="h-6 w-6 p-0"
+                                      title={item.shopify_sync_status === 'pending' ? 'Retry pending sync' : 'Retry failed sync'}
                                     >
                                       <RotateCcw className="h-3 w-3" />
                                     </Button>
