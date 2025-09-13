@@ -15,9 +15,9 @@ export const handleApiError = (error: any, operation: string) => {
 };
 
 // Enhanced inventory analytics with sales data
-export async function getInventoryAnalytics() {
+export async function getInventoryAnalytics(storeKey?: string, locationGid?: string) {
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('intake_items')
       .select(`
         id, 
@@ -35,6 +35,16 @@ export async function getInventoryAnalytics() {
         type
       `)
       .is('deleted_at', null);
+
+    // Apply store and location filters
+    if (storeKey) {
+      query = query.eq('store_key', storeKey);
+    }
+    if (locationGid) {
+      query = query.eq('shopify_location_gid', locationGid);
+    }
+
+    const { data, error } = await query;
 
     if (error) throw error;
 

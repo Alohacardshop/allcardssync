@@ -17,9 +17,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useStore } from '@/contexts/StoreContext';
 
 export function InventoryAnalytics() {
-  const { data: analytics, isLoading, error } = useInventoryAnalytics();
-  const [dateRange, setDateRange] = useState('30');
   const { selectedStore, selectedLocation } = useStore();
+  const { data: analytics, isLoading, error } = useInventoryAnalytics(
+    selectedStore, 
+    selectedLocation
+  );
+  const [dateRange, setDateRange] = useState('30');
 
   if (isLoading) return <LoadingSpinner text="Loading analytics..." />;
   if (error) return <div className="text-destructive">Failed to load analytics</div>;

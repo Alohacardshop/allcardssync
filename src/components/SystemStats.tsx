@@ -1,11 +1,16 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useInventoryAnalytics } from "@/hooks/useInventoryAnalytics";
+import { useStore } from "@/contexts/StoreContext";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { Package, DollarSign, PrinterIcon, TrendingUp } from "lucide-react";
 
 export function SystemStats() {
-  const { data: analytics, isLoading, error } = useInventoryAnalytics();
+  const { selectedStore, selectedLocation } = useStore();
+  const { data: analytics, isLoading, error } = useInventoryAnalytics(
+    selectedStore, 
+    selectedLocation
+  );
 
   if (isLoading) return <LoadingSpinner text="Loading analytics..." />;
   if (error) return <div className="text-destructive">Failed to load analytics</div>;
