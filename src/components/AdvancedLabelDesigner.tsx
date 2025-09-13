@@ -59,6 +59,7 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
   const [templateName, setTemplateName] = useState('');
   const [showGuides, setShowGuides] = useState(false);
   const [copies, setCopies] = useState(1);
+  const [cutAfter, setCutAfter] = useState(true);
 
   // TSPL settings
   const [tsplSettings, setTsplSettings] = useState({
@@ -160,7 +161,11 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
   const handlePrint = async () => {
     try {
       const zplCode = generateLabelTSPL(selectedTemplateId, labelData, tsplSettings);
-      await print(zplCode, copies);
+      
+      // Add cut after functionality to TSPL
+      const finalCode = cutAfter ? zplCode.replace(/^PRINT/, 'CUT\nPRINT') : zplCode;
+      
+      await print(finalCode, copies);
     } catch (error) {
       console.error('Print failed:', error);
       toast.error('Failed to print label');
@@ -237,12 +242,11 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
             </CardHeader>
             <CardContent>
               <Tabs defaultValue="fields" className="w-full">
-                <TabsList className="grid w-full grid-cols-5">
+                <TabsList className="grid w-full grid-cols-4">
                   <TabsTrigger value="fields">Fields</TabsTrigger>
                   <TabsTrigger value="data">Data</TabsTrigger>
                   <TabsTrigger value="template">Template</TabsTrigger>
-                  <TabsTrigger value="settings">Settings</TabsTrigger>
-                  <TabsTrigger value="printer">Printer</TabsTrigger>
+                  <TabsTrigger value="print">Print & Settings</TabsTrigger>
                 </TabsList>
 
                 {/* Field Configuration */}
@@ -424,64 +428,114 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
                   </div>
                 </TabsContent>
 
-                {/* Print Settings */}
-                <TabsContent value="settings" className="space-y-4">
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="copies">Copies</Label>
-                      <Input
-                        id="copies"
-                        type="number"
-                        min="1"
-                        max="100"
-                        value={copies}
-                        onChange={(e) => setCopies(parseInt(e.target.value) || 1)}
-                      />
+                {/* Print & Settings */}
+                <TabsContent value="print" className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-4">
+                      <h4 className="text-sm font-medium">Print Settings</h4>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor="copies">Copies</Label>
+                        <Input
+                          id="copies"
+                          type="number"
+                          min="1"
+                          max="99"
+                          value={copies}
+                          onChange={(e) => setCopies(Number(e.target.value))}
+                        />
+                      </div>
+
+                      <div className="flex items-center space-x-2">
+                        <Switch 
+                          id="cut-after"
+                          checked={cutAfter} 
+                          onCheckedChange={setCutAfter} 
+                        />
+                        <Label htmlFor="cut-after">Cut after printing</Label>
+                      </div>
+
+                      <Separator />
+
+                      <h4 className="text-sm font-medium">TSPL Settings</h4>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="density">Density (0-15)</Label>
+                        <Input
+                          id="density"
+                          type="number"
+                          min="0"
+                          max="15"
+                          value={tsplSettings.density}
+                          onChange={(e) => setTsplSettings(prev => ({
+                            ...prev,
+                            density: Number(e.target.value)
+                          }))}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="speed">Speed (2-8)</Label>
+                        <Input
+                          id="speed"
+                          type="number"
+                          min="2"
+                          max="8"
+                          value={tsplSettings.speed}
+                          onChange={(e) => setTsplSettings(prev => ({
+                            ...prev,
+                            speed: Number(e.target.value)
+                          }))}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="gap">Gap (inches)</Label>
+                        <Input
+                          id="gap"
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          max="1"
+                          value={tsplSettings.gapInches}
+                          onChange={(e) => setTsplSettings(prev => ({
+                            ...prev,
+                            gapInches: Number(e.target.value)
+                          }))}
+                        />
+                      </div>
                     </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="density">Print Density</Label>
-                      <Input
-                        id="density"
-                        type="number"
-                        min="1"
-                        max="15"
-                        value={tsplSettings.density}
-                        onChange={(e) => setTsplSettings(prev => ({
-                          ...prev,
-                          density: parseInt(e.target.value) || 10
-                        }))}
-                      />
+                    <div className="space-y-4">
+                      <h4 className="text-sm font-medium">Printer Configuration</h4>
+                      <PrintNodeSettings />
                     </div>
+                  </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="speed">Print Speed</Label>
-                      <Input
-                        id="speed"
-                        type="number"
-                        min="1"
-                        max="10"
-                        value={tsplSettings.speed}
-                        onChange={(e) => setTsplSettings(prev => ({
-                          ...prev,
-                          speed: parseInt(e.target.value) || 4
-                        }))}
-                      />
-                    </div>
+                  <Separator />
 
-                    <Button onClick={resetToDefaults} variant="outline" className="w-full">
-                      <RotateCcw className="w-4 h-4 mr-2" />
+                  <div className="flex flex-col gap-2">
+                    <Button 
+                      onClick={handlePrint} 
+                      disabled={isPrinting}
+                      className="w-full"
+                      size="lg"
+                    >
+                      {isPrinting ? 'Printing...' : `Print ${copies} Label${copies > 1 ? 's' : ''}`}
+                    </Button>
+                    
+                    <Button 
+                      onClick={resetToDefaults} 
+                      variant="outline" 
+                      className="w-full"
+                    >
                       Reset to Defaults
                     </Button>
                   </div>
-              </TabsContent>
-
-              <TabsContent value="printer" className="space-y-4">
-                <PrintNodeSettings />
-              </TabsContent>
-            </Tabs>
-          </CardContent>
-        </Card>
+                </TabsContent>
+              </Tabs>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Preview Panel */}
@@ -493,23 +547,27 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
             showGuides={showGuides}
           />
 
-          {/* Action Buttons */}
-          <div className="grid grid-cols-2 gap-2">
-            <Button onClick={handlePrint} disabled={isPrinting} className="w-full">
+          <div className="flex flex-col gap-4">
+            <Button 
+              onClick={handlePrint} 
+              disabled={isPrinting}
+              className="w-full"
+              size="lg"
+            >
               <Printer className="w-4 h-4 mr-2" />
-              {isPrinting ? 'Printing...' : `Print (${copies})`}
+              {isPrinting ? 'Printing...' : `Print ${copies} Label${copies > 1 ? 's' : ''}`}
             </Button>
             
             <Button onClick={handleExportPNG} variant="outline" className="w-full">
               <Download className="w-4 h-4 mr-2" />
               Export PNG
             </Button>
+            
+            <Button onClick={handleExportPDF} variant="outline" className="w-full">
+              <Download className="w-4 h-4 mr-2" />
+              Export PDF
+            </Button>
           </div>
-          
-          <Button onClick={handleExportPDF} variant="outline" className="w-full">
-            <Download className="w-4 h-4 mr-2" />
-            Export PDF
-          </Button>
         </div>
       </div>
     </div>
