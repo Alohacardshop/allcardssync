@@ -116,7 +116,17 @@ export function ZPLPreview({ label }: ZPLPreviewProps) {
                       return (
                         <div
                           key={element.id}
-                          style={style}
+                          style={{
+                            ...style,
+                            width: element.boundingBox ? `${element.boundingBox.width / 2}px` : 'auto',
+                            height: element.boundingBox ? `${element.boundingBox.height / 2}px` : 'auto',
+                            overflow: 'hidden',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            padding: '1px', // Half of visual editor padding
+                            whiteSpace: 'pre-wrap'
+                          }}
                           className={element.selected ? 'ring-2 ring-blue-500' : ''}
                         >
                           {element.text}
