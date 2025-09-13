@@ -33,13 +33,23 @@ export function useBatchSendToShopify() {
     storeKey: "hawaii" | "las_vegas",
     locationGid: string
   ): Promise<BatchSendResponse> => {
+    console.log(`🔵 [useBatchSendToShopify] Starting batch send:`, { 
+      itemCount: itemIds.length, 
+      storeKey, 
+      locationGid: locationGid?.substring(0, 20) + '...' 
+    })
+    
     if (!storeKey || !locationGid) {
-      throw new Error("Store and location must be selected")
+      const error = "Store and location must be selected"
+      console.error(`❌ [useBatchSendToShopify] Validation failed:`, error)
+      throw new Error(error)
     }
 
     setIsSending(true)
     
     try {
+      console.log(`🚀 [useBatchSendToShopify] Calling v2-batch-send-to-inventory edge function`)
+      
       const { data, error } = await supabase.functions.invoke("v2-batch-send-to-inventory", {
         body: {
           itemIds,
@@ -48,16 +58,22 @@ export function useBatchSendToShopify() {
         }
       })
 
+      console.log(`📡 [useBatchSendToShopify] Edge function response:`, { data, error })
+
       if (error) {
+        console.error(`❌ [useBatchSendToShopify] Edge function error:`, error)
         throw new Error(`Batch send failed: ${error.message}`)
       }
 
       if (!data?.ok) {
+        console.error(`❌ [useBatchSendToShopify] Edge function returned not ok:`, data)
         throw new Error(data?.error || "Batch send failed")
       }
 
       // Show success summary
       const { shopify_success, shopify_errors, processed } = data
+      console.log(`✅ [useBatchSendToShopify] Success summary:`, { shopify_success, shopify_errors, processed })
+      
       if (shopify_success > 0) {
         toast.success(`Successfully sent ${shopify_success} items to Shopify`)
       }

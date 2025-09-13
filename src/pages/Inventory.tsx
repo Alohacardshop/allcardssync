@@ -718,6 +718,43 @@ const Inventory = () => {
                     </>
                   )}
                 </Button>
+                
+                {/* Debug Test Button for Admins */}
+                {isAdmin && (
+                  <Button 
+                    variant="outline" 
+                    onClick={async () => {
+                      console.log('🧪 [DEBUG] Testing batch send functionality')
+                      const testItems = filteredItems.slice(0, 2); // Take first 2 items for testing
+                      if (testItems.length === 0) {
+                        toast.error('No items available for testing')
+                        return;
+                      }
+                      
+                      console.log('🧪 [DEBUG] Test items:', testItems.map(i => ({ id: i.id, sku: i.sku })))
+                      
+                      try {
+                        const { useBatchSendToShopify } = await import('@/hooks/useBatchSendToShopify')
+                        const { sendBatchToShopify } = useBatchSendToShopify()
+                        
+                        await sendBatchToShopify(
+                          testItems.map(i => i.id),
+                          selectedStore as "hawaii" | "las_vegas", 
+                          selectedLocation
+                        )
+                        
+                        toast.success('Debug test completed - check console logs')
+                        fetchItems() // Refresh
+                      } catch (error) {
+                        console.error('🧪 [DEBUG] Test failed:', error)
+                        toast.error('Debug test failed - check console logs')
+                      }
+                    }}
+                    className="bg-purple-50 hover:bg-purple-100 border-purple-200 text-purple-700"
+                  >
+                    🧪 Test Batch Send
+                  </Button>
+                )}
               </div>
             </CardTitle>
           </CardHeader>
