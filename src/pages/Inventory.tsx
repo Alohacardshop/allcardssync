@@ -152,32 +152,36 @@ const Inventory = () => {
     fetchItems();
   }, [statusFilter, typeFilter, selectedStore, selectedLocation, showSoldItems]); // Updated dependencies
 
-  // F) Manual sync retry function - now uses v2 batch router
+  // F) Manual sync retry function - uses item's original store/location
   const retrySync = async (item: any) => {
     console.log('🔄 [retrySync] Starting retry for item:', {
       id: item.id,
       sku: item.sku,
       store_key: item.store_key,
       shopify_location_gid: item.shopify_location_gid,
-      selectedStore,
-      selectedLocation
+      adminSelectedStore: selectedStore,
+      adminSelectedLocation: selectedLocation
     });
     
     try {
-      if (!selectedStore || !selectedLocation) {
-        console.error('❌ [retrySync] Missing store or location:', { selectedStore, selectedLocation });
-        toast.error('Please select a store and location first');
+      // Use the item's original store and location, not admin's current selection
+      if (!item.store_key || !item.shopify_location_gid) {
+        console.error('❌ [retrySync] Item missing store or location data:', { 
+          store_key: item.store_key, 
+          shopify_location_gid: item.shopify_location_gid 
+        });
+        toast.error('Item is missing store or location data - cannot retry');
         return;
       }
       
-      console.log('🚀 [retrySync] Calling sendBatchToShopify...');
+      console.log('🚀 [retrySync] Using item\'s original store/location for retry');
       await sendBatchToShopify(
         [item.id],
-        selectedStore as "hawaii" | "las_vegas",
-        selectedLocation
+        item.store_key as "hawaii" | "las_vegas",
+        item.shopify_location_gid
       );
       console.log('✅ [retrySync] sendBatchToShopify completed');
-      toast.success('Sync retry initiated');
+      toast.success(`Sync retry initiated for ${item.store_key} store`);
       fetchItems(); // Refresh to see updated status
     } catch (error) {
       console.error('❌ [retrySync] Retry sync failed:', error);
