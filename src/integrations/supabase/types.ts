@@ -1875,7 +1875,7 @@ export type Database = {
         Returns: number
       }
       set_template_default: {
-        Args: { template_id: string; template_type_param: string }
+        Args: { template_id: string; template_type_param?: string }
         Returns: undefined
       }
       set_user_default_location: {

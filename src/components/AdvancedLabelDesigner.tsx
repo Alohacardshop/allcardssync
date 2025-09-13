@@ -7,7 +7,8 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
-import { Printer, Save, RotateCcw } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Printer, Save, RotateCcw, Star, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { LabelPreviewCanvas } from '@/components/LabelPreviewCanvas';
@@ -31,6 +32,7 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
     defaultTemplate,
     saveTemplate,
     setAsDefault,
+    deleteTemplate,
     loading: templatesLoading
   } = useRawTemplates();
 
@@ -139,16 +141,30 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
       return;
     }
 
-    const result = await saveTemplate(
-      templateName,
-      fieldConfig,
-      labelData,
-      { density: zplSettings.darkness, speed: zplSettings.speed, gapInches: 0 }
-    );
+    console.log('Attempting to save template:', templateName);
+    console.log('Field config:', fieldConfig);
+    console.log('Label data:', labelData);
+    console.log('ZPL settings:', zplSettings);
 
-    if (result) {
-      toast.success('Template saved successfully');
-      setTemplateName('');
+    try {
+      const result = await saveTemplate(
+        templateName,
+        fieldConfig,
+        labelData,
+        { density: zplSettings.darkness, speed: zplSettings.speed, gapInches: 0 }
+      );
+
+      console.log('Save template result:', result);
+
+      if (result) {
+        toast.success('Template saved successfully');
+        setTemplateName('');
+      } else {
+        toast.error('Failed to save template - no result returned');
+      }
+    } catch (error) {
+      console.error('Error saving template:', error);
+      toast.error('Failed to save template');
     }
   };
 
@@ -353,57 +369,100 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
                 {/* Template Management */}
                 <TabsContent value="template" className="space-y-4">
                   <div className="space-y-4">
+                    {/* Saved Templates List */}
                     <div className="space-y-2">
-                      <Label htmlFor="template-select">Load Template</Label>
-                      <Select onValueChange={handleLoadTemplate}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a template" />
-                        </SelectTrigger>
-                        <SelectContent>
+                      <Label>Saved Templates</Label>
+                      {templatesLoading ? (
+                        <div className="text-sm text-muted-foreground">Loading templates...</div>
+                      ) : templates.length === 0 ? (
+                        <div className="text-sm text-muted-foreground">No templates saved yet</div>
+                      ) : (
+                        <div className="space-y-2">
                           {templates.map((template) => (
-                            <SelectItem key={template.id} value={template.id}>
-                              {template.name}
-                            </SelectItem>
+                            <div key={template.id} className="flex items-center justify-between p-2 border rounded-lg">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium">{template.name}</span>
+                                {template.is_default && (
+                                  <Badge variant="secondary" className="text-xs">Default</Badge>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm"
+                                  onClick={() => handleLoadTemplate(template.id)}
+                                  className="h-8 px-2"
+                                >
+                                  Load
+                                </Button>
+                                {!template.is_default && (
+                                  <Button 
+                                    variant="ghost" 
+                                    size="sm"
+                                    onClick={() => setAsDefault(template.id)}
+                                    className="h-8 px-2"
+                                  >
+                                    <Star className="w-3 h-3" />
+                                  </Button>
+                                )}
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm"
+                                  onClick={() => deleteTemplate(template.id)}
+                                  className="h-8 px-2 text-destructive hover:text-destructive"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </Button>
+                              </div>
+                            </div>
                           ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="base-template">Base Template Style</Label>
-                      <Select
-                        value={selectedTemplateId}
-                        onValueChange={setSelectedTemplateId}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {AVAILABLE_TEMPLATES.map((template) => (
-                            <SelectItem key={template.id} value={template.id}>
-                              {template.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        </div>
+                      )}
                     </div>
 
                     <Separator />
 
                     <div className="space-y-2">
-                      <Label htmlFor="template-name">Save as New Template</Label>
+                      <Label htmlFor="template-name">Save Current Configuration</Label>
                       <div className="flex gap-2">
                         <Input
                           id="template-name"
                           value={templateName}
                           onChange={(e) => setTemplateName(e.target.value)}
-                          placeholder="Template name"
+                          placeholder="Enter template name"
                         />
-                        <Button onClick={handleSaveTemplate} size="sm">
+                        <Button 
+                          onClick={handleSaveTemplate} 
+                          size="sm"
+                          disabled={!templateName.trim()}
+                        >
                           <Save className="w-4 h-4" />
                         </Button>
                       </div>
+                      <p className="text-xs text-muted-foreground">
+                        This will save your current field settings, label data, and print settings
+                      </p>
                     </div>
+
+                    {defaultTemplate && (
+                      <div className="p-3 bg-muted rounded-lg">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Star className="w-4 h-4 fill-current" />
+                          <span className="text-sm font-medium">Default Template</span>
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          {defaultTemplate.name}
+                        </div>
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => handleLoadTemplate(defaultTemplate.id)}
+                          className="mt-2 h-8"
+                        >
+                          Load Default
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </TabsContent>
 

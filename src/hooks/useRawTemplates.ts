@@ -8,7 +8,7 @@ import { getLabelDesignerSettings } from '@/lib/labelDesignerSettings';
  */
 export function useRawTemplates() {
   const templatesHook = useTemplates('raw');
-  const { templates, defaultTemplate, saveTemplate, setAsDefault, loading } = templatesHook;
+  const { templates, defaultTemplate, saveTemplate, setAsDefault, deleteTemplate, loading } = templatesHook;
 
   // Initialize default raw template if none exists
   const initializeDefaultRawTemplate = async () => {
