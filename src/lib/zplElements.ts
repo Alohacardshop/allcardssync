@@ -272,7 +272,7 @@ export function createDefaultLabelTemplate(): ZPLLabel {
         font: '0',
         fontSize: 20,
         fontWidth: 20,
-        text: 'Near Mint',
+        text: 'NM',
         rotation: 0,
         boundingBox: { width: 200, height: 30 },
         autoSize: 'shrink-to-fit',

@@ -86,7 +86,7 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
           convertedLabel.elements = convertedLabel.elements.map(element => {
             switch (element.id) {
               case 'condition':
-                return { ...element, text: templateToLoad.canvas.labelData.condition || 'Near Mint' };
+                return { ...element, text: templateToLoad.canvas.labelData.condition || 'NM' };
               case 'price':
                 return { ...element, text: `$${templateToLoad.canvas.labelData.price}` || '$15.99' };
               case 'barcode':
@@ -147,7 +147,7 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
         sku: barcodeElement?.data || '120979260',
         price: priceElement?.text?.replace('$', '') || '15.99',
         lot: 'LOT-000001',
-        condition: conditionElement?.text || 'Near Mint',
+        condition: conditionElement?.text || 'NM',
         barcode: barcodeElement?.data || '120979260'
       };
       
@@ -211,7 +211,7 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
             convertedLabel.elements = convertedLabel.elements.map(element => {
               switch (element.id) {
                 case 'condition':
-                  return { ...element, text: template.canvas.labelData.condition || 'Near Mint' };
+                  return { ...element, text: template.canvas.labelData.condition || 'NM' };
                 case 'price':
                   return { ...element, text: `$${template.canvas.labelData.price}` || '$15.99' };
                 case 'barcode':

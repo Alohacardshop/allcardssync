@@ -35,7 +35,7 @@ export function useRawTemplates() {
         sku: "120979260", 
         price: "1000",
         lot: "LOT-000001",
-        condition: "Near Mint",
+        condition: "NM",
         barcode: "120979260"
       },
       { density: 10, speed: 4, gapInches: 0 }

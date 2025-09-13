@@ -26,7 +26,7 @@ export function SimpleLabelDesigner() {
     title: 'Pokemon Card',
     price: '19.99',
     sku: 'PKM-001',
-    condition: 'Near Mint',
+    condition: 'NM',
     barcode: '123456789012',
     qrCode: 'https://example.com/item/123',
     location: 'A1',
