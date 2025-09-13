@@ -27,6 +27,7 @@ import { Link } from 'react-router-dom';
 import { Home } from 'lucide-react';
 
 const Admin = () => {
+  console.log('Admin: Component mounting...');
   const [activeTab, setActiveTab] = useState('overview');
 
   // Get tab from URL parameters on mount

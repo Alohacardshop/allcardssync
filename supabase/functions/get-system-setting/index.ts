@@ -56,7 +56,7 @@ Deno.serve(async (req) => {
       .from('system_settings')
       .select('key_value')
       .eq('key_name', keyName)
-      .single()
+      .maybeSingle()
 
     if (!error && setting?.key_value) {
       console.log(`Found ${keyName} in system_settings`)

@@ -25,18 +25,30 @@ export function PSAApiSettings() {
   const { toast } = useToast();
 
   useEffect(() => {
+    console.log('PSAApiSettings: Component mounted, checking token status...');
     checkCurrentTokenStatus();
   }, []);
 
   const checkCurrentTokenStatus = async () => {
+    console.log('PSAApiSettings: Starting token status check...');
     try {
+      // Add timeout to prevent hanging
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Token status check timed out')), 10000);
+      });
+
       // Use the get-system-setting edge function to check token status
-      const { data, error } = await supabase.functions.invoke('get-system-setting', {
+      console.log('PSAApiSettings: Invoking get-system-setting function...');
+      const functionPromise = supabase.functions.invoke('get-system-setting', {
         body: { 
           keyName: 'PSA_API_TOKEN',
           fallbackSecretName: 'PSA_API_TOKEN'
         }
       });
+
+      const { data, error } = await Promise.race([functionPromise, timeoutPromise]) as any;
+
+      console.log('PSAApiSettings: Function response:', { data, error });
 
       if (error) {
         console.error('Error checking token status:', error);
@@ -47,12 +59,14 @@ export function PSAApiSettings() {
       if (data?.value) {
         // Determine source based on response
         const source = data.source || 'database';
+        console.log('PSAApiSettings: Token found, source:', source);
         setCurrentStatus({
           hasToken: true,
           source: source as 'database' | 'environment',
           lastTested: data.lastUpdated ? new Date(data.lastUpdated) : undefined
         });
       } else {
+        console.log('PSAApiSettings: No token found');
         setCurrentStatus({
           hasToken: false,
           source: 'none'
@@ -62,6 +76,7 @@ export function PSAApiSettings() {
       console.error('Error checking token status:', error);
       setCurrentStatus({ hasToken: false, source: 'none' });
     }
+    console.log('PSAApiSettings: Token status check completed');
   };
 
   const handleSaveToken = async () => {
