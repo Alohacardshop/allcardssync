@@ -78,7 +78,17 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
         if (templateToLoad.canvas && templateToLoad.canvas.zplLabel) {
           // Load from new ZPL format
           console.log('Loading from ZPL format:', templateToLoad.canvas.zplLabel);
-          setLabel(templateToLoad.canvas.zplLabel);
+          const loadedLabel = { ...templateToLoad.canvas.zplLabel };
+          
+          // Apply condition abbreviation to loaded template
+          loadedLabel.elements = loadedLabel.elements.map(element => {
+            if (element.id === 'condition' && element.type === 'text') {
+              return { ...element, text: abbreviateGrade(element.text) || 'NM' };
+            }
+            return element;
+          });
+          
+          setLabel(loadedLabel);
         } else if (templateToLoad.canvas && templateToLoad.canvas.labelData) {
           // Fallback: convert old template format to ZPL format
           const convertedLabel = createDefaultLabelTemplate();
@@ -203,7 +213,17 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
       try {
         // Check if template has ZPL data
         if (template.canvas?.zplLabel) {
-          setLabel(template.canvas.zplLabel);
+          const loadedLabel = { ...template.canvas.zplLabel };
+          
+          // Apply condition abbreviation to loaded template
+          loadedLabel.elements = loadedLabel.elements.map(element => {
+            if (element.id === 'condition' && element.type === 'text') {
+              return { ...element, text: abbreviateGrade(element.text) || 'NM' };
+            }
+            return element;
+          });
+          
+          setLabel(loadedLabel);
         } else {
           // Convert old format to ZPL
           const convertedLabel = createDefaultLabelTemplate();
