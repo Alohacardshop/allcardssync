@@ -404,6 +404,8 @@ export function ZPLVisualEditor({
 
               switch (element.type) {
                 case 'text':
+                  console.log(`Rendering text element ${element.id} with boundingBox:`, element.boundingBox);
+                  
                   const renderTextContent = () => {
                     if (element.boundingBox && element.textOverflow === 'wrap') {
                       // Calculate wrapped lines for display
@@ -470,7 +472,7 @@ export function ZPLVisualEditor({
                           {/* Resize handles */}
                           {['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'].map((handle) => {
                             const isCorner = ['nw', 'ne', 'se', 'sw'].includes(handle);
-                            const size = 10;
+                            const size = 12;
                             let left = 0, top = 0, cursor = '';
 
                             switch (handle) {
@@ -486,26 +488,30 @@ export function ZPLVisualEditor({
 
                             return (
                               <div
-                                key={handle}
+                                key={`resize-${handle}`}
                                 style={{
                                   position: 'absolute',
                                   left: `${element.position.x * scale + left}px`,
                                   top: `${element.position.y * scale + top}px`,
                                   width: `${size}px`,
                                   height: `${size}px`,
-                                  backgroundColor: 'rgb(59, 130, 246)',
-                                  border: '2px solid white',
+                                  backgroundColor: '#ffffff',
+                                  border: '2px solid rgb(59, 130, 246)',
                                   borderRadius: isCorner ? '50%' : '2px',
                                   cursor,
-                                  zIndex: 1000,
-                                  boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-                                  pointerEvents: 'auto'
+                                  zIndex: 1001,
+                                  boxShadow: '0 2px 6px rgba(0,0,0,0.3)',
+                                  pointerEvents: 'auto',
+                                  transform: 'translate(0, 0)' // Force new stacking context
                                 }}
                                 onMouseDown={(e) => {
-                                  console.log('Resize handle clicked:', handle);
+                                  console.log('🎯 Resize handle clicked:', handle, 'at', { x: e.clientX, y: e.clientY });
+                                  e.stopPropagation();
+                                  e.preventDefault();
                                   handleResizeStart(e, handle);
                                 }}
-                                onMouseEnter={() => console.log('Hovering resize handle:', handle)}
+                                onMouseEnter={() => console.log('👆 Hovering resize handle:', handle)}
+                                onMouseLeave={() => console.log('👋 Left resize handle:', handle)}
                               />
                             );
                           })}

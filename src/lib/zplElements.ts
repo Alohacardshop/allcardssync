@@ -304,7 +304,7 @@ export function createDefaultLabelTemplate(): ZPLLabel {
       {
         id: 'title',
         type: 'text',
-        position: { x: 203, y: 150 },
+        position: { x: 89, y: 155 },
         font: '0',
         fontSize: 16,
         fontWidth: 16,
