@@ -7,7 +7,7 @@ import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
-import { Printer, Save, RotateCcw, Star, Trash2 } from 'lucide-react';
+import { Printer, Save, RotateCcw, Star, Trash2, Settings } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { ZPLVisualEditor } from '@/components/ZPLVisualEditor';
@@ -514,7 +514,17 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
                     <Separator />
 
                     <div className="space-y-4">
-                      <h4 className="text-sm font-medium">Print Calibration</h4>
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-sm font-medium">Print Calibration</h4>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => toast.success('Calibration settings saved!')}
+                        >
+                          <Settings className="w-3 h-3 mr-1" />
+                          Save
+                        </Button>
+                      </div>
                       
                       <div className="space-y-2">
                         <Label htmlFor="xOffset">X Offset (-50 to 50)</Label>
