@@ -133,8 +133,8 @@ Deno.serve(async (req) => {
         // Note: Don't update sync status here - the sender functions already write their own status and snapshots
       }
 
-      // Rate limiting - small delay between items
-      await sleep(50)
+      // Rate limiting - increased delay between items to prevent Shopify API limits
+      await sleep(500) // Increased from 50ms to 500ms
     }
 
     const successCount = results.filter(r => r.success).length

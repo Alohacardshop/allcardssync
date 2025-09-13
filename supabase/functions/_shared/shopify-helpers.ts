@@ -48,17 +48,55 @@ export async function sleep(ms: number) {
   return new Promise(r => setTimeout(r, ms))
 }
 
-export async function fetchRetry(i: RequestInfo, init?: RequestInit, tries = 3) {
+export async function fetchRetry(i: RequestInfo, init?: RequestInit, tries = 5) {
   let last: any
   for (let t = 0; t < tries; t++) {
     try {
       const r = await fetch(i, init)
-      if (r.ok || (r.status >= 400 && r.status < 500)) return r
+      
+      // Success case
+      if (r.ok) return r
+      
+      // Rate limit (429) - always retry with exponential backoff
+      if (r.status === 429) {
+        const retryAfter = r.headers.get('Retry-After')
+        let delay = Math.pow(2, t) * 1000 // Exponential backoff: 1s, 2s, 4s, 8s, 16s
+        
+        // Use Retry-After header if provided (in seconds)
+        if (retryAfter) {
+          delay = Math.max(delay, parseInt(retryAfter) * 1000)
+        }
+        
+        console.warn(`Rate limited (429), retrying in ${delay}ms (attempt ${t + 1}/${tries})`)
+        last = new Error(`HTTP 429 - Rate Limited`)
+        await sleep(delay)
+        continue
+      }
+      
+      // Server errors (5xx) - retry with exponential backoff
+      if (r.status >= 500) {
+        const delay = Math.pow(2, t) * 500 // 0.5s, 1s, 2s, 4s, 8s
+        console.warn(`Server error ${r.status}, retrying in ${delay}ms (attempt ${t + 1}/${tries})`)
+        last = new Error(`HTTP ${r.status}`)
+        await sleep(delay)
+        continue
+      }
+      
+      // Client errors (4xx except 429) - don't retry
+      if (r.status >= 400 && r.status < 500) {
+        return r
+      }
+      
       last = new Error(`HTTP ${r.status}`)
     } catch (e) {
       last = e
+      // Network errors - retry with exponential backoff
+      const delay = Math.pow(2, t) * 500
+      console.warn(`Network error, retrying in ${delay}ms (attempt ${t + 1}/${tries}):`, e.message)
     }
-    await sleep(200 * (t + 1))
+    
+    // Default delay for other retry cases
+    await sleep(Math.pow(2, t) * 500)
   }
   throw last
 }
