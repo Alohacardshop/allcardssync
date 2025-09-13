@@ -67,11 +67,41 @@ export function ZPLPreview({ label }: ZPLPreviewProps) {
               >
                 {/* Render elements as HTML approximations */}
                 {label.elements.map((element) => {
+                  // Calculate font size for text elements (matching visual editor logic)
+                  const getPreviewFontSize = () => {
+                    if (element.type !== 'text' || !element.boundingBox || element.autoSize !== 'shrink-to-fit') {
+                      return (element.type === 'text' ? element.fontSize || 20 : 12) / 2;
+                    }
+                    
+                    const scale = 0.5; // Preview scale
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    if (!ctx) return (element.fontSize || 20) / 2;
+
+                    const maxWidth = element.boundingBox.width * scale * 0.9;
+                    const maxHeight = element.boundingBox.height * scale * 0.8;
+                    const text = element.text || '';
+                    
+                    if (!text) return 4; // 8px at full scale = 4px at preview scale
+                    
+                    let fontSize = Math.min(maxWidth / text.length * 2, maxHeight);
+                    
+                    ctx.font = `${fontSize}px monospace`;
+                    let textWidth = ctx.measureText(text).width;
+                    
+                    if (textWidth > 0) {
+                      fontSize = (fontSize * maxWidth) / textWidth;
+                    }
+                    
+                    fontSize = Math.min(fontSize, maxHeight);
+                    return Math.max(fontSize, 4); // Minimum 4px for preview
+                  };
+
                   const style: React.CSSProperties = {
                     position: 'absolute',
                     left: `${element.position.x / 2}px`,
                     top: `${element.position.y / 2}px`,
-                    fontSize: `${(element.type === 'text' ? element.fontSize : 12) / 2}px`,
+                    fontSize: `${getPreviewFontSize()}px`,
                     fontFamily: 'monospace',
                     color: '#000',
                     whiteSpace: 'nowrap',
