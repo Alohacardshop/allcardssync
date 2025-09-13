@@ -175,16 +175,29 @@ const Inventory = () => {
       }
       
       console.log('🚀 [retrySync] Using item\'s original store/location for retry');
-      await sendBatchToShopify(
+      console.log('🔍 [retrySync] sendBatchToShopify function exists:', typeof sendBatchToShopify);
+      console.log('🔍 [retrySync] About to call sendBatchToShopify with:', {
+        itemIds: [item.id],
+        storeKey: item.store_key,
+        locationGid: item.shopify_location_gid
+      });
+      
+      const result = await sendBatchToShopify(
         [item.id],
         item.store_key as "hawaii" | "las_vegas",
         item.shopify_location_gid
       );
-      console.log('✅ [retrySync] sendBatchToShopify completed');
+      
+      console.log('✅ [retrySync] sendBatchToShopify completed successfully:', result);
       toast.success(`Sync retry initiated for ${item.store_key} store`);
       fetchItems(); // Refresh to see updated status
     } catch (error) {
       console.error('❌ [retrySync] Retry sync failed:', error);
+      console.error('❌ [retrySync] Error details:', {
+        message: (error as Error).message,
+        stack: (error as Error).stack,
+        name: (error as Error).name
+      });
       toast.error('Failed to retry sync: ' + (error as Error).message);
     }
   };
