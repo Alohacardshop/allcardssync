@@ -11,6 +11,7 @@ import { Download, Printer, Save, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { LabelPreviewCanvas } from '@/components/LabelPreviewCanvas';
+import { PrintNodeSettings } from '@/components/PrintNodeSettings';
 import { useRawTemplates } from '@/hooks/useRawTemplates';
 import { useSimplePrinting } from '@/hooks/useSimplePrinting';
 import { AVAILABLE_TEMPLATES, generateLabelTSPL } from '@/lib/labelTemplates';
@@ -236,11 +237,12 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
             </CardHeader>
             <CardContent>
               <Tabs defaultValue="fields" className="w-full">
-                <TabsList className="grid w-full grid-cols-4">
+                <TabsList className="grid w-full grid-cols-5">
                   <TabsTrigger value="fields">Fields</TabsTrigger>
                   <TabsTrigger value="data">Data</TabsTrigger>
                   <TabsTrigger value="template">Template</TabsTrigger>
                   <TabsTrigger value="settings">Settings</TabsTrigger>
+                  <TabsTrigger value="printer">Printer</TabsTrigger>
                 </TabsList>
 
                 {/* Field Configuration */}
@@ -472,10 +474,14 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
                       Reset to Defaults
                     </Button>
                   </div>
-                </TabsContent>
-              </Tabs>
-            </CardContent>
-          </Card>
+              </TabsContent>
+
+              <TabsContent value="printer" className="space-y-4">
+                <PrintNodeSettings />
+              </TabsContent>
+            </Tabs>
+          </CardContent>
+        </Card>
         </div>
 
         {/* Preview Panel */}
