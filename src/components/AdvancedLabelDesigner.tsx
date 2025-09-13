@@ -56,7 +56,9 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
   const [cutAfter, setCutAfter] = useState(false);
   const [zplSettings, setZplSettings] = useState({
     darkness: 10,
-    speed: 4
+    speed: 4,
+    xOffset: 0,
+    yOffset: 0
   });
 
   // Load default template on component mount and when selectedTemplateId changes
@@ -99,7 +101,9 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
         if (templateToLoad.canvas?.tsplSettings) {
           setZplSettings({
             darkness: templateToLoad.canvas.tsplSettings.density || 10,
-            speed: templateToLoad.canvas.tsplSettings.speed || 4
+            speed: templateToLoad.canvas.tsplSettings.speed || 4,
+            xOffset: 0,
+            yOffset: 0
           });
         }
       } catch (error) {
@@ -218,7 +222,9 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
         if (template.canvas?.tsplSettings) {
           setZplSettings({
             darkness: template.canvas.tsplSettings.density || 10,
-            speed: template.canvas.tsplSettings.speed || 4
+            speed: template.canvas.tsplSettings.speed || 4,
+            xOffset: 0,
+            yOffset: 0
           });
         }
         
@@ -232,7 +238,7 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
 
   const handlePrint = async () => {
     try {
-      const zplCode = generateZPLFromElements(label);
+      const zplCode = generateZPLFromElements(label, zplSettings.xOffset, zplSettings.yOffset);
       console.log('Generated ZPL for printing:', zplCode);
       
       await print(zplCode, copies);
@@ -248,7 +254,9 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
     setSelectedElement(null);
     setZplSettings({
       darkness: 10,
-      speed: 4
+      speed: 4,
+      xOffset: 0,
+      yOffset: 0
     });
     setCopies(1);
     setCutAfter(false);
@@ -494,6 +502,42 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
                           speed: Number(e.target.value)
                         }))}
                       />
+                    </div>
+
+                    <Separator />
+
+                    <div className="space-y-4">
+                      <h4 className="text-sm font-medium">Print Calibration</h4>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor="xOffset">X Offset (-50 to 50)</Label>
+                        <Input
+                          id="xOffset"
+                          type="number"
+                          min="-50"
+                          max="50"
+                          value={zplSettings.xOffset}
+                          onChange={(e) => setZplSettings(prev => ({
+                            ...prev,
+                            xOffset: Number(e.target.value)
+                          }))}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="yOffset">Y Offset (-50 to 50)</Label>
+                        <Input
+                          id="yOffset"
+                          type="number"
+                          min="-50"
+                          max="50"
+                          value={zplSettings.yOffset}
+                          onChange={(e) => setZplSettings(prev => ({
+                            ...prev,
+                            yOffset: Number(e.target.value)
+                          }))}
+                        />
+                      </div>
                     </div>
                   </div>
                 </TabsContent>

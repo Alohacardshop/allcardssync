@@ -162,7 +162,7 @@ export function processTextOverflow(text: string, maxLength: number, overflow: s
 }
 
 // Generate ZPL code from elements
-export function generateZPLFromElements(label: ZPLLabel): string {
+export function generateZPLFromElements(label: ZPLLabel, xOffset: number = 0, yOffset: number = 0): string {
   const { width, height, dpi, elements } = label;
   
   let zpl = [
@@ -202,9 +202,9 @@ export function generateZPLFromElements(label: ZPLLabel): string {
             
             // Generate ZPL for each line
             limitedLines.forEach((line, index) => {
-              const yOffset = element.position.y + (index * fontSize);
+              const lineYOffset = element.position.y + (index * fontSize) + yOffset;
               zpl.push(
-                `^FO${element.position.x},${yOffset}`,
+                `^FO${element.position.x + xOffset},${lineYOffset}`,
                 `^A${element.font}${element.rotation === 0 ? 'N' : 'R'},${fontSize},${fontWidth}`,
                 `^FD${line}^FS`
               );
@@ -216,7 +216,7 @@ export function generateZPLFromElements(label: ZPLLabel): string {
         }
         
         zpl.push(
-          `^FO${element.position.x},${element.position.y}`,
+          `^FO${element.position.x + xOffset},${element.position.y + yOffset}`,
           `^A${element.font}${element.rotation === 0 ? 'N' : 'R'},${fontSize},${fontWidth}`,
           `^FD${processedText}^FS`
         );
@@ -224,7 +224,7 @@ export function generateZPLFromElements(label: ZPLLabel): string {
       
       case 'barcode':
         zpl.push(
-          `^FO${element.position.x},${element.position.y}`,
+          `^FO${element.position.x + xOffset},${element.position.y + yOffset}`,
           `^BCN,${element.height},${element.humanReadable ? 'Y' : 'N'},N,N`,
           `^FD${element.data}^FS`
         );
@@ -232,7 +232,7 @@ export function generateZPLFromElements(label: ZPLLabel): string {
       
       case 'qr':
         zpl.push(
-          `^FO${element.position.x},${element.position.y}`,
+          `^FO${element.position.x + xOffset},${element.position.y + yOffset}`,
           `^BQN,${element.model},${element.magnification}`,
           `^FD${element.data}^FS`
         );
@@ -240,14 +240,14 @@ export function generateZPLFromElements(label: ZPLLabel): string {
       
       case 'box':
         zpl.push(
-          `^FO${element.position.x},${element.position.y}`,
+          `^FO${element.position.x + xOffset},${element.position.y + yOffset}`,
           `^GB${element.size.width},${element.size.height},${element.thickness}^FS`
         );
         break;
       
       case 'line':
         zpl.push(
-          `^FO${element.position.x},${element.position.y}`,
+          `^FO${element.position.x + xOffset},${element.position.y + yOffset}`,
           `^GB${element.size.width},${element.size.height},${element.thickness}^FS`
         );
         break;
