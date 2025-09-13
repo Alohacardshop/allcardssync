@@ -139,17 +139,17 @@ export function PSAApiSettings() {
   const handleViewCurrentToken = async () => {
     setLoadingCurrentToken(true);
     try {
-      // Use RPC function to get decrypted token
-      const { data, error } = await supabase.rpc('get_decrypted_secret', {
-        secret_name: 'PSA_API_TOKEN'
+      // Use edge function to get decrypted system setting
+      const { data, error } = await supabase.functions.invoke('get-decrypted-system-setting', {
+        body: { keyName: 'PSA_API_TOKEN' }
       });
 
       if (error) {
         throw error;
       }
 
-      if (data) {
-        setCurrentToken(data);
+      if (data?.value) {
+        setCurrentToken(data.value);
         setShowCurrentToken(true);
         toast({
           title: "Success",
