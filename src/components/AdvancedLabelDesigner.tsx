@@ -1,3 +1,4 @@
+import { abbreviateGrade } from '@/lib/labelData';
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -86,7 +87,7 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
           convertedLabel.elements = convertedLabel.elements.map(element => {
             switch (element.id) {
               case 'condition':
-                return { ...element, text: templateToLoad.canvas.labelData.condition || 'NM' };
+                return { ...element, text: abbreviateGrade(templateToLoad.canvas.labelData.condition) || 'NM' };
               case 'price':
                 return { ...element, text: `$${templateToLoad.canvas.labelData.price}` || '$15.99' };
               case 'barcode':
@@ -147,7 +148,7 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
         sku: barcodeElement?.data || '120979260',
         price: priceElement?.text?.replace('$', '') || '15.99',
         lot: 'LOT-000001',
-        condition: conditionElement?.text || 'NM',
+        condition: abbreviateGrade(conditionElement?.text) || 'NM',
         barcode: barcodeElement?.data || '120979260'
       };
       
@@ -211,7 +212,7 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
             convertedLabel.elements = convertedLabel.elements.map(element => {
               switch (element.id) {
                 case 'condition':
-                  return { ...element, text: template.canvas.labelData.condition || 'NM' };
+                  return { ...element, text: abbreviateGrade(template.canvas.labelData.condition) || 'NM' };
                 case 'price':
                   return { ...element, text: `$${template.canvas.labelData.price}` || '$15.99' };
                 case 'barcode':
