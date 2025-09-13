@@ -154,17 +154,34 @@ const Inventory = () => {
 
   // F) Manual sync retry function - now uses v2 batch router
   const retrySync = async (item: any) => {
+    console.log('🔄 [retrySync] Starting retry for item:', {
+      id: item.id,
+      sku: item.sku,
+      store_key: item.store_key,
+      shopify_location_gid: item.shopify_location_gid,
+      selectedStore,
+      selectedLocation
+    });
+    
     try {
+      if (!selectedStore || !selectedLocation) {
+        console.error('❌ [retrySync] Missing store or location:', { selectedStore, selectedLocation });
+        toast.error('Please select a store and location first');
+        return;
+      }
+      
+      console.log('🚀 [retrySync] Calling sendBatchToShopify...');
       await sendBatchToShopify(
         [item.id],
-        item.store_key as "hawaii" | "las_vegas",
-        item.shopify_location_gid
+        selectedStore as "hawaii" | "las_vegas",
+        selectedLocation
       );
+      console.log('✅ [retrySync] sendBatchToShopify completed');
       toast.success('Sync retry initiated');
       fetchItems(); // Refresh to see updated status
     } catch (error) {
-      console.error('Retry sync failed:', error);
-      toast.error('Failed to retry sync');
+      console.error('❌ [retrySync] Retry sync failed:', error);
+      toast.error('Failed to retry sync: ' + (error as Error).message);
     }
   };
 
