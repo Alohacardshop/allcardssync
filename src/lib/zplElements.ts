@@ -19,6 +19,9 @@ export interface ZPLTextElement {
   fontWidth: number;
   text: string;
   rotation: 0 | 90 | 180 | 270;
+  boundingBox?: ZPLSize;
+  autoSize?: 'none' | 'shrink-to-fit' | 'grow-to-fit';
+  textOverflow?: 'clip' | 'ellipsis' | 'wrap' | 'shrink';
   selected?: boolean;
 }
 
@@ -90,6 +93,42 @@ export const ZPL_FONTS = {
   'H': { name: 'Font H', baseWidth: 21, baseHeight: 13 }
 };
 
+// Helper function to calculate optimal font size for text within bounds
+export function calculateOptimalFontSize(text: string, boundingBox: ZPLSize, font: string): { fontSize: number; fontWidth: number } {
+  const fontInfo = ZPL_FONTS[font as keyof typeof ZPL_FONTS];
+  if (!fontInfo || !text.length) return { fontSize: 20, fontWidth: 20 };
+
+  const maxWidth = boundingBox.width;
+  const maxHeight = boundingBox.height;
+  
+  // Calculate maximum font size that fits within bounds
+  const maxFontSizeByWidth = Math.floor(maxWidth / (text.length * (fontInfo.baseWidth / fontInfo.baseHeight)));
+  const maxFontSizeByHeight = Math.floor(maxHeight);
+  
+  const optimalSize = Math.min(maxFontSizeByWidth, maxFontSizeByHeight, 50); // Cap at 50
+  return { 
+    fontSize: Math.max(optimalSize, 8), // Minimum 8pt
+    fontWidth: Math.max(optimalSize, 8)
+  };
+}
+
+// Helper function to process text with overflow handling
+export function processTextOverflow(text: string, maxLength: number, overflow: string): string {
+  if (text.length <= maxLength) return text;
+  
+  switch (overflow) {
+    case 'ellipsis':
+      return text.substring(0, maxLength - 3) + '...';
+    case 'clip':
+      return text.substring(0, maxLength);
+    case 'wrap':
+      // For ZPL, we'll return the text as-is and handle wrapping in the generator
+      return text;
+    default:
+      return text;
+  }
+}
+
 // Generate ZPL code from elements
 export function generateZPLFromElements(label: ZPLLabel): string {
   const { width, height, dpi, elements } = label;
@@ -105,10 +144,30 @@ export function generateZPLFromElements(label: ZPLLabel): string {
   elements.forEach(element => {
     switch (element.type) {
       case 'text':
+        let fontSize = element.fontSize;
+        let fontWidth = element.fontWidth;
+        let processedText = element.text;
+        
+        // Handle auto-sizing if bounding box is defined
+        if (element.boundingBox && element.autoSize && element.autoSize !== 'none') {
+          if (element.autoSize === 'shrink-to-fit') {
+            const optimal = calculateOptimalFontSize(element.text, element.boundingBox, element.font);
+            fontSize = optimal.fontSize;
+            fontWidth = optimal.fontWidth;
+          }
+        }
+        
+        // Handle text overflow if bounding box is defined
+        if (element.boundingBox && element.textOverflow) {
+          const fontInfo = ZPL_FONTS[element.font];
+          const maxChars = Math.floor(element.boundingBox.width / (fontInfo.baseWidth * (fontSize / fontInfo.baseHeight)));
+          processedText = processTextOverflow(element.text, maxChars, element.textOverflow);
+        }
+        
         zpl.push(
           `^FO${element.position.x},${element.position.y}`,
-          `^A${element.font}${element.rotation === 0 ? 'N' : 'R'},${element.fontSize},${element.fontWidth}`,
-          `^FD${element.text}^FS`
+          `^A${element.font}${element.rotation === 0 ? 'N' : 'R'},${fontSize},${fontWidth}`,
+          `^FD${processedText}^FS`
         );
         break;
       
@@ -163,7 +222,10 @@ export function createDefaultLabelTemplate(): ZPLLabel {
         fontSize: 20,
         fontWidth: 20,
         text: 'Near Mint',
-        rotation: 0
+        rotation: 0,
+        boundingBox: { width: 200, height: 30 },
+        autoSize: 'shrink-to-fit',
+        textOverflow: 'ellipsis'
       },
       {
         id: 'price',
@@ -173,7 +235,10 @@ export function createDefaultLabelTemplate(): ZPLLabel {
         fontSize: 20,
         fontWidth: 20,
         text: '$15.99',
-        rotation: 0
+        rotation: 0,
+        boundingBox: { width: 100, height: 30 },
+        autoSize: 'shrink-to-fit',
+        textOverflow: 'ellipsis'
       },
       {
         id: 'barcode',
@@ -193,7 +258,10 @@ export function createDefaultLabelTemplate(): ZPLLabel {
         fontSize: 16,
         fontWidth: 16,
         text: 'POKEMON GENGAR VMAX #020',
-        rotation: 0
+        rotation: 0,
+        boundingBox: { width: 300, height: 40 },
+        autoSize: 'shrink-to-fit',
+        textOverflow: 'wrap'
       }
     ]
   };

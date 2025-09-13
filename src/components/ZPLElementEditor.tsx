@@ -55,23 +55,26 @@ export function ZPLElementEditor({ element, onUpdate, onDelete }: ZPLElementEdit
       case 'text':
         return (
           <>
-            <div className="space-y-2">
-              <Label htmlFor="text-content">Text Content</Label>
-              <Input
-                id="text-content"
-                value={element.text}
-                onChange={(e) => onUpdate({ ...element, text: e.target.value })}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="font-select">Font</Label>
-                <Select
-                  value={element.font}
-                  onValueChange={(value: any) => onUpdate({ ...element, font: value })}
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="text">Text</Label>
+                <Input
+                  id="text"
+                  value={element.text}
+                  onChange={(e) => onUpdate({ ...element, text: e.target.value })}
+                  placeholder="Enter text"
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="font">Font</Label>
+                <Select 
+                  value={element.font} 
+                  onValueChange={(value: any) => 
+                    onUpdate({ ...element, font: value })
+                  }
                 >
-                  <SelectTrigger id="font-select">
+                  <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -83,48 +86,155 @@ export function ZPLElementEditor({ element, onUpdate, onDelete }: ZPLElementEdit
                   </SelectContent>
                 </Select>
               </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="font-size">Font Size</Label>
-                <Input
-                  id="font-size"
-                  type="number"
-                  min="8"
-                  max="100"
-                  value={element.fontSize}
-                  onChange={(e) => onUpdate({ ...element, fontSize: Number(e.target.value) })}
-                />
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="fontSize">Font Size</Label>
+                  <Input
+                    id="fontSize"
+                    type="number"
+                    value={element.fontSize}
+                    onChange={(e) => onUpdate({ ...element, fontSize: parseInt(e.target.value) || 0 })}
+                    min="1"
+                    max="100"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="fontWidth">Font Width</Label>
+                  <Input
+                    id="fontWidth"
+                    type="number"
+                    value={element.fontWidth}
+                    onChange={(e) => onUpdate({ ...element, fontWidth: parseInt(e.target.value) || 0 })}
+                    min="1"
+                    max="100"
+                  />
+                </div>
               </div>
-            </div>
+              
+              <div>
+                <Label htmlFor="rotation">Rotation</Label>
+                <Select 
+                  value={element.rotation.toString()} 
+                  onValueChange={(value) => 
+                    onUpdate({ ...element, rotation: parseInt(value) as 0 | 90 | 180 | 270 })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="0">0°</SelectItem>
+                    <SelectItem value="90">90°</SelectItem>
+                    <SelectItem value="180">180°</SelectItem>
+                    <SelectItem value="270">270°</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="font-width">Font Width</Label>
-              <Input
-                id="font-width"
-                type="number"
-                min="8"
-                max="100"
-                value={element.fontWidth}
-                onChange={(e) => onUpdate({ ...element, fontWidth: Number(e.target.value) })}
-              />
-            </div>
+              {/* Bounding Box Controls */}
+              <div className="border-t pt-4">
+                <div className="flex items-center justify-between mb-2">
+                  <Label>Bounding Box</Label>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const updatedElement = { ...element };
+                      if (updatedElement.boundingBox) {
+                        delete updatedElement.boundingBox;
+                        delete updatedElement.autoSize;
+                        delete updatedElement.textOverflow;
+                      } else {
+                        updatedElement.boundingBox = { width: 150, height: 30 };
+                        updatedElement.autoSize = 'shrink-to-fit';
+                        updatedElement.textOverflow = 'ellipsis';
+                      }
+                      onUpdate(updatedElement);
+                    }}
+                  >
+                    {element.boundingBox ? 'Remove' : 'Add'}
+                  </Button>
+                </div>
+                
+                {element.boundingBox && (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <Label htmlFor="boundingWidth">Width</Label>
+                        <Input
+                          id="boundingWidth"
+                          type="number"
+                          value={element.boundingBox.width}
+                          onChange={(e) => onUpdate({
+                            ...element,
+                            boundingBox: {
+                              ...element.boundingBox!,
+                              width: parseInt(e.target.value) || 0
+                            }
+                          })}
+                          min="10"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="boundingHeight">Height</Label>
+                        <Input
+                          id="boundingHeight"
+                          type="number"
+                          value={element.boundingBox.height}
+                          onChange={(e) => onUpdate({
+                            ...element,
+                            boundingBox: {
+                              ...element.boundingBox!,
+                              height: parseInt(e.target.value) || 0
+                            }
+                          })}
+                          min="10"
+                        />
+                      </div>
+                    </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="rotation">Rotation</Label>
-              <Select
-                value={element.rotation.toString()}
-                onValueChange={(value) => onUpdate({ ...element, rotation: Number(value) as any })}
-              >
-                <SelectTrigger id="rotation">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="0">0°</SelectItem>
-                  <SelectItem value="90">90°</SelectItem>
-                  <SelectItem value="180">180°</SelectItem>
-                  <SelectItem value="270">270°</SelectItem>
-                </SelectContent>
-              </Select>
+                    <div>
+                      <Label htmlFor="autoSize">Auto Size</Label>
+                      <Select
+                        value={element.autoSize || 'none'}
+                        onValueChange={(value: 'none' | 'shrink-to-fit' | 'grow-to-fit') =>
+                          onUpdate({ ...element, autoSize: value })
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">None</SelectItem>
+                          <SelectItem value="shrink-to-fit">Shrink to Fit</SelectItem>
+                          <SelectItem value="grow-to-fit">Grow to Fit</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div>
+                      <Label htmlFor="textOverflow">Text Overflow</Label>
+                      <Select
+                        value={element.textOverflow || 'clip'}
+                        onValueChange={(value: 'clip' | 'ellipsis' | 'wrap' | 'shrink') =>
+                          onUpdate({ ...element, textOverflow: value })
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="clip">Clip</SelectItem>
+                          <SelectItem value="ellipsis">Ellipsis (...)</SelectItem>
+                          <SelectItem value="wrap">Wrap</SelectItem>
+                          <SelectItem value="shrink">Shrink</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </>
         );

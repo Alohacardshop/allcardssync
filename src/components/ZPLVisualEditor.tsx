@@ -39,12 +39,33 @@ export function ZPLVisualEditor({
   const scale = 2; // Scale factor for display
 
   // Helper function to calculate text dimensions
-  const calculateTextDimensions = (text: string, fontSize: number): { width: number; height: number } => {
+  const calculateTextDimensions = (text: string, fontSize: number, fontWidth?: number): { width: number; height: number } => {
     // Approximate character width based on font size (ZPL fonts are monospace-like)
-    const charWidth = fontSize * 0.6; // Rough approximation for ZPL fonts
+    const charWidth = (fontWidth || fontSize) * 0.6; // Rough approximation for ZPL fonts
     const width = text.length * charWidth;
     const height = fontSize;
     return { width, height };
+  };
+
+  // Helper function to get element display dimensions
+  const getElementDisplayDimensions = (element: ZPLElement): { width: number; height: number } => {
+    if (element.type === 'text') {
+      // Use bounding box if available, otherwise calculate text dimensions
+      if (element.boundingBox) {
+        return element.boundingBox;
+      }
+      const fontSize = element.fontSize || 20;
+      const fontWidth = element.fontWidth || fontSize;
+      return calculateTextDimensions(element.text || '', fontSize, fontWidth);
+    } else if ('size' in element && element.size) {
+      return element.size;
+    } else if (element.type === 'barcode') {
+      return { width: 120, height: 60 };
+    } else if (element.type === 'qr') {
+      const magnification = 'magnification' in element ? element.magnification : 3;
+      return { width: 40 * magnification, height: 40 * magnification };
+    }
+    return { width: 100, height: 30 };
   };
 
   // Helper function for element hit testing
@@ -52,26 +73,9 @@ export function ZPLVisualEditor({
     const elementX = element.position.x;
     const elementY = element.position.y;
     
-    let width = 100;
-    let height = 30;
-    
-    if (element.type === 'text') {
-      // Calculate actual text dimensions for better hit testing
-      const fontSize = element.fontSize || 20;
-      const dimensions = calculateTextDimensions(element.text || '', fontSize);
-      width = Math.max(dimensions.width, 50); // Minimum width for easier clicking
-      height = Math.max(dimensions.height, 20); // Minimum height for easier clicking
-    } else if ('size' in element && element.size) {
-      width = element.size.width;
-      height = element.size.height;
-    } else if (element.type === 'barcode') {
-      width = 120;
-      height = 60;
-    } else if (element.type === 'qr') {
-      const magnification = 'magnification' in element ? element.magnification : 3;
-      width = 40 * magnification;
-      height = 40 * magnification;
-    }
+    const dimensions = getElementDisplayDimensions(element);
+    const width = Math.max(dimensions.width, 20); // Minimum width for easier clicking
+    const height = Math.max(dimensions.height, 15); // Minimum height for easier clicking
     
     return x >= elementX && x <= elementX + width &&
            y >= elementY && y <= elementY + height;
@@ -117,7 +121,10 @@ export function ZPLVisualEditor({
             fontSize: 16,
             fontWidth: 16,
             text: 'New Text',
-            rotation: 0
+            rotation: 0,
+            boundingBox: { width: 150, height: 30 },
+            autoSize: 'shrink-to-fit',
+            textOverflow: 'ellipsis'
           };
           break;
 
@@ -314,14 +321,39 @@ export function ZPLVisualEditor({
               switch (element.type) {
                 case 'text':
                   return (
-                    <div
-                      key={element.id}
-                      style={style}
-                      className={`${selectionClass} p-1 rounded`}
-                      onMouseDown={(e) => handleElementMouseDown(e, element)}
-                    >
-                      {element.text}
-                    </div>
+                    <React.Fragment key={element.id}>
+                      <div
+                        style={{
+                          ...style,
+                          maxWidth: element.boundingBox ? `${element.boundingBox.width * scale}px` : 'auto',
+                          maxHeight: element.boundingBox ? `${element.boundingBox.height * scale}px` : 'auto',
+                          overflow: 'hidden',
+                          padding: '2px',
+                          backgroundColor: isSelected ? 'rgba(59, 130, 246, 0.1)' : 'rgba(229, 231, 235, 0.3)',
+                          border: isSelected ? '2px solid rgb(59, 130, 246)' : '1px solid rgb(156, 163, 175)'
+                        }}
+                        className={`${selectionClass} rounded`}
+                        onMouseDown={(e) => handleElementMouseDown(e, element)}
+                      >
+                        {element.text}
+                      </div>
+                      {/* Show bounding box when selected */}
+                      {isSelected && element.boundingBox && (
+                        <div
+                          style={{
+                            position: 'absolute',
+                            left: `${element.position.x * scale}px`,
+                            top: `${element.position.y * scale}px`,
+                            width: `${element.boundingBox.width * scale}px`,
+                            height: `${element.boundingBox.height * scale}px`,
+                            border: '2px dashed rgb(59, 130, 246)',
+                            backgroundColor: 'rgba(59, 130, 246, 0.05)',
+                            pointerEvents: 'none',
+                            borderRadius: '4px'
+                          }}
+                        />
+                      )}
+                    </React.Fragment>
                   );
                 
                 case 'barcode':
