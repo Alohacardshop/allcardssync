@@ -406,6 +406,38 @@ export function ZPLVisualEditor({
                 case 'text':
                   console.log(`Rendering text element ${element.id} with boundingBox:`, element.boundingBox);
                   
+                  // Calculate font size to fit within bounding box
+                  const getAdjustedFontSize = () => {
+                    if (!element.boundingBox || element.autoSize !== 'shrink-to-fit') {
+                      return (element.fontSize || 20) * scale / 2;
+                    }
+                    
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    if (!ctx) return (element.fontSize || 20) * scale / 2;
+
+                    const maxWidth = element.boundingBox.width * scale * 0.9; // 90% of box width for padding
+                    const maxHeight = element.boundingBox.height * scale * 0.8; // 80% of box height for padding
+                    let fontSize = (element.fontSize || 20) * scale / 2;
+                    
+                    // Measure text with current font size
+                    ctx.font = `${fontSize}px monospace`;
+                    let textWidth = ctx.measureText(element.text || '').width;
+                    let textHeight = fontSize;
+                    
+                    // Scale font size to fit width
+                    if (textWidth > maxWidth && textWidth > 0) {
+                      fontSize = (fontSize * maxWidth) / textWidth;
+                    }
+                    
+                    // Scale font size to fit height
+                    if (textHeight > maxHeight && textHeight > 0) {
+                      fontSize = Math.min(fontSize, maxHeight);
+                    }
+                    
+                    return Math.max(fontSize, 8); // Minimum font size of 8px
+                  };
+
                   const renderTextContent = () => {
                     if (element.boundingBox && element.textOverflow === 'wrap') {
                       // Calculate wrapped lines for display
@@ -438,17 +470,28 @@ export function ZPLVisualEditor({
                     <React.Fragment key={element.id}>
                       <div
                         style={{
-                          ...style,
-                          maxWidth: element.boundingBox ? `${element.boundingBox.width * scale}px` : 'auto',
-                          maxHeight: element.boundingBox ? `${element.boundingBox.height * scale}px` : 'auto',
+                          position: 'absolute',
+                          left: `${element.position.x * scale}px`,
+                          top: `${element.position.y * scale}px`,
+                          fontSize: `${getAdjustedFontSize()}px`,
+                          fontFamily: 'monospace',
+                          color: '#000',
+                          width: element.boundingBox ? `${element.boundingBox.width * scale}px` : 'auto',
+                          height: element.boundingBox ? `${element.boundingBox.height * scale}px` : 'auto',
                           overflow: 'hidden',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
                           padding: '2px',
                           backgroundColor: isSelected ? 'rgba(59, 130, 246, 0.1)' : 'rgba(229, 231, 235, 0.3)',
                           border: isSelected ? '2px solid rgb(59, 130, 246)' : '1px solid rgb(156, 163, 175)',
-                          display: 'flex',
-                          alignItems: 'flex-start'
+                          borderRadius: '2px',
+                          cursor: activeTool === 'select' ? 'move' : 'crosshair',
+                          userSelect: 'none',
+                          transform: element.rotation !== 0 ? `rotate(${element.rotation}deg)` : undefined,
+                          transformOrigin: 'top left'
                         }}
-                        className={`${selectionClass} rounded`}
+                        className={`${selectionClass}`}
                         onMouseDown={(e) => handleElementMouseDown(e, element)}
                       >
                         {renderTextContent()}
