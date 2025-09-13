@@ -345,6 +345,79 @@ export const generateLabelPNG = async (
   });
 };
 
+// ZPL Font mapping - ZPL font dimensions for proper sizing
+const ZPL_FONTS = {
+  '0': { baseWidth: 12, baseHeight: 20 }, // More proportional font
+  'A': { baseWidth: 9, baseHeight: 11 }
+} as const;
+
+// Calculate ZPL font size based on desired pixel size
+const calculateZPLFontSize = (desiredPixelSize: number, text: string, maxWidthDots: number): { font: keyof typeof ZPL_FONTS; height: number; width: number } => {
+  // Start with font '0' which is most proportional
+  let font: keyof typeof ZPL_FONTS = '0';
+  let scale = Math.max(1, Math.round(desiredPixelSize / ZPL_FONTS[font].baseHeight));
+  
+  // Calculate text width with current scale
+  let textWidth = text.length * ZPL_FONTS[font].baseWidth * scale;
+  
+  // If text is too wide, try smaller scale or different font
+  while (textWidth > maxWidthDots && scale > 1) {
+    scale--;
+    textWidth = text.length * ZPL_FONTS[font].baseWidth * scale;
+  }
+  
+  // If still too wide, try font 'A' which is narrower
+  if (textWidth > maxWidthDots) {
+    font = 'A';
+    scale = Math.max(1, Math.round(desiredPixelSize / ZPL_FONTS[font].baseHeight));
+    textWidth = text.length * ZPL_FONTS[font].baseWidth * scale;
+    
+    while (textWidth > maxWidthDots && scale > 1) {
+      scale--;
+      textWidth = text.length * ZPL_FONTS[font].baseWidth * scale;
+    }
+  }
+  
+  return {
+    font,
+    height: ZPL_FONTS[font].baseHeight * scale,
+    width: ZPL_FONTS[font].baseWidth * scale
+  };
+};
+
+// Calculate ZPL text position for centering
+const calculateZPLCenterPosition = (text: string, font: keyof typeof ZPL_FONTS, scale: number, centerX: number): number => {
+  const textWidth = text.length * ZPL_FONTS[font].baseWidth * scale;
+  return Math.round(centerX - textWidth / 2);
+};
+
+// Smart text wrapping for ZPL matching canvas logic
+const wrapTextForZPL = (text: string, font: keyof typeof ZPL_FONTS, scale: number, maxWidthDots: number): string[] => {
+  const words = text.split(' ');
+  const lines: string[] = [];
+  let currentLine = '';
+  
+  const charWidth = ZPL_FONTS[font].baseWidth * scale;
+  const maxChars = Math.floor(maxWidthDots / charWidth);
+
+  for (const word of words) {
+    const testLine = currentLine + (currentLine ? ' ' : '') + word;
+    
+    if (testLine.length > maxChars && currentLine) {
+      lines.push(currentLine);
+      currentLine = word;
+    } else {
+      currentLine = testLine;
+    }
+  }
+  
+  if (currentLine) {
+    lines.push(currentLine);
+  }
+  
+  return lines.slice(0, 2); // Limit to 2 lines
+};
+
 export const generateZPLFromLabelData = (
   fieldConfig: LabelFieldConfig,
   labelData: LabelData,
@@ -356,57 +429,69 @@ export const generateZPLFromLabelData = (
   const elements: ZPLElement[] = [];
   const { widthDots, heightDots } = getLabelSizeInDots('2x1', 203);
   
-  // Constants matching canvas layout
+  // Constants matching canvas layout exactly
   const padding = 10;
   const topRowHeight = 60;
   const topLeftWidth = 120;
   const topRightWidth = widthDots - topLeftWidth - padding * 3;
 
-  // Top left content (Condition) - positioned and sized to match canvas
+  // Top left content (Condition) - match canvas dynamic sizing
   if (fieldConfig.includeCondition && labelData.condition) {
+    const maxHeight = topRowHeight * 0.8; // Match canvas logic
+    const fontSize = calculateZPLFontSize(Math.min(maxHeight, 40), labelData.condition, topLeftWidth);
+    const centerX = padding + topLeftWidth / 2;
+    const x = calculateZPLCenterPosition(labelData.condition, fontSize.font, fontSize.width / ZPL_FONTS[fontSize.font].baseWidth, centerX);
+    
     elements.push({
       kind: 'text',
-      x: padding + topLeftWidth/2,
-      y: padding + topRowHeight/2 - 10, // Adjust for center alignment
-      font: 'A',
-      height: 30,
-      width: 20,
+      x: Math.max(padding, x),
+      y: padding + topRowHeight / 2 - fontSize.height / 2,
+      font: fontSize.font,
+      height: fontSize.height,
+      width: fontSize.width,
       data: labelData.condition
     });
   }
 
-  // Top right content (Price) - positioned to match canvas
+  // Top right content (Price) - match canvas dynamic sizing
   if (fieldConfig.includePrice && labelData.price) {
     const topRightX = padding + topLeftWidth + padding;
+    const maxHeight = topRowHeight * 0.8;
+    const fontSize = calculateZPLFontSize(Math.min(maxHeight, 40), labelData.price, topRightWidth);
+    const centerX = topRightX + topRightWidth / 2;
+    const x = calculateZPLCenterPosition(labelData.price, fontSize.font, fontSize.width / ZPL_FONTS[fontSize.font].baseWidth, centerX);
+    
     elements.push({
       kind: 'text',
-      x: topRightX + topRightWidth/2,
-      y: padding + topRowHeight/2 - 10, // Adjust for center alignment
-      font: 'A',
-      height: 30,
-      width: 20,
+      x: Math.max(topRightX, x),
+      y: padding + topRowHeight / 2 - fontSize.height / 2,
+      font: fontSize.font,
+      height: fontSize.height,
+      width: fontSize.width,
       data: labelData.price
     });
   }
 
-  // Barcode section - positioned to match canvas layout
+  // Barcode section - match canvas positioning exactly
   if (fieldConfig.barcodeMode !== 'none') {
     const barcodeY = padding + topRowHeight + 5;
-    const barcodeX = padding * 2;
+    const barcodeWidth = 120;
+    const barcodeHeight = 50;
+    const barcodeX = (widthDots - barcodeWidth) / 2; // Center the barcode
     
     if (fieldConfig.barcodeMode === 'barcode') {
       elements.push({
         kind: 'barcode128',
-        x: barcodeX,
+        x: Math.round(barcodeX),
         y: barcodeY,
-        height: 50,
+        height: barcodeHeight,
         humanReadable: false,
         data: labelData.barcode
       });
     } else if (fieldConfig.barcodeMode === 'qr') {
       elements.push({
         kind: 'qrcode',
-        x: barcodeX,
+        x: Math.round(barcodeX),
         y: barcodeY,
         model: 2,
         mag: 3,
@@ -414,41 +499,60 @@ export const generateZPLFromLabelData = (
       });
     }
 
-    // Add SKU below barcode if included
+    // Add SKU below barcode if included - centered
     if (fieldConfig.includeSku && labelData.sku) {
+      const skuText = `SKU: ${labelData.sku}`;
+      const skuFontSize = calculateZPLFontSize(15, skuText, widthDots - padding * 2);
+      const skuX = calculateZPLCenterPosition(skuText, skuFontSize.font, skuFontSize.width / ZPL_FONTS[skuFontSize.font].baseWidth, widthDots / 2);
+      
       elements.push({
         kind: 'text',
-        x: widthDots / 2,
-        y: barcodeY + 50 + 8,
-        font: 'A',
-        height: 15,
-        width: 10,
-        data: `SKU: ${labelData.sku}`
+        x: Math.max(padding, skuX),
+        y: barcodeY + barcodeHeight + 8,
+        font: skuFontSize.font,
+        height: skuFontSize.height,
+        width: skuFontSize.width,
+        data: skuText
       });
     }
   }
 
-  // Title section - positioned to match canvas layout
+  // Title section - match canvas wrapping and positioning
   if (fieldConfig.includeTitle && labelData.title) {
+    const skuHeight = (fieldConfig.includeSku && labelData.sku) ? 25 : 0;
     const barcodeEndY = fieldConfig.barcodeMode !== 'none' ? 
-      (padding + topRowHeight + 5 + 50 + 15) : 
-      (padding + topRowHeight + 5);
+      (padding + topRowHeight + 5 + 50 + skuHeight + 10) : 
+      (padding + topRowHeight + 15);
     
-    const titleY = barcodeEndY + 10;
+    const availableHeight = heightDots - barcodeEndY - padding;
+    const maxTitleWidth = widthDots - padding * 2;
     
-    // Split title into lines if needed (simplified for ZPL)
-    const titleLines = labelData.title.length > 25 ? 
-      [labelData.title.substring(0, 25), labelData.title.substring(25, 50)] : 
-      [labelData.title];
+    // Calculate optimal font size for title
+    const maxFontSize = Math.min(availableHeight * 0.4, 30);
+    const titleFontSize = calculateZPLFontSize(maxFontSize, labelData.title, maxTitleWidth);
+    
+    // Wrap text using smart wrapping
+    const titleLines = wrapTextForZPL(
+      labelData.title, 
+      titleFontSize.font, 
+      titleFontSize.width / ZPL_FONTS[titleFontSize.font].baseWidth, 
+      maxTitleWidth
+    );
+    
+    const lineHeight = titleFontSize.height + 2;
+    const totalTextHeight = titleLines.length * lineHeight;
+    const startY = barcodeEndY + (availableHeight - totalTextHeight) / 2;
     
     titleLines.forEach((line, index) => {
+      const x = calculateZPLCenterPosition(line, titleFontSize.font, titleFontSize.width / ZPL_FONTS[titleFontSize.font].baseWidth, widthDots / 2);
+      
       elements.push({
         kind: 'text',
-        x: widthDots / 2,
-        y: titleY + (index * 25),
-        font: 'A',
-        height: 20,
-        width: 15,
+        x: Math.max(padding, x),
+        y: Math.round(startY + (index * lineHeight)),
+        font: titleFontSize.font,
+        height: titleFontSize.height,
+        width: titleFontSize.width,
         data: line
       });
     });
