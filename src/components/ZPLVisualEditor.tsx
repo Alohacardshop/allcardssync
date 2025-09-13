@@ -38,27 +38,71 @@ export function ZPLVisualEditor({
 
   const scale = 2; // Scale factor for display
 
+  // Helper function to calculate text dimensions
+  const calculateTextDimensions = (text: string, fontSize: number): { width: number; height: number } => {
+    // Approximate character width based on font size (ZPL fonts are monospace-like)
+    const charWidth = fontSize * 0.6; // Rough approximation for ZPL fonts
+    const width = text.length * charWidth;
+    const height = fontSize;
+    return { width, height };
+  };
+
+  // Helper function for element hit testing
+  const isPointInElement = (x: number, y: number, element: ZPLElement): boolean => {
+    const elementX = element.position.x;
+    const elementY = element.position.y;
+    
+    let width = 100;
+    let height = 30;
+    
+    if (element.type === 'text') {
+      // Calculate actual text dimensions for better hit testing
+      const fontSize = element.fontSize || 20;
+      const dimensions = calculateTextDimensions(element.text || '', fontSize);
+      width = Math.max(dimensions.width, 50); // Minimum width for easier clicking
+      height = Math.max(dimensions.height, 20); // Minimum height for easier clicking
+    } else if ('size' in element && element.size) {
+      width = element.size.width;
+      height = element.size.height;
+    } else if (element.type === 'barcode') {
+      width = 120;
+      height = 60;
+    } else if (element.type === 'qr') {
+      const magnification = 'magnification' in element ? element.magnification : 3;
+      width = 40 * magnification;
+      height = 40 * magnification;
+    }
+    
+    return x >= elementX && x <= elementX + width &&
+           y >= elementY && y <= elementY + height;
+  };
+
   const handleCanvasClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const x = Math.round((e.clientX - rect.left) / scale);
     const y = Math.round((e.clientY - rect.top) / scale);
 
+    console.log('Canvas click at:', { x, y, activeTool });
+
     if (activeTool === 'select') {
-      // Find clicked element
-      const clickedElement = label.elements.find(element => {
-        const { position } = element;
-        const elementWidth = 'size' in element ? element.size.width : 100;
-        const elementHeight = 'size' in element ? element.size.height : 20;
-        
-        return (
-          x >= position.x &&
-          x <= position.x + elementWidth &&
-          y >= position.y &&
-          y <= position.y + elementHeight
-        );
+      // Check if we clicked on an existing element (reverse order for top-most first)
+      const clickedElement = [...label.elements].reverse().find(element => {
+        const isHit = isPointInElement(x, y, element);
+        console.log(`Testing element ${element.id} (${element.type}):`, { 
+          elementPos: element.position, 
+          isHit,
+          elementData: element.type === 'text' ? element.text : element.type
+        });
+        return isHit;
       });
 
-      onElementSelect(clickedElement || null);
+      if (clickedElement) {
+        console.log('Selected element:', clickedElement.id, clickedElement.type);
+        onElementSelect(clickedElement);
+      } else {
+        console.log('No element clicked, deselecting');
+        onElementSelect(null);
+      }
     } else {
       // Add new element
       let newElement: ZPLElement;
@@ -137,6 +181,10 @@ export function ZPLVisualEditor({
 
   const handleElementMouseDown = useCallback((e: React.MouseEvent, element: ZPLElement) => {
     e.stopPropagation();
+    e.preventDefault();
+    
+    console.log('Element mouse down:', element.id, element.type);
+    
     onElementSelect(element);
     
     if (activeTool === 'select') {
