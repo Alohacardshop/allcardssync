@@ -74,18 +74,35 @@ const Index = () => {
     try {
       setLoading(true);
 
-      // Get current batch items (latest lot, not removed from batch, not deleted)
-      const { data: latestLot } = await supabase
+      // Build base query filters for store/location
+      const baseFilters: any = { deleted_at: null };
+      if (selectedStore) {
+        baseFilters.store_key = selectedStore;
+      }
+      if (selectedLocation) {
+        baseFilters.shopify_location_gid = selectedLocation;
+      }
+
+      // Get current batch items - filter by store/location if selected
+      let lotQuery = supabase
         .from('intake_lots')
         .select('lot_number')
         .eq('status', 'active')
         .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .limit(1);
+
+      if (selectedStore) {
+        lotQuery = lotQuery.eq('store_key', selectedStore);
+      }
+      if (selectedLocation) {
+        lotQuery = lotQuery.eq('shopify_location_gid', selectedLocation);
+      }
+
+      const { data: latestLot } = await lotQuery.maybeSingle();
 
       let currentBatch: IntakeItem[] = [];
       if (latestLot) {
-        const { data: batchItems } = await supabase
+        let itemsQuery = supabase
           .from('intake_items')
           .select('*')
           .eq('lot_number', latestLot.lot_number)
@@ -93,14 +110,24 @@ const Index = () => {
           .is('removed_from_batch_at', null)
           .order('created_at', { ascending: false });
 
+        const { data: batchItems } = await itemsQuery;
         currentBatch = batchItems || [];
       }
 
-      // Get system stats
-      const { data: stats } = await supabase
+      // Get system stats - filter by store/location
+      let statsQuery = supabase
         .from('intake_items')
         .select('quantity, price, printed_at, pushed_at')
         .is('deleted_at', null);
+
+      if (selectedStore) {
+        statsQuery = statsQuery.eq('store_key', selectedStore);
+      }
+      if (selectedLocation) {
+        statsQuery = statsQuery.eq('shopify_location_gid', selectedLocation);
+      }
+
+      const { data: stats } = await statsQuery;
 
       const systemStats: SystemStats = {
         total_items: stats?.reduce((sum, item) => sum + item.quantity, 0) || 0,
@@ -149,7 +176,7 @@ const Index = () => {
       supabase.removeChannel(channel);
       window.removeEventListener('intake:item-added', handleItemAdded);
     };
-  }, []);
+  }, [selectedStore, selectedLocation]); // Re-fetch when store/location changes
 
   const handleSelectAll = () => {
     if (selectAll) {
