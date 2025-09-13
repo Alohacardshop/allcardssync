@@ -14,6 +14,7 @@ import { ZPLVisualEditor } from '@/components/ZPLVisualEditor';
 import { ZPLElementEditor } from '@/components/ZPLElementEditor';
 import { ZPLPreview } from '@/components/ZPLPreview';
 import { useRawTemplates } from '@/hooks/useRawTemplates';
+import { useTemplateDefault } from '@/hooks/useTemplateDefault';
 import { useSimplePrinting } from '@/hooks/useSimplePrinting';
 import { 
   ZPLElement, 
@@ -38,6 +39,8 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
     deleteTemplate,
     loading: templatesLoading
   } = useRawTemplates();
+  
+  const { selectedTemplateId } = useTemplateDefault();
 
   // ZPL Label state
   const [label, setLabel] = useState<ZPLLabel>(createDefaultLabelTemplate());
@@ -56,28 +59,35 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
     speed: 4
   });
 
-  // Load default template on component mount
+  // Load default template on component mount and when selectedTemplateId changes
   useEffect(() => {
-    if (defaultTemplate && !templatesLoading) {
+    // Load the template that should be selected by default
+    const templateToLoad = templates.find(t => t.id === selectedTemplateId) || defaultTemplate;
+    
+    if (templateToLoad && !templatesLoading) {
       try {
+        console.log('Loading template:', templateToLoad.name, 'ID:', templateToLoad.id);
+        setCurrentTemplateId(templateToLoad.id);
+        setTemplateName(templateToLoad.name);
+        
         // Convert old template format to ZPL format if needed
-        if (defaultTemplate.canvas && defaultTemplate.canvas.labelData) {
+        if (templateToLoad.canvas && templateToLoad.canvas.labelData) {
           const convertedLabel = createDefaultLabelTemplate();
           
           // Update elements with template data
           convertedLabel.elements = convertedLabel.elements.map(element => {
             switch (element.id) {
               case 'condition':
-                return { ...element, text: defaultTemplate.canvas.labelData.condition || 'Near Mint' };
+                return { ...element, text: templateToLoad.canvas.labelData.condition || 'Near Mint' };
               case 'price':
-                return { ...element, text: `$${defaultTemplate.canvas.labelData.price}` || '$15.99' };
+                return { ...element, text: `$${templateToLoad.canvas.labelData.price}` || '$15.99' };
               case 'barcode':
                 if (element.type === 'barcode') {
-                  return { ...element, data: defaultTemplate.canvas.labelData.barcode || '120979260' };
+                  return { ...element, data: templateToLoad.canvas.labelData.barcode || '120979260' };
                 }
                 return element;
               case 'title':
-                return { ...element, text: defaultTemplate.canvas.labelData.title || 'POKEMON GENGAR VMAX #020' };
+                return { ...element, text: templateToLoad.canvas.labelData.title || 'POKEMON GENGAR VMAX #020' };
               default:
                 return element;
             }
@@ -86,17 +96,17 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
           setLabel(convertedLabel);
         }
         
-        if (defaultTemplate.canvas?.tsplSettings) {
+        if (templateToLoad.canvas?.tsplSettings) {
           setZplSettings({
-            darkness: defaultTemplate.canvas.tsplSettings.density || 10,
-            speed: defaultTemplate.canvas.tsplSettings.speed || 4
+            darkness: templateToLoad.canvas.tsplSettings.density || 10,
+            speed: templateToLoad.canvas.tsplSettings.speed || 4
           });
         }
       } catch (error) {
-        console.error('Error loading default template:', error);
+        console.error('Error loading template:', error);
       }
     }
-  }, [defaultTemplate, templatesLoading]);
+  }, [templates, selectedTemplateId, defaultTemplate, templatesLoading]);
 
   const handleSaveTemplate = async () => {
     if (!templateName.trim()) {
