@@ -36,6 +36,10 @@ export function abbreviateGrade(grade?: string): string {
   
   const gradeMap: Record<string, string> = {
     'Near Mint': 'NM',
+    'Lightly Played': 'LP',
+    'Moderately Played': 'MP',
+    'Heavily Played': 'HP',
+    'Damage': 'DM',
     'Near Mint-Mint': 'NM-M',
     'Mint': 'M',
     'Gem Mint': 'GM',
