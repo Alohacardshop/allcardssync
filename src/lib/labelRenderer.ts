@@ -147,7 +147,7 @@ export const renderLabelToCanvas = (
 
   // Top row boxes
   const topLeftWidth = 120;
-  const topRightWidth = LABEL_WIDTH - topLeftWidth - padding * 3;
+  const topRightWidth = LABEL_WIDTH - topLeftWidth - padding * 2;
 
   // Draw guide outlines only if showGuides is enabled
   if (showGuides) {
@@ -159,7 +159,7 @@ export const renderLabelToCanvas = (
     ctx.strokeRect(padding, padding, topLeftWidth, topRowHeight);
     
     // Top right box (Price)
-    const topRightX = padding + topLeftWidth + padding;
+    const topRightX = padding + topLeftWidth;
     ctx.strokeRect(topRightX, padding, topRightWidth, topRowHeight);
     
     // Bottom box (Title)
@@ -181,13 +181,14 @@ export const renderLabelToCanvas = (
 
   // Top right content (Price) - dynamic sizing to fill box
   if (fieldConfig.includePrice && labelData.price) {
-    const topRightX = padding + topLeftWidth + padding;
-    const fontSize = calculateFontSize(labelData.price, topRightWidth - 10, topRowHeight - 10, ctx);
+    const topRightX = padding + topLeftWidth;
+    const priceText = "$" + labelData.price;
+    const fontSize = calculateFontSize(priceText, topRightWidth - 10, topRowHeight - 10, ctx);
     ctx.font = `bold ${fontSize}px Arial`;
     ctx.fillStyle = '#000000';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(labelData.price, topRightX + topRightWidth/2, padding + topRowHeight/2);
+    ctx.fillText(priceText, topRightX + topRightWidth/2, padding + topRowHeight/2);
   }
 
   // Barcode section - positioned right below the price box
@@ -433,7 +434,7 @@ export const generateZPLFromLabelData = (
   const padding = 10;
   const topRowHeight = 60;
   const topLeftWidth = 120;
-  const topRightWidth = widthDots - topLeftWidth - padding * 3;
+  const topRightWidth = widthDots - topLeftWidth - padding * 2;
 
   // Top left content (Condition) - match canvas dynamic sizing
   if (fieldConfig.includeCondition && labelData.condition) {
@@ -455,11 +456,12 @@ export const generateZPLFromLabelData = (
 
   // Top right content (Price) - match canvas dynamic sizing
   if (fieldConfig.includePrice && labelData.price) {
-    const topRightX = padding + topLeftWidth + padding;
+    const topRightX = padding + topLeftWidth;
+    const priceText = "$" + labelData.price;
     const maxHeight = topRowHeight * 0.8;
-    const fontSize = calculateZPLFontSize(Math.min(maxHeight, 40), labelData.price, topRightWidth);
+    const fontSize = calculateZPLFontSize(Math.min(maxHeight, 40), priceText, topRightWidth);
     const centerX = topRightX + topRightWidth / 2;
-    const x = calculateZPLCenterPosition(labelData.price, fontSize.font, fontSize.width / ZPL_FONTS[fontSize.font].baseWidth, centerX);
+    const x = calculateZPLCenterPosition(priceText, fontSize.font, fontSize.width / ZPL_FONTS[fontSize.font].baseWidth, centerX);
     
     elements.push({
       kind: 'text',
@@ -468,7 +470,7 @@ export const generateZPLFromLabelData = (
       font: fontSize.font,
       height: fontSize.height,
       width: fontSize.width,
-      data: labelData.price
+      data: priceText
     });
   }
 
