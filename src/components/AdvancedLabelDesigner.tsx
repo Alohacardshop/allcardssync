@@ -46,6 +46,7 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
   
   // Template name for saving
   const [templateName, setTemplateName] = useState('');
+  const [currentTemplateId, setCurrentTemplateId] = useState<string | null>(null);
   
   // Print settings
   const [copies, setCopies] = useState(1);
@@ -96,6 +97,66 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
       }
     }
   }, [defaultTemplate, templatesLoading]);
+
+  // Auto-save when editing an existing template
+  useEffect(() => {
+    if (!currentTemplateId || !templateName.trim()) return;
+    
+    const timeoutId = setTimeout(() => {
+      handleAutoSave();
+    }, 2000); // Auto-save after 2 seconds of inactivity
+    
+    return () => clearTimeout(timeoutId);
+  }, [label, zplSettings, currentTemplateId]);
+
+  const handleAutoSave = async () => {
+    if (!currentTemplateId || !templateName.trim()) return;
+    
+    try {
+      const titleElement = label.elements.find(e => e.id === 'title' && e.type === 'text') as any;
+      const priceElement = label.elements.find(e => e.id === 'price' && e.type === 'text') as any;
+      const conditionElement = label.elements.find(e => e.id === 'condition' && e.type === 'text') as any;
+      const barcodeElement = label.elements.find(e => e.id === 'barcode' && e.type === 'barcode') as any;
+      
+      const templateData = {
+        fieldConfig: {
+          includeTitle: true,
+          includeSku: true,
+          includePrice: true,
+          includeLot: false,
+          includeCondition: true,
+          barcodeMode: 'barcode' as const
+        },
+        labelData: {
+          title: titleElement?.text || 'POKEMON GENGAR VMAX #020',
+          sku: barcodeElement?.data || '120979260',
+          price: priceElement?.text?.replace('$', '') || '15.99',
+          lot: 'LOT-000001',
+          condition: conditionElement?.text || 'Near Mint',
+          barcode: barcodeElement?.data || '120979260'
+        },
+        tsplSettings: { 
+          density: zplSettings.darkness, 
+          speed: zplSettings.speed, 
+          gapInches: 0
+        },
+        zplLabel: label,
+        zplSettings: zplSettings
+      };
+
+      await saveTemplate(
+        templateName,
+        templateData.fieldConfig,
+        templateData.labelData,
+        templateData,
+        currentTemplateId // Pass template ID for update
+      );
+      
+      console.log('Auto-saved template:', templateName);
+    } catch (error) {
+      console.error('Auto-save failed:', error);
+    }
+  };
 
   const handleSaveTemplate = async () => {
     if (!templateName.trim()) {
@@ -152,6 +213,7 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
       if (result) {
         toast.success('Template saved successfully');
         setTemplateName('');
+        setCurrentTemplateId(null); // Clear current template after saving new one
       } else {
         toast.error('Failed to save template - no result returned');
       }
@@ -164,6 +226,9 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
   const handleLoadTemplate = (templateId: string) => {
     const template = templates.find(t => t.id === templateId);
     if (template) {
+      setCurrentTemplateId(templateId); // Track which template we're editing
+      setTemplateName(template.name); // Set template name for display
+      
       try {
         // Check if template has ZPL data
         if (template.canvas?.zplLabel) {
@@ -354,22 +419,49 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
                     <Separator />
 
                     <div className="space-y-2">
-                      <Label htmlFor="template-name">Save Current Configuration</Label>
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="template-name">
+                          {currentTemplateId ? 'Editing Template' : 'Save New Template'}
+                        </Label>
+                        {currentTemplateId && (
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => {
+                              setCurrentTemplateId(null);
+                              setTemplateName('');
+                              toast.info('Started new template');
+                            }}
+                          >
+                            New Template
+                          </Button>
+                        )}
+                      </div>
+                      
+                      {currentTemplateId && (
+                        <div className="text-xs text-muted-foreground p-2 bg-muted rounded">
+                          Auto-saving changes to "{templateName}"
+                        </div>
+                      )}
+                      
                       <div className="flex gap-2">
                         <Input
                           id="template-name"
                           value={templateName}
                           onChange={(e) => setTemplateName(e.target.value)}
-                          placeholder="Enter template name"
-                        />
-                        <Button 
-                          onClick={handleSaveTemplate} 
-                          size="sm"
-                          disabled={!templateName.trim()}
-                        >
-                          <Save className="w-4 h-4" />
-                        </Button>
-                      </div>
+                          placeholder={currentTemplateId ? "Current template name" : "Enter template name"}
+                          disabled={!!currentTemplateId}
+                         />
+                         {!currentTemplateId && (
+                           <Button 
+                             onClick={handleSaveTemplate} 
+                             size="sm"
+                             disabled={!templateName.trim()}
+                           >
+                             <Save className="w-4 h-4" />
+                           </Button>
+                         )}
+                       </div>
                       <p className="text-xs text-muted-foreground">
                         This will save your current label design and print settings
                       </p>
