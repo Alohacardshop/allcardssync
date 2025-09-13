@@ -94,7 +94,8 @@ export function useTemplates(templateType: 'general' | 'raw' = 'general') {
     fieldConfig: any, 
     labelData: any, 
     tsplSettings: any,
-    templateId?: string
+    templateId?: string,
+    zplData?: any // Add optional ZPL data parameter
   ) => {
     try {
       const templateData = {
@@ -102,7 +103,8 @@ export function useTemplates(templateType: 'general' | 'raw' = 'general') {
         canvas: {
           fieldConfig,
           labelData,
-          tsplSettings
+          tsplSettings,
+          ...(zplData && { zplLabel: zplData.zplLabel, zplSettings: zplData.zplSettings }) // Add ZPL data if provided
         },
         template_type: templateType
       };

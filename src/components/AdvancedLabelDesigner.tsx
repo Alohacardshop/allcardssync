@@ -109,44 +109,43 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
     console.log('ZPL settings:', zplSettings);
 
     try {
-      // Save the ZPL structure to preserve exact layout and positioning
+      // Structure the template data properly for ZPL labels
       const titleElement = label.elements.find(e => e.id === 'title' && e.type === 'text') as any;
       const priceElement = label.elements.find(e => e.id === 'price' && e.type === 'text') as any;
       const conditionElement = label.elements.find(e => e.id === 'condition' && e.type === 'text') as any;
       const barcodeElement = label.elements.find(e => e.id === 'barcode' && e.type === 'barcode') as any;
       
-      const templateData = {
-        fieldConfig: {
-          includeTitle: true,
-          includeSku: true,
-          includePrice: true,
-          includeLot: false,
-          includeCondition: true,
-          barcodeMode: 'barcode' as const
-        },
-        labelData: {
-          title: titleElement?.text || 'POKEMON GENGAR VMAX #020',
-          sku: barcodeElement?.data || '120979260',
-          price: priceElement?.text?.replace('$', '') || '15.99',
-          lot: 'LOT-000001',
-          condition: conditionElement?.text || 'Near Mint',
-          barcode: barcodeElement?.data || '120979260'
-        },
-        tsplSettings: { 
-          density: zplSettings.darkness, 
-          speed: zplSettings.speed, 
-          gapInches: 0
-        },
-        zplLabel: label, // Preserve the complete ZPL structure
-        zplSettings: zplSettings // Preserve ZPL settings
+      const fieldConfig = {
+        includeTitle: true,
+        includeSku: true,
+        includePrice: true,
+        includeLot: false,
+        includeCondition: true,
+        barcodeMode: 'barcode' as const
+      };
+      
+      const labelData = {
+        title: titleElement?.text || 'POKEMON GENGAR VMAX #020',
+        sku: barcodeElement?.data || '120979260',
+        price: priceElement?.text?.replace('$', '') || '15.99',
+        lot: 'LOT-000001',
+        condition: conditionElement?.text || 'Near Mint',
+        barcode: barcodeElement?.data || '120979260'
+      };
+      
+      const tsplSettings = { 
+        density: zplSettings.darkness, 
+        speed: zplSettings.speed, 
+        gapInches: 0
       };
 
       const result = await saveTemplate(
         templateName,
-        templateData.fieldConfig,
-        templateData.labelData,
-        templateData, // Pass the entire templateData as the canvas object
-        currentTemplateId // Pass template ID if updating existing template
+        fieldConfig,
+        labelData,
+        tsplSettings,
+        currentTemplateId,
+        { zplLabel: label, zplSettings: zplSettings } // Pass ZPL data as separate parameter
       );
 
       console.log('Save template result:', result);
@@ -154,10 +153,8 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
       if (result) {
         toast.success(currentTemplateId ? 'Template updated successfully' : 'Template saved successfully');
         if (!currentTemplateId) {
-          // Only clear when saving new template
           setTemplateName('');
         }
-        // If updating, keep the current template loaded
       } else {
         toast.error('Failed to save template - no result returned');
       }
