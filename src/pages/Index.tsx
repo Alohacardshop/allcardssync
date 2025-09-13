@@ -9,6 +9,7 @@ import { Loader2, Package, ShoppingCart, DollarSign, Trash2, Archive, Award, Fil
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useTemplates } from "@/hooks/useTemplates";
 import { Navigation } from "@/components/Navigation";
+import { StoreToggle } from "@/components/StoreToggle";
 import { GradedCardIntake } from "@/components/GradedCardIntake";
 import { RawCardIntake } from "@/components/RawCardIntake";
 import { BulkCardIntake } from "@/components/BulkCardIntake";
@@ -432,6 +433,9 @@ const Index = () => {
           <Navigation />
         </div>
       </header>
+
+      {/* Store Toggle */}
+      <StoreToggle />
 
       <div className="container mx-auto p-6 space-y-6">
         {/* System Stats */}

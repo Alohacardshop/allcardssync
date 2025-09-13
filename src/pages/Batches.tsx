@@ -18,6 +18,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Navigation } from "@/components/Navigation";
+import { StoreToggle } from "@/components/StoreToggle";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Search, Package, DollarSign, Calendar, Eye, History, Trash2 } from "lucide-react";
@@ -245,6 +246,9 @@ export default function Batches() {
           <Navigation />
         </div>
       </header>
+
+      {/* Store Toggle */}
+      <StoreToggle />
 
       <div className="container mx-auto px-6 py-6">
         {/* Stats Cards */}

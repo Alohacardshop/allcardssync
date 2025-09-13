@@ -32,6 +32,7 @@ import { StoreLocationSelector } from '@/components/StoreLocationSelector';
 import { MultiStoreLocationSelector } from '@/components/MultiStoreLocationSelector';
 import { useStore } from '@/contexts/StoreContext';
 import { Navigation } from '@/components/Navigation';
+import { StoreToggle } from '@/components/StoreToggle';
 import BarcodeLabel from '@/components/BarcodeLabel';
 import { useZebraNetwork } from "@/hooks/useZebraNetwork";
 import { ZebraPrinterSelectionDialog } from '@/components/ZebraPrinterSelectionDialog';
@@ -688,6 +689,9 @@ const Inventory = () => {
           </div>
         </div>
       </div>
+
+      {/* Store Toggle */}
+      <StoreToggle />
 
       <div className="container mx-auto p-4">
         <Card>
