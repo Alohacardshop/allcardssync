@@ -7,6 +7,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { Copy, Eye, EyeOff } from "lucide-react";
 
 export function PSAApiSettings() {
   const [token, setToken] = useState('');
@@ -18,6 +19,9 @@ export function PSAApiSettings() {
     source: 'database' | 'environment' | 'none';
     lastTested?: Date;
   }>({ hasToken: false, source: 'none' });
+  const [currentToken, setCurrentToken] = useState<string>('');
+  const [showCurrentToken, setShowCurrentToken] = useState(false);
+  const [loadingCurrentToken, setLoadingCurrentToken] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -129,6 +133,52 @@ export function PSAApiSettings() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleViewCurrentToken = async () => {
+    setLoadingCurrentToken(true);
+    try {
+      // Use RPC function to get decrypted token
+      const { data, error } = await supabase.rpc('get_decrypted_secret', {
+        secret_name: 'PSA_API_TOKEN'
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      if (data) {
+        setCurrentToken(data);
+        setShowCurrentToken(true);
+        toast({
+          title: "Success",
+          description: "Current PSA API token retrieved"
+        });
+      } else {
+        toast({
+          title: "Info",
+          description: "No PSA API token found in database",
+          variant: "default"
+        });
+      }
+    } catch (error: any) {
+      console.error('Error retrieving current token:', error);
+      
+      let errorMessage = "Failed to retrieve current token";
+      if (error.message?.includes('Admin role required')) {
+        errorMessage = "Admin role required to view PSA API token";
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive"
+      });
+    } finally {
+      setLoadingCurrentToken(false);
     }
   };
 
@@ -256,7 +306,56 @@ export function PSAApiSettings() {
           >
             {testLoading ? "Testing..." : "Test Token"}
           </Button>
+          
+          {currentStatus.hasToken && (
+            <Button 
+              variant="secondary"
+              onClick={handleViewCurrentToken}
+              disabled={loadingCurrentToken}
+            >
+              <Eye className="w-4 h-4 mr-2" />
+              {loadingCurrentToken ? "Loading..." : "View Current Token"}
+            </Button>
+          )}
         </div>
+
+        {showCurrentToken && currentToken && (
+          <div className="mt-4">
+            <div className="flex items-center justify-between">
+              <Label>Current PSA API Token:</Label>
+              <Button 
+                variant="ghost" 
+                size="sm"
+                onClick={() => {
+                  setShowCurrentToken(false);
+                  setCurrentToken('');
+                }}
+              >
+                <EyeOff className="w-4 h-4 mr-2" />
+                Hide
+              </Button>
+            </div>
+            <div className="bg-muted p-3 rounded mt-2 font-mono text-sm break-all">
+              {currentToken}
+            </div>
+            <div className="flex gap-2 mt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  navigator.clipboard.writeText(currentToken);
+                  toast({
+                    title: "Copied",
+                    description: "PSA API token copied to clipboard"
+                  });
+                }}
+              >
+                <Copy className="w-4 h-4 mr-2" />
+                Copy to Clipboard
+              </Button>
+            </div>
+          </div>
+        )}
 
         {testResult && (
           <div className="mt-4">
