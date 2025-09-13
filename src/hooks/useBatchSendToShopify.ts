@@ -50,13 +50,20 @@ export function useBatchSendToShopify() {
     try {
       console.log(`🚀 [useBatchSendToShopify] Calling v2-batch-send-to-inventory edge function`)
       
-      const { data, error } = await supabase.functions.invoke("v2-batch-send-to-inventory", {
+      // Add timeout to prevent hanging
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Edge function timeout after 30 seconds')), 30000)
+      })
+
+      const functionPromise = supabase.functions.invoke("v2-batch-send-to-inventory", {
         body: {
           itemIds,
           storeKey,
           locationGid
         }
       })
+
+      const { data, error } = await Promise.race([functionPromise, timeoutPromise]) as any
 
       console.log(`📡 [useBatchSendToShopify] Edge function response:`, { data, error })
 
