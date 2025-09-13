@@ -27,6 +27,8 @@ import { ShopifyRemovalDialog } from '@/components/ShopifyRemovalDialog';
 import { ShopifySyncDetailsDialog } from '@/components/ShopifySyncDetailsDialog';
 import { formatDistanceToNow } from 'date-fns';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { InventoryAnalytics } from '@/components/InventoryAnalytics';
+import { ItemTimeline } from '@/components/ItemTimeline';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { StoreLocationSelector } from '@/components/StoreLocationSelector';
 import { MultiStoreLocationSelector } from '@/components/MultiStoreLocationSelector';
@@ -769,15 +771,23 @@ const Inventory = () => {
                 </div>
               </div>
 
-              {/* Status Tabs */}
-              <Tabs value={statusFilter} onValueChange={(value) => setStatusFilter(value as typeof statusFilter)}>
-                <TabsList>
-                  <TabsTrigger value="active">Active</TabsTrigger>
-                  <TabsTrigger value="sold">Sold</TabsTrigger>
-                  <TabsTrigger value="errors">Errors</TabsTrigger>
-                  <TabsTrigger value="deleted">Deleted</TabsTrigger>
-                  <TabsTrigger value="all">All</TabsTrigger>
+              {/* Main Tabs - Inventory vs Analytics */}
+              <Tabs defaultValue="inventory" className="w-full">
+                <TabsList className="mb-6">
+                  <TabsTrigger value="inventory">Inventory Management</TabsTrigger>
+                  <TabsTrigger value="analytics">Analytics & Insights</TabsTrigger>
                 </TabsList>
+                
+                <TabsContent value="inventory" className="space-y-4">
+                  {/* Status Tabs */}
+                  <Tabs value={statusFilter} onValueChange={(value) => setStatusFilter(value as typeof statusFilter)}>
+                    <TabsList>
+                      <TabsTrigger value="active">Active</TabsTrigger>
+                      <TabsTrigger value="sold">Sold</TabsTrigger>
+                      <TabsTrigger value="errors">Errors</TabsTrigger>
+                      <TabsTrigger value="deleted">Deleted</TabsTrigger>
+                      <TabsTrigger value="all">All</TabsTrigger>
+                    </TabsList>
                 
                 <TabsContent value={statusFilter} className="mt-4">
                   {/* Bulk Selection Toolbar */}
@@ -1141,45 +1151,8 @@ const Inventory = () => {
                           </div>
 
                           {expandedItems.has(item.id) && (
-                            <div className="mt-4 pt-4 border-t space-y-3">
-                              <div className="grid grid-cols-2 gap-4 text-sm">
-                                <div>
-                                  <span className="font-medium">Cost:</span> ${item.cost || '0'}
-                                </div>
-                                <div>
-                                  <span className="font-medium">Created:</span> {new Date(item.created_at).toLocaleString()}
-                                </div>
-                                <div>
-                                  <span className="font-medium">Type:</span> {item.type || 'Raw'}
-                                </div>
-                                {item.printed_at && (
-                                  <div>
-                                    <span className="font-medium">Printed:</span> {formatDistanceToNow(new Date(item.printed_at), { addSuffix: true })}
-                                  </div>
-                                )}
-                                {item.pushed_at && (
-                                  <div>
-                                    <span className="font-medium">Pushed:</span> {formatDistanceToNow(new Date(item.pushed_at), { addSuffix: true })}
-                                  </div>
-                                )}
-                                {item.sold_at && (
-                                  <div>
-                                    <span className="font-medium">Sold:</span> {formatDistanceToNow(new Date(item.sold_at), { addSuffix: true })}
-                                  </div>
-                                )}
-                                {item.sold_price && (
-                                  <div>
-                                    <span className="font-medium">Sold Price:</span> ${item.sold_price}
-                                  </div>
-                                )}
-                              </div>
-                              
-                              {item.processing_notes && (
-                                <div>
-                                  <span className="font-medium text-sm">Notes:</span>
-                                  <p className="text-sm text-muted-foreground mt-1">{item.processing_notes}</p>
-                                </div>
-                              )}
+                            <div className="mt-4 pt-4 border-t">
+                              <ItemTimeline item={item} />
                             </div>
                           )}
                         </CardContent>
@@ -1192,6 +1165,12 @@ const Inventory = () => {
                       </div>
                     )}
                   </div>
+                </TabsContent>
+                  </Tabs>
+                </TabsContent>
+                
+                <TabsContent value="analytics">
+                  <InventoryAnalytics />
                 </TabsContent>
               </Tabs>
             </div>

@@ -14,7 +14,7 @@ export const handleApiError = (error: any, operation: string) => {
   }
 };
 
-// Enhanced inventory analytics
+// Enhanced inventory analytics with sales data
 export async function getInventoryAnalytics() {
   try {
     const { data, error } = await supabase
@@ -22,13 +22,17 @@ export async function getInventoryAnalytics() {
       .select(`
         id, 
         created_at, 
+        removed_from_batch_at,
         price, 
         cost, 
         printed_at, 
         pushed_at, 
         deleted_at,
+        sold_at,
+        sold_price,
         category,
-        grade
+        grade,
+        type
       `)
       .is('deleted_at', null);
 
@@ -36,24 +40,60 @@ export async function getInventoryAnalytics() {
 
     const today = new Date();
     const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const sevenDaysAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    // Filter active inventory items (those that have been added to inventory)
+    const inventoryItems = data.filter(item => item.removed_from_batch_at);
+    const soldItems = data.filter(item => item.sold_at);
 
     const analytics = {
-      totalItems: data.length,
-      recentItems: data.filter(item => new Date(item.created_at) > thirtyDaysAgo).length,
-      printedItems: data.filter(item => item.printed_at).length,
-      pushedItems: data.filter(item => item.pushed_at).length,
-      totalValue: data.reduce((sum, item) => sum + (parseFloat(item.price?.toString() || '0') || 0), 0),
-      totalCost: data.reduce((sum, item) => sum + (parseFloat(item.cost?.toString() || '0') || 0), 0),
-      categoryBreakdown: data.reduce((acc: Record<string, number>, item) => {
+      totalItems: inventoryItems.length,
+      recentItems: inventoryItems.filter(item => new Date(item.removed_from_batch_at || item.created_at) > thirtyDaysAgo).length,
+      printedItems: inventoryItems.filter(item => item.printed_at).length,
+      pushedItems: inventoryItems.filter(item => item.pushed_at).length,
+      soldItems: soldItems.length,
+      soldThisWeek: soldItems.filter(item => new Date(item.sold_at) > sevenDaysAgo).length,
+      soldThisMonth: soldItems.filter(item => new Date(item.sold_at) > thirtyDaysAgo).length,
+      totalValue: inventoryItems.reduce((sum, item) => sum + (parseFloat(item.price?.toString() || '0') || 0), 0),
+      totalCost: inventoryItems.reduce((sum, item) => sum + (parseFloat(item.cost?.toString() || '0') || 0), 0),
+      totalSalesRevenue: soldItems.reduce((sum, item) => sum + (parseFloat(item.sold_price?.toString() || '0') || 0), 0),
+      totalSalesCost: soldItems.reduce((sum, item) => sum + (parseFloat(item.cost?.toString() || '0') || 0), 0),
+      categoryBreakdown: inventoryItems.reduce((acc: Record<string, number>, item) => {
         const category = item.category || 'Unknown';
         acc[category] = (acc[category] || 0) + 1;
         return acc;
       }, {}),
-      gradeBreakdown: data.reduce((acc: Record<string, number>, item) => {
+      gradeBreakdown: inventoryItems.reduce((acc: Record<string, number>, item) => {
         const grade = item.grade || 'Raw';
         acc[grade] = (acc[grade] || 0) + 1;
         return acc;
-      }, {})
+      }, {}),
+      typeBreakdown: inventoryItems.reduce((acc: Record<string, number>, item) => {
+        const type = item.type || 'Raw';
+        acc[type] = (acc[type] || 0) + 1;
+        return acc;
+      }, {}),
+      // Calculate inventory aging
+      inventoryAging: inventoryItems.reduce((acc: Record<string, number>, item) => {
+        const addedDate = new Date(item.removed_from_batch_at || item.created_at);
+        const daysInInventory = Math.floor((today.getTime() - addedDate.getTime()) / (1000 * 60 * 60 * 24));
+        
+        let ageGroup = '0-7 days';
+        if (daysInInventory > 90) ageGroup = '90+ days';
+        else if (daysInInventory > 30) ageGroup = '30-90 days';
+        else if (daysInInventory > 7) ageGroup = '7-30 days';
+        
+        acc[ageGroup] = (acc[ageGroup] || 0) + 1;
+        return acc;
+      }, {}),
+      averageDaysToSell: soldItems.length > 0 
+        ? soldItems.reduce((sum, item) => {
+            const addedDate = new Date(item.removed_from_batch_at || item.created_at);
+            const soldDate = new Date(item.sold_at);
+            const daysToSell = Math.floor((soldDate.getTime() - addedDate.getTime()) / (1000 * 60 * 60 * 24));
+            return sum + daysToSell;
+          }, 0) / soldItems.length
+        : 0
     };
 
     return analytics;
@@ -64,10 +104,18 @@ export async function getInventoryAnalytics() {
       recentItems: 0,
       printedItems: 0,
       pushedItems: 0,
+      soldItems: 0,
+      soldThisWeek: 0,
+      soldThisMonth: 0,
       totalValue: 0,
       totalCost: 0,
+      totalSalesRevenue: 0,
+      totalSalesCost: 0,
       categoryBreakdown: {},
-      gradeBreakdown: {}
+      gradeBreakdown: {},
+      typeBreakdown: {},
+      inventoryAging: {},
+      averageDaysToSell: 0
     };
   }
 }
