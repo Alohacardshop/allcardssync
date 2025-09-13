@@ -108,11 +108,11 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
     console.log('ZPL settings:', zplSettings);
 
     try {
-      // Convert ZPL label to old format for compatibility with type guards
-      const titleElement = label.elements.find(e => e.id === 'title' && e.type === 'text');
-      const priceElement = label.elements.find(e => e.id === 'price' && e.type === 'text');
-      const conditionElement = label.elements.find(e => e.id === 'condition' && e.type === 'text');
-      const barcodeElement = label.elements.find(e => e.id === 'barcode' && e.type === 'barcode');
+      // Save the ZPL structure to preserve exact layout and positioning
+      const titleElement = label.elements.find(e => e.id === 'title' && e.type === 'text') as any;
+      const priceElement = label.elements.find(e => e.id === 'price' && e.type === 'text') as any;
+      const conditionElement = label.elements.find(e => e.id === 'condition' && e.type === 'text') as any;
+      const barcodeElement = label.elements.find(e => e.id === 'barcode' && e.type === 'barcode') as any;
       
       const templateData = {
         fieldConfig: {
@@ -124,24 +124,27 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
           barcodeMode: 'barcode' as const
         },
         labelData: {
-          title: (titleElement && titleElement.type === 'text') ? titleElement.text : 'POKEMON GENGAR VMAX #020',
-          sku: (barcodeElement && barcodeElement.type === 'barcode') ? barcodeElement.data : '120979260',
-          price: (priceElement && priceElement.type === 'text') ? priceElement.text.replace('$', '') : '15.99',
+          title: titleElement?.text || 'POKEMON GENGAR VMAX #020',
+          sku: barcodeElement?.data || '120979260',
+          price: priceElement?.text?.replace('$', '') || '15.99',
           lot: 'LOT-000001',
-          condition: (conditionElement && conditionElement.type === 'text') ? conditionElement.text : 'Near Mint',
-          barcode: (barcodeElement && barcodeElement.type === 'barcode') ? barcodeElement.data : '120979260'
-        }
+          condition: conditionElement?.text || 'Near Mint',
+          barcode: barcodeElement?.data || '120979260'
+        },
+        tsplSettings: { 
+          density: zplSettings.darkness, 
+          speed: zplSettings.speed, 
+          gapInches: 0
+        },
+        zplLabel: label, // Preserve the complete ZPL structure
+        zplSettings: zplSettings // Preserve ZPL settings
       };
 
       const result = await saveTemplate(
         templateName,
         templateData.fieldConfig,
         templateData.labelData,
-        { 
-          density: zplSettings.darkness, 
-          speed: zplSettings.speed, 
-          gapInches: 0
-        }
+        templateData // Pass the entire templateData as the canvas object
       );
 
       console.log('Save template result:', result);
