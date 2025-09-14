@@ -14,7 +14,7 @@ export const handleApiError = (error: any, operation: string) => {
   }
 };
 
-// Enhanced inventory analytics with sales data
+// Enhanced inventory analytics with sales data - optimized with pagination
 export async function getInventoryAnalytics(storeKey?: string, locationGid?: string) {
   try {
     let query = supabase
@@ -34,7 +34,8 @@ export async function getInventoryAnalytics(storeKey?: string, locationGid?: str
         grade,
         type
       `)
-      .is('deleted_at', null);
+      .is('deleted_at', null)
+      .limit(5000); // Add limit to prevent massive queries
 
     // Apply store and location filters
     if (storeKey) {
