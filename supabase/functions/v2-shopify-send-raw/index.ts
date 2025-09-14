@@ -1,144 +1,25 @@
-// Raw card sender for Shopify - SKU reuse with inventory addition
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
-import { CORS, json, loadStore, parseIdFromGid, fetchRetry, newRun, deriveStoreSlug, API_VER, shopifyGraphQL, parseNumericIdFromGid } from '../_shared/shopify-helpers.ts'
+import { loadStore, fetchRetry, parseIdFromGid, newRun, deriveStoreSlug, API_VER, shopifyGraphQL, parseNumericIdFromGid, setInventory } from '../_shared/shopify-helpers.ts'
 
-async function createRawProduct(domain: string, token: string, item: any) {
-  // Construct title in format: Brand_Title #Card_Number Subject,Condition
-  let title = ''
-  
-  if (item.brand_title) {
-    const parts = [item.brand_title]
-    
-    // Add card number with # prefix if available
-    if (item.card_number) {
-      parts.push(`#${item.card_number}`)
-    }
-    
-    // Add subject if available
-    if (item.subject) {
-      parts.push(item.subject)
-    }
-    
-    // Add condition if not 'normal'
-    if (item.condition && item.condition.toLowerCase() !== 'normal') {
-      parts.push(item.condition)
-    }
-    
-    title = parts.join(' ')
-  } else {
-    title = item.title || item.sku || 'Raw Card'
-  }
-  
-  const description = title // Same as title with all available info
-  
-  // Clean condition mapping - remove "Normal" and convert to proper format
-  let condition = item.condition || 'Near Mint'
-  if (condition.toLowerCase() === 'normal') {
-    condition = 'Near Mint'
-  }
-  
-  // Extract game and set from brand_title
-  const titleParts = item.brand_title?.split(',') || []
-  const game = titleParts[0]?.toLowerCase() || 'pokemon'
-  const set = titleParts[1]?.trim() || null
-  
-  // Simple tags: raw, game, set, single, condition
-  const tags = [
-    'raw',
-    game,
-    set,
-    'single',
-    condition.toLowerCase().replace(/\s+/g, '')
-  ].filter(Boolean).join(', ')
+const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' }
+const json = (s: number, b: unknown) => new Response(JSON.stringify(b), { status: s, headers: { ...CORS, 'Content-Type': 'application/json' } })
 
-  // Enhanced image object with required Shopify properties
-  const images = item.image_url ? [{
-    src: item.image_url,
-    alt: `${item.subject || 'Trading Card'} - ${item.sku}`,
-    position: 1
-  }] : []
-
-  const payload = {
-    product: {
-      title,
-      body_html: description,
-      status: 'active',
-      product_type: item.category || 'Trading Card',
-      tags,
-      images,
-      variants: [{
-        sku: item.sku,
-        price: item.price != null ? Number(item.price).toFixed(2) : undefined,
-        cost: item.cost != null ? Number(item.cost).toFixed(2) : undefined,
-        barcode: item.barcode || undefined,
-        inventory_management: 'shopify',
-        inventory_policy: 'deny',
-        requires_shipping: true,
-        weight: 0.0625, // 1 oz in pounds (1/16)
-        weight_unit: 'lb'
-      }]
-    }
-  }
-  
-  const r = await fetchRetry(`https://${domain}/admin/api/${API_VER}/products.json`, {
-    method: 'POST',
-    headers: { 'X-Shopify-Access-Token': token, 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  })
-  const b = await r.json()
-  if (!r.ok) throw new Error(`Create raw product failed: ${r.status} ${JSON.stringify(b)}`)
-  return b.product
-}
-
-async function getCurrentInventoryLevel(domain: string, token: string, inventoryItemId: string, locationId: string) {
-  const GQL = `
-    query($inventoryItemId: ID!, $locationId: ID!) {
-      inventoryLevel(id: "gid://shopify/InventoryLevel/${inventoryItemId}?inventory_item_id=${inventoryItemId}&location_id=${locationId}") {
-        available
-        location { id }
-        item { id }
-      }
-    }`
-  
-  const { ok, status, body } = await shopifyGraphQL(domain, token, GQL, { 
-    inventoryItemId, 
-    locationId 
-  })
-  
-  if (!ok) throw new Error(`Inventory lookup failed: ${status}`)
-  return body?.data?.inventoryLevel?.available || 0
-}
-
-async function addInventory(domain: string, token: string, inventory_item_id: string, location_id: string, addQuantity: number) {
-  // First get current inventory level
-  const currentLevel = await getCurrentInventoryLevel(domain, token, inventory_item_id, location_id)
-  const newLevel = currentLevel + addQuantity
-  
-  // Set to new total level
-  const r = await fetchRetry(`https://${domain}/admin/api/${API_VER}/inventory_levels/set.json`, {
-    method: 'POST',
-    headers: { 'X-Shopify-Access-Token': token, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ inventory_item_id, location_id, available: newLevel })
-  })
-  if (!r.ok) throw new Error(`Inventory add failed: ${r.status} ${await r.text()}`)
-  
-  return { previousLevel: currentLevel, newLevel, added: addQuantity }
-}
-
-async function publishIfNeeded(domain: string, token: string, productId: string) {
-  const r = await fetchRetry(`https://${domain}/admin/api/${API_VER}/products/${productId}.json`, {
-    headers: { 'X-Shopify-Access-Token': token, 'Content-Type': 'application/json' }
-  })
-  const b = await r.json()
-  if (!r.ok) throw new Error(`Fetch product failed: ${r.status}`)
-  
-  if (b.product?.status !== 'active') {
-    const ur = await fetchRetry(`https://${domain}/admin/api/${API_VER}/products/${productId}.json`, {
-      method: 'PUT',
-      headers: { 'X-Shopify-Access-Token': token, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ product: { id: productId, status: 'active' } })
-    })
-    if (!ur.ok) throw new Error(`Publish failed: ${ur.status}`)
+export interface SendRawArgs {
+  storeKey: "hawaii" | "las_vegas"
+  locationGid: string
+  item: {
+    id?: string
+    sku: string
+    brand_title?: string
+    subject?: string
+    card_number?: string
+    image_url?: string
+    cost?: number
+    title?: string
+    price?: number
+    barcode?: string
+    condition?: string
+    quantity?: number
   }
 }
 
@@ -153,43 +34,44 @@ Deno.serve(async (req) => {
   const run = newRun()
   
   try {
-    const { storeKey, locationGid, item } = await req.json().catch(() => ({}))
+    const args: SendRawArgs = await req.json().catch(() => ({}))
+    const { storeKey, locationGid, item } = args
+    
     if (!storeKey || !locationGid || !item || !item.sku) {
-      return json(400, { error: 'Expected { storeKey, locationGid, item: { sku, ... } }' })
+      return json(400, { error: 'Expected { storeKey, locationGid, item: { sku } }' })
     }
 
-    console.info('send.start', { correlationId: run.correlationId, storeKey, locationGid, sku: item.sku, quantity: item.quantity })
-
-    // Enhanced image object with required Shopify properties
-    const images = item.image_url ? [{
-      src: item.image_url,
-      alt: `${item.subject || 'Trading Card'} - ${item.sku}`,
-      position: 1
-    }] : []
-    
-    console.info('image.payload', { 
-      correlationId: run.correlationId, 
-      hasImage: !!item.image_url, 
-      imageUrl: item.image_url,
-      imageObject: images[0] || null 
-    })
+    console.info('raw.send.start', { correlationId: run.correlationId, storeKey, locationGid, itemId: item.id, sku: item.sku })
 
     const { domain, token } = await loadStore(supabase, storeKey)
     const slug = deriveStoreSlug(domain)
     run.add({ name: 'loadStore', ok: true, data: { domain, slug } })
-
+    
     const locationId = parseIdFromGid(locationGid)
     if (!locationId) return json(400, { ok: false, error: 'Invalid locationGid' })
 
-    // A) GraphQL search by SKU first
+    // For raw cards, search by SKU to find existing product/variant
     const GQL = `
       query($q: String!) {
-        productVariants(first: 50, query: $q) {
+        productVariants(first: 10, query: $q) {
           nodes {
             id
             sku
             barcode
-            product { id title status tags }
+            product { 
+              id 
+              title 
+              status 
+              tags
+              variants(first: 20) {
+                nodes {
+                  id
+                  sku
+                  title
+                  inventoryItem { id }
+                }
+              }
+            }
             inventoryItem { id }
           }
         }
@@ -199,131 +81,175 @@ Deno.serve(async (req) => {
     run.add({ name: 'lookupBySku', ok: gok, status: gstatus, data: { count: gbody?.data?.productVariants?.nodes?.length || 0 } })
     const skuHits = gok ? (gbody?.data?.productVariants?.nodes || []) : []
 
-    // B) Reuse existing variant if SKU matches
-    let chosen: any = null
-    if (skuHits.length) {
-      // Pick first active if present, otherwise first match
-      chosen = skuHits.find((n: any) => n?.product?.status === 'ACTIVE') || skuHits[0]
-      run.add({ name: 'reuseVariant', ok: true, data: { reason: 'sku', variantGid: chosen.id, productGid: chosen.product.id } })
-    }
-
-    // C) Create new product if no SKU match
     let productId: string, variantId: string, inventoryItemId: string
-    let resultMeta: any = {}
-    
-    if (!chosen) {
-      const newProduct = await createRawProduct(domain, token, item)
-      chosen = {
-        id: `gid://shopify/ProductVariant/${newProduct?.variants?.[0]?.id}`,
-        product: { id: `gid://shopify/Product/${newProduct?.id}`, status: newProduct?.status, tags: newProduct?.tags, title: newProduct?.title },
-        sku: newProduct?.variants?.[0]?.sku,
-        inventoryItem: { id: `gid://shopify/InventoryItem/${newProduct?.variants?.[0]?.inventory_item_id}` }
-      }
-      run.add({ name: 'createdNew', ok: true, data: { productId: newProduct?.id, variantId: newProduct?.variants?.[0]?.id, sku: item.sku } })
-      
-      resultMeta = {
-        appliedTitle: newProduct?.title,
-        appliedTags: newProduct?.tags,
-        action: 'created_new_product'
-      }
+    let decision: 'reuse-sku' | 'add-variant' | 'created' = 'created'
+
+    if (skuHits.length) {
+      // Found existing variant with same SKU - reuse it
+      const chosen = skuHits.find((n: any) => n?.product?.status === 'ACTIVE') || skuHits[0]
+      productId = parseNumericIdFromGid(chosen.product.id) || ''
+      variantId = parseNumericIdFromGid(chosen.id) || ''
+      inventoryItemId = parseNumericIdFromGid(chosen.inventoryItem.id) || ''
+      decision = 'reuse-sku'
+      run.add({ name: 'reuseVariant', ok: true, data: { reason: 'sku', variantId, productId } })
     } else {
-      resultMeta = {
-        action: 'reused_existing_sku'
+      // Check if we can add a variant to an existing similar product
+      // Look for products with similar title/brand
+      const searchTitle = item.title || `${item.brand_title || ''} ${item.subject || ''} ${item.card_number || ''}`.trim()
+      
+      if (searchTitle.length > 10) {
+        // Try to find similar product by title
+        const titleQuery = searchTitle.split(' ').slice(0, 3).join(' ')
+        const { ok: tok, status: tstatus, body: tbody } = await shopifyGraphQL(domain, token, `
+          query($q: String!) {
+            products(first: 5, query: $q) {
+              nodes {
+                id
+                title
+                status
+                variants(first: 20) {
+                  nodes {
+                    id
+                    sku
+                    inventoryItem { id }
+                  }
+                }
+              }
+            }
+          }`, { q: `title:*${titleQuery}*` })
+        
+        run.add({ name: 'lookupByTitle', ok: tok, status: tstatus, data: { count: tbody?.data?.products?.nodes?.length || 0 } })
+        
+        const titleHits = tok ? (tbody?.data?.products?.nodes || []) : []
+        const suitableProduct = titleHits.find((p: any) => 
+          p?.status === 'ACTIVE' && 
+          p?.variants?.nodes?.length < 20 && // Don't add to products with too many variants
+          !p?.variants?.nodes?.some((v: any) => v.sku === item.sku) // Make sure SKU doesn't already exist
+        )
+        
+        if (suitableProduct) {
+          // Add variant to existing product
+          const payload = {
+            variant: {
+              product_id: parseNumericIdFromGid(suitableProduct.id),
+              sku: item.sku,
+              barcode: item.barcode || item.sku,
+              price: item.price != null ? Number(item.price).toFixed(2) : undefined,
+              inventory_management: 'shopify',
+              inventory_policy: 'deny',
+              title: item.condition ? `${item.condition} Condition` : undefined,
+              weight: 0.1,
+              weight_unit: 'lb'
+            }
+          }
+          
+          const vr = await fetchRetry(`https://${domain}/admin/api/${API_VER}/products/${parseNumericIdFromGid(suitableProduct.id)}/variants.json`, {
+            method: 'POST',
+            headers: { 'X-Shopify-Access-Token': token, 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          })
+          const vb = await vr.json()
+          if (vr.ok) {
+            productId = String(parseNumericIdFromGid(suitableProduct.id))
+            variantId = String(vb.variant?.id)
+            inventoryItemId = String(vb.variant?.inventory_item_id)
+            decision = 'add-variant'
+            run.add({ name: 'addVariant', ok: true, data: { productId, variantId, inventoryItemId } })
+          } else {
+            console.warn(`⚠️ Failed to add variant: ${vr.status} ${JSON.stringify(vb)}`)
+          }
+        }
+      }
+      
+      // If we couldn't add variant, create new product
+      if (!productId) {
+        const payload = {
+          product: {
+            status: 'active',
+            title: item.title || `${item.brand_title || ''} ${item.subject || ''} ${item.card_number || ''}`.trim() || `Card ${item.sku}`,
+            body_html: `<p><strong>Raw Trading Card</strong></p><p>Condition: ${item.condition || 'Good'}</p><p>SKU: ${item.sku}</p>`,
+            vendor: item.brand_title || 'Trading Cards',
+            product_type: 'Trading Card',
+            tags: [
+              'raw',
+              'trading-card',
+              item.brand_title,
+              item.condition
+            ].filter(Boolean).join(', '),
+            variants: [{
+              sku: item.sku,
+              barcode: item.barcode || item.sku,
+              price: item.price != null ? Number(item.price).toFixed(2) : undefined,
+              inventory_management: 'shopify',
+              inventory_policy: 'deny',
+              weight: 0.1,
+              weight_unit: 'lb'
+            }]
+          }
+        }
+        
+        const cr = await fetchRetry(`https://${domain}/admin/api/${API_VER}/products.json`, {
+          method: 'POST', 
+          headers: { 'X-Shopify-Access-Token': token, 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        })
+        const cb = await cr.json()
+        if (!cr.ok) throw new Error(`Create failed ${cr.status}: ${JSON.stringify(cb)}`)
+        
+        productId = String(cb.product?.id)
+        variantId = String(cb.product?.variants?.[0]?.id)
+        inventoryItemId = String(cb.product?.variants?.[0]?.inventory_item_id)
+        
+        run.add({ name: 'createProduct', ok: true, data: { productId, variantId, inventoryItemId } })
       }
     }
 
-    // Parse numeric IDs for further operations
-    productId = parseNumericIdFromGid(chosen.product.id) || ''
-    variantId = parseNumericIdFromGid(chosen.id) || ''
-    inventoryItemId = parseNumericIdFromGid(chosen.inventoryItem.id) || ''
-
-    // Publish if needed
-    try {
-      await publishIfNeeded(domain, token, productId)
-      run.add({ name: 'publishIfNeeded', ok: true })
-    } catch (e: any) {
-      run.add({ name: 'publishIfNeeded', ok: false, note: e?.message })
-      throw e
+    // Set inventory quantity
+    const quantity = item.quantity || 1
+    if (quantity > 0) {
+      const { ok: iok, status: istatus } = await setInventory(domain, token, inventoryItemId, locationId, quantity)
+      run.add({ name: 'setInventory', ok: iok, status: istatus, data: { quantity, locationId, inventoryItemId } })
+      if (!iok) {
+        console.warn(`⚠️ Inventory set failed for raw item ${item.id}`)
+      }
     }
 
-    // Add inventory at selected location (key difference from graded cards)
-    try {
-      const inventoryResult = await addInventory(domain, token, inventoryItemId, String(locationId), Number(item.quantity || 1))
-      run.add({ name: 'addInventory', ok: true, data: { 
-        locationId, 
-        addedQuantity: item.quantity || 1,
-        previousLevel: inventoryResult.previousLevel,
-        newLevel: inventoryResult.newLevel 
-      } })
-      resultMeta.inventoryChange = inventoryResult
-    } catch (e: any) {
-      run.add({ name: 'addInventory', ok: false, note: e?.message })
-      throw e
-    }
-
-    // Write back IDs to intake_items with full snapshot
-    if (item.id) {
-      await supabase.from('intake_items').update({
-        shopify_product_id: productId,
-        shopify_variant_id: variantId,
-        shopify_inventory_item_id: inventoryItemId,
-        pushed_at: new Date().toISOString(),
-        shopify_sync_status: 'success',
-        last_shopify_synced_at: new Date().toISOString(),
-        last_shopify_correlation_id: run.correlationId,
-        last_shopify_location_gid: locationGid,
-        last_shopify_store_key: storeKey,
-        shopify_sync_snapshot: {
-          input: { storeKey, sku: item.sku, quantity: item.quantity || 1, locationGid, locationId },
-          store: { domain, slug },
-          result: { productId, variantId, inventoryItemId },
-          raw: {
-            decision: skuHits.length ? 'reuse-sku' : 'created',
-            skuMatches: skuHits.length
-          },
-          resultMeta,
-          steps: run.steps,
-        },
-      }).eq('id', item.id)
-    }
-
-    console.info('send.ok', { correlationId: run.correlationId, productId, variantId, locationId })
-
-    return json(200, { 
-      ok: true, 
+    console.info('raw.send.success', { 
+      correlationId: run.correlationId, 
       productId, 
       variantId, 
-      inventoryItemId,
-      locationId: String(locationId),
-      correlationId: run.correlationId,
-      decision: skuHits.length ? 'reuse-sku' : 'created',
-      productAdminUrl: `https://admin.shopify.com/store/${slug}/products/${productId}`,
-      variantAdminUrl: `https://admin.shopify.com/store/${slug}/products/${productId}/variants/${variantId}`,
-      resultMeta
+      sku: item.sku,
+      decision,
+      quantity 
     })
-  } catch (e: any) {
-    console.warn('send.fail', { correlationId: run.correlationId, message: e?.message })
-    
-    // Write partial snapshot on error
-    try {
-      const body = await req.json().catch(() => ({}))
-      if (body?.item?.id) {
-        await supabase.from('intake_items').update({
-          shopify_sync_status: 'error',
-          last_shopify_sync_error: e?.message || 'Internal error',
-          last_shopify_correlation_id: run.correlationId,
-          shopify_sync_snapshot: {
-            input: { storeKey: body?.storeKey, sku: body?.item?.sku, locationGid: body?.locationGid },
-            raw: { decision: 'error' },
-            steps: run.steps,
-            error: e?.message || 'Internal error'
-          },
-        }).eq('id', body.item.id)
+
+    return json(200, {
+      ok: true,
+      productId,
+      variantId,
+      inventoryItemId,
+      decision,
+      diagnostics: {
+        correlationId: run.correlationId,
+        storeKey,
+        domain: slug,
+        locationId,
+        sku: item.sku,
+        quantity,
+        steps: run.steps
       }
-    } catch (dbError) {
-      console.warn('Failed to update item with error:', dbError)
-    }
+    })
+
+  } catch (error: any) {
+    console.error('raw.send.error', { correlationId: run.correlationId, error: error.message })
     
-    return json(500, { ok: false, error: e?.message || 'Internal error', correlationId: run.correlationId })
+    return json(500, {
+      ok: false,
+      error: error.message || 'Internal error',
+      diagnostics: {
+        correlationId: run.correlationId,
+        steps: run.steps
+      }
+    })
   }
 })
