@@ -53,6 +53,19 @@ export function useBatchSendToShopify() {
 
   const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
+  const exponentialBackoff = async (attempt: number, baseDelay: number = 1000) => {
+    const backoffDelay = Math.min(baseDelay * Math.pow(2, attempt), 30000) // Max 30 seconds
+    const jitter = Math.random() * 1000 // Add up to 1 second of jitter
+    await delay(backoffDelay + jitter)
+  }
+
+  const isRateLimitError = (error: any): boolean => {
+    return error?.message?.includes('429') || 
+           error?.status === 429 || 
+           error?.message?.toLowerCase().includes('rate limit') ||
+           error?.message?.toLowerCase().includes('too many requests')
+  }
+
   const sendChunkedBatchToShopify = async (
     itemIds: string[],
     storeKey: "hawaii" | "las_vegas",
@@ -136,6 +149,17 @@ export function useBatchSendToShopify() {
 
           if (error) {
             console.error(`❌ [useBatchSendToShopify] Chunk ${chunkIndex + 1} error:`, error)
+            
+            // Handle rate limit errors with exponential backoff
+            if (isRateLimitError(error)) {
+              console.log(`⏳ [useBatchSendToShopify] Rate limit detected, applying exponential backoff`)
+              await exponentialBackoff(chunkIndex)
+              toast.warning(`Rate limit detected, retrying chunk ${chunkIndex + 1} with backoff...`)
+              // Retry the same chunk (decrement chunkIndex to repeat)
+              chunkIndex--
+              continue
+            }
+            
             if (config.failFast) {
               throw new Error(`Chunk ${chunkIndex + 1} failed: ${error.message}`)
             }

@@ -55,7 +55,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
   const [batchSendProgress, setBatchSendProgress] = useState({ total: 0, completed: 0, failed: 0, inProgress: false });
   const [sendingItemIds, setSendingItemIds] = useState<Set<string>>(new Set()); // Track individual item sends
   const { assignedStore, selectedLocation } = useStore();
-  const { sendBatchToShopify, isSending } = useBatchSendToShopify();
+  const { sendChunkedBatchToShopify, isSending } = useBatchSendToShopify();
 
   // Helper to format card name like "1996 POKEMON JAPANESE BASIC #150 MEWTWO-HOLO PSA 8"
   const formatCardName = (item: IntakeItem) => {
@@ -178,7 +178,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
     try {
       setSendingItemIds(prev => new Set(prev.add(item.id))); // Mark as sending
       
-      const result = await sendBatchToShopify([item.id], assignedStore as "hawaii" | "las_vegas", selectedLocation);
+      const result = await sendChunkedBatchToShopify([item.id], assignedStore as "hawaii" | "las_vegas", selectedLocation);
       
       if (result.shopify_success > 0) {
         // Optimistic UI update for immediate feedback
@@ -239,85 +239,43 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
     });
     
     try {
-      const CHUNK_SIZE = 8; // Process 8 items at a time
-      const chunks = [];
-      
-      // Create chunks of item IDs
-      for (let i = 0; i < itemsToSend.length; i += CHUNK_SIZE) {
-        chunks.push(itemsToSend.slice(i, i + CHUNK_SIZE).map(item => item.id));
-      }
-      
-      console.log(`📦 [${correlationId}] Created ${chunks.length} chunks for processing`);
-      
-      let totalCompleted = 0;
-      let totalFailed = 0;
-      
-      // Process chunks sequentially
-      for (let i = 0; i < chunks.length; i++) {
-        const chunkIds = chunks[i];
-        console.log(`🔄 [${correlationId}] Processing chunk ${i + 1}/${chunks.length} with ${chunkIds.length} items`);
-        
-        try {
-          const response = await sendBatchToShopify(
-            chunkIds,
-            assignedStore as "hawaii" | "las_vegas",
-            selectedLocation
-          );
-          
-          const chunkCompleted = response.shopify_success || 0;
-          const chunkFailed = response.shopify_errors || 0;
-          
-          totalCompleted += chunkCompleted;
-          totalFailed += chunkFailed;
-          
-          // Update progress after each chunk
+      const response = await sendChunkedBatchToShopify(
+        itemsToSend.map(item => item.id),
+        assignedStore as "hawaii" | "las_vegas",
+        selectedLocation,
+        { batchSize: 8, delayBetweenChunks: 1000, failFast: false },
+        (progress) => {
+          // Update progress using the hook's progress tracking
           setBatchSendProgress({ 
-            total: itemsToSend.length, 
-            completed: totalCompleted, 
-            failed: totalFailed, 
-            inProgress: true
-          });
-          
-          console.log(`✅ [${correlationId}] Chunk ${i + 1} completed:`, {
-            chunkSize: chunkIds.length,
-            chunkCompleted,
-            chunkFailed,
-            runningTotals: { totalCompleted, totalFailed }
-          });
-          
-        } catch (chunkError: any) {
-          console.error(`❌ [${correlationId}] Chunk ${i + 1} failed:`, chunkError);
-          totalFailed += chunkIds.length;
-          setBatchSendProgress({ 
-            total: itemsToSend.length, 
-            completed: totalCompleted, 
-            failed: totalFailed, 
-            inProgress: true
+            total: progress.totalItems, 
+            completed: progress.processedItems, 
+            failed: 0, // We'll calculate this from the final response
+            inProgress: progress.isProcessing
           });
         }
-      }
+      );
       
       // Final progress update
       setBatchSendProgress({ 
         total: itemsToSend.length, 
-        completed: totalCompleted, 
-        failed: totalFailed, 
+        completed: response.shopify_success || 0, 
+        failed: response.shopify_errors || 0, 
         inProgress: false
       });
 
-      console.log(`📊 [${correlationId}] Chunked batch send completed:`, {
-        total: itemsToSend.length,
-        completed: totalCompleted,
-        failed: totalFailed,
-        chunks: chunks.length
-      });
+      console.log(`📊 [${correlationId}] Batch send completed:`, response);
       
       // Refresh the batch view
       await fetchRecentItems();
       
       // Trigger empty lot check after successful batch send
-      if (totalCompleted > 0) {
+      if (response.shopify_success > 0) {
         window.dispatchEvent(new CustomEvent('batch:items-sent-to-inventory'));
+        toast.success(`Successfully sent ${response.shopify_success} items to Shopify!`);
+      }
+      
+      if (response.shopify_errors > 0) {
+        toast.error(`${response.shopify_errors} items failed to sync`);
       }
       
     } catch (error: any) {

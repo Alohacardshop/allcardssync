@@ -66,7 +66,7 @@ const Index = () => {
   
   const { defaultTemplate } = useTemplates('raw');
   const { assignedStore, selectedLocation } = useStore();
-  const { sendBatchToShopify, isSending } = useBatchSendToShopify();
+  const { sendChunkedBatchToShopify, isSending } = useBatchSendToShopify();
   const { queueStatus } = usePrintQueue();
 
   const fetchData = async () => {
@@ -219,91 +219,51 @@ const Index = () => {
       setActionLoading(true);
       setSendProgress({ total: itemIds.length, completed: 0, failed: 0, inProgress: true, correlationId });
 
-      const CHUNK_SIZE = 8; // Process 8 items at a time
-      const chunks = [];
-      
-      // Create chunks of item IDs
-      for (let i = 0; i < itemIds.length; i += CHUNK_SIZE) {
-        chunks.push(itemIds.slice(i, i + CHUNK_SIZE));
-      }
-      
-      console.log(`📦 [${correlationId}] Created ${chunks.length} chunks for processing`);
-      
-      let totalCompleted = 0;
-      let totalFailed = 0;
-      
-      // Process chunks sequentially
-      for (let i = 0; i < chunks.length; i++) {
-        const chunkIds = chunks[i];
-        console.log(`🔄 [${correlationId}] Processing chunk ${i + 1}/${chunks.length} with ${chunkIds.length} items`);
-        
-        try {
-          const response = await sendBatchToShopify(
-            chunkIds,
-            assignedStore as "hawaii" | "las_vegas",
-            selectedLocation
-          );
-          
-          const chunkCompleted = response.shopify_success || 0;
-          const chunkFailed = response.shopify_errors || 0;
-          
-          totalCompleted += chunkCompleted;
-          totalFailed += chunkFailed;
-          
-          // Update progress after each chunk
+      const response = await sendChunkedBatchToShopify(
+        itemIds,
+        assignedStore as "hawaii" | "las_vegas",
+        selectedLocation,
+        { batchSize: 8, delayBetweenChunks: 1000, failFast: false },
+        (progress) => {
+          // Update progress using the hook's progress tracking
           setSendProgress({ 
-            total: itemIds.length, 
-            completed: totalCompleted, 
-            failed: totalFailed, 
-            inProgress: true, 
-            correlationId 
-          });
-          
-          console.log(`✅ [${correlationId}] Chunk ${i + 1} completed:`, {
-            chunkSize: chunkIds.length,
-            chunkCompleted,
-            chunkFailed,
-            runningTotals: { totalCompleted, totalFailed }
-          });
-          
-        } catch (chunkError: any) {
-          console.error(`❌ [${correlationId}] Chunk ${i + 1} failed:`, chunkError);
-          totalFailed += chunkIds.length;
-          setSendProgress({ 
-            total: itemIds.length, 
-            completed: totalCompleted, 
-            failed: totalFailed, 
-            inProgress: true, 
+            total: progress.totalItems, 
+            completed: progress.processedItems, 
+            failed: 0, // We'll calculate this from the final response
+            inProgress: progress.isProcessing,
             correlationId 
           });
         }
-      }
+      );
       
       // Final progress update
       setSendProgress({ 
         total: itemIds.length, 
-        completed: totalCompleted, 
-        failed: totalFailed, 
+        completed: response.shopify_success || 0, 
+        failed: response.shopify_errors || 0, 
         inProgress: false, 
         correlationId 
       });
 
-      console.log(`📊 [${correlationId}] Chunked selected send completed:`, {
-        total: itemIds.length,
-        completed: totalCompleted,
-        failed: totalFailed,
-        chunks: chunks.length
-      });
+      console.log(`📊 [${correlationId}] Selected items send completed:`, response);
       
       // Clear selection and refresh, then check for empty lot closure
       setSelectedItems(new Set());
       setSelectAll(false);
       await fetchData();
       
-      // Trigger empty lot check after successful batch send
-      if (totalCompleted > 0) {
+      if (response.shopify_success > 0) {
         window.dispatchEvent(new CustomEvent('batch:items-sent-to-inventory'));
+        toast.success(`Successfully sent ${response.shopify_success} items to Shopify!`);
       }
+      
+      if (response.shopify_errors > 0) {
+        toast.error(`${response.shopify_errors} items failed to sync`);
+      }
+      await fetchData();
+      
+      // Trigger empty lot check after successful batch send was already handled above
+      // No additional code needed here
     } catch (error: any) {
       console.error(`💥 [${correlationId}] Selected send failed:`, error);
       toast.error(`Error sending items to inventory: ${error?.message || 'Unknown error'}`);
