@@ -9,6 +9,7 @@ import { Loader2, Package, ShoppingCart, DollarSign, Trash2, Archive, Award, Fil
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useTemplates } from "@/hooks/useTemplates";
 import { Navigation } from "@/components/Navigation";
+import { MobileBottomNav } from "@/components/navigation/MobileBottomNav";
 import { GradedCardIntake } from "@/components/GradedCardIntake";
 import { RawCardIntake } from "@/components/RawCardIntake";
 import { BulkCardIntake } from "@/components/BulkCardIntake";
@@ -56,6 +57,7 @@ const Index = () => {
   const [selectAll, setSelectAll] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("graded");
+  const isMobile = useIsMobile();
   const [sendProgress, setSendProgress] = useState<{
     total: number;
     completed: number;
@@ -412,7 +414,7 @@ const Index = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background pb-16 md:pb-0">
       {/* Navigation */}
       <header className="border-b bg-card/50">
         <div className="container mx-auto px-4 py-3">
@@ -420,10 +422,13 @@ const Index = () => {
         </div>
       </header>
 
+      {/* Mobile Bottom Navigation */}
+      <MobileBottomNav />
 
-      <div className="container mx-auto p-6 space-y-6">
+
+      <div className="container mx-auto px-4 py-6 space-y-6">
         {/* System Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Items</CardTitle>
@@ -481,22 +486,22 @@ const Index = () => {
 
         {/* Main Content Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="graded" className="flex items-center gap-2">
+          <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 h-auto">
+            <TabsTrigger value="graded" className="flex flex-col md:flex-row items-center gap-1 md:gap-2 py-3 md:py-2">
               <Award className="h-4 w-4" />
-              Graded Cards
+              <span className="text-xs md:text-sm">Graded</span>
             </TabsTrigger>
-            <TabsTrigger value="raw" className="flex items-center gap-2">
+            <TabsTrigger value="raw" className="flex flex-col md:flex-row items-center gap-1 md:gap-2 py-3 md:py-2">
               <FileEdit className="h-4 w-4" />
-              Raw Cards
+              <span className="text-xs md:text-sm">Raw</span>
             </TabsTrigger>
-            <TabsTrigger value="bulk" className="flex items-center gap-2">
+            <TabsTrigger value="bulk" className="flex flex-col md:flex-row items-center gap-1 md:gap-2 py-3 md:py-2">
               <Package className="h-4 w-4" />
-              Bulk Cards
+              <span className="text-xs md:text-sm">Bulk</span>
             </TabsTrigger>
-            <TabsTrigger value="batch" className="flex items-center gap-2">
+            <TabsTrigger value="batch" className="flex flex-col md:flex-row items-center gap-1 md:gap-2 py-3 md:py-2">
               <Archive className="h-4 w-4" />
-              Current Batch
+              <span className="text-xs md:text-sm">Batch</span>
             </TabsTrigger>
           </TabsList>
 
