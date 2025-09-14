@@ -1664,6 +1664,10 @@ export type Database = {
         Args: { rows: Json }
         Returns: undefined
       }
+      check_shopify_queue_health: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
       claim_next_print_job: {
         Args: { ws: string }
         Returns: {
@@ -1681,6 +1685,10 @@ export type Database = {
           tspl_body: string | null
           workstation_id: string
         }
+      }
+      cleanup_shopify_sync_queue: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
       }
       close_empty_lot_and_create_new: {
         Args: { _location_gid: string; _store_key: string }
