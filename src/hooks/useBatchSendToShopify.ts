@@ -111,9 +111,9 @@ export function useBatchSendToShopify() {
     const aggregatedResults: BatchSendResult[] = []
     let totalProcessed = 0
     let totalRejected = 0
-    let totalShopifySuccess = 0
-    let totalShopifyErrors = 0
+    let totalQueued = 0
     const allRejectedItems: Array<{ id: string; reason: string }> = []
+    const allQueuedItems: string[] = []
 
     try {
       toast.info(`Starting batch processing: ${totalChunks} chunks of ${config.batchSize} items`)
@@ -133,65 +133,64 @@ export function useBatchSendToShopify() {
         console.log(`🔄 [useBatchSendToShopify] Processing chunk ${chunkIndex + 1}/${totalChunks} with ${chunk.length} items`)
         
         try {
-          const timeoutPromise = new Promise((_, reject) => {
-            setTimeout(() => reject(new Error('Edge function timeout after 30 seconds')), 30000)
+          // Step 1: Send items to inventory (without Shopify sync)
+          const { data: inventoryData, error: inventoryError } = await supabase.rpc('send_intake_items_to_inventory', {
+            item_ids: chunk
           })
 
-          const functionPromise = supabase.functions.invoke("v2-batch-send-to-inventory", {
-            body: {
-              itemIds: chunk,
-              storeKey,
-              locationGid
-            }
-          })
-
-          const { data, error } = await Promise.race([functionPromise, timeoutPromise]) as any
-
-          if (error) {
-            console.error(`❌ [useBatchSendToShopify] Chunk ${chunkIndex + 1} error:`, error)
-            
-            // Handle rate limit errors with exponential backoff
-            if (isRateLimitError(error)) {
-              console.log(`⏳ [useBatchSendToShopify] Rate limit detected, applying exponential backoff`)
-              await exponentialBackoff(chunkIndex)
-              toast.warning(`Rate limit detected, retrying chunk ${chunkIndex + 1} with backoff...`)
-              // Retry the same chunk (decrement chunkIndex to repeat)
-              chunkIndex--
-              continue
-            }
+          if (inventoryError) {
+            console.error(`❌ [useBatchSendToShopify] Chunk ${chunkIndex + 1} inventory error:`, inventoryError)
             
             if (config.failFast) {
-              throw new Error(`Chunk ${chunkIndex + 1} failed: ${error.message}`)
+              throw new Error(`Chunk ${chunkIndex + 1} failed: ${inventoryError.message}`)
             }
             // Add failed items to rejected list
             chunk.forEach(itemId => {
-              allRejectedItems.push({ id: itemId, reason: error.message })
+              allRejectedItems.push({ id: itemId, reason: inventoryError.message })
             })
             totalRejected += chunk.length
-          } else if (!data?.ok) {
-            console.error(`❌ [useBatchSendToShopify] Chunk ${chunkIndex + 1} returned not ok:`, data)
-            if (config.failFast) {
-              throw new Error(`Chunk ${chunkIndex + 1} failed: ${data?.error || "Unknown error"}`)
-            }
-            chunk.forEach(itemId => {
-              allRejectedItems.push({ id: itemId, reason: data?.error || "Unknown error" })
-            })
-            totalRejected += chunk.length
-          } else {
-            // Success - aggregate results
-            console.log(`✅ [useBatchSendToShopify] Chunk ${chunkIndex + 1} success:`, data)
-            aggregatedResults.push(...(data.results || []))
-            totalProcessed += data.processed || 0
-            totalShopifySuccess += data.shopify_success || 0
-            totalShopifyErrors += data.shopify_errors || 0
-            if (data.rejected_items) {
-              allRejectedItems.push(...data.rejected_items)
-              totalRejected += data.rejected_items.length
-            }
-            
-            processedItems += chunk.length
-            toast.success(`Chunk ${chunkIndex + 1}/${totalChunks} completed: ${data.shopify_success || 0} items synced`)
+            continue
           }
+
+          // Step 2: Queue successful items for Shopify sync
+          const inventoryResult = inventoryData as any
+          if (inventoryResult?.processed_ids && inventoryResult.processed_ids.length > 0) {
+            console.log(`📋 [useBatchSendToShopify] Queueing ${inventoryResult.processed_ids.length} items for Shopify sync`)
+            
+            for (const itemId of inventoryResult.processed_ids) {
+              try {
+                const { error: queueError } = await supabase.rpc('queue_shopify_sync', {
+                  item_id: itemId,
+                  sync_action: 'create'
+                })
+
+                if (queueError) {
+                  console.error(`❌ [useBatchSendToShopify] Failed to queue item ${itemId}:`, queueError)
+                  allRejectedItems.push({ id: itemId, reason: `Queue failed: ${queueError.message}` })
+                  totalRejected++
+                } else {
+                  allQueuedItems.push(itemId)
+                  totalQueued++
+                }
+              } catch (queueError: any) {
+                console.error(`❌ [useBatchSendToShopify] Failed to queue item ${itemId}:`, queueError)
+                allRejectedItems.push({ id: itemId, reason: `Queue failed: ${queueError.message}` })
+                totalRejected++
+              }
+            }
+
+            totalProcessed += inventoryResult.processed_ids.length
+          }
+
+          // Handle rejected items from inventory step
+          if (inventoryResult?.rejected && inventoryResult.rejected.length > 0) {
+            allRejectedItems.push(...inventoryResult.rejected)
+            totalRejected += inventoryResult.rejected.length
+          }
+          
+          processedItems += chunk.length
+          toast.success(`Chunk ${chunkIndex + 1}/${totalChunks} completed: ${inventoryResult?.processed_ids?.length || 0} items moved to inventory`)
+          
         } catch (chunkError: any) {
           console.error(`❌ [useBatchSendToShopify] Chunk ${chunkIndex + 1} failed:`, chunkError)
           if (config.failFast) {
@@ -212,6 +211,18 @@ export function useBatchSendToShopify() {
         }
       }
 
+      // Step 3: Trigger the Shopify sync processor if we have queued items
+      if (totalQueued > 0) {
+        console.log(`🚀 [useBatchSendToShopify] Triggering Shopify sync processor for ${totalQueued} queued items`)
+        try {
+          await supabase.functions.invoke('shopify-sync-processor', { body: {} })
+          toast.info(`Started Shopify sync for ${totalQueued} items - processing in background`)
+        } catch (processorError) {
+          console.error(`⚠️ [useBatchSendToShopify] Failed to trigger sync processor:`, processorError)
+          toast.warning('Items queued for sync but processor failed to start - sync may be delayed')
+        }
+      }
+
       // Final progress update
       const finalProgress: BatchProgress = {
         currentChunk: totalChunks,
@@ -227,23 +238,22 @@ export function useBatchSendToShopify() {
       console.log(`🏁 [useBatchSendToShopify] Final summary:`, { 
         totalProcessed, 
         totalRejected, 
-        totalShopifySuccess, 
-        totalShopifyErrors 
+        totalQueued 
       })
       
-      if (totalShopifySuccess > 0) {
-        toast.success(`Batch complete! Successfully sent ${totalShopifySuccess} items to Shopify`)
+      if (totalQueued > 0) {
+        toast.success(`Batch complete! ${totalQueued} items queued for Shopify sync`)
       }
-      if (totalShopifyErrors > 0 || totalRejected > 0) {
-        toast.error(`${totalShopifyErrors + totalRejected} items failed to sync`)
+      if (totalRejected > 0) {
+        toast.error(`${totalRejected} items failed to process`)
       }
 
       return {
-        ok: totalShopifySuccess > 0 || totalProcessed > 0,
+        ok: totalQueued > 0 || totalProcessed > 0,
         processed: totalProcessed,
         rejected: totalRejected,
-        shopify_success: totalShopifySuccess,
-        shopify_errors: totalShopifyErrors,
+        shopify_success: totalQueued, // Items queued for sync
+        shopify_errors: totalRejected,
         results: aggregatedResults,
         rejected_items: allRejectedItems
       }

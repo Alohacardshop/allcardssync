@@ -31,6 +31,10 @@ port = 54326
 [functions]
 verify_jwt = true
 
+# Shopify sync processor (requires service role access)
+[functions.shopify-sync-processor]
+verify_jwt = false
+
 # SHOPIFY FUNCTIONS: All require JWT + admin/staff role verification
 [functions.shopify-delete-duplicates]
 verify_jwt = true
