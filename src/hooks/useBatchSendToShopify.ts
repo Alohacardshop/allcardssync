@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { supabase } from "@/integrations/supabase/client"
 import { toast } from "sonner"
+import { ShopifyError, RateLimitError } from "@/types/errors"
 
 export interface BatchConfig {
   batchSize: number
@@ -59,11 +60,15 @@ export function useBatchSendToShopify() {
     await delay(backoffDelay + jitter)
   }
 
-  const isRateLimitError = (error: any): boolean => {
-    return error?.message?.includes('429') || 
-           error?.status === 429 || 
-           error?.message?.toLowerCase().includes('rate limit') ||
-           error?.message?.toLowerCase().includes('too many requests')
+  const isRateLimitError = (error: ShopifyError | Error | unknown): boolean => {
+    const errorMessage = error && typeof error === 'object' && 'message' in error 
+      ? (error as { message: string }).message 
+      : String(error)
+    
+    return errorMessage.includes('429') ||
+           (error && typeof error === 'object' && 'status' in error && (error as { status: number }).status === 429) ||
+           errorMessage.toLowerCase().includes('rate limit') ||
+           errorMessage.toLowerCase().includes('too many requests')
   }
 
   const sendChunkedBatchToShopify = async (
@@ -172,9 +177,12 @@ export function useBatchSendToShopify() {
                   allQueuedItems.push(itemId)
                   totalQueued++
                 }
-              } catch (queueError: any) {
-                console.error(`❌ [useBatchSendToShopify] Failed to queue item ${itemId}:`, queueError)
-                allRejectedItems.push({ id: itemId, reason: `Queue failed: ${queueError.message}` })
+                } catch (queueError: unknown) {
+                  console.error(`❌ [useBatchSendToShopify] Failed to queue item ${itemId}:`, queueError)
+                  const errorMessage = queueError && typeof queueError === 'object' && 'message' in queueError 
+                    ? (queueError as { message: string }).message 
+                    : String(queueError)
+                allRejectedItems.push({ id: itemId, reason: `Queue failed: ${errorMessage}` })
                 totalRejected++
               }
             }
@@ -191,17 +199,23 @@ export function useBatchSendToShopify() {
           processedItems += chunk.length
           toast.success(`Chunk ${chunkIndex + 1}/${totalChunks} completed: ${inventoryResult?.processed_ids?.length || 0} items moved to inventory`)
           
-        } catch (chunkError: any) {
+        } catch (chunkError: unknown) {
           console.error(`❌ [useBatchSendToShopify] Chunk ${chunkIndex + 1} failed:`, chunkError)
           if (config.failFast) {
             throw chunkError
           }
           // Add failed items to rejected list
           chunk.forEach(itemId => {
-            allRejectedItems.push({ id: itemId, reason: chunkError.message })
+            const errorMessage = chunkError && typeof chunkError === 'object' && 'message' in chunkError 
+              ? (chunkError as { message: string }).message 
+              : String(chunkError)
+            allRejectedItems.push({ id: itemId, reason: errorMessage })
           })
           totalRejected += chunk.length
-          toast.error(`Chunk ${chunkIndex + 1}/${totalChunks} failed: ${chunkError.message}`)
+          const errorMessage = chunkError && typeof chunkError === 'object' && 'message' in chunkError 
+            ? (chunkError as { message: string }).message 
+            : String(chunkError)
+          toast.error(`Chunk ${chunkIndex + 1}/${totalChunks} failed: ${errorMessage}`)
         }
 
         // Add delay between chunks (except for the last one)

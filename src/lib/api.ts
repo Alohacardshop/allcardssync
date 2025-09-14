@@ -1,16 +1,27 @@
 import { supabase } from "@/integrations/supabase/client";
 
-export const handleApiError = (error: any, operation: string) => {
+import { APIError } from "@/types/errors"
+
+export const handleApiError = (error: APIError | Error | unknown, operation: string) => {
   if (error) {
     // Log error for debugging but avoid exposing sensitive information
     if (process.env.NODE_ENV === 'development') {
       console.error(`API Error - ${operation}:`, error);
     }
     
-    if (error.message) {
-      throw new Error(error.message);
+    // Type guard for objects with message property
+    if (error && typeof error === 'object' && 'message' in error) {
+      const errorWithMessage = error as { message: string }
+      throw new Error(errorWithMessage.message);
     }
-    throw error;
+    
+    // If it's already an Error instance
+    if (error instanceof Error) {
+      throw error;
+    }
+    
+    // Fallback for other types
+    throw new Error(String(error));
   }
 };
 

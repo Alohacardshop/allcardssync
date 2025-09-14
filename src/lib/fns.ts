@@ -12,18 +12,22 @@ export async function getCatalogSyncStatus(game: string, limit: number = 50) {
 /**
  * Parse error responses from Supabase function calls to extract server-provided error messages
  */
-export function parseFunctionError(error: any): string {
+import { APIError, SupabaseError } from "@/types/errors"
+
+export function parseFunctionError(error: APIError | SupabaseError | Error | unknown): string {
   if (!error) return 'Unknown error';
   
   // If it's already a string, return it
   if (typeof error === 'string') return error;
   
-  // Check for nested error message
-  if (error.message) {
+  // Type guard for objects with message property
+  if (error && typeof error === 'object' && 'message' in error) {
+    const errorWithMessage = error as { message: string }
+    
     // Try to parse JSON error responses from server
-    if (typeof error.message === 'string' && error.message.includes('{')) {
+    if (typeof errorWithMessage.message === 'string' && errorWithMessage.message.includes('{')) {
       try {
-        const match = error.message.match(/(\{.+\})/);
+        const match = errorWithMessage.message.match(/(\{.+\})/);
         if (match) {
           const errorData = JSON.parse(match[1]);
           if (errorData.error) {
@@ -34,12 +38,13 @@ export function parseFunctionError(error: any): string {
         // Fall back to original message
       }
     }
-    return error.message;
+    return errorWithMessage.message;
   }
   
-  // Check for direct error property
-  if (error.error) {
-    return typeof error.error === 'string' ? error.error : JSON.stringify(error.error);
+  // Type guard for objects with error property
+  if (error && typeof error === 'object' && 'error' in error) {
+    const errorWithError = error as { error: string | Record<string, unknown> }
+    return typeof errorWithError.error === 'string' ? errorWithError.error : JSON.stringify(errorWithError.error);
   }
   
   // Fall back to stringifying the whole error

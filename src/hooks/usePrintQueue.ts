@@ -3,14 +3,15 @@ import { supabase } from '@/integrations/supabase/client';
 import { useZebraNetwork } from './useZebraNetwork';
 import { LABEL_TEMPLATES } from '@/lib/templates';
 import { toast } from 'sonner';
+import { PrintJobData, PrintJobTarget } from "@/types/api"
 
 interface PrintJob {
   id: string;
   workstation_id: string;
   template_id: string | null;
   status: string;
-  data: any;
-  target: any;
+  data: PrintJobData;
+  target: PrintJobTarget;
   copies: number;
   error?: string;
   created_at: string;
@@ -65,11 +66,11 @@ export function usePrintQueue() {
   }, []);
 
   // Generate ZPL from template and data
-  const generateZPL = async (templateId: string | null, data: any): Promise<string> => {
+  const generateZPL = async (templateId: string | null, data: PrintJobData): Promise<string> => {
     // If no template specified, use a simple default
     if (!templateId) {
-      const itemData = data.intake_item_id ? await getIntakeItemData(data.intake_item_id) : data;
-      return generateSimpleLabel(itemData);
+      const itemData = data.intake_item_id ? await getIntakeItemData(data.intake_item_id as string) : data;
+      return generateSimpleLabel(itemData as PrintJobData);
     }
 
     // Get template from new label_templates_new table
@@ -80,15 +81,15 @@ export function usePrintQueue() {
       .maybeSingle();
 
     if (!template) {
-      // Fallback to simple template
-      const itemData = data.intake_item_id ? await getIntakeItemData(data.intake_item_id) : data;
-      return generateSimpleLabel(itemData);
+      // Fallback to simple template  
+      const itemData = data.intake_item_id ? await getIntakeItemData(String(data.intake_item_id)) : data;
+      return generateSimpleLabel(itemData as PrintJobData);
     }
 
     // Get intake item data if needed
     let labelData = data;
     if (data.intake_item_id) {
-      const itemData = await getIntakeItemData(data.intake_item_id);
+      const itemData = await getIntakeItemData(String(data.intake_item_id));
       labelData = { ...data, ...itemData };
     }
 
@@ -97,15 +98,15 @@ export function usePrintQueue() {
     
     // Simple placeholder replacement for common fields
     const replacements: Record<string, string> = {
-      '{{title}}': labelData.subject || labelData.brand_title || 'Item',
+      '{{title}}': String(labelData.title || labelData.subject || labelData.brand_title || 'Item'),
       '{{price}}': labelData.price ? `$${labelData.price}` : '$0.00',
-      '{{sku}}': labelData.sku || '',
-      '{{barcode}}': labelData.sku || labelData.id || '',
-      '{{quantity}}': labelData.quantity?.toString() || '1',
-      '{{grade}}': labelData.grade || '',
-      '{{card_number}}': labelData.card_number || '',
-      '{{category}}': labelData.category || '',
-      '{{lot_number}}': labelData.lot_number || ''
+      '{{sku}}': String(labelData.sku || ''),
+      '{{barcode}}': String(labelData.sku || labelData.id || ''),
+      '{{quantity}}': String(labelData.quantity || '1'),
+      '{{grade}}': String(labelData.grade || ''),
+      '{{card_number}}': String(labelData.card_number || ''),
+      '{{category}}': String(labelData.category || ''),
+      '{{lot_number}}': String(labelData.lot_number || '')
     };
 
     for (const [placeholder, value] of Object.entries(replacements)) {
@@ -127,7 +128,7 @@ export function usePrintQueue() {
   };
 
   // Generate simple fallback label
-  const generateSimpleLabel = (data: any): string => {
+  const generateSimpleLabel = (data: PrintJobData): string => {
     const title = data.subject || data.brand_title || 'Item';
     const price = data.price ? `$${data.price}` : '$0.00';
     const sku = data.sku || data.id || '';
@@ -251,7 +252,13 @@ export function usePrintQueue() {
       }
 
       const job = jobs[0];
-      await processJob(job);
+      // Convert Supabase Json types to our PrintJob type
+      const typedJob: PrintJob = {
+        ...job,
+        data: (job.data as unknown) as PrintJobData,
+        target: (job.target as unknown) as PrintJobTarget
+      };
+      await processJob(typedJob);
 
     } catch (error) {
       console.error('Error processing print queue:', error);

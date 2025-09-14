@@ -10,8 +10,10 @@ export interface ActionableError {
   }>;
 }
 
+import { NetworkError, PrinterError } from "@/types/errors"
+
 export class ZPLErrorHandler {
-  static parseNetworkError(error: any): ActionableError {
+  static parseNetworkError(error: NetworkError | Error | unknown): ActionableError {
     const errorStr = error instanceof Error ? error.message : String(error);
     
     if (errorStr.includes('ECONNREFUSED')) {
