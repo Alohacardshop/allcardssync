@@ -230,12 +230,14 @@ export function EnhancedInventoryTable({
                 
                 <TableCell className="min-w-0">
                   <CardPreview
-                    name={item.name}
-                    set={item.set}
-                    game={item.game}
-                    rarity={item.rarity}
-                    imageUrl={item.imageUrl}
-                    layout="compact"
+                    card={{
+                      id: item.id,
+                      name: item.name,
+                      set: item.set,
+                      rarity: (item.rarity as "common" | "uncommon" | "rare" | "mythic" | "special") || "common",
+                      game: item.game,
+                      imageUrl: item.imageUrl
+                    }}
                   />
                 </TableCell>
                 
@@ -272,11 +274,11 @@ export function EnhancedInventoryTable({
                 </TableCell>
                 
                 <TableCell>
-                  <PriceDisplay value={item.price} trend="neutral" />
+                  <PriceDisplay price={item.price} />
                 </TableCell>
                 
                 <TableCell>
-                  <StatusIndicator status={item.status} />
+                  <StatusIndicator status={item.status.replace('_', '-') as any} />
                 </TableCell>
                 
                 <TableCell>

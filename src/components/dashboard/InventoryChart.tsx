@@ -79,113 +79,124 @@ export function InventoryChart({ className }: InventoryChartProps) {
   const [chartType, setChartType] = useState<ChartType>("inventory")
   const [timeRange, setTimeRange] = useState<TimeRange>("30d")
 
-  const renderInventoryChart = () => (
-    <ResponsiveContainer width="100%" height={300}>
-      <AreaChart data={inventoryTrendData}>
-        <defs>
-          <linearGradient id="totalValue" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3}/>
-            <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
-          </linearGradient>
-          <linearGradient id="itemCount" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="hsl(var(--secondary))" stopOpacity={0.3}/>
-            <stop offset="95%" stopColor="hsl(var(--secondary))" stopOpacity={0}/>
-          </linearGradient>
-        </defs>
-        <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
-        <XAxis dataKey="date" />
-        <YAxis />
-        <Tooltip 
-          contentStyle={{
-            backgroundColor: "hsl(var(--card))",
-            border: "1px solid hsl(var(--border))",
-            borderRadius: "8px"
-          }}
-          formatter={(value, name) => [
-            name === "totalValue" ? `$${value.toLocaleString()}` : value,
-            name === "totalValue" ? "Total Value" : "Item Count"
-          ]}
-        />
-        <Area
-          type="monotone"
-          dataKey="totalValue"
-          stroke="hsl(var(--primary))"
-          fillOpacity={1}
-          fill="url(#totalValue)"
-          strokeWidth={2}
-        />
+  const renderInventoryChart = () => {
+    return (
+      <ResponsiveContainer width="100%" height={300}>
+        <AreaChart data={inventoryTrendData}>
+          <defs>
+            <linearGradient id="totalValue" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3}/>
+              <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
+            </linearGradient>
+            <linearGradient id="itemCount" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="hsl(var(--secondary))" stopOpacity={0.3}/>
+              <stop offset="95%" stopColor="hsl(var(--secondary))" stopOpacity={0}/>
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+          <XAxis dataKey="date" />
+          <YAxis />
+          <Tooltip 
+            contentStyle={{
+              backgroundColor: "hsl(var(--card))",
+              border: "1px solid hsl(var(--border))",
+              borderRadius: "8px"
+            }}
+            formatter={(value, name) => [
+              name === "totalValue" ? `$${value.toLocaleString()}` : value,
+              name === "totalValue" ? "Total Value" : "Item Count"
+            ]}
+          />
+          <Area
+            type="monotone"
+            dataKey="totalValue"
+            stroke="hsl(var(--primary))"
+            fillOpacity={1}
+            fill="url(#totalValue)"
+            strokeWidth={2}
+          />
+        </AreaChart>
       </ResponsiveContainer>
     )
+  }
 
-  const renderSalesChart = () => (
-    <ResponsiveContainer width="100%" height={300}>
-      <BarChart data={recentSales}>
-        <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
-        <XAxis dataKey="date" />
-        <YAxis />
-        <Tooltip 
-          contentStyle={{
-            backgroundColor: "hsl(var(--card))",
-            border: "1px solid hsl(var(--border))",
-            borderRadius: "8px"
-          }}
-          formatter={(value, name) => [
-            name === "sales" ? `$${value.toLocaleString()}` : value,
-            name === "sales" ? "Sales" : "Orders"
-          ]}
-        />
-        <Bar dataKey="sales" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+  const renderSalesChart = () => {
+    return (
+      <ResponsiveContainer width="100%" height={300}>
+        <BarChart data={recentSales}>
+          <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+          <XAxis dataKey="date" />
+          <YAxis />
+          <Tooltip 
+            contentStyle={{
+              backgroundColor: "hsl(var(--card))",
+              border: "1px solid hsl(var(--border))",
+              borderRadius: "8px"
+            }}
+            formatter={(value, name) => [
+              name === "sales" ? `$${value.toLocaleString()}` : value,
+              name === "sales" ? "Sales" : "Orders"
+            ]}
+          />
+          <Bar dataKey="sales" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+        </BarChart>
       </ResponsiveContainer>
     )
+  }
 
-  const renderConditionsChart = () => (
-    <ResponsiveContainer width="100%" height={300}>
-      <PieChart>
-        <Pie
-          data={conditionDistribution}
-          cx="50%"
-          cy="50%"
-          innerRadius={60}
-          outerRadius={120}
-          paddingAngle={2}
-          dataKey="value"
-        >
-          {conditionDistribution.map((entry, index) => (
-            <Cell key={`cell-${index}`} fill={entry.color} />
-          ))}
-        </Pie>
-        <Tooltip 
-          contentStyle={{
-            backgroundColor: "hsl(var(--card))",
-            border: "1px solid hsl(var(--border))",
-            borderRadius: "8px"
-          }}
-          formatter={(value) => [`${value}%`, "Percentage"]}
-        />
-      </PieChart>
-    </ResponsiveContainer>
-  )
-
-  const renderGamesChart = () => (
-    <ResponsiveContainer width="100%" height={300}>
-      <BarChart data={gameDistribution} layout="horizontal">
-        <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
-        <XAxis type="number" />
-        <YAxis dataKey="game" type="category" width={100} />
-        <Tooltip 
-          contentStyle={{
-            backgroundColor: "hsl(var(--card))",
-            border: "1px solid hsl(var(--border))",
-            borderRadius: "8px"
-          }}
-          formatter={(value, name) => [
-            name === "revenue" ? `$${value.toLocaleString()}` : `${value}%`,
-            name === "revenue" ? "Revenue" : "Percentage"
-          ]}
-        />
-        <Bar dataKey="value" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
-      </BarChart>
+  const renderConditionsChart = () => {
+    return (
+      <ResponsiveContainer width="100%" height={300}>
+        <PieChart>
+          <Pie
+            data={conditionDistribution}
+            cx="50%"
+            cy="50%"
+            innerRadius={60}
+            outerRadius={120}
+            paddingAngle={2}
+            dataKey="value"
+          >
+            {conditionDistribution.map((entry, index) => (
+              <Cell key={`cell-${index}`} fill={entry.color} />
+            ))}
+          </Pie>
+          <Tooltip 
+            contentStyle={{
+              backgroundColor: "hsl(var(--card))",
+              border: "1px solid hsl(var(--border))",
+              borderRadius: "8px"
+            }}
+            formatter={(value) => [`${value}%`, "Percentage"]}
+          />
+        </PieChart>
+      </ResponsiveContainer>
     )
+  }
+
+  const renderGamesChart = () => {
+    return (
+      <ResponsiveContainer width="100%" height={300}>
+        <BarChart data={gameDistribution} layout="horizontal">
+          <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+          <XAxis type="number" />
+          <YAxis dataKey="game" type="category" width={100} />
+          <Tooltip 
+            contentStyle={{
+              backgroundColor: "hsl(var(--card))",
+              border: "1px solid hsl(var(--border))",
+              borderRadius: "8px"
+            }}
+            formatter={(value, name) => [
+              name === "revenue" ? `$${value.toLocaleString()}` : `${value}%`,
+              name === "revenue" ? "Revenue" : "Percentage"
+            ]}
+          />
+          <Bar dataKey="value" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
+    )
+  }
 
   const getChartIcon = () => {
     switch (chartType) {
