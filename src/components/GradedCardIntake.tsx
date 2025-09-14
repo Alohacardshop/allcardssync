@@ -698,77 +698,8 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
                   Stop
                 </Button>
               </div>
-            )}
-        {/* PSA Certificate Input */}
-        <div className="flex gap-3 items-end">
-          <div className="flex-1">
-            <Label htmlFor="cert-input">PSA Cert # to fetch details</Label>
-            <Input
-              id="cert-input"
-              placeholder="e.g., 12345678"
-              value={certInput}
-              onChange={(e) => setCertInput(e.target.value)}
-              disabled={fetching}
-              onKeyDown={(e) => e.key === 'Enter' && !fetching && handleFetchCard('cert')}
-            />
-            <p className="text-xs text-muted-foreground mt-1">
-              SKU and barcode will be set to this certificate number on Shopify.
-            </p>
-          </div>
-          
-          {!fetching ? (
-            <Button 
-              onClick={() => handleFetchCard('cert')} 
-              disabled={!certInput.trim()}
-              className="px-8"
-            >
-              Fetch PSA
-            </Button>
-          ) : (
-            <Button 
-              variant="outline"
-              disabled
-              className="px-8"
-            >
-              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              Fetching...
-            </Button>
-          )}
+           )}
         </div>
-                  placeholder="e.g., 6038499265"
-                  value={certInput}
-                  onChange={(e) => setCertInput(e.target.value)}
-                  disabled={fetching}
-                  onKeyDown={(e) => e.key === 'Enter' && !fetching && handleFetchCard('cert')}
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  SKU and barcode will be set to this certificate number on Shopify.
-                </p>
-              </div>
-              
-              {!fetching ? (
-                <Button 
-                  onClick={() => handleFetchCard('cert')} 
-                  disabled={!certInput.trim()}
-                  className="px-8"
-                >
-                  Fetch PSA
-                </Button>
-              ) : (
-                <Button 
-                  variant="outline"
-                  disabled
-                  className="px-8"
-                >
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  Fetching...
-                </Button>
-              )}
-            </div>
-                  Looking up...
-                </Button>
-              )}
-            </div>
 
         {/* PSA Barcode Input */}
         <div className="flex gap-3 items-end">
