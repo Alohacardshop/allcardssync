@@ -47,6 +47,7 @@ import ShopifySyncQueueEnhanced from '@/components/admin/ShopifySyncQueueEnhance
 import ShopifyQueueTest from '@/components/admin/ShopifyQueueTest';
 import ShopifyQueueSettings from '@/components/admin/ShopifyQueueSettings';
 import ShopifyQueueHealth from '@/components/admin/ShopifyQueueHealth';
+import ShopifyEnvironmentSetup from '@/components/admin/ShopifyEnvironmentSetup';
 
 const Admin = () => {
   const [activeSection, setActiveSection] = useState('overview');
@@ -301,6 +302,7 @@ const Admin = () => {
                 Configure Shopify integration, inventory sync, and product management.
               </p>
             </div>
+            <ShopifyEnvironmentSetup />
             <ShopifyConfig />
             <InventorySyncSettings />
             <ShopifyTagImport />
