@@ -19,6 +19,8 @@ import { useBatchSendToShopify } from "@/hooks/useBatchSendToShopify";
 import { useStore } from "@/contexts/StoreContext";
 import { PrintQueueStatus } from "@/components/PrintQueueStatus";
 import { usePrintQueue } from "@/hooks/usePrintQueue";
+import { MobileBatchPanel } from "@/components/mobile/MobileBatchPanel";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 interface IntakeItem {
   id: string;
