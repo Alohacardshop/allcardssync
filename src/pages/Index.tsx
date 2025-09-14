@@ -65,7 +65,7 @@ const Index = () => {
   }>({ total: 0, completed: 0, failed: 0, inProgress: false });
   
   const { defaultTemplate } = useTemplates('raw');
-  const { selectedStore, selectedLocation } = useStore();
+  const { assignedStore, selectedLocation } = useStore();
   const { sendBatchToShopify, isSending } = useBatchSendToShopify();
   const { queueStatus } = usePrintQueue();
 

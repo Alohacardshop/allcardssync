@@ -232,10 +232,12 @@ export function UserAssignmentManager() {
 
   const handleStoreSelection = async (storeKey: string, checked: boolean) => {
     if (checked) {
-      // Add store
+      // Single store selection - replace any existing store
       setFormData(prev => ({
         ...prev,
-        selectedStores: [...prev.selectedStores, storeKey]
+        selectedStores: [storeKey], // Only one store allowed
+        storeLocations: {}, // Clear existing locations
+        defaultLocations: {} // Clear existing defaults
       }));
 
       // Load locations for this store
@@ -247,29 +249,20 @@ export function UserAssignmentManager() {
       setFormData(prev => ({
         ...prev,
         storeLocations: {
-          ...prev.storeLocations,
           [storeKey]: storeLocations.map(l => l.gid)
         },
         defaultLocations: {
-          ...prev.defaultLocations,
           [storeKey]: storeLocations[0]?.gid || ""
         }
       }));
     } else {
       // Remove store
-      setFormData(prev => {
-        const newStoreLocations = { ...prev.storeLocations };
-        const newDefaultLocations = { ...prev.defaultLocations };
-        delete newStoreLocations[storeKey];
-        delete newDefaultLocations[storeKey];
-
-        return {
-          ...prev,
-          selectedStores: prev.selectedStores.filter(s => s !== storeKey),
-          storeLocations: newStoreLocations,
-          defaultLocations: newDefaultLocations
-        };
-      });
+      setFormData(prev => ({
+        ...prev,
+        selectedStores: [],
+        storeLocations: {},
+        defaultLocations: {}
+      }));
     }
   };
 
@@ -320,7 +313,9 @@ export function UserAssignmentManager() {
         // Update existing user
         const storeAssignments = [];
         
-        for (const storeKey of formData.selectedStores) {
+                // User can only be assigned to one store now - use the first (and only) selected store
+                const storeKey = formData.selectedStores[0];
+                if (storeKey) {
           const storeLocations = formData.storeLocations[storeKey] || [];
           const defaultLocation = formData.defaultLocations[storeKey];
           
@@ -356,7 +351,9 @@ export function UserAssignmentManager() {
         // Create new user
         const storeAssignments = [];
         
-        for (const storeKey of formData.selectedStores) {
+                // User can only be assigned to one store now - use the first (and only) selected store  
+                const storeKey = formData.selectedStores[0];
+                if (storeKey) {
           const storeLocations = formData.storeLocations[storeKey] || [];
           const defaultLocation = formData.defaultLocations[storeKey];
           
@@ -600,7 +597,7 @@ export function UserAssignmentManager() {
                   <h3 className="text-lg font-medium">Store Access</h3>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  Select which stores this user can access. For each store, you can choose specific locations.
+                  Select the store this user can access. Each user can only be assigned to one store, but can have multiple locations within that store.
                 </p>
                 
                 <div className="space-y-4">
@@ -611,7 +608,18 @@ export function UserAssignmentManager() {
                           <Checkbox
                             id={`store-${store.key}`}
                             checked={formData.selectedStores.includes(store.key)}
-                            onCheckedChange={(checked) => handleStoreSelection(store.key, !!checked)}
+                            onCheckedChange={(checked) => {
+                              // Uncheck other stores if this one is being checked (radio button behavior)
+                              if (checked) {
+                                // First uncheck all other stores
+                                stores.forEach(otherStore => {
+                                  if (otherStore.key !== store.key && formData.selectedStores.includes(otherStore.key)) {
+                                    handleStoreSelection(otherStore.key, false);
+                                  }
+                                });
+                              }
+                              handleStoreSelection(store.key, !!checked);
+                            }}
                           />
                           <Label htmlFor={`store-${store.key}`} className="font-medium">
                             {store.name}

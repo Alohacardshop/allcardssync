@@ -75,7 +75,7 @@ const Inventory = () => {
   const [printData, setPrintData] = useState<{ blob: Blob; item: any } | null>(null);
   
   const { printZPL, selectedPrinter } = useZebraNetwork();
-  const { selectedStore, selectedLocation } = useStore();
+  const { assignedStore, selectedLocation } = useStore();
   const { sendBatchToShopify, isSending: isBatchSending } = useBatchSendToShopify();
 
   // Check admin role on mount

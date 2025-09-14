@@ -25,19 +25,15 @@ interface StoreLocationPickerProps {
 
 export function StoreLocationPicker({ className, showSetDefault = true }: StoreLocationPickerProps) {
   const { 
-    selectedStore, 
-    setSelectedStore,
+    assignedStore,
     selectedLocation, 
     setSelectedLocation,
-    availableStores, 
     availableLocations,
-    loadingStores,
     loadingLocations,
     locationsLastUpdated,
     userAssignments,
     refreshUserAssignments,
-    refreshLocations,
-    refreshStores
+    refreshLocations
   } = useStore();
 
   const [open, setOpen] = useState(false);

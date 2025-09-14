@@ -76,7 +76,7 @@ export default function ShopifyMapping() {
     description: "Manage how inventory items map to Shopify products and variants." 
   });
 
-  const { selectedStore, selectedLocation, availableLocations } = useStore();
+  const { assignedStore, selectedLocation, availableLocations } = useStore();
   const [items, setItems] = useState<MappingItem[]>([]);
   const [productGroups, setProductGroups] = useState<ProductGroup[]>([]);
   const [loading, setLoading] = useState(false);

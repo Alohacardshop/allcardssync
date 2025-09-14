@@ -36,9 +36,8 @@ export function MultiStoreLocationSelector({
   onChange 
 }: MultiStoreLocationSelectorProps) {
   const { 
-    availableStores, 
-    loadingStores,
-    refreshStores,
+    assignedStore,
+    assignedStoreName,
     userAssignments
   } = useStore();
 

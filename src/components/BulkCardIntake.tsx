@@ -21,7 +21,7 @@ const GAME_OPTIONS = [
 ];
 
 export function BulkCardIntake({ onBatchAdd }: BulkCardIntakeProps) {
-  const { selectedStore, selectedLocation } = useStore();
+  const { assignedStore, selectedLocation } = useStore();
   
   // Form state
   const [selectedGame, setSelectedGame] = useState('');
@@ -41,14 +41,14 @@ export function BulkCardIntake({ onBatchAdd }: BulkCardIntakeProps) {
         return false;
       }
 
-      if (!selectedStore || !selectedLocation) {
+      if (!assignedStore || !selectedLocation) {
         toast.error("Store and location must be selected");
         return false;
       }
 
       const userId = session.user.id;
       const userIdLast6 = userId.slice(-6);
-      const storeKeyTrimmed = selectedStore.trim();
+      const storeKeyTrimmed = assignedStore.trim();
       const locationGidTrimmed = selectedLocation.trim();
 
       // Use the diagnostic RPC for access check
@@ -121,7 +121,7 @@ export function BulkCardIntake({ onBatchAdd }: BulkCardIntakeProps) {
       const gameTitle = `${selectedGame.charAt(0).toUpperCase() + selectedGame.slice(1)} Bulk Cards`;
       
       const rpcParams = {
-        store_key_in: selectedStore!.trim(),
+        store_key_in: assignedStore!.trim(),
         shopify_location_gid_in: selectedLocation!.trim(),
         quantity_in: amount,
         brand_title_in: gameTitle,
@@ -186,7 +186,7 @@ export function BulkCardIntake({ onBatchAdd }: BulkCardIntakeProps) {
       <StoreLocationSelector />
 
       {/* Access Alert */}
-      {(!selectedStore || !selectedLocation) && (
+      {(!assignedStore || !selectedLocation) && (
         <Alert className="border-orange-200 bg-orange-50">
           <AlertCircle className="h-4 w-4 text-orange-600" />
           <AlertDescription className="text-orange-800">
@@ -260,7 +260,7 @@ export function BulkCardIntake({ onBatchAdd }: BulkCardIntakeProps) {
           {/* Add to Batch Button */}
           <Button
             onClick={handleAddBulkToBatch}
-            disabled={addingBulk || !selectedGame || !selectedStore || !selectedLocation || amount <= 0 || totalPrice <= 0 || accessCheckLoading}
+            disabled={addingBulk || !selectedGame || !assignedStore || !selectedLocation || amount <= 0 || totalPrice <= 0 || accessCheckLoading}
             className="w-full"
           >
             {addingBulk || accessCheckLoading ? (

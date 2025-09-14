@@ -14,7 +14,7 @@ interface OtherItemsEntryProps {
 }
 
 export function OtherItemsEntry({ onBatchAdd }: OtherItemsEntryProps) {
-  const { selectedStore, selectedLocation } = useStore();
+  const { assignedStore, selectedLocation } = useStore();
   
   // Form state
   const [description, setDescription] = useState('');

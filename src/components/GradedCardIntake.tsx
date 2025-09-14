@@ -64,7 +64,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
   const [abortController, setAbortController] = useState<AbortController | null>(null);
   const [showRawData, setShowRawData] = useState(false);
   const [populatedFieldsCount, setPopulatedFieldsCount] = useState(0);
-  const { selectedStore, selectedLocation, availableLocations, setSelectedLocation } = useStore();
+  const { assignedStore, selectedLocation, availableLocations, setSelectedLocation } = useStore();
 
   // Form fields that can be edited after fetching
   const [formData, setFormData] = useState({

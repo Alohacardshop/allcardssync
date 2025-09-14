@@ -82,7 +82,7 @@ export default function Batches() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [deletingBatch, setDeletingBatch] = useState<string | null>(null);
   const { toast } = useToast();
-  const { selectedStore, selectedLocation } = useStore();
+  const { assignedStore, selectedLocation } = useStore();
 
   // Check if user is admin
   useEffect(() => {

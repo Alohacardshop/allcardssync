@@ -14,7 +14,7 @@ import { useStore } from "@/contexts/StoreContext";
 import { RefreshCw, Download, Eye, Clock, Info } from "lucide-react";
 
 export function ShopifyTagImport() {
-  const { selectedStore } = useStore();
+  const { assignedStore } = useStore();
   const [gradedTags, setGradedTags] = useState("graded,Professional Sports Authenticator (PSA),PSA");
   const [rawTags, setRawTags] = useState("single");
   const [updatedSince, setUpdatedSince] = useState("");

@@ -54,7 +54,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
   const [sendingBatchToInventory, setSendingBatchToInventory] = useState(false);
   const [batchSendProgress, setBatchSendProgress] = useState({ total: 0, completed: 0, failed: 0, inProgress: false });
   const [sendingItemIds, setSendingItemIds] = useState<Set<string>>(new Set()); // Track individual item sends
-  const { selectedStore, selectedLocation } = useStore();
+  const { assignedStore, selectedLocation } = useStore();
   const { sendBatchToShopify, isSending } = useBatchSendToShopify();
 
   // Helper to format card name like "1996 POKEMON JAPANESE BASIC #150 MEWTWO-HOLO PSA 8"

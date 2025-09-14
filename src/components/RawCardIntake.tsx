@@ -112,7 +112,7 @@ const resolveVariantId = async (card: NormalizedCard): Promise<{ cardId?: string
 
 export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
   const { settings } = useRawIntakeSettings();
-  const { selectedStore, selectedLocation, availableStores, availableLocations } = useStore();
+  const { assignedStore, selectedLocation, availableLocations } = useStore();
   
   // Paste workflow state
   const [pasteText, setPasteText] = useState('');

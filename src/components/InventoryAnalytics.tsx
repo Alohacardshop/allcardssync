@@ -19,7 +19,7 @@ import { useStore } from '@/contexts/StoreContext';
 export function InventoryAnalytics() {
   // Prefetch analytics for all user stores for instant switching
   usePrefetchAnalytics();
-  const { selectedStore, selectedLocation } = useStore();
+  const { assignedStore, selectedLocation } = useStore();
   const { data: analytics, isLoading, error } = useInventoryAnalytics(
     selectedStore, 
     selectedLocation

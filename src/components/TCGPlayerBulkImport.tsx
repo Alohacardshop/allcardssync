@@ -39,7 +39,7 @@ export const TCGPlayerBulkImport = () => {
   const [items, setItems] = useState<TCGPlayerItem[]>([]);
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState(0);
-  const { selectedStore, selectedLocation } = useStore();
+  const { assignedStore, selectedLocation } = useStore();
   const batchId = uuidv4(); // Generate a unique batch ID for this import session
 
   // Handle CSV parsing results

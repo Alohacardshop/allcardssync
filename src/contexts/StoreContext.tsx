@@ -16,11 +16,9 @@ interface Location {
 }
 
 interface StoreContextType {
-  // Store management
-  selectedStore: string | null;
-  setSelectedStore: (storeKey: string | null) => void;
-  availableStores: Store[];
-  loadingStores: boolean;
+  // Auto-assigned store (single store per user)
+  assignedStore: string | null;
+  assignedStoreName: string | null;
   
   // Location management
   selectedLocation: string | null;
@@ -42,7 +40,6 @@ interface StoreContextType {
   // Actions
   refreshUserAssignments: () => Promise<void>;
   refreshLocations: () => Promise<void>;
-  refreshStores: () => Promise<void>;
 }
 
 const StoreContext = createContext<StoreContextType | null>(null);
@@ -60,11 +57,10 @@ interface StoreProviderProps {
 }
 
 export function StoreProvider({ children }: StoreProviderProps) {
-  const [selectedStore, setSelectedStore] = useState<string | null>(null);
+  const [assignedStore, setAssignedStore] = useState<string | null>(null);
+  const [assignedStoreName, setAssignedStoreName] = useState<string | null>(null);
   const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
-  const [availableStores, setAvailableStores] = useState<Store[]>([]);
   const [availableLocations, setAvailableLocations] = useState<Location[]>([]);
-  const [loadingStores, setLoadingStores] = useState(false);
   const [loadingLocations, setLoadingLocations] = useState(false);
   const [locationsLastUpdated, setLocationsLastUpdated] = useState<Date | null>(null);
   const [locationsCache, setLocationsCache] = useState<Record<string, Location[]>>({});
@@ -145,46 +141,36 @@ export function StoreProvider({ children }: StoreProviderProps) {
       console.log("StoreContext: Loaded assignments:", assignments);
       setUserAssignments(assignments || []);
 
-      // Set default store/location from user assignments
-      const defaultAssignment = assignments?.find(a => a.is_default);
-      if (defaultAssignment) {
-        console.log("StoreContext: Found default assignment:", defaultAssignment);
-        setSelectedStore(defaultAssignment.store_key);
+      // Auto-assign to user's single store (with new constraint, users can only have one store)
+      if (assignments && assignments.length > 0) {
+        const userAssignment = assignments[0]; // Should only be one store now
+        console.log("StoreContext: Auto-assigning to user's store:", userAssignment);
         
-        // Auto-load locations for the default store FIRST
-        const loadedDefaultLocs = await autoLoadLocations(defaultAssignment.store_key);
+        // Get store name from database
+        const { data: storeData } = await supabase
+          .from("shopify_stores")
+          .select("name")
+          .eq("key", userAssignment.store_key)
+          .single();
         
-        // Then set the location after locations are loaded
-        setSelectedLocation(defaultAssignment.location_gid);
+        setAssignedStore(userAssignment.store_key);
+        setAssignedStoreName(storeData?.name || userAssignment.store_key);
         
-        const defaultDisplayName = defaultAssignment.location_name 
-          || loadedDefaultLocs?.find(l => l.gid === defaultAssignment.location_gid)?.name 
-          || defaultAssignment.store_key;
+        // Auto-load locations for the assigned store
+        const loadedLocs = await autoLoadLocations(userAssignment.store_key);
         
-        toast({
-          title: "Default store loaded",
-          description: `Using ${defaultDisplayName}`,
-          variant: "default",
-        });
-      } else if (assignments && assignments.length > 0) {
-        // If no default, use the first assignment
-        const firstAssignment = assignments[0];
-        console.log("StoreContext: No default found, using first assignment:", firstAssignment);
-        setSelectedStore(firstAssignment.store_key);
+        // Set default location or first available
+        const defaultAssignment = assignments.find(a => a.is_default);
+        const locationToSelect = defaultAssignment?.location_gid || assignments[0].location_gid;
+        setSelectedLocation(locationToSelect);
         
-        // Auto-load locations for the selected store FIRST
-        const loadedLocs = await autoLoadLocations(firstAssignment.store_key);
-        
-        // Then set the location after locations are loaded
-        setSelectedLocation(firstAssignment.location_gid);
-        
-        const firstDisplayName = firstAssignment.location_name 
-          || loadedLocs?.find(l => l.gid === firstAssignment.location_gid)?.name 
-          || firstAssignment.store_key;
+        const locationDisplayName = defaultAssignment?.location_name 
+          || loadedLocs?.find(l => l.gid === locationToSelect)?.name 
+          || "your location";
         
         toast({
           title: "Store loaded",
-          description: `Please set ${firstDisplayName} as default for faster access`,
+          description: `Using ${storeData?.name || userAssignment.store_key} - ${locationDisplayName}`,
           variant: "default",
         });
       } else {
@@ -209,44 +195,18 @@ export function StoreProvider({ children }: StoreProviderProps) {
     await loadUserData();
   };
 
-  // Load available stores function
-  const loadStores = async () => {
-    setLoadingStores(true);
-    try {
-      const { data } = await supabase
-        .from("shopify_stores")
-        .select("key, name, vendor")
-        .order("name");
-      
-      setAvailableStores(data || []);
-    } catch (error) {
-      console.error("Error loading stores:", error);
-    } finally {
-      setLoadingStores(false);
-    }
-  };
-
-  // Refresh stores function
-  const refreshStores = async () => {
-    await loadStores();
-  };
-
-  // Load stores on mount
-  useEffect(() => {
-    loadStores();
-  }, []);
+  // No need to load all stores anymore - users are auto-assigned to their single store
 
   // Refresh data when auth state changes
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
         loadUserData();
-        loadStores();
       }
       if (event === "SIGNED_OUT") {
-        setSelectedStore(null);
+        setAssignedStore(null);
+        setAssignedStoreName(null);
         setSelectedLocation(null);
-        setAvailableStores([]);
         setAvailableLocations([]);
         setUserAssignments([]);
         setIsAdmin(false);
@@ -256,16 +216,16 @@ export function StoreProvider({ children }: StoreProviderProps) {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Load cached locations when store changes (no automatic refresh)
+  // Load cached locations when assigned store changes (no automatic refresh)
   useEffect(() => {
-    if (!selectedStore) {
+    if (!assignedStore) {
       setAvailableLocations([]);
       setSelectedLocation(null);
       return;
     }
 
     // Use cached locations if available
-    const cached = locationsCache[selectedStore];
+    const cached = locationsCache[assignedStore];
     if (cached) {
       setAvailableLocations(cached);
       
@@ -274,7 +234,7 @@ export function StoreProvider({ children }: StoreProviderProps) {
       if (selectedLocation && !cached.some(loc => loc.gid === selectedLocation)) {
         // Check if this might be a default location that's valid but not yet loaded
         const hasMatchingAssignment = userAssignments.some(
-          a => a.store_key === selectedStore && a.location_gid === selectedLocation
+          a => a.store_key === assignedStore && a.location_gid === selectedLocation
         );
         
         // Only clear if we don't have a matching assignment
@@ -287,21 +247,21 @@ export function StoreProvider({ children }: StoreProviderProps) {
       setAvailableLocations([]);
       // Don't clear selectedLocation here if user assignments indicate it should be valid
       const hasMatchingAssignment = userAssignments.some(
-        a => a.store_key === selectedStore && a.location_gid === selectedLocation
+        a => a.store_key === assignedStore && a.location_gid === selectedLocation
       );
       
       if (!hasMatchingAssignment) {
         setSelectedLocation(null);
       }
     }
-  }, [selectedStore, locationsCache, userAssignments]); // Removed selectedLocation from deps to prevent loop
+  }, [assignedStore, locationsCache, userAssignments]); // Removed selectedLocation from deps to prevent loop
 
   // Manual location refresh function
   const refreshLocations = async () => {
-    if (!selectedStore) {
+    if (!assignedStore) {
       toast({
-        title: "No store selected",
-        description: "Please select a store first",
+        title: "No store assigned",
+        description: "Please contact an administrator to assign you to a store",
         variant: "destructive",
       });
       return;
@@ -310,7 +270,7 @@ export function StoreProvider({ children }: StoreProviderProps) {
     setLoadingLocations(true);
     try {
       const { data, error } = await supabase.functions.invoke("shopify-locations", {
-        body: { storeKey: selectedStore }
+        body: { storeKey: assignedStore }
       });
       
       if (error) throw error;
@@ -323,14 +283,14 @@ export function StoreProvider({ children }: StoreProviderProps) {
         }));
         
         // Update cache and available locations
-        setLocationsCache(prev => ({ ...prev, [selectedStore]: locations }));
+        setLocationsCache(prev => ({ ...prev, [assignedStore]: locations }));
         setAvailableLocations(locations);
         setLocationsLastUpdated(new Date());
         
         // Show success message
         toast({
           title: "Locations refreshed",
-          description: `Found ${locations.length} location${locations.length !== 1 ? 's' : ''} for ${selectedStore}`,
+          description: `Found ${locations.length} location${locations.length !== 1 ? 's' : ''} for ${assignedStoreName || assignedStore}`,
           variant: "default",
         });
         
@@ -359,20 +319,15 @@ export function StoreProvider({ children }: StoreProviderProps) {
   };
 
   const contextValue: StoreContextType = {
-    selectedStore,
-    setSelectedStore,
-    // Show all stores to admins and staff, or only assigned stores to regular users
-    availableStores: (isAdmin || isStaff) ? availableStores : availableStores.filter(store => 
-      userAssignments.some(assignment => assignment.store_key === store.key)
-    ),
-    loadingStores,
+    assignedStore,
+    assignedStoreName,
     selectedLocation,
     setSelectedLocation,
     // Show locations filtered by assignments for non-admins/non-staff
     availableLocations: (isAdmin || isStaff)
       ? availableLocations 
       : availableLocations.filter(loc => 
-          userAssignments.some(a => a.store_key === selectedStore && a.location_gid === loc.gid)
+          userAssignments.some(a => a.store_key === assignedStore && a.location_gid === loc.gid)
         ),
     loadingLocations,
     locationsLastUpdated,
@@ -381,7 +336,6 @@ export function StoreProvider({ children }: StoreProviderProps) {
     userAssignments,
     refreshUserAssignments,
     refreshLocations,
-    refreshStores,
   };
 
   return (

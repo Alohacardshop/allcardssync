@@ -18,7 +18,7 @@ export function LocationSelector({ className }: LocationSelectorProps) {
     availableLocations, 
     loadingLocations,
     locationsLastUpdated,
-    selectedStore,
+    assignedStore,
     isAdmin,
     userAssignments,
     refreshUserAssignments,

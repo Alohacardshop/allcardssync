@@ -39,7 +39,7 @@ export const PSABulkImport = () => {
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState(0);
   const [manualInput, setManualInput] = useState('');
-  const { selectedStore, selectedLocation, availableLocations } = useStore();
+  const { assignedStore, selectedLocation, availableLocations } = useStore();
   const batchId = uuidv4(); // Generate a unique batch ID for this import session
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {

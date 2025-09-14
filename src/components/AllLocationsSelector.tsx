@@ -28,7 +28,7 @@ export function AllLocationsSelector({
   onValueChange, 
   placeholder = "Select location" 
 }: AllLocationsSelectorProps) {
-  const { setSelectedStore } = useStore();
+  const { assignedStore } = useStore();
   const [locations, setLocations] = useState<LocationOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
