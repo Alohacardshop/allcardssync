@@ -55,6 +55,7 @@ const Inventory = () => {
   const [syncDetailsRow, setSyncDetailsRow] = useState<any>(null);
   const [showPrinterDialog, setShowPrinterDialog] = useState(false);
   const [printData, setPrintData] = useState<{ blob: Blob; item: any } | null>(null);
+  const [removingFromShopify, setRemovingFromShopify] = useState(false);
   
   const { printZPL, selectedPrinter } = useZebraNetwork();
   const { assignedStore, selectedLocation } = useStore();
@@ -373,6 +374,87 @@ const Inventory = () => {
     setSelectedItems(new Set());
   }, []);
 
+  const handleRemoveFromShopify = useCallback(async (mode: 'delete') => {
+    if (!selectedItemForRemoval) return;
+    
+    setRemovingFromShopify(true);
+    const items = Array.isArray(selectedItemForRemoval) ? selectedItemForRemoval : [selectedItemForRemoval];
+    
+    try {
+      const results = await Promise.allSettled(
+        items.map(async (item) => {
+          // Determine item type for appropriate edge function
+          const itemType = item.type || (item.psa_cert || item.grade ? 'Graded' : 'Raw');
+          const functionName = itemType === 'Graded' ? 'v2-shopify-remove-graded' : 'v2-shopify-remove-raw';
+          
+          // Call the appropriate Shopify removal edge function
+          const { data, error } = await supabase.functions.invoke(functionName, {
+            body: {
+              storeKey: item.store_key,
+              productId: item.shopify_product_id,
+              sku: item.sku,
+              locationGid: item.shopify_location_gid,
+              itemId: item.id,
+              certNumber: item.psa_cert,
+              quantity: 1
+            }
+          });
+
+          if (error) {
+            throw new Error(`Failed to remove ${item.sku}: ${error.message}`);
+          }
+
+          if (!data?.ok) {
+            throw new Error(`Failed to remove ${item.sku}: ${data?.error || 'Unknown error'}`);
+          }
+
+          // Update local database to mark as deleted
+          const { error: updateError } = await supabase
+            .from('intake_items')
+            .update({ 
+              deleted_at: new Date().toISOString(),
+              deleted_reason: 'Removed from Shopify via inventory management',
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', item.id);
+
+          if (updateError) {
+            console.error('Failed to update local database:', updateError);
+            // Don't throw here as Shopify removal was successful
+          }
+
+          return item;
+        })
+      );
+
+      // Process results
+      const successful = results.filter(r => r.status === 'fulfilled').length;
+      const failed = results.filter(r => r.status === 'rejected');
+
+      if (successful > 0) {
+        toast.success(
+          `Successfully removed ${successful} item${successful > 1 ? 's' : ''} from Shopify`
+        );
+      }
+
+      if (failed.length > 0) {
+        const firstError = (failed[0] as PromiseRejectedResult).reason;
+        toast.error(`Failed to remove ${failed.length} item${failed.length > 1 ? 's' : ''}: ${firstError.message}`);
+      }
+
+      // Refresh inventory
+      fetchItems(0, true);
+      
+    } catch (error: any) {
+      console.error('Error removing from Shopify:', error);
+      toast.error(`Failed to remove items: ${error.message}`);
+    } finally {
+      setRemovingFromShopify(false);
+      setShowRemovalDialog(false);
+      setSelectedItemForRemoval(null);
+    }
+  }, [selectedItemForRemoval, fetchItems]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
@@ -535,13 +617,13 @@ const Inventory = () => {
         {/* Dialogs */}
         <ShopifyRemovalDialog
           isOpen={showRemovalDialog}
-          onClose={() => setShowRemovalDialog(false)}
-          items={Array.isArray(selectedItemForRemoval) ? selectedItemForRemoval : selectedItemForRemoval ? [selectedItemForRemoval] : []}
-          loading={false}
-          onConfirm={() => {
+          onClose={() => {
             setShowRemovalDialog(false);
-            fetchItems(0, true);
+            setSelectedItemForRemoval(null);
           }}
+          items={Array.isArray(selectedItemForRemoval) ? selectedItemForRemoval : selectedItemForRemoval ? [selectedItemForRemoval] : []}
+          loading={removingFromShopify}
+          onConfirm={handleRemoveFromShopify}
         />
 
         {syncDetailsRow && (
