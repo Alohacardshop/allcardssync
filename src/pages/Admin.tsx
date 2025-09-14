@@ -43,6 +43,7 @@ import { InventorySyncSettings } from '@/components/admin/InventorySyncSettings'
 import { ShopifyTagImport } from '@/components/admin/ShopifyTagImport';
 import { PSAApiSettings } from '@/components/admin/PSAApiSettings';
 import ShopifySyncQueue from '@/components/admin/ShopifySyncQueue';
+import ShopifySyncQueueEnhanced from '@/components/admin/ShopifySyncQueueEnhanced';
 
 const Admin = () => {
   const [activeSection, setActiveSection] = useState('overview');
@@ -62,6 +63,13 @@ const Admin = () => {
       icon: ShoppingCart,
       description: 'Shopify integration and inventory sync',
       url: '#stores'
+    },
+    {
+      id: 'queue',
+      title: 'Shopify Queue',
+      icon: Package,
+      description: 'Monitor and manage sync queue',
+      url: '#queue'
     },
     {
       id: 'catalog',
@@ -246,10 +254,14 @@ const Admin = () => {
               </p>
             </div>
             <ShopifyConfig />
-            <ShopifySyncQueue />
             <InventorySyncSettings />
             <ShopifyTagImport />
           </div>
+        );
+
+      case 'queue':
+        return (
+          <ShopifySyncQueueEnhanced />
         );
 
       case 'catalog':
