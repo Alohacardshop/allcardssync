@@ -11,10 +11,7 @@ import { Settings, Database, ShoppingCart, Search, ExternalLink, RotateCcw, Load
 import { Navigation } from '@/components/Navigation';
 import { ShopifyConfig } from '@/components/admin/ShopifyConfig';
 import TCGDatabaseSettings from '@/components/admin/TCGDatabaseSettings';
-import { SystemHealthCard } from '@/components/admin/SystemHealthCard';
 import { SystemLogsViewer } from '@/components/admin/SystemLogsViewer';
-import { TCGHealthCheck } from '@/components/admin/TCGHealthCheck';
-import { PricingJobsMonitor } from '@/components/admin/PricingJobsMonitor';
 import { UserAssignmentManager } from '@/components/UserAssignmentManager';
 import { RawIntakeSettings } from '@/components/admin/RawIntakeSettings';
 import CatalogTab from '@/components/admin/CatalogTab';
@@ -85,11 +82,27 @@ const Admin = () => {
           </TabsList>
 
           <TabsContent value="overview" className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              <SystemHealthCard />
-              <TCGHealthCheck />
-              <PricingJobsMonitor />
-            </div>
+            <Card>
+              <CardHeader>
+                <CardTitle>Admin Dashboard Overview</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <h3 className="font-medium">Shopify Integration</h3>
+                    <p className="text-sm text-muted-foreground">Manage store connections and product syncing</p>
+                  </div>
+                  <div className="space-y-2">
+                    <h3 className="font-medium">Database Settings</h3>
+                    <p className="text-sm text-muted-foreground">Configure TCG data and intake settings</p>
+                  </div>
+                  <div className="space-y-2">
+                    <h3 className="font-medium">User Management</h3>
+                    <p className="text-sm text-muted-foreground">Assign users to stores and locations</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="shopify" className="space-y-4">
