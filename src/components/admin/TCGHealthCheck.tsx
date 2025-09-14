@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle, XCircle, Loader2 } from "lucide-react";
-import { tcgSupabase, getCachedPricingViaDB, updateVariantPricing, PricingResponse } from "@/lib/tcg-supabase";
+import { tcgSupabase, getCachedPricingViaDB, updateVariantPricing, PricingResponse } from "@/integrations/supabase/client";
 
 export function TCGHealthCheck() {
   const [cardId, setCardId] = useState("");

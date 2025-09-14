@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import { tcgLjyClient, ExternalGame, ExternalSet, ExternalCard, ExternalPrice, SearchFilters } from '@/integrations/supabase/tcgLjyClient';
+import { tcgLjyClient, ExternalGame, ExternalSet, ExternalCard, ExternalPrice, SearchFilters } from '@/integrations/supabase/client';
 
 // Games hook
 export const useExternalGames = () => {

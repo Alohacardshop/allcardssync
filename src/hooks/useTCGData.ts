@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { tcgSupabase, Game, Set, Card, SearchResult, PopularCard, PricingData } from '@/lib/tcg-supabase';
+import { tcgSupabase, Game, Set, Card, SearchResult, PopularCard, PricingData } from '@/integrations/supabase/client';
 
 // Get all games
 export function useGames() {
@@ -121,7 +121,7 @@ export function useCard(cardId?: string) {
 // Get card pricing - use our proxy
 export async function fetchCardPricing(cardId: string, condition?: string, printing?: string, refresh = false): Promise<PricingData> {
   try {
-    const { getCachedPricingViaDB, updateVariantPricing } = await import('@/lib/tcg-supabase');
+    const { getCachedPricingViaDB, updateVariantPricing } = await import('@/integrations/supabase/client');
     
     // Use cached DB read by default, edge function for refresh
     return refresh 

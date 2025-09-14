@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Clock, TrendingUp, Database, Activity } from "lucide-react";
-import { tcgSupabase } from "@/lib/tcg-supabase";
+import { tcgSupabase } from "@/integrations/supabase/client";
 import { usePollingWithCircuitBreaker } from "@/hooks/usePollingWithCircuitBreaker";
 
 interface PricingJobRun {

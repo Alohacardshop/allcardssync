@@ -9,7 +9,7 @@ import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Search, Code, Copy } from 'lucide-react';
 import { useExternalGames, useExternalCardSearch, useExternalCardPrices, useExternalRealtime, useExternalRarities, getExternalCardById, getExternalLatestPrice } from '@/hooks/useExternalTCG';
-import { ExternalCard } from '@/integrations/supabase/tcgLjyClient';
+import { ExternalCard } from '@/integrations/supabase/client';
 import { useRawIntakeSettings } from '@/hooks/useRawIntakeSettings';
 import { toast } from 'sonner';
 

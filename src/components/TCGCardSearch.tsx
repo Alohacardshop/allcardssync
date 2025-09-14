@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { tcgSupabase, SearchResult } from "@/lib/tcg-supabase";
+import { tcgSupabase, SearchResult } from "@/integrations/supabase/client";
 import { useGames, useCardSearch } from "@/hooks/useTCGData";
 import { toast } from "sonner";
 import { Search } from "lucide-react";

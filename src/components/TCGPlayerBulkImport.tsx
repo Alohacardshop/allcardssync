@@ -12,7 +12,7 @@ import { useStore } from "@/contexts/StoreContext";
 import { v4 as uuidv4 } from 'uuid';
 import { generateSKU, generateTCGSKU } from '@/lib/sku';
 import { fetchCardPricing } from '@/hooks/useTCGData';
-import { tcgSupabase } from '@/lib/tcg-supabase';
+import { tcgSupabase } from '@/integrations/supabase/client';
 import { CsvPasteArea } from '@/components/csv/CsvPasteArea';
 import { NormalizedCard } from '@/lib/csv/normalize';
 

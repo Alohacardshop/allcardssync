@@ -17,7 +17,7 @@ import { parseSmartTcgplayerCsv, type SmartParseResult } from '@/lib/csv/smartTc
 import { NormalizedCard } from '@/lib/csv/normalize';
 import { generateSKU, generateTCGSKU } from '@/lib/sku';
 import { fetchCardPricing } from '@/hooks/useTCGData';
-import { tcgSupabase } from '@/lib/tcg-supabase';
+import { tcgSupabase } from '@/integrations/supabase/client';
 import { useRawIntakeSettings } from '@/hooks/useRawIntakeSettings';
 
 interface RawCardWithPricing extends NormalizedCard {
