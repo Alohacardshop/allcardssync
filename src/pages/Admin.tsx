@@ -44,6 +44,7 @@ import { ShopifyTagImport } from '@/components/admin/ShopifyTagImport';
 import { PSAApiSettings } from '@/components/admin/PSAApiSettings';
 import ShopifySyncQueue from '@/components/admin/ShopifySyncQueue';
 import ShopifySyncQueueEnhanced from '@/components/admin/ShopifySyncQueueEnhanced';
+import ShopifyQueueTest from '@/components/admin/ShopifyQueueTest';
 
 const Admin = () => {
   const [activeSection, setActiveSection] = useState('overview');
@@ -256,6 +257,7 @@ const Admin = () => {
             <ShopifyConfig />
             <InventorySyncSettings />
             <ShopifyTagImport />
+            <ShopifyQueueTest />
           </div>
         );
 
