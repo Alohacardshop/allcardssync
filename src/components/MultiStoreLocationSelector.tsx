@@ -3,12 +3,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useStore } from "@/contexts/StoreContext";
 import { 
-  Store, 
   MapPin, 
   Search, 
   RefreshCw, 
@@ -17,24 +15,24 @@ import {
   CheckSquare
 } from "lucide-react";
 
-interface SelectedStoreLocation {
+interface SelectedLocation {
   storeKey: string;
   storeName: string;
   locationGid: string;
   locationName: string;
 }
 
-interface MultiStoreLocationSelectorProps {
+interface LocationSelectorProps {
   className?: string;
-  selectedItems: SelectedStoreLocation[];
-  onChange: (items: SelectedStoreLocation[]) => void;
+  selectedItems: SelectedLocation[];
+  onChange: (items: SelectedLocation[]) => void;
 }
 
 export function MultiStoreLocationSelector({ 
   className, 
   selectedItems, 
   onChange 
-}: MultiStoreLocationSelectorProps) {
+}: LocationSelectorProps) {
   const {
     assignedStore,
     assignedStoreName,
@@ -42,40 +40,28 @@ export function MultiStoreLocationSelector({
   } = useStore();
 
   const [open, setOpen] = useState(false);
-  const [storeSearch, setStoreSearch] = useState("");
   const [locationSearch, setLocationSearch] = useState("");
-  const [selectedStoreKey, setSelectedStoreKey] = useState<string>("");
-  const [storeLocations, setStoreLocations] = useState<any[]>([]);
+  const [locations, setLocations] = useState<any[]>([]);
   const [loadingLocations, setLoadingLocations] = useState(false);
 
-  // Since we now only support single store per user, we'll disable store selection
-  const filteredStores: any[] = [];
+  const filteredLocations = locations.filter(location =>
+    location.name.toLowerCase().includes(locationSearch.toLowerCase())
+  );
 
-  const filteredLocations = selectedStoreKey 
-    ? storeLocations.filter(location =>
-        location.name.toLowerCase().includes(locationSearch.toLowerCase())
-      )
-    : [];
-
-  const isStoreLocationSelected = (storeKey: string, locationGid: string) => {
-    return selectedItems.some(item => 
-      item.storeKey === storeKey && item.locationGid === locationGid
-    );
+  const isLocationSelected = (locationGid: string) => {
+    return selectedItems.some(item => item.locationGid === locationGid);
   };
 
-  const handleStoreLocationToggle = (storeKey: string, locationGid: string) => {
-    // Simplified since users can only have one store now
-    const location = storeLocations.find(l => l.gid === locationGid);
+  const handleLocationToggle = (locationGid: string) => {
+    const location = locations.find(l => l.gid === locationGid);
     
     if (!assignedStore || !location) return;
 
-    const isSelected = isStoreLocationSelected(storeKey, locationGid);
+    const isSelected = isLocationSelected(locationGid);
     
     if (isSelected) {
       // Remove the selection
-      onChange(selectedItems.filter(item => 
-        !(item.storeKey === storeKey && item.locationGid === locationGid)
-      ));
+      onChange(selectedItems.filter(item => item.locationGid !== locationGid));
     } else {
       // Add the selection
       onChange([...selectedItems, {
@@ -87,15 +73,14 @@ export function MultiStoreLocationSelector({
     }
   };
 
-  const handleSelectAllForStore = (storeKey: string) => {
-    if (storeKey !== assignedStore) return;
-    const newSelections: any[] = [];
+  const handleSelectAll = () => {
+    const newSelections: SelectedLocation[] = [];
     
-    storeLocations.forEach(location => {
-      if (!isStoreLocationSelected(storeKey, location.gid)) {
+    locations.forEach(location => {
+      if (!isLocationSelected(location.gid)) {
         newSelections.push({
-          storeKey: assignedStore,
-          storeName: assignedStoreName || assignedStore,
+          storeKey: assignedStore!,
+          storeName: assignedStoreName || assignedStore!,
           locationGid: location.gid,
           locationName: location.name
         });
@@ -106,18 +91,14 @@ export function MultiStoreLocationSelector({
   };
 
   const handleSelectAllAssigned = () => {
-    const allAssigned: any[] = [];
+    const allAssigned: SelectedLocation[] = [];
     
     userAssignments.forEach(assignment => {
       if (assignment.store_key !== assignedStore) return;
 
       if (assignment.location_gid) {
-        // Specific location assignment - find in current store locations if this is the selected store
-        let location = null;
-        if (assignment.store_key === selectedStoreKey) {
-          location = storeLocations.find(l => l.gid === assignment.location_gid);
-        }
-        if (location && !isStoreLocationSelected(assignment.store_key, assignment.location_gid)) {
+        const location = locations.find(l => l.gid === assignment.location_gid);
+        if (location && !isLocationSelected(assignment.location_gid)) {
           allAssigned.push({
             storeKey: assignment.store_key,
             storeName: assignedStoreName || assignment.store_key,
@@ -131,21 +112,21 @@ export function MultiStoreLocationSelector({
     onChange([...selectedItems, ...allAssigned]);
   };
 
-  const removeSelection = (storeKey: string, locationGid: string) => {
-    onChange(selectedItems.filter(item => 
-      !(item.storeKey === storeKey && item.locationGid === locationGid)
-    ));
+  const removeSelection = (locationGid: string) => {
+    onChange(selectedItems.filter(item => item.locationGid !== locationGid));
   };
 
   const clearAll = () => {
     onChange([]);
   };
 
-  const loadLocationsForStore = async (storeKey: string) => {
+  const loadLocations = async () => {
+    if (!assignedStore) return;
+    
     setLoadingLocations(true);
     try {
       const { data, error } = await supabase.functions.invoke("shopify-locations", {
-        body: { storeKey }
+        body: { storeKey: assignedStore }
       });
       
       if (error) throw error;
@@ -156,31 +137,28 @@ export function MultiStoreLocationSelector({
           name: loc.name,
           gid: `gid://shopify/Location/${loc.id}`
         }));
-        setStoreLocations(locations);
+        setLocations(locations);
       } else {
         throw new Error(data?.error || "Failed to load locations");
       }
     } catch (error) {
       console.error("Error loading locations:", error);
-      setStoreLocations([]);
+      setLocations([]);
     } finally {
       setLoadingLocations(false);
     }
   };
 
-  const handleStoreSelect = (storeKey: string) => {
-    setSelectedStoreKey(storeKey);
-    setLocationSearch("");
-    setStoreLocations([]);
-    // Load locations for the selected store
-    loadLocationsForStore(storeKey);
+  const refreshLocations = () => {
+    loadLocations();
   };
 
-  const refreshLocationsForSelectedStore = () => {
-    if (selectedStoreKey) {
-      loadLocationsForStore(selectedStoreKey);
+  // Auto-load locations when modal opens
+  useEffect(() => {
+    if (open && assignedStore) {
+      loadLocations();
     }
-  };
+  }, [open, assignedStore]);
 
   return (
     <div className={className}>
@@ -192,7 +170,6 @@ export function MultiStoreLocationSelector({
           >
             <div className="flex items-start gap-3 text-left">
               <div className="flex flex-col gap-1 mt-1">
-                <Store className="h-4 w-4 text-muted-foreground" />
                 <MapPin className="h-4 w-4 text-muted-foreground" />
               </div>
               <div className="flex flex-col gap-1">
@@ -214,58 +191,25 @@ export function MultiStoreLocationSelector({
           </Button>
         </DialogTrigger>
         
-        <DialogContent className="max-w-4xl max-h-[80vh]">
+        <DialogContent className="max-w-3xl max-h-[80vh]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Store className="h-5 w-5" />
-              Select Store & Location Combinations
+              <MapPin className="h-5 w-5" />
+              Select Locations
             </DialogTitle>
           </DialogHeader>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 py-4">
-            {/* Store Selection */}
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="font-semibold">Stores</h3>
-                <Button 
-                  variant="ghost" 
-                  size="sm"
-                  onClick={() => {}}
-                  disabled={true}
-                >
-                  <RefreshCw className="h-3 w-3" />
-                </Button>
-              </div>
-              
-              <div className="relative">
-                <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search stores..."
-                  value={storeSearch}
-                  onChange={(e) => setStoreSearch(e.target.value)}
-                  className="pl-9"
-                />
-              </div>
-
-              <ScrollArea className="h-48 border rounded-md">
-                <div className="p-2">
-                  <div className="text-center py-8 text-muted-foreground">
-                    Store switching disabled - users now use single assigned store
-                  </div>
-                </div>
-              </ScrollArea>
-            </div>
-
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 py-4">
             {/* Location Selection */}
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="font-semibold">Locations</h3>
+                <h3 className="font-semibold">Available Locations</h3>
                 <div className="flex gap-2">
-                  {selectedStoreKey && (
+                  {locations.length > 0 && (
                     <Button 
                       variant="ghost" 
                       size="sm"
-                      onClick={() => handleSelectAllForStore(selectedStoreKey)}
+                      onClick={handleSelectAll}
                     >
                       <CheckSquare className="h-3 w-3 mr-1" />
                       All
@@ -274,8 +218,8 @@ export function MultiStoreLocationSelector({
                   <Button 
                     variant="ghost" 
                     size="sm"
-                    onClick={refreshLocationsForSelectedStore}
-                    disabled={loadingLocations || !selectedStoreKey}
+                    onClick={refreshLocations}
+                    disabled={loadingLocations}
                   >
                     <RefreshCw className={`h-3 w-3 ${loadingLocations ? 'animate-spin' : ''}`} />
                   </Button>
@@ -289,15 +233,14 @@ export function MultiStoreLocationSelector({
                   value={locationSearch}
                   onChange={(e) => setLocationSearch(e.target.value)}
                   className="pl-9"
-                  disabled={!selectedStoreKey}
                 />
               </div>
 
-              <ScrollArea className="h-48 border rounded-md">
+              <ScrollArea className="h-64 border rounded-md">
                 <div className="p-2">
-                  {!selectedStoreKey ? (
+                  {!assignedStore ? (
                     <div className="text-center py-8 text-muted-foreground">
-                      Please select a store first
+                      No store assigned
                     </div>
                   ) : loadingLocations ? (
                     <div className="flex items-center justify-center py-8">
@@ -315,8 +258,8 @@ export function MultiStoreLocationSelector({
                         className="flex items-center gap-3 p-3 rounded-md hover:bg-muted transition-colors"
                       >
                         <Checkbox
-                          checked={isStoreLocationSelected(selectedStoreKey, location.gid)}
-                          onCheckedChange={() => handleStoreLocationToggle(selectedStoreKey, location.gid)}
+                          checked={isLocationSelected(location.gid)}
+                          onCheckedChange={() => handleLocationToggle(location.gid)}
                         />
                         <div className="flex-1">
                           <div className="font-medium">{location.name}</div>
@@ -365,17 +308,17 @@ export function MultiStoreLocationSelector({
                   ) : (
                     selectedItems.map((item) => (
                       <div
-                        key={`${item.storeKey}-${item.locationGid}`}
+                        key={item.locationGid}
                         className="flex items-center justify-between p-2 bg-muted rounded-md"
                       >
                         <div className="min-w-0 flex-1">
-                          <div className="font-medium text-sm truncate">{item.storeName}</div>
-                          <div className="text-xs text-muted-foreground truncate">{item.locationName}</div>
+                          <div className="font-medium text-sm truncate">{item.locationName}</div>
+                          <div className="text-xs text-muted-foreground truncate">{item.storeName}</div>
                         </div>
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => removeSelection(item.storeKey, item.locationGid)}
+                          onClick={() => removeSelection(item.locationGid)}
                           className="h-6 w-6 p-0"
                         >
                           <X className="h-3 w-3" />
