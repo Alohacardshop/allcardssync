@@ -11,7 +11,6 @@ import { useStore } from "@/contexts/StoreContext";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 // PSA service removed - using direct API integration
 import { normalizePSAData } from "@/lib/psaNormalization";
-import { lookupCert } from "@/lib/cgc/client";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { StoreLocationSelector } from "@/components/StoreLocationSelector";
 import { parseFunctionError } from "@/lib/fns";
@@ -45,7 +44,7 @@ const parsePSAGrade = (gradeStr: string): { numeric: string; original: string; h
 
 export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => {
   const logger = useLogger();
-  const [gradingCompany, setGradingCompany] = useState<'PSA' | 'CGC'>('PSA');
+  const [gradingCompany] = useState<'PSA'>('PSA'); // Simplified to PSA only
 
   // Force PSA when CGC is disabled
   useEffect(() => {
@@ -109,78 +108,24 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
 
     const controller = new AbortController();
     setAbortController(controller);
-    console.log("[CGC:UI] Starting CGC invoke process", {
-    gradingCompany,
-    inputValue,
-    lookupType,
-    timestamp: new Date().toISOString()
-  });
-
-  setFetching(true);
     
-    logger.logInfo(`${gradingCompany} fetch started`, { 
+    setFetching(true);
+    
+    logger.logInfo(`PSA fetch started`, { 
       certNumber: lookupType === 'cert' ? inputValue : undefined,
       barcode: lookupType === 'barcode' ? inputValue : undefined,
       lookupType
     });
     
     try {
-      let data: any;
-      
-      if (gradingCompany === 'PSA') {
-        // TODO: Replace with direct PSA API integration
-        throw new Error("PSA lookup functionality removed - please implement direct API integration");
-      } else {
-        // Use new clean CGC client with explicit lookup type
-        const startTime = Date.now();
-        console.log("[CGC:UI] Starting CGC lookup with new client...", { lookupType, inputValue });
-        
-        try {
-          // CGC only supports certificate lookup via scraping
-          const cgcResult = await lookupCert(inputValue);
-          const cgcCard = cgcResult.card;
-          const cgcDiagnostics = cgcResult.diagnostics;
-          
-          const endTime = Date.now();
-          console.log(`[CGC:UI] CGC lookup completed in ${endTime - startTime}ms`);
-          
-          // Convert CGC card to normalized format for intake
-          const normalizedForIntake = {
-            gradingCompany: 'CGC',
-            certNumber: cgcCard.certNumber,
-            brandTitle: cgcCard.collectible.setName || '',
-            subject: cgcCard.collectible.cardName || '',
-            category: cgcCard.collectible.game || 'Trading Cards',
-            variant: cgcCard.grade.displayGrade + (cgcCard.grade.autographType ? ` (${cgcCard.grade.autographType})` : ''),
-            cardNumber: cgcCard.collectible.cardNumber || '',
-            year: cgcCard.collectible.cardYear || '',
-            grade: cgcCard.grade.displayGrade,
-            gradeNumeric: '',
-            game: cgcCard.collectible.game?.toLowerCase().includes('pokemon') ? 'pokemon' : 
-                   cgcCard.collectible.game?.toLowerCase().includes('magic') ? 'mtg' : 
-                   cgcCard.collectible.game || '',
-            imageUrl: cgcCard.images?.frontThumbnailUrl || cgcCard.images?.frontUrl || null,
-            isValid: !!(cgcCard.certNumber && cgcCard.grade.displayGrade),
-            source: 'cgc_scrape',
-            diagnostics: cgcDiagnostics,
-            rawPayload: cgcCard
-          };
-          
-          data = { ok: true, ...normalizedForIntake };
-        } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : 'CGC lookup failed';
-          console.error('[CGC:UI] CGC lookup error:', errorMessage);
-          data = { ok: false, error: errorMessage };
-        }
-      }
+      // TODO: Replace with direct PSA API integration
+      throw new Error("PSA lookup functionality removed - please implement direct API integration");
 
       if (data && data.ok) {
-        console.log(`${gradingCompany} data received successfully:`, JSON.stringify(data, null, 2));
+        console.log(`PSA data received successfully:`, JSON.stringify(data, null, 2));
         
-        let normalizedData: any;
-        
-        // CGC data is already normalized (PSA support removed)
-        normalizedData = data;
+        // PSA data is already normalized
+        const normalizedData = data;
         
         setCardData(normalizedData);
         
@@ -416,17 +361,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
       if (!error && data) {
         const responseData = Array.isArray(data) ? data[0] : data;
         
-        if (responseData?.id && gradingCompany === 'CGC') {
-          // Update with CGC-specific fields
-          await supabase
-            .from('intake_items')
-            .update({
-              grading_company: 'CGC',
-              cgc_cert: formData.certNumber,
-              cgc_snapshot: cardData
-            })
-            .eq('id', responseData.id);
-        } else if (responseData?.id && gradingCompany === 'PSA') {
+        if (responseData?.id && gradingCompany === 'PSA') {
           // Update with PSA-specific fields (ensure grading_company is set)
           await supabase
             .from('intake_items')
@@ -707,47 +642,45 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
           </div>
         )}
         
-        {/* Grading Company Selector */}
+        {/* Grading Company Selector - PSA Only */}
         <div className="space-y-3">
           <Label htmlFor="grading-company">Grading Company</Label>
-          <Select value={gradingCompany} onValueChange={(value: 'PSA' | 'CGC') => setGradingCompany(value)}>
+          <Select value={gradingCompany} disabled>
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="PSA">PSA</SelectItem>
-              {CGC_ENABLED && <SelectItem value="CGC">CGC</SelectItem>}
             </SelectContent>
           </Select>
         </div>
 
-        {/* Certificate Input */}
-        {gradingCompany === 'PSA' ? (
-          <div className="flex gap-3 items-end">
-            <div className="flex-1">
-              <Label htmlFor="cert-input">PSA Cert # to fetch details</Label>
-              <Input
-                id="cert-input"
-                placeholder="e.g., 12345678"
-                value={certInput}
-                onChange={(e) => setCertInput(e.target.value)}
-                disabled={fetching}
-                onKeyDown={(e) => e.key === 'Enter' && !fetching && handleFetchCard('cert')}
-              />
-              <p className="text-xs text-muted-foreground mt-1">
-                SKU and barcode will be set to this certificate number on Shopify.
-              </p>
-            </div>
-            
-            {!fetching ? (
-              <Button 
-                onClick={() => handleFetchCard('cert')} 
-                disabled={!certInput.trim()}
-                className="px-8"
-              >
-                Fetch PSA
-              </Button>
-            ) : (
+        {/* Certificate Input - PSA Only */}
+        <div className="flex gap-3 items-end">
+          <div className="flex-1">
+            <Label htmlFor="cert-input">PSA Cert # to fetch details</Label>
+            <Input
+              id="cert-input"
+              placeholder="e.g., 12345678"
+              value={certInput}
+              onChange={(e) => setCertInput(e.target.value)}
+              disabled={fetching}
+              onKeyDown={(e) => e.key === 'Enter' && !fetching && handleFetchCard('cert')}
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              SKU and barcode will be set to this certificate number on Shopify.
+            </p>
+          </div>
+          
+          {!fetching ? (
+            <Button 
+              onClick={() => handleFetchCard('cert')} 
+              disabled={!certInput.trim()}
+              className="px-8"
+            >
+              Fetch PSA
+            </Button>
+          ) : (
               <div className="flex gap-2">
                 <Button 
                   variant="outline"
@@ -766,105 +699,115 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
                 </Button>
               </div>
             )}
+        {/* PSA Certificate Input */}
+        <div className="flex gap-3 items-end">
+          <div className="flex-1">
+            <Label htmlFor="cert-input">PSA Cert # to fetch details</Label>
+            <Input
+              id="cert-input"
+              placeholder="e.g., 12345678"
+              value={certInput}
+              onChange={(e) => setCertInput(e.target.value)}
+              disabled={fetching}
+              onKeyDown={(e) => e.key === 'Enter' && !fetching && handleFetchCard('cert')}
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              SKU and barcode will be set to this certificate number on Shopify.
+            </p>
           </div>
-        ) : CGC_ENABLED ? (
-          <div className="space-y-4">
-            {/* CGC Certificate Number Input */}
-            <div className="flex gap-3 items-end">
-              <div className="flex-1">
-                <Label htmlFor="cert-input">CGC Certification #</Label>
-                <Input
-                  id="cert-input"
+          
+          {!fetching ? (
+            <Button 
+              onClick={() => handleFetchCard('cert')} 
+              disabled={!certInput.trim()}
+              className="px-8"
+            >
+              Fetch PSA
+            </Button>
+          ) : (
+            <Button 
+              variant="outline"
+              disabled
+              className="px-8"
+            >
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              Fetching...
+            </Button>
+          )}
+        </div>
                   placeholder="e.g., 6038499265"
                   value={certInput}
                   onChange={(e) => setCertInput(e.target.value)}
                   disabled={fetching}
                   onKeyDown={(e) => e.key === 'Enter' && !fetching && handleFetchCard('cert')}
                 />
+                <p className="text-xs text-muted-foreground mt-1">
+                  SKU and barcode will be set to this certificate number on Shopify.
+                </p>
               </div>
               
               {!fetching ? (
                 <Button 
                   onClick={() => handleFetchCard('cert')} 
                   disabled={!certInput.trim()}
-                  className="px-6"
+                  className="px-8"
                 >
-                  Lookup Cert
+                  Fetch PSA
                 </Button>
               ) : (
                 <Button 
                   variant="outline"
                   disabled
-                  className="px-6"
+                  className="px-8"
                 >
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Fetching...
+                </Button>
+              )}
+            </div>
                   Looking up...
                 </Button>
               )}
             </div>
 
-            {/* CGC Notice - barcode not supported via scraping */}
-            <div className="bg-muted/50 p-4 rounded-lg border border-dashed border-muted-foreground/20">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <AlertCircle className="h-4 w-4" />
-                CGC barcode lookup isn't supported yet—please enter the certificate number above.
-              </div>
-            </div>
+        {/* PSA Barcode Input */}
+        <div className="flex gap-3 items-end">
+          <div className="flex-1">
+            <Label htmlFor="barcode-input">PSA Barcode</Label>
+            <Input
+              id="barcode-input"
+              placeholder="Enter PSA barcode number"
+              value={barcodeInput}
+              onChange={(e) => setBarcodeInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !fetching) {
+                  e.preventDefault();
+                  handleFetchCard('barcode');
+                }
+              }}
+            />
           </div>
-        ) : null}
-
-        {/* PSA Barcode Input - only shown for PSA */}
-        {gradingCompany === 'PSA' && (
-          <div className="flex gap-3 items-end">
-            <div className="flex-1">
-              <Label htmlFor="barcode-input">PSA Barcode</Label>
-              <Input
-                id="barcode-input"
-                placeholder="Enter PSA barcode number"
-                value={barcodeInput}
-                onChange={(e) => setBarcodeInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !fetching) {
-                    e.preventDefault();
-                    handleFetchCard('barcode');
-                  }
-                }}
-              />
-            </div>
-            
-            {!fetching ? (
-              <Button 
-                onClick={() => handleFetchCard('barcode')}
-                disabled={!barcodeInput.trim()}
-                variant="outline"
-                className="px-6"
-              >
-                Lookup
-              </Button>
-            ) : (
-              <Button 
-                variant="outline"
-                disabled
-                className="px-6"
-              >
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                Looking up...
-              </Button>
-            )}
-          </div>
-        )}
-
-        {fetching && (
-          <div className="flex justify-center">
+          
+          {!fetching ? (
             <Button 
-              variant="destructive"
-              onClick={handleStopFetch}
-              className="px-4"
+              onClick={() => handleFetchCard('barcode')}
+              disabled={!barcodeInput.trim()}
+              variant="outline"
+              className="px-6"
             >
-              Stop
+              Lookup
             </Button>
-          </div>
-        )}
+          ) : (
+            <Button 
+              variant="outline"
+              disabled
+              className="px-6"
+            >
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              Looking up...
+            </Button>
+          )}
+        </div>
 
         <p className="text-xs text-muted-foreground">
           SKU and barcode will be set to the certificate number on Shopify.
@@ -1091,14 +1034,8 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
             <span>Data source:</span>
             <span className="px-2 py-1 rounded text-xs bg-blue-100 text-blue-800">
               {cardData.source === 'psa_scrape' ? 'PSA Scrape' :
-               cardData.source === 'cgc_scrape' ? 'CGC Scrape' :
                cardData.source === 'database_cache' ? 'Database Cache' : 'Unknown'}
             </span>
-            {cardData.source === 'cgc_scrape' && cardData.diagnostics?.used === 'direct' && (
-              <span className="px-2 py-1 rounded text-xs bg-green-100 text-green-800">
-                Parsed from CGC page
-              </span>
-            )}
           </div>
         )}
 

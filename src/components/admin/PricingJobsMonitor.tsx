@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Clock, TrendingUp, Database, Activity } from "lucide-react";
 import { tcgSupabase } from "@/lib/tcg-supabase";
+import { usePollingWithCircuitBreaker } from "@/hooks/usePollingWithCircuitBreaker";
 
 interface PricingJobRun {
   id: string;
@@ -18,37 +20,42 @@ interface PricingJobRun {
 }
 
 export function PricingJobsMonitor() {
-  const [jobRuns, setJobRuns] = useState<PricingJobRun[]>([]);
-  const [loading, setLoading] = useState(true);
+  const fetchJobRuns = async (): Promise<PricingJobRun[]> => {
+    const { data, error } = await tcgSupabase
+      .from('pricing_job_runs')
+      .select('*')
+      .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()) // Last 24 hours
+      .order('created_at', { ascending: false })
+      .limit(20);
 
-  useEffect(() => {
-    const fetchJobRuns = async () => {
-      try {
-        const { data, error } = await tcgSupabase
-          .from('pricing_job_runs')
-          .select('*')
-          .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()) // Last 24 hours
-          .order('created_at', { ascending: false })
-          .limit(20);
+    if (error) {
+      console.error('Failed to fetch pricing job runs from TCG DB:', error);
+      throw new Error(`Failed to fetch pricing jobs: ${error.message}`);
+    }
 
-        if (error) {
-          console.error('Failed to fetch pricing job runs from TCG DB:', error);
-        } else {
-          setJobRuns(data || []);
-        }
-      } catch (error) {
-        console.error('Error fetching pricing jobs from TCG DB:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
+    return data || [];
+  };
 
-    fetchJobRuns();
-    
-    // Refresh every 5 minutes
-    const interval = setInterval(fetchJobRuns, 5 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, []);
+  const { 
+    data: jobRuns, 
+    isLoading: loading, 
+    error, 
+    circuitBreaker, 
+    retry,
+    currentInterval 
+  } = usePollingWithCircuitBreaker(
+    fetchJobRuns,
+    {
+      enabled: true,
+      baseInterval: 10 * 60 * 1000, // 10 minutes (increased from 5 minutes)
+      maxInterval: 30 * 60 * 1000, // 30 minutes max
+      maxFailures: 2,
+      circuitOpenTime: 2 * 60 * 1000, // 2 minutes
+      onError: (error) => console.error('[PricingJobs] Polling error:', error.message),
+      onCircuitOpen: () => console.log('[PricingJobs] Circuit breaker opened'),
+      onCircuitClose: () => console.log('[PricingJobs] Circuit breaker closed'),
+    }
+  );
 
   const formatDuration = (ms: number) => {
     const seconds = Math.round(ms / 1000);
@@ -94,7 +101,46 @@ export function PricingJobsMonitor() {
     );
   }
 
-  if (!jobRuns.length) {
+  if (error) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5" />
+              Pricing Jobs (24h)
+            </div>
+            {circuitBreaker.isOpen && (
+              <Badge variant="destructive" className="text-xs">
+                Circuit Open
+              </Badge>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Badge variant="destructive">Failed to Load</Badge>
+          <p className="text-sm text-muted-foreground mt-2">
+            {error.message}
+          </p>
+          {circuitBreaker.isOpen && (
+            <div className="mt-4 space-y-2">
+              <p className="text-xs text-muted-foreground">
+                Circuit breaker is open. Next attempt in {Math.max(0, Math.ceil((circuitBreaker.nextAttemptTime - Date.now()) / 1000))}s
+              </p>
+              <Button onClick={retry} size="sm" variant="outline">
+                Retry Now
+              </Button>
+            </div>
+          )}
+          <div className="mt-2 text-xs text-muted-foreground">
+            Polling interval: {Math.round(currentInterval / 60000)}min
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!jobRuns || jobRuns.length === 0) {
     return (
       <Card>
         <CardHeader>
@@ -117,10 +163,27 @@ export function PricingJobsMonitor() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <TrendingUp className="h-5 w-5" />
-          Pricing Jobs (24h)
-          <Badge variant="secondary">{jobRuns.length} runs</Badge>
+        <CardTitle className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="h-5 w-5" />
+            Pricing Jobs (24h)
+            <Badge variant="secondary">{jobRuns.length} runs</Badge>
+          </div>
+          <div className="flex gap-2">
+            {circuitBreaker.isOpen && (
+              <Badge variant="destructive" className="text-xs">
+                Circuit Open
+              </Badge>
+            )}
+            {circuitBreaker.failureCount > 0 && !circuitBreaker.isOpen && (
+              <Badge variant="secondary" className="text-xs">
+                {circuitBreaker.failureCount} failures
+              </Badge>
+            )}
+            <Badge variant="outline" className="text-xs">
+              {Math.round(currentInterval / 60000)}min interval
+            </Badge>
+          </div>
         </CardTitle>
       </CardHeader>
       <CardContent>
