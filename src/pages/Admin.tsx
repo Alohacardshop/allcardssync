@@ -42,6 +42,7 @@ import CatalogTab from '@/components/admin/CatalogTab';
 import { InventorySyncSettings } from '@/components/admin/InventorySyncSettings';
 import { ShopifyTagImport } from '@/components/admin/ShopifyTagImport';
 import { PSAApiSettings } from '@/components/admin/PSAApiSettings';
+import ShopifySyncQueue from '@/components/admin/ShopifySyncQueue';
 
 const Admin = () => {
   const [activeSection, setActiveSection] = useState('overview');
@@ -245,6 +246,7 @@ const Admin = () => {
               </p>
             </div>
             <ShopifyConfig />
+            <ShopifySyncQueue />
             <InventorySyncSettings />
             <ShopifyTagImport />
           </div>
