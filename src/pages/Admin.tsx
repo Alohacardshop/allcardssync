@@ -112,38 +112,38 @@ const Admin = () => {
   ];
 
   const AdminSidebar = () => (
-    <Sidebar className="min-w-80 border-r border-border bg-card">
-      <SidebarContent className="p-4">
+    <Sidebar className="min-w-[22rem] border-r border-border bg-card">
+      <SidebarContent className="p-6">
         <SidebarGroup>
-          <SidebarGroupLabel className="text-lg font-semibold mb-4 px-2">
+          <SidebarGroupLabel className="text-xl font-bold mb-6 px-3 text-foreground">
             Admin Dashboard
           </SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu className="space-y-2">
+            <SidebarMenu className="space-y-4">
               {adminSections.map((section) => (
                 <SidebarMenuItem key={section.id}>
                   <SidebarMenuButton
                     isActive={activeSection === section.id}
                     onClick={() => setActiveSection(section.id)}
                     className={`
-                      flex items-start gap-4 px-4 py-3 rounded-lg transition-all duration-200 
-                      hover:bg-muted/50 w-full min-h-[64px]
+                      flex items-start gap-4 px-4 py-4 rounded-lg transition-all duration-200 
+                      hover:bg-muted/50 w-full min-h-[80px] cursor-pointer
                       ${activeSection === section.id 
-                        ? 'bg-primary/10 text-primary border-l-4 border-primary' 
-                        : 'hover:bg-muted/80 border-l-4 border-transparent'
+                        ? 'bg-primary/10 text-primary border-l-4 border-primary shadow-sm' 
+                        : 'hover:bg-muted/80 border-l-4 border-transparent hover:shadow-sm'
                       }
                     `}
                   >
-                    <div className="flex-shrink-0 mt-1">
+                    <div className="flex-shrink-0 pt-1">
                       <section.icon className="w-5 h-5" />
                     </div>
-                    <div className="flex flex-col items-start min-w-0 flex-1">
-                      <span className="font-semibold text-sm leading-tight mb-1">
+                    <div className="flex flex-col items-start min-w-0 flex-1 space-y-1">
+                      <span className="font-semibold text-base leading-tight tracking-tight">
                         {section.title}
                       </span>
-                      <span className="text-xs text-muted-foreground leading-relaxed line-clamp-2">
+                      <p className="text-sm text-muted-foreground leading-relaxed max-w-full break-words">
                         {section.description}
-                      </span>
+                      </p>
                     </div>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -153,16 +153,16 @@ const Admin = () => {
         </SidebarGroup>
         
         {/* Navigation Footer */}
-        <div className="mt-auto pt-4 border-t border-border">
-          <div className="px-2">
+        <div className="mt-8 pt-6 border-t border-border">
+          <div className="px-3">
             <Link to="/">
               <Button 
                 variant="ghost" 
-                size="sm" 
-                className="w-full justify-start gap-3 h-10"
+                size="lg" 
+                className="w-full justify-start gap-3 h-12 text-base"
               >
-                <Home className="w-4 h-4" />
-                <span className="text-sm">Back to Dashboard</span>
+                <Home className="w-5 h-5" />
+                <span>Back to Dashboard</span>
               </Button>
             </Link>
           </div>
