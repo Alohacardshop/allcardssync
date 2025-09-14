@@ -21,7 +21,7 @@ import CatalogTab from '@/components/admin/CatalogTab';
 import { InventorySyncSettings } from '@/components/admin/InventorySyncSettings';
 import { ShopifyTagImport } from '@/components/admin/ShopifyTagImport';
 import { PSAApiSettings } from '@/components/admin/PSAApiSettings';
-import { PSAScrapePingCard } from '@/components/admin/PSAScrapePingCard';
+
 import { CGCScrapePingCard } from '@/components/admin/CGCScrapePingCard';
 import { Link } from 'react-router-dom';
 import { Home } from 'lucide-react';
@@ -89,7 +89,7 @@ const Admin = () => {
               <SystemHealthCard />
               <TCGHealthCheck />
               <PricingJobsMonitor />
-              <PSAScrapePingCard />
+              
               <CGCScrapePingCard />
             </div>
           </TabsContent>

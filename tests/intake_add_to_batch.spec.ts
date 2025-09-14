@@ -149,18 +149,13 @@ test.describe('Intake Add to Batch - DB Only', () => {
     // Fill in PSA certificate (mock data)
     await page.fill('input[placeholder="Enter PSA certificate number"]', '12345678');
     
-    // Mock PSA fetch response to avoid external calls
+    // Mock PSA fetch response - now returns error since scraper was removed
     await page.route('**/functions/v1/psa-scrape-v2', async route => {
       await route.fulfill({
-        status: 200,
+        status: 404,
         contentType: 'application/json',
         body: JSON.stringify({
-          ok: true,
-          brandTitle: 'Test Brand',
-          subject: 'Test Card',
-          category: 'Pokemon',
-          grade: '10',
-          certNumber: '12345678'
+          error: 'PSA scraper functionality removed - please implement direct API integration'
         })
       });
     });

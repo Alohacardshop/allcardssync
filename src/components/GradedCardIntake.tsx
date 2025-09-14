@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { Loader2, Award, ChevronDown, ChevronUp, AlertCircle, CheckCircle, XCircle, Package, Plus } from "lucide-react";
 import { useStore } from "@/contexts/StoreContext";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { invokePSAScrapeV2 } from "@/lib/psaServiceV2";
+// PSA service removed - using direct API integration
 import { normalizePSAData } from "@/lib/psaNormalization";
 import { lookupCert } from "@/lib/cgc/client";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -128,8 +128,8 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
       let data: any;
       
       if (gradingCompany === 'PSA') {
-        // Use the enhanced PSA service (PSA only supports cert lookup)
-        data = await invokePSAScrapeV2({ cert: inputValue, forceRefresh: true, includeRaw: true }, 45000);
+        // TODO: Replace with direct PSA API integration
+        throw new Error("PSA lookup functionality removed - please implement direct API integration");
       } else {
         // Use new clean CGC client with explicit lookup type
         const startTime = Date.now();
@@ -179,13 +179,8 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         
         let normalizedData: any;
         
-        if (gradingCompany === 'PSA') {
-          // Normalize PSA data
-          normalizedData = normalizePSAData(data);
-        } else {
-          // CGC data is already normalized
-          normalizedData = data;
-        }
+        // CGC data is already normalized (PSA support removed)
+        normalizedData = data;
         
         setCardData(normalizedData);
         

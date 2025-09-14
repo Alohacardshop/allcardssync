@@ -225,34 +225,16 @@ export function PSAApiSettings() {
         throw new Error(saveData?.error || saveError?.message || 'Failed to save token for testing');
       }
 
-      // Test with a known certificate number (user can change this in settings)
-      const testCertNumber = '120317196'; // Use the known test cert number
-
-      const { data, error } = await supabase.functions.invoke('psa-scrape-v2', {
-        body: { 
-          cert: testCertNumber,
-          forceRefresh: true 
-        }
+      // PSA scraper functionality has been removed - replace with direct PSA API integration
+      toast({
+        title: "PSA API Test",
+        description: "PSA scraper functions have been removed. Please implement direct PSA API integration.",
+        variant: "destructive"
       });
-
-      if (error) {
-        throw error;
-      }
-
-      setTestResult(data);
-      
-      if (data?.ok) {
-        toast({
-          title: "Success",
-          description: "PSA API token is working correctly!"
-        });
-      } else {
-        toast({
-          title: "Warning",
-          description: data?.error || "API test returned an error",
-          variant: "destructive"
-        });
-      }
+      setTestResult({
+        ok: false,
+        error: "PSA scraper functionality removed - please implement direct API integration"
+      });
     } catch (error: any) {
       console.error('Error testing PSA API token:', error);
       setTestResult({ 

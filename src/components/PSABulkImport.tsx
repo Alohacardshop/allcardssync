@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import { Upload, FileText, Download, Hash } from "lucide-react";
 import { useStore } from "@/contexts/StoreContext";
 import { v4 as uuidv4 } from 'uuid';
-import { invokePSAScrapeV2 } from "@/lib/psaServiceV2";
+// PSA service removed - using direct API integration
 import { normalizePSAData } from "@/lib/psaNormalization";
 
 interface PSAImportItem {
@@ -107,7 +107,8 @@ export const PSABulkImport = () => {
   };
 
   const scrapePSAData = async (psaCert: string) => {
-    return await invokePSAScrapeV2({ cert: psaCert, forceRefresh: true }, 45000); // 45s timeout
+    // TODO: Replace with direct PSA API integration
+    throw new Error("PSA lookup functionality removed - please implement direct API integration");
   };
 
   const insertIntakeItem = async (item: PSAImportItem) => {
@@ -174,40 +175,8 @@ export const PSABulkImport = () => {
         updatedItems[i] = { ...item, status: 'processing' };
         setItems([...updatedItems]);
 
-        // Scrape PSA data
-        const psaData = await scrapePSAData(item.psaCert);
-        
-        if (psaData && psaData.ok) {
-          // Normalize the PSA data to handle older cert formats
-          const normalizedData = normalizePSAData(psaData);
-          
-          // Update with normalized data
-          updatedItems[i] = {
-            ...item,
-            data: {
-              title: normalizedData.brandTitle || normalizedData.subject,
-              year: normalizedData.year,
-              grade: normalizedData.grade,
-              brandTitle: normalizedData.brandTitle,
-              subject: normalizedData.subject,
-              category: normalizedData.category,
-              game: normalizedData.gameSport,
-              imageUrl: normalizedData.imageUrl,
-              imageUrls: normalizedData.imageUrls || [],
-              source: normalizedData.source
-            }
-          };
-
-          // Insert into database
-          await insertIntakeItem(updatedItems[i]);
-          
-          updatedItems[i] = { ...updatedItems[i], status: 'success' };
-          
-          // Show per-item success toast
-          toast.success(`${item.psaCert}: Fetched via web scraping`);
-        } else {
-          throw new Error(psaData?.error || 'Failed to scrape PSA data');
-        }
+        // PSA functionality has been removed - skip processing
+        throw new Error("PSA lookup functionality removed - please implement direct API integration");
       } catch (error) {
         console.error(`Error processing ${item.psaCert}:`, error);
         updatedItems[i] = {
