@@ -13,7 +13,7 @@ import { GradedCardIntake } from "@/components/GradedCardIntake";
 import { RawCardIntake } from "@/components/RawCardIntake";
 import { BulkCardIntake } from "@/components/BulkCardIntake";
 import { CurrentBatchPanel } from "@/components/CurrentBatchPanel";
-import { StoreLocationSelector } from "@/components/StoreLocationSelector";
+import { StoreLocationSelectorAutoWrapper } from "@/components/StoreLocationSelectorAuto";
 import { useBatchSendToShopify } from "@/hooks/useBatchSendToShopify";
 import { useStore } from "@/contexts/StoreContext";
 import { PrintQueueStatus } from "@/components/PrintQueueStatus";
@@ -469,7 +469,7 @@ const Index = () => {
               <h3 className="text-sm font-medium text-muted-foreground">Store & Location Settings</h3>
               <Badge variant="outline" className="text-xs">Default: Store + Location</Badge>
             </div>
-            <StoreLocationSelector showSetDefault={true} />
+            <StoreLocationSelectorAutoWrapper showSetDefault={true} />
             <p className="text-xs text-muted-foreground mt-2">
               💡 Set your default store & location combination to save time on future intake sessions
             </p>

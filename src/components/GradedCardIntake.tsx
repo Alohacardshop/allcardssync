@@ -12,7 +12,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 // PSA service removed - using direct API integration
 import { normalizePSAData } from "@/lib/psaNormalization";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { StoreLocationSelector } from "@/components/StoreLocationSelector";
+import { StoreLocationSelectorAutoWrapper } from "@/components/StoreLocationSelectorAuto";
 import { parseFunctionError } from "@/lib/fns";
 import { useLogger } from "@/hooks/useLogger";
 
@@ -46,12 +46,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
   const logger = useLogger();
   const [gradingCompany] = useState<'PSA'>('PSA'); // Simplified to PSA only
 
-  // Force PSA when CGC is disabled
-  useEffect(() => {
-    if (!CGC_ENABLED) {
-      setGradingCompany('PSA');
-    }
-  }, []);
+  // PSA is hardcoded - no need for useEffect since it's already set in useState
 
   // CGC is now enabled with Firecrawl scraping
   // No need to enforce PSA-only anymore
@@ -118,94 +113,8 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
     });
     
     try {
-      // TODO: Replace with direct PSA API integration
+      // PSA lookup functionality temporarily disabled
       throw new Error("PSA lookup functionality removed - please implement direct API integration");
-
-      if (data && data.ok) {
-        console.log(`PSA data received successfully:`, JSON.stringify(data, null, 2));
-        
-        // PSA data is already normalized
-        const normalizedData = data;
-        
-        setCardData(normalizedData);
-        
-        // Parse the grade to extract numeric value for the number input
-        const gradeInfo = parsePSAGrade(normalizedData.grade || normalizedData.gradeNumeric || "");
-        
-        const newFormData = {
-          brandTitle: normalizedData.brandTitle || "",
-          subject: normalizedData.subject || "",
-          category: normalizedData.category || "",
-          variant: normalizedData.variant || normalizedData.varietyPedigree || "",
-          cardNumber: normalizedData.cardNumber || "",
-          year: normalizedData.year || "",
-          grade: gradeInfo.numeric || normalizedData.gradeNumeric || "",
-          game: normalizedData.game || normalizedData.gameSport || 
-                (normalizedData.category?.toLowerCase().includes('pokemon') ? 'pokemon' : 
-                 normalizedData.category?.toLowerCase().includes('magic') ? 'mtg' : ""),
-          certNumber: normalizedData.certNumber || inputValue,
-          price: "",
-          cost: "",
-          quantity: 1,
-          psaEstimate: normalizedData.psaEstimate || ""
-        };
-
-        setFormData(newFormData);
-
-        // Count populated fields (excluding always-populated ones like certNumber, quantity)
-        const populatedCount = Object.entries(newFormData).filter(([key, value]) => 
-          value && value !== "" && key !== 'certNumber' && key !== 'quantity' && key !== 'cost' && key !== 'price' && key !== 'psaEstimate'
-        ).length;
-        setPopulatedFieldsCount(populatedCount);
-
-        if (normalizedData.isValid) {
-          toast.success(`${gradingCompany} ${lookupType} verified - ${populatedCount} fields populated`);
-          logger.logInfo(`${gradingCompany} fetch successful`, { 
-            certNumber: lookupType === 'cert' ? inputValue : undefined,
-            barcode: lookupType === 'barcode' ? inputValue : undefined,
-            lookupType,
-            fieldsPopulated: populatedCount,
-            cardData: { subject: normalizedData.subject, grade: normalizedData.grade }
-          });
-        } else {
-          toast.warning(`${gradingCompany} ${lookupType} found but may have incomplete data - ${populatedCount} fields populated`);
-          logger.logWarn(`${gradingCompany} fetch returned incomplete data`, { 
-            certNumber: lookupType === 'cert' ? inputValue : undefined,
-            barcode: lookupType === 'barcode' ? inputValue : undefined,
-            lookupType,
-            fieldsPopulated: populatedCount 
-          });
-        }
-        
-        // Show info if grade had non-numeric parts that were stripped
-        if (gradeInfo.hasNonNumeric) {
-          toast.info(`Grade "${gradeInfo.original}" converted to numeric: ${gradeInfo.numeric}`);
-        }
-      } else {
-        console.log(`[CGC:UI] invokeCGCLookup returned non-ok response:`, data);
-        const errorMsg = data?.error || `Invalid response from ${gradingCompany} service`;
-        console.error(`${gradingCompany} fetch failed:`, errorMsg);
-        logger.logError(`${gradingCompany} fetch failed`, new Error(errorMsg), { 
-          certNumber: lookupType === 'cert' ? inputValue : undefined,
-          barcode: lookupType === 'barcode' ? inputValue : undefined,
-          lookupType
-        });
-        
-        // Show appropriate error message based on grading company
-        if (gradingCompany === 'CGC') {
-          if (errorMsg.includes('404') || errorMsg.includes('Not found')) {
-            toast.error("CGC certification not found.");
-          } else if (errorMsg.includes('401') || errorMsg.includes('403') || errorMsg.includes('Unauthorized') || errorMsg.includes('Forbidden')) {
-            toast.error("CGC token expired or invalid—please check credentials.");
-          } else if (errorMsg.includes('500') || errorMsg.includes('Configuration error')) {
-            toast.error("CGC API configuration error—please check server settings.");
-          } else {
-            toast.error(`CGC lookup failed: ${errorMsg}`);
-          }
-        } else {
-          toast.error(`PSA fetch failed: ${errorMsg}`);
-        }
-      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
       console.error(`${gradingCompany} fetch error:`, {
@@ -589,7 +498,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
       <CardContent className="space-y-6">
         {/* Store and Location Selector */}
         <div className="space-y-4">
-          <StoreLocationSelector />
+          <StoreLocationSelectorAutoWrapper />
         </div>
 
         {/* Check Access Now Button */}

@@ -47,17 +47,17 @@ export function StoreLocationPicker({ className, showSetDefault = true }: StoreL
     }
   });
 
-  const selectedLocationName = availableLocations.find(l => l.gid === selectedLocation)?.name || "No location selected";
+  const selectedLocationName = availableLocations?.find(l => l.gid === selectedLocation)?.name || "No location selected";
   
-  const isCurrentDefault = userAssignments.some(
+  const isCurrentDefault = userAssignments?.some(
     assignment => 
       assignment.store_key === assignedStore && 
       assignment.location_gid === selectedLocation && 
       assignment.is_default
-  );
+  ) || false;
 
-  const filteredLocations = availableLocations.filter(location =>
-    location.name.toLowerCase().includes(locationSearch.toLowerCase())
+  const filteredLocations = (availableLocations || []).filter(location =>
+    location.name?.toLowerCase().includes(locationSearch.toLowerCase())
   );
 
   const handleLocationSelect = async (gid: string) => {
@@ -201,7 +201,7 @@ export function StoreLocationPicker({ className, showSetDefault = true }: StoreL
                 </div>
               </ScrollArea>
 
-              {locationsLastUpdated && availableLocations.length > 0 && (
+              {locationsLastUpdated && availableLocations?.length > 0 && (
                 <p className="text-xs text-muted-foreground">
                   Last updated: {locationsLastUpdated.toLocaleTimeString()}
                 </p>
