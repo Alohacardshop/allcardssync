@@ -45,7 +45,7 @@ export function LocationSelector({ className }: LocationSelectorProps) {
       if (error) throw error;
 
       const locationName = availableLocations.find(l => l.gid === selectedLocation)?.name;
-      toast.success(`Set ${locationName} as default for ${selectedStore}`);
+      toast.success(`Set ${locationName} as default for ${assignedStore}`);
       
       // Refresh user assignments to reflect the new default
       await refreshUserAssignments();
@@ -57,14 +57,14 @@ export function LocationSelector({ className }: LocationSelectorProps) {
 
   const isCurrentDefault = userAssignments.some(
     assignment => 
-      assignment.store_key === selectedStore && 
+      assignment.store_key === assignedStore && 
       assignment.location_gid === selectedLocation && 
       assignment.is_default
   );
 
   // Auto-select single available location or restore last selection
   useEffect(() => {
-    if (!selectedStore || loadingLocations) return;
+    if (!assignedStore || loadingLocations) return;
 
     if (availableLocations.length === 1 && !selectedLocation) {
       // Auto-select if only one location available
@@ -77,7 +77,7 @@ export function LocationSelector({ className }: LocationSelectorProps) {
         setSelectedLocation(lastSelectedLocation);
       }
     }
-  }, [availableLocations, selectedLocation, selectedStore, loadingLocations, lastSelectedLocation, setSelectedLocation, setLastSelectedLocation]);
+  }, [availableLocations, selectedLocation, assignedStore, loadingLocations, lastSelectedLocation, setSelectedLocation, setLastSelectedLocation]);
 
   // Save selection to local storage when changed
   useEffect(() => {
@@ -87,7 +87,7 @@ export function LocationSelector({ className }: LocationSelectorProps) {
   }, [selectedLocation, setLastSelectedLocation]);
 
   // Show helpful message when no store selected
-  if (!selectedStore) {
+  if (!assignedStore) {
     return (
       <div className={className}>
         <Select disabled>
@@ -146,7 +146,7 @@ export function LocationSelector({ className }: LocationSelectorProps) {
           {locationsLastUpdated && (
             <div className="text-xs space-y-1">
               <p className="text-muted-foreground">
-                No locations found for {selectedStore}
+                No locations found for {assignedStore}
               </p>
               <p className="text-muted-foreground">
                 Check Admin &gt; Shopify Config for details
@@ -193,13 +193,13 @@ export function LocationSelector({ className }: LocationSelectorProps) {
               <SelectItem key={location.gid} value={location.gid} className="text-foreground hover:bg-accent">
                 <div className="flex items-center justify-between w-full">
                   <span>{location.name}</span>
-                  {userAssignments.some(a => 
-                    a.store_key === selectedStore && 
-                    a.location_gid === location.gid && 
-                    a.is_default
-                  ) && (
-                    <Star className="h-3 w-3 text-yellow-500 ml-2" />
-                  )}
+                   {userAssignments.some(a => 
+                     a.store_key === assignedStore && 
+                     a.location_gid === location.gid && 
+                     a.is_default
+                   ) && (
+                     <Star className="h-3 w-3 text-yellow-500 ml-2" />
+                   )}
                 </div>
               </SelectItem>
             ))}
@@ -220,7 +220,7 @@ export function LocationSelector({ className }: LocationSelectorProps) {
           </Button>
           
           {/* Set as Default Button */}
-          {selectedLocation && selectedStore && !isCurrentDefault && (
+          {selectedLocation && assignedStore && !isCurrentDefault && (
             <Button
               variant="outline"
               size="sm"
@@ -233,10 +233,10 @@ export function LocationSelector({ className }: LocationSelectorProps) {
           )}
         </div>
         
-        {selectedStore && availableLocations.length > 0 && (
+        {assignedStore && availableLocations.length > 0 && (
           <div className="text-xs text-muted-foreground space-y-1">
             <p>
-              {selectedStore}: {availableLocations.length} location{availableLocations.length !== 1 ? 's' : ''} available
+              {assignedStore}: {availableLocations.length} location{availableLocations.length !== 1 ? 's' : ''} available
               {isCurrentDefault && selectedLocation && (
                 <span className="text-yellow-600 ml-1">(Current Default)</span>
               )}

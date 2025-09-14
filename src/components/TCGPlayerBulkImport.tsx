@@ -221,7 +221,7 @@ export const TCGPlayerBulkImport = () => {
     
     try {
       const rpcParams = {
-        store_key_in: selectedStore || null,
+        store_key_in: assignedStore || null,
         shopify_location_gid_in: selectedLocation || null,
         quantity_in: item.quantity,
         brand_title_in: item.set,
@@ -267,7 +267,7 @@ export const TCGPlayerBulkImport = () => {
       return;
     }
 
-    if (!selectedStore || !selectedLocation) {
+    if (!assignedStore || !selectedLocation) {
       toast.error("Please select a store and location before importing");
       return;
     }

@@ -21,7 +21,7 @@ export function InventoryAnalytics() {
   usePrefetchAnalytics();
   const { assignedStore, selectedLocation } = useStore();
   const { data: analytics, isLoading, error } = useInventoryAnalytics(
-    selectedStore, 
+    assignedStore,
     selectedLocation
   );
   const [dateRange, setDateRange] = useState('30');

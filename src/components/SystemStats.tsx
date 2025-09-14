@@ -10,7 +10,7 @@ export function SystemStats() {
   usePrefetchAnalytics();
   const { assignedStore, selectedLocation } = useStore();
   const { data: analytics, isLoading, error } = useInventoryAnalytics(
-    selectedStore, 
+    assignedStore,
     selectedLocation
   );
 

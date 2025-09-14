@@ -113,8 +113,8 @@ const Inventory = () => {
         .not('removed_from_batch_at', 'is', null);
 
       // Apply store/location filters from StoreContext
-      if (selectedStore) {
-        query = query.eq('store_key', selectedStore);
+      if (assignedStore) {
+        query = query.eq('store_key', assignedStore);
       }
       if (selectedLocation) {
         query = query.eq('shopify_location_gid', selectedLocation);
@@ -150,16 +150,16 @@ const Inventory = () => {
 
   useEffect(() => {
     fetchItems();
-  }, [statusFilter, typeFilter, selectedStore, selectedLocation, showSoldItems]); // Updated dependencies
+  }, [statusFilter, typeFilter, assignedStore, selectedLocation, showSoldItems]); // Updated dependencies
 
   // F) Manual sync retry function - uses item's original store/location
   const retrySync = async (item: any) => {
-    console.log('🔄 [retrySync] Starting retry for item:', {
-      id: item.id,
-      sku: item.sku,
-      store_key: item.store_key,
-      shopify_location_gid: item.shopify_location_gid,
-      adminSelectedStore: selectedStore,
+      console.log('🔄 [retrySync] Starting retry for item:', {
+        id: item.id,
+        sku: item.sku,
+        store_key: item.store_key,
+        shopify_location_gid: item.shopify_location_gid,
+        adminSelectedStore: assignedStore,
       adminSelectedLocation: selectedLocation
     });
     
@@ -227,7 +227,7 @@ const Inventory = () => {
   const syncAllVisible = async () => {
     setSyncingAll(true);
     try {
-      if (!selectedStore || !selectedLocation) {
+      if (!assignedStore || !selectedLocation) {
         toast.error('Please select a store and location first');
         return;
       }
@@ -246,7 +246,7 @@ const Inventory = () => {
       
       await sendBatchToShopify(
         itemIdsToSync,
-        selectedStore as "hawaii" | "las_vegas",
+        assignedStore as "hawaii" | "las_vegas",
         selectedLocation
       );
 
@@ -262,7 +262,7 @@ const Inventory = () => {
   const syncPendingOnly = async () => {
     setSyncingAll(true);
     try {
-      if (!selectedStore || !selectedLocation) {
+      if (!assignedStore || !selectedLocation) {
         toast.error('Please select a store and location first');
         return;
       }
@@ -284,7 +284,7 @@ const Inventory = () => {
       
       await sendBatchToShopify(
         pendingItems.map(item => item.id),
-        selectedStore as "hawaii" | "las_vegas",
+        assignedStore as "hawaii" | "las_vegas",
         selectedLocation
       );
 
@@ -802,7 +802,7 @@ const Inventory = () => {
                         
                         await sendBatchToShopify(
                           testItems.map(i => i.id),
-                          selectedStore as "hawaii" | "las_vegas", 
+                          assignedStore as "hawaii" | "las_vegas", 
                           selectedLocation
                         )
                         

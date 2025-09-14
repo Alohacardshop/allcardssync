@@ -95,8 +95,8 @@ export default function ShopifyMapping() {
         .is("deleted_at", null);
 
       // Filter by selected store and location
-      if (selectedStore) {
-        query = query.eq('store_key', selectedStore);
+      if (assignedStore) {
+        query = query.eq('store_key', assignedStore);
       }
       if (selectedLocation) {
         query = query.eq('shopify_location_gid', selectedLocation);
@@ -274,7 +274,7 @@ export default function ShopifyMapping() {
 
   useEffect(() => {
     loadMappingData();
-  }, [selectedStore, selectedLocation]); // Re-fetch when store/location changes
+  }, [assignedStore, selectedLocation]); // Re-fetch when store/location changes
 
   const filteredGroups = productGroups.filter(group => {
     // Apply filter
@@ -316,7 +316,7 @@ export default function ShopifyMapping() {
               <Settings className="h-4 w-4" />
               <Label>Current Store:</Label>
             </div>
-            <Badge variant="outline">{selectedStore || "No store selected"}</Badge>
+            <Badge variant="outline">{assignedStore || "No store selected"}</Badge>
             {availableLocations.length > 0 && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <MapPin className="h-4 w-4" />
@@ -498,7 +498,7 @@ export default function ShopifyMapping() {
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => window.open(`https://admin.shopify.com/store/${selectedStore || 'your-store'}/products/${group.productId}`, '_blank')}
+                              onClick={() => window.open(`https://admin.shopify.com/store/${assignedStore || 'your-store'}/products/${group.productId}`, '_blank')}
                             >
                               <ExternalLink className="w-4 h-4 mr-1" />
                               View in Shopify
@@ -560,7 +560,7 @@ export default function ShopifyMapping() {
                                         variant="outline"
                                         onClick={() => handleBulkPush([item.id])}
                                         disabled={true}
-                                        title={!selectedStore ? "Select a store first" : "Push to Shopify"}
+                                        title={!assignedStore ? "Select a store first" : "Push to Shopify"}
                                       >
                                          Push (coming soon)
                                       </Button>

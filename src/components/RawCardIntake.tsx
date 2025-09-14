@@ -155,14 +155,14 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
         return false;
       }
 
-      if (!selectedStore || !selectedLocation) {
+      if (!assignedStore || !selectedLocation) {
         toast.error("Store and location must be selected");
         return false;
       }
 
       const userId = session.user.id;
       const userIdLast6 = userId.slice(-6);
-      const storeKeyTrimmed = selectedStore.trim();
+      const storeKeyTrimmed = assignedStore.trim();
       const locationGidTrimmed = selectedLocation.trim();
 
       // Use the diagnostic RPC for access check
@@ -350,7 +350,7 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
           })();
 
           const rpcParams = {
-            store_key_in: selectedStore!.trim(),
+            store_key_in: assignedStore!.trim(),
             shopify_location_gid_in: selectedLocation!.trim(),
             quantity_in: row.quantity,
             brand_title_in: brandTitle,
@@ -521,7 +521,7 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
           <div className="flex items-center gap-2">
             <Button
               onClick={checkAccessAndShowToast}
-              disabled={accessCheckLoading || !selectedStore || !selectedLocation}
+              disabled={accessCheckLoading || !assignedStore || !selectedLocation}
               variant="outline"
               size="sm"
             >
@@ -534,7 +534,7 @@ export function RawCardIntake({ onBatchAdd }: RawCardIntakeProps) {
                 'Check Access'
               )}
             </Button>
-            {!selectedStore || !selectedLocation ? (
+            {!assignedStore || !selectedLocation ? (
               <span className="text-sm text-muted-foreground">Select store and location first</span>
             ) : null}
           </div>

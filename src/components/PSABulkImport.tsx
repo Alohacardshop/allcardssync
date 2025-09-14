@@ -113,7 +113,7 @@ export const PSABulkImport = () => {
   const insertIntakeItem = async (item: PSAImportItem) => {
     try {
       const rpcParams = {
-        store_key_in: selectedStore || null,
+        store_key_in: assignedStore || null,
         shopify_location_gid_in: selectedLocation || null,
         quantity_in: 1,
         brand_title_in: item.data?.brandTitle || '',
@@ -148,7 +148,7 @@ export const PSABulkImport = () => {
       return;
     }
 
-    if (!selectedStore || !selectedLocation) {
+    if (!assignedStore || !selectedLocation) {
       toast.error("Please select a store and location before importing");
       return;
     }

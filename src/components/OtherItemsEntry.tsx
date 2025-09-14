@@ -34,14 +34,14 @@ export function OtherItemsEntry({ onBatchAdd }: OtherItemsEntryProps) {
         return false;
       }
 
-      if (!selectedStore || !selectedLocation) {
+      if (!assignedStore || !selectedLocation) {
         toast.error("Store and location must be selected");
         return false;
       }
 
       const userId = session.user.id;
       const userIdLast6 = userId.slice(-6);
-      const storeKeyTrimmed = selectedStore.trim();
+      const storeKeyTrimmed = assignedStore.trim();
       const locationGidTrimmed = selectedLocation.trim();
 
       // Use the diagnostic RPC for access check
@@ -112,7 +112,7 @@ export function OtherItemsEntry({ onBatchAdd }: OtherItemsEntryProps) {
 
     try {
       const rpcParams = {
-        store_key_in: selectedStore!.trim(),
+        store_key_in: assignedStore!.trim(),
         shopify_location_gid_in: selectedLocation!.trim(),
         quantity_in: amount,
         brand_title_in: 'Other Items',
@@ -233,7 +233,7 @@ export function OtherItemsEntry({ onBatchAdd }: OtherItemsEntryProps) {
         {/* Add to Batch Button */}
         <Button
           onClick={handleAddOtherToBatch}
-          disabled={addingOther || !description.trim() || !selectedStore || !selectedLocation || amount <= 0 || totalPrice <= 0 || accessCheckLoading}
+          disabled={addingOther || !description.trim() || !assignedStore || !selectedLocation || amount <= 0 || totalPrice <= 0 || accessCheckLoading}
           className="w-full"
         >
           {addingOther || accessCheckLoading ? (

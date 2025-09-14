@@ -30,7 +30,7 @@ export function ShopifyTagImport() {
   };
 
   const handlePreview = async () => {
-    if (!selectedStore) {
+    if (!assignedStore) {
       toast.error("Please select a store first");
       return;
     }
@@ -46,7 +46,7 @@ export function ShopifyTagImport() {
     try {
       const { data, error } = await supabase.functions.invoke("shopify-pull-products-by-tags", {
         body: {
-          storeKey: selectedStore,
+          storeKey: assignedStore,
           gradedTags: parseTagString(gradedTags),
           rawTags: parseTagString(rawTags),
           updatedSince: updatedSince || undefined,
@@ -76,7 +76,7 @@ export function ShopifyTagImport() {
   };
 
   const handleImport = async () => {
-    if (!selectedStore) {
+    if (!assignedStore) {
       toast.error("Please select a store first");
       return;
     }
@@ -85,7 +85,7 @@ export function ShopifyTagImport() {
     try {
       const { data, error } = await supabase.functions.invoke("shopify-pull-products-by-tags", {
         body: {
-          storeKey: selectedStore,
+          storeKey: assignedStore,
           gradedTags: parseTagString(gradedTags),
           rawTags: parseTagString(rawTags),
           updatedSince: updatedSince || undefined,

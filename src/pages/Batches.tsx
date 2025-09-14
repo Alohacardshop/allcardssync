@@ -115,8 +115,8 @@ export default function Batches() {
         .select('*');
 
       // Filter by selected store and location
-      if (selectedStore) {
-        query = query.eq('store_key', selectedStore);
+      if (assignedStore) {
+        query = query.eq('store_key', assignedStore);
       }
       if (selectedLocation) {
         query = query.eq('shopify_location_gid', selectedLocation);
@@ -163,7 +163,7 @@ export default function Batches() {
 
   useEffect(() => {
     fetchLots();
-  }, [selectedStore, selectedLocation]); // Re-fetch when store/location changes
+  }, [assignedStore, selectedLocation]); // Re-fetch when store/location changes
 
   const handleDeleteBatch = async (lotId: string, lotNumber: string) => {
     if (!isAdmin) {

@@ -75,8 +75,8 @@ const Index = () => {
 
       // Build base query filters for store/location
       const baseFilters: any = { deleted_at: null };
-      if (selectedStore) {
-        baseFilters.store_key = selectedStore;
+      if (assignedStore) {
+        baseFilters.store_key = assignedStore;
       }
       if (selectedLocation) {
         baseFilters.shopify_location_gid = selectedLocation;
@@ -90,8 +90,8 @@ const Index = () => {
         .order('created_at', { ascending: false })
         .limit(1);
 
-      if (selectedStore) {
-        lotQuery = lotQuery.eq('store_key', selectedStore);
+      if (assignedStore) {
+        lotQuery = lotQuery.eq('store_key', assignedStore);
       }
       if (selectedLocation) {
         lotQuery = lotQuery.eq('shopify_location_gid', selectedLocation);
@@ -119,8 +119,8 @@ const Index = () => {
         .select('quantity, price, printed_at, pushed_at')
         .is('deleted_at', null);
 
-      if (selectedStore) {
-        statsQuery = statsQuery.eq('store_key', selectedStore);
+      if (assignedStore) {
+        statsQuery = statsQuery.eq('store_key', assignedStore);
       }
       if (selectedLocation) {
         statsQuery = statsQuery.eq('shopify_location_gid', selectedLocation);
@@ -175,7 +175,7 @@ const Index = () => {
       supabase.removeChannel(channel);
       window.removeEventListener('intake:item-added', handleItemAdded);
     };
-  }, [selectedStore, selectedLocation]); // Re-fetch when store/location changes
+  }, [assignedStore, selectedLocation]); // Re-fetch when store/location changes
 
   const handleSelectAll = () => {
     if (selectAll) {
@@ -203,7 +203,7 @@ const Index = () => {
       return;
     }
 
-    if (!selectedStore || !selectedLocation) {
+    if (!assignedStore || !selectedLocation) {
       toast.error('Please select a store and location first');
       return;
     }
@@ -211,7 +211,7 @@ const Index = () => {
     const correlationId = `selected_send_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
     console.log(`🚀 [${correlationId}] Starting chunked selected items send to inventory:`, { 
       itemCount: itemIds.length, 
-      store: selectedStore,
+      store: assignedStore,
       location: selectedLocation 
     });
     
@@ -240,7 +240,7 @@ const Index = () => {
         try {
           const response = await sendBatchToShopify(
             chunkIds,
-            selectedStore as "hawaii" | "las_vegas",
+            assignedStore as "hawaii" | "las_vegas",
             selectedLocation
           );
           
