@@ -112,23 +112,38 @@ const Admin = () => {
   ];
 
   const AdminSidebar = () => (
-    <Sidebar>
-      <SidebarContent>
+    <Sidebar className="min-w-80 border-r border-border bg-card">
+      <SidebarContent className="p-4">
         <SidebarGroup>
-          <SidebarGroupLabel>Admin Dashboard</SidebarGroupLabel>
+          <SidebarGroupLabel className="text-lg font-semibold mb-4 px-2">
+            Admin Dashboard
+          </SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu>
+            <SidebarMenu className="space-y-2">
               {adminSections.map((section) => (
                 <SidebarMenuItem key={section.id}>
                   <SidebarMenuButton
                     isActive={activeSection === section.id}
                     onClick={() => setActiveSection(section.id)}
-                    className="flex items-center gap-3 px-3 py-2"
+                    className={`
+                      flex items-start gap-4 px-4 py-3 rounded-lg transition-all duration-200 
+                      hover:bg-muted/50 w-full min-h-[64px]
+                      ${activeSection === section.id 
+                        ? 'bg-primary/10 text-primary border-l-4 border-primary' 
+                        : 'hover:bg-muted/80 border-l-4 border-transparent'
+                      }
+                    `}
                   >
-                    <section.icon className="w-4 h-4" />
-                    <div className="flex flex-col items-start">
-                      <span className="font-medium">{section.title}</span>
-                      <span className="text-xs text-muted-foreground">{section.description}</span>
+                    <div className="flex-shrink-0 mt-1">
+                      <section.icon className="w-5 h-5" />
+                    </div>
+                    <div className="flex flex-col items-start min-w-0 flex-1">
+                      <span className="font-semibold text-sm leading-tight mb-1">
+                        {section.title}
+                      </span>
+                      <span className="text-xs text-muted-foreground leading-relaxed line-clamp-2">
+                        {section.description}
+                      </span>
                     </div>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -136,6 +151,22 @@ const Admin = () => {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+        
+        {/* Navigation Footer */}
+        <div className="mt-auto pt-4 border-t border-border">
+          <div className="px-2">
+            <Link to="/">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="w-full justify-start gap-3 h-10"
+              >
+                <Home className="w-4 h-4" />
+                <span className="text-sm">Back to Dashboard</span>
+              </Button>
+            </Link>
+          </div>
+        </div>
       </SidebarContent>
     </Sidebar>
   );
@@ -365,27 +396,41 @@ const Admin = () => {
 
   return (
     <SidebarProvider>
-      <div className="min-h-screen flex w-full">
+      <div className="min-h-screen flex w-full bg-background">
         <AdminSidebar />
-        <SidebarInset className="flex-1">
+        <SidebarInset className="flex-1 flex flex-col">
           {/* Header */}
-          <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
-            <SidebarTrigger className="-ml-1" />
-            <Separator orientation="vertical" className="mr-2 h-4" />
-            <Link to="/">
-              <Button variant="ghost" size="sm" className="flex items-center gap-2">
-                <Home className="w-4 h-4" />
-                Back to Dashboard
-              </Button>
-            </Link>
+          <header className="flex h-16 shrink-0 items-center gap-4 border-b bg-card px-6 shadow-sm">
+            <SidebarTrigger className="lg:hidden" />
+            <Separator orientation="vertical" className="h-6" />
+            
+            {/* Breadcrumb */}
+            <div className="flex items-center gap-2 text-sm">
+              <Link to="/" className="text-muted-foreground hover:text-foreground transition-colors">
+                Dashboard
+              </Link>
+              <span className="text-muted-foreground">/</span>
+              <span className="font-medium">Admin</span>
+              {activeSection !== 'overview' && (
+                <>
+                  <span className="text-muted-foreground">/</span>
+                  <span className="font-medium">
+                    {adminSections.find(s => s.id === activeSection)?.title}
+                  </span>
+                </>
+              )}
+            </div>
+            
             <div className="ml-auto">
-              <Navigation showMobileMenu={true} />
+              <Navigation showMobileMenu={false} />
             </div>
           </header>
 
           {/* Main Content */}
-          <main className="flex-1 p-6">
-            {renderSectionContent()}
+          <main className="flex-1 p-6 bg-muted/30 overflow-auto">
+            <div className="max-w-7xl mx-auto">
+              {renderSectionContent()}
+            </div>
           </main>
         </SidebarInset>
       </div>
