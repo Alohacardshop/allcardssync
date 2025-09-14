@@ -79,10 +79,6 @@ verify_jwt = false
 [functions.zebra-tcp]
 verify_jwt = true
 
-# TCG card search (requires authentication)
-[functions.tcg-card-search]
-verify_jwt = true
-
 # System settings functions (require admin role)
 [functions.set-system-setting]
 verify_jwt = true
