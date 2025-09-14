@@ -40,8 +40,10 @@ import { ZebraPrinterSelectionDialog } from '@/components/ZebraPrinterSelectionD
 import { zebraNetworkService } from "@/lib/zebraNetworkService";
 import { Link } from 'react-router-dom';
 import { sendGradedToShopify, sendRawToShopify } from '@/hooks/useShopifySend';
-import { useBatchSendToShopify } from '@/hooks/useBatchSendToShopify';
+import { useBatchSendToShopify, BatchConfig, BatchProgress } from '@/hooks/useBatchSendToShopify';
 import { FLAGS } from '@/lib/flags';
+import { BatchConfigDialog } from '@/components/BatchConfigDialog';
+import { BatchProgressDialog } from '@/components/BatchProgressDialog';
 
 const Inventory = () => {
   const [items, setItems] = useState<any[]>([]);
@@ -76,7 +78,7 @@ const Inventory = () => {
   
   const { printZPL, selectedPrinter } = useZebraNetwork();
   const { assignedStore, selectedLocation } = useStore();
-  const { sendBatchToShopify, isSending: isBatchSending } = useBatchSendToShopify();
+  const { sendChunkedBatchToShopify, isSending: isBatchSending, progress } = useBatchSendToShopify();
 
   // Check admin role on mount
   useEffect(() => {
@@ -175,20 +177,20 @@ const Inventory = () => {
       }
       
       console.log('🚀 [retrySync] Using item\'s original store/location for retry');
-      console.log('🔍 [retrySync] sendBatchToShopify function exists:', typeof sendBatchToShopify);
-      console.log('🔍 [retrySync] About to call sendBatchToShopify with:', {
+      console.log('🔍 [retrySync] sendChunkedBatchToShopify function exists:', typeof sendChunkedBatchToShopify);
+      console.log('🔍 [retrySync] About to call sendChunkedBatchToShopify with:', {
         itemIds: [item.id],
         storeKey: item.store_key,
         locationGid: item.shopify_location_gid
       });
       
-      const result = await sendBatchToShopify(
+      const result = await sendChunkedBatchToShopify(
         [item.id],
         item.store_key as "hawaii" | "las_vegas",
         item.shopify_location_gid
       );
       
-      console.log('✅ [retrySync] sendBatchToShopify completed successfully:', result);
+      console.log('✅ [retrySync] sendChunkedBatchToShopify completed successfully:', result);
       toast.success(`Sync retry initiated for ${item.store_key} store`);
       fetchItems(); // Refresh to see updated status
     } catch (error) {
@@ -244,7 +246,7 @@ const Inventory = () => {
 
       console.log(`🔄 [syncAllVisible] Syncing ${itemIdsToSync.length} items`);
       
-      await sendBatchToShopify(
+      await sendChunkedBatchToShopify(
         itemIdsToSync,
         assignedStore as "hawaii" | "las_vegas",
         selectedLocation
@@ -282,7 +284,7 @@ const Inventory = () => {
 
       console.log(`🟡 [syncPendingOnly] Syncing ${pendingItems.length} pending items`);
       
-      await sendBatchToShopify(
+      await sendChunkedBatchToShopify(
         pendingItems.map(item => item.id),
         assignedStore as "hawaii" | "las_vegas",
         selectedLocation
@@ -798,9 +800,9 @@ const Inventory = () => {
                       
                       try {
                         const { useBatchSendToShopify } = await import('@/hooks/useBatchSendToShopify')
-                        const { sendBatchToShopify } = useBatchSendToShopify()
+                        const { sendChunkedBatchToShopify } = useBatchSendToShopify()
                         
-                        await sendBatchToShopify(
+                        await sendChunkedBatchToShopify(
                           testItems.map(i => i.id),
                           assignedStore as "hawaii" | "las_vegas", 
                           selectedLocation
@@ -1304,6 +1306,16 @@ const Inventory = () => {
           onPrint={printData ? handlePrintWithPrinter : handleDummyPrint}
           title={printData ? "Select Printer for Barcode" : "Select Default Printer"}
           allowDefaultOnly={!printData}
+        />
+        
+        <BatchProgressDialog
+          open={isBatchSending}
+          progress={progress}
+          onCancel={() => {
+            // Note: Current implementation doesn't support cancellation
+            // This could be enhanced in the future
+            console.log('Batch processing cannot be cancelled in current implementation')
+          }}
         />
       </div>
     </>
