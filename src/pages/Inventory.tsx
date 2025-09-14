@@ -22,6 +22,7 @@ import { InventoryItemCard } from '@/components/InventoryItemCard';
 import { InventorySkeleton } from '@/components/InventorySkeleton';
 import { ShopifyRemovalDialog } from '@/components/ShopifyRemovalDialog';
 import { ShopifySyncDetailsDialog } from '@/components/ShopifySyncDetailsDialog';
+import { QueueStatusIndicator } from '@/components/QueueStatusIndicator';
 
 const ITEMS_PER_PAGE = 50;
 
@@ -245,53 +246,32 @@ const Inventory = () => {
     
     setSyncingRowId(item.id);
     try {
-      const isGraded = item.type === 'Graded' || item.psa_cert || item.grade;
-      
-      if (isGraded) {
-        await sendGradedToShopify({
-          storeKey: assignedStore as "hawaii" | "las_vegas",
-          locationGid: selectedLocation,
-          item: {
-            id: item.id,
-            sku: item.sku,
-            psa_cert: item.psa_cert,
-            barcode: item.barcode || item.sku,
-            year: item.year,
-            brand_title: item.brand_title,
-            subject: item.subject,
-            card_number: item.card_number,
-            variant: item.variant,
-            category_tag: item.game || 'Pokemon',
-            image_url: item.catalog_snapshot?.image_url || item.psa_snapshot?.image_url || undefined,
-            price: item.price ?? undefined,
-            cost: item.cost ?? undefined,
-            grade: item.grade,
-            quantity: Number(item.quantity ?? 1)
-          }
-        });
-      } else {
-        await sendRawToShopify({
-          storeKey: assignedStore as "hawaii" | "las_vegas",
-          locationGid: selectedLocation,
-          item: {
-            id: item.id,
-            sku: item.sku,
-            brand_title: item.brand_title,
-            subject: item.subject,
-            card_number: item.card_number,
-            image_url: item.catalog_snapshot?.image_url || item.image_urls?.[0] || undefined,
-            price: item.price ?? undefined,
-            cost: item.cost ?? undefined,
-            barcode: item.barcode,
-            condition: item.variant === 'Normal' ? 'Near Mint' : item.variant,
-            quantity: Number(item.quantity ?? 1)
-          }
-        });
+      // Queue item for Shopify sync
+      const { error: queueError } = await supabase.rpc('queue_shopify_sync', {
+        item_id: item.id,
+        sync_action: 'update'
+      });
+
+      if (queueError) {
+        throw new Error(`Failed to queue for sync: ${queueError.message}`);
       }
-      toast.success(`Synced ${item.sku} to Shopify`);
+
+      // Trigger the processor
+      await supabase.functions.invoke('shopify-sync-processor', { body: {} });
+      
+      toast.success(
+        `${item.sku} queued for Shopify sync`, 
+        {
+          action: {
+            label: "View Queue",
+            onClick: () => window.location.href = '/admin#queue'
+          }
+        }
+      );
+      
       fetchItems(0, true);
     } catch (e: any) {
-      toast.error(e?.message || "Sync failed");
+      toast.error(e?.message || "Failed to queue sync");
     } finally {
       setSyncingRowId(null);
     }
@@ -411,6 +391,7 @@ const Inventory = () => {
       <div className="container mx-auto p-6 space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-3xl font-bold">Inventory Management</h1>
+          <QueueStatusIndicator />
         </div>
 
         <Tabs defaultValue="inventory" className="w-full">

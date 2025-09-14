@@ -9,6 +9,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import EditIntakeItemDialog, { IntakeItemDetails } from "@/components/EditIntakeItemDialog";
 import { useStore } from "@/contexts/StoreContext";
 import { useBatchSendToShopify } from "@/hooks/useBatchSendToShopify";
+import { QueueStatusIndicator } from "@/components/QueueStatusIndicator";
 
 interface IntakeItem {
   id: string;
@@ -178,9 +179,10 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
     try {
       setSendingItemIds(prev => new Set(prev.add(item.id))); // Mark as sending
       
+      // Use the improved batching function that handles inventory + queue
       const result = await sendChunkedBatchToShopify([item.id], assignedStore as "hawaii" | "las_vegas", selectedLocation);
       
-      if (result.shopify_success > 0) {
+      if (result.processed > 0) {
         // Optimistic UI update for immediate feedback
         setRecentItems((prev) => prev.filter((i) => i.id !== item.id));
         setTotalCount((c) => Math.max(0, (c || 0) - 1));
@@ -192,8 +194,8 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
         }, 1000);
       }
     } catch (error: any) {
-      console.error('Error sending item:', error);
-      toast.error(`Error sending item: ${error?.message || 'Unknown error'}`);
+      console.error('Error processing item:', error);
+      toast.error(`Error processing item: ${error?.message || 'Unknown error'}`);
     } finally {
       setSendingItemIds(prev => {
         const newSet = new Set(prev);
@@ -269,13 +271,30 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
       await fetchRecentItems();
       
       // Trigger empty lot check after successful batch send
-      if (response.shopify_success > 0) {
+      if (response.processed > 0) {
         window.dispatchEvent(new CustomEvent('batch:items-sent-to-inventory'));
-        toast.success(`Successfully sent ${response.shopify_success} items to Shopify!`);
+        
+        const queuedCount = response.shopify_success || 0;
+        const inventoryCount = response.processed || 0;
+        
+        if (queuedCount > 0) {
+          toast.success(
+            `✅ ${inventoryCount} items added to inventory and ${queuedCount} queued for Shopify sync`, 
+            {
+              action: {
+                label: "View Queue",
+                onClick: () => window.location.href = '/admin#queue'
+              }
+            }
+          );
+        } else {
+          toast.success(`✅ ${inventoryCount} items added to inventory`);
+        }
       }
       
-      if (response.shopify_errors > 0) {
-        toast.error(`${response.shopify_errors} items failed to sync`);
+      if (response.shopify_errors > 0 || response.rejected > 0) {
+        const totalErrors = (response.shopify_errors || 0) + (response.rejected || 0);
+        toast.error(`❌ ${totalErrors} items failed to process`);
       }
       
     } catch (error: any) {
@@ -633,6 +652,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
               <CardDescription>Recent items added to the batch</CardDescription>
             </div>
             <div className="flex gap-2">
+              <QueueStatusIndicator />
               {onViewFullBatch && (
                 <Button variant="outline" size="sm" onClick={onViewFullBatch}>
                   <Eye className="h-4 w-4 mr-2" />
@@ -650,10 +670,10 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
                   <Package className={`h-4 w-4 mr-2 ${sendingBatchToInventory ? 'animate-pulse' : ''}`} />
                   {sendingBatchToInventory ? (
                     batchSendProgress.inProgress ? 
-                      `Sending... (${batchSendProgress.completed}/${batchSendProgress.total})` : 
-                      'Sending...'
+                      `Processing... (${batchSendProgress.completed}/${batchSendProgress.total})` : 
+                      'Processing...'
                   ) : (
-                    `Send Batch to Inventory`
+                    `Send to Inventory`
                   )}
                 </Button>
               )}
