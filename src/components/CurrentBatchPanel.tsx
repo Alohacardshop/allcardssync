@@ -165,7 +165,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
   };
 
   const handleSendToInventory = async (item: IntakeItem) => {
-    if (!selectedStore || !selectedLocation) {
+    if (!assignedStore || !selectedLocation) {
       toast.error("Please select a store and location first");
       return;
     }
@@ -178,7 +178,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
     try {
       setSendingItemIds(prev => new Set(prev.add(item.id))); // Mark as sending
       
-      const result = await sendBatchToShopify([item.id], selectedStore as "hawaii" | "las_vegas", selectedLocation);
+      const result = await sendBatchToShopify([item.id], assignedStore as "hawaii" | "las_vegas", selectedLocation);
       
       if (result.shopify_success > 0) {
         // Optimistic UI update for immediate feedback
@@ -205,7 +205,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
 
   // Send entire batch to inventory
   const handleSendBatchToInventory = async () => {
-    if (!selectedStore || !selectedLocation) {
+    if (!assignedStore || !selectedLocation) {
       toast.error('Please select a store and location first');
       return;
     }
@@ -234,7 +234,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
     const correlationId = `batch_send_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
     console.log(`🚀 [${correlationId}] Starting chunked batch send to inventory:`, { 
       itemCount: itemsToSend.length, 
-      store: selectedStore,
+      store: assignedStore,
       location: selectedLocation 
     });
     
@@ -260,7 +260,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
         try {
           const response = await sendBatchToShopify(
             chunkIds,
-            selectedStore as "hawaii" | "las_vegas",
+            assignedStore as "hawaii" | "las_vegas",
             selectedLocation
           );
           
@@ -439,11 +439,11 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
   };
 
   const checkAndCloseEmptyLot = async () => {
-    if (!selectedStore || !selectedLocation) return;
+    if (!assignedStore || !selectedLocation) return;
     
     try {
       const { data, error } = await supabase.rpc('close_empty_lot_and_create_new', {
-        _store_key: selectedStore,
+        _store_key: assignedStore,
         _location_gid: selectedLocation
       });
 
@@ -466,7 +466,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
   };
 
   const handleStartNewLot = async () => {
-    if (!selectedStore || !selectedLocation) {
+    if (!assignedStore || !selectedLocation) {
       toast.error('Please select a store and location first');
       return;
     }
@@ -474,7 +474,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
     try {
       setStartingNewLot(true);
       const { data, error } = await supabase.rpc('force_new_lot', {
-        _store_key: selectedStore,
+        _store_key: assignedStore,
         _location_gid: selectedLocation,
         _reason: 'Manually started new lot'
       });
@@ -510,8 +510,8 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
         .limit(1);
 
       // Scope by store/location if available
-      if (selectedStore) {
-        lotQuery = lotQuery.eq('store_key', selectedStore);
+      if (assignedStore) {
+        lotQuery = lotQuery.eq('store_key', assignedStore);
       }
       if (selectedLocation) {
         lotQuery = lotQuery.eq('shopify_location_gid', selectedLocation);

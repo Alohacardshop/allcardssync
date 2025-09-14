@@ -35,7 +35,7 @@ export function MultiStoreLocationSelector({
   selectedItems, 
   onChange 
 }: MultiStoreLocationSelectorProps) {
-  const { 
+  const {
     assignedStore,
     assignedStoreName,
     userAssignments
@@ -48,9 +48,8 @@ export function MultiStoreLocationSelector({
   const [storeLocations, setStoreLocations] = useState<any[]>([]);
   const [loadingLocations, setLoadingLocations] = useState(false);
 
-  const filteredStores = availableStores.filter(store =>
-    store.name.toLowerCase().includes(storeSearch.toLowerCase())
-  );
+  // Since we now only support single store per user, we'll disable store selection
+  const filteredStores: any[] = [];
 
   const filteredLocations = selectedStoreKey 
     ? storeLocations.filter(location =>
@@ -65,10 +64,10 @@ export function MultiStoreLocationSelector({
   };
 
   const handleStoreLocationToggle = (storeKey: string, locationGid: string) => {
-    const store = availableStores.find(s => s.key === storeKey);
+    // Simplified since users can only have one store now
     const location = storeLocations.find(l => l.gid === locationGid);
     
-    if (!store || !location) return;
+    if (!assignedStore || !location) return;
 
     const isSelected = isStoreLocationSelected(storeKey, locationGid);
     
@@ -80,8 +79,8 @@ export function MultiStoreLocationSelector({
     } else {
       // Add the selection
       onChange([...selectedItems, {
-        storeKey,
-        storeName: store.name,
+        storeKey: assignedStore,
+        storeName: assignedStoreName || assignedStore,
         locationGid,
         locationName: location.name
       }]);
@@ -89,15 +88,14 @@ export function MultiStoreLocationSelector({
   };
 
   const handleSelectAllForStore = (storeKey: string) => {
-    const store = availableStores.find(s => s.key === storeKey);
-    if (!store) return;
-    const newSelections: SelectedStoreLocation[] = [];
+    if (storeKey !== assignedStore) return;
+    const newSelections: any[] = [];
     
     storeLocations.forEach(location => {
       if (!isStoreLocationSelected(storeKey, location.gid)) {
         newSelections.push({
-          storeKey,
-          storeName: store.name,
+          storeKey: assignedStore,
+          storeName: assignedStoreName || assignedStore,
           locationGid: location.gid,
           locationName: location.name
         });
@@ -108,11 +106,10 @@ export function MultiStoreLocationSelector({
   };
 
   const handleSelectAllAssigned = () => {
-    const allAssigned: SelectedStoreLocation[] = [];
+    const allAssigned: any[] = [];
     
     userAssignments.forEach(assignment => {
-      const store = availableStores.find(s => s.key === assignment.store_key);
-      if (!store) return;
+      if (assignment.store_key !== assignedStore) return;
 
       if (assignment.location_gid) {
         // Specific location assignment - find in current store locations if this is the selected store
@@ -123,7 +120,7 @@ export function MultiStoreLocationSelector({
         if (location && !isStoreLocationSelected(assignment.store_key, assignment.location_gid)) {
           allAssigned.push({
             storeKey: assignment.store_key,
-            storeName: store.name,
+            storeName: assignedStoreName || assignment.store_key,
             locationGid: assignment.location_gid,
             locationName: location.name
           });
@@ -233,10 +230,10 @@ export function MultiStoreLocationSelector({
                 <Button 
                   variant="ghost" 
                   size="sm"
-                  onClick={refreshStores}
-                  disabled={loadingStores}
+                  onClick={() => {}}
+                  disabled={true}
                 >
-                  <RefreshCw className={`h-3 w-3 ${loadingStores ? 'animate-spin' : ''}`} />
+                  <RefreshCw className="h-3 w-3" />
                 </Button>
               </div>
               
@@ -252,29 +249,9 @@ export function MultiStoreLocationSelector({
 
               <ScrollArea className="h-48 border rounded-md">
                 <div className="p-2">
-                  {loadingStores ? (
-                    <div className="flex items-center justify-center py-8">
-                      <RefreshCw className="h-4 w-4 animate-spin mr-2" />
-                      Loading stores...
-                    </div>
-                  ) : filteredStores.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground">
-                      {storeSearch ? "No stores found" : "No stores available"}
-                    </div>
-                  ) : (
-                    filteredStores.map((store) => (
-                      <button
-                        key={store.key}
-                        onClick={() => handleStoreSelect(store.key)}
-                        className={`w-full text-left p-3 rounded-md hover:bg-muted transition-colors ${
-                          selectedStoreKey === store.key ? 'bg-muted' : ''
-                        }`}
-                      >
-                        <div className="font-medium">{store.name}</div>
-                        <div className="text-sm text-muted-foreground">{store.vendor}</div>
-                      </button>
-                    ))
-                  )}
+                  <div className="text-center py-8 text-muted-foreground">
+                    Store switching disabled - users now use single assigned store
+                  </div>
                 </div>
               </ScrollArea>
             </div>

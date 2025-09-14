@@ -237,9 +237,8 @@ export function AllLocationsSelector({
     // Keep store and location in sync
     if (newValue) {
       const loc = locations.find(l => l.gid === newValue);
-      if (loc) setSelectedStore(loc.storeKey);
-    } else {
-      setSelectedStore(null);
+      // Remove the location from store if no longer exists
+      // This shouldn't happen with the new single-store model
     }
   };
 

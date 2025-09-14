@@ -45,7 +45,7 @@ export function InventoryAnalytics() {
         <div>
           <h2 className="text-2xl font-bold">Inventory Analytics</h2>
           <p className="text-muted-foreground">
-            {selectedStore && `Store: ${selectedStore}`} {selectedLocation && ` - Location: ${selectedLocation}`}
+            {assignedStore && `Store: ${assignedStore}`} {selectedLocation && ` - Location: ${selectedLocation}`}
           </p>
         </div>
         <Select value={dateRange} onValueChange={setDateRange}>

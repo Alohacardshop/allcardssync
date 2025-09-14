@@ -26,19 +26,19 @@ export function LocationSelector({ className }: LocationSelectorProps) {
   } = useStore();
 
   const [lastSelectedLocation, setLastSelectedLocation] = useLocalStorageString(
-    `last-location-${selectedStore}`, 
+    `last-location-${assignedStore}`, 
     ""
   );
 
   const handleSetDefault = async () => {
-    if (!selectedStore || !selectedLocation) {
+    if (!assignedStore || !selectedLocation) {
       toast.error("Please select both store and location first");
       return;
     }
 
     try {
       const { error } = await supabase.rpc("set_user_default_location", {
-        _store_key: selectedStore,
+        _store_key: assignedStore,
         _location_gid: selectedLocation
       });
 

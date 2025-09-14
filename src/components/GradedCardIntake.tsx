@@ -308,7 +308,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
   };
 
   const handleSubmit = async () => {
-    if (!selectedStore || !selectedLocation) {
+    if (!assignedStore || !selectedLocation) {
       toast.error("Please select a store and location before submitting");
       return;
     }
@@ -366,7 +366,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
     const startTime = Date.now();
     
     logger.logInfo("Intake item submission started", {
-      store: selectedStore,
+      store: assignedStore,
       location: selectedLocation,
       certNumber: formData.certNumber,
       price: formData.price,
@@ -377,7 +377,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
 
     try {
       const rpcParams = {
-        store_key_in: selectedStore.trim(),
+        store_key_in: assignedStore.trim(),
         shopify_location_gid_in: selectedLocation.trim(),
         quantity_in: formData.quantity,
         brand_title_in: formData.brandTitle,
@@ -401,7 +401,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
       // Check exact access before insert
       console.log('🔧 Final values check:', {
         userId: (await supabase.auth.getSession()).data.session?.user.id,
-        storeKey: selectedStore.trim(),
+        storeKey: assignedStore.trim(),
         locationGid: selectedLocation.trim(),
         rpcStoreKey: rpcParams.store_key_in,
         rpcLocationGid: rpcParams.shopify_location_gid_in
@@ -461,7 +461,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         if (error.code === 'PGRST116' || error.code === '42501' || error.message?.toLowerCase().includes('row-level security')) {
           // Show detailed row data for comparison since preflight passed
           const { data: { session } } = await supabase.auth.getSession();
-          toast.error(`Insert failed with 42501 despite preflight success. Row data: Store="${selectedStore}", Location="${selectedLocation}", User ID ending in "${session?.user.id?.slice(-6) || 'unknown'}"`, {
+          toast.error(`Insert failed with 42501 despite preflight success. Row data: Store="${assignedStore}", Location="${selectedLocation}", User ID ending in "${session?.user.id?.slice(-6) || 'unknown'}"`, {
             duration: 10000
           });
           throw new Error('Access denied: RLS policy rejected the insert despite preflight checks passing.');
@@ -480,7 +480,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
           itemId: responseData.id,
           lotNumber: lotNumber,
           certNumber: formData.certNumber,
-          store: selectedStore,
+          store: assignedStore,
           location: selectedLocation,
           price: formData.price,
           processingTime: Date.now() - startTime
@@ -530,7 +530,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
       logger.logError("Intake item submission failed", 
         error instanceof Error ? error : new Error(error?.message || 'Unknown error'), {
         certNumber: formData.certNumber,
-        store: selectedStore,
+        store: assignedStore,
         location: selectedLocation,
         processingTime: elapsed,
         errorCode: error?.code,
@@ -580,7 +580,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         return false;
       }
 
-      if (!selectedStore || !selectedLocation) {
+      if (!assignedStore || !selectedLocation) {
         const errorMsg = "Store and location must be selected";
         toast.error(errorMsg);
         setAccessResult({ success: false, hasStaffRole: false, canAccessLocation: false, userId: session.user.id, error: errorMsg });
@@ -589,7 +589,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
 
       const userId = session.user.id;
       const userIdLast6 = userId.slice(-6);
-      const storeKeyTrimmed = selectedStore.trim();
+      const storeKeyTrimmed = assignedStore.trim();
       const locationGidTrimmed = selectedLocation.trim();
 
       // Use the new diagnostic RPC for consolidated access check
@@ -663,7 +663,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         </div>
 
         {/* Check Access Now Button */}
-        {selectedStore && selectedLocation && (
+        {assignedStore && selectedLocation && (
           <div className="space-y-3">
             <div className="flex justify-center">
               <Button
