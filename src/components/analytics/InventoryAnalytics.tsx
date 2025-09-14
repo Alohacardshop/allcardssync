@@ -30,6 +30,44 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 
+interface ChartDataPoint {
+  count: number;
+  value: number;
+  name?: string;
+  [key: string]: any;
+}
+
+interface ConditionData {
+  condition: string;
+  count: number;
+  percentage: number;
+  color: string;
+}
+
+interface GameData {
+  game: string;
+  count: number;
+  value: number;
+  color: string;
+}
+
+// Type guards and safe operations
+const isNumber = (value: unknown): value is number => {
+  return typeof value === 'number' && !isNaN(value);
+}
+
+const safeAdd = (a: unknown, b: unknown): number => {
+  const numA = isNumber(a) ? a : 0;
+  const numB = isNumber(b) ? b : 0;
+  return numA + numB;
+}
+
+const safeMultiply = (a: unknown, b: unknown): number => {
+  const numA = isNumber(a) ? a : 0;
+  const numB = isNumber(b) ? b : 0;
+  return numA * numB;
+}
+
 interface AnalyticsData {
   inventoryTrends: Array<{
     date: string
@@ -176,34 +214,42 @@ export function InventoryAnalytics() {
     return trends
   }
 
-  const processConditionDistribution = (items: any[]) => {
-    const conditions = items.reduce((acc: Record<string, number>, item: any) => {
-      const condition = item.variant || 'Near Mint'
-      acc[condition] = (acc[condition] || 0) + (item.quantity || 0)
-      return acc
-    }, {})
-
-    const total = Object.values(conditions).reduce((sum, count) => sum + count, 0)
+  const processConditionDistribution = (items: any[]): ConditionData[] => {
+    const conditions: Record<string, number> = {}
     
-    return Object.entries(conditions).map(([condition, count]) => ({
+    items.forEach((item: any) => {
+      const condition = item.variant || 'Near Mint'
+      const quantity = isNumber(item.quantity) ? item.quantity : 0
+      conditions[condition] = (conditions[condition] || 0) + quantity
+    })
+
+    const total = Object.values(conditions).reduce((sum: number, count: number) => sum + count, 0)
+    
+    return Object.entries(conditions).map(([condition, count]): ConditionData => ({
       condition,
-      count: count as number,
-      percentage: Math.round((count as number / total) * 100),
+      count,
+      percentage: total > 0 ? Math.round((count / total) * 100) : 0,
       color: CONDITION_COLORS[condition as keyof typeof CONDITION_COLORS] || '#6b7280'
     }))
   }
 
-  const processGameDistribution = (items: any[]) => {
-    const games = items.reduce((acc: Record<string, { count: number, value: number }>, item: any) => {
+  const processGameDistribution = (items: any[]): GameData[] => {
+    const games: Record<string, { count: number, value: number }> = {}
+    
+    items.forEach((item: any) => {
       const game = item.catalog_snapshot?.game || 'other'
-      acc[game] = {
-        count: (acc[game]?.count || 0) + (item.quantity || 0),
-        value: (acc[game]?.value || 0) + ((item.price || 0) * (item.quantity || 0))
+      const quantity = isNumber(item.quantity) ? item.quantity : 0
+      const price = isNumber(item.price) ? item.price : 0
+      
+      if (!games[game]) {
+        games[game] = { count: 0, value: 0 }
       }
-      return acc
-    }, {})
+      
+      games[game].count += quantity
+      games[game].value += price * quantity
+    })
 
-    return Object.entries(games).map(([game, data]) => ({
+    return Object.entries(games).map(([game, data]): GameData => ({
       game: game.charAt(0).toUpperCase() + game.slice(1),
       count: data.count,
       value: Math.round(data.value),
