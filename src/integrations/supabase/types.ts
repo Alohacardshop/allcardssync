@@ -1076,6 +1076,56 @@ export type Database = {
         }
         Relationships: []
       }
+      shopify_sync_queue: {
+        Row: {
+          action: string
+          completed_at: string | null
+          created_at: string
+          error_message: string | null
+          id: string
+          inventory_item_id: string
+          max_retries: number
+          retry_count: number
+          shopify_product_id: string | null
+          started_at: string | null
+          status: string
+        }
+        Insert: {
+          action: string
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          inventory_item_id: string
+          max_retries?: number
+          retry_count?: number
+          shopify_product_id?: string | null
+          started_at?: string | null
+          status?: string
+        }
+        Update: {
+          action?: string
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          inventory_item_id?: string
+          max_retries?: number
+          retry_count?: number
+          shopify_product_id?: string | null
+          started_at?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shopify_sync_queue_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "intake_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sync_queue: {
         Row: {
           created_at: string
@@ -1769,6 +1819,10 @@ export type Database = {
       }
       normalize_game_slug: {
         Args: { input_game: string }
+        Returns: string
+      }
+      queue_shopify_sync: {
+        Args: { item_id: string; sync_action?: string }
         Returns: string
       }
       restore_intake_item: {
