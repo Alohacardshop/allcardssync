@@ -6,6 +6,7 @@ import { Progress } from "@/components/ui/progress"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { useShopifySyncQueue } from "@/hooks/useShopifySyncQueue"
+import { useShopifyValidation } from "@/hooks/useShopifyValidation"
 import { toast } from "sonner"
 import { 
   RefreshCw, 
@@ -19,7 +20,9 @@ import {
   TrendingUp,
   CheckCircle,
   XCircle,
-  Activity
+  Activity,
+  Shield,
+  Search
 } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 
@@ -37,10 +40,18 @@ export default function ShopifySyncQueueEnhanced() {
     clearCompleted 
   } = useShopifySyncQueue()
   
+  const { 
+    validating, 
+    results, 
+    validateSyncedItems, 
+    resyncItem 
+  } = useShopifyValidation()
+  
   const [isTriggering, setIsTriggering] = useState(false)
   const [isRetrying, setIsRetrying] = useState(false)
   const [isClearing, setIsClearing] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(false)
+  const [validationOpen, setValidationOpen] = useState(false)
 
   const handleTriggerProcessor = async () => {
     setIsTriggering(true)
@@ -78,6 +89,37 @@ export default function ShopifySyncQueueEnhanced() {
       toast.error("Failed to clear completed items")
     } finally {
       setIsClearing(false)
+    }
+  }
+
+  const handleValidateRecent = async () => {
+    try {
+      const recentCompletedIds = recentItems
+        .filter(item => item.status === 'completed')
+        .slice(0, 10)
+        .map(item => item.inventory_item_id)
+      
+      if (recentCompletedIds.length === 0) {
+        toast.error('No recent completed items to validate')
+        return
+      }
+
+      await validateSyncedItems(recentCompletedIds)
+      setValidationOpen(true)
+      toast.success(`Validated ${recentCompletedIds.length} items`)
+    } catch (error) {
+      console.error('Error validating items:', error)
+      toast.error('Failed to validate items')
+    }
+  }
+
+  const handleResync = async (itemId: string) => {
+    try {
+      await resyncItem(itemId)
+      toast.success('Item queued for re-sync')
+    } catch (error) {
+      console.error('Error resyncing item:', error)
+      toast.error('Failed to queue item for re-sync')
     }
   }
 
@@ -317,11 +359,11 @@ export default function ShopifySyncQueueEnhanced() {
 
             <Button
               variant="outline"
-              disabled
-              title="Coming soon"
+              onClick={handleValidateRecent}
+              disabled={validating || stats.completed === 0}
             >
-              <Pause className="h-4 w-4 mr-2" />
-              Pause Queue
+              <Shield className="h-4 w-4 mr-2" />
+              {validating ? "Validating..." : "Validate Recent"}
             </Button>
           </div>
         </CardContent>
@@ -406,6 +448,77 @@ export default function ShopifySyncQueueEnhanced() {
           </Card>
         </CollapsibleContent>
       </Collapsible>
+
+      {/* Sync Validation Results */}
+      {results.length > 0 && (
+        <Collapsible open={validationOpen} onOpenChange={setValidationOpen}>
+          <CollapsibleTrigger asChild>
+            <Card className="cursor-pointer hover:bg-muted/50 transition-colors">
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    <Search className="w-4 h-4" />
+                    Sync Validation Results ({results.length})
+                  </span>
+                  <ChevronDown className={`h-4 w-4 transition-transform ${validationOpen ? 'rotate-180' : ''}`} />
+                </CardTitle>
+                <CardDescription>
+                  Verification of synced items against Shopify data
+                </CardDescription>
+              </CardHeader>
+            </Card>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="space-y-4">
+                  {results.map((result) => (
+                    <div key={result.itemId} className={`p-4 rounded-lg border ${
+                      result.status === 'valid' ? 'border-green-200 bg-green-50' :
+                      result.status === 'invalid' ? 'border-yellow-200 bg-yellow-50' :
+                      'border-red-200 bg-red-50'
+                    }`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-sm">{result.itemId.slice(0, 8)}...</span>
+                          {getStatusBadge(result.status)}
+                        </div>
+                        {result.status !== 'valid' && (
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => handleResync(result.itemId)}
+                          >
+                            Re-sync
+                          </Button>
+                        )}
+                      </div>
+                      
+                      {result.issues.length > 0 && (
+                        <div className="space-y-1">
+                          {result.issues.map((issue, index) => (
+                            <div key={index} className="text-sm text-red-700 flex items-center gap-1">
+                              <AlertTriangle className="w-3 h-3" />
+                              {issue}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      
+                      {result.status === 'valid' && (
+                        <div className="text-sm text-green-700 flex items-center gap-1">
+                          <CheckCircle className="w-3 h-3" />
+                          All data matches between inventory and Shopify
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </CollapsibleContent>
+        </Collapsible>
+      )}
     </div>
   )
 }

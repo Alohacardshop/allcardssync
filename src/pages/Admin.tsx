@@ -45,6 +45,8 @@ import { PSAApiSettings } from '@/components/admin/PSAApiSettings';
 import ShopifySyncQueue from '@/components/admin/ShopifySyncQueue';
 import ShopifySyncQueueEnhanced from '@/components/admin/ShopifySyncQueueEnhanced';
 import ShopifyQueueTest from '@/components/admin/ShopifyQueueTest';
+import ShopifyQueueSettings from '@/components/admin/ShopifyQueueSettings';
+import ShopifyQueueHealth from '@/components/admin/ShopifyQueueHealth';
 
 const Admin = () => {
   const [activeSection, setActiveSection] = useState('overview');
@@ -71,6 +73,20 @@ const Admin = () => {
       icon: Package,
       description: 'Monitor and manage sync queue',
       url: '#queue'
+    },
+    {
+      id: 'queue-settings',
+      title: 'Queue Settings',
+      icon: Settings,
+      description: 'Configure queue performance and safety',
+      url: '#queue-settings'
+    },
+    {
+      id: 'queue-health',
+      title: 'Queue Health',
+      icon: Shield,
+      description: 'Monitor queue health and alerts',
+      url: '#queue-health'
     },
     {
       id: 'catalog',
@@ -263,7 +279,41 @@ const Admin = () => {
 
       case 'queue':
         return (
-          <ShopifySyncQueueEnhanced />
+          <div className="space-y-6">
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight">Shopify Sync Queue</h1>
+              <p className="text-muted-foreground">
+                Monitor and manage inventory items being synced to Shopify.
+              </p>
+            </div>
+            <ShopifySyncQueueEnhanced />
+          </div>
+        );
+
+      case 'queue-settings':
+        return (
+          <div className="space-y-6">
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight">Queue Configuration</h1>
+              <p className="text-muted-foreground">
+                Configure Shopify sync performance, safety settings, and automation.
+              </p>
+            </div>
+            <ShopifyQueueSettings />
+          </div>
+        );
+
+      case 'queue-health':
+        return (
+          <div className="space-y-6">
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight">Queue Health Monitor</h1>
+              <p className="text-muted-foreground">
+                Monitor queue health, performance metrics, and receive alerts.
+              </p>
+            </div>
+            <ShopifyQueueHealth />
+          </div>
         );
 
       case 'catalog':

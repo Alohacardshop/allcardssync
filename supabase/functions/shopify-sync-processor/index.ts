@@ -42,8 +42,26 @@ async function shopifyGraphQL(domain: string, token: string, query: string, vari
   
   const data = await response.json()
   
+  // Enhanced rate limit monitoring
+  const callLimit = response.headers.get('X-Shopify-Shop-Api-Call-Limit')
+  const rateLimitInfo = callLimit ? callLimit.split('/') : null
+  
+  if (rateLimitInfo) {
+    const [current, max] = rateLimitInfo.map(Number)
+    const usage = (current / max) * 100
+    
+    console.log(`📊 API Usage: ${current}/${max} (${usage.toFixed(1)}%)`)
+    
+    // Return rate limit info for dynamic adjustment
+    if (usage > 80) {
+      console.log(`⚠️ High API usage: ${usage.toFixed(1)}%`)
+      return { ...data.data, _rateLimitWarning: true, _usage: usage }
+    }
+  }
+  
   if (response.status === 429) {
-    throw new Error('RATE_LIMIT: Shopify rate limit exceeded')
+    const retryAfter = response.headers.get('Retry-After')
+    throw new Error(`RATE_LIMIT: ${retryAfter ? `Retry after ${retryAfter}s` : 'Shopify rate limit exceeded'}`)
   }
   
   if (!response.ok) {
@@ -235,17 +253,35 @@ Deno.serve(async (req) => {
 
     console.log('🔄 Starting Shopify sync processor...')
 
+    // Get processing settings from system_settings
+    const { data: settingsData } = await supabase
+      .from('system_settings')
+      .select('key_name, key_value')
+      .in('key_name', ['SHOPIFY_BATCH_SIZE', 'SHOPIFY_BATCH_DELAY', 'SHOPIFY_MAX_PROCESS_COUNT'])
+
+    const settings = settingsData?.reduce((acc: any, setting) => {
+      acc[setting.key_name] = setting.key_value
+      return acc
+    }, {}) || {}
+
+    const batchSize = parseInt(settings.SHOPIFY_BATCH_SIZE || '1')
+    const batchDelay = parseInt(settings.SHOPIFY_BATCH_DELAY || '2000') // milliseconds
+    const maxProcessCount = parseInt(settings.SHOPIFY_MAX_PROCESS_COUNT || '50')
+
+    console.log(`⚙️ Processing config: ${batchSize} items per batch, ${batchDelay}ms delay, max ${maxProcessCount} items`)
+
     let processedCount = 0
-    let maxProcessCount = 50 // Prevent infinite loops
+    let consecutiveRateLimits = 0
+    let dynamicDelay = batchDelay
 
     while (processedCount < maxProcessCount) {
-      // Get next queued item
+      // Get next batch of queued items
       const { data: queueItems, error: queueError } = await supabase
         .from('shopify_sync_queue')
         .select('*')
         .eq('status', 'queued')
         .order('created_at', { ascending: true })
-        .limit(1)
+        .limit(batchSize)
 
       if (queueError) {
         console.error('❌ Error fetching queue items:', queueError)
@@ -257,8 +293,11 @@ Deno.serve(async (req) => {
         break
       }
 
-      const queueItem: QueueItem = queueItems[0]
-      console.log(`📦 Processing item ${queueItem.id} (${queueItem.action})`)
+      console.log(`📦 Processing batch of ${queueItems.length} items`)
+
+      // Process each item in the current batch
+      for (const queueItem of queueItems) {
+        console.log(`📦 Processing item ${queueItem.id} (${queueItem.action})`)
 
       // Mark as processing
       const { error: updateError } = await supabase
@@ -318,28 +357,43 @@ Deno.serve(async (req) => {
               item.shopify_location_gid
             )
             console.log(`✅ Created Shopify product: ${shopifyResult.productId}`)
+            
+            // Check for rate limit warnings and adjust delay
+            if (shopifyResult._rateLimitWarning) {
+              dynamicDelay = Math.min(dynamicDelay * 1.5, 10000) // Cap at 10 seconds
+              console.log(`⚠️ Increased delay to ${dynamicDelay}ms due to high API usage`)
+            } else if (consecutiveRateLimits === 0) {
+              // Gradually reduce delay if no rate limit issues
+              dynamicDelay = Math.max(dynamicDelay * 0.9, batchDelay)
+            }
+            
           } catch (shopifyError: any) {
-            // Check for rate limit errors and handle them specially
+            // Enhanced rate limit handling
             if (shopifyError.message.includes('RATE_LIMIT')) {
-              console.log(`⏳ Rate limit hit, will retry item ${queueItem.id} later`)
+              consecutiveRateLimits++
+              console.log(`⏳ Rate limit hit (#${consecutiveRateLimits}), will retry item ${queueItem.id} later`)
               
-              // Update retry count but keep status as queued with longer delay
+              // Exponential backoff for rate limits
+              const backoffTime = Math.min(600000, 30000 * Math.pow(2, consecutiveRateLimits - 1)) // Cap at 10 minutes
+              
+              // Update retry count but keep status as queued
               await supabase
                 .from('shopify_sync_queue')
                 .update({
                   status: 'queued',
                   retry_count: queueItem.retry_count + 1,
-                  error_message: 'Rate limited, will retry',
+                  error_message: `Rate limited, backoff ${backoffTime/1000}s`,
                   started_at: null
                 })
                 .eq('id', queueItem.id)
               
-              // Wait longer for rate limits (30 seconds)
-              console.log('⏳ Waiting 30 seconds due to rate limit...')
-              await new Promise(resolve => setTimeout(resolve, 30000))
+              console.log(`⏳ Waiting ${backoffTime/1000} seconds due to rate limit...`)
+              await new Promise(resolve => setTimeout(resolve, backoffTime))
               continue // Skip the normal retry logic
             }
             
+            // Reset consecutive rate limits on other errors
+            consecutiveRateLimits = 0
             throw shopifyError
           }
         }
@@ -370,6 +424,9 @@ Deno.serve(async (req) => {
         }
 
         console.log(`✅ Successfully synced item ${queueItem.id} -> Product ${shopifyResult.productId}`)
+        
+        // Reset consecutive rate limits on success
+        consecutiveRateLimits = 0
 
       } catch (error: any) {
         console.error(`❌ Error syncing item ${queueItem.id}:`, error)
@@ -409,12 +466,14 @@ Deno.serve(async (req) => {
         }
       }
 
-      processedCount++
+      } // End of batch processing loop
+      
+      processedCount += queueItems.length
 
-      // Wait 2 seconds before next item
-      if (processedCount < maxProcessCount) {
-        console.log('⏳ Waiting 2 seconds before next item...')
-        await new Promise(resolve => setTimeout(resolve, 2000))
+      // Dynamic delay between batches
+      if (processedCount < maxProcessCount && queueItems.length > 0) {
+        console.log(`⏳ Waiting ${dynamicDelay}ms before next batch...`)
+        await new Promise(resolve => setTimeout(resolve, dynamicDelay))
       }
     }
 
