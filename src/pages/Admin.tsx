@@ -18,6 +18,20 @@ import {
   Tag,
   Download
 } from 'lucide-react';
+import { Link, useLocation } from 'react-router-dom';
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarTrigger,
+  SidebarInset
+} from "@/components/ui/sidebar";
 import { Navigation } from '@/components/Navigation';
 import { ShopifyConfig } from '@/components/admin/ShopifyConfig';
 import TCGDatabaseSettings from '@/components/admin/TCGDatabaseSettings';
@@ -28,43 +42,77 @@ import CatalogTab from '@/components/admin/CatalogTab';
 import { InventorySyncSettings } from '@/components/admin/InventorySyncSettings';
 import { ShopifyTagImport } from '@/components/admin/ShopifyTagImport';
 import { PSAApiSettings } from '@/components/admin/PSAApiSettings';
-import { Link } from 'react-router-dom';
 
 const Admin = () => {
   const [activeSection, setActiveSection] = useState('overview');
+  const location = useLocation();
 
   const adminSections = [
     {
       id: 'overview',
       title: 'Overview',
       icon: BarChart3,
-      description: 'System overview and quick actions'
+      description: 'System overview and quick actions',
+      url: '#overview'
     },
     {
       id: 'stores',
       title: 'Store Management',
       icon: ShoppingCart,
-      description: 'Shopify integration and inventory sync'
+      description: 'Shopify integration and inventory sync',
+      url: '#stores'
     },
     {
       id: 'catalog',
       title: 'Catalog & Data',
       icon: Database,
-      description: 'TCG database and card catalog settings'
+      description: 'TCG database and card catalog settings',
+      url: '#catalog'
     },
     {
       id: 'users',
       title: 'User Management',
       icon: Users,
-      description: 'User assignments and permissions'
+      description: 'User assignments and permissions',
+      url: '#users'
     },
     {
       id: 'system',
       title: 'System & Logs',
       icon: Server,
-      description: 'System logs and debugging tools'
+      description: 'System logs and debugging tools',
+      url: '#system'
     }
   ];
+
+  const AdminSidebar = () => (
+    <Sidebar>
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupLabel>Admin Dashboard</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {adminSections.map((section) => (
+                <SidebarMenuItem key={section.id}>
+                  <SidebarMenuButton
+                    isActive={activeSection === section.id}
+                    onClick={() => setActiveSection(section.id)}
+                    className="flex items-center gap-3 px-3 py-2"
+                  >
+                    <section.icon className="w-4 h-4" />
+                    <div className="flex flex-col items-start">
+                      <span className="font-medium">{section.title}</span>
+                      <span className="text-xs text-muted-foreground">{section.description}</span>
+                    </div>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
+    </Sidebar>
+  );
 
   const renderSectionContent = () => {
     switch (activeSection) {
@@ -72,8 +120,8 @@ const Admin = () => {
         return (
           <div className="space-y-6">
             <div>
-              <h2 className="text-2xl font-bold mb-2">System Overview</h2>
-              <p className="text-muted-foreground mb-6">
+              <h1 className="text-3xl font-bold tracking-tight">Admin Dashboard</h1>
+              <p className="text-muted-foreground">
                 Manage your TCG inventory system, Shopify integration, and user access.
               </p>
             </div>
@@ -82,7 +130,7 @@ const Admin = () => {
               {adminSections.slice(1).map((section) => (
                 <Card 
                   key={section.id} 
-                  className="cursor-pointer hover:shadow-md transition-shadow"
+                  className="cursor-pointer hover:shadow-md transition-all duration-200 hover:scale-105"
                   onClick={() => setActiveSection(section.id)}
                 >
                   <CardHeader className="pb-3">
@@ -90,9 +138,7 @@ const Admin = () => {
                       <div className="p-2 bg-primary/10 rounded-lg">
                         <section.icon className="w-5 h-5 text-primary" />
                       </div>
-                      <div>
-                        <CardTitle className="text-lg">{section.title}</CardTitle>
-                      </div>
+                      <CardTitle className="text-lg">{section.title}</CardTitle>
                     </div>
                   </CardHeader>
                   <CardContent>
@@ -193,8 +239,8 @@ const Admin = () => {
         return (
           <div className="space-y-6">
             <div>
-              <h2 className="text-2xl font-bold mb-2">Store Management</h2>
-              <p className="text-muted-foreground mb-6">
+              <h1 className="text-3xl font-bold tracking-tight">Store Management</h1>
+              <p className="text-muted-foreground">
                 Configure Shopify integration, inventory sync, and product management.
               </p>
             </div>
@@ -208,8 +254,8 @@ const Admin = () => {
         return (
           <div className="space-y-6">
             <div>
-              <h2 className="text-2xl font-bold mb-2">Catalog & Data Management</h2>
-              <p className="text-muted-foreground mb-6">
+              <h1 className="text-3xl font-bold tracking-tight">Catalog & Data Management</h1>
+              <p className="text-muted-foreground">
                 Manage TCG database connections, card catalogs, and intake settings.
               </p>
             </div>
@@ -224,8 +270,8 @@ const Admin = () => {
         return (
           <div className="space-y-6">
             <div>
-              <h2 className="text-2xl font-bold mb-2">User Management</h2>
-              <p className="text-muted-foreground mb-6">
+              <h1 className="text-3xl font-bold tracking-tight">User Management</h1>
+              <p className="text-muted-foreground">
                 Manage user assignments, store access, and permissions.
               </p>
             </div>
@@ -237,8 +283,8 @@ const Admin = () => {
         return (
           <div className="space-y-6">
             <div>
-              <h2 className="text-2xl font-bold mb-2">System & Logs</h2>
-              <p className="text-muted-foreground mb-6">
+              <h1 className="text-3xl font-bold tracking-tight">System & Logs</h1>
+              <p className="text-muted-foreground">
                 View system logs, debug information, and monitor system health.
               </p>
             </div>
@@ -252,57 +298,32 @@ const Admin = () => {
   };
 
   return (
-    <>
-      {/* Navigation Header */}
-      <div className="bg-background border-b">
-        <div className="container mx-auto px-4 py-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Link to="/">
-                <Button variant="ghost" size="sm" className="flex items-center gap-2">
-                  <Home className="w-4 h-4" />
-                  Back to Dashboard
-                </Button>
-              </Link>
-              <div className="h-6 w-px bg-border" />
-              <h1 className="text-lg font-semibold">Admin Dashboard</h1>
+    <SidebarProvider>
+      <div className="min-h-screen flex w-full">
+        <AdminSidebar />
+        <SidebarInset className="flex-1">
+          {/* Header */}
+          <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
+            <SidebarTrigger className="-ml-1" />
+            <Separator orientation="vertical" className="mr-2 h-4" />
+            <Link to="/">
+              <Button variant="ghost" size="sm" className="flex items-center gap-2">
+                <Home className="w-4 h-4" />
+                Back to Dashboard
+              </Button>
+            </Link>
+            <div className="ml-auto">
+              <Navigation showMobileMenu={true} />
             </div>
-            <Navigation showMobileMenu={true} />
-          </div>
-        </div>
-      </div>
+          </header>
 
-      <div className="flex min-h-screen">
-        {/* Sidebar Navigation */}
-        <div className="w-64 bg-muted/30 border-r">
-          <div className="p-4">
-            <nav className="space-y-2">
-              {adminSections.map((section) => (
-                <Button
-                  key={section.id}
-                  variant={activeSection === section.id ? "default" : "ghost"}
-                  className="w-full justify-start h-auto py-3"
-                  onClick={() => setActiveSection(section.id)}
-                >
-                  <section.icon className="w-5 h-5 mr-3" />
-                  <div className="text-left">
-                    <div className="font-medium">{section.title}</div>
-                    <div className="text-xs opacity-60">{section.description}</div>
-                  </div>
-                </Button>
-              ))}
-            </nav>
-          </div>
-        </div>
-
-        {/* Main Content */}
-        <div className="flex-1">
-          <div className="container mx-auto p-6">
+          {/* Main Content */}
+          <main className="flex-1 p-6">
             {renderSectionContent()}
-          </div>
-        </div>
+          </main>
+        </SidebarInset>
       </div>
-    </>
+    </SidebarProvider>
   );
 };
 
