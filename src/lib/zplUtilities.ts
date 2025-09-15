@@ -70,7 +70,11 @@ export class ZPLUtilities {
     options: PrinterUtilityOptions
   ): Promise<{ success: boolean; message?: string; error?: string }> {
     try {
-      const response = await fetch(`http://127.0.0.1:17777/rawtcp?ip=${options.ip}&port=${options.port || 9100}`, {
+      // Get bridge URL from environment or use default
+      const bridgeUrl = import.meta.env.VITE_LOCAL_BRIDGE_URL || 'http://127.0.0.1:17777';
+      const bridgePort = import.meta.env.VITE_DEFAULT_PRINTER_PORT || '9100';
+      
+      const response = await fetch(`${bridgeUrl}/rawtcp?ip=${options.ip}&port=${options.port || bridgePort}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'text/plain',

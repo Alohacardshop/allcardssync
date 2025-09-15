@@ -100,7 +100,7 @@ export async function testLocalBridge(config: LocalBridgeConfig): Promise<Bridge
 }
 
 export const DEFAULT_BRIDGE_CONFIG: LocalBridgeConfig = {
-  bridgeUrl: 'http://localhost:3001',
-  printerIp: '192.168.1.70',
-  printerPort: 9100
+  bridgeUrl: import.meta.env.VITE_LOCAL_BRIDGE_URL || 'http://localhost:3001',
+  printerIp: import.meta.env.VITE_DEFAULT_PRINTER_IP || '192.168.1.70',
+  printerPort: parseInt(import.meta.env.VITE_DEFAULT_PRINTER_PORT || '9100')
 };
