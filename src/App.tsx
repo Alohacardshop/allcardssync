@@ -8,6 +8,8 @@ import { useEffect, useState } from "react";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { StoreProvider } from "@/contexts/StoreContext";
 import Index from "./pages/Index";
+import DashboardPage from "./pages/DashboardPage";
+import TestHardwarePage from "./pages/TestHardwarePage";
 import Inventory from "./pages/Inventory";
 import Batches from "./pages/Batches";
 import { LabelDesigner } from "./pages/LabelDesigner";
@@ -18,6 +20,10 @@ import PrintLogs from "./pages/PrintLogs";
 import ZPLSettings from "./pages/ZPLSettings";
 import ShopifyMapping from "./pages/ShopifyMapping";
 import BulkImport from "./pages/BulkImport";
+import { GlobalKeyboardHandler } from "./components/GlobalKeyboardHandler";
+import { FloatingActionButton } from "./components/FloatingActionButton";
+import { PerformanceMonitor } from "./components/PerformanceMonitor";
+import { SessionTimeoutWarning, RecoveryMode } from "./components/OperationalSafeguards";
 
 import { supabase } from "@/integrations/supabase/client";
 import { CatalogMigrationPlaceholder } from "@/components/CatalogMigrationPlaceholder";
@@ -100,7 +106,9 @@ const App = () => (
             <BrowserRouter>
             <Routes>
               <Route path="/auth" element={<Auth />} />
-              <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
+              <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+              <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+              <Route path="/test-hardware" element={<ProtectedRoute><TestHardwarePage /></ProtectedRoute>} />
               <Route path="/inventory" element={<ProtectedRoute><Inventory /></ProtectedRoute>} />
               <Route path="/batches" element={<ProtectedRoute><Batches /></ProtectedRoute>} />
               <Route path="/labels" element={<ProtectedRoute><LabelDesigner /></ProtectedRoute>} />
@@ -113,6 +121,13 @@ const App = () => (
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>
+            
+            {/* Global Components */}
+            <GlobalKeyboardHandler />
+            <FloatingActionButton />
+            <PerformanceMonitor />
+            <SessionTimeoutWarning />
+            <RecoveryMode />
           </BrowserRouter>
         </StoreProvider>
       </TooltipProvider>

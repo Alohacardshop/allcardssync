@@ -113,6 +113,7 @@ export function Navigation({ showMobileMenu = true }: NavigationProps) {
     { to: "/labels", label: "Labels", icon: Tags },
     { to: "/shopify-mapping", label: "Shopify", icon: FileText },
     { to: "/print-logs", label: "Print Logs", icon: FileText },
+    { to: "/test-hardware", label: "Hardware Test", icon: Settings },
   ];
 
   if (isAdmin) {
