@@ -147,7 +147,8 @@ export function PerformanceMonitor() {
     return <Zap className="h-4 w-4 text-green-500" />;
   };
 
-  if (process.env.NODE_ENV !== 'development') return null;
+  // Hidden for now - return null to prevent rendering
+  return null;
 
   return (
     <div className="fixed bottom-20 left-4 z-40 space-y-2">
