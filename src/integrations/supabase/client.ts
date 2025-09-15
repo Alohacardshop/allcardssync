@@ -243,7 +243,7 @@ export async function getCachedPricingViaDB(
         .from('catalog_v2.variants')
         .select('id, condition, printing, sku, price, market_price, low_price, mid_price, high_price, updated_at, card_id')
         .eq('id', variantId)
-        .single();
+        .maybeSingle();
 
       if (error || !variant) {
         return {
@@ -260,7 +260,7 @@ export async function getCachedPricingViaDB(
         .from('catalog_v2.cards')
         .select('name, image_url, set_id, game')
         .eq('id', variant.card_id)
-        .single();
+        .maybeSingle();
 
       // Get set name if available
       let setName = '';
@@ -269,7 +269,7 @@ export async function getCachedPricingViaDB(
           .from('catalog_v2.sets')
           .select('name')
           .eq('id', card.set_id)
-          .single();
+          .maybeSingle();
         setName = set?.name || '';
       }
 
@@ -322,7 +322,7 @@ export async function getCachedPricingViaDB(
         .from('catalog_v2.cards')
         .select('name, image_url, set_id, game')
         .eq('id', cardId)
-        .single();
+        .maybeSingle();
 
       // Get set name if available
       let setName = '';
@@ -331,7 +331,7 @@ export async function getCachedPricingViaDB(
           .from('catalog_v2.sets')
           .select('name')
           .eq('id', card.set_id)
-          .single();
+          .maybeSingle();
         setName = set?.name || '';
       }
 

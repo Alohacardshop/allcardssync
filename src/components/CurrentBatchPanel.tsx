@@ -336,7 +336,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
           })
           .eq('id', item.id)
           .select('id')
-          .single();
+          .maybeSingle();
 
         if (fbError) {
           console.error('🗑️ [delete] fallback failed', fbError);

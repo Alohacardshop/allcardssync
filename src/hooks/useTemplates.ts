@@ -117,14 +117,14 @@ export function useTemplates(templateType: 'general' | 'raw' = 'general') {
           .update(templateData)
           .eq('id', templateId)
           .select()
-          .single();
+          .maybeSingle();
       } else {
         // Create new template
         result = await supabase
           .from('label_templates')
           .insert(templateData)
           .select()
-          .single();
+          .maybeSingle();
       }
 
       if (result.error) {

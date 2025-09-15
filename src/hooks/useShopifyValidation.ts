@@ -26,7 +26,7 @@ export function useShopifyValidation() {
             .from('intake_items')
             .select('*')
             .eq('id', itemId)
-            .single()
+            .maybeSingle()
 
           if (inventoryError || !inventoryItem) {
             validationResults.push({

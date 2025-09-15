@@ -31,49 +31,86 @@ async function getShopifyCredentials(supabase: any, storeKey: string) {
   }
 }
 
-async function shopifyGraphQL(domain: string, token: string, query: string, variables?: any) {
-  const response = await fetch(`https://${domain}/admin/api/2024-07/graphql.json`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Shopify-Access-Token': token,
-    },
-    body: JSON.stringify({ query, variables })
-  })
+  const supabase = await supabase.functions.invoke('shopify-sync-processor', { query })
+
+async function shopifyGraphQL(domain: string, token: string, query: string, variables?: any, retryCount = 0) {
+  const maxRetries = 3;
+  const baseDelay = 2000; // 2 seconds base delay
+  const maxDelay = 10000; // 10 seconds max delay
   
-  const data = await response.json()
-  
-  // Enhanced rate limit monitoring
-  const callLimit = response.headers.get('X-Shopify-Shop-Api-Call-Limit')
-  const rateLimitInfo = callLimit ? callLimit.split('/') : null
-  
-  if (rateLimitInfo) {
-    const [current, max] = rateLimitInfo.map(Number)
-    const usage = (current / max) * 100
-    
-    console.log(`📊 API Usage: ${current}/${max} (${usage.toFixed(1)}%)`)
-    
-    // Return rate limit info for dynamic adjustment
-    if (usage > 80) {
-      console.log(`⚠️ High API usage: ${usage.toFixed(1)}%`)
-      return { ...data.data, _rateLimitWarning: true, _usage: usage }
+  try {
+    // Add jitter to prevent thundering herd (random 0-500ms)
+    const jitter = Math.random() * 500;
+    if (retryCount > 0) {
+      const exponentialDelay = Math.min(baseDelay * Math.pow(2, retryCount - 1), maxDelay);
+      const totalDelay = exponentialDelay + jitter;
+      console.log(`⏳ Waiting ${totalDelay}ms before retry ${retryCount}/${maxRetries}`);
+      await new Promise(resolve => setTimeout(resolve, totalDelay));
     }
+
+    const response = await fetch(`https://${domain}/admin/api/2024-07/graphql.json`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Shopify-Access-Token': token,
+      },
+      body: JSON.stringify({ query, variables })
+    });
+    
+    const data = await response.json();
+    
+    // Enhanced rate limit monitoring with early warning
+    const callLimit = response.headers.get('X-Shopify-Shop-Api-Call-Limit');
+    const rateLimitInfo = callLimit ? callLimit.split('/') : null;
+    
+    if (rateLimitInfo) {
+      const [current, max] = rateLimitInfo.map(Number);
+      const usage = (current / max) * 100;
+      
+      console.log(`📊 API Usage: ${current}/${max} (${usage.toFixed(1)}%)`);
+      
+      // Enhanced rate limit warnings at multiple thresholds
+      if (usage > 90) {
+        console.log(`🚨 CRITICAL API usage: ${usage.toFixed(1)}% - Emergency slowdown`);
+        return { ...data.data, _rateLimitCritical: true, _usage: usage };
+      } else if (usage > 80) {
+        console.log(`⚠️ HIGH API usage: ${usage.toFixed(1)}% - Reducing speed`);
+        return { ...data.data, _rateLimitWarning: true, _usage: usage };
+      } else if (usage > 70) {
+        console.log(`⚡ Moderate API usage: ${usage.toFixed(1)}% - Monitor closely`);
+        return { ...data.data, _rateLimitWatch: true, _usage: usage };
+      }
+    }
+    
+    if (response.status === 429) {
+      const retryAfter = response.headers.get('Retry-After');
+      const retryDelay = retryAfter ? parseInt(retryAfter) * 1000 : baseDelay * Math.pow(2, retryCount);
+      
+      if (retryCount < maxRetries) {
+        console.log(`⏳ Rate limited, retrying in ${retryDelay}ms (attempt ${retryCount + 1}/${maxRetries})`);
+        return shopifyGraphQL(domain, token, query, variables, retryCount + 1);
+      }
+      
+      throw new Error(`RATE_LIMIT: ${retryAfter ? `Retry after ${retryAfter}s` : 'Shopify rate limit exceeded after all retries'}`);
+    }
+    
+    if (!response.ok) {
+      throw new Error(`Shopify API error: ${response.status} - ${JSON.stringify(data)}`);
+    }
+    
+    if (data.errors) {
+      throw new Error(`Shopify GraphQL errors: ${JSON.stringify(data.errors)}`);
+    }
+    
+    return data.data;
+    
+  } catch (error) {
+    if (retryCount < maxRetries && !error.message.includes('RATE_LIMIT')) {
+      console.log(`🔄 Request failed, retrying (attempt ${retryCount + 1}/${maxRetries}):`, error.message);
+      return shopifyGraphQL(domain, token, query, variables, retryCount + 1);
+    }
+    throw error;
   }
-  
-  if (response.status === 429) {
-    const retryAfter = response.headers.get('Retry-After')
-    throw new Error(`RATE_LIMIT: ${retryAfter ? `Retry after ${retryAfter}s` : 'Shopify rate limit exceeded'}`)
-  }
-  
-  if (!response.ok) {
-    throw new Error(`Shopify API error: ${response.status} - ${JSON.stringify(data)}`)
-  }
-  
-  if (data.errors) {
-    throw new Error(`Shopify GraphQL errors: ${JSON.stringify(data.errors)}`)
-  }
-  
-  return data.data
 }
 
 async function createShopifyProduct(credentials: any, item: InventoryItem, locationId: string) {
@@ -359,38 +396,47 @@ Deno.serve(async (req) => {
             )
             console.log(`✅ Created Shopify product: ${shopifyResult.productId}`)
             
-            // Check for rate limit warnings and adjust delay
-            if (shopifyResult._rateLimitWarning) {
-              dynamicDelay = Math.min(dynamicDelay * 1.5, 10000) // Cap at 10 seconds
-              console.log(`⚠️ Increased delay to ${dynamicDelay}ms due to high API usage`)
+            // Check for rate limit warnings and adjust delay dynamically
+            if (shopifyResult._rateLimitCritical) {
+              dynamicDelay = Math.min(dynamicDelay * 3, 15000); // Emergency slowdown - cap at 15 seconds
+              console.log(`🚨 CRITICAL rate limit - increased delay to ${dynamicDelay}ms`);
+            } else if (shopifyResult._rateLimitWarning) {
+              dynamicDelay = Math.min(dynamicDelay * 2, 10000); // High usage - cap at 10 seconds
+              console.log(`⚠️ HIGH usage - increased delay to ${dynamicDelay}ms`);
+            } else if (shopifyResult._rateLimitWatch) {
+              dynamicDelay = Math.min(dynamicDelay * 1.3, 6000); // Moderate usage - cap at 6 seconds
+              console.log(`⚡ Moderate usage - increased delay to ${dynamicDelay}ms`);
             } else if (consecutiveRateLimits === 0) {
-              // Gradually reduce delay if no rate limit issues
-              dynamicDelay = Math.max(dynamicDelay * 0.9, batchDelay)
+              // Gradually reduce delay if no rate limit issues (but not below base delay)
+              dynamicDelay = Math.max(dynamicDelay * 0.9, batchDelay);
             }
             
           } catch (shopifyError: any) {
-            // Enhanced rate limit handling
+            // Enhanced rate limit handling with exponential backoff and jitter
             if (shopifyError.message.includes('RATE_LIMIT')) {
-              consecutiveRateLimits++
-              console.log(`⏳ Rate limit hit (#${consecutiveRateLimits}), will retry item ${queueItem.id} later`)
+              consecutiveRateLimits++;
+              console.log(`⏳ Rate limit hit (#${consecutiveRateLimits}), backing off for item ${queueItem.id}`);
               
-              // Exponential backoff for rate limits
-              const backoffTime = Math.min(600000, 30000 * Math.pow(2, consecutiveRateLimits - 1)) // Cap at 10 minutes
+              // Exponential backoff starting at 2 seconds, capping at 10 minutes with jitter
+              const baseBackoff = 2000; // 2 seconds
+              const exponentialDelay = Math.min(baseBackoff * Math.pow(2, consecutiveRateLimits - 1), 600000); // Cap at 10 minutes
+              const jitter = Math.random() * 1000; // 0-1 second jitter to prevent thundering herd
+              const totalBackoff = exponentialDelay + jitter;
               
-              // Update retry count but keep status as queued
+              // Update retry count but keep status as queued for retry
               await supabase
                 .from('shopify_sync_queue')
                 .update({
                   status: 'queued',
                   retry_count: queueItem.retry_count + 1,
-                  error_message: `Rate limited, backoff ${backoffTime/1000}s`,
+                  error_message: `Rate limited (attempt ${consecutiveRateLimits}), backoff ${Math.round(totalBackoff/1000)}s`,
                   started_at: null
                 })
-                .eq('id', queueItem.id)
+                .eq('id', queueItem.id);
               
-              console.log(`⏳ Waiting ${backoffTime/1000} seconds due to rate limit...`)
-              await new Promise(resolve => setTimeout(resolve, backoffTime))
-              continue // Skip the normal retry logic
+              console.log(`⏳ Backing off ${Math.round(totalBackoff/1000)} seconds due to rate limit (#${consecutiveRateLimits})...`);
+              await new Promise(resolve => setTimeout(resolve, totalBackoff));
+              continue; // Skip the normal retry logic
             }
             
             // Reset consecutive rate limits on other errors

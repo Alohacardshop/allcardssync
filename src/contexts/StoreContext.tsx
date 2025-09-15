@@ -147,11 +147,16 @@ export function StoreProvider({ children }: StoreProviderProps) {
         console.log("StoreContext: Auto-assigning to user's store:", userAssignment);
         
         // Get store name from database
-        const { data: storeData } = await supabase
+        const { data: storeData, error: storeError } = await supabase
           .from("shopify_stores")
           .select("name")
           .eq("key", userAssignment.store_key)
-          .single();
+          .maybeSingle();
+          
+        if (storeError) {
+          console.error("Error fetching store data:", storeError);
+          // Don't show toast error here as it might be called too early
+        }
         
         setAssignedStore(userAssignment.store_key);
         setAssignedStoreName(storeData?.name || userAssignment.store_key);

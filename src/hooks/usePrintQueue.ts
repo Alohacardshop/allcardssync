@@ -303,7 +303,10 @@ export function usePrintQueue() {
     // Initial queue length check
     updateQueueLength();
 
-    return () => clearInterval(pollInterval);
+    // CRITICAL: Clear interval on unmount to prevent memory leaks
+    return () => {
+      clearInterval(pollInterval);
+    };
   }, [selectedPrinter, processQueue, updateQueueLength]);
 
   // Set up realtime subscription for queue updates
@@ -326,6 +329,7 @@ export function usePrintQueue() {
       )
       .subscribe();
 
+    // CRITICAL: Properly cleanup subscription to prevent memory leaks
     return () => {
       supabase.removeChannel(channel);
     };

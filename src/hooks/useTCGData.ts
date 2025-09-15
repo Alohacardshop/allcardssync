@@ -108,9 +108,10 @@ export function useCard(cardId?: string) {
           )
         `)
         .eq('id', cardId)
-        .single();
+        .maybeSingle();
       
       if (error) throw error;
+      if (!data) throw new Error(`Card with ID ${cardId} not found`);
       return data;
     },
     enabled: !!cardId,

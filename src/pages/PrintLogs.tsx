@@ -131,7 +131,7 @@ export default function PrintLogs() {
           payload: job.payload
         })
         .select()
-        .single();
+        .maybeSingle();
 
       if (insertError) throw insertError;
 

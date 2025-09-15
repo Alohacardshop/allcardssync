@@ -266,11 +266,15 @@ export const getExternalCardById = async (cardId: string) => {
     .from('cards')
     .select('*')
     .eq('id', cardId)
-    .single();
+    .maybeSingle();
     
   if (error) {
     console.error('Error fetching card by ID:', error);
     throw error;
+  }
+  
+  if (!data) {
+    throw new Error(`Card with ID ${cardId} not found`);
   }
   
   return data;
@@ -283,7 +287,7 @@ export const getExternalLatestPrice = async (cardId: string) => {
     .eq('card_id', cardId)
     .order('created_at', { ascending: false })
     .limit(1)
-    .single();
+    .maybeSingle();
     
   if (error) {
     // No price found is not necessarily an error
