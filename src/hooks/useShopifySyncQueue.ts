@@ -13,6 +13,10 @@ export interface SyncQueueItem {
   created_at: string
   started_at?: string
   completed_at?: string
+  queue_position?: number
+  processor_id?: string
+  processor_heartbeat?: string
+  retry_after?: string
 }
 
 export interface QueueStats {
@@ -32,6 +36,8 @@ export interface QueueProcessingState {
   isPaused: boolean
   currentItem?: SyncQueueItem
   estimatedTimeRemaining: number
+  processorId?: string
+  itemsPerMinute: number
 }
 
 export function useShopifySyncQueue() {
@@ -51,7 +57,8 @@ export function useShopifySyncQueue() {
   const [processingState, setProcessingState] = useState<QueueProcessingState>({
     isActive: false,
     isPaused: false,
-    estimatedTimeRemaining: 0
+    estimatedTimeRemaining: 0,
+    itemsPerMinute: 0
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -67,11 +74,11 @@ export function useShopifySyncQueue() {
         .from('shopify_sync_queue')
         .select('*')
 
-      // Fetch recent queue items for display  
+      // Fetch recent queue items for display ordered by queue position
       const { data: recentItems, error: recentError } = await supabase
         .from('shopify_sync_queue')
         .select('*')
-        .order('created_at', { ascending: false })
+        .order('queue_position', { ascending: true })
         .limit(20)
 
       if (allItemsError || recentError) throw allItemsError || recentError
@@ -124,24 +131,36 @@ export function useShopifySyncQueue() {
           ? Math.round((allItemsArray.filter(item => item.status === 'completed').length / allItemsArray.length) * 100)
           : 0,
         avgProcessingTime: Math.round(avgProcessingTime / 1000), // Convert to seconds
-        itemsPerMinute: processingTimes.length > 0 
-          ? Math.round(60000 / avgProcessingTime * 10) / 10 // Items per minute with 1 decimal
-          : 0
+        // CRITICAL: Max 30 items per minute due to 2-second delays
+        itemsPerMinute: Math.min(30, processingTimes.length > 0 
+          ? Math.round(60000 / avgProcessingTime * 10) / 10 
+          : 0)
       })
 
       setStats(newStats)
 
       // Update processing state
       const currentProcessing = allItemsArray.find(item => item.status === 'processing')
-      const estimatedTime = newStats.queued > 0 && avgProcessingTime > 0
-        ? (newStats.queued * avgProcessingTime) / 1000 // Convert to seconds
+      
+      // CRITICAL: Calculate estimated time based on 2-second per item processing
+      const estimatedTime = newStats.queued > 0 
+        ? newStats.queued * 2 // 2 seconds per item
         : 0
+
+      // Check if processor is currently active
+      const { data: processorSetting } = await supabase
+        .from('system_settings')
+        .select('key_value')
+        .eq('key_name', 'SHOPIFY_PROCESSOR_ACTIVE')
+        .maybeSingle()
 
       setProcessingState({
         isActive: newStats.processing > 0 || newStats.queued > 0,
-        isPaused: false, // This would need to be managed separately
+        isPaused: false,
         currentItem: currentProcessing,
-        estimatedTimeRemaining: Math.round(estimatedTime)
+        estimatedTimeRemaining: Math.round(estimatedTime),
+        processorId: processorSetting?.key_value || undefined,
+        itemsPerMinute: newStats.itemsPerMinute
       })
 
     } catch (err) {

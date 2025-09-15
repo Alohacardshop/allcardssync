@@ -1085,6 +1085,10 @@ export type Database = {
           id: string
           inventory_item_id: string
           max_retries: number
+          processor_heartbeat: string | null
+          processor_id: string | null
+          queue_position: number
+          retry_after: string | null
           retry_count: number
           shopify_product_id: string | null
           started_at: string | null
@@ -1098,6 +1102,10 @@ export type Database = {
           id?: string
           inventory_item_id: string
           max_retries?: number
+          processor_heartbeat?: string | null
+          processor_id?: string | null
+          queue_position?: number
+          retry_after?: string | null
           retry_count?: number
           shopify_product_id?: string | null
           started_at?: string | null
@@ -1111,6 +1119,10 @@ export type Database = {
           id?: string
           inventory_item_id?: string
           max_retries?: number
+          processor_heartbeat?: string | null
+          processor_id?: string | null
+          queue_position?: number
+          retry_after?: string | null
           retry_count?: number
           shopify_product_id?: string | null
           started_at?: string | null
@@ -1433,6 +1445,10 @@ export type Database = {
       _norm_gid: {
         Args: { t: string }
         Returns: string
+      }
+      acquire_shopify_processor_lock: {
+        Args: { processor_instance_id: string }
+        Returns: boolean
       }
       add_system_log: {
         Args: {
@@ -1832,6 +1848,10 @@ export type Database = {
       queue_shopify_sync: {
         Args: { item_id: string; sync_action?: string }
         Returns: string
+      }
+      release_shopify_processor_lock: {
+        Args: Record<PropertyKey, never>
+        Returns: boolean
       }
       restore_intake_item: {
         Args: { item_id: string; reason_in?: string }

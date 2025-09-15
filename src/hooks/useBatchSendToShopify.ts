@@ -162,7 +162,11 @@ export function useBatchSendToShopify() {
           if (inventoryResult?.processed_ids && inventoryResult.processed_ids.length > 0) {
             console.log(`📋 [useBatchSendToShopify] Queueing ${inventoryResult.processed_ids.length} items for Shopify sync`)
             
-            for (const itemId of inventoryResult.processed_ids) {
+            // Queue each item individually for Shopify sync with small delay to prevent position conflicts
+            for (let i = 0; i < inventoryResult.processed_ids.length; i++) {
+              const itemId = inventoryResult.processed_ids[i]
+              console.log(`📤 Queuing item ${itemId} for Shopify sync (${i + 1}/${inventoryResult.processed_ids.length})`)
+              
               try {
                 const { error: queueError } = await supabase.rpc('queue_shopify_sync', {
                   item_id: itemId,
@@ -176,12 +180,17 @@ export function useBatchSendToShopify() {
                 } else {
                   allQueuedItems.push(itemId)
                   totalQueued++
+                  
+                  // Small delay between queuing items to prevent position conflicts
+                  if (i < inventoryResult.processed_ids.length - 1) {
+                    await delay(100) // 100ms delay between each queue operation
+                  }
                 }
-                } catch (queueError: unknown) {
-                  console.error(`❌ [useBatchSendToShopify] Failed to queue item ${itemId}:`, queueError)
-                  const errorMessage = queueError && typeof queueError === 'object' && 'message' in queueError 
-                    ? (queueError as { message: string }).message 
-                    : String(queueError)
+              } catch (queueError: unknown) {
+                console.error(`❌ [useBatchSendToShopify] Failed to queue item ${itemId}:`, queueError)
+                const errorMessage = queueError && typeof queueError === 'object' && 'message' in queueError 
+                  ? (queueError as { message: string }).message 
+                  : String(queueError)
                 allRejectedItems.push({ id: itemId, reason: `Queue failed: ${errorMessage}` })
                 totalRejected++
               }

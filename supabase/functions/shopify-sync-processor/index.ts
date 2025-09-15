@@ -289,37 +289,54 @@ Deno.serve(async (req) => {
       }
     })
 
-    console.log('🔄 Starting Shopify sync processor...')
+    // Generate unique processor ID
+    const processorId = crypto.randomUUID()
+    console.log(`🔄 Starting Shopify sync processor ${processorId}...`)
 
-    // Get processing settings from system_settings
-    const { data: settingsData } = await supabase
-      .from('system_settings')
-      .select('key_name, key_value')
-      .in('key_name', ['SHOPIFY_BATCH_SIZE', 'SHOPIFY_BATCH_DELAY', 'SHOPIFY_MAX_PROCESS_COUNT'])
+    // Try to acquire distributed lock
+    const { data: lockAcquired, error: lockError } = await supabase
+      .rpc('acquire_shopify_processor_lock', { processor_instance_id: processorId })
+    
+    if (lockError) {
+      console.error('❌ Error acquiring processor lock:', lockError)
+      throw lockError
+    }
+    
+    if (!lockAcquired) {
+      console.log('⏳ Another processor instance is already running')
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message: 'Another processor instance is already running'
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 409
+        }
+      )
+    }
 
-    const settings = settingsData?.reduce((acc: any, setting) => {
-      acc[setting.key_name] = setting.key_value
-      return acc
-    }, {}) || {}
+    console.log(`🔐 Acquired processor lock for ${processorId}`)
 
-    const batchSize = parseInt(settings.SHOPIFY_BATCH_SIZE || '1')
-    const batchDelay = parseInt(settings.SHOPIFY_BATCH_DELAY || '2000') // milliseconds
-    const maxProcessCount = parseInt(settings.SHOPIFY_MAX_PROCESS_COUNT || '50')
-
-    console.log(`⚙️ Processing config: ${batchSize} items per batch, ${batchDelay}ms delay, max ${maxProcessCount} items`)
+    // CRITICAL: True one-by-one processing - ALWAYS process exactly 1 item at a time
+    const ITEM_DELAY_MS = 2000 // 2 seconds minimum between each item
+    const MAX_PROCESS_COUNT = 50 // Maximum items to process in one run
+    
+    console.log(`⚙️ Processing config: 1 item at a time, ${ITEM_DELAY_MS}ms delay between items, max ${MAX_PROCESS_COUNT} items`)
 
     let processedCount = 0
     let consecutiveRateLimits = 0
-    let dynamicDelay = batchDelay
 
-    while (processedCount < maxProcessCount) {
-      // Get next batch of queued items
+    // Process items one by one until queue is empty or max reached
+    while (processedCount < MAX_PROCESS_COUNT) {
+      // Get the NEXT SINGLE item by queue_position (guaranteed ordering)
       const { data: queueItems, error: queueError } = await supabase
         .from('shopify_sync_queue')
         .select('*')
         .eq('status', 'queued')
-        .order('created_at', { ascending: true })
-        .limit(batchSize)
+        .is('retry_after', null) // Skip items with retry delay
+        .order('queue_position', { ascending: true }) // CRITICAL: Order by position, not created_at
+        .limit(1) // ALWAYS exactly 1 item
 
       if (queueError) {
         console.error('❌ Error fetching queue items:', queueError)
@@ -331,23 +348,24 @@ Deno.serve(async (req) => {
         break
       }
 
-      console.log(`📦 Processing batch of ${queueItems.length} items`)
+      const queueItem = queueItems[0] // Get the single item
+      console.log(`📦 Processing item ${queueItem.id} (${queueItem.action}) at position ${queueItem.queue_position}`)
 
-      // Process each item in the current batch
-      for (const queueItem of queueItems) {
-        console.log(`📦 Processing item ${queueItem.id} (${queueItem.action})`)
-
-      // Mark as processing
+      // Mark as processing with processor tracking
       const { error: updateError } = await supabase
         .from('shopify_sync_queue')
         .update({
           status: 'processing',
-          started_at: new Date().toISOString()
+          started_at: new Date().toISOString(),
+          processor_id: processorId,
+          processor_heartbeat: new Date().toISOString()
         })
         .eq('id', queueItem.id)
 
       if (updateError) {
         console.error('❌ Error updating queue status:', updateError)
+        // Wait before trying next item even on error
+        await new Promise(resolve => setTimeout(resolve, ITEM_DELAY_MS))
         continue
       }
 
@@ -475,6 +493,10 @@ Deno.serve(async (req) => {
         // Reset consecutive rate limits on success
         consecutiveRateLimits = 0
 
+        // CRITICAL: Wait 2 seconds after EACH item (true one-by-one processing)
+        console.log(`⏳ Waiting ${ITEM_DELAY_MS}ms before next item...`)
+        await new Promise(resolve => setTimeout(resolve, ITEM_DELAY_MS))
+
       } catch (error: any) {
         console.error(`❌ Error syncing item ${queueItem.id}:`, error)
 
@@ -501,6 +523,8 @@ Deno.serve(async (req) => {
             error_message: fullErrorMessage,
             completed_at: shouldRetry ? null : new Date().toISOString(),
             started_at: null, // Reset started_at for retry
+            processor_id: null, // Clear processor ownership
+            processor_heartbeat: null,
             retry_after: shouldRetry ? new Date(Date.now() + retryDelay * 1000).toISOString() : null
           })
           .eq('id', queueItem.id)
@@ -519,23 +543,22 @@ Deno.serve(async (req) => {
           console.log(`💀 Item ${queueItem.id} failed permanently after ${queueItem.max_retries} retries`)
         } else {
           console.log(`🔄 Item ${queueItem.id} will retry (attempt ${newRetryCount}/${queueItem.max_retries}) after ${retryDelay}s`)
-          
-          // If this is a retry, wait the calculated delay before continuing
-          if (retryDelay > 0) {
-            await new Promise(resolve => setTimeout(resolve, retryDelay * 1000))
-          }
         }
+        
+        // CRITICAL: Always wait between items, even on errors
+        console.log(`⏳ Waiting ${ITEM_DELAY_MS}ms before next item (after error)...`)
+        await new Promise(resolve => setTimeout(resolve, ITEM_DELAY_MS))
       }
 
-      } // End of batch processing loop
-      
-      processedCount += queueItems.length
+      processedCount++
+    }
 
-      // Dynamic delay between batches
-      if (processedCount < maxProcessCount && queueItems.length > 0) {
-        console.log(`⏳ Waiting ${dynamicDelay}ms before next batch...`)
-        await new Promise(resolve => setTimeout(resolve, dynamicDelay))
-      }
+    // Release the processor lock
+    const { error: releaseError } = await supabase.rpc('release_shopify_processor_lock')
+    if (releaseError) {
+      console.error('❌ Error releasing processor lock:', releaseError)
+    } else {
+      console.log(`🔓 Released processor lock for ${processorId}`)
     }
 
     return new Response(
@@ -552,6 +575,15 @@ Deno.serve(async (req) => {
 
   } catch (error) {
     console.error('❌ Processor error:', error)
+    
+    // Try to release lock on error
+    try {
+      await supabase.rpc('release_shopify_processor_lock')
+      console.log('🔓 Released processor lock after error')
+    } catch (releaseError) {
+      console.error('❌ Failed to release lock after error:', releaseError)
+    }
+    
     return new Response(
       JSON.stringify({
         success: false,
