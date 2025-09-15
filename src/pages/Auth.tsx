@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Link, useNavigate } from "react-router-dom";
-import { cleanupAuthState } from "@/lib/auth";
+import { cleanupAuthState } from "@/lib/authUtils";
 
 function useSEO(opts: { title: string; description?: string; canonical?: string }) {
   useEffect(() => {
@@ -44,73 +44,86 @@ export default function Auth() {
   useEffect(() => {
     console.log('Auth page mount');
     setMounted(true);
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state change:', event, session?.user?.email);
+      
       if (session?.user) {
-        // Check role and route accordingly
-        setTimeout(async () => {
+        setLoading(true);
+        try {
+          const uid = session.user.id;
+          
+          // Try bootstrap first for initial admin setup
           try {
-            const uid = session.user.id;
-            const staff = await supabase.rpc("has_role", { _user_id: uid, _role: "staff" as any });
-            const admin = await supabase.rpc("has_role", { _user_id: uid, _role: "admin" as any });
-            const ok = Boolean(staff.data) || Boolean(admin.data);
-            if (ok) navigate("/", { replace: true });
-            else {
-              // Attempt to bootstrap admin role for initial setup
-              try { await supabase.functions.invoke("bootstrap-admin"); } catch {}
-              // Re-check roles after bootstrap attempt
-              const staff2 = await supabase.rpc("has_role", { _user_id: uid, _role: "staff" as any });
-              const admin2 = await supabase.rpc("has_role", { _user_id: uid, _role: "admin" as any });
-              const ok2 = Boolean(staff2.data) || Boolean(admin2.data);
-              if (ok2) navigate("/", { replace: true });
-              else setRoleError("Your account is signed in but not authorized. Ask an admin to grant Staff access.");
-            }
-          } catch (e) {
-            console.error(e);
+            await supabase.functions.invoke("bootstrap-admin");
+          } catch (bootstrapError) {
+            console.log('Bootstrap attempt failed (expected for non-admins):', bootstrapError);
           }
-        }, 0);
+          
+          // Check roles with timeout
+          const roleCheckPromise = Promise.all([
+            supabase.rpc("has_role", { _user_id: uid, _role: "staff" as any }),
+            supabase.rpc("has_role", { _user_id: uid, _role: "admin" as any })
+          ]);
+          
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error("Role check timeout")), 8000)
+          );
+          
+          const [staff, admin] = await Promise.race([roleCheckPromise, timeoutPromise]) as any;
+          
+          const hasValidRole = Boolean(staff.data) || Boolean(admin.data);
+          
+          if (hasValidRole) {
+            navigate("/", { replace: true });
+          } else {
+            setRoleError("Your account is signed in but not authorized. Ask an admin to grant Staff access.");
+            setLoading(false);
+          }
+        } catch (error) {
+          console.error('Role check failed:', error);
+          if (error.message === "Role check timeout") {
+            setRoleError("Authentication is taking too long. Please try refreshing the page.");
+          } else {
+            setRoleError("Failed to verify account permissions. Please try again.");
+          }
+          setLoading(false);
+        }
+      } else {
+        setLoading(false);
+        setRoleError(null);
       }
     });
+
+    // Check existing session
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
-        // Will be handled by listener
+        // Will be handled by the auth state change listener
+      } else {
+        setLoading(false);
       }
     });
+
     return () => subscription.unsubscribe();
   }, [navigate]);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setRoleError(null);
     
-    const attemptSignIn = async (retryCount = 0): Promise<void> => {
-      try {
-        cleanupAuthState();
-        try { await supabase.auth.signOut({ scope: 'global' } as any); } catch {}
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-        toast.success("Signed in");
-        navigate("/", { replace: true });
-      } catch (err: any) {
-        console.error(err);
-        
-        // Retry on 503 Service Unavailable or network errors
-        if ((err?.status === 503 || err?.name === 'AuthRetryableFetchError') && retryCount < 3) {
-          const delay = Math.pow(2, retryCount) * 1000; // Exponential backoff: 1s, 2s, 4s
-          toast.error(`Service temporarily unavailable. Retrying in ${delay/1000}s...`);
-          setTimeout(() => attemptSignIn(retryCount + 1), delay);
-          return;
-        }
-        
-        if (err?.status === 503) {
-          toast.error("Supabase service is temporarily unavailable. Please try again in a few minutes.");
-        } else {
-          toast.error(err?.message || "Sign in failed");
-        }
-        setLoading(false);
-      }
-    };
-    
-    await attemptSignIn();
+    try {
+      cleanupAuthState();
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      
+      toast.success("Signed in successfully!");
+      // The auth state change listener will handle navigation
+    } catch (err: any) {
+      console.error('Sign in error:', err);
+      toast.error(err?.message || "Sign in failed");
+      setLoading(false);
+    }
   };
 
   const handleSignUp = async (e: React.FormEvent) => {

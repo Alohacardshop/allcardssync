@@ -18,48 +18,58 @@ export function AuthGuard({ children }: AuthGuardProps) {
     // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        console.log('AuthGuard auth state change:', event, session?.user?.email);
         setSession(session);
         setUser(session?.user ?? null);
         
         if (session?.user) {
-          // Check if user has staff or admin role
-          setTimeout(async () => {
-            try {
-              const uid = session.user.id;
-              const [staffCheck, adminCheck] = await Promise.all([
-                supabase.rpc("has_role", { _user_id: uid, _role: "staff" as any }),
-                supabase.rpc("has_role", { _user_id: uid, _role: "admin" as any })
-              ]);
-              
-              const hasValidRole = Boolean(staffCheck.data) || Boolean(adminCheck.data);
-              setHasRole(hasValidRole);
-              
-              if (!hasValidRole) {
-                // Try bootstrap for admin role (for initial setup)
-                try {
-                  await supabase.functions.invoke("bootstrap-admin");
-                  // Re-check after bootstrap
-                  const [staffCheck2, adminCheck2] = await Promise.all([
-                    supabase.rpc("has_role", { _user_id: uid, _role: "staff" as any }),
-                    supabase.rpc("has_role", { _user_id: uid, _role: "admin" as any })
-                  ]);
-                  const hasValidRole2 = Boolean(staffCheck2.data) || Boolean(adminCheck2.data);
-                  setHasRole(hasValidRole2);
-                  
-                  if (!hasValidRole2) {
-                    toast.error("Your account is not authorized. Contact an admin for access.");
-                  }
-                } catch (e) {
+          // Check if user has staff or admin role with timeout
+          const uid = session.user.id;
+          
+          try {
+            const roleCheckPromise = Promise.all([
+              supabase.rpc("has_role", { _user_id: uid, _role: "staff" as any }),
+              supabase.rpc("has_role", { _user_id: uid, _role: "admin" as any })
+            ]);
+            
+            const timeoutPromise = new Promise((_, reject) => 
+              setTimeout(() => reject(new Error("Role check timeout")), 8000)
+            );
+            
+            const [staffCheck, adminCheck] = await Promise.race([roleCheckPromise, timeoutPromise]) as any;
+            
+            const hasValidRole = Boolean(staffCheck.data) || Boolean(adminCheck.data);
+            setHasRole(hasValidRole);
+            
+            if (!hasValidRole) {
+              // Try bootstrap for admin role (for initial setup)
+              try {
+                await supabase.functions.invoke("bootstrap-admin");
+                // Re-check after bootstrap
+                const [staffCheck2, adminCheck2] = await Promise.all([
+                  supabase.rpc("has_role", { _user_id: uid, _role: "staff" as any }),
+                  supabase.rpc("has_role", { _user_id: uid, _role: "admin" as any })
+                ]);
+                const hasValidRole2 = Boolean(staffCheck2.data) || Boolean(adminCheck2.data);
+                setHasRole(hasValidRole2);
+                
+                if (!hasValidRole2) {
                   toast.error("Your account is not authorized. Contact an admin for access.");
                 }
+              } catch (e) {
+                console.log('Bootstrap failed (expected for non-admins):', e);
+                toast.error("Your account is not authorized. Contact an admin for access.");
               }
-            } catch (error) {
-              console.error('Role check failed:', error);
-              setHasRole(false);
-            } finally {
-              setLoading(false);
             }
-          }, 0);
+          } catch (error) {
+            console.error('Role check failed:', error);
+            if (error.message === "Role check timeout") {
+              toast.error("Authentication is taking too long. Please refresh the page.");
+            }
+            setHasRole(false);
+          } finally {
+            setLoading(false);
+          }
         } else {
           setHasRole(false);
           setLoading(false);
