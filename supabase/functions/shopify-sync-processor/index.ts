@@ -439,6 +439,14 @@ Deno.serve(async (req) => {
         const errorMessage = error instanceof Error ? error.message : String(error)
         const fullErrorMessage = `Attempt ${newRetryCount}/${queueItem.max_retries}: ${errorMessage}`
 
+        // Determine retry delay with exponential backoff
+        let retryDelay = 0
+        if (shouldRetry) {
+          // Base delay of 30 seconds, exponentially increasing
+          retryDelay = Math.min(30 * Math.pow(2, newRetryCount - 1), 300) // Cap at 5 minutes
+          console.log(`⏳ Will retry item ${queueItem.id} in ${retryDelay} seconds`)
+        }
+
         await supabase
           .from('shopify_sync_queue')
           .update({
@@ -446,7 +454,8 @@ Deno.serve(async (req) => {
             retry_count: newRetryCount,
             error_message: fullErrorMessage,
             completed_at: shouldRetry ? null : new Date().toISOString(),
-            started_at: null // Reset started_at for retry
+            started_at: null, // Reset started_at for retry
+            retry_after: shouldRetry ? new Date(Date.now() + retryDelay * 1000).toISOString() : null
           })
           .eq('id', queueItem.id)
 
@@ -463,7 +472,12 @@ Deno.serve(async (req) => {
             
           console.log(`💀 Item ${queueItem.id} failed permanently after ${queueItem.max_retries} retries`)
         } else {
-          console.log(`🔄 Item ${queueItem.id} will retry (attempt ${newRetryCount}/${queueItem.max_retries})`)
+          console.log(`🔄 Item ${queueItem.id} will retry (attempt ${newRetryCount}/${queueItem.max_retries}) after ${retryDelay}s`)
+          
+          // If this is a retry, wait the calculated delay before continuing
+          if (retryDelay > 0) {
+            await new Promise(resolve => setTimeout(resolve, retryDelay * 1000))
+          }
         }
       }
 

@@ -45,14 +45,34 @@ serve(async (req) => {
       });
     }
 
-    // TODO: Add HMAC verification here
-    // const hmacSecret = Deno.env.get('SHOPIFY_WEBHOOK_SECRET');
-    // if (hmacSecret && hmacHeader) {
-    //   const expectedHmac = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(body + hmacSecret));
-    //   if (hmacHeader !== btoa(String.fromCharCode(...new Uint8Array(expectedHmac)))) {
-    //     return new Response('Unauthorized: Invalid HMAC', { status: 401, headers: corsHeaders });
-    //   }
-    // }
+    // HMAC verification for webhook security
+    const hmacSecret = Deno.env.get('SHOPIFY_WEBHOOK_SECRET');
+    if (hmacSecret && hmacHeader) {
+      const encoder = new TextEncoder();
+      const data = encoder.encode(body);
+      const key = await crypto.subtle.importKey(
+        'raw',
+        encoder.encode(hmacSecret),
+        { name: 'HMAC', hash: 'SHA-256' },
+        false,
+        ['sign']
+      );
+      
+      const signature = await crypto.subtle.sign('HMAC', key, data);
+      const expectedHmac = btoa(String.fromCharCode(...new Uint8Array(signature)));
+      
+      if (hmacHeader !== expectedHmac) {
+        console.error('HMAC verification failed');
+        return new Response('Unauthorized: Invalid HMAC signature', { 
+          status: 401, 
+          headers: corsHeaders 
+        });
+      }
+      
+      console.log('✅ HMAC signature verified');
+    } else if (hmacSecret) {
+      console.warn('⚠️ HMAC secret configured but no signature provided');
+    }
 
     const body = await req.text();
     const payload = JSON.parse(body);
