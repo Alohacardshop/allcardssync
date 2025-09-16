@@ -113,8 +113,56 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
     });
     
     try {
-      // PSA lookup functionality temporarily disabled
-      throw new Error("PSA lookup functionality removed - please implement direct API integration");
+      // Call PSA lookup edge function
+      const { data: response, error: functionError } = await supabase.functions.invoke('psa-lookup', {
+        body: { 
+          certNumber: inputValue,
+          lookupType
+        }
+      });
+
+      if (functionError) {
+        throw new Error(`PSA lookup failed: ${functionError.message}`);
+      }
+
+      if (!response.success) {
+        throw new Error(response.error || 'PSA lookup failed');
+      }
+
+      const psaData = response.data;
+      if (!psaData || !psaData.isValid) {
+        throw new Error('Invalid PSA certificate number');
+      }
+
+      // Update form with PSA data
+      setFormData(prev => ({
+        ...prev,
+        grade: psaData.grade || prev.grade,
+        year: psaData.year || prev.year,
+        brandTitle: psaData.brandTitle || prev.brandTitle,
+        subject: psaData.subject || prev.subject,
+        cardNumber: psaData.cardNumber || prev.cardNumber,
+        certNumber: psaData.certNumber || prev.certNumber
+      }));
+
+      // Store PSA snapshot for later use
+      setCardData({
+        cert_number: psaData.certNumber,
+        grade: psaData.grade,
+        year: psaData.year,
+        brand_title: psaData.brandTitle,
+        subject: psaData.subject,
+        card_number: psaData.cardNumber,
+        category: psaData.category,
+        variety_pedigree: psaData.varietyPedigree,
+        image_url: psaData.imageUrl,
+        image_urls: psaData.imageUrls,
+        psa_url: psaData.psaUrl,
+        fetched_at: new Date().toISOString()
+      });
+
+      toast.success(`${gradingCompany} certificate ${psaData.certNumber} loaded successfully`);
+      
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
       console.error(`${gradingCompany} fetch error:`, {
