@@ -423,35 +423,29 @@ const Index = () => {
       <MobileBottomNav />
 
 
-      <div className="container mx-auto px-4 py-6 space-y-6">
+      <div className="container mx-auto px-4 py-6">
         {/* Top Row: Items Pushed and Store/Location side-by-side */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
           {/* Items Pushed Card - Left Side */}
-          <Card>
+          <Card className="h-fit">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Items Pushed</CardTitle>
-              <ShoppingCart className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-lg font-semibold">Items Pushed</CardTitle>
+              <ShoppingCart className="h-5 w-5 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{systemStats?.items_pushed || 0}</div>
-              <p className="text-xs text-muted-foreground mt-1">Synced to Shopify</p>
+              <div className="text-3xl font-bold">{systemStats?.items_pushed || 0}</div>
+              <p className="text-sm text-muted-foreground mt-1">Synced to Shopify</p>
             </CardContent>
           </Card>
 
           {/* Store & Location Card - Right Side */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Package className="h-5 w-5" />
-                  Store & Location
-                </div>
-                <Badge variant="outline" className="text-xs">Default: Store + Location</Badge>
-              </CardTitle>
+          <Card className="h-fit">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg font-semibold">Store & Location</CardTitle>
             </CardHeader>
             <CardContent>
               <StoreLocationSelectorAutoWrapper showSetDefault={true} />
-              <p className="text-xs text-muted-foreground mt-2">
+              <p className="text-xs text-muted-foreground mt-3">
                 💡 Set your default store & location combination to save time on future intake sessions
               </p>
             </CardContent>
@@ -459,7 +453,9 @@ const Index = () => {
         </div>
 
         {/* Print Queue Status */}
-        <PrintQueueStatus />
+        <div className="mb-6">
+          <PrintQueueStatus />
+        </div>
 
         {/* Main Content Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
