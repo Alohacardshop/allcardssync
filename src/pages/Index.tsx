@@ -441,20 +441,6 @@ const Index = () => {
         {/* Print Queue Status */}
         <PrintQueueStatus />
 
-        {/* Store & Location Selector - positioned above tabs */}
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-medium text-muted-foreground">Store & Location Settings</h3>
-              <Badge variant="outline" className="text-xs">Default: Store + Location</Badge>
-            </div>
-            <StoreLocationSelectorAutoWrapper showSetDefault={true} />
-            <p className="text-xs text-muted-foreground mt-2">
-              💡 Set your default store & location combination to save time on future intake sessions
-            </p>
-          </CardContent>
-        </Card>
-
         {/* Main Content Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-3 h-auto">
@@ -471,6 +457,22 @@ const Index = () => {
               <span className="text-xs md:text-sm">Batch</span>
             </TabsTrigger>
           </TabsList>
+
+          {/* Store & Location Selector - positioned above intake forms */}
+          <div className="mt-6">
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-medium text-muted-foreground">Store & Location Settings</h3>
+                  <Badge variant="outline" className="text-xs">Default: Store + Location</Badge>
+                </div>
+                <StoreLocationSelectorAutoWrapper showSetDefault={true} />
+                <p className="text-xs text-muted-foreground mt-2">
+                  💡 Set your default store & location combination to save time on future intake sessions
+                </p>
+              </CardContent>
+            </Card>
+          </div>
 
           <TabsContent value="graded" className="mt-6 space-y-6">
             <GradedCardIntake onBatchAdd={handleBatchAdd} />
