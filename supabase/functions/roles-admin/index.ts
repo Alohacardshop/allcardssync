@@ -158,21 +158,24 @@ Deno.serve(async (req) => {
       // Clean up foreign key references first to avoid constraint violations
       console.log(`Cleaning up FK references for user ${targetUserId}`);
       
-      // Update intake_lots.created_by to NULL
-      const { count: lotsUpdated, error: lotsErr } = await admin
-        .from("intake_lots")
-        .update({ created_by: null })
-        .eq("created_by", targetUserId);
-      if (lotsErr) throw lotsErr;
-      console.log(`Updated ${lotsUpdated || 0} intake_lots records`);
-
-      // Update intake_items.created_by to NULL  
+      // IMPORTANT: Update intake_items FIRST, then lots to avoid constraint violations
+      // The validate_item_lot_owner trigger requires item.created_by = lot.created_by
+      
+      // Update intake_items.created_by to NULL first
       const { count: itemsUpdated, error: itemsErr } = await admin
         .from("intake_items")
         .update({ created_by: null })
         .eq("created_by", targetUserId);
       if (itemsErr) throw itemsErr;
       console.log(`Updated ${itemsUpdated || 0} intake_items records`);
+
+      // Now update intake_lots.created_by to NULL
+      const { count: lotsUpdated, error: lotsErr } = await admin
+        .from("intake_lots")
+        .update({ created_by: null })
+        .eq("created_by", targetUserId);
+      if (lotsErr) throw lotsErr;
+      console.log(`Updated ${lotsUpdated || 0} intake_lots records`);
 
       // Update item_snapshots.created_by to NULL
       const { count: snapshotsUpdated, error: snapshotsErr } = await admin
