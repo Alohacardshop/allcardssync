@@ -94,26 +94,41 @@ Deno.serve(async (req) => {
       })
     }
 
-    // Make API call to PSA (replace with actual PSA API endpoint when available)
+    // Make API call to PSA using the official API
     console.log(`Making PSA API call for cert: ${certNumber}`)
     
-    // For now, we'll simulate a PSA API call since the actual API endpoint structure isn't provided
-    // This is a placeholder that returns structured data for testing
-    // TODO: Replace with actual PSA API integration when endpoint details are available
+    const psaApiUrl = `https://api.psacard.com/publicapi/cert/GetByCertNumber/${certNumber}`
     
-    const mockPSAResponse = {
+    const psaResponse = await fetch(psaApiUrl, {
+      method: 'GET',
+      headers: {
+        'authorization': `bearer ${psaApiToken}`,
+        'Content-Type': 'application/json'
+      }
+    })
+
+    if (!psaResponse.ok) {
+      console.error(`PSA API error: ${psaResponse.status} ${psaResponse.statusText}`)
+      throw new Error(`PSA API returned ${psaResponse.status}: ${psaResponse.statusText}`)
+    }
+
+    const psaData = await psaResponse.json()
+    console.log('PSA API response:', psaData)
+
+    // Transform PSA API response to our format
+    const psaApiResponse = {
       certNumber: certNumber,
-      isValid: true,
-      grade: "10",
-      year: "2023",
-      brandTitle: "Pokemon",
-      subject: "Pikachu",
-      cardNumber: "1",
-      category: "Trading Cards",
-      varietyPedigree: "",
-      gameSport: "Pokemon",
-      imageUrl: "",
-      imageUrls: [],
+      isValid: psaData ? true : false,
+      grade: psaData?.Grade?.toString() || undefined,
+      year: psaData?.Year?.toString() || undefined,
+      brandTitle: psaData?.Brand || undefined,
+      subject: psaData?.Subject || undefined,
+      cardNumber: psaData?.CardNumber || undefined,
+      category: psaData?.Category || undefined,
+      varietyPedigree: psaData?.VarietyPedigree || undefined,
+      gameSport: psaData?.Sport || undefined,
+      imageUrl: psaData?.ImageUrl || undefined,
+      imageUrls: psaData?.ImageUrls || [],
       psaUrl: `https://www.psacard.com/cert/${certNumber}`
     }
 
@@ -122,17 +137,17 @@ Deno.serve(async (req) => {
       .from('psa_certificates')
       .upsert({
         cert_number: certNumber,
-        is_valid: mockPSAResponse.isValid,
-        grade: mockPSAResponse.grade,
-        year: mockPSAResponse.year,
-        brand: mockPSAResponse.brandTitle,
-        subject: mockPSAResponse.subject,
-        card_number: mockPSAResponse.cardNumber,
-        category: mockPSAResponse.category,
-        variety_pedigree: mockPSAResponse.varietyPedigree,
-        image_url: mockPSAResponse.imageUrl,
-        image_urls: mockPSAResponse.imageUrls,
-        psa_url: mockPSAResponse.psaUrl,
+        is_valid: psaApiResponse.isValid,
+        grade: psaApiResponse.grade,
+        year: psaApiResponse.year,
+        brand: psaApiResponse.brandTitle,
+        subject: psaApiResponse.subject,
+        card_number: psaApiResponse.cardNumber,
+        category: psaApiResponse.category,
+        variety_pedigree: psaApiResponse.varietyPedigree,
+        image_url: psaApiResponse.imageUrl,
+        image_urls: psaApiResponse.imageUrls,
+        psa_url: psaApiResponse.psaUrl,
         scraped_at: new Date().toISOString()
       })
 
@@ -153,7 +168,7 @@ Deno.serve(async (req) => {
 
     const response: PSAApiResponse = {
       success: true,
-      data: mockPSAResponse
+      data: psaApiResponse
     }
 
     console.log(`PSA lookup completed for cert: ${certNumber}`)
