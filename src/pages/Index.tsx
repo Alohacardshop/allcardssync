@@ -45,9 +45,6 @@ interface IntakeItem {
 }
 
 interface SystemStats {
-  total_items: number;
-  total_value: number;
-  items_printed: number;
   items_pushed: number;
 }
 
@@ -134,9 +131,6 @@ const Index = () => {
       const { data: stats } = await statsQuery;
 
       const systemStats: SystemStats = {
-        total_items: stats?.reduce((sum, item) => sum + item.quantity, 0) || 0,
-        total_value: stats?.reduce((sum, item) => sum + (item.price * item.quantity), 0) || 0,
-        items_printed: stats?.filter(item => item.printed_at).length || 0,
         items_pushed: stats?.filter(item => item.pushed_at).length || 0
       };
 
@@ -431,34 +425,7 @@ const Index = () => {
 
       <div className="container mx-auto px-4 py-6 space-y-6">
         {/* System Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Items</CardTitle>
-              <Package className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{systemStats?.total_items || 0}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Value</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">${systemStats?.total_value?.toFixed(2) || '0.00'}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Items Printed</CardTitle>
-              <Package className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{systemStats?.items_printed || 0}</div>
-            </CardContent>
-          </Card>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 max-w-md">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Items Pushed</CardTitle>
@@ -466,6 +433,7 @@ const Index = () => {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{systemStats?.items_pushed || 0}</div>
+              <p className="text-xs text-muted-foreground mt-1">Synced to Shopify</p>
             </CardContent>
           </Card>
         </div>
