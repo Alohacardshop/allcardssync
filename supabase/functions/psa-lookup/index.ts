@@ -128,9 +128,20 @@ Deno.serve(async (req) => {
     
     // Handle images response (don't fail if images API fails)
     let psaImages = null
+    let imageUrls = []
+    let primaryImageUrl = undefined
+    
     if (psaImagesResponse.ok) {
       psaImages = await psaImagesResponse.json()
       console.log('PSA Images API response:', psaImages)
+      
+      // Extract image URLs from the response structure
+      if (Array.isArray(psaImages)) {
+        imageUrls = psaImages.map(img => img.ImageURL).filter(url => url)
+        // Find the front image or use the first available image
+        const frontImage = psaImages.find(img => img.IsFrontImage === true)
+        primaryImageUrl = frontImage?.ImageURL || imageUrls[0]
+      }
     } else {
       console.warn(`PSA Images API error: ${psaImagesResponse.status} ${psaImagesResponse.statusText}`)
     }
@@ -158,8 +169,8 @@ Deno.serve(async (req) => {
       category: psaCert?.Category || undefined,
       varietyPedigree: psaCert?.Variety || undefined,
       gameSport: undefined, // Not available in PSA API
-      imageUrl: psaImages?.length > 0 ? psaImages[0] : undefined,
-      imageUrls: psaImages || [],
+      imageUrl: primaryImageUrl,
+      imageUrls: imageUrls,
       psaUrl: `https://www.psacard.com/cert/${certNumber}`
     }
 
