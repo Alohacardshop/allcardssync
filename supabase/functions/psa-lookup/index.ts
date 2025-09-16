@@ -98,14 +98,25 @@ Deno.serve(async (req) => {
     console.log(`Making PSA API call for cert: ${certNumber}`)
     
     const psaApiUrl = `https://api.psacard.com/publicapi/cert/GetByCertNumber/${certNumber}`
+    const psaImagesUrl = `https://api.psacard.com/publicapi/cert/GetImagesByCertNumber/${certNumber}`
     
-    const psaResponse = await fetch(psaApiUrl, {
-      method: 'GET',
-      headers: {
-        'authorization': `bearer ${psaApiToken}`,
-        'Content-Type': 'application/json'
-      }
-    })
+    // Make both API calls in parallel
+    const [psaResponse, psaImagesResponse] = await Promise.all([
+      fetch(psaApiUrl, {
+        method: 'GET',
+        headers: {
+          'authorization': `bearer ${psaApiToken}`,
+          'Content-Type': 'application/json'
+        }
+      }),
+      fetch(psaImagesUrl, {
+        method: 'GET',
+        headers: {
+          'authorization': `bearer ${psaApiToken}`,
+          'Content-Type': 'application/json'
+        }
+      })
+    ])
 
     if (!psaResponse.ok) {
       console.error(`PSA API error: ${psaResponse.status} ${psaResponse.statusText}`)
@@ -114,6 +125,15 @@ Deno.serve(async (req) => {
 
     const psaData = await psaResponse.json()
     console.log('PSA API response:', psaData)
+    
+    // Handle images response (don't fail if images API fails)
+    let psaImages = null
+    if (psaImagesResponse.ok) {
+      psaImages = await psaImagesResponse.json()
+      console.log('PSA Images API response:', psaImages)
+    } else {
+      console.warn(`PSA Images API error: ${psaImagesResponse.status} ${psaImagesResponse.statusText}`)
+    }
 
     // Extract PSA certificate data from the nested structure
     const psaCert = psaData?.PSACert
@@ -138,8 +158,8 @@ Deno.serve(async (req) => {
       category: psaCert?.Category || undefined,
       varietyPedigree: psaCert?.Variety || undefined,
       gameSport: undefined, // Not available in PSA API
-      imageUrl: undefined, // Not available in PSA API
-      imageUrls: [],
+      imageUrl: psaImages?.length > 0 ? psaImages[0] : undefined,
+      imageUrls: psaImages || [],
       psaUrl: `https://www.psacard.com/cert/${certNumber}`
     }
 
