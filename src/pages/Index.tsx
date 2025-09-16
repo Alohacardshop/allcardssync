@@ -425,7 +425,7 @@ const Index = () => {
 
       <div className="container mx-auto px-4 py-6">
         {/* CRITICAL: TOP SECTION - Items Pushed and Store/Location side-by-side */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
           {/* LEFT CARD: Items Pushed */}
           <Card className="h-fit">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -438,7 +438,7 @@ const Index = () => {
             </CardContent>
           </Card>
 
-          {/* RIGHT CARD: Store & Location - ONLY PLACE IT SHOULD EXIST */}
+          {/* RIGHT CARD: Store & Location - MUST BE VISIBLE */}
           <Card className="h-fit">
             <CardHeader>
               <CardTitle className="text-lg font-semibold">Store & Location</CardTitle>
@@ -473,22 +473,6 @@ const Index = () => {
               <span className="text-xs md:text-sm">Batch</span>
             </TabsTrigger>
           </TabsList>
-
-          {/* Store & Location Selector - positioned above intake forms */}
-          <div className="mt-6">
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-medium text-muted-foreground">Store & Location Settings</h3>
-                  <Badge variant="outline" className="text-xs">Default: Store + Location</Badge>
-                </div>
-                <StoreLocationSelectorAutoWrapper showSetDefault={true} />
-                <p className="text-xs text-muted-foreground mt-2">
-                  💡 Set your default store & location combination to save time on future intake sessions
-                </p>
-              </CardContent>
-            </Card>
-          </div>
 
           <TabsContent value="graded" className="mt-6 space-y-6">
             <GradedCardIntake onBatchAdd={handleBatchAdd} />
