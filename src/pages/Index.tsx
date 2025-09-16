@@ -117,11 +117,12 @@ const Index = () => {
         currentBatch = batchItems || [];
       }
 
-      // Get system stats - filter by store/location
+      // Get system stats - filter by store/location (exclude batch items)
       let statsQuery = supabase
         .from('intake_items')
         .select('quantity, price, printed_at, pushed_at')
-        .is('deleted_at', null);
+        .is('deleted_at', null)
+        .not('removed_from_batch_at', 'is', null);
 
       if (assignedStore) {
         statsQuery = statsQuery.eq('store_key', assignedStore);
