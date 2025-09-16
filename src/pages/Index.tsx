@@ -4,22 +4,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Loader2, Package, ShoppingCart, DollarSign, Trash2, Archive, Award, FileEdit } from "lucide-react";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { useTemplates } from "@/hooks/useTemplates";
+import { Loader2, Package, ShoppingCart, RefreshCw, Store, Lock, Layers } from "lucide-react";
 import { Navigation } from "@/components/Navigation";
 import { MobileBottomNav } from "@/components/navigation/MobileBottomNav";
 import { GradedCardIntake } from "@/components/GradedCardIntake";
 import { RawCardIntake } from "@/components/RawCardIntake";
-import { BulkCardIntake } from "@/components/BulkCardIntake";
 import { CurrentBatchPanel } from "@/components/CurrentBatchPanel";
-import { StoreLocationSelectorAutoWrapper } from "@/components/StoreLocationSelectorAuto";
-import { useBatchSendToShopify } from "@/hooks/useBatchSendToShopify";
 import { useStore } from "@/contexts/StoreContext";
 import { PrintQueueStatus } from "@/components/PrintQueueStatus";
-import { usePrintQueue } from "@/hooks/usePrintQueue";
-import { MobileBatchPanel } from "@/components/mobile/MobileBatchPanel";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 interface IntakeItem {
@@ -41,7 +36,7 @@ interface IntakeItem {
   updated_at: string;
   removed_from_batch_at?: string;
   category?: string;
-  catalog_snapshot?: any; // Match CurrentBatchPanel interface for consistent naming
+  catalog_snapshot?: any;
 }
 
 interface SystemStats {
@@ -49,26 +44,42 @@ interface SystemStats {
 }
 
 const Index = () => {
-  const [currentBatchItems, setCurrentBatchItems] = useState<IntakeItem[]>([]);
   const [systemStats, setSystemStats] = useState<SystemStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
-  const [selectAll, setSelectAll] = useState(false);
-  const [actionLoading, setActionLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("graded");
   const isMobile = useIsMobile();
-  const [sendProgress, setSendProgress] = useState<{
-    total: number;
-    completed: number;
-    failed: number;
-    inProgress: boolean;
-    correlationId?: string;
-  }>({ total: 0, completed: 0, failed: 0, inProgress: false });
   
-  const { defaultTemplate } = useTemplates('raw');
-  const { assignedStore, selectedLocation } = useStore();
-  const { sendChunkedBatchToShopify, isSending } = useBatchSendToShopify();
-  const { queueStatus } = usePrintQueue();
+  const { 
+    assignedStore, 
+    selectedLocation, 
+    setSelectedLocation,
+    availableLocations,
+    loadingLocations,
+    refreshLocations
+  } = useStore();
+
+  // Auto-select Ward location as default
+  useEffect(() => {
+    if (availableLocations && availableLocations.length > 0 && !selectedLocation) {
+      const wardLocation = availableLocations.find(l => 
+        l.name?.toLowerCase().includes('ward')
+      );
+      if (wardLocation) {
+        setSelectedLocation(wardLocation.gid);
+      }
+    }
+  }, [availableLocations, selectedLocation, setSelectedLocation]);
+
+  // Handle location change
+  const handleLocationChange = (value: string) => {
+    setSelectedLocation(value);
+    localStorage.setItem('selected_shopify_location', value);
+    
+    // Notify all components
+    window.dispatchEvent(new CustomEvent('locationChanged', { 
+      detail: { location: value, store: assignedStore }
+    }));
+  };
 
   const fetchData = async () => {
     try {
@@ -81,37 +92,6 @@ const Index = () => {
       }
       if (selectedLocation) {
         baseFilters.shopify_location_gid = selectedLocation;
-      }
-
-      // Get current batch items - filter by store/location if selected
-      let lotQuery = supabase
-        .from('intake_lots')
-        .select('lot_number')
-        .eq('status', 'active')
-        .order('created_at', { ascending: false })
-        .limit(1);
-
-      if (assignedStore) {
-        lotQuery = lotQuery.eq('store_key', assignedStore);
-      }
-      if (selectedLocation) {
-        lotQuery = lotQuery.eq('shopify_location_gid', selectedLocation);
-      }
-
-      const { data: latestLot } = await lotQuery.maybeSingle();
-
-      let currentBatch: IntakeItem[] = [];
-      if (latestLot) {
-        let itemsQuery = supabase
-          .from('intake_items')
-          .select('*')
-          .eq('lot_number', latestLot.lot_number)
-          .is('deleted_at', null)
-          .is('removed_from_batch_at', null)
-          .order('created_at', { ascending: false });
-
-        const { data: batchItems } = await itemsQuery;
-        currentBatch = batchItems || [];
       }
 
       // Get system stats - filter by store/location (exclude batch items)
@@ -134,7 +114,6 @@ const Index = () => {
         items_pushed: stats?.filter(item => item.pushed_at).length || 0
       };
 
-      setCurrentBatchItems(currentBatch);
       setSystemStats(systemStats);
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -176,230 +155,9 @@ const Index = () => {
     };
   }, [assignedStore, selectedLocation]); // Re-fetch when store/location changes
 
-  const handleSelectAll = () => {
-    if (selectAll) {
-      setSelectedItems(new Set());
-    } else {
-      setSelectedItems(new Set(currentBatchItems.map(item => item.id)));
-    }
-    setSelectAll(!selectAll);
-  };
-
-  const handleItemSelect = (itemId: string) => {
-    const newSelected = new Set(selectedItems);
-    if (newSelected.has(itemId)) {
-      newSelected.delete(itemId);
-    } else {
-      newSelected.add(itemId);
-    }
-    setSelectedItems(newSelected);
-    setSelectAll(newSelected.size === currentBatchItems.length);
-  };
-
-  const handleInventoryAction = async (itemIds: string[]) => {
-    if (itemIds.length === 0) {
-      toast.error('Please select items to send to inventory');
-      return;
-    }
-
-    if (!assignedStore || !selectedLocation) {
-      toast.error('Please select a store and location first');
-      return;
-    }
-
-    const correlationId = `selected_send_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
-    console.log(`🚀 [${correlationId}] Starting chunked selected items send to inventory:`, { 
-      itemCount: itemIds.length, 
-      store: assignedStore,
-      location: selectedLocation 
-    });
-    
-    try {
-      setActionLoading(true);
-      setSendProgress({ total: itemIds.length, completed: 0, failed: 0, inProgress: true, correlationId });
-
-      const response = await sendChunkedBatchToShopify(
-        itemIds,
-        assignedStore as "hawaii" | "las_vegas",
-        selectedLocation,
-        { batchSize: 8, delayBetweenChunks: 1000, failFast: false },
-        (progress) => {
-          // Update progress using the hook's progress tracking
-          setSendProgress({ 
-            total: progress.totalItems, 
-            completed: progress.processedItems, 
-            failed: 0, // We'll calculate this from the final response
-            inProgress: progress.isProcessing,
-            correlationId 
-          });
-        }
-      );
-      
-      // Final progress update
-      setSendProgress({ 
-        total: itemIds.length, 
-        completed: response.shopify_success || 0, 
-        failed: response.shopify_errors || 0, 
-        inProgress: false, 
-        correlationId 
-      });
-
-      console.log(`📊 [${correlationId}] Selected items send completed:`, response);
-      
-      // Clear selection and refresh, then check for empty lot closure
-      setSelectedItems(new Set());
-      setSelectAll(false);
-      await fetchData();
-      
-      if (response.shopify_success > 0) {
-        window.dispatchEvent(new CustomEvent('batch:items-sent-to-inventory'));
-        toast.success(`Successfully sent ${response.shopify_success} items to Shopify!`);
-      }
-      
-      if (response.shopify_errors > 0) {
-        toast.error(`${response.shopify_errors} items failed to sync`);
-      }
-      await fetchData();
-      
-      // Trigger empty lot check after successful batch send was already handled above
-      // No additional code needed here
-    } catch (error: any) {
-      console.error(`💥 [${correlationId}] Selected send failed:`, error);
-      toast.error(`Error sending items to inventory: ${error?.message || 'Unknown error'}`);
-      setSendProgress({ total: 0, completed: 0, failed: itemIds.length, inProgress: false });
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleCompleteAction = async (itemIds: string[]) => {
-    if (itemIds.length === 0) return;
-
-    try {
-      setActionLoading(true);
-
-      // Mark items as complete and removed from batch
-      const { error } = await supabase
-        .from('intake_items')
-        .update({ 
-          processing_notes: 'Completed',
-          removed_from_batch_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
-        .in('id', itemIds);
-
-      if (error) throw error;
-
-      toast.success(`Successfully completed ${itemIds.length} item(s)`);
-      
-      // Clear selection and refresh
-      setSelectedItems(new Set());
-      setSelectAll(false);
-      await fetchData();
-    } catch (error) {
-      console.error('Error updating items:', error);
-      toast.error('Error completing items');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleDeleteAction = async (itemIds: string[]) => {
-    if (itemIds.length === 0) return;
-
-    try {
-      setActionLoading(true);
-
-      const { error } = await supabase
-        .from('intake_items')
-        .update({ 
-          deleted_at: new Date().toISOString(),
-          deleted_reason: 'Deleted from dashboard',
-          updated_at: new Date().toISOString()
-        })
-        .in('id', itemIds);
-
-      if (error) throw error;
-
-      toast.success(`Successfully deleted ${itemIds.length} item(s)`);
-      
-      // Clear selection and refresh
-      setSelectedItems(new Set());
-      setSelectAll(false);
-      await fetchData();
-    } catch (error) {
-      console.error('Error deleting items:', error);
-      toast.error('Error deleting items');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleCardPick = ({ card, chosenVariant }: {
-    card: any;
-    chosenVariant?: { condition: string; printing: string; price?: number };
-  }) => {
-    console.log('Card picked:', card, chosenVariant);
-    toast.success(`Selected ${card.name || card.subject || 'card'}`);
-  };
-
   const handleBatchAdd = async () => {
     toast.success('Item added to batch');
     await fetchData();
-  };
-
-  const handlePrintLabels = async (itemIds: string[]) => {
-    if (itemIds.length === 0) return;
-
-    // Get workstation ID (same method as print queue)
-    let workstationId = localStorage.getItem('workstation-id');
-    if (!workstationId) {
-      workstationId = crypto.randomUUID().substring(0, 8);
-      localStorage.setItem('workstation-id', workstationId);
-    }
-
-    try {
-      setActionLoading(true);
-
-      // Create print jobs for selected items
-      const printJobs = itemIds.map(itemId => ({
-        workstation_id: workstationId,
-        template_id: defaultTemplate?.id || null,
-        status: 'queued',
-        data: { intake_item_id: itemId },
-        target: { type: 'intake_item', id: itemId },
-        copies: 1
-      }));
-
-      const { error: printError } = await supabase
-        .from('print_jobs')
-        .insert(printJobs);
-
-      if (printError) throw printError;
-
-      // Update items as printed (optimistic update - will be handled by print queue)
-      const { error: updateError } = await supabase
-        .from('intake_items')
-        .update({ 
-          printed_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
-        .in('id', itemIds);
-
-      if (updateError) throw updateError;
-
-      toast.success(`Successfully queued ${itemIds.length} label(s) for printing`);
-      
-      // Clear selection and refresh
-      setSelectedItems(new Set());
-      setSelectAll(false);
-      await fetchData();
-    } catch (error) {
-      console.error('Error printing labels:', error);
-      toast.error('Error printing labels');
-    } finally {
-      setActionLoading(false);
-    }
   };
 
   if (loading) {
@@ -422,32 +180,82 @@ const Index = () => {
       {/* Mobile Bottom Navigation */}
       <MobileBottomNav />
 
-
       <div className="container mx-auto px-4 py-6">
-        {/* CRITICAL: TOP SECTION - Items Pushed and Store/Location side-by-side */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        {/* TOP SECTION: Items Pushed and Store/Location side-by-side */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
           {/* LEFT CARD: Items Pushed */}
-          <Card className="h-fit">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-lg font-semibold">Items Pushed</CardTitle>
-              <ShoppingCart className="h-5 w-5 text-muted-foreground" />
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <ShoppingCart className="h-4 w-4" />
+                Items Pushed
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">{systemStats?.items_pushed || 0}</div>
+              <div className="text-4xl font-bold">{systemStats?.items_pushed || 0}</div>
               <p className="text-sm text-muted-foreground mt-1">Synced to Shopify</p>
             </CardContent>
           </Card>
 
-          {/* RIGHT CARD: Store & Location - MUST BE VISIBLE */}
-          <Card className="h-fit">
-            <CardHeader>
-              <CardTitle className="text-lg font-semibold">Store & Location</CardTitle>
+          {/* RIGHT CARD: Store & Location */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center justify-between text-base">
+                <div className="flex items-center gap-2">
+                  <Store className="h-4 w-4" />
+                  Store & Location
+                </div>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-7 w-7"
+                  onClick={refreshLocations}
+                  disabled={loadingLocations}
+                >
+                  <RefreshCw className={`h-3 w-3 ${loadingLocations ? 'animate-spin' : ''}`} />
+                </Button>
+              </CardTitle>
             </CardHeader>
-            <CardContent>
-              <StoreLocationSelectorAutoWrapper showSetDefault={true} />
-              <p className="text-xs text-muted-foreground mt-3">
-                💡 Set your default store & location combination to save time on future intake sessions
-              </p>
+            <CardContent className="space-y-3">
+              {/* Store Badge */}
+              <div>
+                <Label className="text-xs text-muted-foreground">Active Store</Label>
+                <div className="flex items-center gap-2 mt-1">
+                  <Badge variant="secondary">
+                    {assignedStore === 'hawaii' ? 'Hawaii Store' : 
+                     assignedStore === 'las_vegas' ? 'Las Vegas' : 
+                     'No Store'}
+                  </Badge>
+                </div>
+              </div>
+              
+              {/* Location Dropdown */}
+              <div>
+                <Label className="text-xs text-muted-foreground">Location</Label>
+                <Select 
+                  value={selectedLocation || ''} 
+                  onValueChange={handleLocationChange}
+                  disabled={loadingLocations}
+                >
+                  <SelectTrigger className="w-full mt-1">
+                    <SelectValue>
+                      {loadingLocations ? 'Loading...' :
+                       !selectedLocation ? 'Select location' :
+                       availableLocations?.find(l => l.gid === selectedLocation)?.name || 'Selected'}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableLocations?.map((location) => (
+                      <SelectItem key={location.gid} value={location.gid}>
+                        {location.name}
+                        {location.name?.toLowerCase().includes('ward') && 
+                          <span className="ml-2 text-xs text-muted-foreground">(Default)</span>
+                        }
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -457,29 +265,28 @@ const Index = () => {
           <PrintQueueStatus />
         </div>
 
-        {/* Main Content Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-3 h-auto">
-            <TabsTrigger value="graded" className="flex flex-col md:flex-row items-center gap-1 md:gap-2 py-3 md:py-2">
-              <Award className="h-4 w-4" />
-              <span className="text-xs md:text-sm">Graded</span>
+        {/* TAB NAVIGATION */}
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="graded" className="flex items-center gap-2">
+              <Lock className="h-4 w-4" />
+              Graded
             </TabsTrigger>
-            <TabsTrigger value="raw" className="flex flex-col md:flex-row items-center gap-1 md:gap-2 py-3 md:py-2">
-              <FileEdit className="h-4 w-4" />
-              <span className="text-xs md:text-sm">Raw</span>
+            <TabsTrigger value="raw" className="flex items-center gap-2">
+              <Package className="h-4 w-4" />
+              Raw
             </TabsTrigger>
-            <TabsTrigger value="batch" className="flex flex-col md:flex-row items-center gap-1 md:gap-2 py-3 md:py-2">
-              <Archive className="h-4 w-4" />
-              <span className="text-xs md:text-sm">Batch</span>
+            <TabsTrigger value="batch" className="flex items-center gap-2">
+              <Layers className="h-4 w-4" />
+              Batch
             </TabsTrigger>
           </TabsList>
-
-          <TabsContent value="graded" className="mt-6 space-y-6">
+          
+          <TabsContent value="graded" className="mt-4">
             <GradedCardIntake onBatchAdd={handleBatchAdd} />
-            <CurrentBatchPanel onViewFullBatch={() => setActiveTab("batch")} />
           </TabsContent>
-
-          <TabsContent value="raw" className="mt-6 space-y-6">
+          
+          <TabsContent value="raw" className="mt-4">
             <Card>
               <CardHeader>
                 <CardTitle>Raw Cards Intake</CardTitle>
@@ -491,157 +298,10 @@ const Index = () => {
                 />
               </CardContent>
             </Card>
-            <CurrentBatchPanel onViewFullBatch={() => setActiveTab("batch")} />
           </TabsContent>
-
-          <TabsContent value="batch" className="mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Current Batch</CardTitle>
-                <CardDescription>
-                  Items in the active batch that haven't been processed yet
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {currentBatchItems.length === 0 ? (
-                  <p className="text-muted-foreground">No items in current batch</p>
-                ) : (
-                  <div className="space-y-4">
-                    {/* Selection controls */}
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <input
-                          type="checkbox"
-                          checked={selectAll}
-                          onChange={handleSelectAll}
-                          className="rounded"
-                        />
-                        <span className="text-sm text-muted-foreground">
-                          Select all ({selectedItems.size} selected)
-                        </span>
-                      </div>
-                      
-                      {/* Action buttons */}
-                      {selectedItems.size > 0 && (
-                        <div className="flex space-x-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handlePrintLabels(Array.from(selectedItems))}
-                            disabled={actionLoading}
-                          >
-                            {actionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Print Labels"}
-                          </Button>
-                           <Button
-                             size="sm"
-                             variant="outline"
-                             onClick={() => handleInventoryAction(Array.from(selectedItems))}
-                             disabled={actionLoading || sendProgress.inProgress}
-                             className="bg-green-50 hover:bg-green-100 border-green-200 text-green-700"
-                           >
-                             {sendProgress.inProgress ? (
-                               <>
-                                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                                 {sendProgress.completed}/{sendProgress.total} sent...
-                               </>
-                             ) : actionLoading ? (
-                               <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                             ) : (
-                               <Archive className="h-4 w-4 mr-2" />
-                             )}
-                             {!sendProgress.inProgress && !actionLoading && 'Send to Inventory'}
-                           </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleCompleteAction(Array.from(selectedItems))}
-                            disabled={actionLoading}
-                          >
-                            {actionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Complete"}
-                          </Button>
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button size="sm" variant="destructive" disabled={actionLoading}>
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Delete Items</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  Are you sure you want to delete {selectedItems.size} selected item(s)? This action cannot be undone.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => handleDeleteAction(Array.from(selectedItems))}>
-                                  Delete
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Items list */}
-                    <div className="space-y-2">
-                      {currentBatchItems.map((item) => (
-                        <div key={item.id} className="flex items-center space-x-4 p-3 border rounded-lg">
-                          <input
-                            type="checkbox"
-                            checked={selectedItems.has(item.id)}
-                            onChange={() => handleItemSelect(item.id)}
-                            className="rounded"
-                          />
-                          <div className="flex-1">
-                            <div className="font-medium">
-                              {(() => {
-                                // Use catalog_snapshot for proper formatting (same as CurrentBatchPanel)
-                                const catalog = item.catalog_snapshot;
-                                if (catalog?.name && catalog?.set) {
-                                  const cardName = catalog.name.split(' - ')[0]; // Extract "Blaziken" from "Blaziken - 192/182"
-                                  const cardNumber = catalog.name.split(' - ')[1]; // Extract "192/182" from "Blaziken - 192/182"
-                                  const category = item.category || '';
-                                  const set = catalog.set;
-                                  
-                                  return `${category} ${cardName} ${set} • #${cardNumber}`.trim();
-                                }
-                                
-                                // Fallback to original logic
-                                const base = [item.category, item.subject, item.brand_title]
-                                  .filter(Boolean)
-                                  .join(' ');
-                                const card = item.card_number ? ` • #${item.card_number}` : '';
-                                const title = `${base}${card}`.trim();
-                                return title || item.sku || 'Unknown Item';
-                              })()}
-                            </div>
-                            <div className="text-sm text-muted-foreground">
-                              {item.set_name && `${item.set_name} • `}
-                              {item.card_number && `#${item.card_number} • `}
-                              Qty: {item.quantity} • ${(item.price || 0).toFixed(2)}
-                              {item.game && ` • ${item.game}`}
-                            </div>
-                            {item.processing_notes && (
-                              <div className="text-sm text-blue-600 mt-1">{item.processing_notes}</div>
-                            )}
-                          </div>
-                          <div className="flex space-x-2">
-                            {item.printed_at && (
-                              <Badge variant="secondary">Printed</Badge>
-                            )}
-                            {item.pushed_at && (
-                              <Badge variant="default">Pushed</Badge>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+          
+          <TabsContent value="batch" className="mt-4">
+            <CurrentBatchPanel onViewFullBatch={() => setActiveTab("batch")} />
           </TabsContent>
         </Tabs>
       </div>
