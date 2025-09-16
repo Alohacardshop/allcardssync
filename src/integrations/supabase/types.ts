@@ -1975,7 +1975,7 @@ export type Database = {
       soft_delete_intake_item: {
         Args: { item_id: string; reason_in?: string }
         Returns: {
-          id: string
+          item_id_out: string
         }[]
       }
       soft_delete_intake_items: {
