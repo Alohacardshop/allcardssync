@@ -2,6 +2,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { useLocalStorageString } from "@/hooks/useLocalStorage";
 
 interface Store {
   key: string;
@@ -59,7 +60,7 @@ interface StoreProviderProps {
 export function StoreProvider({ children }: StoreProviderProps) {
   const [assignedStore, setAssignedStore] = useState<string | null>(null);
   const [assignedStoreName, setAssignedStoreName] = useState<string | null>(null);
-  const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
+  const [selectedLocationState, setSelectedLocationState] = useLocalStorageString('selected_shopify_location', '');
   const [availableLocations, setAvailableLocations] = useState<Location[]>([]);
   const [loadingLocations, setLoadingLocations] = useState(false);
   const [locationsLastUpdated, setLocationsLastUpdated] = useState<Date | null>(null);
@@ -67,6 +68,56 @@ export function StoreProvider({ children }: StoreProviderProps) {
   const [isAdmin, setIsAdmin] = useState(false);
   const [isStaff, setIsStaff] = useState(false);
   const [userAssignments, setUserAssignments] = useState<any[]>([]);
+
+  // Computed selectedLocation with recovery logic
+  const selectedLocation = selectedLocationState || null;
+  
+  // Enhanced setSelectedLocation that persists and recovers
+  const setSelectedLocation = (locationGid: string | null) => {
+    setSelectedLocationState(locationGid || '');
+  };
+
+  // Recovery function for missing location
+  const recoverSelectedLocation = async () => {
+    if (!assignedStore || selectedLocation) return;
+    
+    console.log('[StoreContext] Recovering missing selectedLocation...');
+    
+    // Try to get from user assignments first
+    const defaultAssignment = userAssignments.find(a => a.is_default && a.store_key === assignedStore);
+    if (defaultAssignment?.location_gid) {
+      console.log('[StoreContext] Recovered from default assignment:', defaultAssignment.location_gid);
+      setSelectedLocation(defaultAssignment.location_gid);
+      return;
+    }
+    
+    // Try first assignment for this store
+    const firstAssignment = userAssignments.find(a => a.store_key === assignedStore);
+    if (firstAssignment?.location_gid) {
+      console.log('[StoreContext] Recovered from first assignment:', firstAssignment.location_gid);
+      setSelectedLocation(firstAssignment.location_gid);
+      return;
+    }
+    
+    // Try to get from active lot as last resort
+    try {
+      const { data: activeLot } = await supabase
+        .from('intake_lots')
+        .select('shopify_location_gid')
+        .eq('store_key', assignedStore)
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+        
+      if (activeLot?.shopify_location_gid) {
+        console.log('[StoreContext] Recovered from active lot:', activeLot.shopify_location_gid);
+        setSelectedLocation(activeLot.shopify_location_gid);
+      }
+    } catch (error) {
+      console.error('[StoreContext] Failed to recover location from active lot:', error);
+    }
+  };
 
   // Load user roles and assignments
   useEffect(() => {
@@ -164,20 +215,28 @@ export function StoreProvider({ children }: StoreProviderProps) {
         // Auto-load locations for the assigned store
         const loadedLocs = await autoLoadLocations(userAssignment.store_key);
         
-        // Set default location or first available
-        const defaultAssignment = assignments.find(a => a.is_default);
-        const locationToSelect = defaultAssignment?.location_gid || assignments[0].location_gid;
-        setSelectedLocation(locationToSelect);
-        
-        const locationDisplayName = defaultAssignment?.location_name 
-          || loadedLocs?.find(l => l.gid === locationToSelect)?.name 
-          || "your location";
-        
-        toast({
-          title: "Store loaded",
-          description: `Using ${storeData?.name || userAssignment.store_key} - ${locationDisplayName}`,
-          variant: "default",
-        });
+        // Set default location or first available (only if not already set)
+          const locationDisplayName = defaultAssignment?.location_name 
+            || loadedLocs?.find(l => l.gid === locationToSelect)?.name 
+            || "your location";
+          
+          toast({
+            title: "Store loaded",
+            description: `Using ${storeData?.name || userAssignment.store_key} - ${locationDisplayName}`,
+            variant: "default",
+          });
+        } else {
+          // Show toast for completed store/location assignment without new location assignment
+          const currentLocationName = selectedLocation 
+            ? availableLocations.find(l => l.gid === selectedLocation)?.name || "your location"
+            : "your location";
+            
+          toast({
+            title: "Store loaded", 
+            description: `Using ${storeData?.name || userAssignment.store_key} - ${currentLocationName}`,
+            variant: "default",
+          });
+        }
       } else {
         console.log("StoreContext: No assignments found");
         toast({
@@ -193,6 +252,17 @@ export function StoreProvider({ children }: StoreProviderProps) {
         description: "Please try refreshing the page",
         variant: "destructive",
       });
+    }
+  };
+    } catch (error) {
+      console.error("Error loading user data:", error);
+      toast({
+        title: "Failed to load user data",
+        description: "Please try refreshing the page",
+        variant: "destructive",
+      });
+    }
+  };
     }
   };
 
@@ -221,6 +291,12 @@ export function StoreProvider({ children }: StoreProviderProps) {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Auto-recovery when store/assignments change
+  useEffect(() => {
+    if (assignedStore && userAssignments.length > 0 && !selectedLocation) {
+      recoverSelectedLocation();
+    }
+  }, [assignedStore, userAssignments, selectedLocation]);
   // Load cached locations when assigned store changes (no automatic refresh)
   useEffect(() => {
     if (!assignedStore) {
