@@ -115,20 +115,23 @@ Deno.serve(async (req) => {
     const psaData = await psaResponse.json()
     console.log('PSA API response:', psaData)
 
+    // Extract PSA certificate data from the nested structure
+    const psaCert = psaData?.PSACert
+    
     // Transform PSA API response to our format
     const psaApiResponse = {
       certNumber: certNumber,
-      isValid: psaData ? true : false,
-      grade: psaData?.Grade?.toString() || undefined,
-      year: psaData?.Year?.toString() || undefined,
-      brandTitle: psaData?.Brand || undefined,
-      subject: psaData?.Subject || undefined,
-      cardNumber: psaData?.CardNumber || undefined,
-      category: psaData?.Category || undefined,
-      varietyPedigree: psaData?.VarietyPedigree || undefined,
-      gameSport: psaData?.Sport || undefined,
-      imageUrl: psaData?.ImageUrl || undefined,
-      imageUrls: psaData?.ImageUrls || [],
+      isValid: psaCert ? true : false,
+      grade: psaCert?.CardGrade || undefined,
+      year: psaCert?.Year || undefined,
+      brandTitle: psaCert?.Brand || undefined,
+      subject: psaCert?.Subject || undefined,
+      cardNumber: psaCert?.CardNumber || undefined,
+      category: psaCert?.Category || undefined,
+      varietyPedigree: psaCert?.Variety || undefined,
+      gameSport: undefined, // Not available in PSA API
+      imageUrl: undefined, // Not available in PSA API
+      imageUrls: [],
       psaUrl: `https://www.psacard.com/cert/${certNumber}`
     }
 
