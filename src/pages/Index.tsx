@@ -424,8 +424,9 @@ const Index = () => {
 
 
       <div className="container mx-auto px-4 py-6 space-y-6">
-        {/* System Stats */}
-        <div className="flex-shrink-0">
+        {/* Top Row: Items Pushed and Store/Location side-by-side */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Items Pushed Card - Left Side */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Items Pushed</CardTitle>
@@ -434,6 +435,25 @@ const Index = () => {
             <CardContent>
               <div className="text-2xl font-bold">{systemStats?.items_pushed || 0}</div>
               <p className="text-xs text-muted-foreground mt-1">Synced to Shopify</p>
+            </CardContent>
+          </Card>
+
+          {/* Store & Location Card - Right Side */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Package className="h-5 w-5" />
+                  Store & Location
+                </div>
+                <Badge variant="outline" className="text-xs">Default: Store + Location</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <StoreLocationSelectorAutoWrapper showSetDefault={true} />
+              <p className="text-xs text-muted-foreground mt-2">
+                💡 Set your default store & location combination to save time on future intake sessions
+              </p>
             </CardContent>
           </Card>
         </div>
