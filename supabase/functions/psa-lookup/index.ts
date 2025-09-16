@@ -89,6 +89,8 @@ Deno.serve(async (req) => {
         }
       }
 
+      console.log('Returning cached PSA data:', response.data)
+      
       return new Response(JSON.stringify(response), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
@@ -213,7 +215,7 @@ Deno.serve(async (req) => {
       data: psaApiResponse
     }
 
-    console.log(`PSA lookup completed for cert: ${certNumber}`)
+    console.log(`PSA lookup completed for cert: ${certNumber}`, response.data)
 
     return new Response(JSON.stringify(response), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
