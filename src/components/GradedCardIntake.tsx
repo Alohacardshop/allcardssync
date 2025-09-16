@@ -12,7 +12,6 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 // PSA service removed - using direct API integration
 import { normalizePSAData } from "@/lib/psaNormalization";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { StoreLocationSelectorAutoWrapper } from "@/components/StoreLocationSelectorAuto";
 import { parseFunctionError } from "@/lib/fns";
 import { useLogger } from "@/hooks/useLogger";
 import { validateCompleteStoreContext, logStoreContext } from "@/utils/storeValidation";
@@ -569,11 +568,6 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Store and Location Selector */}
-        <div className="space-y-4">
-          <StoreLocationSelectorAutoWrapper />
-        </div>
-
         {/* Check Access Now Button */}
         {assignedStore && selectedLocation && (
           <div className="space-y-3">
