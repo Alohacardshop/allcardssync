@@ -457,7 +457,7 @@ const Index = () => {
 
         {/* Main Content Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 h-auto">
+          <TabsList className="grid w-full grid-cols-3 h-auto">
             <TabsTrigger value="graded" className="flex flex-col md:flex-row items-center gap-1 md:gap-2 py-3 md:py-2">
               <Award className="h-4 w-4" />
               <span className="text-xs md:text-sm">Graded</span>
@@ -465,10 +465,6 @@ const Index = () => {
             <TabsTrigger value="raw" className="flex flex-col md:flex-row items-center gap-1 md:gap-2 py-3 md:py-2">
               <FileEdit className="h-4 w-4" />
               <span className="text-xs md:text-sm">Raw</span>
-            </TabsTrigger>
-            <TabsTrigger value="bulk" className="flex flex-col md:flex-row items-center gap-1 md:gap-2 py-3 md:py-2">
-              <Package className="h-4 w-4" />
-              <span className="text-xs md:text-sm">Bulk</span>
             </TabsTrigger>
             <TabsTrigger value="batch" className="flex flex-col md:flex-row items-center gap-1 md:gap-2 py-3 md:py-2">
               <Archive className="h-4 w-4" />
@@ -493,11 +489,6 @@ const Index = () => {
                 />
               </CardContent>
             </Card>
-            <CurrentBatchPanel onViewFullBatch={() => setActiveTab("batch")} />
-          </TabsContent>
-
-          <TabsContent value="bulk" className="mt-6 space-y-6">
-            <BulkCardIntake onBatchAdd={handleBatchAdd} />
             <CurrentBatchPanel onViewFullBatch={() => setActiveTab("batch")} />
           </TabsContent>
 
