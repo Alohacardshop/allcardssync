@@ -9,7 +9,6 @@ import { Loader2, Package, AlertCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useStore } from '@/contexts/StoreContext';
-import { StoreLocationSelector } from '@/components/StoreLocationSelector';
 import { OtherItemsEntry } from '@/components/OtherItemsEntry';
 import { validateCompleteStoreContext, logStoreContext } from '@/utils/storeValidation';
 interface BulkCardIntakeProps {
@@ -200,9 +199,6 @@ export function BulkCardIntake({ onBatchAdd }: BulkCardIntakeProps) {
 
   return (
     <div className="space-y-6">
-      {/* Store & Location Selection */}
-      <StoreLocationSelector />
-
       {/* Access Alert */}
       {(!assignedStore || !selectedLocation) && (
         <Alert className="border-orange-200 bg-orange-50">
