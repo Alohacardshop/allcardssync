@@ -2,8 +2,9 @@ import React, { useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { useStore } from "@/contexts/StoreContext";
-import { Store, MapPin, AlertCircle } from "lucide-react";
+import { Store, MapPin, AlertCircle, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 
@@ -20,15 +21,25 @@ export function StoreLocationSelectorAuto({ className, showSetDefault = true }: 
     availableLocations,
     loadingLocations,
     isAdmin,
-    userAssignments 
+    userAssignments,
+    refreshLocations
   } = useStore();
 
-  // Get the selected location name safely
+  // Get the selected location name safely with better fallback
   const selectedLocationData = availableLocations?.find(l => l.gid === selectedLocation);
-  const selectedLocationName = selectedLocationData?.name || "Loading...";
+  const selectedLocationName = selectedLocationData?.name || 
+    (loadingLocations ? "Loading locations..." : 
+     (availableLocations?.length === 0 ? "No locations available" : 
+      (selectedLocation ? "Unknown location" : "No location selected")));
 
-  // Auto-select default location if none selected
+  // Auto-load locations and set default location if needed
   useEffect(() => {
+    if (assignedStore && !loadingLocations && availableLocations?.length === 0) {
+      // Try to refresh locations if we have a store but no locations
+      console.log('[StoreLocationSelectorAuto] No locations available, triggering refresh for store:', assignedStore);
+      refreshLocations();
+    }
+    
     if (!loadingLocations && availableLocations?.length > 0 && !selectedLocation) {
       // Find default location from assignments
       const defaultAssignment = userAssignments?.find(
@@ -40,11 +51,16 @@ export function StoreLocationSelectorAuto({ className, showSetDefault = true }: 
         const isLocationAvailable = availableLocations.some(l => l.gid === defaultAssignment.location_gid);
         if (isLocationAvailable) {
           // Auto-select the default location (this would be handled by StoreContext)
-          console.log("Auto-selected default location:", defaultAssignment.location_gid);
+          console.log("[StoreLocationSelectorAuto] Default location available:", defaultAssignment.location_gid);
+        } else {
+          console.log("[StoreLocationSelectorAuto] Default location not in available locations:", defaultAssignment.location_gid, availableLocations.map(l => l.gid));
         }
+      } else if (availableLocations.length > 0) {
+        // No default but we have locations available
+        console.log("[StoreLocationSelectorAuto] No default assignment, available locations:", availableLocations.length);
       }
     }
-  }, [assignedStore, selectedLocation, availableLocations, loadingLocations, userAssignments]);
+  }, [assignedStore, selectedLocation, availableLocations, loadingLocations, userAssignments, refreshLocations]);
 
   // Show error state if no store assigned
   if (!assignedStore) {
@@ -91,11 +107,24 @@ export function StoreLocationSelectorAuto({ className, showSetDefault = true }: 
   return (
     <Card className={className}>
       <CardContent className="pt-6">
-        <div className="space-y-4">
-          <Label className="text-base font-semibold flex items-center gap-2">
-            <Store className="h-4 w-4" />
-            Store & Location
-          </Label>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <Label className="text-base font-semibold flex items-center gap-2">
+                <Store className="h-4 w-4" />
+                Store & Location
+              </Label>
+              {assignedStore && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={refreshLocations}
+                  disabled={loadingLocations}
+                  className="h-7 px-2"
+                >
+                  <RefreshCw className={`h-3 w-3 ${loadingLocations ? 'animate-spin' : ''}`} />
+                </Button>
+              )}
+            </div>
           
           <div className="space-y-2">
             <div className="flex items-center gap-2">
@@ -113,17 +142,31 @@ export function StoreLocationSelectorAuto({ className, showSetDefault = true }: 
               <span className="text-sm">
                 {selectedLocationName}
               </span>
-              {selectedLocation && (
+              {selectedLocation && selectedLocationData && (
                 <Badge variant="outline" className="text-xs">
                   Active
                 </Badge>
               )}
+              {!selectedLocation && !loadingLocations && availableLocations?.length > 0 && (
+                <Badge variant="destructive" className="text-xs">
+                  None Selected
+                </Badge>
+              )}
             </div>
 
-            {!selectedLocation && availableLocations?.length === 0 && (
+            {!selectedLocation && availableLocations?.length === 0 && !loadingLocations && (
               <div className="flex items-center gap-2 text-destructive">
                 <AlertCircle className="h-4 w-4" />
                 <span className="text-sm">No locations available for this store</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={refreshLocations}
+                  className="h-6 px-2 text-xs"
+                >
+                  <RefreshCw className="h-3 w-3 mr-1" />
+                  Retry
+                </Button>
               </div>
             )}
           </div>

@@ -424,32 +424,36 @@ const Index = () => {
 
 
       <div className="container mx-auto px-4 py-6 space-y-6">
-        {/* System Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 max-w-md">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Items Pushed</CardTitle>
-              <ShoppingCart className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{systemStats?.items_pushed || 0}</div>
-              <p className="text-xs text-muted-foreground mt-1">Synced to Shopify</p>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Store & Location Selector - with enhanced default functionality */}
-        <div className="mb-6">
-          <Card className="p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-medium text-muted-foreground">Store & Location Settings</h3>
-              <Badge variant="outline" className="text-xs">Default: Store + Location</Badge>
-            </div>
-            <StoreLocationSelectorAutoWrapper showSetDefault={true} />
-            <p className="text-xs text-muted-foreground mt-2">
-              💡 Set your default store & location combination to save time on future intake sessions
-            </p>
-          </Card>
+        {/* System Stats & Store Selector */}
+        <div className="flex flex-col md:flex-row gap-4 items-start">
+          <div className="flex-shrink-0">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Items Pushed</CardTitle>
+                <ShoppingCart className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{systemStats?.items_pushed || 0}</div>
+                <p className="text-xs text-muted-foreground mt-1">Synced to Shopify</p>
+              </CardContent>
+            </Card>
+          </div>
+          
+          {/* Store & Location Selector */}
+          <div className="flex-1 min-w-0">
+            <Card className="h-full">
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-medium text-muted-foreground">Store & Location Settings</h3>
+                  <Badge variant="outline" className="text-xs">Default: Store + Location</Badge>
+                </div>
+                <StoreLocationSelectorAutoWrapper showSetDefault={true} />
+                <p className="text-xs text-muted-foreground mt-2">
+                  💡 Set your default store & location combination to save time on future intake sessions
+                </p>
+              </CardContent>
+            </Card>
+          </div>
         </div>
 
         {/* Print Queue Status */}
