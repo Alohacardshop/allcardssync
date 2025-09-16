@@ -88,12 +88,13 @@ export const RawCardIntake = ({ onBatchAdd }: RawCardIntakeProps) => {
       setNotes("");
 
       // Trigger refresh
-      onBatchAdd?.(data);
+      onBatchAdd?.(Array.isArray(data) ? data[0] : data);
       
       // Dispatch events for CurrentBatchPanel
+      const item = Array.isArray(data) ? data[0] : data;
       window.dispatchEvent(new CustomEvent('intake:item-added', { 
         detail: { 
-          item: data,
+          item: item,
           store: storeKey,
           location: locationGid
         }
@@ -101,8 +102,8 @@ export const RawCardIntake = ({ onBatchAdd }: RawCardIntakeProps) => {
       
       window.dispatchEvent(new CustomEvent('batchItemAdded', { 
         detail: { 
-          itemId: data.id,
-          lot: data.lot_number,
+          itemId: item.id,
+          lot: item.lot_number,
           store: storeKey,
           location: locationGid
         }

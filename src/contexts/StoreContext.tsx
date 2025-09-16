@@ -215,28 +215,16 @@ export function StoreProvider({ children }: StoreProviderProps) {
         // Auto-load locations for the assigned store
         const loadedLocs = await autoLoadLocations(userAssignment.store_key);
         
-        // Set default location or first available (only if not already set)
-          const locationDisplayName = defaultAssignment?.location_name 
-            || loadedLocs?.find(l => l.gid === locationToSelect)?.name 
-            || "your location";
+        // Show toast for completed store/location assignment
+        const currentLocationName = selectedLocation 
+          ? availableLocations.find(l => l.gid === selectedLocation)?.name || "your location"
+          : "your location";
           
-          toast({
-            title: "Store loaded",
-            description: `Using ${storeData?.name || userAssignment.store_key} - ${locationDisplayName}`,
-            variant: "default",
-          });
-        } else {
-          // Show toast for completed store/location assignment without new location assignment
-          const currentLocationName = selectedLocation 
-            ? availableLocations.find(l => l.gid === selectedLocation)?.name || "your location"
-            : "your location";
-            
-          toast({
-            title: "Store loaded", 
-            description: `Using ${storeData?.name || userAssignment.store_key} - ${currentLocationName}`,
-            variant: "default",
-          });
-        }
+        toast({
+          title: "Store loaded", 
+          description: `Using ${storeData?.name || userAssignment.store_key} - ${currentLocationName}`,
+          variant: "default",
+        });
       } else {
         console.log("StoreContext: No assignments found");
         toast({
@@ -252,17 +240,6 @@ export function StoreProvider({ children }: StoreProviderProps) {
         description: "Please try refreshing the page",
         variant: "destructive",
       });
-    }
-  };
-    } catch (error) {
-      console.error("Error loading user data:", error);
-      toast({
-        title: "Failed to load user data",
-        description: "Please try refreshing the page",
-        variant: "destructive",
-      });
-    }
-  };
     }
   };
 

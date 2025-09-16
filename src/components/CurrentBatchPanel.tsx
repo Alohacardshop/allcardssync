@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Pencil, Send, Trash2, Eye, Plus, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { EditIntakeItemDialog } from "./EditIntakeItemDialog";
+import EditIntakeItemDialog from "./EditIntakeItemDialog";
 import { useStore } from "@/contexts/StoreContext";
 import { logStoreContext, validateCompleteStoreContext } from "@/utils/storeValidation";
 import { StoreContextDebug } from "./StoreContextDebug";
@@ -299,7 +299,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
 
       if (error) throw error;
 
-      toast({ title: "Success", description: `Sent ${data.processed_ids.length} items to inventory` });
+      toast({ title: "Success", description: `Sent ${(data as any)?.processed_ids?.length || itemIds.length} items to inventory` });
       fetchRecentItemsWithRetry();
     } catch (error: any) {
       console.error("Error sending batch to inventory:", error);
