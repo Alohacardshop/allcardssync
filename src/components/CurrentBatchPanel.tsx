@@ -9,6 +9,7 @@ import EditIntakeItemDialog from "./EditIntakeItemDialog";
 import { useStore } from "@/contexts/StoreContext";
 import { logStoreContext, validateCompleteStoreContext } from "@/utils/storeValidation";
 import { StoreContextDebug } from "./StoreContextDebug";
+import { CompactLocationSelector } from "./CompactLocationSelector";
 
 interface IntakeItem {
   id: string;
@@ -366,7 +367,8 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
               {counts.activeItems} active items
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-3">
+            <CompactLocationSelector />
             <Button
               onClick={handleSendBatchToInventory}
               disabled={recentItems.length === 0 || sendingBatch}
