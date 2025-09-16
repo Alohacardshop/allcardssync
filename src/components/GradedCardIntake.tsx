@@ -142,6 +142,8 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         brandTitle: psaData.brandTitle || prev.brandTitle,
         subject: psaData.subject || prev.subject,
         cardNumber: psaData.cardNumber || prev.cardNumber,
+        category: psaData.category || prev.category,
+        variant: psaData.varietyPedigree || prev.variant,
         certNumber: psaData.certNumber || prev.certNumber
       }));
 
@@ -755,9 +757,9 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         {/* Card Image Preview */}
         {cardData && (
           <div className="flex justify-center">
-            {cardData.imageUrl ? (
+            {cardData.image_url ? (
               <img 
-                src={cardData.imageUrl} 
+                src={cardData.image_url} 
                 alt={`${gradingCompany} Card`}
                 className="max-w-xs max-h-80 object-contain rounded-lg border shadow-md"
                 onError={(e) => {
