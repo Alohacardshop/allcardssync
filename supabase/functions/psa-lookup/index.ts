@@ -118,11 +118,19 @@ Deno.serve(async (req) => {
     // Extract PSA certificate data from the nested structure
     const psaCert = psaData?.PSACert
     
+    // Extract numeric grade from "GEM MT 10" format
+    const extractNumericGrade = (gradeStr: string): string | undefined => {
+      if (!gradeStr) return undefined;
+      // Extract number from grade string (e.g., "GEM MT 10" -> "10")
+      const match = gradeStr.match(/\d+/);
+      return match ? match[0] : undefined;
+    };
+    
     // Transform PSA API response to our format
     const psaApiResponse = {
       certNumber: certNumber,
       isValid: psaCert ? true : false,
-      grade: psaCert?.CardGrade || undefined,
+      grade: extractNumericGrade(psaCert?.CardGrade),
       year: psaCert?.Year || undefined,
       brandTitle: psaCert?.Brand || undefined,
       subject: psaCert?.Subject || undefined,
