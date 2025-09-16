@@ -134,6 +134,10 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         throw new Error('Invalid PSA certificate number');
       }
 
+      console.log('PSA Data received:', psaData);
+      console.log('Category:', psaData.category);
+      console.log('Variety/Pedigree:', psaData.varietyPedigree);
+
       // Update form with PSA data
       setFormData(prev => ({
         ...prev,
