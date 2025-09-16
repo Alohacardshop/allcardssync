@@ -127,14 +127,6 @@ export const RawCardIntake = ({ onBatchAdd }: RawCardIntakeProps) => {
         <CardTitle>Raw Card Intake</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {!assignedStore || !selectedLocation ? (
-          <Alert>
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              Please select a store and location to add raw cards.
-            </AlertDescription>
-          </Alert>
-        ) : null}
 
         <div>
           <Label htmlFor="brand">Brand/Set</Label>
