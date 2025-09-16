@@ -34,7 +34,7 @@ interface Props {
   isAdmin?: boolean;
 }
 
-export default function EditIntakeItemDialog({ open, item, onOpenChange, onSave, isAdmin = false }: Props) {
+function EditIntakeItemDialog({ open, item, onOpenChange, onSave, isAdmin = false }: Props) {
   const [form, setForm] = useState<IntakeItemDetails | null>(item);
 
   useEffect(() => {
@@ -160,3 +160,6 @@ export default function EditIntakeItemDialog({ open, item, onOpenChange, onSave,
     </Dialog>
   );
 }
+
+export default EditIntakeItemDialog;
+export { EditIntakeItemDialog };
