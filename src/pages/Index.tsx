@@ -424,9 +424,9 @@ const Index = () => {
 
 
       <div className="container mx-auto px-4 py-6">
-        {/* Top Row: Items Pushed and Store/Location side-by-side */}
+        {/* CRITICAL: TOP SECTION - Items Pushed and Store/Location side-by-side */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-          {/* Items Pushed Card - Left Side */}
+          {/* LEFT CARD: Items Pushed */}
           <Card className="h-fit">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-lg font-semibold">Items Pushed</CardTitle>
@@ -438,9 +438,9 @@ const Index = () => {
             </CardContent>
           </Card>
 
-          {/* Store & Location Card - Right Side */}
+          {/* RIGHT CARD: Store & Location - ONLY PLACE IT SHOULD EXIST */}
           <Card className="h-fit">
-            <CardHeader className="pb-3">
+            <CardHeader>
               <CardTitle className="text-lg font-semibold">Store & Location</CardTitle>
             </CardHeader>
             <CardContent>
