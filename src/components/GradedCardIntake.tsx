@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { StoreLocationSelectorAutoWrapper } from "@/components/StoreLocationSelectorAuto";
 import { parseFunctionError } from "@/lib/fns";
 import { useLogger } from "@/hooks/useLogger";
+import { validateCompleteStoreContext, logStoreContext } from "@/utils/storeValidation";
 
 // Feature flag for CGC functionality - temporarily disabled
 const CGC_ENABLED = false;
@@ -211,8 +212,19 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
   };
 
   const handleSubmit = async () => {
-    if (!assignedStore || !selectedLocation) {
-      toast.error("Please select a store and location before submitting");
+    try {
+      // Validate store context before submission
+      const storeContext = validateCompleteStoreContext(
+        { assignedStore, selectedLocation }, 
+        'submit graded card intake'
+      );
+      
+      logStoreContext('GradedCardIntake', storeContext, { 
+        certNumber: formData.certNumber,
+        price: formData.price 
+      });
+    } catch (error: any) {
+      toast.error(error.message);
       return;
     }
 
@@ -277,6 +289,13 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
     });
     
     console.log(`🚀 Adding item to batch - Started at ${new Date().toISOString()}`);
+
+    console.log('[Intake] Creating item with store context:', {
+      store_key: assignedStore,
+      shopify_location_gid: selectedLocation,
+      certNumber: formData.certNumber,
+      timestamp: new Date().toISOString()
+    });
 
     try {
       const rpcParams = {

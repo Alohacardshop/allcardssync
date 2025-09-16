@@ -10,6 +10,9 @@ import EditIntakeItemDialog, { IntakeItemDetails } from "@/components/EditIntake
 import { useStore } from "@/contexts/StoreContext";
 import { useBatchSendToShopify } from "@/hooks/useBatchSendToShopify";
 import { QueueStatusIndicator } from "@/components/QueueStatusIndicator";
+import { validateCompleteStoreContext, logStoreContext } from "@/utils/storeValidation";
+
+import { StoreContextDebug } from "@/components/StoreContextDebug";
 
 interface IntakeItem {
   id: string;
@@ -166,8 +169,16 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
   };
 
   const handleSendToInventory = async (item: IntakeItem) => {
-    if (!assignedStore || !selectedLocation) {
-      toast.error("Please select a store and location first");
+    try {
+      // Validate store context before processing
+      const storeContext = validateCompleteStoreContext(
+        { assignedStore, selectedLocation }, 
+        'send item to inventory'
+      );
+      
+      logStoreContext('SendToInventory', storeContext, { itemId: item.id });
+    } catch (error: any) {
+      toast.error(error.message);
       return;
     }
 
@@ -207,8 +218,16 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
 
   // Send entire batch to inventory
   const handleSendBatchToInventory = async () => {
-    if (!assignedStore || !selectedLocation) {
-      toast.error('Please select a store and location first');
+    try {
+      // Validate store context before processing
+      const storeContext = validateCompleteStoreContext(
+        { assignedStore, selectedLocation }, 
+        'send batch to inventory'
+      );
+      
+      logStoreContext('SendBatchToInventory', storeContext, { itemCount: recentItems.length });
+    } catch (error: any) {
+      toast.error(error.message);
       return;
     }
 
@@ -416,7 +435,16 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
   };
 
   const checkAndCloseEmptyLot = async () => {
-    if (!assignedStore || !selectedLocation) return;
+    try {
+      // Validate store context before processing
+      const storeContext = validateCompleteStoreContext(
+        { assignedStore, selectedLocation }, 
+        'close empty lot'
+      );
+    } catch (error: any) {
+      console.warn('Cannot check empty lot without store context:', error.message);
+      return;
+    }
     
     try {
       const { data, error } = await supabase.rpc('close_empty_lot_and_create_new', {
@@ -443,8 +471,16 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
   };
 
   const handleStartNewLot = async () => {
-    if (!assignedStore || !selectedLocation) {
-      toast.error('Please select a store and location first');
+    try {
+      // Validate store context before processing
+      const storeContext = validateCompleteStoreContext(
+        { assignedStore, selectedLocation }, 
+        'start new lot'
+      );
+      
+      logStoreContext('StartNewLot', storeContext);
+    } catch (error: any) {
+      toast.error(error.message);
       return;
     }
 
@@ -477,33 +513,88 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
   };
 
   const fetchRecentItems = async () => {
+    // REQUIRE store/location parameters - no optional logic
+    if (!assignedStore || !selectedLocation) {
+      console.error('[CurrentBatchPanel] Store context missing:', { assignedStore, selectedLocation });
+      setRecentItems([]);
+      setTotalCount(0);
+      setCurrentLotId(null);
+      setCurrentLotNumber(null);
+      setLoading(false);
+      return;
+    }
+
+    console.log('[CurrentBatchPanel] Fetching items for store context:', {
+      assignedStore,
+      selectedLocation,
+      timestamp: new Date().toISOString()
+    });
+
     try {
-      // Get latest active lot scoped by user/store/location
-      let lotQuery = supabase
+      // Get latest active lot scoped by user/store/location - REQUIRED fields
+      const lotQuery = supabase
         .from('intake_lots')
-        .select('id, lot_number')
+        .select('id, lot_number, store_key, shopify_location_gid')
         .eq('status', 'active')
+        .eq('store_key', assignedStore)  // REQUIRED - not optional
+        .eq('shopify_location_gid', selectedLocation)  // REQUIRED - not optional
         .order('created_at', { ascending: false })
         .limit(1);
 
-      // Scope by store/location if available
-      if (assignedStore) {
-        lotQuery = lotQuery.eq('store_key', assignedStore);
-      }
-      if (selectedLocation) {
-        lotQuery = lotQuery.eq('shopify_location_gid', selectedLocation);
-      }
-
       const { data: latestLot } = await lotQuery.maybeSingle();
 
+      console.log('[CurrentBatchPanel] Lot query result:', { 
+        latestLot, 
+        searchedStore: assignedStore, 
+        searchedLocation: selectedLocation 
+      });
+
       if (!latestLot) {
-        setRecentItems([]);
-        setTotalCount(0);
-        setCurrentLotId(null);
-        setCurrentLotNumber(null);
-        return;
+        console.warn(`[CurrentBatchPanel] No active lot found for store: ${assignedStore}, location: ${selectedLocation}`);
+        
+        // Check if items exist in other lots (debugging)
+        const { data: otherLots } = await supabase
+          .from('intake_lots')
+          .select('lot_number, store_key, shopify_location_gid, status')
+          .eq('status', 'active')
+          .neq('store_key', assignedStore)
+          .limit(5);
+
+      if (otherLots && otherLots.length > 0) {
+        console.warn('[CurrentBatchPanel] Items found in other store lots:', otherLots);
+        // Add user-facing warning about store context mismatch
+        toast.warning(
+          `No items in current batch for ${assignedStore}. Items may be in other store batches.`,
+          {
+            description: `Found ${otherLots.length} active lots in other stores. Check your store selection.`,
+            duration: 5000,
+            action: {
+              label: "View Stores",
+              onClick: () => console.log('Store selection needed')
+            }
+          }
+        );
       }
 
+      setRecentItems([]);
+      setTotalCount(0);
+      setCurrentLotId(null);
+      setCurrentLotNumber(null);
+      return;
+      }
+
+      // Validate the lot belongs to the correct store/location
+      if (latestLot.store_key !== assignedStore || latestLot.shopify_location_gid !== selectedLocation) {
+        console.error('[CurrentBatchPanel] Lot store/location mismatch:', {
+          expectedStore: assignedStore,
+          expectedLocation: selectedLocation,
+          actualStore: latestLot.store_key,
+          actualLocation: latestLot.shopify_location_gid,
+          lotId: latestLot.id
+        });
+      }
+
+      console.log(`[CurrentBatchPanel] Using lot ${latestLot.lot_number} for store ${assignedStore}`);
       setCurrentLotId(latestLot.id);
       setCurrentLotNumber(latestLot.lot_number);
 
@@ -536,6 +627,12 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
   };
 
   useEffect(() => {
+    console.log('[CurrentBatchPanel] Store Context Changed:', {
+      assignedStore,
+      selectedLocation,
+      timestamp: new Date().toISOString()
+    });
+
     // Check if user is admin
     const checkAdminRole = async () => {
       try {
@@ -553,9 +650,22 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
     };
 
     checkAdminRole();
-    fetchRecentItems();
+    
+    // Only fetch if we have both store and location context
+    if (assignedStore && selectedLocation) {
+      fetchRecentItems();
+    } else {
+      console.warn('[CurrentBatchPanel] Missing store context, not fetching items');
+      setRecentItems([]);
+      setTotalCount(0);
+      setCurrentLotId(null);
+      setCurrentLotNumber(null);
+      setLoading(false);
+    }
+  }, [assignedStore, selectedLocation]); // CRITICAL: Add dependencies to trigger refresh when store context changes
 
-    // Set up realtime subscription
+  // Separate useEffect for realtime subscriptions and events (only run once)
+  useEffect(() => {
     const channel = supabase
       .channel('intake-items-changes')
       .on(
@@ -649,7 +759,10 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
                    </Badge>
                  )}
                </CardTitle>
-              <CardDescription>Recent items added to the batch</CardDescription>
+               <CardDescription>Recent items added to the batch</CardDescription>
+               
+               {/* Store Context Debug Display */}
+               <StoreContextDebug className="mt-3" />
             </div>
             <div className="flex gap-2">
               <QueueStatusIndicator />

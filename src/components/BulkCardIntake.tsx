@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { useStore } from '@/contexts/StoreContext';
 import { StoreLocationSelector } from '@/components/StoreLocationSelector';
 import { OtherItemsEntry } from '@/components/OtherItemsEntry';
+import { validateCompleteStoreContext, logStoreContext } from '@/utils/storeValidation';
 interface BulkCardIntakeProps {
   onBatchAdd?: (item: any) => void;
 }
@@ -94,6 +95,23 @@ export function BulkCardIntake({ onBatchAdd }: BulkCardIntakeProps) {
 
   // Add bulk item to batch
   const handleAddBulkToBatch = async () => {
+    try {
+      // Validate store context before submission
+      const storeContext = validateCompleteStoreContext(
+        { assignedStore, selectedLocation }, 
+        'add bulk cards to batch'
+      );
+      
+      logStoreContext('BulkCardIntake', storeContext, { 
+        game: selectedGame,
+        amount: amount,
+        totalPrice: totalPrice 
+      });
+    } catch (error: any) {
+      toast.error(error.message);
+      return;
+    }
+
     if (!selectedGame) {
       toast.error('Please select a game');
       return;

@@ -19,6 +19,7 @@ import { generateSKU, generateTCGSKU } from '@/lib/sku';
 import { fetchCardPricing } from '@/hooks/useTCGData';
 import { tcgSupabase } from '@/integrations/supabase/client';
 import { useRawIntakeSettings } from '@/hooks/useRawIntakeSettings';
+import { validateCompleteStoreContext, logStoreContext } from '@/utils/storeValidation';
 
 interface RawCardWithPricing extends NormalizedCard {
   cost: number;
