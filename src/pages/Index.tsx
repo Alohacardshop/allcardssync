@@ -5,7 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { RefreshCw, Store as StoreIcon, ShoppingCart, Lock, Package, Layers } from 'lucide-react';
+import { RefreshCw, Store as StoreIcon, ShoppingCart, Lock, Package, Layers, MapPin } from 'lucide-react';
 import { useStore } from '@/contexts/StoreContext';
 import { supabase } from '@/integrations/supabase/client';
 import { GradedCardIntake } from '@/components/GradedCardIntake';
@@ -13,19 +13,15 @@ import { RawCardIntake } from '@/components/RawCardIntake';
 import { CurrentBatchPanel } from '@/components/CurrentBatchPanel';
 
 export default function Index() {
-  // Get all store context values
-  const storeContext = useStore();
+  const { 
+    assignedStore, 
+    selectedLocation, 
+    setSelectedLocation,
+    availableLocations = [],
+    loadingLocations,
+    refreshLocations
+  } = useStore();
   
-  // Extract what we need - handle both possible naming conventions
-  const assignedStore = storeContext.assignedStore;
-  const selectedLocation = storeContext.selectedLocation;
-  const setSelectedLocation = storeContext.setSelectedLocation;
-  const isLoadingLocations = storeContext.loadingLocations || false;
-  const refreshLocations = storeContext.refreshLocations;
-  
-  // Handle different possible names for locations array
-  const locations = storeContext.availableLocations || [];
-
   const [activeTab, setActiveTab] = useState('graded');
   const [itemsPushed, setItemsPushed] = useState(0);
 
@@ -45,19 +41,19 @@ export default function Index() {
 
   // Auto-select Ward location as default
   useEffect(() => {
-    if (locations && locations.length > 0 && !selectedLocation) {
-      const wardLocation = locations.find(loc => 
+    if (availableLocations && availableLocations.length > 0 && !selectedLocation) {
+      const wardLocation = availableLocations.find(loc => 
         loc.name && loc.name.toLowerCase().includes('ward')
       );
       
       if (wardLocation && wardLocation.gid) {
         setSelectedLocation(wardLocation.gid);
-      } else if (locations[0] && locations[0].gid) {
+      } else if (availableLocations[0] && availableLocations[0].gid) {
         // Fallback to first location if Ward not found
-        setSelectedLocation(locations[0].gid);
+        setSelectedLocation(availableLocations[0].gid);
       }
     }
-  }, [locations, selectedLocation, setSelectedLocation]);
+  }, [availableLocations, selectedLocation, setSelectedLocation]);
 
   const handleLocationChange = (value: string) => {
     if (setSelectedLocation) {
@@ -73,10 +69,10 @@ export default function Index() {
 
   // Helper to get location name from GID
   const getLocationName = () => {
-    if (isLoadingLocations) return 'Loading locations...';
+    if (loadingLocations) return 'Loading locations...';
     if (!selectedLocation) return 'Select a location';
     
-    const location = locations.find(loc => loc.gid === selectedLocation);
+    const location = availableLocations.find(loc => loc.gid === selectedLocation);
     if (location && location.name) {
       return location.name;
     }
@@ -87,75 +83,53 @@ export default function Index() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="container mx-auto p-4">
-        
-        {/* TOP SECTION: Two cards side by side */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-          
-          {/* LEFT CARD: Items Pushed */}
-          <Card className="h-full">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <ShoppingCart className="h-5 w-5" />
-                Items Pushed
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-4xl font-bold">{itemsPushed}</div>
-              <p className="text-sm text-muted-foreground mt-1">Synced to Shopify</p>
-            </CardContent>
-          </Card>
+      {/* TOP NAVIGATION BAR */}
+      <nav className="sticky top-0 z-50 w-full border-b bg-card shadow-sm">
+        <div className="container mx-auto px-4 py-3">
+          <div className="flex items-center justify-between">
+            
+            {/* LEFT SIDE - App Title */}
+            <div className="flex items-center gap-2">
+              <Package className="h-6 w-6 text-primary" />
+              <h1 className="text-xl font-semibold">Inventory Management</h1>
+            </div>
 
-          {/* RIGHT CARD: Store & Location */}
-          <Card className="h-full">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center justify-between text-lg">
-                <div className="flex items-center gap-2">
-                  <StoreIcon className="h-5 w-5" />
-                  Store & Location
-                </div>
-                {refreshLocations && (
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={refreshLocations}
-                    disabled={isLoadingLocations}
-                    className="h-8 w-8"
-                  >
-                    <RefreshCw className={`h-4 w-4 ${isLoadingLocations ? 'animate-spin' : ''}`} />
-                  </Button>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Store Display */}
-              <div>
-                <Label className="text-xs text-muted-foreground">Active Store</Label>
-                <div className="mt-1">
-                  <Badge variant="secondary" className="text-sm font-medium">
-                    {assignedStore === 'hawaii' ? 'Hawaii Store' : 
-                     assignedStore === 'las_vegas' ? 'Las Vegas Store' : 
-                     assignedStore || 'No Store Assigned'}
-                  </Badge>
-                </div>
+            {/* RIGHT SIDE - Store Controls */}
+            <div className="flex items-center gap-4">
+              
+              {/* Items Pushed Counter */}
+              <div className="flex items-center gap-2 px-3 py-1 rounded-md bg-muted">
+                <ShoppingCart className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">{itemsPushed}</span>
+                <span className="text-xs text-muted-foreground">pushed</span>
               </div>
+
+              {/* Store Badge */}
+              {assignedStore && (
+                <Badge variant="secondary" className="text-sm">
+                  <StoreIcon className="h-3 w-3 mr-1" />
+                  {assignedStore === 'hawaii' ? 'Hawaii Store' : 
+                   assignedStore === 'las_vegas' ? 'Las Vegas Store' : 
+                   assignedStore}
+                </Badge>
+              )}
 
               {/* Location Selector */}
               {assignedStore && (
-                <div>
-                  <Label className="text-xs text-muted-foreground">Location</Label>
+                <div className="flex items-center gap-2">
+                  <MapPin className="h-4 w-4 text-muted-foreground" />
                   <Select
                     value={selectedLocation || ''}
                     onValueChange={handleLocationChange}
-                    disabled={isLoadingLocations || locations.length === 0}
+                    disabled={loadingLocations || availableLocations.length === 0}
                   >
-                    <SelectTrigger className="w-full mt-1">
+                    <SelectTrigger className="w-[180px]">
                       <SelectValue>
                         {getLocationName()}
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                      {locations.map((location) => (
+                      {availableLocations.map((location) => (
                         <SelectItem key={location.gid} value={location.gid}>
                           <div className="flex items-center gap-2">
                             <span>{location.name}</span>
@@ -167,19 +141,28 @@ export default function Index() {
                       ))}
                     </SelectContent>
                   </Select>
-                  
-                  {/* Warning if no location selected */}
-                  {!selectedLocation && !isLoadingLocations && locations.length > 0 && (
-                    <p className="text-xs text-amber-600 mt-2">
-                      Please select a location to continue
-                    </p>
+
+                  {/* Refresh Button */}
+                  {refreshLocations && (
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={refreshLocations}
+                      disabled={loadingLocations}
+                      className="h-8 w-8"
+                    >
+                      <RefreshCw className={`h-4 w-4 ${loadingLocations ? 'animate-spin' : ''}`} />
+                    </Button>
                   )}
                 </div>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </div>
+      </nav>
 
+      {/* MAIN CONTENT */}
+      <div className="container mx-auto p-4">
         {/* TAB NAVIGATION */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-3">
