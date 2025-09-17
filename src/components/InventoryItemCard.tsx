@@ -25,6 +25,7 @@ interface InventoryItemCardProps {
   onRetrySync: (item: any) => void;
   onPrint: (item: any) => void;
   onRemove: (item: any) => void;
+  onDelete?: (item: any) => void;
   onSyncDetails: (item: any) => void;
 }
 
@@ -41,6 +42,7 @@ export const InventoryItemCard = memo(({
   onRetrySync,
   onPrint,
   onRemove,
+  onDelete,
   onSyncDetails
 }: InventoryItemCardProps) => {
   const generateTitle = (item: any) => {
@@ -227,6 +229,17 @@ export const InventoryItemCard = memo(({
             >
               <Trash2 className="h-3 w-3 mr-1" />
               Remove
+            </Button>
+          )}
+          
+          {isAdmin && onDelete && !item.deleted_at && (
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => onDelete(item)}
+            >
+              <Trash2 className="h-3 w-3 mr-1" />
+              Delete
             </Button>
           )}
           

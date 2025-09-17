@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, Upload, Search, CheckSquare, Square } from 'lucide-react';
+import { Loader2, Upload, Search, CheckSquare, Square, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
@@ -23,6 +23,7 @@ import { InventorySkeleton } from '@/components/InventorySkeleton';
 import { ShopifyRemovalDialog } from '@/components/ShopifyRemovalDialog';
 import { ShopifySyncDetailsDialog } from '@/components/ShopifySyncDetailsDialog';
 import { QueueStatusIndicator } from '@/components/QueueStatusIndicator';
+import { InventoryDeleteDialog } from '@/components/InventoryDeleteDialog';
 
 const ITEMS_PER_PAGE = 50;
 
@@ -51,11 +52,14 @@ const Inventory = () => {
   
   // Dialog state
   const [showRemovalDialog, setShowRemovalDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [selectedItemForRemoval, setSelectedItemForRemoval] = useState<any>(null);
+  const [selectedItemsForDeletion, setSelectedItemsForDeletion] = useState<any[]>([]);
   const [syncDetailsRow, setSyncDetailsRow] = useState<any>(null);
   const [showPrinterDialog, setShowPrinterDialog] = useState(false);
   const [printData, setPrintData] = useState<{ blob: Blob; item: any } | null>(null);
   const [removingFromShopify, setRemovingFromShopify] = useState(false);
+  const [deletingItems, setDeletingItems] = useState(false);
   
   const { printZPL, selectedPrinter } = useZebraNetwork();
   const { assignedStore, selectedLocation } = useStore();
@@ -455,6 +459,102 @@ const Inventory = () => {
     }
   }, [selectedItemForRemoval, fetchItems]);
 
+  // New comprehensive delete handler for admins
+  const handleDeleteItems = useCallback(async (items: any[]) => {
+    if (!isAdmin) {
+      toast.error('Only admins can delete inventory items');
+      return;
+    }
+
+    setDeletingItems(true);
+    
+    try {
+      const results = await Promise.allSettled(
+        items.map(async (item) => {
+          // Check if item is synced to Shopify and not pending
+          const isSyncedToShopify = item.shopify_product_id && 
+                                    item.shopify_sync_status === 'synced';
+
+          if (isSyncedToShopify) {
+            // Remove from Shopify first
+            const itemType = item.type || (item.psa_cert || item.grade ? 'Graded' : 'Raw');
+            const functionName = itemType === 'Graded' ? 'v2-shopify-remove-graded' : 'v2-shopify-remove-raw';
+            
+            const { data, error } = await supabase.functions.invoke(functionName, {
+              body: {
+                storeKey: item.store_key,
+                productId: item.shopify_product_id,
+                sku: item.sku,
+                locationGid: item.shopify_location_gid,
+                itemId: item.id,
+                certNumber: item.psa_cert,
+                quantity: 1
+              }
+            });
+
+            if (error) {
+              throw new Error(`Failed to remove ${item.sku} from Shopify: ${error.message}`);
+            }
+
+            if (!data?.ok) {
+              throw new Error(`Failed to remove ${item.sku} from Shopify: ${data?.error || 'Unknown error'}`);
+            }
+          }
+
+          // Soft delete from inventory
+          const { error: deleteError } = await supabase
+            .from('intake_items')
+            .update({ 
+              deleted_at: new Date().toISOString(),
+              deleted_reason: isSyncedToShopify 
+                ? 'Admin deleted - removed from Shopify and inventory'
+                : 'Admin deleted from inventory',
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', item.id);
+
+          if (deleteError) {
+            throw new Error(`Failed to delete ${item.sku} from inventory: ${deleteError.message}`);
+          }
+
+          return { item, removedFromShopify: isSyncedToShopify };
+        })
+      );
+
+      // Process results
+      const successful = results.filter(r => r.status === 'fulfilled').length;
+      const failed = results.filter(r => r.status === 'rejected');
+      const shopifyRemoved = results
+        .filter(r => r.status === 'fulfilled')
+        .map(r => (r as PromiseFulfilledResult<any>).value)
+        .filter(r => r.removedFromShopify).length;
+
+      if (successful > 0) {
+        const message = shopifyRemoved > 0 
+          ? `Successfully deleted ${successful} item${successful > 1 ? 's' : ''} from inventory (${shopifyRemoved} also removed from Shopify)`
+          : `Successfully deleted ${successful} item${successful > 1 ? 's' : ''} from inventory`;
+        toast.success(message);
+      }
+
+      if (failed.length > 0) {
+        const firstError = (failed[0] as PromiseRejectedResult).reason;
+        toast.error(`Failed to delete ${failed.length} item${failed.length > 1 ? 's' : ''}: ${firstError.message}`);
+      }
+
+      // Refresh inventory
+      fetchItems(0, true);
+      clearSelection();
+      
+    } catch (error: any) {
+      console.error('Error deleting items:', error);
+      toast.error(`Failed to delete items: ${error.message}`);
+    } finally {
+      setDeletingItems(false);
+      setShowDeleteDialog(false);
+      setSelectedItemsForDeletion([]);
+    }
+  }, [isAdmin, fetchItems, clearSelection]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
@@ -542,9 +642,25 @@ const Inventory = () => {
                     </Button>
                     
                     {selectedItems.size > 0 && (
-                      <span className="text-sm text-muted-foreground">
-                        {selectedItems.size} selected
-                      </span>
+                      <>
+                        <span className="text-sm text-muted-foreground">
+                          {selectedItems.size} selected
+                        </span>
+                        {isAdmin && (
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => {
+                              const selectedItemsArray = filteredItems.filter(item => selectedItems.has(item.id));
+                              setSelectedItemsForDeletion(selectedItemsArray);
+                              setShowDeleteDialog(true);
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete Selected
+                          </Button>
+                        )}
+                      </>
                     )}
                   </div>
 
@@ -575,6 +691,10 @@ const Inventory = () => {
                     setSelectedItemForRemoval(item);
                     setShowRemovalDialog(true);
                   }}
+                  onDelete={isAdmin ? (item) => {
+                    setSelectedItemsForDeletion([item]);
+                    setShowDeleteDialog(true);
+                  } : undefined}
                   onSyncDetails={(item) => setSyncDetailsRow(item)}
                 />
               ))}
@@ -624,6 +744,17 @@ const Inventory = () => {
           items={Array.isArray(selectedItemForRemoval) ? selectedItemForRemoval : selectedItemForRemoval ? [selectedItemForRemoval] : []}
           loading={removingFromShopify}
           onConfirm={handleRemoveFromShopify}
+        />
+
+        <InventoryDeleteDialog
+          isOpen={showDeleteDialog}
+          onClose={() => {
+            setShowDeleteDialog(false);
+            setSelectedItemsForDeletion([]);
+          }}
+          items={selectedItemsForDeletion}
+          loading={deletingItems}
+          onConfirm={() => handleDeleteItems(selectedItemsForDeletion)}
         />
 
         {syncDetailsRow && (
