@@ -166,12 +166,14 @@ export function useShopifySync() {
   // Clear all items
   const clearAll = useMutation({
     mutationFn: async () => {
+      console.log('clearAll: Starting delete operation...')
       const { data, error } = await supabase
         .from('shopify_sync_queue')
         .delete()
         .neq('id', '00000000-0000-0000-0000-000000000000') // Delete all
         .select()
       
+      console.log('clearAll: Delete result:', { data, error })
       if (error) throw error
       return data
     },
