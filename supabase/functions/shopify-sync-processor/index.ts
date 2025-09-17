@@ -158,18 +158,12 @@ async function createShopifyProduct(credentials: any, item: InventoryItem, locat
   const variables = {
     input: {
       title: title,
-      bodyHtml: item.type === 'Graded' 
+      descriptionHtml: item.type === 'Graded' 
         ? `<p>Graded Card - ${item.grade || 'Grade Unknown'}</p><p>Certificate: ${item.psa_cert || 'N/A'}</p>`
         : `<p>Trading Card</p><p>Condition: ${item.condition || 'Good'}</p>`,
       vendor: item.brand_title || 'Trading Cards',
       productType: item.category_tag || 'Trading Card',
       tags: [item.type, item.brand_title, item.category_tag].filter(Boolean),
-      variants: [{
-        price: item.price?.toString() || '0.00',
-        sku: item.sku,
-        inventoryManagement: 'SHOPIFY',
-        inventoryPolicy: 'DENY'
-      }],
       status: 'ACTIVE'
     }
   }
@@ -183,8 +177,48 @@ async function createShopifyProduct(credentials: any, item: InventoryItem, locat
   }
   
   const product = result.productCreate.product
-  const variantId = product.variants.edges[0]?.node?.id
-  const inventoryItemId = product.variants.edges[0]?.node?.inventoryItem?.id
+  
+  // Now create a variant for this product
+  const variantMutation = `
+    mutation productVariantCreate($input: ProductVariantInput!) {
+      productVariantCreate(input: $input) {
+        productVariant {
+          id
+          sku
+          price
+          inventoryItem {
+            id
+          }
+        }
+        userErrors {
+          field
+          message
+        }
+      }
+    }
+  `
+  
+  const variantVariables = {
+    input: {
+      productId: product.id,
+      price: item.price?.toString() || '0.00',
+      sku: item.sku,
+      inventoryManagement: 'SHOPIFY',
+      inventoryPolicy: 'DENY'
+    }
+  }
+  
+  console.log(`📦 Creating variant for product: ${product.id}`)
+  
+  const variantResult = await shopifyGraphQL(domain, accessToken, variantMutation, variantVariables)
+  
+  if (variantResult.productVariantCreate.userErrors?.length > 0) {
+    throw new Error(`Variant creation failed: ${JSON.stringify(variantResult.productVariantCreate.userErrors)}`)
+  }
+  
+  const variant = variantResult.productVariantCreate.productVariant
+  const variantId = variant.id
+  const inventoryItemId = variant.inventoryItem?.id
   
   // Set inventory quantity if we have the location and inventory item
   if (inventoryItemId && item.quantity && item.quantity > 0) {
@@ -319,6 +353,10 @@ Deno.serve(async (req) => {
     // CRITICAL: True one-by-one processing - ALWAYS process exactly 1 item at a time
     const ITEM_DELAY_MS = 2000 // 2 seconds minimum between each item
     const MAX_PROCESS_COUNT = 50 // Maximum items to process in one run
+    
+    // Dynamic delay variables for rate limit handling
+    let dynamicDelay = ITEM_DELAY_MS
+    const batchDelay = ITEM_DELAY_MS
     
     console.log(`⚙️ Processing config: 1 item at a time, ${ITEM_DELAY_MS}ms delay between items, max ${MAX_PROCESS_COUNT} items`)
 
@@ -491,9 +529,10 @@ Deno.serve(async (req) => {
         // Reset consecutive rate limits on success
         consecutiveRateLimits = 0
 
-        // CRITICAL: Wait 2 seconds after EACH item (true one-by-one processing)
-        console.log(`⏳ Waiting ${ITEM_DELAY_MS}ms before next item...`)
-        await new Promise(resolve => setTimeout(resolve, ITEM_DELAY_MS))
+        // Use dynamic delay that adjusts based on rate limit conditions
+        const currentDelay = Math.max(dynamicDelay, ITEM_DELAY_MS)
+        console.log(`⏳ Waiting ${currentDelay}ms before next item...`)
+        await new Promise(resolve => setTimeout(resolve, currentDelay))
 
       } catch (error: any) {
         console.error(`❌ Error syncing item ${queueItem.id}:`, error)
@@ -543,9 +582,10 @@ Deno.serve(async (req) => {
           console.log(`🔄 Item ${queueItem.id} will retry (attempt ${newRetryCount}/${queueItem.max_retries}) after ${retryDelay}s`)
         }
         
-        // CRITICAL: Always wait between items, even on errors
-        console.log(`⏳ Waiting ${ITEM_DELAY_MS}ms before next item (after error)...`)
-        await new Promise(resolve => setTimeout(resolve, ITEM_DELAY_MS))
+        // CRITICAL: Always wait between items, even on errors (use dynamic delay)
+        const errorDelay = Math.max(dynamicDelay * 2, ITEM_DELAY_MS) // Double delay on error
+        console.log(`⏳ Waiting ${errorDelay}ms before next item (after error)...`)
+        await new Promise(resolve => setTimeout(resolve, errorDelay))
       }
 
       processedCount++
