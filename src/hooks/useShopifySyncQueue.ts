@@ -208,13 +208,14 @@ export function useShopifySyncQueue() {
 
   const clearCompleted = async () => {
     try {
-      const { error } = await supabase
-        .from('shopify_sync_queue')
-        .delete()
-        .eq('status', 'completed')
+      const { data, error } = await supabase.rpc('admin_clear_shopify_sync_queue', {
+        clear_type: 'completed'
+      })
 
       if (error) throw error
 
+      const result = data as { deleted_count?: number }
+      console.log(`Cleared ${result?.deleted_count || 0} completed items`)
       fetchQueueStatus()
     } catch (err) {
       console.error('Error clearing completed items:', err)
@@ -240,20 +241,20 @@ export function useShopifySyncQueue() {
 
   const clearAllQueue = async () => {
     try {
-      console.log('Attempting to clear all queue items...')
-      const { error, count } = await supabase
-        .from('shopify_sync_queue')
-        .delete()
-        .gte('created_at', '1900-01-01') // Delete all records
+      console.log('Attempting to clear all queue items via admin function...')
+      const { data, error } = await supabase.rpc('admin_clear_shopify_sync_queue', {
+        clear_type: 'all'
+      })
 
-      console.log('Clear all result:', { error, count })
+      console.log('Clear all result:', { data, error })
 
       if (error) {
         console.error('Supabase error clearing queue:', error)
         throw error
       }
 
-      console.log(`Successfully cleared ${count || 'unknown'} queue items`)
+      const result = data as { deleted_count?: number }
+      console.log(`Successfully cleared ${result?.deleted_count || 0} queue items`)
       fetchQueueStatus()
     } catch (err) {
       console.error('Error clearing all queue items:', err)
@@ -263,13 +264,14 @@ export function useShopifySyncQueue() {
 
   const clearFailedItems = async () => {
     try {
-      const { error } = await supabase
-        .from('shopify_sync_queue')
-        .delete()
-        .eq('status', 'failed')
+      const { data, error } = await supabase.rpc('admin_clear_shopify_sync_queue', {
+        clear_type: 'failed'
+      })
 
       if (error) throw error
 
+      const result = data as { deleted_count?: number }
+      console.log(`Cleared ${result?.deleted_count || 0} failed items`)
       fetchQueueStatus()
     } catch (err) {
       console.error('Error clearing failed items:', err)

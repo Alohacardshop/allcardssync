@@ -1462,6 +1462,10 @@ export type Database = {
         }
         Returns: string
       }
+      admin_clear_shopify_sync_queue: {
+        Args: { clear_type?: string }
+        Returns: Json
+      }
       admin_delete_batch: {
         Args: { lot_id_in: string; reason_in?: string }
         Returns: number
