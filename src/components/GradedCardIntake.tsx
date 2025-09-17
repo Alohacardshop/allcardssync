@@ -15,6 +15,7 @@ import { parseFunctionError } from "@/lib/fns";
 import { useLogger } from "@/hooks/useLogger";
 import { validateCompleteStoreContext, logStoreContext } from "@/utils/storeValidation";
 import { PSACertificateDisplay } from "@/components/PSACertificateDisplay";
+import { CurrentBatchPanel } from "./CurrentBatchPanel";
 
 interface GradedCardIntakeProps {
   onBatchAdd?: () => void;
@@ -249,211 +250,218 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
   };
 
   return (
-    <Card className="w-full max-w-4xl mx-auto">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Award className="h-5 w-5" />
-          Graded Cards Intake
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        {/* Certificate Input Section */}
-        <div className="space-y-3">
-          <Label htmlFor="cert-input">Certificate Number</Label>
-          <div className="flex gap-2">
-            <Input
-              id="cert-input"
-              placeholder="Enter PSA certificate number"
-              value={certInput}
-              onChange={(e) => setCertInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  handleFetchData();
-                }
-              }}
-              disabled={fetching}
-            />
-            <Button 
-              onClick={handleFetchData}
-              disabled={!certInput.trim() || fetching}
-              size="default"
-            >
-              {fetching ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  Fetching...
-                </>
-              ) : (
-                'Fetch Data'
-              )}
-            </Button>
-            {fetching && (
+    <div className="space-y-6">
+      <Card className="w-full max-w-4xl mx-auto">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Award className="h-5 w-5" />
+            Graded Cards Intake
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* Certificate Input Section */}
+          <div className="space-y-3">
+            <Label htmlFor="cert-input">Certificate Number</Label>
+            <div className="flex gap-2">
+              <Input
+                id="cert-input"
+                placeholder="Enter PSA certificate number"
+                value={certInput}
+                onChange={(e) => setCertInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleFetchData();
+                  }
+                }}
+                disabled={fetching}
+              />
               <Button 
-                onClick={cancelFetch}
-                variant="outline" 
+                onClick={handleFetchData}
+                disabled={!certInput.trim() || fetching}
                 size="default"
               >
-                Cancel
+                {fetching ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    Fetching...
+                  </>
+                ) : (
+                  'Fetch Data'
+                )}
               </Button>
-            )}
+              {fetching && (
+                <Button 
+                  onClick={cancelFetch}
+                  variant="outline" 
+                  size="default"
+                >
+                  Cancel
+                </Button>
+              )}
+            </div>
           </div>
-        </div>
 
-        {/* Barcode Scanner Input */}
-        <div className="space-y-3">
-          <Label htmlFor="barcode-input">Barcode Scanner</Label>
-          <Input
-            id="barcode-input"
-            placeholder="Scan barcode here (auto-populates certificate number)"
-            value={barcodeInput}
-            onChange={(e) => setBarcodeInput(e.target.value)}
-            className="bg-yellow-50 border-yellow-200"
-          />
-        </div>
-
-        {/* PSA Certificate Display */}
-        {cardData && (
+          {/* Barcode Scanner Input */}
           <div className="space-y-3">
-            <PSACertificateDisplay 
-              psaData={cardData} 
-              className="border-2 border-primary/20 bg-primary/5"
-            />
-          </div>
-        )}
-
-        {/* Form Fields */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <Label htmlFor="brand">Brand <span className="text-destructive">*</span></Label>
+            <Label htmlFor="barcode-input">Barcode Scanner</Label>
             <Input
-              id="brand"
-              placeholder="Brand (e.g., Pokémon)"
-              value={formData.brandTitle}
-              onChange={(e) => updateFormField('brandTitle', e.target.value)}
-              className={!formData.brandTitle ? "border-destructive/50" : ""}
+              id="barcode-input"
+              placeholder="Scan barcode here (auto-populates certificate number)"
+              value={barcodeInput}
+              onChange={(e) => setBarcodeInput(e.target.value)}
+              className="bg-yellow-50 border-yellow-200"
             />
           </div>
 
-          <div>
-            <Label htmlFor="subject">Subject <span className="text-destructive">*</span></Label>
-            <Input
-              id="subject"
-              placeholder="Card name/subject"
-              value={formData.subject}
-              onChange={(e) => updateFormField('subject', e.target.value)}
-              className={!formData.subject ? "border-destructive/50" : ""}
-            />
+          {/* PSA Certificate Display */}
+          {cardData && (
+            <div className="space-y-3">
+              <PSACertificateDisplay 
+                psaData={cardData} 
+                className="border-2 border-primary/20 bg-primary/5"
+              />
+            </div>
+          )}
+
+          {/* Form Fields */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="brand">Brand <span className="text-destructive">*</span></Label>
+              <Input
+                id="brand"
+                placeholder="Brand (e.g., Pokémon)"
+                value={formData.brandTitle}
+                onChange={(e) => updateFormField('brandTitle', e.target.value)}
+                className={!formData.brandTitle ? "border-destructive/50" : ""}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="subject">Subject <span className="text-destructive">*</span></Label>
+              <Input
+                id="subject"
+                placeholder="Card name/subject"
+                value={formData.subject}
+                onChange={(e) => updateFormField('subject', e.target.value)}
+                className={!formData.subject ? "border-destructive/50" : ""}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="category">Category</Label>
+              <Input
+                id="category"
+                placeholder="Category (e.g., Sports Card)"
+                value={formData.category}
+                onChange={(e) => updateFormField('category', e.target.value)}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="variety">Variety/Pedigree</Label>
+              <Input
+                id="variety"
+                placeholder="Variety or pedigree info"
+                value={formData.varietyPedigree}
+                onChange={(e) => updateFormField('varietyPedigree', e.target.value)}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="grade">Grade <span className="text-destructive">*</span></Label>
+              <Input
+                id="grade"
+                placeholder="PSA grade (e.g., 10)"
+                value={formData.grade}
+                onChange={(e) => updateFormField('grade', e.target.value)}
+                className={!formData.grade ? "border-destructive/50" : ""}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="card-number">Card Number</Label>
+              <Input
+                id="card-number"
+                placeholder="Card number (e.g., 25/102)"
+                value={formData.cardNumber}
+                onChange={(e) => updateFormField('cardNumber', e.target.value)}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="year">Year</Label>
+              <Input
+                id="year"
+                placeholder="Year (e.g., 1999)"
+                value={formData.year}
+                onChange={(e) => updateFormField('year', e.target.value)}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="price">Price ($) <span className="text-destructive">*</span></Label>
+              <Input
+                id="price"
+                type="number"
+                step="0.01"
+                placeholder="0.00"
+                value={formData.price}
+                onChange={(e) => updateFormField('price', e.target.value)}
+                className={!formData.price ? "border-destructive/50" : ""}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="cost">Cost ($) <span className="text-destructive">*</span></Label>
+              <Input
+                id="cost"
+                type="number"
+                step="0.01"
+                placeholder="0.00"
+                value={formData.cost}
+                onChange={(e) => updateFormField('cost', e.target.value)}
+                className={!formData.cost ? "border-destructive/50" : ""}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="quantity">Quantity</Label>
+              <Input
+                id="quantity"
+                type="number"
+                min="1"
+                value={formData.quantity}
+                onChange={(e) => updateFormField('quantity', parseInt(e.target.value) || 1)}
+              />
+            </div>
           </div>
 
-          <div>
-            <Label htmlFor="category">Category</Label>
-            <Input
-              id="category"
-              placeholder="Category (e.g., Sports Card)"
-              value={formData.category}
-              onChange={(e) => updateFormField('category', e.target.value)}
-            />
+          {/* Submit Button */}
+          <div className="flex justify-end gap-2 pt-4">
+            <Button 
+              onClick={handleSubmit}
+              disabled={submitting || !formData.certNumber || !formData.grade || !formData.price || !formData.cost}
+              className="px-8"
+              size="lg"
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Adding to Batch...
+                </>
+              ) : (
+                'Add to Batch'
+              )}
+            </Button>
           </div>
-
-          <div>
-            <Label htmlFor="variety">Variety/Pedigree</Label>
-            <Input
-              id="variety"
-              placeholder="Variety or pedigree info"
-              value={formData.varietyPedigree}
-              onChange={(e) => updateFormField('varietyPedigree', e.target.value)}
-            />
-          </div>
-
-          <div>
-            <Label htmlFor="grade">Grade <span className="text-destructive">*</span></Label>
-            <Input
-              id="grade"
-              placeholder="PSA grade (e.g., 10)"
-              value={formData.grade}
-              onChange={(e) => updateFormField('grade', e.target.value)}
-              className={!formData.grade ? "border-destructive/50" : ""}
-            />
-          </div>
-
-          <div>
-            <Label htmlFor="card-number">Card Number</Label>
-            <Input
-              id="card-number"
-              placeholder="Card number (e.g., 25/102)"
-              value={formData.cardNumber}
-              onChange={(e) => updateFormField('cardNumber', e.target.value)}
-            />
-          </div>
-
-          <div>
-            <Label htmlFor="year">Year</Label>
-            <Input
-              id="year"
-              placeholder="Year (e.g., 1999)"
-              value={formData.year}
-              onChange={(e) => updateFormField('year', e.target.value)}
-            />
-          </div>
-
-          <div>
-            <Label htmlFor="price">Price ($) <span className="text-destructive">*</span></Label>
-            <Input
-              id="price"
-              type="number"
-              step="0.01"
-              placeholder="0.00"
-              value={formData.price}
-              onChange={(e) => updateFormField('price', e.target.value)}
-              className={!formData.price ? "border-destructive/50" : ""}
-            />
-          </div>
-
-          <div>
-            <Label htmlFor="cost">Cost ($) <span className="text-destructive">*</span></Label>
-            <Input
-              id="cost"
-              type="number"
-              step="0.01"
-              placeholder="0.00"
-              value={formData.cost}
-              onChange={(e) => updateFormField('cost', e.target.value)}
-              className={!formData.cost ? "border-destructive/50" : ""}
-            />
-          </div>
-
-          <div>
-            <Label htmlFor="quantity">Quantity</Label>
-            <Input
-              id="quantity"
-              type="number"
-              min="1"
-              value={formData.quantity}
-              onChange={(e) => updateFormField('quantity', parseInt(e.target.value) || 1)}
-            />
-          </div>
-        </div>
-
-        {/* Submit Button */}
-        <div className="flex justify-end gap-2 pt-4">
-          <Button 
-            onClick={handleSubmit}
-            disabled={submitting || !formData.certNumber || !formData.grade || !formData.price || !formData.cost}
-            className="px-8"
-            size="lg"
-          >
-            {submitting ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                Adding to Batch...
-              </>
-            ) : (
-              'Add to Batch'
-            )}
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+      
+      {/* Current Batch Panel */}
+      <div className="max-w-4xl mx-auto">
+        <CurrentBatchPanel />
+      </div>
+    </div>
   );
 };
