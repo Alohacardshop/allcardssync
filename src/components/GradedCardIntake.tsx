@@ -189,6 +189,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         card_number_in: formData.cardNumber,
         price_in: parseFloat(formData.price),
         cost_in: parseFloat(formData.cost),
+        sku_in: formData.certNumber, // Use PSA cert number as SKU
         catalog_snapshot_in: {
           ...cardData,
           psa_cert: formData.certNumber,
