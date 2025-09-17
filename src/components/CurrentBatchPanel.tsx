@@ -56,8 +56,9 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
   const formatCardName = (item: IntakeItem) => {
     const parts = []
     
-    // Add year at the start if available
-    if (item.year) parts.push(item.year)
+    // Add year at the start if available (check both direct field and catalog_snapshot)
+    const year = item.year || (item.catalog_snapshot && typeof item.catalog_snapshot === 'object' && item.catalog_snapshot !== null && 'year' in item.catalog_snapshot ? item.catalog_snapshot.year : null);
+    if (year) parts.push(year)
     
     // Add brand
     if (item.brand_title) parts.push(item.brand_title)
@@ -73,9 +74,10 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
       parts.push('vstar')
     }
     
-    // Add variant after vstar
-    if (item.variant && item.variant.toLowerCase() !== 'vstar') {
-      parts.push(item.variant.toLowerCase())
+    // Add variant after vstar (check both direct field and catalog_snapshot)
+    const variant = item.variant || (item.catalog_snapshot && typeof item.catalog_snapshot === 'object' && item.catalog_snapshot !== null && 'varietyPedigree' in item.catalog_snapshot ? item.catalog_snapshot.varietyPedigree : null);
+    if (variant && variant.toLowerCase() !== 'vstar') {
+      parts.push(variant.toLowerCase())
     }
     
     // Handle grading - use PSA for PSA certs
