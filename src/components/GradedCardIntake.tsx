@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { parseFunctionError } from "@/lib/fns";
 import { useLogger } from "@/hooks/useLogger";
 import { validateCompleteStoreContext, logStoreContext } from "@/utils/storeValidation";
+import { PSACertificateDisplay } from "@/components/PSACertificateDisplay";
 
 interface GradedCardIntakeProps {
   onBatchAdd?: () => void;
@@ -67,6 +68,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
     cost: "",
     quantity: 1,
     psaEstimate: "",
+    varietyPedigree: "",
   });
 
   // Auto-populate cert number when barcode is scanned/entered
@@ -121,6 +123,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
           cardNumber: normalizedData.cardNumber || "",
           year: normalizedData.year || "",
           grade: normalizedData.grade || "",
+          varietyPedigree: normalizedData.varietyPedigree || "",
         }));
 
         toast.success("Card data fetched successfully!");
@@ -202,6 +205,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         cost: "",
         quantity: 1,
         psaEstimate: "",
+        varietyPedigree: "",
       });
 
       toast.success("Card added to batch successfully!");
@@ -299,6 +303,16 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
           />
         </div>
 
+        {/* PSA Certificate Display */}
+        {cardData && (
+          <div className="space-y-3">
+            <PSACertificateDisplay 
+              psaData={cardData} 
+              className="border-2 border-primary/20 bg-primary/5"
+            />
+          </div>
+        )}
+
         {/* Form Fields */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
@@ -320,6 +334,26 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
               value={formData.subject}
               onChange={(e) => updateFormField('subject', e.target.value)}
               className={!formData.subject ? "border-destructive/50" : ""}
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="category">Category</Label>
+            <Input
+              id="category"
+              placeholder="Category (e.g., Sports Card)"
+              value={formData.category}
+              onChange={(e) => updateFormField('category', e.target.value)}
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="variety">Variety/Pedigree</Label>
+            <Input
+              id="variety"
+              placeholder="Variety or pedigree info"
+              value={formData.varietyPedigree}
+              onChange={(e) => updateFormField('varietyPedigree', e.target.value)}
             />
           </div>
 
