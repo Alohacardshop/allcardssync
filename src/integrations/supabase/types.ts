@@ -1462,6 +1462,10 @@ export type Database = {
         }
         Returns: string
       }
+      add_to_shopify_sync_queue: {
+        Args: { item_ids: string[]; sync_action?: string }
+        Returns: Json
+      }
       admin_clear_shopify_sync_queue: {
         Args: { clear_type?: string }
         Returns: Json
@@ -1845,10 +1849,6 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: boolean
       }
-      manual_trigger_shopify_processor: {
-        Args: Record<PropertyKey, never>
-        Returns: Json
-      }
       normalize_game_slug: {
         Args: { input_game: string }
         Returns: string
@@ -1990,9 +1990,9 @@ export type Database = {
         Args: { ids: string[]; reason?: string }
         Returns: Json
       }
-      trigger_shopify_sync_processor: {
+      trigger_shopify_sync: {
         Args: Record<PropertyKey, never>
-        Returns: undefined
+        Returns: Json
       }
       user_can_access_store_location: {
         Args: { _location_gid?: string; _store_key: string; _user_id: string }
