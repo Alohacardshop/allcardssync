@@ -90,25 +90,27 @@ Deno.serve(async (req) => {
       run.add({ name: 'reuseVariant', ok: true, data: { reason: 'barcode', variantId, productId } })
     } else {
       // Create new canonical graded product
+      const fullTitle = item.title || `${item.brand_title || ''} ${item.subject || ''} #${item.card_number || ''} PSA ${item.grade || ''} ${cert}`.trim()
+      const storeVendor = storeKey === 'hawaii' ? 'Aloha Card Shop Hawaii' : 'Aloha Card Shop Las Vegas'
+      
       const payload = {
         product: {
           status: 'active',
-          title: item.title || `${item.brand_title || ''} ${item.subject || ''} #${item.card_number || ''} PSA ${item.grade || ''} ${cert}`.trim(),
-          body_html: `<p><strong>Graded Trading Card</strong></p><p>Grade: ${item.grade || 'Unknown'}</p><p>PSA Certificate: ${cert}</p><p>Year: ${item.year || 'N/A'}</p>`,
-          vendor: item.brand_title || 'Trading Cards',
-          product_type: item.category_tag || 'Graded Card',
+          title: fullTitle,
+          body_html: `<p>${fullTitle}</p><p>SKU: ${item.sku || cert}</p>`,
+          vendor: storeVendor,
+          product_type: 'Graded Cards',
           tags: [
             'graded',
-            'psa',
-            `cert-${cert}`,
-            item.grade ? `grade-${String(item.grade).replace(/\s+/g,'').toLowerCase()}` : null,
-            item.brand_title,
-            item.category_tag
+            'single',
+            item.grade ? String(item.grade) : null,
+            cert
           ].filter(Boolean).join(', '),
           variants: [{
             sku: item.sku || cert,
             barcode: cert,  // MUST equal cert for graded cards
             price: item.price != null ? Number(item.price).toFixed(2) : undefined,
+            cost: item.cost != null ? Number(item.cost).toFixed(2) : undefined,
             inventory_management: 'shopify',
             inventory_policy: 'deny',
             weight: 0.1, // Default weight for cards

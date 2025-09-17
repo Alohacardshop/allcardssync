@@ -20,6 +20,7 @@ export interface SendRawArgs {
     barcode?: string
     condition?: string
     quantity?: number
+    tcgplayer_id?: string
   }
 }
 
@@ -132,9 +133,10 @@ Deno.serve(async (req) => {
           const payload = {
             variant: {
               product_id: parseNumericIdFromGid(suitableProduct.id),
-              sku: item.sku,
-              barcode: item.barcode || item.sku,
+              sku: item.tcgplayer_id || item.sku,
+              barcode: item.tcgplayer_id || item.barcode || item.sku,
               price: item.price != null ? Number(item.price).toFixed(2) : undefined,
+              cost: item.cost != null ? Number(item.cost).toFixed(2) : undefined,
               inventory_management: 'shopify',
               inventory_policy: 'deny',
               title: item.condition ? `${item.condition} Condition` : undefined,
@@ -163,23 +165,25 @@ Deno.serve(async (req) => {
       
       // If we couldn't add variant, create new product
       if (!productId) {
+        const fullTitle = item.title || `${item.brand_title || ''} ${item.subject || ''} ${item.card_number || ''}`.trim() || `Card ${item.sku}`
+        const storeVendor = storeKey === 'hawaii' ? 'Aloha Card Shop Hawaii' : 'Aloha Card Shop Las Vegas'
+        
         const payload = {
           product: {
             status: 'active',
-            title: item.title || `${item.brand_title || ''} ${item.subject || ''} ${item.card_number || ''}`.trim() || `Card ${item.sku}`,
-            body_html: `<p><strong>Raw Trading Card</strong></p><p>Condition: ${item.condition || 'Good'}</p><p>SKU: ${item.sku}</p>`,
-            vendor: item.brand_title || 'Trading Cards',
-            product_type: 'Trading Card',
+            title: fullTitle,
+            body_html: `<p>${fullTitle}</p><p>SKU: ${item.sku}</p>`,
+            vendor: storeVendor,
+            product_type: 'Raw',
             tags: [
               'raw',
-              'trading-card',
-              item.brand_title,
-              item.condition
+              'single'
             ].filter(Boolean).join(', '),
             variants: [{
-              sku: item.sku,
-              barcode: item.barcode || item.sku,
+              sku: item.tcgplayer_id || item.sku,
+              barcode: item.tcgplayer_id || item.barcode || item.sku,
               price: item.price != null ? Number(item.price).toFixed(2) : undefined,
+              cost: item.cost != null ? Number(item.cost).toFixed(2) : undefined,
               inventory_management: 'shopify',
               inventory_policy: 'deny',
               weight: 0.1,
