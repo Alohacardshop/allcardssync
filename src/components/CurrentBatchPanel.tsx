@@ -58,17 +58,24 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
     
     // Add year at the start if available
     if (item.year) parts.push(item.year)
+    
+    // Add brand
     if (item.brand_title) parts.push(item.brand_title)
+    
+    // Add subject (like FA/MewTwo)
+    if (item.subject) parts.push(item.subject)
+    
+    // Add card number
     if (item.card_number) parts.push(`#${item.card_number}`)
     
-    // Handle subject with variant insertion after "vstar"
-    if (item.subject) {
-      let subject = item.subject;
-      if (item.variant && subject.toLowerCase().includes('vstar')) {
-        // Insert variant after "vstar"
-        subject = subject.replace(/vstar/i, `VSTAR ${item.variant}`);
-      }
-      parts.push(subject);
+    // Add "vstar" if present in subject
+    if (item.subject && item.subject.toLowerCase().includes('vstar')) {
+      parts.push('vstar')
+    }
+    
+    // Add variant after vstar
+    if (item.variant && item.variant.toLowerCase() !== 'vstar') {
+      parts.push(item.variant.toLowerCase())
     }
     
     // Handle grading - use PSA for PSA certs
