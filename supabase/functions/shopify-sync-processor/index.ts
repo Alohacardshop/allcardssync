@@ -31,8 +31,6 @@ async function getShopifyCredentials(supabase: any, storeKey: string) {
   }
 }
 
-  const supabase = await supabase.functions.invoke('shopify-sync-processor', { query })
-
 async function shopifyGraphQL(domain: string, token: string, query: string, variables?: any, retryCount = 0) {
   const maxRetries = 3;
   const baseDelay = 2000; // 2 seconds base delay
