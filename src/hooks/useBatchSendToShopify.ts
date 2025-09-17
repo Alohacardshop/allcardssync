@@ -2,6 +2,8 @@ import { useState } from "react"
 import { supabase } from "@/integrations/supabase/client"
 import { toast } from "sonner"
 import { ShopifyError, RateLimitError } from "@/types/errors"
+import { triggerShopifyProcessor } from "@/utils/triggerProcessor"
+import { autoTriggerAfterInventoryUpdate } from "@/utils/autoTriggerProcessor"
 
 export interface BatchConfig {
   batchSize: number
@@ -238,12 +240,15 @@ export function useBatchSendToShopify() {
       if (totalQueued > 0) {
         console.log(`🚀 [useBatchSendToShopify] Triggering Shopify sync processor for ${totalQueued} queued items`)
         try {
-          await supabase.functions.invoke('shopify-sync-processor', { body: {} })
+          await triggerShopifyProcessor()
           toast.info(`Started Shopify sync for ${totalQueued} items - processing in background`)
         } catch (processorError) {
           console.error(`⚠️ [useBatchSendToShopify] Failed to trigger sync processor:`, processorError)
           toast.warning('Items queued for sync but processor failed to start - sync may be delayed')
         }
+      } else {
+        // Even if no items were explicitly queued, trigger auto-check for any pending items
+        autoTriggerAfterInventoryUpdate()
       }
 
       // Final progress update

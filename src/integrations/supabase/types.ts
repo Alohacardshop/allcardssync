@@ -1845,6 +1845,10 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: boolean
       }
+      manual_trigger_shopify_processor: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
       normalize_game_slug: {
         Args: { input_game: string }
         Returns: string
@@ -1985,6 +1989,10 @@ export type Database = {
       soft_delete_intake_items: {
         Args: { ids: string[]; reason?: string }
         Returns: Json
+      }
+      trigger_shopify_sync_processor: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
       }
       user_can_access_store_location: {
         Args: { _location_gid?: string; _store_key: string; _user_id: string }
