@@ -240,13 +240,20 @@ export function useShopifySyncQueue() {
 
   const clearAllQueue = async () => {
     try {
-      const { error } = await supabase
+      console.log('Attempting to clear all queue items...')
+      const { error, count } = await supabase
         .from('shopify_sync_queue')
         .delete()
-        .neq('id', '00000000-0000-0000-0000-000000000000') // Delete all
+        .gte('created_at', '1900-01-01') // Delete all records
 
-      if (error) throw error
+      console.log('Clear all result:', { error, count })
 
+      if (error) {
+        console.error('Supabase error clearing queue:', error)
+        throw error
+      }
+
+      console.log(`Successfully cleared ${count || 'unknown'} queue items`)
       fetchQueueStatus()
     } catch (err) {
       console.error('Error clearing all queue items:', err)
