@@ -38,9 +38,10 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { certNumber, lookupType = 'cert' } = await req.json()
+    const { certNumber, cert_number, lookupType = 'cert' } = await req.json()
+    const certificateNumber = certNumber || cert_number
 
-    if (!certNumber) {
+    if (!certificateNumber) {
       return new Response(
         JSON.stringify({ success: false, error: 'Certificate number is required' }),
         { 
@@ -50,7 +51,7 @@ Deno.serve(async (req) => {
       )
     }
 
-    console.log(`PSA lookup started for cert: ${certNumber}`)
+    console.log(`PSA lookup started for cert: ${certificateNumber}`)
 
     // Initialize Supabase clients
     const supabase = createClient(supabaseUrl, supabaseAnonKey)
@@ -79,7 +80,7 @@ Deno.serve(async (req) => {
 
     // Log the request
     await supabase.from('psa_request_log').insert({
-      cert_number: certNumber,
+      cert_number: certificateNumber,
       ip_address: req.headers.get('x-forwarded-for') || 'unknown'
     })
 
@@ -87,11 +88,11 @@ Deno.serve(async (req) => {
     const { data: cachedData } = await supabase
       .from('psa_certificates')
       .select('*')
-      .eq('cert_number', certNumber)
+      .eq('cert_number', certificateNumber)
       .single()
 
     if (cachedData && cachedData.is_valid) {
-      console.log(`Using cached PSA data for cert: ${certNumber}`)
+      console.log(`Using cached PSA data for cert: ${certificateNumber}`)
       
       const response: PSAApiResponse = {
         success: true,
@@ -107,7 +108,7 @@ Deno.serve(async (req) => {
           varietyPedigree: cachedData.variety_pedigree || undefined,
           imageUrl: cachedData.image_url || undefined,
           imageUrls: cachedData.image_urls ? JSON.parse(JSON.stringify(cachedData.image_urls)) : undefined,
-          psaUrl: cachedData.psa_url || `https://www.psacard.com/cert/${certNumber}`
+          psaUrl: cachedData.psa_url || `https://www.psacard.com/cert/${certificateNumber}`
         }
       }
 
@@ -119,10 +120,10 @@ Deno.serve(async (req) => {
     }
 
     // Make API call to PSA using the official API
-    console.log(`Making PSA API call for cert: ${certNumber}`)
+    console.log(`Making PSA API call for cert: ${certificateNumber}`)
     
-    const psaApiUrl = `https://api.psacard.com/publicapi/cert/GetByCertNumber/${certNumber}`
-    const psaImagesUrl = `https://api.psacard.com/publicapi/cert/GetImagesByCertNumber/${certNumber}`
+    const psaApiUrl = `https://api.psacard.com/publicapi/cert/GetByCertNumber/${certificateNumber}`
+    const psaImagesUrl = `https://api.psacard.com/publicapi/cert/GetImagesByCertNumber/${certificateNumber}`
     
     // Make both API calls in parallel
     const [psaResponse, psaImagesResponse] = await Promise.all([
@@ -183,7 +184,7 @@ Deno.serve(async (req) => {
     
     // Transform PSA API response to our format
     const psaApiResponse = {
-      certNumber: certNumber,
+      certNumber: certificateNumber,
       isValid: psaCert ? true : false,
       grade: extractNumericGrade(psaCert?.CardGrade),
       year: psaCert?.Year || undefined,
@@ -195,14 +196,14 @@ Deno.serve(async (req) => {
       gameSport: undefined, // Not available in PSA API
       imageUrl: primaryImageUrl,
       imageUrls: imageUrls,
-      psaUrl: `https://www.psacard.com/cert/${certNumber}`
+      psaUrl: `https://www.psacard.com/cert/${certificateNumber}`
     }
 
     // Store in database for caching
     const { error: insertError } = await supabase
       .from('psa_certificates')
       .upsert({
-        cert_number: certNumber,
+        cert_number: certificateNumber,
         is_valid: psaApiResponse.isValid,
         grade: psaApiResponse.grade,
         year: psaApiResponse.year,
@@ -228,7 +229,7 @@ Deno.serve(async (req) => {
         success: true,
         response_time_ms: 1000 // placeholder
       })
-      .eq('cert_number', certNumber)
+      .eq('cert_number', certificateNumber)
       .order('created_at', { ascending: false })
       .limit(1)
 
@@ -237,7 +238,7 @@ Deno.serve(async (req) => {
       data: psaApiResponse
     }
 
-    console.log(`PSA lookup completed for cert: ${certNumber}`, response.data)
+    console.log(`PSA lookup completed for cert: ${certificateNumber}`, response.data)
 
     return new Response(JSON.stringify(response), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
