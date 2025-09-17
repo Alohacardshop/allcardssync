@@ -79,6 +79,15 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
     }
   }, [barcodeInput, certInput]);
 
+  // Auto-calculate cost as 70% of price
+  useEffect(() => {
+    if (formData.price && !isNaN(parseFloat(formData.price))) {
+      const price = parseFloat(formData.price);
+      const calculatedCost = (price * 0.7).toFixed(2);
+      setFormData(prev => ({ ...prev, cost: calculatedCost }));
+    }
+  }, [formData.price]);
+
   const updateFormField = (field: string, value: string | number) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
