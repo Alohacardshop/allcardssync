@@ -63,16 +63,11 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
     // Add brand
     if (item.brand_title) parts.push(item.brand_title)
     
-    // Add subject (like FA/MewTwo)
+    // Add subject (like FA/MewTwo VSTAR)
     if (item.subject) parts.push(item.subject)
     
     // Add card number
     if (item.card_number) parts.push(`#${item.card_number}`)
-    
-    // Add "vstar" if present in subject
-    if (item.subject && item.subject.toLowerCase().includes('vstar')) {
-      parts.push('vstar')
-    }
     
     // Add variant after vstar (check both direct field and catalog_snapshot)
     const variant = item.variant || (item.catalog_snapshot && typeof item.catalog_snapshot === 'object' && item.catalog_snapshot !== null && 'varietyPedigree' in item.catalog_snapshot ? item.catalog_snapshot.varietyPedigree : null);
