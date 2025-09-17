@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
 import { useShopifySyncQueue } from "@/hooks/useShopifySyncQueue"
 import { useShopifyValidation } from "@/hooks/useShopifyValidation"
 import { toast } from "sonner"
@@ -22,7 +23,8 @@ import {
   XCircle,
   Activity,
   Shield,
-  Search
+  Search,
+  X
 } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 
@@ -37,7 +39,10 @@ export default function ShopifySyncQueueEnhanced() {
     fetchQueueStatus, 
     triggerProcessor, 
     retryFailedItems, 
-    clearCompleted 
+    clearCompleted,
+    deleteQueueItem,
+    clearAllQueue,
+    clearFailedItems
   } = useShopifySyncQueue()
   
   const { 
@@ -50,6 +55,9 @@ export default function ShopifySyncQueueEnhanced() {
   const [isTriggering, setIsTriggering] = useState(false)
   const [isRetrying, setIsRetrying] = useState(false)
   const [isClearing, setIsClearing] = useState(false)
+  const [isDeletingAll, setIsDeletingAll] = useState(false)
+  const [isClearingFailed, setIsClearingFailed] = useState(false)
+  const [deletingItemId, setDeletingItemId] = useState<string | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [validationOpen, setValidationOpen] = useState(false)
 
@@ -120,6 +128,45 @@ export default function ShopifySyncQueueEnhanced() {
     } catch (error) {
       console.error('Error resyncing item:', error)
       toast.error('Failed to queue item for re-sync')
+    }
+  }
+
+  const handleDeleteItem = async (itemId: string) => {
+    setDeletingItemId(itemId)
+    try {
+      await deleteQueueItem(itemId)
+      toast.success("Queue item deleted")
+    } catch (err) {
+      console.error("Error deleting queue item:", err)
+      toast.error("Failed to delete queue item")
+    } finally {
+      setDeletingItemId(null)
+    }
+  }
+
+  const handleClearAllQueue = async () => {
+    setIsDeletingAll(true)
+    try {
+      await clearAllQueue()
+      toast.success("All queue items cleared")
+    } catch (err) {
+      console.error("Error clearing all queue items:", err)
+      toast.error("Failed to clear all queue items")
+    } finally {
+      setIsDeletingAll(false)
+    }
+  }
+
+  const handleClearFailed = async () => {
+    setIsClearingFailed(true)
+    try {
+      await clearFailedItems()
+      toast.success("Failed items cleared")
+    } catch (err) {
+      console.error("Error clearing failed items:", err)
+      toast.error("Failed to clear failed items")
+    } finally {
+      setIsClearingFailed(false)
     }
   }
 
@@ -359,12 +406,51 @@ export default function ShopifySyncQueueEnhanced() {
 
             <Button
               variant="outline"
+              onClick={handleClearFailed}
+              disabled={isClearingFailed || stats.failed === 0}
+            >
+              <X className="h-4 w-4 mr-2" />
+              {isClearingFailed ? "Clearing..." : `Clear Failed (${stats.failed})`}
+            </Button>
+
+            <Button
+              variant="outline"
               onClick={handleValidateRecent}
               disabled={validating || stats.completed === 0}
             >
               <Shield className="h-4 w-4 mr-2" />
               {validating ? "Validating..." : "Validate Recent"}
             </Button>
+
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  disabled={isDeletingAll || stats.total === 0}
+                >
+                  <AlertTriangle className="h-4 w-4 mr-2" />
+                  Clear All
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Clear All Queue Items?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will permanently delete all items from the sync queue. This action cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction 
+                    onClick={handleClearAllQueue}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    {isDeletingAll ? "Clearing..." : "Clear All"}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
         </CardContent>
       </Card>
@@ -408,6 +494,7 @@ export default function ShopifySyncQueueEnhanced() {
                         <TableHead>Retries</TableHead>
                         <TableHead>Created</TableHead>
                         <TableHead className="min-w-[200px]">Error</TableHead>
+                        <TableHead className="w-[50px]">Delete</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -436,6 +523,21 @@ export default function ShopifySyncQueueEnhanced() {
                               <div className="truncate" title={item.error_message}>
                                 {item.error_message}
                               </div>
+                            </TableCell>
+                            <TableCell>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleDeleteItem(item.id)}
+                                disabled={deletingItemId === item.id}
+                                className="h-6 w-6 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                              >
+                                {deletingItemId === item.id ? (
+                                  <RefreshCw className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <X className="h-3 w-3" />
+                                )}
+                              </Button>
                             </TableCell>
                           </TableRow>
                         )
