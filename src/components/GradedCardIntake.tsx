@@ -164,21 +164,23 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
     try {
       setSubmitting(true);
 
-      const { data, error } = await supabase.rpc("create_intake_item", {
+      const { data, error } = await supabase.rpc("create_raw_intake_item", {
         store_key_in: assignedStore,
         shopify_location_gid_in: selectedLocation,
         quantity_in: formData.quantity,
-        psa_cert_in: formData.certNumber,
         grade_in: formData.grade,
         brand_title_in: formData.brandTitle,
         subject_in: formData.subject,
         category_in: formData.category,
         variant_in: formData.variant,
         card_number_in: formData.cardNumber,
-        year_in: formData.year,
         price_in: parseFloat(formData.price),
         cost_in: parseFloat(formData.cost),
-        catalog_snapshot_in: cardData || {}
+        catalog_snapshot_in: {
+          ...cardData,
+          psa_cert: formData.certNumber,
+          year: formData.year
+        }
       });
 
       if (error) throw error;
