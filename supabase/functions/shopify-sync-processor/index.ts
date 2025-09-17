@@ -178,11 +178,11 @@ async function createShopifyProduct(credentials: any, item: InventoryItem, locat
   
   const product = result.productCreate.product
   
-  // Now create a variant for this product
+  // Now create a variant for this product using the bulk create mutation
   const variantMutation = `
-    mutation productVariantCreate($input: ProductVariantInput!) {
-      productVariantCreate(input: $input) {
-        productVariant {
+    mutation productVariantsBulkCreate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+      productVariantsBulkCreate(productId: $productId, variants: $variants) {
+        productVariants {
           id
           sku
           price
@@ -199,26 +199,26 @@ async function createShopifyProduct(credentials: any, item: InventoryItem, locat
   `
   
   const variantVariables = {
-    input: {
-      productId: product.id,
+    productId: product.id,
+    variants: [{
       price: item.price?.toString() || '0.00',
       sku: item.sku,
       inventoryManagement: 'SHOPIFY',
       inventoryPolicy: 'DENY'
-    }
+    }]
   }
   
   console.log(`📦 Creating variant for product: ${product.id}`)
   
   const variantResult = await shopifyGraphQL(domain, accessToken, variantMutation, variantVariables)
   
-  if (variantResult.productVariantCreate.userErrors?.length > 0) {
-    throw new Error(`Variant creation failed: ${JSON.stringify(variantResult.productVariantCreate.userErrors)}`)
+  if (variantResult.productVariantsBulkCreate.userErrors?.length > 0) {
+    throw new Error(`Variant creation failed: ${JSON.stringify(variantResult.productVariantsBulkCreate.userErrors)}`)
   }
   
-  const variant = variantResult.productVariantCreate.productVariant
-  const variantId = variant.id
-  const inventoryItemId = variant.inventoryItem?.id
+  const variant = variantResult.productVariantsBulkCreate.productVariants[0]
+  const variantId = variant?.id
+  const inventoryItemId = variant?.inventoryItem?.id
   
   // Set inventory quantity if we have the location and inventory item
   if (inventoryItemId && item.quantity && item.quantity > 0) {
