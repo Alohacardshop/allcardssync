@@ -1,12 +1,16 @@
 import React, { useState, useEffect } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { RefreshCw, Store as StoreIcon, ShoppingCart, MapPin, Package } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { RefreshCw, Store as StoreIcon, ShoppingCart, MapPin, Package, Home, Archive, Tags, Printer, LogOut, Settings, Menu, X } from 'lucide-react';
 import { useStore } from '@/contexts/StoreContext';
 import { supabase } from '@/integrations/supabase/client';
 
 export function NavigationBar() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const { 
     assignedStore, 
     selectedLocation, 
@@ -17,6 +21,30 @@ export function NavigationBar() {
   } = useStore();
   
   const [itemsPushed, setItemsPushed] = useState(0);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // Check admin status
+  useEffect(() => {
+    const checkAdminStatus = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          const { data, error } = await supabase.rpc('has_role', { 
+            _role: 'admin',
+            _user_id: session.user.id
+          });
+          if (!error && data) {
+            setIsAdmin(true);
+          }
+        }
+      } catch (error) {
+        console.error('Error checking admin status:', error);
+      }
+    };
+
+    checkAdminStatus();
+  }, []);
 
   // Fetch items pushed count
   useEffect(() => {
@@ -72,6 +100,15 @@ export function NavigationBar() {
     }
   };
 
+  const handleSignOut = async () => {
+    try {
+      await supabase.auth.signOut();
+      navigate('/auth');
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
+  };
+
   // Helper to get location name from GID
   const getLocationName = () => {
     if (loadingLocations) return 'Loading locations...';
@@ -92,18 +129,64 @@ export function NavigationBar() {
     return assignedStore || 'No Store Assigned';
   };
 
+  const isActive = (path: string) => {
+    return location.pathname === path;
+  };
+
+  // Navigation items
+  const navItems = [
+    { to: '/', label: 'Dashboard', icon: Home },
+    { to: '/inventory', label: 'Inventory', icon: Archive },
+    { to: '/batches', label: 'Batches', icon: Package },
+    { to: '/labels', label: 'Labels', icon: Tags },
+    { to: '/shopify-mapping', label: 'Shopify', icon: ShoppingCart },
+    { to: '/print-logs', label: 'Print Logs', icon: Printer },
+    { to: '/test-hardware', label: 'Hardware', icon: Settings },
+  ];
+
+  if (isAdmin) {
+    navItems.push({ to: '/admin', label: 'Admin', icon: Settings });
+  }
+
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-card border-b shadow-sm">
       <div className="container mx-auto px-4 py-3">
         <div className="flex items-center justify-between">
           
-          {/* LEFT SIDE - Logo/Title */}
-          <div className="flex items-center gap-3">
-            <Package className="h-6 w-6 text-primary" />
-            <h1 className="text-xl font-semibold">Inventory Management</h1>
+          {/* LEFT SIDE - Logo/Title & Desktop Navigation */}
+          <div className="flex items-center gap-6">
+            {/* Logo */}
+            <div className="flex items-center gap-3">
+              <Package className="h-6 w-6 text-primary" />
+              <h1 className="text-xl font-semibold">Inventory Management</h1>
+            </div>
+            
+            {/* Desktop Navigation */}
+            <div className="hidden md:flex items-center gap-1">
+              {navItems.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                      isActive(item.to)
+                        ? 'bg-primary text-primary-foreground'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                    }`}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {item.label}
+                    {item.label === 'Admin' && (
+                      <Badge variant="outline" className="text-xs ml-1">A</Badge>
+                    )}
+                  </Link>
+                );
+              })}
+            </div>
           </div>
 
-          {/* RIGHT SIDE - Store Controls & Info */}
+          {/* RIGHT SIDE - Store Controls & Mobile Menu */}
           <div className="flex items-center gap-4">
             
             {/* Items Pushed Counter */}
@@ -123,7 +206,7 @@ export function NavigationBar() {
 
             {/* Location Selector */}
             {assignedStore && (
-              <div className="flex items-center gap-2">
+              <div className="hidden sm:flex items-center gap-2">
                 <MapPin className="h-4 w-4 text-muted-foreground" />
                 <Select
                   value={selectedLocation || ''}
@@ -164,6 +247,52 @@ export function NavigationBar() {
               </div>
             )}
 
+            {/* Sign Out Button */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleSignOut}
+              className="hidden sm:flex items-center gap-2"
+            >
+              <LogOut className="h-4 w-4" />
+              Sign Out
+            </Button>
+
+            {/* Mobile Menu */}
+            <DropdownMenu open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="md:hidden">
+                  {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                {navItems.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <DropdownMenuItem key={item.to} asChild>
+                      <Link
+                        to={item.to}
+                        className={`flex items-center gap-2 w-full ${
+                          isActive(item.to) ? 'bg-accent' : ''
+                        }`}
+                        onClick={() => setIsMobileMenuOpen(false)}
+                      >
+                        <Icon className="h-4 w-4" />
+                        {item.label}
+                        {item.label === 'Admin' && (
+                          <Badge variant="outline" className="text-xs ml-auto">A</Badge>
+                        )}
+                      </Link>
+                    </DropdownMenuItem>
+                  );
+                })}
+                <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Sign Out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
             {/* Warning if no store/location */}
             {!assignedStore && (
               <Badge variant="destructive" className="text-xs">
@@ -172,6 +301,50 @@ export function NavigationBar() {
             )}
           </div>
         </div>
+        
+        {/* Mobile Location Selector (when space is limited) */}
+        {assignedStore && (
+          <div className="sm:hidden mt-3 pt-3 border-t">
+            <div className="flex items-center gap-2">
+              <MapPin className="h-4 w-4 text-muted-foreground" />
+              <Select
+                value={selectedLocation || ''}
+                onValueChange={handleLocationChange}
+                disabled={loadingLocations || availableLocations.length === 0}
+              >
+                <SelectTrigger className="flex-1">
+                  <SelectValue>
+                    {getLocationName()}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {availableLocations.map((location) => (
+                    <SelectItem key={location.gid} value={location.gid}>
+                      <div className="flex items-center gap-2">
+                        <span>{location.name}</span>
+                        {location.name && location.name.toLowerCase().includes('ward') && (
+                          <Badge variant="outline" className="text-xs">Default</Badge>
+                        )}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {refreshLocations && (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={refreshLocations}
+                  disabled={loadingLocations}
+                  className="h-8 w-8"
+                >
+                  <RefreshCw className={`h-4 w-4 ${loadingLocations ? 'animate-spin' : ''}`} />
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </nav>
   );
