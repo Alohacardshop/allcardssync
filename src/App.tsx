@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ErrorBoundaryWrapper } from "@/components/ErrorBoundaryWrapper";
 import { StoreProvider } from "@/contexts/StoreContext";
+import { NavigationBar } from "@/components/NavigationBar";
 import Index from "./pages/Index";
 import DashboardPage from "./pages/DashboardPage";
 import TestHardwarePage from "./pages/TestHardwarePage";
@@ -180,9 +181,10 @@ const App = () => (
             <Toaster />
             <Sonner />
             <BrowserRouter>
+            <NavigationBar />
             <Routes>
               <Route path="/auth" element={<Auth />} />
-              <Route path="/" element={<ProtectedRoute><ErrorBoundaryWrapper componentName="Dashboard"><DashboardPage /></ErrorBoundaryWrapper></ProtectedRoute>} />
+              <Route path="/" element={<ProtectedRoute><ErrorBoundaryWrapper componentName="Index"><Index /></ErrorBoundaryWrapper></ProtectedRoute>} />
               <Route path="/dashboard" element={<ProtectedRoute><ErrorBoundaryWrapper componentName="Dashboard"><DashboardPage /></ErrorBoundaryWrapper></ProtectedRoute>} />
               <Route path="/test-hardware" element={<ProtectedRoute><TestHardwarePage /></ProtectedRoute>} />
               <Route path="/inventory" element={<ProtectedRoute><ErrorBoundaryWrapper componentName="Inventory"><Inventory /></ErrorBoundaryWrapper></ProtectedRoute>} />

@@ -185,7 +185,7 @@ export const RawCardIntake = ({ onBatchAdd }: RawCardIntakeProps) => {
 
         <Button
           onClick={handleSubmit}
-          disabled={isLoading || !brand || !subject || !price || !assignedStore || !selectedLocation}
+          disabled={isLoading || !brand || !subject || !price}
           className="w-full"
         >
           {isLoading ? (
