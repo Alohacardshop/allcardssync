@@ -42,8 +42,7 @@ import CatalogTab from '@/components/admin/CatalogTab';
 import { InventorySyncSettings } from '@/components/admin/InventorySyncSettings';
 import { ShopifyTagImport } from '@/components/admin/ShopifyTagImport';
 import { PSAApiSettings } from '@/components/admin/PSAApiSettings';
-import ShopifySyncQueue from '@/components/admin/ShopifySyncQueue';
-import ShopifySyncQueueEnhanced from '@/components/admin/ShopifySyncQueueEnhanced';
+import { ShopifySyncPanel } from '@/components/admin/ShopifySyncPanel';
 import ShopifyQueueTest from '@/components/admin/ShopifyQueueTest';
 import ShopifyQueueSettings from '@/components/admin/ShopifyQueueSettings';
 import ShopifyQueueHealth from '@/components/admin/ShopifyQueueHealth';
@@ -319,7 +318,7 @@ const Admin = () => {
                 Monitor and manage inventory items being synced to Shopify.
               </p>
             </div>
-            <ShopifySyncQueueEnhanced />
+            <ShopifySyncPanel />
           </div>
         );
 
