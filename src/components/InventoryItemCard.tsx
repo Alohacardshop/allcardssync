@@ -44,16 +44,37 @@ export const InventoryItemCard = memo(({
   onSyncDetails
 }: InventoryItemCardProps) => {
   const generateTitle = (item: any) => {
-    const parts = [
-      item.year,
-      item.brand_title,
-      item.subject,
-      item.card_number,
-      item.variant !== 'Normal' ? item.variant : null,
-      item.grade
-    ].filter(Boolean);
+    const parts = []
     
-    return parts.join(' ') || item.sku || 'Unknown Item';
+    // Add year at the start if available (check both direct field and catalog_snapshot)
+    const year = item.year || (item.catalog_snapshot && typeof item.catalog_snapshot === 'object' && item.catalog_snapshot !== null && 'year' in item.catalog_snapshot ? item.catalog_snapshot.year : null);
+    if (year) parts.push(year)
+    
+    // Add brand
+    if (item.brand_title) parts.push(item.brand_title)
+    
+    // Add subject (like FA/MewTwo VSTAR)
+    if (item.subject) parts.push(item.subject)
+    
+    // Add card number
+    if (item.card_number) parts.push(`#${item.card_number}`)
+    
+    // Add variant after vstar (check both direct field and catalog_snapshot)
+    const variant = item.variant || (item.catalog_snapshot && typeof item.catalog_snapshot === 'object' && item.catalog_snapshot !== null && 'varietyPedigree' in item.catalog_snapshot ? item.catalog_snapshot.varietyPedigree : null);
+    if (variant && variant.toLowerCase() !== 'vstar' && variant.toLowerCase() !== 'normal') {
+      parts.push(variant.toLowerCase())
+    }
+    
+    // Handle grading - use PSA for PSA certs
+    if (item.grade && item.psa_cert) {
+      parts.push(`PSA ${item.grade}`)
+    } else if (item.grade) {
+      parts.push(`Grade ${item.grade}`)
+    } else if (item.psa_cert) {
+      parts.push(`PSA ${item.psa_cert}`)
+    }
+    
+    return parts.length > 0 ? parts.join(' ') : 'Unknown Item';
   };
 
   const getStatusBadge = (item: any) => {
