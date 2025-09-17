@@ -5,8 +5,9 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useShopifySyncQueue } from "@/hooks/useShopifySyncQueue"
 import { toast } from "sonner"
-import { RefreshCw, Play, Trash2, RotateCcw } from "lucide-react"
+import { RefreshCw, Play, Trash2, RotateCcw, X, AlertTriangle } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
 
 export default function ShopifySyncQueue() {
   const { 
@@ -17,12 +18,18 @@ export default function ShopifySyncQueue() {
     fetchQueueStatus, 
     triggerProcessor, 
     retryFailedItems, 
-    clearCompleted 
+    clearCompleted,
+    deleteQueueItem,
+    clearAllQueue,
+    clearFailedItems
   } = useShopifySyncQueue()
   
   const [isTriggering, setIsTriggering] = useState(false)
   const [isRetrying, setIsRetrying] = useState(false)
   const [isClearing, setIsClearing] = useState(false)
+  const [isDeletingAll, setIsDeletingAll] = useState(false)
+  const [isClearingFailed, setIsClearingFailed] = useState(false)
+  const [deletingItemId, setDeletingItemId] = useState<string | null>(null)
 
   const handleTriggerProcessor = async () => {
     setIsTriggering(true)
@@ -60,6 +67,45 @@ export default function ShopifySyncQueue() {
       toast.error("Failed to clear completed items")
     } finally {
       setIsClearing(false)
+    }
+  }
+
+  const handleDeleteItem = async (itemId: string) => {
+    setDeletingItemId(itemId)
+    try {
+      await deleteQueueItem(itemId)
+      toast.success("Queue item deleted")
+    } catch (err) {
+      console.error("Error deleting queue item:", err)
+      toast.error("Failed to delete queue item")
+    } finally {
+      setDeletingItemId(null)
+    }
+  }
+
+  const handleClearAllQueue = async () => {
+    setIsDeletingAll(true)
+    try {
+      await clearAllQueue()
+      toast.success("All queue items cleared")
+    } catch (err) {
+      console.error("Error clearing all queue items:", err)
+      toast.error("Failed to clear all queue items")
+    } finally {
+      setIsDeletingAll(false)
+    }
+  }
+
+  const handleClearFailed = async () => {
+    setIsClearingFailed(true)
+    try {
+      await clearFailedItems()
+      toast.success("Failed items cleared")
+    } catch (err) {
+      console.error("Error clearing failed items:", err)
+      toast.error("Failed to clear failed items")
+    } finally {
+      setIsClearingFailed(false)
     }
   }
 
@@ -165,7 +211,7 @@ export default function ShopifySyncQueue() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <Button
               onClick={handleTriggerProcessor}
               disabled={isTriggering || stats.queued === 0}
@@ -191,6 +237,44 @@ export default function ShopifySyncQueue() {
               <Trash2 className="h-4 w-4 mr-2" />
               {isClearing ? "Clearing..." : `Clear Completed (${stats.completed})`}
             </Button>
+
+            <Button
+              variant="outline"
+              onClick={handleClearFailed}
+              disabled={isClearingFailed || stats.failed === 0}
+            >
+              <X className="h-4 w-4 mr-2" />
+              {isClearingFailed ? "Clearing..." : `Clear Failed (${stats.failed})`}
+            </Button>
+
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="destructive"
+                  disabled={isDeletingAll || stats.total === 0}
+                >
+                  <AlertTriangle className="h-4 w-4 mr-2" />
+                  Clear All Queue
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Clear All Queue Items?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will permanently delete all items from the sync queue, including queued and processing items. This action cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction 
+                    onClick={handleClearAllQueue}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    {isDeletingAll ? "Clearing..." : "Clear All"}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
         </CardContent>
       </Card>
@@ -224,6 +308,7 @@ export default function ShopifySyncQueue() {
                   <TableHead>Retries</TableHead>
                   <TableHead>Created</TableHead>
                   <TableHead>Error</TableHead>
+                  <TableHead className="w-[50px]">Delete</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -246,6 +331,21 @@ export default function ShopifySyncQueue() {
                     </TableCell>
                     <TableCell className="text-xs text-red-600 max-w-xs truncate">
                       {item.error_message}
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDeleteItem(item.id)}
+                        disabled={deletingItemId === item.id}
+                        className="h-6 w-6 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                      >
+                        {deletingItemId === item.id ? (
+                          <RefreshCw className="h-3 w-3 animate-spin" />
+                        ) : (
+                          <X className="h-3 w-3" />
+                        )}
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}

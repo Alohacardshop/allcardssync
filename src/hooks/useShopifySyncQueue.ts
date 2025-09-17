@@ -222,6 +222,54 @@ export function useShopifySyncQueue() {
     }
   }
 
+  const deleteQueueItem = async (itemId: string) => {
+    try {
+      const { error } = await supabase
+        .from('shopify_sync_queue')
+        .delete()
+        .eq('id', itemId)
+
+      if (error) throw error
+
+      fetchQueueStatus()
+    } catch (err) {
+      console.error('Error deleting queue item:', err)
+      throw err
+    }
+  }
+
+  const clearAllQueue = async () => {
+    try {
+      const { error } = await supabase
+        .from('shopify_sync_queue')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000') // Delete all
+
+      if (error) throw error
+
+      fetchQueueStatus()
+    } catch (err) {
+      console.error('Error clearing all queue items:', err)
+      throw err
+    }
+  }
+
+  const clearFailedItems = async () => {
+    try {
+      const { error } = await supabase
+        .from('shopify_sync_queue')
+        .delete()
+        .eq('status', 'failed')
+
+      if (error) throw error
+
+      fetchQueueStatus()
+    } catch (err) {
+      console.error('Error clearing failed items:', err)
+      throw err
+    }
+  }
+
   // Auto-refresh every 5 seconds when there are active items
   useEffect(() => {
     fetchQueueStatus()
@@ -243,6 +291,9 @@ export function useShopifySyncQueue() {
     fetchQueueStatus,
     triggerProcessor,
     retryFailedItems,
-    clearCompleted
+    clearCompleted,
+    deleteQueueItem,
+    clearAllQueue,
+    clearFailedItems
   }
 }
