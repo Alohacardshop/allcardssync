@@ -39,21 +39,40 @@ export function PSACertificateDisplay({ psaData, className }: PSACertificateDisp
           </Badge>
         </div>
 
-        {/* Certificate Number & Grade */}
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <Hash className="h-4 w-4 text-muted-foreground" />
-            <span className="font-mono text-sm">{psaData.certNumber}</span>
-          </div>
-          {psaData.grade && (
+        {/* Grade Badge */}
+        {psaData.grade && (
+          <div className="flex justify-center">
             <Badge 
               style={{ backgroundColor: gradeColor, color: 'white' }}
-              className="font-bold"
+              className="font-bold text-lg px-4 py-2"
             >
-              <Trophy className="h-3 w-3 mr-1" />
+              <Trophy className="h-4 w-4 mr-2" />
               Grade {psaData.grade}
             </Badge>
-          )}
+          </div>
+        )}
+
+        {/* Image */}
+        {psaData.imageUrl && (
+          <div className="flex justify-center">
+            <img 
+              src={psaData.imageUrl} 
+              alt={`PSA Certificate ${psaData.certNumber}`}
+              className="max-w-full h-auto rounded border max-h-80 object-contain"
+              onError={(e) => {
+                const target = e.target as HTMLImageElement;
+                target.style.display = 'none';
+              }}
+            />
+          </div>
+        )}
+
+        {/* Certificate Number */}
+        <div className="flex justify-center">
+          <div className="flex items-center gap-2">
+            <Hash className="h-4 w-4 text-muted-foreground" />
+            <span className="font-mono text-lg font-medium">{psaData.certNumber}</span>
+          </div>
         </div>
 
         {/* Card Details */}
@@ -64,16 +83,6 @@ export function PSACertificateDisplay({ psaData, className }: PSACertificateDisp
               <div>
                 <span className="text-muted-foreground">Brand: </span>
                 <span className="font-medium">{psaData.brandTitle}</span>
-              </div>
-            </div>
-          )}
-          
-          {psaData.gameSport && (
-            <div className="flex items-center gap-2">
-              <Trophy className="h-4 w-4 text-muted-foreground" />
-              <div>
-                <span className="text-muted-foreground">Game: </span>
-                <span className="font-medium capitalize">{psaData.gameSport}</span>
               </div>
             </div>
           )}
@@ -107,27 +116,32 @@ export function PSACertificateDisplay({ psaData, className }: PSACertificateDisp
               </div>
             </div>
           )}
+
+          {psaData.category && (
+            <div className="flex items-center gap-2">
+              <Tag className="h-4 w-4 text-muted-foreground" />
+              <div>
+                <span className="text-muted-foreground">Category: </span>
+                <span className="font-medium">{psaData.category}</span>
+              </div>
+            </div>
+          )}
+          
+          {psaData.gameSport && (
+            <div className="flex items-center gap-2">
+              <Trophy className="h-4 w-4 text-muted-foreground" />
+              <div>
+                <span className="text-muted-foreground">Game: </span>
+                <span className="font-medium capitalize">{psaData.gameSport}</span>
+              </div>
+            </div>
+          )}
         </div>
 
         {psaData.varietyPedigree && (
-          <div className="text-sm">
+          <div className="text-sm text-center">
             <span className="text-muted-foreground">Variety: </span>
             <span className="font-medium">{psaData.varietyPedigree}</span>
-          </div>
-        )}
-
-        {/* Image */}
-        {psaData.imageUrl && (
-          <div className="mt-4">
-            <img 
-              src={psaData.imageUrl} 
-              alt={`PSA Certificate ${psaData.certNumber}`}
-              className="max-w-full h-auto rounded border max-h-64 object-contain"
-              onError={(e) => {
-                const target = e.target as HTMLImageElement;
-                target.style.display = 'none';
-              }}
-            />
           </div>
         )}
 
