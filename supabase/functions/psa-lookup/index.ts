@@ -6,9 +6,10 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Get environment variables
-const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!
+  // Get environment variables
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+  const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!
+  const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
 interface PSAApiResponse {
   success: boolean
@@ -51,11 +52,12 @@ Deno.serve(async (req) => {
 
     console.log(`PSA lookup started for cert: ${certNumber}`)
 
-    // Initialize Supabase client
+    // Initialize Supabase clients
     const supabase = createClient(supabaseUrl, supabaseAnonKey)
+    const supabaseService = createClient(supabaseUrl, supabaseServiceKey)
 
-    // Get PSA API token from system settings
-    const { data: tokenData, error: tokenError } = await supabase.functions.invoke('get-system-setting', {
+    // Get PSA API token from system settings using service client
+    const { data: tokenData, error: tokenError } = await supabaseService.functions.invoke('get-system-setting', {
       body: { keyName: 'PSA_API_TOKEN' }
     })
 
