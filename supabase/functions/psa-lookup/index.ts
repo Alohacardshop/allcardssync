@@ -55,7 +55,7 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
     // Get PSA API token from system settings
-    const { data: tokenData, error: tokenError } = await supabase.functions.invoke('get-decrypted-system-setting', {
+    const { data: tokenData, error: tokenError } = await supabase.functions.invoke('get-system-setting', {
       body: { keyName: 'PSA_API_TOKEN' }
     })
 
