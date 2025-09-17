@@ -9,7 +9,6 @@ const corsHeaders = {
 // Get environment variables
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!
 const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!
-const psaApiToken = Deno.env.get('PSA_API_TOKEN')!
 
 interface PSAApiResponse {
   success: boolean
@@ -54,6 +53,27 @@ Deno.serve(async (req) => {
 
     // Initialize Supabase client
     const supabase = createClient(supabaseUrl, supabaseAnonKey)
+
+    // Get PSA API token from system settings
+    const { data: tokenData, error: tokenError } = await supabase.functions.invoke('get-decrypted-system-setting', {
+      body: { keyName: 'PSA_API_TOKEN' }
+    })
+
+    if (tokenError || !tokenData?.value) {
+      console.error('PSA API token not configured:', tokenError)
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: 'PSA API token not configured. Please configure it in Admin settings.' 
+        }),
+        { 
+          status: 400, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      )
+    }
+
+    const psaApiToken = tokenData.value
 
     // Log the request
     await supabase.from('psa_request_log').insert({
