@@ -56,11 +56,22 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
   const formatCardName = (item: IntakeItem) => {
     const parts = []
     
+    // Add year at the start if available
     if (item.year) parts.push(item.year)
     if (item.brand_title) parts.push(item.brand_title)
     if (item.card_number) parts.push(`#${item.card_number}`)
-    if (item.subject) parts.push(item.subject)
     
+    // Handle subject with variant insertion after "vstar"
+    if (item.subject) {
+      let subject = item.subject;
+      if (item.variant && subject.toLowerCase().includes('vstar')) {
+        // Insert variant after "vstar"
+        subject = subject.replace(/vstar/i, `VSTAR ${item.variant}`);
+      }
+      parts.push(subject);
+    }
+    
+    // Handle grading - use PSA for PSA certs
     if (item.grade && item.psa_cert) {
       parts.push(`PSA ${item.grade}`)
     } else if (item.grade) {

@@ -9,30 +9,6 @@ interface PSACertificateDisplayProps {
 }
 
 export function PSACertificateDisplay({ psaData, className }: PSACertificateDisplayProps) {
-  // Create formatted title with year at start and variant after vstar
-  const formatCardTitle = () => {
-    let title = '';
-    
-    // Add year at the start if available
-    if (psaData.year) {
-      title += `${psaData.year} `;
-    }
-    
-    // Add subject with variety/pedigree inserted after "vstar" if present
-    if (psaData.subject) {
-      let subject = psaData.subject;
-      if (psaData.varietyPedigree && subject.toLowerCase().includes('vstar')) {
-        // Insert variety after "vstar"
-        subject = subject.replace(/vstar/i, `VSTAR ${psaData.varietyPedigree}`);
-      }
-      title += subject;
-    } else if (psaData.varietyPedigree) {
-      title += psaData.varietyPedigree;
-    }
-    
-    return title.trim();
-  };
-
   if (!psaData.isValid) {
     return (
       <Card className={`p-4 border-destructive bg-destructive/5 ${className || ''}`}>
@@ -71,7 +47,7 @@ export function PSACertificateDisplay({ psaData, className }: PSACertificateDisp
               className="font-bold text-lg px-4 py-2"
             >
               <Trophy className="h-4 w-4 mr-2" />
-              PSA {psaData.grade}
+              Grade {psaData.grade}
             </Badge>
           </div>
         )}
@@ -111,14 +87,12 @@ export function PSACertificateDisplay({ psaData, className }: PSACertificateDisp
             </div>
           )}
           
-          {formatCardTitle() && (
-            <div className="col-span-1 md:col-span-2">
-              <div className="flex items-center gap-2">
-                <User className="h-4 w-4 text-muted-foreground" />
-                <div>
-                  <span className="text-muted-foreground">Card: </span>
-                  <span className="font-medium">{formatCardTitle()}</span>
-                </div>
+          {psaData.subject && (
+            <div className="flex items-center gap-2">
+              <User className="h-4 w-4 text-muted-foreground" />
+              <div>
+                <span className="text-muted-foreground">Subject: </span>
+                <span className="font-medium">{psaData.subject}</span>
               </div>
             </div>
           )}
@@ -164,6 +138,13 @@ export function PSACertificateDisplay({ psaData, className }: PSACertificateDisp
           )}
         </div>
 
+
+        {psaData.varietyPedigree && (
+          <div className="text-sm text-center">
+            <span className="text-muted-foreground">Variety: </span>
+            <span className="font-medium">{psaData.varietyPedigree}</span>
+          </div>
+        )}
 
         {/* Footer */}
         <div className="flex items-center justify-between pt-2 border-t">
