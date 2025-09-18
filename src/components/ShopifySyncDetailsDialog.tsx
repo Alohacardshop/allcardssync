@@ -125,23 +125,123 @@ export function ShopifySyncDetailsDialog({ open, onOpenChange, row, selectedStor
         </DialogHeader>
 
         <div className="space-y-6">
-          {/* Header Info */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <div className="text-sm font-medium text-muted-foreground">SKU</div>
-              <div className="font-mono">{snapshot.input?.sku || row.sku}</div>
+          {/* Item Information */}
+          <div className="border rounded-lg p-4">
+            <div className="text-sm font-medium text-muted-foreground mb-3">Item Information</div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* Basic Info */}
+              <div>
+                <div className="text-xs font-medium text-muted-foreground">SKU</div>
+                <div className="font-mono text-sm">{row.sku}</div>
+              </div>
+              <div>
+                <div className="text-xs font-medium text-muted-foreground">Year</div>
+                <div className="text-sm">{row.year || row.catalog_snapshot?.year || 'N/A'}</div>
+              </div>
+              <div>
+                <div className="text-xs font-medium text-muted-foreground">Brand / Title / Game</div>
+                <div className="text-sm">{row.brand_title || 'N/A'}</div>
+              </div>
+              <div>
+                <div className="text-xs font-medium text-muted-foreground">Subject</div>
+                <div className="text-sm">{row.subject || 'N/A'}</div>
+              </div>
+              <div>
+                <div className="text-xs font-medium text-muted-foreground">Category</div>
+                <div className="text-sm">{row.category || 'N/A'}</div>
+              </div>
+              <div>
+                <div className="text-xs font-medium text-muted-foreground">Variant</div>
+                <div className="text-sm">{row.variant || row.catalog_snapshot?.varietyPedigree || 'N/A'}</div>
+              </div>
+              <div>
+                <div className="text-xs font-medium text-muted-foreground">Card Number</div>
+                <div className="text-sm">{row.card_number || 'N/A'}</div>
+              </div>
+              <div>
+                <div className="text-xs font-medium text-muted-foreground">Grade</div>
+                <div className="text-sm">{row.grade || 'N/A'}</div>
+              </div>
+              <div>
+                <div className="text-xs font-medium text-muted-foreground">PSA Cert</div>
+                <div className="text-sm font-mono">{row.psa_cert || row.sku || 'N/A'}</div>
+              </div>
+              <div>
+                <div className="text-xs font-medium text-muted-foreground">Price</div>
+                <div className="text-sm">${parseFloat(row.price || '0').toFixed(2)}</div>
+              </div>
+              <div>
+                <div className="text-xs font-medium text-muted-foreground">Cost</div>
+                <div className="text-sm">{row.cost ? `$${parseFloat(row.cost).toFixed(2)}` : 'N/A'}</div>
+              </div>
+              <div>
+                <div className="text-xs font-medium text-muted-foreground">Quantity</div>
+                <div className="text-sm">{row.quantity}</div>
+              </div>
+              <div>
+                <div className="text-xs font-medium text-muted-foreground">Type</div>
+                <div className="text-sm">{row.type || 'Raw'}</div>
+              </div>
+              <div>
+                <div className="text-xs font-medium text-muted-foreground">Store</div>
+                <div className="text-sm">{row.store_key || 'N/A'}</div>
+              </div>
+              <div>
+                <div className="text-xs font-medium text-muted-foreground">Location GID</div>
+                <div className="text-sm font-mono text-xs">{row.shopify_location_gid || 'N/A'}</div>
+              </div>
             </div>
-            <div>
-              <div className="text-sm font-medium text-muted-foreground">Quantity</div>
-              <div>{snapshot.input?.quantity || row.quantity}</div>
-            </div>
-            <div>
-              <div className="text-sm font-medium text-muted-foreground">Last Synced</div>
-              <div>{row.last_shopify_synced_at ? formatDistanceToNow(new Date(row.last_shopify_synced_at), { addSuffix: true }) : 'Never'}</div>
-            </div>
-            <div>
-              <div className="text-sm font-medium text-muted-foreground">Correlation ID</div>
-              <div className="font-mono text-xs">{row.last_shopify_correlation_id}</div>
+            
+            {/* Image URL Section */}
+            {(row.image_urls?.[0] || row.catalog_snapshot?.image_url || row.psa_snapshot?.image_url) && (
+              <div className="mt-4 pt-4 border-t">
+                <div className="text-xs font-medium text-muted-foreground mb-2">Image</div>
+                <div className="flex gap-4">
+                  <div className="flex-1">
+                    <div className="text-xs text-muted-foreground">Image URL</div>
+                    <div className="text-sm font-mono break-all">
+                      {row.image_urls?.[0] || row.catalog_snapshot?.image_url || row.psa_snapshot?.image_url}
+                    </div>
+                  </div>
+                  {(row.image_urls?.[0] || row.catalog_snapshot?.image_url || row.psa_snapshot?.image_url) && (
+                    <div className="flex-shrink-0">
+                      <img 
+                        src={row.image_urls?.[0] || row.catalog_snapshot?.image_url || row.psa_snapshot?.image_url}
+                        alt="Card"
+                        className="w-20 h-28 object-cover rounded border"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Sync Status Information */}
+          <div className="border rounded-lg p-4">
+            <div className="text-sm font-medium text-muted-foreground mb-3">Shopify Sync Status</div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <div className="text-xs font-medium text-muted-foreground">Status</div>
+                <Badge variant={row.shopify_sync_status === 'synced' ? 'default' : row.shopify_sync_status === 'error' ? 'destructive' : 'outline'}>
+                  {row.shopify_sync_status?.toUpperCase() || 'PENDING'}
+                </Badge>
+              </div>
+              <div>
+                <div className="text-xs font-medium text-muted-foreground">Last Synced</div>
+                <div className="text-sm">{row.last_shopify_synced_at ? formatDistanceToNow(new Date(row.last_shopify_synced_at), { addSuffix: true }) : 'Never'}</div>
+              </div>
+              <div>
+                <div className="text-xs font-medium text-muted-foreground">Product ID</div>
+                <div className="text-sm font-mono">{row.shopify_product_id || 'N/A'}</div>
+              </div>
+              <div>
+                <div className="text-xs font-medium text-muted-foreground">Correlation ID</div>
+                <div className="font-mono text-xs">{row.last_shopify_correlation_id || 'N/A'}</div>
+              </div>
             </div>
           </div>
 
