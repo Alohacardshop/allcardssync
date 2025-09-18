@@ -18,6 +18,7 @@ export type IntakeItemDetails = {
   cost?: string;
   sku?: string;
   quantity?: number;
+  imageUrl?: string;
   sourceProvider?: string;
   shopifyProductId?: string;
   shopifyVariantId?: string;
@@ -122,6 +123,20 @@ function EditIntakeItemDialog({ open, item, onOpenChange, onSave, isAdmin = fals
           <div>
             <Label htmlFor="sku">SKU</Label>
             <Input id="sku" value={form.sku || ""} onChange={(e) => handleChange("sku", e.target.value)} />
+          </div>
+          <div>
+            <Label htmlFor="imageUrl">Image URL</Label>
+            <Input 
+              id="imageUrl" 
+              value={form.imageUrl || ""} 
+              onChange={(e) => handleChange("imageUrl", e.target.value)} 
+              placeholder="https://example.com/image.jpg"
+            />
+            {form.imageUrl && (
+              <p className="text-xs text-muted-foreground mt-1">
+                This image will be used in Shopify product listing.
+              </p>
+            )}
           </div>
           {isAdmin && (
             <>

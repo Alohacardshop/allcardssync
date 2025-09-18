@@ -35,6 +35,7 @@ interface IntakeItem {
   catalog_snapshot?: any;
   store_key?: string;
   shopify_location_gid?: string;
+  image_urls?: string[];
 }
 
 interface CurrentBatchPanelProps {
@@ -195,7 +196,14 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
       }
 
       console.log(`[CurrentBatchPanel] Loaded ${items?.length || 0} items from lot ${lot.lot_number}`);
-      setRecentItems(items || []);
+      // Cast the database items to our interface with proper type handling
+      const typedItems: IntakeItem[] = (items || []).map(item => ({
+        ...item,
+        image_urls: Array.isArray(item.image_urls) ? 
+          (item.image_urls as any[]).map(url => String(url)) : 
+          item.image_urls ? [String(item.image_urls)] : []
+      }));
+      setRecentItems(typedItems);
 
       // Update counts
       setCounts({
@@ -488,15 +496,61 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
             price: editingItem.price?.toString(),
             cost: editingItem.cost?.toString(),
             sku: editingItem.sku,
-            quantity: editingItem.quantity
+            quantity: editingItem.quantity,
+            imageUrl: editingItem.image_urls?.[0] || ''
           }}
           open={!!editingItem}
           onOpenChange={(open) => {
             if (!open) setEditingItem(null);
           }}
-          onSave={() => {
-            setEditingItem(null);
-            fetchRecentItemsWithRetry();
+          onSave={async (values) => {
+            try {
+              // Update the intake item in the database
+              const { error } = await supabase
+                .from('intake_items')
+                .update({
+                  year: values.year,
+                  brand_title: values.brandTitle,
+                  subject: values.subject,
+                  category: values.category,
+                  variant: values.variant,
+                  card_number: values.cardNumber,
+                  grade: values.grade,
+                  psa_cert: values.psaCert,
+                  price: values.price ? parseFloat(values.price) : null,
+                  cost: values.cost ? parseFloat(values.cost) : null,
+                  sku: values.sku,
+                  quantity: values.quantity,
+                  image_urls: values.imageUrl ? [values.imageUrl] : null,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', values.id);
+
+              if (error) {
+                console.error('Error updating item:', error);
+                toast({
+                  title: "Error",
+                  description: "Failed to update item. Please try again.",
+                  variant: "destructive",
+                });
+                return;
+              }
+
+              toast({
+                title: "Success",
+                description: "Item updated successfully!",
+              });
+              
+              setEditingItem(null);
+              fetchRecentItemsWithRetry();
+            } catch (error) {
+              console.error('Error updating item:', error);
+              toast({
+                title: "Error", 
+                description: "Failed to update item. Please try again.",
+                variant: "destructive",
+              });
+            }
           }}
         />
       )}
