@@ -257,12 +257,20 @@ async function createShopifyProduct(credentials: ShopifyCredentials, item: Inven
   
   // Remove duplicates and create Shopify images array
   const uniqueImageUrls = [...new Set(imageUrls)].filter(url => url && typeof url === 'string')
+  
+  // Add default image if no images found
+  if (uniqueImageUrls.length === 0) {
+    const defaultImageUrl = 'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_large.png'
+    uniqueImageUrls.push(defaultImageUrl)
+    console.log('DEBUG: No images found, using default placeholder image')
+  }
+  
   const images = uniqueImageUrls.map((url, index) => ({
     src: url,
     alt: `${title} - Image ${index + 1}`
   }))
   
-  console.log('DEBUG: Found images for product:', uniqueImageUrls)
+  console.log('DEBUG: Final images for product:', uniqueImageUrls)
   
   const handle = item.sku.toLowerCase().replace(/[^a-z0-9]/g, '-')
   
