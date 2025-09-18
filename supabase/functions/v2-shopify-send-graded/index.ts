@@ -73,8 +73,10 @@ Deno.serve(async (req) => {
       throw new Error(`Missing Shopify credentials for ${storeKey}`)
     }
 
-    // Create graded card title in proper format: "YEAR BRAND SUBJECT #CARDNUMBER VARIANT Grade X"
-    const year = item.year || intakeItem.year || ''
+    // Create graded card title in proper format: "YEAR BRAND SUBJECT #CARDNUMBER VARIANT PSA X"
+    const year = item.year || intakeItem.year || 
+                 intakeItem.catalog_snapshot?.year || 
+                 intakeItem.psa_snapshot?.year || ''
     const brandTitle = item.brand_title || intakeItem.brand_title || ''
     const subject = item.subject || intakeItem.subject || ''
     const grade = item.grade || intakeItem.grade || ''
@@ -91,7 +93,7 @@ Deno.serve(async (req) => {
       if (cardNumber) parts.push(`#${cardNumber}`)
       if (variant && variant !== 'Normal') parts.push(variant.toLowerCase())
       if (category && category !== 'Normal') parts.push(category.toLowerCase())
-      if (grade) parts.push(`Grade ${grade}`)
+      if (grade) parts.push(`PSA ${grade}`)
       
       title = parts.filter(Boolean).join(' ')
     }
