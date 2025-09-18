@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Upload, FileText, Download } from "lucide-react";
+import { Upload, FileText, Download, X } from 'lucide-react';
 import { useStore } from "@/contexts/StoreContext";
 import { v4 as uuidv4 } from 'uuid';
 import { generateSKU, generateTCGSKU } from '@/lib/sku';
@@ -504,6 +504,17 @@ export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) =>
     toast.success(`Import completed: ${successful} successful, ${failed} failed`);
   };
 
+  const handleClear = () => {
+    setItems([]);
+    setFile(null);
+    // Reset file input
+    const fileInput = document.getElementById('tcg-csv') as HTMLInputElement;
+    if (fileInput) {
+      fileInput.value = '';
+    }
+    toast.success('Import data cleared');
+  };
+
   const downloadTemplate = () => {
     const template = `TOTAL: 3 cards - $50.00
 1 Pikachu VMAX [SV01:] (Holofoil, Near Mint, English) - $25.00
@@ -713,10 +724,16 @@ Prices from Market Price on 8/24/2025 and are subject to change.`;
             </div>
             
             {!importing && items.length > 0 && (
-              <Button onClick={handleImport} className="mt-4">
-                <Upload className="h-4 w-4 mr-2" />
-                Import {items.length} Items
-              </Button>
+              <div className="mt-4 flex gap-2">
+                <Button onClick={handleImport}>
+                  <Upload className="h-4 w-4 mr-2" />
+                  Import {items.length} Items
+                </Button>
+                <Button variant="outline" onClick={handleClear}>
+                  <X className="h-4 w-4 mr-2" />
+                  Clear Data
+                </Button>
+              </div>
             )}
 
             {importing && (
