@@ -176,9 +176,45 @@ async function createShopifyProduct(credentials: ShopifyCredentials, item: Inven
   let tags: string[] = []
   
   if (item.type === 'Graded') {
-    // For graded cards: "2022 POKEMON GO FA/MEWTWO VSTAR #079 secret Grade 8"
+    // For graded cards: "2022 POKEMON GO FA/MEWTWO VSTAR #079 secret PSA 8"
     const cardNumber = item.card_number ? `#${item.card_number}` : ''
-    title = `${item.year || ''} ${item.brand_title} ${item.subject} ${cardNumber} ${item.variant || ''} Grade ${item.grade}`.replace(/\s+/g, ' ').trim()
+    
+    // Try to get year from various sources including catalog_snapshot
+    let year = item.year || ''
+    if (!year && item.catalog_snapshot && typeof item.catalog_snapshot === 'object') {
+      year = item.catalog_snapshot.year || ''
+    }
+    
+    // Handle variant (convert "SECRET" to "secret")
+    let variant = item.variant || ''
+    if (variant && variant !== 'Normal' && variant !== 'Default') {
+      variant = variant.toLowerCase()
+    } else {
+      variant = ''
+    }
+    
+    // Debug logging
+    console.log('DEBUG: Graded card title data:', {
+      year: year,
+      brand_title: item.brand_title,
+      subject: item.subject,
+      cardNumber: cardNumber,
+      variant: variant,
+      grade: item.grade,
+      itemYear: item.year,
+      catalogSnapshot: item.catalog_snapshot
+    })
+    
+    const parts = []
+    if (year) parts.push(year)
+    if (item.brand_title) parts.push(item.brand_title)
+    if (item.subject) parts.push(item.subject)
+    if (cardNumber) parts.push(cardNumber)
+    if (variant) parts.push(variant)
+    if (item.grade) parts.push(`PSA ${item.grade}`)
+    
+    title = parts.filter(Boolean).join(' ').replace(/\s+/g, ' ').trim()
+    console.log('DEBUG: Final graded card title:', title)
     description = `${title}\nSKU: ${item.sku}`
     
     // Tags for graded cards: brand, "graded", grade number
