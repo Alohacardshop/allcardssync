@@ -133,7 +133,7 @@ export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) =>
       condition: card.condition,
       language: 'English', // Default, could be enhanced
       priceEach: card.marketPrice || 0, // Start with market price as default
-      cost: (card.marketPrice || 0) * 0.7, // Calculate cost as 70% of price
+      cost: (card.marketPrice || 0) * 0.7, // Calculate cost as 70% of TCGplayer price
       totalPrice: (card.marketPrice || 0) * (card.quantity || 1),
       status: 'pending' as const
     }));
@@ -231,7 +231,7 @@ export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) =>
           condition,
           language,
           priceEach,
-          cost: priceEach * 0.7, // Calculate cost as 70% of price
+          cost: priceEach * 0.7, // Calculate cost as 70% of TCGplayer price
           totalPrice,
           status: 'pending',
           // TCGPlayer data will be enhanced by CSV parsing if available
@@ -299,7 +299,7 @@ export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) =>
     if (editingItem && editingIndex >= 0) {
       const updatedItems = [...items];
       // Recalculate cost and total when price changes
-      editingItem.cost = editingItem.priceEach * 0.7;
+      editingItem.cost = (editingItem.marketPrice || 0) * 0.7;
       editingItem.totalPrice = editingItem.priceEach * editingItem.quantity;
       updatedItems[editingIndex] = editingItem;
       setItems(updatedItems);
