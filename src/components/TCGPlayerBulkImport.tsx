@@ -521,7 +521,8 @@ Prices from Market Price on 8/24/2025 and are subject to change.`;
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-16">Qty</TableHead>
-                    <TableHead className="min-w-48">Name & ID</TableHead>
+                    <TableHead className="w-24">TCG ID</TableHead>
+                    <TableHead className="min-w-40">Name</TableHead>
                     <TableHead className="min-w-32">Set & Game</TableHead>
                     <TableHead className="w-20">Number</TableHead>
                     <TableHead className="w-24">Condition</TableHead>
@@ -534,21 +535,23 @@ Prices from Market Price on 8/24/2025 and are subject to change.`;
                   {items.map((item, index) => (
                     <TableRow key={index}>
                       <TableCell className="font-medium">{item.quantity}</TableCell>
-                      <TableCell className="min-w-48">
+                      <TableCell>
+                        {item.tcgplayerId ? (
+                          <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded font-mono text-xs font-medium">
+                            {item.tcgplayerId}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-400">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="min-w-40">
                         <div className="space-y-1">
                           <div className="font-medium truncate">{item.name}</div>
-                          <div className="flex flex-wrap gap-2 text-xs">
-                            {item.tcgplayerId && (
-                              <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded font-mono">
-                                ID: {item.tcgplayerId}
-                              </span>
-                            )}
-                            {item.rarity && (
-                              <span className="bg-purple-100 text-purple-800 px-2 py-1 rounded">
-                                {item.rarity}
-                              </span>
-                            )}
-                          </div>
+                          {item.rarity && (
+                            <span className="bg-purple-100 text-purple-800 px-2 py-1 rounded text-xs">
+                              {item.rarity}
+                            </span>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell className="min-w-32">
