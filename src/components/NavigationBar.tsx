@@ -62,32 +62,45 @@ export function NavigationBar() {
     fetchItemsPushed();
   }, []);
 
-  // Auto-select Ward location as default and persist location
+  // Auto-select location based on user assignments, falling back to Ward, then first location
   useEffect(() => {
-    // First try to recover from localStorage
-    const savedLocation = localStorage.getItem('selected_shopify_location');
+    // Don't auto-select if we already have a location or locations aren't loaded yet
+    if (selectedLocation || !availableLocations || availableLocations.length === 0) {
+      return;
+    }
+
+    // First check if user has a default assignment for current store
+    const defaultAssignment = userAssignments?.find(
+      a => a.store_key === assignedStore && a.is_default && a.location_gid
+    );
     
-    if (savedLocation && availableLocations.some(loc => loc.gid === savedLocation) && !selectedLocation) {
+    if (defaultAssignment?.location_gid && availableLocations.some(loc => loc.gid === defaultAssignment.location_gid)) {
+      setSelectedLocation(defaultAssignment.location_gid);
+      localStorage.setItem('selected_shopify_location', defaultAssignment.location_gid);
+      return;
+    }
+
+    // Try to recover from localStorage if it matches available locations
+    const savedLocation = localStorage.getItem('selected_shopify_location');
+    if (savedLocation && availableLocations.some(loc => loc.gid === savedLocation)) {
       setSelectedLocation(savedLocation);
       return;
     }
 
-    // Auto-select Ward location if no saved location or saved location not available
-    if (availableLocations && availableLocations.length > 0 && !selectedLocation) {
-      const wardLocation = availableLocations.find(loc => 
-        loc.name && loc.name.toLowerCase().includes('ward')
-      );
-      
-      if (wardLocation && wardLocation.gid) {
-        setSelectedLocation(wardLocation.gid);
-        localStorage.setItem('selected_shopify_location', wardLocation.gid);
-      } else if (availableLocations[0] && availableLocations[0].gid) {
-        // Fallback to first location if Ward not found
-        setSelectedLocation(availableLocations[0].gid);
-        localStorage.setItem('selected_shopify_location', availableLocations[0].gid);
-      }
+    // Auto-select Ward location if no user default
+    const wardLocation = availableLocations.find(loc => 
+      loc.name && loc.name.toLowerCase().includes('ward')
+    );
+    
+    if (wardLocation?.gid) {
+      setSelectedLocation(wardLocation.gid);
+      localStorage.setItem('selected_shopify_location', wardLocation.gid);
+    } else if (availableLocations[0]?.gid) {
+      // Fallback to first location if Ward not found
+      setSelectedLocation(availableLocations[0].gid);
+      localStorage.setItem('selected_shopify_location', availableLocations[0].gid);
     }
-  }, [availableLocations, selectedLocation, setSelectedLocation]);
+  }, [availableLocations, selectedLocation, setSelectedLocation, userAssignments, assignedStore]);
 
   const handleLocationChange = (value: string) => {
     if (setSelectedLocation) {
