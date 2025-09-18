@@ -176,7 +176,7 @@ async function createShopifyProduct(credentials: ShopifyCredentials, item: Inven
   let tags: string[] = []
   
   if (item.type === 'Graded') {
-    // For graded cards: "2022 POKEMON GO FA/MEWTWO VSTAR #079 secret PSA 8"
+    // For graded cards: "2022 POKEMON GO FA/MEWTWO VSTAR #079 SHADOWLESS PSA 8"
     const cardNumber = item.card_number ? `#${item.card_number}` : ''
     
     // Try to get year from various sources including catalog_snapshot
@@ -185,10 +185,11 @@ async function createShopifyProduct(credentials: ShopifyCredentials, item: Inven
       year = item.catalog_snapshot.year || ''
     }
     
-    // Handle variant (convert "SECRET" to "secret")
+    // Handle variant - include meaningful variants in the title
     let variant = item.variant || ''
-    if (variant && variant !== 'Normal' && variant !== 'Default') {
-      variant = variant.toLowerCase()
+    if (variant && variant !== 'Normal' && variant !== 'Default' && variant !== '') {
+      // Keep variants like SHADOWLESS, FIRST EDITION, etc.
+      variant = variant.toUpperCase()
     } else {
       variant = ''
     }
@@ -220,21 +221,41 @@ async function createShopifyProduct(credentials: ShopifyCredentials, item: Inven
     const psaCertNumber = item.psa_cert || item.catalog_snapshot?.certNumber || item.catalog_snapshot?.psa_cert || item.sku
     description = `${title}\nPSA Cert: ${psaCertNumber}`
     
-    // Tags for graded cards: brand, "graded", grade number
+    // Tags for graded cards: brand, "graded", grade number, variant, category, lot number
     if (item.brand_title) tags.push(item.brand_title.toLowerCase())
     tags.push('graded')
-    if (item.grade) tags.push(item.grade)
+    if (item.grade) tags.push(`psa-${item.grade}`)
+    if (variant) tags.push(variant.toLowerCase())
+    if (item.category) tags.push(item.category.toLowerCase().replace(/\s+/g, '-'))
+    if (item.lot_number) tags.push(`lot-${item.lot_number}`)
   } else {
-    // For raw cards: keep simpler format
-    title = `${item.brand_title} ${item.subject} ${item.card_number}`.trim()
+    // For raw cards: keep simpler format but include variant if meaningful
+    const cardNumber = item.card_number ? `#${item.card_number}` : ''
+    let variant = item.variant || ''
+    if (variant && variant !== 'Normal' && variant !== 'Default' && variant !== '') {
+      variant = variant.toUpperCase()
+    } else {
+      variant = ''
+    }
+    
+    const parts = []
+    if (item.brand_title) parts.push(item.brand_title)
+    if (item.subject) parts.push(item.subject)
+    if (cardNumber) parts.push(cardNumber)
+    if (variant) parts.push(variant)
+    
+    title = parts.filter(Boolean).join(' ').replace(/\s+/g, ' ').trim()
     
     // Get PSA cert number for description (fallback to SKU for raw cards)
     const psaCertNumber = item.psa_cert || item.catalog_snapshot?.certNumber || item.catalog_snapshot?.psa_cert || item.sku
     description = `${title}\nSKU: ${psaCertNumber}`
     
-    // Tags for raw cards: brand, condition
+    // Tags for raw cards: brand, condition, variant, category, lot number
     if (item.brand_title) tags.push(item.brand_title.toLowerCase())
-    if (item.variant && item.variant !== 'Default') tags.push(item.variant.toLowerCase())
+    if (variant) tags.push(variant.toLowerCase())
+    if (item.category) tags.push(item.category.toLowerCase().replace(/\s+/g, '-'))
+    if (item.lot_number) tags.push(`lot-${item.lot_number}`)
+    tags.push('raw')
   }
   
   // Extract image URLs from various sources
