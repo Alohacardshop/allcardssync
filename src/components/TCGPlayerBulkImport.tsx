@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Upload, FileText, Download } from "lucide-react";
@@ -15,6 +16,33 @@ import { fetchCardPricing } from '@/hooks/useTCGData';
 import { tcgSupabase } from '@/integrations/supabase/client';
 import { CsvPasteArea } from '@/components/csv/CsvPasteArea';
 import { NormalizedCard } from '@/lib/csv/normalize';
+
+interface TCGPlayerItem {
+  tcgplayerId?: string; // TCGPlayer ID for SKU generation (readonly)
+  productLine?: string; // Game information from TCGPlayer
+  rarity?: string; // Original TCGPlayer rarity
+  photoUrl?: string; // TCGPlayer product image URL
+  marketPrice?: number; // TCGPlayer market price (readonly)
+  quantity: number;
+  name: string;
+  set: string;
+  cardNumber?: string;
+  foil: string;
+  condition: string;
+  language: string;
+  priceEach: number; // User-entered selling price
+  cost: number; // Calculated cost (70% of priceEach)
+  totalPrice: number;
+  status: 'pending' | 'processing' | 'success' | 'error';
+  error?: string;
+  generatedSku?: string;
+  variantId?: string; // TCG variant ID if resolved
+  cardId?: string; // TCG card ID if found
+}
+
+interface TCGPlayerBulkImportProps {
+  onBatchAdd?: (itemData: any) => void;
+}
 
 // Helper function to detect game from TCGPlayer product line
 const detectGameFromProductLine = (productLine?: string): string | null => {
@@ -79,37 +107,13 @@ const createHumanReadableDescription = (item: TCGPlayerItem): string => {
   return parts.join('\n');
 };
 
-interface TCGPlayerItem {
-  tcgplayerId?: string; // TCGPlayer ID for SKU generation
-  productLine?: string; // Game information from TCGPlayer
-  rarity?: string; // Original TCGPlayer rarity
-  photoUrl?: string; // TCGPlayer product image URL
-  marketPrice?: number; // TCGPlayer market price
-  quantity: number;
-  name: string;
-  set: string;
-  cardNumber?: string;
-  foil: string;
-  condition: string;
-  language: string;
-  priceEach: number;
-  totalPrice: number;
-  status: 'pending' | 'processing' | 'success' | 'error';
-  error?: string;
-  generatedSku?: string;
-  variantId?: string; // TCG variant ID if resolved
-  cardId?: string; // TCG card ID if found
-}
-
-interface TCGPlayerBulkImportProps {
-  onBatchAdd?: (itemData: any) => void;
-}
-
 export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) => {
   const [file, setFile] = useState<File | null>(null);
   const [items, setItems] = useState<TCGPlayerItem[]>([]);
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [editingItem, setEditingItem] = useState<TCGPlayerItem | null>(null);
+  const [editingIndex, setEditingIndex] = useState<number>(-1);
   const { assignedStore, selectedLocation } = useStore();
   const batchId = uuidv4(); // Generate a unique batch ID for this import session
 
@@ -120,7 +124,7 @@ export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) =>
       productLine: card.line, // Game information from TCGPlayer (Product Line -> line)
       rarity: card.rarity, // Original TCGPlayer rarity
       photoUrl: card.photoUrl, // TCGPlayer product image
-      marketPrice: card.marketPrice, // TCGPlayer market price
+      marketPrice: card.marketPrice, // TCGPlayer market price (readonly)
       quantity: card.quantity || 1,
       name: card.name,
       set: card.set,
@@ -128,7 +132,8 @@ export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) =>
       foil: card.rarity || 'Normal',
       condition: card.condition,
       language: 'English', // Default, could be enhanced
-      priceEach: card.marketPrice || 0,
+      priceEach: card.marketPrice || 0, // Start with market price as default
+      cost: (card.marketPrice || 0) * 0.7, // Calculate cost as 70% of price
       totalPrice: (card.marketPrice || 0) * (card.quantity || 1),
       status: 'pending' as const
     }));
@@ -226,6 +231,7 @@ export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) =>
           condition,
           language,
           priceEach,
+          cost: priceEach * 0.7, // Calculate cost as 70% of price
           totalPrice,
           status: 'pending',
           // TCGPlayer data will be enhanced by CSV parsing if available
@@ -282,6 +288,32 @@ export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) =>
     }
   };
 
+  // Handle row editing
+  const handleRowClick = (item: TCGPlayerItem, index: number) => {
+    if (item.status === 'processing') return; // Don't edit while processing
+    setEditingItem({ ...item });
+    setEditingIndex(index);
+  };
+
+  const handleSaveEdit = () => {
+    if (editingItem && editingIndex >= 0) {
+      const updatedItems = [...items];
+      // Recalculate cost and total when price changes
+      editingItem.cost = editingItem.priceEach * 0.7;
+      editingItem.totalPrice = editingItem.priceEach * editingItem.quantity;
+      updatedItems[editingIndex] = editingItem;
+      setItems(updatedItems);
+      setEditingItem(null);
+      setEditingIndex(-1);
+      toast.success('Item updated');
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingItem(null);
+    setEditingIndex(-1);
+  };
+
   const insertIntakeItem = async (item: TCGPlayerItem) => {
     // Try to resolve variant ID first
     const { cardId, variantId } = await resolveVariantId(item);
@@ -308,7 +340,7 @@ export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) =>
         card_number_in: item.cardNumber,
         grade_in: null, // Raw cards should not have grades
         price_in: item.priceEach,
-        cost_in: item.priceEach * 0.7,
+        cost_in: item.cost,
         sku_in: sku,
         source_provider_in: 'tcgplayer',
         // Enhanced catalog snapshot with all TCGPlayer data
@@ -522,18 +554,24 @@ Prices from Market Price on 8/24/2025 and are subject to change.`;
                   <TableRow>
                     <TableHead className="w-16">Qty</TableHead>
                     <TableHead className="w-24">TCG ID</TableHead>
-                    <TableHead className="min-w-40">Name</TableHead>
+                    <TableHead className="min-w-40">Card Name</TableHead>
                     <TableHead className="min-w-32">Set & Game</TableHead>
                     <TableHead className="w-20">Number</TableHead>
                     <TableHead className="w-24">Condition</TableHead>
-                    <TableHead className="w-24">Price</TableHead>
+                    <TableHead className="w-24">TCG Price</TableHead>
+                    <TableHead className="w-24">Our Price</TableHead>
+                    <TableHead className="w-24">Cost (70%)</TableHead>
                     <TableHead className="w-32">Image</TableHead>
                     <TableHead className="w-20">Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {items.map((item, index) => (
-                    <TableRow key={index}>
+                    <TableRow 
+                      key={index}
+                      className="cursor-pointer hover:bg-muted/50 transition-colors"
+                      onClick={() => handleRowClick(item, index)}
+                    >
                       <TableCell className="font-medium">{item.quantity}</TableCell>
                       <TableCell>
                         {item.tcgplayerId ? (
@@ -575,14 +613,23 @@ Prices from Market Price on 8/24/2025 and are subject to change.`;
                           {item.marketPrice && item.marketPrice > 0 ? (
                             <div>
                               <div className="font-medium">${item.marketPrice.toFixed(2)}</div>
-                              <div className="text-xs text-muted-foreground">Market</div>
+                              <div className="text-xs text-muted-foreground">TCG Market</div>
                             </div>
                           ) : (
-                            <div>
-                              <div>${item.priceEach.toFixed(2)}</div>
-                              <div className="text-xs text-muted-foreground">Each</div>
-                            </div>
+                            <div className="text-xs text-gray-400">No price</div>
                           )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-right">
+                          <div className="font-medium text-green-600">${item.priceEach.toFixed(2)}</div>
+                          <div className="text-xs text-muted-foreground">Selling</div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-right">
+                          <div className="font-medium text-orange-600">${item.cost.toFixed(2)}</div>
+                          <div className="text-xs text-muted-foreground">Cost</div>
                         </div>
                       </TableCell>
                       <TableCell>
@@ -640,7 +687,7 @@ Prices from Market Price on 8/24/2025 and are subject to change.`;
                   <span className="font-medium">Total Items:</span> {items.length}
                 </div>
                 <div>
-                  <span className="font-medium">Total Value:</span> ${items.reduce((sum, item) => sum + item.totalPrice, 0).toFixed(2)}
+                  <span className="font-medium">Total Value:</span> ${items.reduce((sum, item) => sum + (item.priceEach * item.quantity), 0).toFixed(2)}
                 </div>
                 <div>
                   <span className="font-medium">With TCG IDs:</span> {items.filter(item => item.tcgplayerId).length}
@@ -648,6 +695,9 @@ Prices from Market Price on 8/24/2025 and are subject to change.`;
                 <div>
                   <span className="font-medium">With Images:</span> {items.filter(item => item.photoUrl).length}
                 </div>
+              </div>
+              <div className="mt-2 text-xs text-muted-foreground">
+                Click any row to edit pricing and details
               </div>
             </div>
             
@@ -669,6 +719,140 @@ Prices from Market Price on 8/24/2025 and are subject to change.`;
           </CardContent>
         </Card>
       )}
+
+      {/* Edit Item Dialog */}
+      <Dialog open={editingItem !== null} onOpenChange={() => editingItem && handleCancelEdit()}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Edit Item</DialogTitle>
+          </DialogHeader>
+          {editingItem && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>TCGPlayer ID (readonly)</Label>
+                  <Input 
+                    value={editingItem.tcgplayerId || ''} 
+                    disabled 
+                    className="bg-gray-50"
+                  />
+                </div>
+                <div>
+                  <Label>Quantity</Label>
+                  <Input 
+                    type="number"
+                    value={editingItem.quantity}
+                    onChange={(e) => setEditingItem({
+                      ...editingItem, 
+                      quantity: parseInt(e.target.value) || 1
+                    })}
+                  />
+                </div>
+              </div>
+              
+              <div>
+                <Label>Card Name</Label>
+                <Input 
+                  value={editingItem.name}
+                  onChange={(e) => setEditingItem({...editingItem, name: e.target.value})}
+                />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Set</Label>
+                  <Input 
+                    value={editingItem.set}
+                    onChange={(e) => setEditingItem({...editingItem, set: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <Label>Card Number</Label>
+                  <Input 
+                    value={editingItem.cardNumber || ''}
+                    onChange={(e) => setEditingItem({...editingItem, cardNumber: e.target.value})}
+                  />
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Condition</Label>
+                  <Input 
+                    value={editingItem.condition}
+                    onChange={(e) => setEditingItem({...editingItem, condition: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <Label>Rarity</Label>
+                  <Input 
+                    value={editingItem.rarity || ''}
+                    onChange={(e) => setEditingItem({...editingItem, rarity: e.target.value})}
+                  />
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <Label>TCGPlayer Price (readonly)</Label>
+                  <Input 
+                    value={editingItem.marketPrice ? `$${editingItem.marketPrice.toFixed(2)}` : 'No price'}
+                    disabled 
+                    className="bg-gray-50"
+                  />
+                </div>
+                <div>
+                  <Label>Our Selling Price</Label>
+                  <Input 
+                    type="number"
+                    step="0.01"
+                    value={editingItem.priceEach}
+                    onChange={(e) => {
+                      const price = parseFloat(e.target.value) || 0;
+                      setEditingItem({
+                        ...editingItem, 
+                        priceEach: price,
+                        cost: price * 0.7,
+                        totalPrice: price * editingItem.quantity
+                      });
+                    }}
+                  />
+                </div>
+                <div>
+                  <Label>Cost (70% of price)</Label>
+                  <Input 
+                    value={`$${editingItem.cost.toFixed(2)}`}
+                    disabled 
+                    className="bg-gray-50"
+                  />
+                </div>
+              </div>
+              
+              {editingItem.photoUrl && (
+                <div>
+                  <Label>Card Image</Label>
+                  <div className="mt-2">
+                    <img 
+                      src={editingItem.photoUrl}
+                      alt={editingItem.name}
+                      className="w-32 h-32 object-cover rounded border"
+                    />
+                  </div>
+                </div>
+              )}
+              
+              <div className="flex justify-end gap-2 pt-4">
+                <Button variant="outline" onClick={handleCancelEdit}>
+                  Cancel
+                </Button>
+                <Button onClick={handleSaveEdit}>
+                  Save Changes
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
