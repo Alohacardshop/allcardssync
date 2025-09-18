@@ -403,7 +403,54 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    console.log('🚀 Starting Shopify sync processor (REST API only)...')
+    // Check if this is a single item processing request
+    let requestBody = null
+    if (req.method === 'POST') {
+      try {
+        requestBody = await req.json()
+      } catch {
+        // No body or invalid JSON - proceed with batch processing
+      }
+    }
+
+    if (requestBody?.single_item_id) {
+      console.log(`🎯 Processing single item: ${requestBody.single_item_id}`)
+      
+      // Get the specific queue item
+      const { data: queueItems, error: queueError } = await supabase
+        .from('shopify_sync_queue')
+        .select('*')
+        .eq('id', requestBody.single_item_id)
+        .eq('status', 'queued')
+      
+      if (queueError) {
+        throw new Error(`Failed to fetch queue item: ${queueError.message}`)
+      }
+      
+      if (!queueItems || queueItems.length === 0) {
+        console.log('✅ Queue item not found or already processed')
+        return new Response(
+          JSON.stringify({ success: true, message: 'Item not found or already processed', processed: 0 }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+      
+      // Process the single item
+      await processQueueItem(supabase, queueItems[0])
+      
+      console.log(`✅ Successfully processed single item: ${requestBody.single_item_id}`)
+      
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          message: `Processed single item: ${requestBody.single_item_id}`,
+          processed: 1 
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    console.log('🚀 Starting Shopify sync processor (batch mode)...')
     
     // Clear any old problematic queue items first
     await supabase
@@ -411,7 +458,7 @@ Deno.serve(async (req) => {
       .delete()
       .like('error_message', '%GraphQL%')
     
-    // Get pending queue items (max 5 at a time for stability)
+    // Get pending queue items (max 5 at a time for stability)  
     const { data: queueItems, error: queueError } = await supabase
       .from('shopify_sync_queue')
       .select('*')
