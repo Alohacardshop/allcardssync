@@ -77,45 +77,42 @@ export default function Auth() {
     try {
       console.log('Processing auth for user:', userId);
       
-      // Try bootstrap first for initial admin setup
-      try {
-        console.log('Attempting bootstrap...');
-        await supabase.functions.invoke("bootstrap-admin");
-        console.log('Bootstrap completed');
-      } catch (bootstrapError) {
-        console.log('Bootstrap attempt failed (expected for non-admins):', bootstrapError);
+      // Use the new verify_user_access function for cleaner checking
+      const { data: access, error } = await supabase.rpc('verify_user_access', { _user_id: userId });
+      
+      if (error) {
+        console.error('Access verification failed:', error);
+        setRoleError("Failed to verify account permissions. Please try again.");
+        return;
       }
       
-      // Check roles with timeout
-      console.log('Checking user roles...');
-      const roleCheckPromise = Promise.all([
-        supabase.rpc("has_role", { _user_id: userId, _role: "staff" as any }),
-        supabase.rpc("has_role", { _user_id: userId, _role: "admin" as any })
-      ]);
+      console.log('Access verification result:', access);
       
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("Role check timeout")), 5000)
-      );
-      
-      const [staff, admin] = await Promise.race([roleCheckPromise, timeoutPromise]) as any;
-      console.log('Role check results:', { staff: staff?.data, admin: admin?.data });
-      
-      const hasValidRole = Boolean(staff?.data) || Boolean(admin?.data);
-      
-      if (hasValidRole) {
-        console.log('Valid role found, navigating to dashboard');
+      if (access && typeof access === 'object' && 'access_granted' in access && access.access_granted) {
+        console.log('Access granted, navigating to dashboard');
         navigate("/", { replace: true });
       } else {
-        console.log('No valid role found');
-        setRoleError("Your account is signed in but not authorized. Ask an admin to grant Staff access.");
+        // Try bootstrap for initial admin setup
+        try {
+          console.log('Attempting bootstrap...');
+          const { data: bootstrap } = await supabase.rpc('bootstrap_user_admin', { _target_user_id: userId });
+          console.log('Bootstrap result:', bootstrap);
+          
+          if (bootstrap && typeof bootstrap === 'object' && 'success' in bootstrap && bootstrap.success) {
+            console.log('Bootstrap successful, navigating to dashboard');
+            navigate("/", { replace: true });
+          } else {
+            console.log('Bootstrap failed or not allowed');
+            setRoleError("Your account is signed in but not authorized. Ask an admin to grant Staff access.");
+          }
+        } catch (bootstrapError) {
+          console.log('Bootstrap attempt failed (expected for non-admins):', bootstrapError);
+          setRoleError("Your account is signed in but not authorized. Ask an admin to grant Staff access.");
+        }
       }
     } catch (error) {
-      console.error('Role check failed:', error);
-      if (error?.message === "Role check timeout") {
-        setRoleError("Authentication is taking too long. Please try refreshing the page.");
-      } else {
-        setRoleError("Failed to verify account permissions. Please try again.");
-      }
+      console.error('Auth processing failed:', error);
+      setRoleError("Failed to verify account permissions. Please try again.");
     } finally {
       setLoading(false);
     }

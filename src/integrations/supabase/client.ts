@@ -24,10 +24,9 @@ const TCG_ANON_KEY = import.meta.env.VITE_TCG_ANON_KEY || "eyJhbGciOiJIUzI1NiIsI
 export const tcgSupabase = createClient(TCG_URL, TCG_ANON_KEY, {
   auth: {
     persistSession: false,
-    storage: undefined,
+    storage: null, // Completely disable auth storage
     autoRefreshToken: false,
     detectSessionInUrl: false,
-    storageKey: 'tcg-auth', // Separate storage key to avoid conflicts
   },
   db: {
     schema: 'public'
@@ -41,10 +40,9 @@ const EXTERNAL_ANON_KEY = import.meta.env.VITE_EXTERNAL_TCG_ANON_KEY || 'eyJhbGc
 export const tcgLjyClient = createClient(EXTERNAL_URL, EXTERNAL_ANON_KEY, {
   auth: {
     persistSession: false,
-    storage: undefined,
+    storage: null, // Completely disable auth storage
     autoRefreshToken: false,
     detectSessionInUrl: false,
-    storageKey: 'external-tcg-auth', // Separate storage key to avoid conflicts
   },
   db: {
     schema: 'public'
