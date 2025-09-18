@@ -88,12 +88,13 @@ export function normalizePSAData(rawData: any): PSACertificateData {
     return yearMatch ? yearMatch[0] : undefined;
   };
 
-  // Extract card number - often gets polluted with category info
+  // Extract card number - preserve full string content instead of just numeric patterns
   const extractCardNumber = (cardNumField: any): string | undefined => {
     if (!cardNumField) return undefined;
     const cleaned = cleanText(String(cardNumField));
-    const cardMatch = cleaned.match(/^(\d+[A-Za-z]?|\d+\/\d+)/);
-    return cardMatch ? cardMatch[0] : undefined;
+    // Return the full cleaned string instead of extracting only numeric patterns
+    // This preserves strings like "slab", "promo", etc. that may be valid card numbers
+    return cleaned || undefined;
   };
 
   return {
