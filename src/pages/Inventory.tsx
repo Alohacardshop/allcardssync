@@ -212,6 +212,14 @@ const Inventory = () => {
     fetchItems(0, true);
   }, [fetchItems]);
 
+  // Auto-refresh every 30 seconds to show latest sync status
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchItems(0, true);
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [fetchItems]);
+
   const loadMore = useCallback(() => {
     if (!loadingMore && hasMore) {
       fetchItems(currentPage + 1, false);
