@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -20,6 +21,7 @@ export const RawCardIntake = ({ onBatchAdd }: RawCardIntakeProps) => {
   const [brand, setBrand] = useState("");
   const [subject, setSubject] = useState("");
   const [cardNumber, setCardNumber] = useState("");
+  const [condition, setCondition] = useState("");
   const [price, setPrice] = useState("");
   const [notes, setNotes] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -60,7 +62,7 @@ export const RawCardIntake = ({ onBatchAdd }: RawCardIntakeProps) => {
         category_in: "Trading Cards",
         variant_in: "Raw",
         card_number_in: cardNumber,
-        grade_in: "",
+        grade_in: condition,
         price_in: parseFloat(price) || 0,
         sku_in: `RAW-${Date.now()}`,
         processing_notes_in: notes,
@@ -68,7 +70,8 @@ export const RawCardIntake = ({ onBatchAdd }: RawCardIntakeProps) => {
           type: "raw_card",
           brand: brand,
           subject: subject,
-          card_number: cardNumber
+          card_number: cardNumber,
+          condition: condition
         }
       });
 
@@ -84,6 +87,7 @@ export const RawCardIntake = ({ onBatchAdd }: RawCardIntakeProps) => {
       setBrand("");
       setSubject("");
       setCardNumber("");
+      setCondition("");
       setPrice("");
       setNotes("");
 
@@ -162,6 +166,22 @@ export const RawCardIntake = ({ onBatchAdd }: RawCardIntakeProps) => {
         </div>
 
         <div>
+          <Label htmlFor="condition">Condition</Label>
+          <Select value={condition} onValueChange={setCondition}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select condition" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Near Mint">Near Mint</SelectItem>
+              <SelectItem value="Lightly Played">Lightly Played</SelectItem>
+              <SelectItem value="Moderately Played">Moderately Played</SelectItem>
+              <SelectItem value="Heavily Played">Heavily Played</SelectItem>
+              <SelectItem value="Damaged">Damaged</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div>
           <Label htmlFor="price">Price ($)</Label>
           <Input
             id="price"
@@ -185,7 +205,7 @@ export const RawCardIntake = ({ onBatchAdd }: RawCardIntakeProps) => {
 
         <Button
           onClick={handleSubmit}
-          disabled={isLoading || !brand || !subject || !price}
+          disabled={isLoading || !brand || !subject || !condition || !price}
           className="w-full"
         >
           {isLoading ? (
