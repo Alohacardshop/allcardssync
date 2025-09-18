@@ -492,7 +492,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
             variant: editingItem.variant || (editingItem.catalog_snapshot?.varietyPedigree) || '',
             cardNumber: editingItem.card_number,
             grade: editingItem.grade,
-            psaCert: editingItem.psa_cert || (editingItem.catalog_snapshot?.psaCert) || '',
+            psaCert: editingItem.psa_cert || editingItem.sku || (editingItem.catalog_snapshot?.psaCert) || '',
             price: editingItem.price?.toString(),
             cost: editingItem.cost?.toString(),
             sku: editingItem.sku,
