@@ -16,8 +16,75 @@ import { tcgSupabase } from '@/integrations/supabase/client';
 import { CsvPasteArea } from '@/components/csv/CsvPasteArea';
 import { NormalizedCard } from '@/lib/csv/normalize';
 
+// Helper function to detect game from TCGPlayer product line
+const detectGameFromProductLine = (productLine?: string): string | null => {
+  if (!productLine) return null;
+  
+  const line = productLine.toLowerCase();
+  if (line.includes('pokemon')) return 'pokemon';
+  if (line.includes('magic') || line.includes('mtg')) return 'mtg';
+  if (line.includes('yugioh') || line.includes('yu-gi-oh')) return 'yugioh';
+  if (line.includes('dragon ball')) return 'dragonball';
+  if (line.includes('digimon')) return 'digimon';
+  if (line.includes('flesh and blood')) return 'fab';
+  
+  return null;
+};
+
+// Helper function to capitalize first letter
+const capitalize = (str: string): string => {
+  return str.charAt(0).toUpperCase() + str.slice(1);
+};
+
+// Helper function to create human-readable descriptions
+const createHumanReadableDescription = (item: TCGPlayerItem): string => {
+  const parts = [];
+  
+  // Main title with card number if available
+  const title = item.cardNumber 
+    ? `**${item.name} (${item.cardNumber})**`
+    : `**${item.name}**`;
+  parts.push(title);
+  
+  // Set information
+  if (item.set) {
+    parts.push(`- Set: ${item.set}`);
+  }
+  
+  // Rarity
+  if (item.rarity) {
+    parts.push(`- Rarity: ${item.rarity}`);
+  }
+  
+  // Condition
+  if (item.condition) {
+    parts.push(`- Condition: ${item.condition}`);
+  }
+  
+  // Market Price
+  if (item.marketPrice && item.marketPrice > 0) {
+    parts.push(`- Market Price: $${item.marketPrice.toFixed(2)}`);
+  }
+  
+  // Quantity if greater than 1
+  if (item.quantity > 1) {
+    parts.push(`- Quantity: ${item.quantity}`);
+  }
+  
+  // Photo URL
+  if (item.photoUrl) {
+    parts.push(`- Image: ${item.photoUrl}`);
+  }
+  
+  return parts.join('\n');
+};
+
 interface TCGPlayerItem {
   tcgplayerId?: string; // TCGPlayer ID for SKU generation
+  productLine?: string; // Game information from TCGPlayer
+  rarity?: string; // Original TCGPlayer rarity
+  photoUrl?: string; // TCGPlayer product image URL
+  marketPrice?: number; // TCGPlayer market price
   quantity: number;
   name: string;
   set: string;
@@ -50,6 +117,10 @@ export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) =>
   const handleCsvParsed = (cards: NormalizedCard[]) => {
     const tcgItems: TCGPlayerItem[] = cards.map(card => ({
       tcgplayerId: card.id, // Preserve TCGPlayer ID
+      productLine: card.line, // Game information from TCGPlayer (Product Line -> line)
+      rarity: card.rarity, // Original TCGPlayer rarity
+      photoUrl: card.photoUrl, // TCGPlayer product image
+      marketPrice: card.marketPrice, // TCGPlayer market price
       quantity: card.quantity || 1,
       name: card.name,
       set: card.set,
@@ -156,7 +227,9 @@ export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) =>
           language,
           priceEach,
           totalPrice,
-          status: 'pending'
+          status: 'pending',
+          // TCGPlayer data will be enhanced by CSV parsing if available
+          marketPrice: priceEach
         });
       });
 
@@ -217,8 +290,8 @@ export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) =>
     item.cardId = cardId;
     item.variantId = variantId;
     
-    // Map game from foil/set info (simplified mapping)
-    const gameKey = 'pokemon'; // Default for now, could be enhanced with better game detection
+    // Enhanced game detection from TCGPlayer product line
+    const gameKey = detectGameFromProductLine(item.productLine) || 'pokemon';
     
     // Generate SKU prioritizing TCGPlayer ID
     const sku = generateTCGSKU(item.tcgplayerId, gameKey, variantId, cardId);
@@ -230,14 +303,15 @@ export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) =>
         quantity_in: item.quantity,
         brand_title_in: item.set,
         subject_in: item.name,
-        category_in: 'Pokemon',
-        variant_in: `${item.condition}${item.foil ? ' - Foil' : ''}`, // Store condition and foil status in variant
+        category_in: gameKey === 'pokemon' ? 'Pokemon' : capitalize(gameKey),
+        variant_in: `${item.condition}${item.foil ? ' - Foil' : ''}`,
         card_number_in: item.cardNumber,
         grade_in: null, // Raw cards should not have grades
         price_in: item.priceEach,
         cost_in: item.priceEach * 0.7,
         sku_in: sku,
         source_provider_in: 'tcgplayer',
+        // Enhanced catalog snapshot with all TCGPlayer data
         catalog_snapshot_in: {
           name: item.name,
           set: item.set,
@@ -246,14 +320,33 @@ export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) =>
           foil: item.foil,
           language: item.language,
           card_id: cardId,
-          variant_id: variantId
+          variant_id: variantId,
+          // TCGPlayer specific fields
+          tcgplayer_id: item.tcgplayerId,
+          product_line: item.productLine,
+          rarity: item.rarity,
+          photo_url: item.photoUrl,
+          type: 'tcgplayer_raw',
+          source: 'tcgplayer_bulk_import'
         },
+        // Enhanced pricing snapshot with TCGPlayer market data
         pricing_snapshot_in: {
           price: item.priceEach,
           total_price: item.totalPrice,
+          market_price: item.marketPrice,
+          source: 'tcgplayer',
           captured_at: new Date().toISOString()
         },
-        processing_notes_in: `TCGPlayer bulk import from ${file?.name}`
+        // Store complete raw TCGPlayer data
+        source_payload_in: {
+          ...item,
+          import_source: 'tcgplayer_bulk_import',
+          imported_at: new Date().toISOString(),
+          filename: file?.name
+        },
+        // Use TCGPlayer photo for image URLs
+        image_urls_in: item.photoUrl ? [item.photoUrl] : null,
+        processing_notes_in: createHumanReadableDescription(item)
       };
 
       const response: any = await supabase.rpc('create_raw_intake_item', rpcParams);
@@ -429,8 +522,10 @@ Prices from Market Price on 8/24/2025 and are subject to change.`;
                   <TableHead>Qty</TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Set</TableHead>
+                  <TableHead>Number</TableHead>
+                  <TableHead>Rarity</TableHead>
                   <TableHead>Condition</TableHead>
-                  <TableHead>Price Each</TableHead>
+                  <TableHead>Market Price</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>SKU</TableHead>
                 </TableRow>
@@ -439,10 +534,37 @@ Prices from Market Price on 8/24/2025 and are subject to change.`;
                 {items.map((item, index) => (
                   <TableRow key={index}>
                     <TableCell>{item.quantity}</TableCell>
-                    <TableCell className="max-w-xs truncate">{item.name}</TableCell>
-                    <TableCell>{item.set}</TableCell>
+                    <TableCell className="max-w-xs truncate">
+                      <div>
+                        <div className="font-medium">{item.name}</div>
+                        {item.tcgplayerId && (
+                          <div className="text-xs text-muted-foreground">ID: {item.tcgplayerId}</div>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div>
+                        <div>{item.set}</div>
+                        {item.productLine && (
+                          <div className="text-xs text-muted-foreground">{item.productLine}</div>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>{item.cardNumber || '-'}</TableCell>
+                    <TableCell>{item.rarity || item.foil}</TableCell>
                     <TableCell>{item.condition}</TableCell>
-                    <TableCell>${item.priceEach.toFixed(2)}</TableCell>
+                    <TableCell>
+                      <div>
+                        {item.marketPrice && item.marketPrice > 0 ? (
+                          <div className="font-medium">${item.marketPrice.toFixed(2)}</div>
+                        ) : (
+                          <div>${item.priceEach.toFixed(2)}</div>
+                        )}
+                        {item.photoUrl && (
+                          <div className="text-xs text-muted-foreground">📷 Image</div>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell>
                       <span className={`px-2 py-1 rounded text-xs font-medium ${
                         item.status === 'success' ? 'bg-green-100 text-green-800' :
@@ -452,6 +574,11 @@ Prices from Market Price on 8/24/2025 and are subject to change.`;
                       }`}>
                         {item.status}
                       </span>
+                      {item.error && (
+                        <div className="text-xs text-red-600 mt-1 truncate" title={item.error}>
+                          {item.error}
+                        </div>
+                      )}
                     </TableCell>
                     <TableCell className="font-mono text-xs">
                       {item.generatedSku || (item.error ? 'Error' : '-')}
