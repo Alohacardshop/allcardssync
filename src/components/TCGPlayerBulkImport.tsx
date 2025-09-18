@@ -34,7 +34,11 @@ interface TCGPlayerItem {
   cardId?: string; // TCG card ID if found
 }
 
-export const TCGPlayerBulkImport = () => {
+interface TCGPlayerBulkImportProps {
+  onBatchAdd?: (itemData: any) => void;
+}
+
+export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) => {
   const [file, setFile] = useState<File | null>(null);
   const [items, setItems] = useState<TCGPlayerItem[]>([]);
   const [importing, setImporting] = useState(false);
@@ -254,11 +258,19 @@ export const TCGPlayerBulkImport = () => {
 
       const response: any = await supabase.rpc('create_raw_intake_item', rpcParams);
       if (response.error) throw response.error;
+      
+      // Return the full item data for event dispatching
+      return {
+        id: response.data?.id,
+        sku,
+        item_data: rpcParams,
+        store_key: assignedStore,
+        location_gid: selectedLocation
+      };
     } catch (error: any) {
       console.error('TCGPlayer bulk import error:', error);
       throw error;
     }
-    return sku;
   };
 
   const handleImport = async () => {
@@ -287,13 +299,50 @@ export const TCGPlayerBulkImport = () => {
         setItems([...updatedItems]);
 
         // Insert into database
-        const sku = await insertIntakeItem(item);
+        const result = await insertIntakeItem(item);
         
         updatedItems[i] = { 
           ...updatedItems[i], 
           status: 'success',
-          generatedSku: sku
+          generatedSku: result.sku
         };
+
+        // Dispatch events for batch management
+        if (result.id) {
+          // Dispatch custom event for components listening
+          window.dispatchEvent(new CustomEvent('intake:item-added', {
+            detail: {
+              itemId: result.id,
+              sku: result.sku,
+              store: result.store_key,
+              location: result.location_gid
+            }
+          }));
+
+          // Call onBatchAdd callback if provided
+          if (onBatchAdd) {
+            onBatchAdd({
+              id: result.id,
+              sku: result.sku,
+              store: result.store_key,
+              location: result.location_gid,
+              ...result.item_data
+            });
+          }
+
+          // Dispatch batchItemAdded event for CurrentBatchPanel
+          window.dispatchEvent(new CustomEvent('batchItemAdded', {
+            detail: {
+              item: {
+                id: result.id,
+                sku: result.sku,
+                ...result.item_data
+              },
+              store: result.store_key,
+              location: result.location_gid
+            }
+          }));
+        }
       } catch (error) {
         console.error(`Error processing item ${i}:`, error);
         updatedItems[i] = {
@@ -411,6 +460,22 @@ Prices from Market Price on 8/24/2025 and are subject to change.`;
                 ))}
               </TableBody>
             </Table>
+            
+            {!importing && items.length > 0 && (
+              <Button onClick={handleImport} className="mt-4">
+                <Upload className="h-4 w-4 mr-2" />
+                Import {items.length} Items
+              </Button>
+            )}
+
+            {importing && (
+              <div className="mt-4">
+                <Progress value={progress} />
+                <p className="text-sm text-muted-foreground mt-2">
+                  Importing items... {Math.round(progress)}% complete
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

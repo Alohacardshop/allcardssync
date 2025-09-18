@@ -31,7 +31,7 @@ import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { GradedCardIntake } from "@/components/GradedCardIntake";
-import { RawCardIntake } from "@/components/RawCardIntake";
+import { TCGPlayerBulkImport } from "@/components/TCGPlayerBulkImport";
 import { CurrentBatchPanel } from "@/components/CurrentBatchPanel";
 
 // Interface for stats
@@ -198,7 +198,7 @@ export default function DashboardPage() {
                 <CardDescription>Add raw (ungraded) cards to inventory</CardDescription>
               </CardHeader>
               <CardContent>
-                <RawCardIntake onBatchAdd={handleBatchAdd} />
+                <TCGPlayerBulkImport onBatchAdd={handleBatchAdd} />
               </CardContent>
             </Card>
             <CurrentBatchPanel onViewFullBatch={() => setActiveTab("batch")} />
