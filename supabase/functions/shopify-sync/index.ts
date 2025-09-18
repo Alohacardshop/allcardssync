@@ -89,16 +89,24 @@ async function shopifyRequest(credentials: ShopifyCredentials, endpoint: string,
     headers: {
       'X-Shopify-Access-Token': credentials.access_token,
       'Content-Type': 'application/json',
+      'Accept': 'application/json',
       ...options.headers
     }
   })
 
   if (!response.ok) {
     const errorText = await response.text()
+    console.error(`Shopify API error: ${response.status} - ${errorText}`)
     throw new Error(`Shopify API error: ${response.status} - ${errorText}`)
   }
 
-  return response.json()
+  const responseText = await response.text()
+  try {
+    return JSON.parse(responseText)
+  } catch (parseError) {
+    console.error('Failed to parse Shopify response:', responseText)
+    throw new Error(`Invalid JSON response from Shopify: ${responseText}`)
+  }
 }
 
 async function findExistingProduct(credentials: ShopifyCredentials, sku: string, title?: string) {
@@ -175,6 +183,7 @@ async function createShopifyProduct(credentials: ShopifyCredentials, item: Inven
         price: item.price.toString(),
         inventory_management: 'shopify',
         inventory_policy: 'deny',
+        inventory_quantity: item.quantity,
         barcode: item.type === 'Graded' ? item.psa_cert : undefined
       }]
     }
@@ -200,6 +209,7 @@ async function createProductVariant(credentials: ShopifyCredentials, productId: 
       price: item.price.toString(),
       inventory_management: 'shopify',
       inventory_policy: 'deny',
+      inventory_quantity: item.quantity,
       barcode: item.type === 'Graded' ? item.psa_cert : undefined,
       option1: item.variant || 'Default'
     }
@@ -316,19 +326,20 @@ async function processQueueItem(supabase: any, queueItem: SyncQueueItem) {
         await setInventoryLevel(credentials, inventoryItemId, locationId, item.quantity)
       }
       
-      // Update item with Shopify IDs
-      await supabase
-        .from('intake_items')
-        .update({
-          shopify_product_id: shopifyProductId,
-          shopify_variant_id: shopifyVariantId,
-          shopify_inventory_item_id: inventoryItemId,
-          last_shopify_synced_at: new Date().toISOString(),
-          shopify_sync_status: 'synced',
-          last_shopify_sync_error: null,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', item.id)
+        // Update item with Shopify IDs and clear any previous errors
+        await supabase
+          .from('intake_items')
+          .update({
+            shopify_product_id: shopifyProductId,
+            shopify_variant_id: shopifyVariantId,
+            shopify_inventory_item_id: inventoryItemId,
+            last_shopify_synced_at: new Date().toISOString(),
+            shopify_sync_status: 'synced',
+            last_shopify_sync_error: null,
+            updated_at: new Date().toISOString(),
+            updated_by: 'shopify_sync'
+          })
+          .eq('id', item.id)
     }
     
     // Mark queue item as completed
@@ -349,14 +360,16 @@ async function processQueueItem(supabase: any, queueItem: SyncQueueItem) {
     const shouldRetry = queueItem.retry_count < queueItem.max_retries
     const retryAfter = shouldRetry ? new Date(Date.now() + Math.pow(2, queueItem.retry_count) * 30000) : null
     
-    // Update queue item with error
+    // Update queue item with error details and better retry logic
+    const errorMessage = `Attempt ${queueItem.retry_count + 1}/${queueItem.max_retries}: ${error.message}`
+    
     await supabase
       .from('shopify_sync_queue')
       .update({
         status: shouldRetry ? 'queued' : 'failed',
         retry_count: queueItem.retry_count + 1,
         retry_after: retryAfter?.toISOString(),
-        error_message: error.message
+        error_message: errorMessage
       })
       .eq('id', queueItem.id)
     
