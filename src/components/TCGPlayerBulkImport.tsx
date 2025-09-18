@@ -521,13 +521,13 @@ Prices from Market Price on 8/24/2025 and are subject to change.`;
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-16">Qty</TableHead>
-                    <TableHead className="min-w-48">Name & Details</TableHead>
-                    <TableHead className="min-w-32">Set</TableHead>
+                    <TableHead className="min-w-48">Name & ID</TableHead>
+                    <TableHead className="min-w-32">Set & Game</TableHead>
                     <TableHead className="w-20">Number</TableHead>
                     <TableHead className="w-24">Condition</TableHead>
                     <TableHead className="w-24">Price</TableHead>
+                    <TableHead className="w-32">Image</TableHead>
                     <TableHead className="w-20">Status</TableHead>
-                    <TableHead className="w-32">SKU</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -537,28 +537,31 @@ Prices from Market Price on 8/24/2025 and are subject to change.`;
                       <TableCell className="min-w-48">
                         <div className="space-y-1">
                           <div className="font-medium truncate">{item.name}</div>
-                          <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                          <div className="flex flex-wrap gap-2 text-xs">
                             {item.tcgplayerId && (
-                              <span className="bg-blue-100 text-blue-800 px-1 rounded">ID: {item.tcgplayerId}</span>
+                              <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded font-mono">
+                                ID: {item.tcgplayerId}
+                              </span>
                             )}
                             {item.rarity && (
-                              <span className="bg-purple-100 text-purple-800 px-1 rounded">{item.rarity}</span>
-                            )}
-                            {item.photoUrl && (
-                              <span className="bg-green-100 text-green-800 px-1 rounded">📷</span>
+                              <span className="bg-purple-100 text-purple-800 px-2 py-1 rounded">
+                                {item.rarity}
+                              </span>
                             )}
                           </div>
                         </div>
                       </TableCell>
                       <TableCell className="min-w-32">
                         <div className="space-y-1">
-                          <div className="truncate">{item.set}</div>
+                          <div className="font-medium truncate">{item.set}</div>
                           {item.productLine && (
-                            <div className="text-xs text-muted-foreground truncate">{item.productLine}</div>
+                            <div className="text-xs text-muted-foreground bg-gray-100 px-2 py-1 rounded truncate">
+                              {item.productLine}
+                            </div>
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className="text-center">{item.cardNumber || '-'}</TableCell>
+                      <TableCell className="text-center font-mono">{item.cardNumber || '-'}</TableCell>
                       <TableCell>
                         <span className="text-xs bg-gray-100 text-gray-800 px-2 py-1 rounded">
                           {item.condition}
@@ -580,6 +583,33 @@ Prices from Market Price on 8/24/2025 and are subject to change.`;
                         </div>
                       </TableCell>
                       <TableCell>
+                        {item.photoUrl ? (
+                          <div className="space-y-1">
+                            <img 
+                              src={item.photoUrl} 
+                              alt={item.name}
+                              className="w-12 h-12 object-cover rounded border"
+                              onError={(e) => {
+                                e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjQ4IiBoZWlnaHQ9IjQ4IiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik0yNCAzNkMzMC42Mjc0IDM2IDM2IDMwLjYyNzQgMzYgMjRDMzYgMTcuMzcyNiAzMC42Mjc0IDEyIDI0IDEyQzE3LjM3MjYgMTIgMTIgMTcuMzcyNiAxMiAyNEMxMiAzMC42Mjc0IDE3LjM3MjYgMzYgMjQgMzYiIHN0cm9rZT0iIzlDQTNBRiIgc3Ryb2tlLXdpZHRoPSIyIi8+CjxwYXRoIGQ9Ik0yNCAyOEMyNi4yMDkxIDI4IDI4IDI2LjIwOTEgMjggMjRDMjggMjEuNzkwOSAyNi4yMDkxIDIwIDI0IDIwQzIxLjc5MDkgMjAgMjAgMjEuNzkwOSAyMCAyNEMyMCAyNi4yMDkxIDIxLjc5MDkgMjggMjQgMjgiIGZpbGw9IiM5Q0EzQUYiLz4KPC9zdmc+Cg==';
+                              }}
+                            />
+                            <a 
+                              href={item.photoUrl} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="text-xs text-blue-600 hover:underline block truncate max-w-24"
+                              title={item.photoUrl}
+                            >
+                              View Full
+                            </a>
+                          </div>
+                        ) : (
+                          <div className="text-xs text-gray-400 text-center py-2">
+                            No Image
+                          </div>
+                        )}
+                      </TableCell>
+                      <TableCell>
                         <span className={`px-2 py-1 rounded text-xs font-medium ${
                           item.status === 'success' ? 'bg-green-100 text-green-800' :
                           item.status === 'error' ? 'bg-red-100 text-red-800' :
@@ -593,11 +623,6 @@ Prices from Market Price on 8/24/2025 and are subject to change.`;
                             {item.error}
                           </div>
                         )}
-                      </TableCell>
-                      <TableCell className="font-mono text-xs">
-                        <div className="truncate max-w-32" title={item.generatedSku || 'No SKU'}>
-                          {item.generatedSku || (item.error ? 'Error' : '-')}
-                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
