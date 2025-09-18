@@ -38,6 +38,7 @@ export function LocationSelector({ className }: LocationSelectorProps) {
 
     try {
       const { error } = await supabase.rpc("set_user_default_location", {
+        _user_id: (await supabase.auth.getUser()).data.user?.id,
         _store_key: assignedStore,
         _location_gid: selectedLocation
       });

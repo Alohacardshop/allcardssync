@@ -65,6 +65,7 @@ export function StoreLocationPicker({ className, showSetDefault = true }: StoreL
     if (autoSaveDefault && assignedStore) {
       try {
         const { error } = await supabase.rpc("set_user_default_location", {
+          _user_id: (await supabase.auth.getUser()).data.user?.id,
           _store_key: assignedStore,
           _location_gid: gid
         });
@@ -86,6 +87,7 @@ export function StoreLocationPicker({ className, showSetDefault = true }: StoreL
 
     try {
       const { error } = await supabase.rpc("set_user_default_location", {
+        _user_id: (await supabase.auth.getUser()).data.user?.id,
         _store_key: assignedStore,
         _location_gid: selectedLocation
       });

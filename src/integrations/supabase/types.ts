@@ -1969,7 +1969,9 @@ export type Database = {
         Returns: undefined
       }
       set_user_default_location: {
-        Args: { _location_gid: string; _store_key: string }
+        Args:
+          | { _location_gid: string; _store_key: string }
+          | { _location_gid: string; _store_key: string; _user_id: string }
         Returns: undefined
       }
       show_limit: {
