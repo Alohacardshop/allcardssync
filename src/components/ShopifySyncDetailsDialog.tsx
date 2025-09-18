@@ -48,9 +48,7 @@ export function ShopifySyncDetailsDialog({ open, onOpenChange, row, selectedStor
     }
   }, [open, row]);
 
-  if (!row?.shopify_sync_snapshot) {
-    return null;
-  }
+  // Always show dialog if row exists, even without sync snapshot
 
   const snapshot = row.shopify_sync_snapshot;
   const isSuccess = row.shopify_sync_status === 'success';
