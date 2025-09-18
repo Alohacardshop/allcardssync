@@ -29,6 +29,8 @@ interface InventoryItem {
   quantity: number
   type: 'Graded' | 'Raw'
   psa_cert: string
+  year?: string
+  cost?: number
   shopify_product_id?: string
   shopify_variant_id?: string
 }
@@ -168,23 +170,52 @@ async function findExistingProduct(credentials: ShopifyCredentials, sku: string,
 }
 
 async function createShopifyProduct(credentials: ShopifyCredentials, item: InventoryItem) {
-  const title = `${item.brand_title} ${item.subject} ${item.card_number}`.trim()
+  // Different title formatting for graded vs raw cards
+  let title: string
+  let description: string
+  let tags: string[] = []
+  
+  if (item.type === 'Graded') {
+    // For graded cards: "2022 POKEMON GO FA/MEWTWO VSTAR #079 secret Grade 8"
+    const cardNumber = item.card_number ? `#${item.card_number}` : ''
+    title = `${item.year || ''} ${item.brand_title} ${item.subject} ${cardNumber} ${item.variant || ''} Grade ${item.grade}`.replace(/\s+/g, ' ').trim()
+    description = `${title}\nSKU: ${item.sku}`
+    
+    // Tags for graded cards: brand, "graded", grade number
+    if (item.brand_title) tags.push(item.brand_title.toLowerCase())
+    tags.push('graded')
+    if (item.grade) tags.push(item.grade)
+  } else {
+    // For raw cards: keep simpler format
+    title = `${item.brand_title} ${item.subject} ${item.card_number}`.trim()
+    description = `${title}\nSKU: ${item.sku}`
+    
+    // Tags for raw cards: brand, condition
+    if (item.brand_title) tags.push(item.brand_title.toLowerCase())
+    if (item.variant && item.variant !== 'Default') tags.push(item.variant.toLowerCase())
+  }
+  
   const handle = item.sku.toLowerCase().replace(/[^a-z0-9]/g, '-')
   
   const productData = {
     product: {
       title,
+      body_html: description,
       handle,
       product_type: item.category,
-      vendor: item.brand_title,
+      vendor: 'aloha card shop hawaii',
       status: 'active',
+      tags: tags.join(', '),
       variants: [{
         sku: item.sku,
         price: item.price.toString(),
+        cost: item.cost ? item.cost.toString() : undefined,
         inventory_management: 'shopify',
         inventory_policy: 'deny',
         inventory_quantity: item.quantity,
-        barcode: item.type === 'Graded' ? item.psa_cert : undefined
+        barcode: item.type === 'Graded' ? item.psa_cert : undefined,
+        weight: 3, // 3oz as requested
+        weight_unit: 'oz'
       }]
     }
   }
@@ -207,11 +238,14 @@ async function createProductVariant(credentials: ShopifyCredentials, productId: 
       product_id: productId,
       sku: item.sku,
       price: item.price.toString(),
+      cost: item.cost ? item.cost.toString() : undefined,
       inventory_management: 'shopify',
       inventory_policy: 'deny',
       inventory_quantity: item.quantity,
       barcode: item.type === 'Graded' ? item.psa_cert : undefined,
-      option1: item.variant || 'Default'
+      option1: item.variant || 'Default',
+      weight: 3, // 3oz as requested
+      weight_unit: 'oz'
     }
   }
 
