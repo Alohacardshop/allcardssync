@@ -1478,6 +1478,10 @@ export type Database = {
         Args: { game_name: string }
         Returns: undefined
       }
+      bootstrap_user_admin: {
+        Args: { _target_user_id?: string }
+        Returns: Json
+      }
       can_delete_batch_item: {
         Args: { _item_id: string }
         Returns: boolean
@@ -1714,6 +1718,10 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: undefined
       }
+      cleanup_user_session: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
       close_empty_lot_and_create_new: {
         Args: { _location_gid: string; _store_key: string }
         Returns: {
@@ -1750,6 +1758,10 @@ export type Database = {
       }
       debug_eval_intake_access: {
         Args: { _location_gid: string; _store_key: string; _user_id: string }
+        Returns: Json
+      }
+      debug_user_auth: {
+        Args: { _user_id?: string }
         Returns: Json
       }
       force_new_lot: {
@@ -1995,6 +2007,10 @@ export type Database = {
       user_can_access_store_location: {
         Args: { _location_gid?: string; _store_key: string; _user_id: string }
         Returns: boolean
+      }
+      verify_user_access: {
+        Args: { _user_id?: string }
+        Returns: Json
       }
     }
     Enums: {
