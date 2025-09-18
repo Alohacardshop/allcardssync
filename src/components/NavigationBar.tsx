@@ -17,7 +17,8 @@ export function NavigationBar() {
     setSelectedLocation,
     availableLocations = [],
     loadingLocations,
-    refreshLocations
+    refreshLocations,
+    userAssignments
   } = useStore();
   
   const [itemsPushed, setItemsPushed] = useState(0);
@@ -219,16 +220,21 @@ export function NavigationBar() {
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    {availableLocations.map((location) => (
-                      <SelectItem key={location.gid} value={location.gid}>
-                        <div className="flex items-center gap-2">
-                          <span>{location.name}</span>
-                          {location.name && location.name.toLowerCase().includes('ward') && (
-                            <Badge variant="outline" className="text-xs">Default</Badge>
-                          )}
-                        </div>
-                      </SelectItem>
-                    ))}
+                     {availableLocations.map((location) => {
+                       const isDefault = userAssignments?.some(
+                         assignment => assignment.location_gid === location.gid && assignment.is_default
+                       );
+                       return (
+                         <SelectItem key={location.gid} value={location.gid}>
+                           <div className="flex items-center gap-2">
+                             <span>{location.name}</span>
+                             {isDefault && (
+                               <Badge variant="outline" className="text-xs">Default</Badge>
+                             )}
+                           </div>
+                         </SelectItem>
+                       );
+                     })}
                   </SelectContent>
                 </Select>
 
@@ -318,16 +324,21 @@ export function NavigationBar() {
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  {availableLocations.map((location) => (
-                    <SelectItem key={location.gid} value={location.gid}>
-                      <div className="flex items-center gap-2">
-                        <span>{location.name}</span>
-                        {location.name && location.name.toLowerCase().includes('ward') && (
-                          <Badge variant="outline" className="text-xs">Default</Badge>
-                        )}
-                      </div>
-                    </SelectItem>
-                  ))}
+                   {availableLocations.map((location) => {
+                     const isDefault = userAssignments?.some(
+                       assignment => assignment.location_gid === location.gid && assignment.is_default
+                     );
+                     return (
+                       <SelectItem key={location.gid} value={location.gid}>
+                         <div className="flex items-center gap-2">
+                           <span>{location.name}</span>
+                           {isDefault && (
+                             <Badge variant="outline" className="text-xs">Default</Badge>
+                           )}
+                         </div>
+                       </SelectItem>
+                     );
+                   })}
                 </SelectContent>
               </Select>
 
