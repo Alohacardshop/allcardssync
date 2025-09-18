@@ -22,7 +22,7 @@ import Auth from "./pages/Auth";
 import PrintLogs from "./pages/PrintLogs";
 import ZPLSettings from "./pages/ZPLSettings";
 import ShopifyMapping from "./pages/ShopifyMapping";
-
+import BulkImport from "./pages/BulkImport";
 import { GlobalKeyboardHandler } from "./components/GlobalKeyboardHandler";
 import { FloatingActionButton } from "./components/FloatingActionButton";
 import { PerformanceMonitor } from "./components/PerformanceMonitor";
@@ -73,7 +73,7 @@ const App = () => (
                       <Route path="/inventory" element={<ErrorBoundaryWrapper componentName="Inventory"><Inventory /></ErrorBoundaryWrapper>} />
                       <Route path="/batches" element={<ErrorBoundaryWrapper componentName="Batch Management"><Batches /></ErrorBoundaryWrapper>} />
                       <Route path="/labels" element={<LabelDesigner />} />
-                      
+                      <Route path="/bulk-import" element={<BulkImport />} />
                       <Route path="/admin" element={<AdminGuard><Admin /></AdminGuard>} />
                       <Route path="/admin/catalog" element={<AdminGuard><div className="p-8"><CatalogMigrationPlaceholder /></div></AdminGuard>} />
                       <Route path="/shopify-mapping" element={<ShopifyMapping />} />
