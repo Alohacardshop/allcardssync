@@ -84,6 +84,24 @@ Deno.serve(async (req) => {
     const variant = item.variant || intakeItem.variant || ''
     const category = item.category_tag || intakeItem.category || ''
 
+    // Debug logging
+    console.log('DEBUG: Title construction data:', {
+      itemTitle: item.title,
+      year,
+      brandTitle,
+      subject,
+      grade,
+      cardNumber,
+      variant,
+      category,
+      intakeItemData: {
+        year: intakeItem.year,
+        grade: intakeItem.grade,
+        catalogYear: intakeItem.catalog_snapshot?.year,
+        psaYear: intakeItem.psa_snapshot?.year
+      }
+    })
+
     let title = item.title
     if (!title) {
       const parts = []
@@ -96,6 +114,10 @@ Deno.serve(async (req) => {
       if (grade) parts.push(`PSA ${grade}`)
       
       title = parts.filter(Boolean).join(' ')
+      console.log('DEBUG: Constructed title parts:', parts)
+      console.log('DEBUG: Final constructed title:', title)
+    } else {
+      console.log('DEBUG: Using provided title:', title)
     }
 
     // Create product description with PSA cert number
@@ -133,6 +155,8 @@ Deno.serve(async (req) => {
         }] : []
       }
     }
+
+    console.log('DEBUG: Sending to Shopify:', JSON.stringify(productData, null, 2))
 
     const createResponse = await fetch(`https://${domain}/admin/api/2024-07/products.json`, {
       method: 'POST',
