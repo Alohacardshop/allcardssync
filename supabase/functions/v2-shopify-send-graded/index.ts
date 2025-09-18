@@ -96,8 +96,13 @@ Deno.serve(async (req) => {
       title = parts.filter(Boolean).join(' ')
     }
 
-    // Create product description with PSA URL
-    let description = `Graded ${brandTitle} ${subject}`
+    // Create product description with PSA cert number
+    const psaCert = item.psa_cert || intakeItem.psa_cert || intakeItem.psa_cert_number
+    let description = title
+    if (psaCert) description += ` ${psaCert}`
+    
+    // Add detailed description
+    description += `\n\nGraded ${brandTitle} ${subject}`
     if (year) description += ` from ${year}`
     if (grade) description += `, PSA Grade ${grade}`
     if (psaUrl) description += `\n\nPSA Certificate: ${psaUrl}`
@@ -166,7 +171,14 @@ Deno.serve(async (req) => {
       console.warn(`Failed to set inventory level: ${errorText}`)
     }
 
-    // Update intake item with Shopify IDs
+    // Update intake item with Shopify IDs and preserve all raw data
+    const shopifySnapshot = {
+      product_data: productData,
+      shopify_response: result,
+      sync_timestamp: new Date().toISOString(),
+      graded: true
+    }
+
     const { error: updateError } = await supabase
       .from('intake_items')
       .update({
@@ -176,7 +188,10 @@ Deno.serve(async (req) => {
         last_shopify_synced_at: new Date().toISOString(),
         shopify_sync_status: 'synced',
         pushed_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
+        shopify_sync_snapshot: shopifySnapshot,
+        image_urls: imageUrl ? [imageUrl] : intakeItem.image_urls,
+        updated_by: 'shopify_sync'
       })
       .eq('id', item.id)
 

@@ -80,8 +80,12 @@ Deno.serve(async (req) => {
       title = parts.join(' ')
     }
 
-    // Create product description
-    let description = `Raw ${brandTitle} ${subject}`
+    // Create product description with title and SKU
+    let description = title
+    if (item.sku) description += ` ${item.sku}`
+    
+    // Add detailed description
+    description += `\n\nRaw ${brandTitle} ${subject}`
     if (cardNumber) description += ` #${cardNumber}`
     if (condition) description += ` - ${condition} Condition`
 
@@ -151,6 +155,14 @@ Deno.serve(async (req) => {
 
     // Update intake item with Shopify IDs if provided
     if (item.id) {
+      // Create shopify snapshot with all raw data
+      const shopifySnapshot = {
+        product_data: productData,
+        shopify_response: result,
+        sync_timestamp: new Date().toISOString(),
+        graded: false
+      }
+
       const { error: updateError } = await supabase
         .from('intake_items')
         .update({
@@ -160,7 +172,10 @@ Deno.serve(async (req) => {
           last_shopify_synced_at: new Date().toISOString(),
           shopify_sync_status: 'synced',
           pushed_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
+          shopify_sync_snapshot: shopifySnapshot,
+          image_urls: imageUrl ? [imageUrl] : (intakeItem?.image_urls || null),
+          updated_by: 'shopify_sync'
         })
         .eq('id', item.id)
 
