@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Lock, Package, Layers } from 'lucide-react';
 import { GradedCardIntake } from '@/components/GradedCardIntake';
-import { RawCardIntake } from '@/components/RawCardIntake';
+import { OtherItemsEntry } from '@/components/OtherItemsEntry';
 import { CurrentBatchPanel } from '@/components/CurrentBatchPanel';
 
 export default function Index() {
@@ -33,7 +33,7 @@ export default function Index() {
           </TabsContent>
           
           <TabsContent value="raw">
-            <RawCardIntake />
+            <OtherItemsEntry />
           </TabsContent>
           
           <TabsContent value="batch">
