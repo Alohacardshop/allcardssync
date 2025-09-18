@@ -50,7 +50,7 @@ export function ShopifySyncDetailsDialog({ open, onOpenChange, row, selectedStor
 
   // Always show dialog if row exists, even without sync snapshot
 
-  const snapshot = row.shopify_sync_snapshot;
+  const snapshot = row.shopify_sync_snapshot || {};
   const isSuccess = row.shopify_sync_status === 'success';
   
   const getStepIcon = (step: any) => {
@@ -244,7 +244,7 @@ export function ShopifySyncDetailsDialog({ open, onOpenChange, row, selectedStor
           </div>
 
           {/* Graded item barcode enforcement details */}
-          {snapshot.graded && (
+          {snapshot?.graded && (
             <div className="border rounded-lg p-4 bg-muted/30">
               <div className="flex items-center justify-between mb-3">
                 <h4 className="font-medium text-sm">Graded Item Sync Details</h4>
@@ -324,39 +324,39 @@ export function ShopifySyncDetailsDialog({ open, onOpenChange, row, selectedStor
           {/* Target Location */}
           <div>
             <div className="text-sm font-medium text-muted-foreground">Target Location</div>
-            <div className="flex items-center gap-2">
-              <span>{locationName || snapshot.input?.locationId || 'Unknown'}</span>
-              {snapshot.input?.locationGid && (
-                <span className="text-xs text-muted-foreground font-mono">
-                  ({snapshot.input.locationGid})
+              <div className="flex items-center gap-2">
+                <span>{locationName || snapshot?.input?.locationId || 'Unknown'}</span>
+                {snapshot?.input?.locationGid && (
+                  <span className="text-xs text-muted-foreground font-mono">
+                    ({snapshot?.input?.locationGid})
                 </span>
               )}
             </div>
           </div>
 
           {/* Store Info */}
-          {snapshot.store && (
+          {snapshot?.store && (
             <div>
               <div className="text-sm font-medium text-muted-foreground">Store</div>
               <div className="flex items-center gap-2">
-                <span>{snapshot.store.domain}</span>
-                <span className="text-xs text-muted-foreground">({snapshot.store.slug})</span>
+                <span>{snapshot?.store?.domain}</span>
+                <span className="text-xs text-muted-foreground">({snapshot?.store?.slug})</span>
               </div>
             </div>
           )}
 
           {/* Result IDs */}
-          {snapshot.result && (
+          {snapshot?.result && (
             <div>
               <div className="text-sm font-medium text-muted-foreground mb-2">Shopify IDs</div>
               <div className="grid grid-cols-1 gap-2">
-                {snapshot.result.productId && (
+                {snapshot?.result?.productId && (
                   <div className="flex items-center justify-between">
-                    <span className="text-sm">Product ID: <code>{snapshot.result.productId}</code></span>
-                    {snapshot.store?.slug && (
+                    <span className="text-sm">Product ID: <code>{snapshot?.result?.productId}</code></span>
+                    {snapshot?.store?.slug && (
                        <Button variant="outline" size="sm" asChild>
-                         <a 
-                           href={`https://admin.shopify.com/store/${snapshot.store.slug}/products/${snapshot.result.productId}`}
+                           <a 
+                            href={`https://admin.shopify.com/store/${snapshot?.store?.slug}/products/${snapshot?.result?.productId}`}
                            target="_blank"
                            rel="noopener noreferrer"
                          >
@@ -367,13 +367,13 @@ export function ShopifySyncDetailsDialog({ open, onOpenChange, row, selectedStor
                     )}
                   </div>
                 )}
-                {snapshot.result.variantId && (
+                {snapshot?.result?.variantId && (
                   <div className="flex items-center justify-between">
-                    <span className="text-sm">Variant ID: <code>{snapshot.result.variantId}</code></span>
-                     {snapshot.store?.slug && snapshot.result.productId && (
+                    <span className="text-sm">Variant ID: <code>{snapshot?.result?.variantId}</code></span>
+                     {snapshot?.store?.slug && snapshot?.result?.productId && (
                        <Button variant="outline" size="sm" asChild>
-                         <a 
-                           href={`https://admin.shopify.com/store/${snapshot.store.slug}/products/${snapshot.result.productId}/variants/${snapshot.result.variantId}`}
+                           <a 
+                            href={`https://admin.shopify.com/store/${snapshot?.store?.slug}/products/${snapshot?.result?.productId}/variants/${snapshot?.result?.variantId}`}
                            target="_blank"
                            rel="noopener noreferrer"
                          >
@@ -384,9 +384,9 @@ export function ShopifySyncDetailsDialog({ open, onOpenChange, row, selectedStor
                      )}
                   </div>
                 )}
-                {snapshot.result.inventoryItemId && (
+                {snapshot?.result?.inventoryItemId && (
                   <div className="text-sm">
-                    Inventory Item ID: <code>{snapshot.result.inventoryItemId}</code>
+                    Inventory Item ID: <code>{snapshot?.result?.inventoryItemId}</code>
                   </div>
                 )}
               </div>
@@ -394,7 +394,7 @@ export function ShopifySyncDetailsDialog({ open, onOpenChange, row, selectedStor
           )}
 
           {/* Steps */}
-          {snapshot.steps && snapshot.steps.length > 0 && (
+          {snapshot?.steps && snapshot?.steps?.length > 0 && (
             <div>
               <div className="text-sm font-medium text-muted-foreground mb-2">Steps</div>
               <div className="border rounded-lg overflow-hidden">
@@ -408,7 +408,7 @@ export function ShopifySyncDetailsDialog({ open, onOpenChange, row, selectedStor
                     </tr>
                   </thead>
                   <tbody>
-                    {snapshot.steps.map((step: any, index: number) => (
+                    {snapshot?.steps?.map((step: any, index: number) => (
                       <tr key={index} className="border-t">
                         <td className="p-2 flex items-center gap-2">
                           {getStepIcon(step)}
@@ -438,11 +438,11 @@ export function ShopifySyncDetailsDialog({ open, onOpenChange, row, selectedStor
           )}
 
           {/* Error */}
-          {snapshot.error && (
+          {snapshot?.error && (
             <div>
               <div className="text-sm font-medium text-red-600 mb-2">Error</div>
               <div className="bg-red-50 border border-red-200 rounded p-3 text-sm text-red-800">
-                {snapshot.error}
+                {snapshot?.error}
               </div>
             </div>
           )}
