@@ -403,16 +403,22 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    console.log('🚀 Starting Shopify sync processor...')
+    console.log('🚀 Starting Shopify sync processor (REST API only)...')
     
-    // Get pending queue items (max 10 at a time)
+    // Clear any old problematic queue items first
+    await supabase
+      .from('shopify_sync_queue')
+      .delete()
+      .like('error_message', '%GraphQL%')
+    
+    // Get pending queue items (max 5 at a time for stability)
     const { data: queueItems, error: queueError } = await supabase
       .from('shopify_sync_queue')
       .select('*')
       .eq('status', 'queued')
       .or('retry_after.is.null,retry_after.lte.now()')
       .order('created_at', { ascending: true })
-      .limit(10)
+      .limit(5)
     
     if (queueError) {
       throw new Error(`Failed to fetch queue items: ${queueError.message}`)
@@ -426,26 +432,31 @@ Deno.serve(async (req) => {
       )
     }
     
-    console.log(`📦 Processing ${queueItems.length} queue items...`)
+    console.log(`📦 Processing ${queueItems.length} queue items with REST API only...`)
     
     // Process items sequentially to respect rate limits
     let processed = 0
     for (const queueItem of queueItems) {
-      await processQueueItem(supabase, queueItem)
-      processed++
+      try {
+        await processQueueItem(supabase, queueItem)
+        processed++
+      } catch (error) {
+        console.error(`Failed to process item ${queueItem.id}:`, error)
+        // Continue processing other items
+      }
       
-      // Small delay between items
+      // Delay between items to respect rate limits
       if (processed < queueItems.length) {
-        await new Promise(resolve => setTimeout(resolve, 1000))
+        await new Promise(resolve => setTimeout(resolve, 2000))
       }
     }
     
-    console.log(`✅ Processed ${processed} items successfully`)
+    console.log(`✅ Processed ${processed}/${queueItems.length} items successfully`)
     
     return new Response(
       JSON.stringify({ 
         success: true, 
-        message: `Processed ${processed} items`,
+        message: `Processed ${processed}/${queueItems.length} items`,
         processed 
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
