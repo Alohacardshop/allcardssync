@@ -35,6 +35,27 @@ Deno.serve(async (req) => {
     const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2')
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
+    // Get intake item to extract additional data
+    let intakeItem = null
+    let imageUrl = item.image_url
+    
+    if (item.id) {
+      const { data: fetchedItem } = await supabase
+        .from('intake_items')
+        .select('*')
+        .eq('id', item.id)
+        .single()
+      
+      if (fetchedItem) {
+        intakeItem = fetchedItem
+        // Extract image URL from various sources
+        imageUrl = item.image_url || 
+                   intakeItem.catalog_snapshot?.image_url || 
+                   intakeItem.psa_snapshot?.image_url ||
+                   (intakeItem.image_urls && Array.isArray(intakeItem.image_urls) ? intakeItem.image_urls[0] : null)
+      }
+    }
+
     // Get Shopify credentials
     const storeUpper = storeKey.toUpperCase()
     const domainKey = `SHOPIFY_${storeUpper}_STORE_DOMAIN`
@@ -79,11 +100,11 @@ Deno.serve(async (req) => {
           inventory_management: 'shopify',
           requires_shipping: true,
           taxable: true,
-          barcode: item.barcode || '',
+          barcode: item.sku, // SKU and barcode should be the same
           inventory_policy: 'deny'
         }],
-        images: item.image_url ? [{
-          src: item.image_url,
+        images: imageUrl ? [{
+          src: imageUrl,
           alt: title
         }] : []
       }

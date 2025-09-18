@@ -50,10 +50,16 @@ Deno.serve(async (req) => {
       throw new Error(`Failed to fetch intake item: ${fetchError?.message}`)
     }
 
-    // Extract PSA URL from catalog_snapshot or psa_snapshot
+    // Extract PSA URL and image from snapshots
     const psaUrl = intakeItem.catalog_snapshot?.psaUrl || 
                    intakeItem.psa_snapshot?.psaUrl || 
                    (intakeItem.psa_cert ? `https://www.psacard.com/cert/${intakeItem.psa_cert}` : null)
+
+    // Extract image URL from various sources
+    const imageUrl = item.image_url || 
+                     intakeItem.catalog_snapshot?.image_url || 
+                     intakeItem.psa_snapshot?.image_url ||
+                     (intakeItem.image_urls && Array.isArray(intakeItem.image_urls) ? intakeItem.image_urls[0] : null)
 
     // Get Shopify credentials
     const storeUpper = storeKey.toUpperCase()
@@ -67,17 +73,27 @@ Deno.serve(async (req) => {
       throw new Error(`Missing Shopify credentials for ${storeKey}`)
     }
 
-    // Create graded card title with year
+    // Create graded card title in proper format: "YEAR BRAND SUBJECT #CARDNUMBER VARIANT Grade X"
     const year = item.year || intakeItem.year || ''
     const brandTitle = item.brand_title || intakeItem.brand_title || ''
     const subject = item.subject || intakeItem.subject || ''
     const grade = item.grade || intakeItem.grade || ''
     const cardNumber = item.card_number || intakeItem.card_number || ''
+    const variant = item.variant || intakeItem.variant || ''
+    const category = item.category_tag || intakeItem.category || ''
 
     let title = item.title
     if (!title) {
-      const parts = [year, brandTitle, subject, cardNumber, `PSA ${grade}`].filter(Boolean)
-      title = parts.join(' ')
+      const parts = []
+      if (year) parts.push(year)
+      if (brandTitle) parts.push(brandTitle.toUpperCase())
+      if (subject) parts.push(subject.toUpperCase())
+      if (cardNumber) parts.push(`#${cardNumber}`)
+      if (variant && variant !== 'Normal') parts.push(variant.toLowerCase())
+      if (category && category !== 'Normal') parts.push(category.toLowerCase())
+      if (grade) parts.push(`Grade ${grade}`)
+      
+      title = parts.filter(Boolean).join(' ')
     }
 
     // Create product description with PSA URL
@@ -101,11 +117,11 @@ Deno.serve(async (req) => {
           inventory_management: 'shopify',
           requires_shipping: true,
           taxable: true,
-          barcode: item.barcode || item.psa_cert || '',
+          barcode: item.sku, // SKU and barcode should be the same
           inventory_policy: 'deny'
         }],
-        images: item.image_url ? [{
-          src: item.image_url,
+        images: imageUrl ? [{
+          src: imageUrl,
           alt: title
         }] : []
       }
