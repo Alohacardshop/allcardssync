@@ -516,77 +516,112 @@ Prices from Market Price on 8/24/2025 and are subject to change.`;
             <CardTitle>Import Preview</CardTitle>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Qty</TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Set</TableHead>
-                  <TableHead>Number</TableHead>
-                  <TableHead>Rarity</TableHead>
-                  <TableHead>Condition</TableHead>
-                  <TableHead>Market Price</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>SKU</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {items.map((item, index) => (
-                  <TableRow key={index}>
-                    <TableCell>{item.quantity}</TableCell>
-                    <TableCell className="max-w-xs truncate">
-                      <div>
-                        <div className="font-medium">{item.name}</div>
-                        {item.tcgplayerId && (
-                          <div className="text-xs text-muted-foreground">ID: {item.tcgplayerId}</div>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div>
-                        <div>{item.set}</div>
-                        {item.productLine && (
-                          <div className="text-xs text-muted-foreground">{item.productLine}</div>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>{item.cardNumber || '-'}</TableCell>
-                    <TableCell>{item.rarity || item.foil}</TableCell>
-                    <TableCell>{item.condition}</TableCell>
-                    <TableCell>
-                      <div>
-                        {item.marketPrice && item.marketPrice > 0 ? (
-                          <div className="font-medium">${item.marketPrice.toFixed(2)}</div>
-                        ) : (
-                          <div>${item.priceEach.toFixed(2)}</div>
-                        )}
-                        {item.photoUrl && (
-                          <div className="text-xs text-muted-foreground">📷 Image</div>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <span className={`px-2 py-1 rounded text-xs font-medium ${
-                        item.status === 'success' ? 'bg-green-100 text-green-800' :
-                        item.status === 'error' ? 'bg-red-100 text-red-800' :
-                        item.status === 'processing' ? 'bg-blue-100 text-blue-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
-                        {item.status}
-                      </span>
-                      {item.error && (
-                        <div className="text-xs text-red-600 mt-1 truncate" title={item.error}>
-                          {item.error}
-                        </div>
-                      )}
-                    </TableCell>
-                    <TableCell className="font-mono text-xs">
-                      {item.generatedSku || (item.error ? 'Error' : '-')}
-                    </TableCell>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-16">Qty</TableHead>
+                    <TableHead className="min-w-48">Name & Details</TableHead>
+                    <TableHead className="min-w-32">Set</TableHead>
+                    <TableHead className="w-20">Number</TableHead>
+                    <TableHead className="w-24">Condition</TableHead>
+                    <TableHead className="w-24">Price</TableHead>
+                    <TableHead className="w-20">Status</TableHead>
+                    <TableHead className="w-32">SKU</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {items.map((item, index) => (
+                    <TableRow key={index}>
+                      <TableCell className="font-medium">{item.quantity}</TableCell>
+                      <TableCell className="min-w-48">
+                        <div className="space-y-1">
+                          <div className="font-medium truncate">{item.name}</div>
+                          <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                            {item.tcgplayerId && (
+                              <span className="bg-blue-100 text-blue-800 px-1 rounded">ID: {item.tcgplayerId}</span>
+                            )}
+                            {item.rarity && (
+                              <span className="bg-purple-100 text-purple-800 px-1 rounded">{item.rarity}</span>
+                            )}
+                            {item.photoUrl && (
+                              <span className="bg-green-100 text-green-800 px-1 rounded">📷</span>
+                            )}
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="min-w-32">
+                        <div className="space-y-1">
+                          <div className="truncate">{item.set}</div>
+                          {item.productLine && (
+                            <div className="text-xs text-muted-foreground truncate">{item.productLine}</div>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-center">{item.cardNumber || '-'}</TableCell>
+                      <TableCell>
+                        <span className="text-xs bg-gray-100 text-gray-800 px-2 py-1 rounded">
+                          {item.condition}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-right">
+                          {item.marketPrice && item.marketPrice > 0 ? (
+                            <div>
+                              <div className="font-medium">${item.marketPrice.toFixed(2)}</div>
+                              <div className="text-xs text-muted-foreground">Market</div>
+                            </div>
+                          ) : (
+                            <div>
+                              <div>${item.priceEach.toFixed(2)}</div>
+                              <div className="text-xs text-muted-foreground">Each</div>
+                            </div>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <span className={`px-2 py-1 rounded text-xs font-medium ${
+                          item.status === 'success' ? 'bg-green-100 text-green-800' :
+                          item.status === 'error' ? 'bg-red-100 text-red-800' :
+                          item.status === 'processing' ? 'bg-blue-100 text-blue-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {item.status}
+                        </span>
+                        {item.error && (
+                          <div className="text-xs text-red-600 mt-1 truncate max-w-24" title={item.error}>
+                            {item.error}
+                          </div>
+                        )}
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">
+                        <div className="truncate max-w-32" title={item.generatedSku || 'No SKU'}>
+                          {item.generatedSku || (item.error ? 'Error' : '-')}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            
+            {/* Summary Info */}
+            <div className="mt-4 p-4 bg-muted/50 rounded-lg">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div>
+                  <span className="font-medium">Total Items:</span> {items.length}
+                </div>
+                <div>
+                  <span className="font-medium">Total Value:</span> ${items.reduce((sum, item) => sum + item.totalPrice, 0).toFixed(2)}
+                </div>
+                <div>
+                  <span className="font-medium">With TCG IDs:</span> {items.filter(item => item.tcgplayerId).length}
+                </div>
+                <div>
+                  <span className="font-medium">With Images:</span> {items.filter(item => item.photoUrl).length}
+                </div>
+              </div>
+            </div>
             
             {!importing && items.length > 0 && (
               <Button onClick={handleImport} className="mt-4">
