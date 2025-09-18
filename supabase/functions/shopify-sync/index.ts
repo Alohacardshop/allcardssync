@@ -215,7 +215,10 @@ async function createShopifyProduct(credentials: ShopifyCredentials, item: Inven
     
     title = parts.filter(Boolean).join(' ').replace(/\s+/g, ' ').trim()
     console.log('DEBUG: Final graded card title:', title)
-    description = `${title}\nSKU: ${item.sku}`
+    
+    // Get PSA cert number for description
+    const psaCertNumber = item.psa_cert || item.catalog_snapshot?.certNumber || item.catalog_snapshot?.psa_cert || item.sku
+    description = `${title}\nPSA Cert: ${psaCertNumber}`
     
     // Tags for graded cards: brand, "graded", grade number
     if (item.brand_title) tags.push(item.brand_title.toLowerCase())
@@ -224,7 +227,10 @@ async function createShopifyProduct(credentials: ShopifyCredentials, item: Inven
   } else {
     // For raw cards: keep simpler format
     title = `${item.brand_title} ${item.subject} ${item.card_number}`.trim()
-    description = `${title}\nSKU: ${item.sku}`
+    
+    // Get PSA cert number for description (fallback to SKU for raw cards)
+    const psaCertNumber = item.psa_cert || item.catalog_snapshot?.certNumber || item.catalog_snapshot?.psa_cert || item.sku
+    description = `${title}\nSKU: ${psaCertNumber}`
     
     // Tags for raw cards: brand, condition
     if (item.brand_title) tags.push(item.brand_title.toLowerCase())
