@@ -60,17 +60,19 @@ export default function Auth() {
             console.log('Bootstrap attempt failed (expected for non-admins):', bootstrapError);
           }
           
-          // Check roles with timeout
+          // Check roles with faster timeout and better error handling
+          console.log('Checking user roles...');
           const roleCheckPromise = Promise.all([
             supabase.rpc("has_role", { _user_id: uid, _role: "staff" as any }),
             supabase.rpc("has_role", { _user_id: uid, _role: "admin" as any })
           ]);
           
           const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error("Role check timeout")), 8000)
+            setTimeout(() => reject(new Error("Role check timeout")), 3000)
           );
           
           const [staff, admin] = await Promise.race([roleCheckPromise, timeoutPromise]) as any;
+          console.log('Role check results:', { staff: staff?.data, admin: admin?.data });
           
           const hasValidRole = Boolean(staff.data) || Boolean(admin.data);
           
