@@ -15,7 +15,8 @@ export function ShopifySyncPanel() {
     triggerProcessor,
     retryFailed,
     clearCompleted,
-    clearAll
+    clearAll,
+    deleteItem
   } = useShopifySync()
 
   const getStatusIcon = (status: string) => {
@@ -192,6 +193,7 @@ export function ShopifySyncPanel() {
                     <TableHead>Retries</TableHead>
                     <TableHead>Created</TableHead>
                     <TableHead>Error</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -221,6 +223,34 @@ export function ShopifySyncPanel() {
                             {item.error_message}
                           </div>
                         )}
+                      </TableCell>
+                      <TableCell>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              disabled={deleteItem.isPending}
+                              className="h-8 w-8 p-0"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete Queue Item?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This will remove this item from the sync queue. This action cannot be undone.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => deleteItem.mutate(item.id)}>
+                                Delete
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
                       </TableCell>
                     </TableRow>
                   ))}

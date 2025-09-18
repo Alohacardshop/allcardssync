@@ -185,6 +185,28 @@ export function useShopifySync() {
     }
   })
 
+  // Delete single item
+  const deleteItem = useMutation({
+    mutationFn: async (itemId: string) => {
+      const { data, error } = await supabase
+        .from('shopify_sync_queue')
+        .delete()
+        .eq('id', itemId)
+        .select()
+      
+      if (error) throw error
+      return data
+    },
+    onSuccess: (data) => {
+      toast.success(`Deleted ${data.length} item from queue`)
+      queryClient.invalidateQueries({ queryKey: ['shopify-sync-queue'] })
+    },
+    onError: (error) => {
+      console.error('Delete item error:', error)
+      toast.error(`Failed to delete item: ${error.message}`)
+    }
+  })
+
   return {
     queueItems,
     stats,
@@ -194,6 +216,7 @@ export function useShopifySync() {
     addToQueue,
     retryFailed,
     clearCompleted,
-    clearAll
+    clearAll,
+    deleteItem
   }
 }
