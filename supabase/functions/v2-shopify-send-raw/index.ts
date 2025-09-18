@@ -96,7 +96,15 @@ Deno.serve(async (req) => {
         body_html: description,
         vendor: brandTitle || 'Trading Cards',
         product_type: 'Raw Card',
-        tags: ['Raw Card', brandTitle, condition].filter(Boolean).join(', '),
+        tags: [
+          'Raw Card', 
+          brandTitle, 
+          condition,
+          intakeItem?.category || 'Pokemon', // Game from intake item
+          intakeItem?.lot_number || 'Unknown Lot', // Lot number
+          subject ? `Card: ${subject}` : null, // Card name
+          cardNumber ? `Number: ${cardNumber}` : null // Card number
+        ].filter(Boolean).join(', '),
         variants: [{
           sku: item.sku,
           price: item.price?.toString() || '0.00',

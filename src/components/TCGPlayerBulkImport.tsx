@@ -231,9 +231,9 @@ export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) =>
         brand_title_in: item.set,
         subject_in: item.name,
         category_in: 'Pokemon',
-        variant_in: item.foil,
+        variant_in: `${item.condition}${item.foil ? ' - Foil' : ''}`, // Store condition and foil status in variant
         card_number_in: item.cardNumber,
-        grade_in: item.condition,
+        grade_in: null, // Raw cards should not have grades
         price_in: item.priceEach,
         cost_in: item.priceEach * 0.7,
         sku_in: sku,
