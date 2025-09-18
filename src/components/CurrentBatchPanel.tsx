@@ -410,7 +410,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
                   <div className="flex-1">
                     <div className="font-medium">{formatCardName(item)}</div>
                     <div className="text-sm text-muted-foreground">
-                      {item.sku} • ${item.price} • Qty: {item.quantity}
+                      {item.sku} • ${item.price} {item.cost && `• Cost: $${item.cost}`} • Qty: {item.quantity}
                     </div>
                   </div>
                   <div className="flex gap-2">
