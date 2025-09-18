@@ -358,14 +358,25 @@ export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) =>
           product_line: item.productLine,
           rarity: item.rarity,
           photo_url: item.photoUrl,
+          // Include all pricing data in catalog for reference
+          tcgplayer_market_price: item.marketPrice,
+          entered_price: item.priceEach,
+          calculated_cost: item.cost,
           type: 'tcgplayer_raw',
           source: 'tcgplayer_bulk_import'
         },
         // Enhanced pricing snapshot with TCGPlayer market data
         pricing_snapshot_in: {
+          // User-entered selling price
           price: item.priceEach,
           total_price: item.totalPrice,
+          // TCGPlayer market price (readonly)
           market_price: item.marketPrice,
+          tcgplayer_price: item.marketPrice,
+          // Calculated cost (70% of TCGplayer price)
+          cost: item.cost,
+          cost_percentage: 0.70,
+          cost_basis: 'tcgplayer_market_price',
           source: 'tcgplayer',
           captured_at: new Date().toISOString()
         },
