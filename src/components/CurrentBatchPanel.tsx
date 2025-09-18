@@ -485,19 +485,21 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
         <EditIntakeItemDialog
           item={{
             id: editingItem.id,
-            year: editingItem.year,
+            year: editingItem.year || (editingItem.catalog_snapshot?.year) || '',
             brandTitle: editingItem.brand_title,
             subject: editingItem.subject,
             category: editingItem.category,
-            variant: editingItem.variant,
+            variant: editingItem.variant || (editingItem.catalog_snapshot?.varietyPedigree) || '',
             cardNumber: editingItem.card_number,
             grade: editingItem.grade,
-            psaCert: editingItem.psa_cert,
+            psaCert: editingItem.psa_cert || (editingItem.catalog_snapshot?.psaCert) || '',
             price: editingItem.price?.toString(),
             cost: editingItem.cost?.toString(),
             sku: editingItem.sku,
             quantity: editingItem.quantity,
-            imageUrl: editingItem.image_urls?.[0] || ''
+            imageUrl: editingItem.image_urls?.[0] || 
+                     (editingItem.catalog_snapshot?.image_url) || 
+                     (editingItem.catalog_snapshot?.imageUrl) || ''
           }}
           open={!!editingItem}
           onOpenChange={(open) => {
@@ -505,6 +507,8 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
           }}
           onSave={async (values) => {
             try {
+              console.log('Saving item with values:', values);
+              
               // Update the intake item in the database
               const { error } = await supabase
                 .from('intake_items')
