@@ -7,6 +7,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { RefreshCw, Store as StoreIcon, ShoppingCart, MapPin, Package, Home, Archive, Tags, Printer, LogOut, Settings, Menu, X } from 'lucide-react';
 import { useStore } from '@/contexts/StoreContext';
 import { supabase } from '@/integrations/supabase/client';
+import { resetLogin } from '@/lib/authUtils';
 
 export function NavigationBar() {
   const location = useLocation();
@@ -115,12 +116,7 @@ export function NavigationBar() {
   };
 
   const handleSignOut = async () => {
-    try {
-      await supabase.auth.signOut();
-      navigate('/auth');
-    } catch (error) {
-      console.error('Error signing out:', error);
-    }
+    await resetLogin();
   };
 
   // Helper to get location name from GID

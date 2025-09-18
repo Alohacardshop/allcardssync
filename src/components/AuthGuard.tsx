@@ -3,6 +3,7 @@ import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { User, Session } from '@supabase/supabase-js';
 import { toast } from 'sonner';
+import { resetLogin } from '@/lib/authUtils';
 
 interface AuthGuardProps {
   children: React.ReactNode;
@@ -114,7 +115,7 @@ export function AuthGuard({ children }: AuthGuardProps) {
             Please contact an administrator to grant you Staff access.
           </p>
           <button 
-            onClick={() => supabase.auth.signOut()}
+            onClick={resetLogin}
             className="text-primary hover:underline"
           >
             Sign out
