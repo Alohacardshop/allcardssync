@@ -347,6 +347,8 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
       // Only refresh if it's for our current store
       if (event.detail.store === assignedStore) {
         setLastAddedItemId(event.detail.itemId);
+        // Also directly fetch to ensure refresh happens
+        fetchRecentItemsWithRetry();
       }
     };
     

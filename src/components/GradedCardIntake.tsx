@@ -226,8 +226,11 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
       }
 
       // Dispatch event for batch panel to refresh
+      const item = Array.isArray(data) ? data[0] : data;
       window.dispatchEvent(new CustomEvent('batchItemAdded', {
         detail: { 
+          itemId: item.id,
+          lot: item.lot_number,
           store: assignedStore,
           location: selectedLocation
         }
