@@ -7,6 +7,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ErrorBoundaryWrapper } from "@/components/ErrorBoundaryWrapper";
 import { AuthGuard } from "@/components/AuthGuard";
+import { AdminGuard } from "@/components/AdminGuard";
 import { StoreProvider } from "@/contexts/StoreContext";
 import { NavigationBar } from "@/components/NavigationBar";
 import Index from "./pages/Index";
@@ -56,26 +57,35 @@ const App = () => (
             <Toaster />
             <Sonner />
             <BrowserRouter>
-            <NavigationBar />
-            <AuthGuard>
-              <Routes>
-                <Route path="/auth" element={<Auth />} />
-                <Route path="/" element={<ErrorBoundaryWrapper componentName="Index"><Index /></ErrorBoundaryWrapper>} />
-                <Route path="/dashboard" element={<ErrorBoundaryWrapper componentName="Dashboard"><DashboardPage /></ErrorBoundaryWrapper>} />
-                <Route path="/test-hardware" element={<TestHardwarePage />} />
-                <Route path="/inventory" element={<ErrorBoundaryWrapper componentName="Inventory"><Inventory /></ErrorBoundaryWrapper>} />
-                <Route path="/batches" element={<ErrorBoundaryWrapper componentName="Batch Management"><Batches /></ErrorBoundaryWrapper>} />
-                <Route path="/labels" element={<LabelDesigner />} />
-                <Route path="/bulk-import" element={<BulkImport />} />
-                <Route path="/admin" element={<Admin />} />
-                <Route path="/admin/catalog" element={<div className="p-8"><CatalogMigrationPlaceholder /></div>} />
-                <Route path="/shopify-mapping" element={<ShopifyMapping />} />
-                <Route path="/print-logs" element={<PrintLogs />} />
-                
-                {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </AuthGuard>
+            <Routes>
+              {/* Auth route - accessible without authentication */}
+              <Route path="/auth" element={<Auth />} />
+              
+              {/* Protected routes */}
+              <Route path="/*" element={
+                <>
+                  <NavigationBar />
+                  <AuthGuard>
+                    <Routes>
+                      <Route path="/" element={<ErrorBoundaryWrapper componentName="Index"><Index /></ErrorBoundaryWrapper>} />
+                      <Route path="/dashboard" element={<ErrorBoundaryWrapper componentName="Dashboard"><DashboardPage /></ErrorBoundaryWrapper>} />
+                      <Route path="/test-hardware" element={<TestHardwarePage />} />
+                      <Route path="/inventory" element={<ErrorBoundaryWrapper componentName="Inventory"><Inventory /></ErrorBoundaryWrapper>} />
+                      <Route path="/batches" element={<ErrorBoundaryWrapper componentName="Batch Management"><Batches /></ErrorBoundaryWrapper>} />
+                      <Route path="/labels" element={<LabelDesigner />} />
+                      <Route path="/bulk-import" element={<BulkImport />} />
+                      <Route path="/admin" element={<AdminGuard><Admin /></AdminGuard>} />
+                      <Route path="/admin/catalog" element={<AdminGuard><div className="p-8"><CatalogMigrationPlaceholder /></div></AdminGuard>} />
+                      <Route path="/shopify-mapping" element={<ShopifyMapping />} />
+                      <Route path="/print-logs" element={<PrintLogs />} />
+                      
+                      {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                      <Route path="*" element={<NotFound />} />
+                    </Routes>
+                  </AuthGuard>
+                </>
+              } />
+            </Routes>
             
             {/* Global Components */}
             <GlobalKeyboardHandler />

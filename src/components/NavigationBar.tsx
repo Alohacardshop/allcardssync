@@ -32,11 +32,12 @@ export function NavigationBar() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
-          const { data, error } = await supabase.rpc('has_role', { 
-            _role: 'admin',
-            _user_id: session.user.id
+          // Use the new verify_user_access function
+          const { data: access, error } = await supabase.rpc('verify_user_access', { 
+            _user_id: session.user.id 
           });
-          if (!error && data) {
+          
+          if (!error && access && typeof access === 'object' && 'has_admin_access' in access && access.has_admin_access) {
             setIsAdmin(true);
           }
         }
