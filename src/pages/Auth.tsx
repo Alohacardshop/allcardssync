@@ -45,77 +45,81 @@ export default function Auth() {
     console.log('Auth page mount');
     setMounted(true);
     
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth state change:', event, session?.user?.email);
-      
+    // Check for existing session first
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user) {
-        setLoading(true);
-        setRoleError(null);
-        
-        try {
-          const uid = session.user.id;
-          console.log('Processing auth for user:', uid);
-          
-          // Try bootstrap first for initial admin setup
-          try {
-            console.log('Attempting bootstrap...');
-            await supabase.functions.invoke("bootstrap-admin");
-            console.log('Bootstrap completed');
-          } catch (bootstrapError) {
-            console.log('Bootstrap attempt failed (expected for non-admins):', bootstrapError);
-          }
-          
-          // Check roles with faster timeout and better error handling
-          console.log('Checking user roles...');
-          const roleCheckPromise = Promise.all([
-            supabase.rpc("has_role", { _user_id: uid, _role: "staff" as any }),
-            supabase.rpc("has_role", { _user_id: uid, _role: "admin" as any })
-          ]);
-          
-          const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error("Role check timeout")), 3000)
-          );
-          
-          const [staff, admin] = await Promise.race([roleCheckPromise, timeoutPromise]) as any;
-          console.log('Role check results:', { staff: staff?.data, admin: admin?.data });
-          
-          const hasValidRole = Boolean(staff?.data) || Boolean(admin?.data);
-          
-          if (hasValidRole) {
-            console.log('Valid role found, navigating to dashboard');
-            navigate("/", { replace: true });
-          } else {
-            console.log('No valid role found');
-            setRoleError("Your account is signed in but not authorized. Ask an admin to grant Staff access.");
-          }
-        } catch (error) {
-          console.error('Role check failed:', error);
-          if (error?.message === "Role check timeout") {
-            setRoleError("Authentication is taking too long. Please try refreshing the page.");
-          } else {
-            setRoleError("Failed to verify account permissions. Please try again.");
-          }
-        } finally {
-          // Always clear loading state
-          setLoading(false);
-        }
+        console.log('Existing session found for:', session.user.email);
+        await handleUserAuthentication(session.user.id);
       } else {
         setLoading(false);
-        setRoleError(null);
       }
     });
 
-    // Check existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        // Will be handled by the auth state change listener
-      } else {
+    // Set up auth state listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state change:', event, session?.user?.email);
+      
+      if (event === 'SIGNED_IN' && session?.user) {
+        await handleUserAuthentication(session.user.id);
+      } else if (event === 'SIGNED_OUT') {
         setLoading(false);
+        setRoleError(null);
       }
     });
 
     return () => subscription.unsubscribe();
   }, [navigate]);
+
+  const handleUserAuthentication = async (userId: string) => {
+    setLoading(true);
+    setRoleError(null);
+    
+    try {
+      console.log('Processing auth for user:', userId);
+      
+      // Try bootstrap first for initial admin setup
+      try {
+        console.log('Attempting bootstrap...');
+        await supabase.functions.invoke("bootstrap-admin");
+        console.log('Bootstrap completed');
+      } catch (bootstrapError) {
+        console.log('Bootstrap attempt failed (expected for non-admins):', bootstrapError);
+      }
+      
+      // Check roles with timeout
+      console.log('Checking user roles...');
+      const roleCheckPromise = Promise.all([
+        supabase.rpc("has_role", { _user_id: userId, _role: "staff" as any }),
+        supabase.rpc("has_role", { _user_id: userId, _role: "admin" as any })
+      ]);
+      
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error("Role check timeout")), 5000)
+      );
+      
+      const [staff, admin] = await Promise.race([roleCheckPromise, timeoutPromise]) as any;
+      console.log('Role check results:', { staff: staff?.data, admin: admin?.data });
+      
+      const hasValidRole = Boolean(staff?.data) || Boolean(admin?.data);
+      
+      if (hasValidRole) {
+        console.log('Valid role found, navigating to dashboard');
+        navigate("/", { replace: true });
+      } else {
+        console.log('No valid role found');
+        setRoleError("Your account is signed in but not authorized. Ask an admin to grant Staff access.");
+      }
+    } catch (error) {
+      console.error('Role check failed:', error);
+      if (error?.message === "Role check timeout") {
+        setRoleError("Authentication is taking too long. Please try refreshing the page.");
+      } else {
+        setRoleError("Failed to verify account permissions. Please try again.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -123,12 +127,20 @@ export default function Auth() {
     setRoleError(null);
     
     try {
+      console.log('Starting sign in process');
       cleanupAuthState();
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      
+      const { data, error } = await supabase.auth.signInWithPassword({ 
+        email, 
+        password 
+      });
+      
       if (error) throw error;
       
+      console.log('Sign in successful, data:', data);
       toast.success("Signed in successfully!");
-      // The auth state change listener will handle navigation
+      
+      // Don't set loading to false here - let the auth state change handle it
     } catch (err: any) {
       console.error('Sign in error:', err);
       toast.error(err?.message || "Sign in failed");
