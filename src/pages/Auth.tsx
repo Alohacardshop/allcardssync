@@ -50,12 +50,17 @@ export default function Auth() {
       
       if (session?.user) {
         setLoading(true);
+        setRoleError(null);
+        
         try {
           const uid = session.user.id;
+          console.log('Processing auth for user:', uid);
           
           // Try bootstrap first for initial admin setup
           try {
+            console.log('Attempting bootstrap...');
             await supabase.functions.invoke("bootstrap-admin");
+            console.log('Bootstrap completed');
           } catch (bootstrapError) {
             console.log('Bootstrap attempt failed (expected for non-admins):', bootstrapError);
           }
@@ -74,21 +79,24 @@ export default function Auth() {
           const [staff, admin] = await Promise.race([roleCheckPromise, timeoutPromise]) as any;
           console.log('Role check results:', { staff: staff?.data, admin: admin?.data });
           
-          const hasValidRole = Boolean(staff.data) || Boolean(admin.data);
+          const hasValidRole = Boolean(staff?.data) || Boolean(admin?.data);
           
           if (hasValidRole) {
+            console.log('Valid role found, navigating to dashboard');
             navigate("/", { replace: true });
           } else {
+            console.log('No valid role found');
             setRoleError("Your account is signed in but not authorized. Ask an admin to grant Staff access.");
-            setLoading(false);
           }
         } catch (error) {
           console.error('Role check failed:', error);
-          if (error.message === "Role check timeout") {
+          if (error?.message === "Role check timeout") {
             setRoleError("Authentication is taking too long. Please try refreshing the page.");
           } else {
             setRoleError("Failed to verify account permissions. Please try again.");
           }
+        } finally {
+          // Always clear loading state
           setLoading(false);
         }
       } else {
