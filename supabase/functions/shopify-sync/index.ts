@@ -231,6 +231,33 @@ async function createShopifyProduct(credentials: ShopifyCredentials, item: Inven
     if (item.variant && item.variant !== 'Default') tags.push(item.variant.toLowerCase())
   }
   
+  // Extract image URLs from various sources
+  const imageUrls = []
+  
+  // Check item.image_urls array
+  if (item.image_urls && Array.isArray(item.image_urls)) {
+    imageUrls.push(...item.image_urls)
+  }
+  
+  // Check catalog_snapshot for images
+  if (item.catalog_snapshot && typeof item.catalog_snapshot === 'object') {
+    if (item.catalog_snapshot.imageUrls && Array.isArray(item.catalog_snapshot.imageUrls)) {
+      imageUrls.push(...item.catalog_snapshot.imageUrls)
+    }
+    if (item.catalog_snapshot.imageUrl && typeof item.catalog_snapshot.imageUrl === 'string') {
+      imageUrls.push(item.catalog_snapshot.imageUrl)
+    }
+  }
+  
+  // Remove duplicates and create Shopify images array
+  const uniqueImageUrls = [...new Set(imageUrls)].filter(url => url && typeof url === 'string')
+  const images = uniqueImageUrls.map((url, index) => ({
+    src: url,
+    alt: `${title} - Image ${index + 1}`
+  }))
+  
+  console.log('DEBUG: Found images for product:', uniqueImageUrls)
+  
   const handle = item.sku.toLowerCase().replace(/[^a-z0-9]/g, '-')
   
   const productData = {
@@ -242,6 +269,7 @@ async function createShopifyProduct(credentials: ShopifyCredentials, item: Inven
       vendor: 'aloha card shop hawaii',
       status: 'active',
       tags: tags.join(', '),
+      images: images, // Add images array
       variants: [{
         sku: item.sku,
         price: item.price.toString(),
@@ -257,6 +285,7 @@ async function createShopifyProduct(credentials: ShopifyCredentials, item: Inven
   }
 
   console.log(`📦 Creating new product: ${title}`)
+  console.log('DEBUG: Product data being sent to Shopify:', JSON.stringify(productData, null, 2))
   const result = await shopifyRequest(credentials, 'products.json', {
     method: 'POST',
     body: JSON.stringify(productData)
