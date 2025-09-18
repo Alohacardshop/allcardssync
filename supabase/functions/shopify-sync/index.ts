@@ -414,21 +414,35 @@ Deno.serve(async (req) => {
     }
 
     if (requestBody?.single_item_id) {
-      console.log(`🎯 Processing single item: ${requestBody.single_item_id}`)
+      console.log(`🎯 Processing single queue item: ${requestBody.single_item_id}`)
       
-      // Get the specific queue item
+      // First mark the item as processing to avoid race conditions
+      const { error: updateError } = await supabase
+        .from('shopify_sync_queue')
+        .update({ 
+          status: 'processing',
+          started_at: new Date().toISOString() 
+        })
+        .eq('id', requestBody.single_item_id)
+        .eq('status', 'queued')
+      
+      if (updateError) {
+        console.log(`⚠️ Could not update queue item status: ${updateError.message}`)
+        return new Response(
+          JSON.stringify({ success: true, message: 'Item already being processed or completed', processed: 0 }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+      
+      // Get the queue item details
       const { data: queueItems, error: queueError } = await supabase
         .from('shopify_sync_queue')
         .select('*')
         .eq('id', requestBody.single_item_id)
-        .eq('status', 'queued')
+        .eq('status', 'processing')
       
-      if (queueError) {
-        throw new Error(`Failed to fetch queue item: ${queueError.message}`)
-      }
-      
-      if (!queueItems || queueItems.length === 0) {
-        console.log('✅ Queue item not found or already processed')
+      if (queueError || !queueItems || queueItems.length === 0) {
+        console.log('⚠️ Queue item not found or status changed')
         return new Response(
           JSON.stringify({ success: true, message: 'Item not found or already processed', processed: 0 }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -438,7 +452,7 @@ Deno.serve(async (req) => {
       // Process the single item
       await processQueueItem(supabase, queueItems[0])
       
-      console.log(`✅ Successfully processed single item: ${requestBody.single_item_id}`)
+      console.log(`✅ Successfully processed single queue item: ${requestBody.single_item_id}`)
       
       return new Response(
         JSON.stringify({ 
