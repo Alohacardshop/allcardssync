@@ -1990,10 +1990,6 @@ export type Database = {
         Args: { ids: string[]; reason?: string }
         Returns: Json
       }
-      trigger_shopify_sync: {
-        Args: Record<PropertyKey, never>
-        Returns: Json
-      }
       user_can_access_store_location: {
         Args: { _location_gid?: string; _store_key: string; _user_id: string }
         Returns: boolean
