@@ -134,7 +134,7 @@ export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) =>
       condition: card.condition,
       language: 'English', // Default, could be enhanced
       priceEach: calculateOurPrice(card.marketPrice || 0), // Apply new pricing formula for raw cards
-      cost: (card.marketPrice || 0) * 0.7, // Calculate cost as 70% of TCGPlayer price
+      cost: Math.round((card.marketPrice || 0) * 0.7 * 100) / 100, // Calculate cost as 70% of TCGPlayer price, 2 decimals
       totalPrice: calculateOurPrice(card.marketPrice || 0) * (card.quantity || 1),
       status: 'pending' as const
     }));
@@ -232,7 +232,7 @@ export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) =>
           condition,
           language,
           priceEach: calculateOurPrice(priceEach), // Apply new pricing formula for raw cards
-          cost: priceEach * 0.7, // Calculate cost as 70% of TCGPlayer price
+          cost: Math.round(priceEach * 0.7 * 100) / 100, // Calculate cost as 70% of TCGPlayer price, 2 decimals
           totalPrice: calculateOurPrice(priceEach) * quantity,
           status: 'pending',
           // TCGPlayer data will be enhanced by CSV parsing if available
@@ -248,19 +248,24 @@ export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) =>
 
 // Calculate our selling price based on market price for raw cards
   const calculateOurPrice = (marketPrice: number): number => {
+    let calculatedPrice: number;
+    
     if (marketPrice < 10) {
       // Less than $10: (+$0.51 rounded up to nearest whole dollar) + $1
-      return Math.ceil(marketPrice + 0.51) + 1;
+      calculatedPrice = Math.ceil(marketPrice + 0.51) + 1;
     } else if (marketPrice <= 20) {
       // $10-20: x1.25 rounded up to nearest whole dollar
-      return Math.ceil(marketPrice * 1.25);
+      calculatedPrice = Math.ceil(marketPrice * 1.25);
     } else if (marketPrice <= 26) {
       // $20-26: x1.15 rounded up to nearest whole dollar
-      return Math.ceil(marketPrice * 1.15);
+      calculatedPrice = Math.ceil(marketPrice * 1.15);
     } else {
       // $26+: x1.1 rounded up to nearest multiple of $5
-      return Math.ceil((marketPrice * 1.1) / 5) * 5;
+      calculatedPrice = Math.ceil((marketPrice * 1.1) / 5) * 5;
     }
+    
+    // Ensure 2 decimal places
+    return Math.round(calculatedPrice * 100) / 100;
   };
 
   // Resolve variant ID for a TCGPlayer item by searching TCG database
