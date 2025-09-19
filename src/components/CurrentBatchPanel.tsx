@@ -63,20 +63,14 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
     const year = item.year || (item.catalog_snapshot && typeof item.catalog_snapshot === 'object' && item.catalog_snapshot !== null && 'year' in item.catalog_snapshot ? item.catalog_snapshot.year : null);
     if (year) parts.push(year)
     
-    // Add brand
+    // Add brand/set
     if (item.brand_title) parts.push(item.brand_title)
     
-    // Add subject (like FA/MewTwo VSTAR)
+    // Add subject (like card name)
     if (item.subject) parts.push(item.subject)
     
     // Add card number
     if (item.card_number) parts.push(`#${item.card_number}`)
-    
-    // Add variant after vstar (check both direct field and catalog_snapshot)
-    const variant = item.variant || (item.catalog_snapshot && typeof item.catalog_snapshot === 'object' && item.catalog_snapshot !== null && 'varietyPedigree' in item.catalog_snapshot ? item.catalog_snapshot.varietyPedigree : null);
-    if (variant && variant.toLowerCase() !== 'vstar') {
-      parts.push(variant.toLowerCase())
-    }
     
     // Handle grading - use PSA for PSA certs
     if (item.grade && item.psa_cert) {
@@ -88,6 +82,40 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
     }
     
     return parts.length > 0 ? parts.join(' ') : (item.sku || 'Unknown Item')
+  }
+
+  // Helper to get condition for raw cards
+  const getCondition = (item: IntakeItem) => {
+    // For raw cards, check catalog_snapshot for condition
+    if (item.catalog_snapshot && typeof item.catalog_snapshot === 'object' && item.catalog_snapshot !== null) {
+      if ('condition' in item.catalog_snapshot && item.catalog_snapshot.condition) {
+        return item.catalog_snapshot.condition;
+      }
+    }
+    
+    // Fallback to variant if no condition found
+    const variant = item.variant || (item.catalog_snapshot && typeof item.catalog_snapshot === 'object' && item.catalog_snapshot !== null && 'varietyPedigree' in item.catalog_snapshot ? item.catalog_snapshot.varietyPedigree : null);
+    return variant;
+  }
+
+  // Helper to get additional variant info (like foil)
+  const getVariantInfo = (item: IntakeItem) => {
+    if (item.catalog_snapshot && typeof item.catalog_snapshot === 'object' && item.catalog_snapshot !== null) {
+      const parts = [];
+      
+      // Add foil if present
+      if ('foil' in item.catalog_snapshot && item.catalog_snapshot.foil) {
+        parts.push('Foil');
+      }
+      
+      // Add language if not English
+      if ('language' in item.catalog_snapshot && item.catalog_snapshot.language && item.catalog_snapshot.language !== 'English') {
+        parts.push(item.catalog_snapshot.language);
+      }
+      
+      return parts.join(', ');
+    }
+    return null;
   }
 
   const canDeleteFromBatch = (item: IntakeItem) => {
@@ -479,11 +507,20 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
                 >
                   <div className="flex-1 cursor-pointer" onClick={() => handleEditItem(item)}>
                     <div className={`font-medium ${compact ? 'text-sm' : ''}`}>{formatCardName(item)}</div>
-                    <div className="text-sm text-muted-foreground">
-                      {compact ? (
-                        `$${item.price} • Qty: ${item.quantity}`
-                      ) : (
-                        `${item.sku} • $${item.price} ${item.cost && `• Cost: $${item.cost}`} • Qty: ${item.quantity}`
+                    <div className="text-sm text-muted-foreground space-y-1">
+                      <div>
+                        {compact ? (
+                          `$${item.price} • Qty: ${item.quantity}`
+                        ) : (
+                          `${item.sku} • $${item.price} ${item.cost && `• Cost: $${item.cost}`} • Qty: ${item.quantity}`
+                        )}
+                      </div>
+                      {/* Show condition for raw cards */}
+                      {getCondition(item) && (
+                        <div className="text-xs">
+                          <span className="font-medium">Condition:</span> {getCondition(item)}
+                          {getVariantInfo(item) && ` • ${getVariantInfo(item)}`}
+                        </div>
                       )}
                     </div>
                   </div>
