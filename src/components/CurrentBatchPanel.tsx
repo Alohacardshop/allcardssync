@@ -526,19 +526,10 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
                           `${item.sku} • $${item.price} ${item.cost && `• Cost: $${item.cost}`} • Qty: ${item.quantity}`
                         )}
                       </div>
-                      {/* Show condition and variant for raw cards */}
-                      {(getCondition(item) || getVariantInfo(item)) && (
-                        <div className="text-xs space-y-0.5">
-                          {getCondition(item) && (
-                            <div>
-                              <span className="font-medium">Condition:</span> {getCondition(item)}
-                            </div>
-                          )}
-                          {getVariantInfo(item) && (
-                            <div>
-                              <span className="font-medium">Variant:</span> {getVariantInfo(item)}
-                            </div>
-                          )}
+                      {/* Show condition for raw cards only */}
+                      {getCondition(item) && (
+                        <div className="text-xs">
+                          <span className="font-medium">Condition:</span> {getCondition(item)}
                         </div>
                       )}
                     </div>
