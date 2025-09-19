@@ -318,6 +318,78 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
     }
   };
 
+  const handleSendBatchToShopify = async () => {
+    if (recentItems.length === 0) {
+      toast({ title: "Info", description: "No items to send" });
+      return;
+    }
+
+    setSendingBatch(true);
+    try {
+      const itemIds = recentItems.map(item => item.id);
+      
+      // Step 1: Send to inventory first
+      const { data, error } = await supabase.rpc("send_intake_items_to_inventory", {
+        item_ids: itemIds
+      });
+
+      if (error) throw error;
+
+      const processedIds = (data as any)?.processed_ids || [];
+      
+      if (processedIds.length === 0) {
+        toast({ title: "Warning", description: "No items were successfully sent to inventory" });
+        return;
+      }
+
+      // Step 2: Queue items for Shopify sync by calling the v2 send function
+      let successCount = 0;
+      let errorCount = 0;
+      
+      for (const itemId of processedIds) {
+        try {
+          const { error: shopifyError } = await supabase.functions.invoke('v2-shopify-send-raw', {
+            body: { item_id: itemId }
+          });
+          
+          if (shopifyError) {
+            console.error(`Shopify sync failed for item ${itemId}:`, shopifyError);
+            errorCount++;
+          } else {
+            successCount++;
+          }
+        } catch (err) {
+          console.error(`Shopify sync error for item ${itemId}:`, err);
+          errorCount++;
+        }
+      }
+
+      const inventoryCount = processedIds.length;
+      let message = `Sent ${inventoryCount} items to inventory`;
+      
+      if (successCount > 0) {
+        message += ` and ${successCount} to Shopify`;
+      }
+      
+      if (errorCount > 0) {
+        message += `. ${errorCount} Shopify sync(s) failed`;
+      }
+
+      toast({ 
+        title: "Success", 
+        description: message,
+        variant: errorCount > 0 ? "destructive" : "default"
+      });
+      
+      fetchRecentItemsWithRetry();
+    } catch (error: any) {
+      console.error("Error sending batch to inventory + Shopify:", error);
+      toast({ title: "Error", description: error.message });
+    } finally {
+      setSendingBatch(false);
+    }
+  };
+
   const handleSendBatchToInventory = async () => {
     if (recentItems.length === 0) {
       toast({ title: "Info", description: "No items to send" });
@@ -414,6 +486,19 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
                   <Send className="h-4 w-4 mr-2" />
                 )}
                 Send to Inventory
+              </Button>
+              <Button
+                onClick={handleSendBatchToShopify}
+                disabled={recentItems.length === 0 || sendingBatch}
+                size="sm"
+                variant="outline"
+              >
+                {sendingBatch ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <Send className="h-4 w-4 mr-2" />
+                )}
+                Send to Inventory + Shopify
               </Button>
             </div>
           )}
