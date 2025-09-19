@@ -526,20 +526,24 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
           item={{
             id: editingItem.id,
             year: editingItem.year || (editingItem.catalog_snapshot?.year) || '',
-            brandTitle: editingItem.brand_title,
-            subject: editingItem.subject,
+            brandTitle: editingItem.brand_title || (editingItem.catalog_snapshot?.set) || '',
+            subject: editingItem.subject || (editingItem.catalog_snapshot?.name) || '',
             category: editingItem.category,
-            variant: editingItem.variant || (editingItem.catalog_snapshot?.varietyPedigree) || '',
-            cardNumber: editingItem.card_number,
+            variant: editingItem.variant || 
+                    (editingItem.catalog_snapshot?.condition) || 
+                    (editingItem.catalog_snapshot?.varietyPedigree) || '',
+            cardNumber: editingItem.card_number || (editingItem.catalog_snapshot?.number) || '',
             grade: editingItem.grade,
-            psaCert: editingItem.psa_cert || editingItem.sku || (editingItem.catalog_snapshot?.psaCert) || '',
-            price: editingItem.price?.toString(),
-            cost: editingItem.cost?.toString(),
-            sku: editingItem.sku,
+            psaCert: editingItem.psa_cert || (editingItem.catalog_snapshot?.psaCert) || '',
+            price: editingItem.price?.toString() || (editingItem.catalog_snapshot?.entered_price?.toString()) || '',
+            cost: editingItem.cost?.toString() || (editingItem.catalog_snapshot?.calculated_cost?.toString()) || '',
+            sku: editingItem.sku || (editingItem.catalog_snapshot?.tcgplayer_id) || '',
             quantity: editingItem.quantity,
             imageUrl: editingItem.image_urls?.[0] || 
+                     (editingItem.catalog_snapshot?.photo_url) ||
                      (editingItem.catalog_snapshot?.image_url) || 
-                     (editingItem.catalog_snapshot?.imageUrl) || ''
+                     (editingItem.catalog_snapshot?.imageUrl) || 
+                     (editingItem.catalog_snapshot?.image_urls?.[0]) || ''
           }}
           open={!!editingItem}
           onOpenChange={(open) => {
@@ -566,6 +570,18 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
                   sku: values.sku,
                   quantity: values.quantity,
                   image_urls: values.imageUrl ? [values.imageUrl] : null,
+                  // Update catalog_snapshot with new values to preserve TCGPlayer data
+                  catalog_snapshot: editingItem.catalog_snapshot ? {
+                    ...editingItem.catalog_snapshot,
+                    name: values.subject,
+                    set: values.brandTitle,
+                    number: values.cardNumber,
+                    condition: values.variant,
+                    entered_price: values.price ? parseFloat(values.price) : editingItem.catalog_snapshot.entered_price,
+                    calculated_cost: values.cost ? parseFloat(values.cost) : editingItem.catalog_snapshot.calculated_cost,
+                    photo_url: values.imageUrl || editingItem.catalog_snapshot.photo_url,
+                    image_urls: values.imageUrl ? [values.imageUrl] : editingItem.catalog_snapshot.image_urls
+                  } : null,
                   updated_at: new Date().toISOString()
                 })
                 .eq('id', values.id);
