@@ -134,17 +134,30 @@ Deno.serve(async (req) => {
       })
     }
 
-    // Get Shopify credentials
+    // Get Shopify credentials from database
     const storeKey = intakeItem.store_key
     const storeUpper = storeKey.toUpperCase()
     const domainKey = `SHOPIFY_${storeUpper}_STORE_DOMAIN`
     const tokenKey = `SHOPIFY_${storeUpper}_ACCESS_TOKEN`
     
-    const domain = Deno.env.get(domainKey)
-    const token = Deno.env.get(tokenKey)
+    // Load credentials from system_settings table
+    const { data: domainSetting } = await supabase
+      .from('system_settings')
+      .select('key_value')
+      .eq('key_name', domainKey)
+      .single()
+    
+    const { data: tokenSetting } = await supabase
+      .from('system_settings')
+      .select('key_value')
+      .eq('key_name', tokenKey)
+      .single()
+    
+    const domain = domainSetting?.key_value
+    const token = tokenSetting?.key_value
 
     if (!domain || !token) {
-      throw new Error(`Missing Shopify credentials for ${storeKey}`)
+      throw new Error(`Missing Shopify credentials for ${storeKey}. Looking for ${domainKey} and ${tokenKey} in system_settings`)
     }
 
     // Delete the product entirely from Shopify
