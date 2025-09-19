@@ -1,22 +1,7 @@
 import { corsHeaders } from '../_shared/cors.ts'
 
 interface SendRawArgs {
-  storeKey: "hawaii" | "las_vegas"
-  locationGid: string
-  item: {
-    id?: string
-    sku: string
-    brand_title?: string
-    subject?: string
-    card_number?: string
-    image_url?: string
-    cost?: number
-    title?: string
-    price?: number
-    barcode?: string
-    condition?: string
-    quantity?: number
-  }
+  item_id: string
 }
 
 Deno.serve(async (req) => {
@@ -25,7 +10,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { storeKey, locationGid, item }: SendRawArgs = await req.json()
+    const { item_id }: SendRawArgs = await req.json()
 
     // Get environment variables for Supabase
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
@@ -35,28 +20,26 @@ Deno.serve(async (req) => {
     const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2')
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-    // Get intake item to extract additional data
-    let intakeItem = null
-    let imageUrl = item.image_url
+    // Get intake item data
+    const { data: intakeItem, error: fetchError } = await supabase
+      .from('intake_items')
+      .select('*')
+      .eq('id', item_id)
+      .single()
     
-    if (item.id) {
-      const { data: fetchedItem } = await supabase
-        .from('intake_items')
-        .select('*')
-        .eq('id', item.id)
-        .single()
-      
-      if (fetchedItem) {
-        intakeItem = fetchedItem
-        // Extract image URL from various sources
-        imageUrl = item.image_url || 
-                   intakeItem.catalog_snapshot?.image_url || 
-                   intakeItem.psa_snapshot?.image_url ||
-                   (intakeItem.image_urls && Array.isArray(intakeItem.image_urls) ? intakeItem.image_urls[0] : null)
-      }
+    if (fetchError || !intakeItem) {
+      throw new Error(`Failed to fetch intake item: ${fetchError?.message || 'Item not found'}`)
     }
 
+    // Extract image URL from various sources
+    const imageUrl = intakeItem.catalog_snapshot?.photo_url || 
+                     intakeItem.catalog_snapshot?.image_url || 
+                     intakeItem.psa_snapshot?.image_url ||
+                     (intakeItem.image_urls && Array.isArray(intakeItem.image_urls) ? intakeItem.image_urls[0] : null) ||
+                     (intakeItem.catalog_snapshot?.image_urls && Array.isArray(intakeItem.catalog_snapshot.image_urls) ? intakeItem.catalog_snapshot.image_urls[0] : null)
+
     // Get Shopify credentials
+    const storeKey = intakeItem.store_key
     const storeUpper = storeKey.toUpperCase()
     const domainKey = `SHOPIFY_${storeUpper}_STORE_DOMAIN`
     const tokenKey = `SHOPIFY_${storeUpper}_ACCESS_TOKEN`
@@ -69,20 +52,17 @@ Deno.serve(async (req) => {
     }
 
     // Create raw card title
-    const brandTitle = item.brand_title || ''
-    const subject = item.subject || ''
-    const cardNumber = item.card_number || ''
-    const condition = item.condition || 'NM'
+    const brandTitle = intakeItem.brand_title || ''
+    const subject = intakeItem.subject || ''
+    const cardNumber = intakeItem.card_number || ''
+    const condition = intakeItem.variant || 'NM'
 
-    let title = item.title
-    if (!title) {
-      const parts = [brandTitle, subject, cardNumber, condition].filter(Boolean)
-      title = parts.join(' ')
-    }
+    const parts = [brandTitle, subject, cardNumber, condition].filter(Boolean)
+    const title = parts.join(' ')
 
     // Create product description with title and SKU
     let description = title
-    if (item.sku) description += ` ${item.sku}`
+    if (intakeItem.sku) description += `\nSKU: ${intakeItem.sku}`
     
     // Add detailed description
     description += `\n\nRaw ${brandTitle} ${subject}`
@@ -100,19 +80,19 @@ Deno.serve(async (req) => {
           'Raw Card', 
           brandTitle, 
           condition,
-          intakeItem?.category || 'Pokemon', // Game from intake item
-          intakeItem?.lot_number || 'Unknown Lot', // Lot number
+          intakeItem.category || 'Pokemon', // Game from intake item
+          intakeItem.lot_number || 'Unknown Lot', // Lot number
           subject ? `Card: ${subject}` : null, // Card name
           cardNumber ? `Number: ${cardNumber}` : null // Card number
         ].filter(Boolean).join(', '),
         variants: [{
-          sku: item.sku,
-          price: item.price?.toString() || '0.00',
-          inventory_quantity: item.quantity || 1,
+          sku: intakeItem.sku,
+          price: intakeItem.price?.toString() || '0.00',
+          inventory_quantity: intakeItem.quantity || 1,
           inventory_management: 'shopify',
           requires_shipping: true,
           taxable: true,
-          barcode: item.sku, // SKU and barcode should be the same
+          barcode: intakeItem.sku, // SKU and barcode should be the same
           inventory_policy: 'deny'
         }],
         images: imageUrl ? [{
@@ -141,7 +121,7 @@ Deno.serve(async (req) => {
     const variant = product.variants[0]
 
     // Set inventory level at location
-    const locationId = locationGid.replace('gid://shopify/Location/', '')
+    const locationId = intakeItem.shopify_location_gid.replace('gid://shopify/Location/', '')
     
     const inventoryResponse = await fetch(`https://${domain}/admin/api/2024-07/inventory_levels/set.json`, {
       method: 'POST',
@@ -152,7 +132,7 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         location_id: locationId,
         inventory_item_id: variant.inventory_item_id,
-        available: item.quantity || 1
+        available: intakeItem.quantity || 1
       })
     })
 
@@ -161,35 +141,33 @@ Deno.serve(async (req) => {
       console.warn(`Failed to set inventory level: ${errorText}`)
     }
 
-    // Update intake item with Shopify IDs if provided
-    if (item.id) {
-      // Create shopify snapshot with all raw data
-      const shopifySnapshot = {
-        product_data: productData,
-        shopify_response: result,
-        sync_timestamp: new Date().toISOString(),
-        graded: false
-      }
+    // Create shopify snapshot with all raw data
+    const shopifySnapshot = {
+      product_data: productData,
+      shopify_response: result,
+      sync_timestamp: new Date().toISOString(),
+      graded: false
+    }
 
-      const { error: updateError } = await supabase
-        .from('intake_items')
-        .update({
-          shopify_product_id: product.id.toString(),
-          shopify_variant_id: variant.id.toString(),
-          shopify_inventory_item_id: variant.inventory_item_id.toString(),
-          last_shopify_synced_at: new Date().toISOString(),
-          shopify_sync_status: 'synced',
-          pushed_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          shopify_sync_snapshot: shopifySnapshot,
-          image_urls: imageUrl ? [imageUrl] : (intakeItem?.image_urls || null),
-          updated_by: 'shopify_sync'
-        })
-        .eq('id', item.id)
+    const { error: updateError } = await supabase
+      .from('intake_items')
+      .update({
+        shopify_product_id: product.id.toString(),
+        shopify_variant_id: variant.id.toString(),
+        shopify_inventory_item_id: variant.inventory_item_id.toString(),
+        last_shopify_synced_at: new Date().toISOString(),
+        shopify_sync_status: 'synced',
+        pushed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        shopify_sync_snapshot: shopifySnapshot,
+        image_urls: imageUrl ? [imageUrl] : (intakeItem.image_urls || null),
+        updated_by: 'shopify_sync'
+      })
+      .eq('id', item_id)
 
-      if (updateError) {
-        console.error('Failed to update intake item:', updateError)
-      }
+    if (updateError) {
+      console.error('Failed to update intake item:', updateError)
+      throw new Error(`Failed to update intake item: ${updateError.message}`)
     }
 
     return new Response(JSON.stringify({
