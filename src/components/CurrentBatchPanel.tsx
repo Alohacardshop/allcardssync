@@ -390,31 +390,6 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
     }
   };
 
-  const handleSendBatchToInventory = async () => {
-    if (recentItems.length === 0) {
-      toast({ title: "Info", description: "No items to send" });
-      return;
-    }
-
-    setSendingBatch(true);
-    try {
-      const itemIds = recentItems.map(item => item.id);
-      const { data, error } = await supabase.rpc("send_intake_items_to_inventory", {
-        item_ids: itemIds
-      });
-
-      if (error) throw error;
-
-      toast({ title: "Success", description: `Sent ${(data as any)?.processed_ids?.length || itemIds.length} items to inventory` });
-      fetchRecentItemsWithRetry();
-    } catch (error: any) {
-      console.error("Error sending batch to inventory:", error);
-      toast({ title: "Error", description: error.message });
-    } finally {
-      setSendingBatch(false);
-    }
-  };
-
   // Load items when store context changes
   useEffect(() => {
     if (assignedStore) {
@@ -476,7 +451,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
           {!compact && (
             <div className="flex gap-2">
               <Button
-                onClick={handleSendBatchToInventory}
+                onClick={handleSendBatchToShopify}
                 disabled={recentItems.length === 0 || sendingBatch}
                 size="sm"
               >
@@ -486,19 +461,6 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
                   <Send className="h-4 w-4 mr-2" />
                 )}
                 Send to Inventory
-              </Button>
-              <Button
-                onClick={handleSendBatchToShopify}
-                disabled={recentItems.length === 0 || sendingBatch}
-                size="sm"
-                variant="outline"
-              >
-                {sendingBatch ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : (
-                  <Send className="h-4 w-4 mr-2" />
-                )}
-                Send to Inventory + Shopify
               </Button>
             </div>
           )}
@@ -605,35 +567,19 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
           
           {compact && recentItems.length > 0 && (
             <div className="mt-3 pt-3 border-t space-y-2">
-              <div className="flex gap-2">
-                <Button
-                  onClick={handleSendBatchToInventory}
-                  disabled={recentItems.length === 0 || sendingBatch}
-                  size="sm"
-                  className="flex-1"
-                >
-                  {sendingBatch ? (
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  ) : (
-                    <Send className="h-4 w-4 mr-2" />
-                  )}
-                  Send to Inventory
-                </Button>
-                <Button
-                  onClick={handleSendBatchToShopify}
-                  disabled={recentItems.length === 0 || sendingBatch}
-                  size="sm"
-                  variant="outline"
-                  className="flex-1"
-                >
-                  {sendingBatch ? (
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  ) : (
-                    <Send className="h-4 w-4 mr-2" />
-                  )}
-                  Inventory + Shopify
-                </Button>
-              </div>
+              <Button
+                onClick={handleSendBatchToShopify}
+                disabled={recentItems.length === 0 || sendingBatch}
+                size="sm"
+                className="w-full"
+              >
+                {sendingBatch ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <Send className="h-4 w-4 mr-2" />
+                )}
+                Send to Inventory
+              </Button>
               <Button
                 variant="outline"
                 onClick={() => window.dispatchEvent(new CustomEvent('switchToBatchTab'))}
