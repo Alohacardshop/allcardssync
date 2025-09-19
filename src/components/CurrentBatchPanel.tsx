@@ -41,9 +41,10 @@ interface IntakeItem {
 interface CurrentBatchPanelProps {
   onViewFullBatch?: () => void;
   onBatchCountUpdate?: (count: number) => void;
+  compact?: boolean;
 }
 
-export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate }: CurrentBatchPanelProps) => {
+export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact = false }: CurrentBatchPanelProps) => {
   const { assignedStore, selectedLocation } = useStore();
   const [recentItems, setRecentItems] = useState<IntakeItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -393,27 +394,29 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate }: Curre
   return (
     <>
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+        <CardHeader className={`flex flex-row items-center justify-between space-y-0 ${compact ? 'pb-2' : 'pb-4'}`}>
           <div>
-            <CardTitle>Current Batch</CardTitle>
+            <CardTitle className={compact ? 'text-lg' : ''}>Current Batch</CardTitle>
             <p className="text-sm text-muted-foreground">
               {counts.activeItems} active items
             </p>
           </div>
-          <div className="flex gap-2">
-            <Button
-              onClick={handleSendBatchToInventory}
-              disabled={recentItems.length === 0 || sendingBatch}
-              size="sm"
-            >
-              {sendingBatch ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              ) : (
-                <Send className="h-4 w-4 mr-2" />
-              )}
-              Send to Inventory
-            </Button>
-          </div>
+          {!compact && (
+            <div className="flex gap-2">
+              <Button
+                onClick={handleSendBatchToInventory}
+                disabled={recentItems.length === 0 || sendingBatch}
+                size="sm"
+              >
+                {sendingBatch ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <Send className="h-4 w-4 mr-2" />
+                )}
+                Send to Inventory
+              </Button>
+            </div>
+          )}
         </CardHeader>
         <CardContent>
           {recentItems.length === 0 ? (
@@ -422,46 +425,57 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate }: Curre
             </div>
           ) : (
             <div className="space-y-3">
-              {recentItems.map((item) => (
+              {recentItems.slice(0, compact ? 5 : recentItems.length).map((item) => (
                 <div
                   key={item.id}
-                  className="flex items-center justify-between p-3 border rounded-lg"
+                  className={`flex items-center justify-between ${compact ? 'p-2' : 'p-3'} border rounded-lg`}
                 >
                   <div className="flex-1">
-                    <div className="font-medium">{formatCardName(item)}</div>
+                    <div className={`font-medium ${compact ? 'text-sm' : ''}`}>{formatCardName(item)}</div>
                     <div className="text-sm text-muted-foreground">
-                      {item.sku} • ${item.price} {item.cost && `• Cost: $${item.cost}`} • Qty: {item.quantity}
+                      {compact ? (
+                        `$${item.price} • Qty: ${item.quantity}`
+                      ) : (
+                        `${item.sku} • $${item.price} ${item.cost && `• Cost: $${item.cost}`} • Qty: ${item.quantity}`
+                      )}
                     </div>
                   </div>
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleEditItem(item)}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleSendToInventory(item.id)}
-                    >
-                      <Send className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleDeleteItem(item.id)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
+                  {!compact && (
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleEditItem(item)}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleSendToInventory(item.id)}
+                      >
+                        <Send className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleDeleteItem(item.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
               ))}
+              {compact && recentItems.length > 5 && (
+                <div className="text-center text-sm text-muted-foreground pt-2">
+                  ... and {recentItems.length - 5} more items
+                </div>
+              )}
             </div>
           )}
           
-          {recentItems.length > 0 && (
+          {recentItems.length > 0 && !compact && (
             <div className="mt-4 pt-4 border-t flex gap-2">
               <Button
                 variant="outline"
@@ -488,6 +502,20 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate }: Curre
                   View Full Batch
                 </Button>
               )}
+            </div>
+          )}
+          
+          {compact && recentItems.length > 0 && (
+            <div className="mt-3 pt-3 border-t">
+              <Button
+                variant="outline"
+                onClick={() => window.dispatchEvent(new CustomEvent('switchToBatchTab'))}
+                size="sm"
+                className="w-full"
+              >
+                <Eye className="h-4 w-4 mr-2" />
+                View Full Batch
+              </Button>
             </div>
           )}
         </CardContent>

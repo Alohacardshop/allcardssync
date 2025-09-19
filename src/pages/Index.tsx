@@ -5,7 +5,7 @@ import { Lock, Package, Layers } from 'lucide-react';
 import { GradedCardIntake } from '@/components/GradedCardIntake';
 import { TCGPlayerBulkImport } from '@/components/TCGPlayerBulkImport';
 import { CurrentBatchPanel } from '@/components/CurrentBatchPanel';
-import { toast } from 'sonner';
+import { toast } from "@/hooks/use-toast";
 
 export default function Index() {
   const [activeTab, setActiveTab] = useState('graded');
@@ -15,16 +15,30 @@ export default function Index() {
   useEffect(() => {
     const handleBatchItemAdded = () => {
       // Batch count will be updated by CurrentBatchPanel callback
-      toast.success('Item added to batch! Switch to Batch tab to view.');
+      toast({
+        title: "Success",
+        description: "Item added to batch! Switch to Batch tab to view."
+      });
+    };
+
+    const handleSwitchToBatchTab = () => {
+      setActiveTab('batch');
     };
 
     window.addEventListener('batchItemAdded', handleBatchItemAdded as EventListener);
-    return () => window.removeEventListener('batchItemAdded', handleBatchItemAdded as EventListener);
+    window.addEventListener('switchToBatchTab', handleSwitchToBatchTab as EventListener);
+    return () => {
+      window.removeEventListener('batchItemAdded', handleBatchItemAdded as EventListener);
+      window.removeEventListener('switchToBatchTab', handleSwitchToBatchTab as EventListener);
+    };
   }, []);
 
   // Handle batch add callback
   const handleBatchAdd = () => {
-    toast.success('Item added to batch! Switch to Batch tab to view.');
+    toast({
+      title: "Success", 
+      description: "Item added to batch! Switch to Batch tab to view."
+    });
   };
 
   return (
@@ -57,7 +71,17 @@ export default function Index() {
           </TabsContent>
           
           <TabsContent value="raw">
-            <TCGPlayerBulkImport onBatchAdd={handleBatchAdd} />
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-2">
+                <TCGPlayerBulkImport onBatchAdd={handleBatchAdd} />
+              </div>
+              <div className="lg:col-span-1">
+                <CurrentBatchPanel 
+                  onBatchCountUpdate={(count) => setBatchCount(count)} 
+                  compact={true}
+                />
+              </div>
+            </div>
           </TabsContent>
           
           <TabsContent value="batch">
