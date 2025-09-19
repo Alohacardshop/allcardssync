@@ -2,6 +2,7 @@ import { corsHeaders } from '../_shared/cors.ts'
 
 interface RemoveRawArgs {
   item_id?: string
+  itemId?: string  // Alternative name from frontend
   sku?: string
   certNumber?: string
   quantity?: number
@@ -13,10 +14,16 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { item_id, sku, certNumber, quantity = 1 }: RemoveRawArgs = await req.json()
+    const args: RemoveRawArgs = await req.json()
+    const { item_id, itemId, sku, certNumber, quantity = 1 } = args
+    
+    // Use item_id or itemId (frontend sends itemId)
+    const actualItemId = item_id || itemId
 
-    if (!item_id && !sku) {
-      throw new Error('Either item_id or sku must be provided')
+    console.log('Remove raw args received:', { actualItemId, sku, quantity })
+
+    if (!actualItemId && !sku) {
+      throw new Error('Either item_id/itemId or sku must be provided')
     }
 
     // Get environment variables for Supabase
@@ -31,15 +38,17 @@ Deno.serve(async (req) => {
     let intakeItem = null
     let fetchError = null
     
-    if (item_id) {
+    if (actualItemId) {
+      console.log(`Looking up item by ID: ${actualItemId}`)
       const { data, error } = await supabase
         .from('intake_items')
         .select('*')
-        .eq('id', item_id)
+        .eq('id', actualItemId)
         .single()
       intakeItem = data
       fetchError = error
     } else if (sku) {
+      console.log(`Looking up item by SKU: ${sku}`)
       // For SKU, get the most recent non-deleted item
       const { data, error } = await supabase
         .from('intake_items')
