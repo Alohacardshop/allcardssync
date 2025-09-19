@@ -67,7 +67,13 @@ export default function Index() {
           </TabsList>
           
           <TabsContent value="graded">
-            <GradedCardIntake onBatchAdd={handleBatchAdd} />
+            <div className="space-y-6">
+              <GradedCardIntake onBatchAdd={handleBatchAdd} />
+              <CurrentBatchPanel 
+                onBatchCountUpdate={(count) => setBatchCount(count)} 
+                compact={false}
+              />
+            </div>
           </TabsContent>
           
           <TabsContent value="raw">
@@ -75,7 +81,7 @@ export default function Index() {
               <TCGPlayerBulkImport onBatchAdd={handleBatchAdd} />
               <CurrentBatchPanel 
                 onBatchCountUpdate={(count) => setBatchCount(count)} 
-                compact={true}
+                compact={false}
               />
             </div>
           </TabsContent>
