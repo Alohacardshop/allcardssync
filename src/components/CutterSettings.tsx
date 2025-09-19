@@ -7,6 +7,7 @@ import { Scissors } from 'lucide-react';
 
 export interface CutterConfig {
   cutAfter: boolean;
+  cutTiming: 'after-each' | 'after-interval' | 'end-of-job';
   cutInterval: number;
   hasCutter: boolean;
 }
@@ -23,6 +24,10 @@ export function CutterSettings({ config, onChange }: CutterSettingsProps) {
 
   const handleToggleCutting = (cutAfter: boolean) => {
     onChange({ ...config, cutAfter });
+  };
+
+  const handleCutTimingChange = (value: string) => {
+    onChange({ ...config, cutTiming: value as 'after-each' | 'after-interval' | 'end-of-job' });
   };
 
   const handleCutIntervalChange = (value: string) => {
@@ -71,8 +76,30 @@ export function CutterSettings({ config, onChange }: CutterSettingsProps) {
               />
             </div>
 
-            {/* Cut Interval - only show if cutting is enabled */}
+            {/* Cut Timing - only show if cutting is enabled */}
             {config.cutAfter && (
+              <div className="space-y-2">
+                <Label>Cut timing</Label>
+                <Select value={config.cutTiming} onValueChange={handleCutTimingChange}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select cut timing" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="after-each">Cut after each label</SelectItem>
+                    <SelectItem value="after-interval">Cut after interval</SelectItem>
+                    <SelectItem value="end-of-job">Cut after all labels finished</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {config.cutTiming === 'after-each' && 'Labels cut individually'}
+                  {config.cutTiming === 'after-interval' && 'Labels cut in groups'}
+                  {config.cutTiming === 'end-of-job' && 'Cut only when all labels are printed'}
+                </p>
+              </div>
+            )}
+
+            {/* Cut Interval - only show if timing is 'after-interval' */}
+            {config.cutAfter && config.cutTiming === 'after-interval' && (
               <div className="space-y-2">
                 <Label>Cut interval</Label>
                 <Select value={config.cutInterval.toString()} onValueChange={handleCutIntervalChange}>
@@ -80,7 +107,6 @@ export function CutterSettings({ config, onChange }: CutterSettingsProps) {
                     <SelectValue placeholder="Select cut interval" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="1">Cut after each label</SelectItem>
                     <SelectItem value="2">Cut after 2 labels</SelectItem>
                     <SelectItem value="5">Cut after 5 labels</SelectItem>
                     <SelectItem value="10">Cut after 10 labels</SelectItem>
@@ -89,10 +115,7 @@ export function CutterSettings({ config, onChange }: CutterSettingsProps) {
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  {config.cutInterval === 1 
-                    ? 'Labels cut individually' 
-                    : `Labels will be cut in groups of ${config.cutInterval}`
-                  }
+                  Labels will be cut in groups of {config.cutInterval}
                 </p>
               </div>
             )}

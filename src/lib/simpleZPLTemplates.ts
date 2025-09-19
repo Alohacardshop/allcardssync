@@ -20,7 +20,8 @@ export interface ZPLOptions {
   darkness?: number; // 0-30
   copies?: number;
   cutAfter?: boolean;
-  cutInterval?: number; // Cut after every N labels (1 = cut after each, 10 = cut after 10, etc.)
+  cutTiming?: 'after-each' | 'after-interval' | 'end-of-job'; // When to cut
+  cutInterval?: number; // Cut after every N labels (only used with 'after-interval')
   hasCutter?: boolean; // Whether printer has a cutter
 }
 
@@ -30,6 +31,7 @@ export interface ZPLOptions {
 function generateCutCommands(options: ZPLOptions): string {
   const {
     cutAfter = false,
+    cutTiming = 'after-each',
     cutInterval = 1,
     hasCutter = false,
     copies = 1
@@ -39,15 +41,19 @@ function generateCutCommands(options: ZPLOptions): string {
     return '';
   }
 
-  if (cutInterval === 1) {
-    // Cut after each label
-    return '^MMC';
-  } else if (cutInterval > 1) {
-    // Cut after specified number of labels
-    return `^MMC^MC${cutInterval}`;
+  switch (cutTiming) {
+    case 'after-each':
+      // Cut after each label
+      return '^MMC';
+    case 'after-interval':
+      // Cut after specified number of labels
+      return `^MMC^MC${cutInterval}`;
+    case 'end-of-job':
+      // Cut only at the end of the entire job
+      return '^MMT^MC1'; // ^MMT sets mode to tear-off, ^MC1 cuts after job
+    default:
+      return '^MMC';
   }
-
-  return '';
 }
 
 /**

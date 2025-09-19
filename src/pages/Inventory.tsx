@@ -346,6 +346,7 @@ const Inventory = () => {
       // Load cutter settings
       let cutterConfig = {
         cutAfter: true,
+        cutTiming: 'after-each' as const,
         cutInterval: 1,
         hasCutter: true
       };
@@ -353,7 +354,13 @@ const Inventory = () => {
       try {
         const savedCutterConfig = localStorage.getItem('zebra-cutter-config');
         if (savedCutterConfig) {
-          cutterConfig = JSON.parse(savedCutterConfig);
+          const parsedConfig = JSON.parse(savedCutterConfig);
+          cutterConfig = {
+            ...cutterConfig,
+            ...parsedConfig,
+            // Ensure cutTiming exists for backward compatibility
+            cutTiming: parsedConfig.cutTiming || 'after-each'
+          };
         }
       } catch (error) {
         console.warn('Failed to load cutter config:', error);
@@ -383,6 +390,7 @@ const Inventory = () => {
         darkness: 10,
         copies: 1,
         cutAfter: cutterConfig.cutAfter,
+        cutTiming: cutterConfig.cutTiming,
         cutInterval: cutterConfig.cutInterval,
         hasCutter: cutterConfig.hasCutter
       });

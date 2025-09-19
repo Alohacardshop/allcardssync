@@ -40,6 +40,7 @@ export default function TestHardwarePage() {
   const [dbTest, setDbTest] = useState<TestResult>({ status: 'idle' });
   const [cutterConfig, setCutterConfig] = useState<CutterConfig>({
     cutAfter: true,
+    cutTiming: 'after-each',
     cutInterval: 1,
     hasCutter: true
   });
