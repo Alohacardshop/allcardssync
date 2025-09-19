@@ -414,11 +414,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
         message += `. ${errorCount} Shopify sync(s) failed`;
       }
 
-      toast({ 
-        title: "Success", 
-        description: message,
-        variant: errorCount > 0 ? "destructive" : "default"
-      });
+      // Removed toast notification - information will be shown in inventory screen
       
       fetchRecentItemsWithRetry();
     } catch (error: any) {
