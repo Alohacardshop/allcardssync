@@ -392,12 +392,17 @@ export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) =>
         processing_notes_in: createHumanReadableDescription(item)
       };
 
-      const response: any = await supabase.rpc('create_raw_intake_item', rpcParams);
-      if (response.error) throw response.error;
+      const { data: response, error } = await supabase.rpc('create_raw_intake_item', rpcParams);
+      if (error) throw error;
+      
+      console.log('Raw intake item created:', response);
+      
+      // Handle array response from RPC function
+      const itemData = Array.isArray(response) ? response[0] : response;
       
       // Return the full item data for event dispatching
       return {
-        id: response.data?.id,
+        id: itemData?.id,
         sku,
         item_data: rpcParams,
         store_key: assignedStore,
