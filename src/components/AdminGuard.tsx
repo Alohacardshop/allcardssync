@@ -17,39 +17,70 @@ export function AdminGuard({ children }: AdminGuardProps) {
         const { data: { session } } = await supabase.auth.getSession();
         
         if (!session?.user) {
+          console.log('AdminGuard: No session found');
           setIsAdmin(false);
           setLoading(false);
           return;
         }
 
-        // Use the new verify_user_access function to check admin role
-        const { data: access, error } = await supabase.rpc('verify_user_access', { 
-          _user_id: session.user.id 
-        });
+        console.log('AdminGuard: Checking access for user:', session.user.id);
 
-        if (error) {
-          console.error('Admin access verification failed:', error);
+        // Try both methods to ensure compatibility
+        const [verifyResult, roleResult] = await Promise.all([
+          supabase.rpc('verify_user_access', { _user_id: session.user.id }),
+          supabase.rpc('has_role', { _user_id: session.user.id, _role: 'admin' })
+        ]);
+
+        console.log('AdminGuard: verify_user_access result:', verifyResult);
+        console.log('AdminGuard: has_role result:', roleResult);
+
+        // Check verify_user_access first
+        if (verifyResult.data && typeof verifyResult.data === 'object' && 
+            !Array.isArray(verifyResult.data) && 
+            'has_admin_access' in verifyResult.data && 
+            verifyResult.data.has_admin_access) {
+          console.log('AdminGuard: Access granted via verify_user_access');
+          setIsAdmin(true);
+        }
+        // Fallback to has_role check
+        else if (roleResult.data === true) {
+          console.log('AdminGuard: Access granted via has_role');
+          setIsAdmin(true);
+        }
+        // Both methods failed
+        else {
+          console.log('AdminGuard: Access denied');
           setIsAdmin(false);
-          toast.error('Failed to verify admin access');
-        } else {
-          // Check if user has admin access specifically
-          const hasAdminAccess = access && typeof access === 'object' && 'has_admin_access' in access && access.has_admin_access;
-          setIsAdmin(Boolean(hasAdminAccess));
           
-          if (!hasAdminAccess) {
-            toast.error('Admin access required for this page');
+          // Log detailed error info
+          if (verifyResult.error) {
+            console.error('verify_user_access error:', verifyResult.error);
           }
+          if (roleResult.error) {
+            console.error('has_role error:', roleResult.error);
+          }
+          
+          toast.error('Admin access required for this page');
         }
       } catch (error) {
-        console.error('Admin guard error:', error);
+        console.error('AdminGuard: Exception during access check:', error);
         setIsAdmin(false);
-        toast.error('Authentication error');
+        toast.error('Authentication error - please try refreshing the page');
       } finally {
         setLoading(false);
       }
     };
 
     checkAdminAccess();
+
+    // Set up auth state listener to recheck on auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
+      console.log('AdminGuard: Auth state changed, rechecking access');
+      setLoading(true);
+      checkAdminAccess();
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   if (loading) {
