@@ -40,9 +40,10 @@ interface IntakeItem {
 
 interface CurrentBatchPanelProps {
   onViewFullBatch?: () => void;
+  onBatchCountUpdate?: (count: number) => void;
 }
 
-export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) => {
+export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate }: CurrentBatchPanelProps) => {
   const { assignedStore, selectedLocation } = useStore();
   const [recentItems, setRecentItems] = useState<IntakeItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -177,6 +178,9 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
         console.log(`[CurrentBatchPanel] No active lot found for store: ${store}, location: ${location}`);
         setRecentItems([]);
         setCounts({ activeItems: 0, totalItems: 0 });
+        if (onBatchCountUpdate) {
+          onBatchCountUpdate(0);
+        }
         return;
       }
 
@@ -206,10 +210,16 @@ export const CurrentBatchPanel = ({ onViewFullBatch }: CurrentBatchPanelProps) =
       setRecentItems(typedItems);
 
       // Update counts
-      setCounts({
+      const newCounts = {
         activeItems: items?.length || 0,
         totalItems: lot.total_items || 0
-      });
+      };
+      setCounts(newCounts);
+
+      // Notify parent of batch count update
+      if (onBatchCountUpdate) {
+        onBatchCountUpdate(newCounts.activeItems);
+      }
 
     } catch (error) {
       console.error("Error in fetchRecentItems:", error);
