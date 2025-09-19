@@ -133,9 +133,9 @@ export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) =>
       foil: card.rarity || 'Normal',
       condition: card.condition,
       language: 'English', // Default, could be enhanced
-      priceEach: card.marketPrice || 0, // Start with market price as default
-      cost: (card.marketPrice || 0) * 0.7, // Calculate cost as 70% of TCGplayer price
-      totalPrice: (card.marketPrice || 0) * (card.quantity || 1),
+      priceEach: calculateOurPrice(card.marketPrice || 0), // Apply new pricing formula for raw cards
+      cost: calculateOurPrice(card.marketPrice || 0) * 0.7, // Calculate cost as 70% of our selling price
+      totalPrice: calculateOurPrice(card.marketPrice || 0) * (card.quantity || 1),
       status: 'pending' as const
     }));
     
@@ -231,9 +231,9 @@ export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) =>
           foil,
           condition,
           language,
-          priceEach,
-          cost: priceEach * 0.7, // Calculate cost as 70% of TCGplayer price
-          totalPrice,
+          priceEach: calculateOurPrice(priceEach), // Apply new pricing formula for raw cards
+          cost: calculateOurPrice(priceEach) * 0.7, // Calculate cost as 70% of our selling price
+          totalPrice: calculateOurPrice(priceEach) * quantity,
           status: 'pending',
           // TCGPlayer data will be enhanced by CSV parsing if available
           marketPrice: priceEach
@@ -244,6 +244,23 @@ export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) =>
       toast.success(`Loaded ${parsedItems.length} items from TCGPlayer list`);
     };
     reader.readAsText(file);
+  };
+
+// Calculate our selling price based on market price for raw cards
+  const calculateOurPrice = (marketPrice: number): number => {
+    if (marketPrice < 10) {
+      // Less than $10: (+$0.51 rounded up to nearest whole dollar) + $1
+      return Math.ceil(marketPrice + 0.51) + 1;
+    } else if (marketPrice <= 20) {
+      // $10-20: x1.25 rounded up to nearest whole dollar
+      return Math.ceil(marketPrice * 1.25);
+    } else if (marketPrice <= 26) {
+      // $20-26: x1.15 rounded up to nearest whole dollar
+      return Math.ceil(marketPrice * 1.15);
+    } else {
+      // $26+: x1.1 rounded up to nearest multiple of $5
+      return Math.ceil((marketPrice * 1.1) / 5) * 5;
+    }
   };
 
   // Resolve variant ID for a TCGPlayer item by searching TCG database
