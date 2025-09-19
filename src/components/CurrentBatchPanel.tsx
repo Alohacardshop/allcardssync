@@ -604,7 +604,36 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
           )}
           
           {compact && recentItems.length > 0 && (
-            <div className="mt-3 pt-3 border-t">
+            <div className="mt-3 pt-3 border-t space-y-2">
+              <div className="flex gap-2">
+                <Button
+                  onClick={handleSendBatchToInventory}
+                  disabled={recentItems.length === 0 || sendingBatch}
+                  size="sm"
+                  className="flex-1"
+                >
+                  {sendingBatch ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : (
+                    <Send className="h-4 w-4 mr-2" />
+                  )}
+                  Send to Inventory
+                </Button>
+                <Button
+                  onClick={handleSendBatchToShopify}
+                  disabled={recentItems.length === 0 || sendingBatch}
+                  size="sm"
+                  variant="outline"
+                  className="flex-1"
+                >
+                  {sendingBatch ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : (
+                    <Send className="h-4 w-4 mr-2" />
+                  )}
+                  Inventory + Shopify
+                </Button>
+              </div>
               <Button
                 variant="outline"
                 onClick={() => window.dispatchEvent(new CustomEvent('switchToBatchTab'))}
