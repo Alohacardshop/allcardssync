@@ -55,11 +55,20 @@ Deno.serve(async (req) => {
                    intakeItem.psa_snapshot?.psaUrl || 
                    (intakeItem.psa_cert ? `https://www.psacard.com/cert/${intakeItem.psa_cert}` : null)
 
-    // Extract image URL from various sources
+    // Extract image URL from various sources - prioritize front image
     const imageUrl = item.image_url || 
                      intakeItem.catalog_snapshot?.image_url || 
                      intakeItem.psa_snapshot?.image_url ||
-                     (intakeItem.image_urls && Array.isArray(intakeItem.image_urls) ? intakeItem.image_urls[0] : null)
+                     intakeItem.psa_snapshot?.imageUrl ||  // PSA primary image (front)
+                     (intakeItem.image_urls && Array.isArray(intakeItem.image_urls) ? 
+                       // Find front image in PSA image array or use first
+                       (intakeItem.image_urls.find((_, index, urls) => {
+                         // If we have psa_snapshot with imageUrls array, match the primary imageUrl
+                         if (intakeItem.psa_snapshot?.imageUrl && intakeItem.psa_snapshot?.imageUrls) {
+                           return urls[index] === intakeItem.psa_snapshot.imageUrl;
+                         }
+                         return false;
+                       }) || intakeItem.image_urls[0]) : null)
 
     // Get Shopify credentials
     const storeUpper = storeKey.toUpperCase()
