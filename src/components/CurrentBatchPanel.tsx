@@ -428,9 +428,9 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
               {recentItems.slice(0, compact ? 5 : recentItems.length).map((item) => (
                 <div
                   key={item.id}
-                  className={`flex items-center justify-between ${compact ? 'p-2' : 'p-3'} border rounded-lg`}
+                  className={`flex items-center justify-between ${compact ? 'p-2' : 'p-3'} border rounded-lg group hover:bg-muted/50`}
                 >
-                  <div className="flex-1">
+                  <div className="flex-1 cursor-pointer" onClick={() => handleEditItem(item)}>
                     <div className={`font-medium ${compact ? 'text-sm' : ''}`}>{formatCardName(item)}</div>
                     <div className="text-sm text-muted-foreground">
                       {compact ? (
@@ -440,31 +440,44 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
                       )}
                     </div>
                   </div>
-                  {!compact && (
-                    <div className="flex gap-2">
+                  <div className={`flex gap-1 ${compact ? 'opacity-0 group-hover:opacity-100 transition-opacity' : 'gap-2'}`}>
+                    {compact && (
                       <Button
                         size="sm"
-                        variant="outline"
+                        variant="ghost"
                         onClick={() => handleEditItem(item)}
+                        className="h-8 w-8 p-0"
                       >
-                        <Pencil className="h-4 w-4" />
+                        <Pencil className="h-3 w-3" />
                       </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleSendToInventory(item.id)}
-                      >
-                        <Send className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleDeleteItem(item.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  )}
+                    )}
+                    {!compact && (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleEditItem(item)}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleSendToInventory(item.id)}
+                        >
+                          <Send className="h-4 w-4" />
+                        </Button>
+                      </>
+                    )}
+                    <Button
+                      size="sm"
+                      variant={compact ? "ghost" : "outline"}
+                      onClick={() => handleDeleteItem(item.id)}
+                      className={compact ? "h-8 w-8 p-0 text-destructive hover:text-destructive" : ""}
+                    >
+                      <Trash2 className={compact ? "h-3 w-3" : "h-4 w-4"} />
+                    </Button>
+                  </div>
                 </div>
               ))}
               {compact && recentItems.length > 5 && (
