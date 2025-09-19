@@ -23,6 +23,7 @@ import { testLocalBridge } from "@/lib/localPrintBridge";
 import { PrintNodeSettings } from "@/components/PrintNodeSettings";
 import { SimplePrinterPanel } from "@/components/SimplePrinterPanel";
 import { CutterSettings, CutterConfig } from "@/components/CutterSettings";
+import { DefaultPrinterSelector } from "@/components/DefaultPrinterSelector";
 
 interface TestResult {
   status: 'idle' | 'running' | 'success' | 'error';
@@ -256,7 +257,13 @@ export default function TestHardwarePage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6">
+              {/* Default Printer Selection */}
+              <div>
+                <h3 className="text-lg font-semibold mb-4">Default Printer</h3>
+                <DefaultPrinterSelector />
+              </div>
+
               {/* PrintNode Configuration */}
               <div>
                 <h3 className="text-lg font-semibold mb-4">PrintNode (Recommended)</h3>
