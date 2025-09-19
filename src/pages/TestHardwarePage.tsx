@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Navigation } from "@/components/Navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { testLocalBridge } from "@/lib/localPrintBridge";
 import { PrintNodeSettings } from "@/components/PrintNodeSettings";
 import { SimplePrinterPanel } from "@/components/SimplePrinterPanel";
+import { CutterSettings, CutterConfig } from "@/components/CutterSettings";
 
 interface TestResult {
   status: 'idle' | 'running' | 'success' | 'error';
@@ -37,6 +38,33 @@ export default function TestHardwarePage() {
   const [printerTest, setPrinterTest] = useState<TestResult>({ status: 'idle' });
   const [networkTest, setNetworkTest] = useState<TestResult>({ status: 'idle' });
   const [dbTest, setDbTest] = useState<TestResult>({ status: 'idle' });
+  const [cutterConfig, setCutterConfig] = useState<CutterConfig>({
+    cutAfter: true,
+    cutInterval: 1,
+    hasCutter: true
+  });
+  useEffect(() => {
+    // Load saved cutter config on mount
+    try {
+      const saved = localStorage.getItem('zebra-cutter-config');
+      if (saved) {
+        const config = JSON.parse(saved);
+        setCutterConfig(config);
+      }
+    } catch (error) {
+      console.warn('Failed to load cutter config:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    // Save cutter config when it changes
+    try {
+      localStorage.setItem('zebra-cutter-config', JSON.stringify(cutterConfig));
+    } catch (error) {
+      console.warn('Failed to save cutter config:', error);
+    }
+  }, [cutterConfig]);
+  
   const barcodeInputRef = useRef<HTMLInputElement>(null);
 
   const handleBarcodeTest = () => {
@@ -227,7 +255,7 @@ export default function TestHardwarePage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* PrintNode Configuration */}
               <div>
                 <h3 className="text-lg font-semibold mb-4">PrintNode (Recommended)</h3>
@@ -238,6 +266,15 @@ export default function TestHardwarePage() {
               <div>
                 <h3 className="text-lg font-semibold mb-4">Direct Zebra Printing</h3>
                 <SimplePrinterPanel />
+              </div>
+
+              {/* Cutter Settings */}
+              <div>
+                <h3 className="text-lg font-semibold mb-4">Label Cutting</h3>
+                <CutterSettings 
+                  config={cutterConfig}
+                  onChange={setCutterConfig}
+                />
               </div>
             </div>
           </CardContent>

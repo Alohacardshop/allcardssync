@@ -20,6 +20,34 @@ export interface ZPLOptions {
   darkness?: number; // 0-30
   copies?: number;
   cutAfter?: boolean;
+  cutInterval?: number; // Cut after every N labels (1 = cut after each, 10 = cut after 10, etc.)
+  hasCutter?: boolean; // Whether printer has a cutter
+}
+
+/**
+ * Generate cutting commands for ZPL based on options
+ */
+function generateCutCommands(options: ZPLOptions): string {
+  const {
+    cutAfter = false,
+    cutInterval = 1,
+    hasCutter = false,
+    copies = 1
+  } = options;
+
+  if (!cutAfter || !hasCutter) {
+    return '';
+  }
+
+  if (cutInterval === 1) {
+    // Cut after each label
+    return '^MMC';
+  } else if (cutInterval > 1) {
+    // Cut after specified number of labels
+    return `^MMC^MC${cutInterval}`;
+  }
+
+  return '';
 }
 
 /**
@@ -30,8 +58,7 @@ export function generatePriceTagZPL(data: LabelData, options: ZPLOptions = {}): 
     dpi = 203,
     speed = 4,
     darkness = 10,
-    copies = 1,
-    cutAfter = true
+    copies = 1
   } = options;
 
   const { title = '', price = '', sku = '', condition = '' } = data;
@@ -40,6 +67,8 @@ export function generatePriceTagZPL(data: LabelData, options: ZPLOptions = {}): 
   const labelWidth = dpi * 2;
   const labelHeight = dpi * 1;
 
+  const cutCommands = generateCutCommands(options);
+
   return `^XA
 ^MMT
 ^PW${labelWidth}
@@ -47,6 +76,7 @@ export function generatePriceTagZPL(data: LabelData, options: ZPLOptions = {}): 
 ^LH0,0
 ^PR${speed}
 ^MD${darkness}
+${cutCommands}
 
 ~SD15
 ^FO10,10^A0N,28,28^FD${title.substring(0, 25)}^FS
@@ -55,7 +85,7 @@ ${condition ? `^FO${labelWidth - 120},55^A0N,18,18^FD${condition}^FS` : ''}
 ${sku ? `^FO10,${labelHeight - 30}^A0N,16,16^FDSKU: ${sku}^FS` : ''}
 
 ^PQ${copies}
-${cutAfter ? '^MMC^XZ' : '^XZ'}`;
+^XZ`;
 }
 
 /**
@@ -66,14 +96,15 @@ export function generateBarcodeLabelZPL(data: LabelData, options: ZPLOptions = {
     dpi = 203,
     speed = 4,
     darkness = 10,
-    copies = 1,
-    cutAfter = true
+    copies = 1
   } = options;
 
   const { title = '', barcode = '', description = '', sku = '' } = data;
 
   const labelWidth = dpi * 2;
   const labelHeight = dpi * 1;
+
+  const cutCommands = generateCutCommands(options);
 
   return `^XA
 ^MMT
@@ -82,6 +113,7 @@ export function generateBarcodeLabelZPL(data: LabelData, options: ZPLOptions = {
 ^LH0,0
 ^PR${speed}
 ^MD${darkness}
+${cutCommands}
 
 ~SD15
 ${title ? `^FO10,10^A0N,24,24^FD${title.substring(0, 30)}^FS` : ''}
@@ -90,7 +122,7 @@ ${description ? `^FO10,${labelHeight - 25}^A0N,16,16^FD${description.substring(0
 ${sku ? `^FO${labelWidth - 100},${labelHeight - 25}^A0N,16,16^FD${sku}^FS` : ''}
 
 ^PQ${copies}
-${cutAfter ? '^MMC^XZ' : '^XZ'}`;
+^XZ`;
 }
 
 /**
@@ -101,8 +133,7 @@ export function generateQRShelfLabelZPL(data: LabelData, options: ZPLOptions = {
     dpi = 203,
     speed = 4,
     darkness = 10,
-    copies = 1,
-    cutAfter = true
+    copies = 1
   } = options;
 
   const { title = '', qrCode = '', location = '', description = '' } = data;
@@ -111,6 +142,8 @@ export function generateQRShelfLabelZPL(data: LabelData, options: ZPLOptions = {
   const labelWidth = Math.floor(dpi * 2.25);
   const labelHeight = Math.floor(dpi * 1.25);
 
+  const cutCommands = generateCutCommands(options);
+
   return `^XA
 ^MMT
 ^PW${labelWidth}
@@ -118,6 +151,7 @@ export function generateQRShelfLabelZPL(data: LabelData, options: ZPLOptions = {
 ^LH0,0
 ^PR${speed}
 ^MD${darkness}
+${cutCommands}
 
 ~SD15
 ^FO15,20^BQN,2,6^FDQM,${qrCode}^FS
@@ -126,7 +160,7 @@ ${location ? `^FO120,50^A0N,24,24^FDLOC: ${location}^FS` : ''}
 ${description ? `^FO120,75^A0N,20,20^FD${description.substring(0, 15)}^FS` : ''}
 
 ^PQ${copies}
-${cutAfter ? '^MMC^XZ' : '^XZ'}`;
+^XZ`;
 }
 
 /**
@@ -137,13 +171,14 @@ export function generateTestLabelZPL(options: ZPLOptions = {}): string {
     dpi = 203,
     speed = 4,
     darkness = 10,
-    copies = 1,
-    cutAfter = true
+    copies = 1
   } = options;
 
   const labelWidth = dpi * 2;
   const labelHeight = dpi * 1;
   const timestamp = new Date().toLocaleString();
+
+  const cutCommands = generateCutCommands(options);
 
   return `^XA
 ^MMT
@@ -152,6 +187,7 @@ export function generateTestLabelZPL(options: ZPLOptions = {}): string {
 ^LH0,0
 ^PR${speed}
 ^MD${darkness}
+${cutCommands}
 
 ~SD15
 ^FO10,10^A0N,32,32^FDTEST PRINT^FS
@@ -159,7 +195,7 @@ export function generateTestLabelZPL(options: ZPLOptions = {}): string {
 ^FO10,80^BCN,40,Y,N,N^FD123456789^FS
 
 ^PQ${copies}
-${cutAfter ? '^MMC^XZ' : '^XZ'}`;
+^XZ`;
 }
 
 /**
@@ -170,15 +206,16 @@ export function generateRawCardLabelZPL(data: LabelData, options: ZPLOptions = {
     dpi = 203,
     speed = 4,
     darkness = 10,
-    copies = 1,
-    cutAfter = true
+    copies = 1
   } = options;
 
   const { title = '', sku = '', price = '', condition = '', location = '' } = data;
 
-  // 2x1 inch label for raw cards
+  // 2x1 inch label for raw cards (optimized for trading cards)
   const labelWidth = dpi * 2;
   const labelHeight = dpi * 1;
+
+  const cutCommands = generateCutCommands(options);
 
   return `^XA
 ^MMT
@@ -187,6 +224,7 @@ export function generateRawCardLabelZPL(data: LabelData, options: ZPLOptions = {
 ^LH0,0
 ^PR${speed}
 ^MD${darkness}
+${cutCommands}
 
 ~SD15
 ^FO10,10^A0N,20,20^FD${title.substring(0, 35)}^FS
@@ -196,7 +234,7 @@ ${condition ? `^FO${labelWidth - 100},45^A0N,16,16^FD${condition}^FS` : ''}
 ${location ? `^FO10,${labelHeight - 15}^A0N,12,12^FDLOC: ${location}^FS` : ''}
 
 ^PQ${copies}
-${cutAfter ? '^MMC^XZ' : '^XZ'}`;
+^XZ`;
 }
 
 /**

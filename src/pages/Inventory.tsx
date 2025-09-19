@@ -343,6 +343,22 @@ const Inventory = () => {
     try {
       setPrintingItem(item.id);
       
+      // Load cutter settings
+      let cutterConfig = {
+        cutAfter: true,
+        cutInterval: 1,
+        hasCutter: true
+      };
+      
+      try {
+        const savedCutterConfig = localStorage.getItem('zebra-cutter-config');
+        if (savedCutterConfig) {
+          cutterConfig = JSON.parse(savedCutterConfig);
+        }
+      } catch (error) {
+        console.warn('Failed to load cutter config:', error);
+      }
+      
       // Generate proper title for raw card
       const generateTitle = (item: any) => {
         const parts = []
@@ -353,7 +369,7 @@ const Inventory = () => {
         return parts.length > 0 ? parts.join(' ') : 'Raw Card';
       };
 
-      // Use enhanced ZPL template for raw cards
+      // Use enhanced ZPL template for raw cards with cutter settings
       const { generateRawCardLabelZPL } = await import('@/lib/simpleZPLTemplates');
       const zpl = generateRawCardLabelZPL({
         title: generateTitle(item),
@@ -365,7 +381,10 @@ const Inventory = () => {
         dpi: 203,
         speed: 4,
         darkness: 10,
-        copies: 1
+        copies: 1,
+        cutAfter: cutterConfig.cutAfter,
+        cutInterval: cutterConfig.cutInterval,
+        hasCutter: cutterConfig.hasCutter
       });
 
       console.log('Generated ZPL for printing:', zpl);
