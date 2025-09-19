@@ -113,8 +113,19 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
         parts.push(item.catalog_snapshot.language);
       }
       
+      // Add variant from item if present and not a condition
+      if (item.variant && !['Near Mint', 'Lightly Played', 'Moderately Played', 'Heavily Played', 'Damaged'].includes(item.variant)) {
+        parts.push(item.variant);
+      }
+      
       return parts.join(', ');
     }
+    
+    // Fallback to item variant if no catalog_snapshot
+    if (item.variant && !['Near Mint', 'Lightly Played', 'Moderately Played', 'Heavily Played', 'Damaged'].includes(item.variant)) {
+      return item.variant;
+    }
+    
     return null;
   }
 
@@ -515,11 +526,19 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
                           `${item.sku} • $${item.price} ${item.cost && `• Cost: $${item.cost}`} • Qty: ${item.quantity}`
                         )}
                       </div>
-                      {/* Show condition for raw cards */}
-                      {getCondition(item) && (
-                        <div className="text-xs">
-                          <span className="font-medium">Condition:</span> {getCondition(item)}
-                          {getVariantInfo(item) && ` • ${getVariantInfo(item)}`}
+                      {/* Show condition and variant for raw cards */}
+                      {(getCondition(item) || getVariantInfo(item)) && (
+                        <div className="text-xs space-y-0.5">
+                          {getCondition(item) && (
+                            <div>
+                              <span className="font-medium">Condition:</span> {getCondition(item)}
+                            </div>
+                          )}
+                          {getVariantInfo(item) && (
+                            <div>
+                              <span className="font-medium">Variant:</span> {getVariantInfo(item)}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -640,8 +659,14 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
             subject: editingItem.subject || (editingItem.catalog_snapshot?.name) || '',
             category: editingItem.category,
             variant: editingItem.variant || 
-                    (editingItem.catalog_snapshot?.condition) || 
+                    (editingItem.catalog_snapshot?.foil ? 'Foil' : '') || 
                     (editingItem.catalog_snapshot?.varietyPedigree) || '',
+            condition: editingItem.catalog_snapshot?.condition || 
+                      (editingItem.variant?.includes('Near Mint') ? 'Near Mint' : 
+                       editingItem.variant?.includes('Lightly Played') ? 'Lightly Played' :
+                       editingItem.variant?.includes('Moderately Played') ? 'Moderately Played' :
+                       editingItem.variant?.includes('Heavily Played') ? 'Heavily Played' :
+                       editingItem.variant?.includes('Damaged') ? 'Damaged' : ''),
             cardNumber: editingItem.card_number || (editingItem.catalog_snapshot?.number) || '',
             grade: editingItem.grade,
             psaCert: editingItem.psa_cert || (editingItem.catalog_snapshot?.psaCert) || '',
@@ -686,7 +711,8 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
                     name: values.subject,
                     set: values.brandTitle,
                     number: values.cardNumber,
-                    condition: values.variant,
+                    condition: values.condition || editingItem.catalog_snapshot.condition,
+                    foil: values.variant?.toLowerCase().includes('foil') || editingItem.catalog_snapshot.foil,
                     entered_price: values.price ? parseFloat(values.price) : editingItem.catalog_snapshot.entered_price,
                     calculated_cost: values.cost ? parseFloat(values.cost) : editingItem.catalog_snapshot.calculated_cost,
                     photo_url: values.imageUrl || editingItem.catalog_snapshot.photo_url,

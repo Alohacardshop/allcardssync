@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export type IntakeItemDetails = {
   id: string;
@@ -11,6 +12,7 @@ export type IntakeItemDetails = {
   subject?: string;
   category?: string;
   variant?: string;
+  condition?: string;
   cardNumber?: string;
   grade?: string;
   psaCert?: string;
@@ -43,6 +45,17 @@ function EditIntakeItemDialog({ open, item, onOpenChange, onSave, isAdmin = fals
   }, [item]);
 
   if (!form) return null;
+
+  // Check if this is a graded card
+  const isGradedCard = Boolean(form.grade && form.grade !== 'Raw' && form.grade !== 'Ungraded') || Boolean(form.psaCert);
+
+  const conditionOptions = [
+    "Near Mint",
+    "Lightly Played", 
+    "Moderately Played",
+    "Heavily Played",
+    "Damaged"
+  ];
 
   const handleChange = (key: keyof IntakeItemDetails, value: any) => {
     setForm((f) => {
@@ -89,8 +102,25 @@ function EditIntakeItemDialog({ open, item, onOpenChange, onSave, isAdmin = fals
           </div>
           <div>
             <Label htmlFor="variant">Variant</Label>
-            <Input id="variant" value={form.variant || ""} onChange={(e) => handleChange("variant", e.target.value)} />
+            <Input id="variant" value={form.variant || ""} onChange={(e) => handleChange("variant", e.target.value)} placeholder="e.g., Foil, Reverse Holo" />
           </div>
+          {!isGradedCard && (
+            <div>
+              <Label htmlFor="condition">Condition</Label>
+              <Select value={form.condition || ""} onValueChange={(value) => handleChange("condition", value)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select condition" />
+                </SelectTrigger>
+                <SelectContent className="bg-background border shadow-md z-50">
+                  {conditionOptions.map((condition) => (
+                    <SelectItem key={condition} value={condition}>
+                      {condition}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div>
             <Label htmlFor="cardNumber">Card Number</Label>
             <Input id="cardNumber" value={form.cardNumber || ""} onChange={(e) => handleChange("cardNumber", e.target.value)} />
