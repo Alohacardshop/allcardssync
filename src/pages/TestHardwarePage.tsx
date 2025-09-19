@@ -20,6 +20,8 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { testLocalBridge } from "@/lib/localPrintBridge";
+import { PrintNodeSettings } from "@/components/PrintNodeSettings";
+import { SimplePrinterPanel } from "@/components/SimplePrinterPanel";
 
 interface TestResult {
   status: 'idle' | 'running' | 'success' | 'error';
@@ -213,6 +215,34 @@ export default function TestHardwarePage() {
       </header>
 
       <main className="container mx-auto px-4 py-8">
+        {/* PrintNode Setup Section */}
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Printer className="h-5 w-5" />
+              Printer Setup
+            </CardTitle>
+            <CardDescription>
+              Configure cloud-based printing with PrintNode or direct Zebra network printing
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* PrintNode Configuration */}
+              <div>
+                <h3 className="text-lg font-semibold mb-4">PrintNode (Recommended)</h3>
+                <PrintNodeSettings />
+              </div>
+              
+              {/* Direct Zebra Printing */}
+              <div>
+                <h3 className="text-lg font-semibold mb-4">Direct Zebra Printing</h3>
+                <SimplePrinterPanel />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Barcode Scanner Test */}
           <Card>

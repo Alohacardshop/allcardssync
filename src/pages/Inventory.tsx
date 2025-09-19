@@ -325,7 +325,7 @@ const Inventory = () => {
   }, [sendChunkedBatchToShopify, fetchItems]);
 
   const handlePrint = useCallback(async (item: any) => {
-    console.log('handlePrint called for item:', item.id, 'selectedPrinter:', selectedPrinter);
+    console.log('handlePrint called for item:', item.id);
     
     const itemType = item.type?.toLowerCase() || 'raw';
     
@@ -337,11 +337,6 @@ const Inventory = () => {
     
     if (!item.sku) {
       toast.error('No SKU available for printing');
-      return;
-    }
-
-    if (!selectedPrinter) {
-      toast.error('Please select a printer first. Go to Test Hardware > Printer Setup to configure a printer.');
       return;
     }
 
@@ -375,17 +370,46 @@ const Inventory = () => {
 
       console.log('Generated ZPL for printing:', zpl);
 
-      await zebraNetworkService.printZPL(zpl, selectedPrinter, {
-        title: `Raw-Card-${item.sku}`,
-        copies: 1 
-      });
+      // Try PrintNode first (preferred method)
+      try {
+        // Get saved PrintNode printer ID from localStorage
+        const savedPrinter = localStorage.getItem('printnode-selected-printer');
+        if (savedPrinter) {
+          const printerConfig = JSON.parse(savedPrinter);
+          const printNodeService = await import('@/lib/printNodeService');
+          
+          const result = await printNodeService.printNodeService.printZPL(zpl, printerConfig.id, 1);
+          
+          if (result.success) {
+            toast.success('Raw card label sent to PrintNode successfully');
+          } else {
+            throw new Error(result.error || 'PrintNode print failed');
+          }
+        } else {
+          throw new Error('No PrintNode printer configured');
+        }
+      } catch (printNodeError) {
+        console.log('PrintNode failed, trying direct Zebra printing:', printNodeError);
+        
+        // Fallback to direct Zebra printing if available
+        if (!selectedPrinter) {
+          throw new Error('No PrintNode configuration and no Zebra printer selected. Please configure printing in Test Hardware > Printer Setup.');
+        }
 
+        await zebraNetworkService.printZPL(zpl, selectedPrinter, {
+          title: `Raw-Card-${item.sku}`,
+          copies: 1 
+        });
+
+        toast.success('Raw card label printed via direct connection');
+      }
+
+      // Mark as printed in database
       await supabase
         .from('intake_items')
         .update({ printed_at: new Date().toISOString() })
         .eq('id', item.id);
 
-      toast.success('Raw card label printed successfully');
       fetchItems(0, true);
     } catch (error) {
       console.error('Print error:', error);
@@ -462,15 +486,10 @@ const Inventory = () => {
   }, [printData, selectedPrinter, fetchItems]);
 
   const handleBulkPrintRaw = useCallback(async () => {
-    if (!selectedPrinter) {
-      toast.error('Please select a printer first');
-      return;
-    }
-
     setBulkPrinting(true);
     
     try {
-      // Filter for unpinted raw items
+      // Filter for unprinted raw items
       const unprintedRawItems = items.filter(item => {
         const itemType = item.type?.toLowerCase() || 'raw';
         return itemType === 'raw' && !item.printed_at && !item.deleted_at;
@@ -478,6 +497,15 @@ const Inventory = () => {
 
       if (unprintedRawItems.length === 0) {
         toast.info('No unprinted raw cards found');
+        return;
+      }
+
+      // Check for PrintNode configuration first
+      const savedPrinter = localStorage.getItem('printnode-selected-printer');
+      const usePrintNode = !!savedPrinter;
+      
+      if (!usePrintNode && !selectedPrinter) {
+        toast.error('Please configure PrintNode or select a Zebra printer in Test Hardware > Printer Setup');
         return;
       }
 
@@ -510,10 +538,23 @@ const Inventory = () => {
             copies: 1
           });
 
-          await zebraNetworkService.printZPL(zpl, selectedPrinter, {
-            title: `Bulk-Raw-${item.sku}`,
-            copies: 1 
-          });
+          // Try PrintNode first if configured
+          if (usePrintNode) {
+            const printerConfig = JSON.parse(savedPrinter!);
+            const printNodeService = await import('@/lib/printNodeService');
+            
+            const result = await printNodeService.printNodeService.printZPL(zpl, printerConfig.id, 1);
+            
+            if (!result.success) {
+              throw new Error(result.error || 'PrintNode print failed');
+            }
+          } else {
+            // Fallback to direct Zebra printing
+            await zebraNetworkService.printZPL(zpl, selectedPrinter!, {
+              title: `Bulk-Raw-${item.sku}`,
+              copies: 1 
+            });
+          }
 
           // Mark as printed
           await supabase
@@ -846,7 +887,7 @@ const Inventory = () => {
                       variant="outline"
                       size="sm"
                       onClick={handleBulkPrintRaw}
-                      disabled={bulkPrinting || !selectedPrinter}
+                      disabled={bulkPrinting}
                     >
                       {bulkPrinting ? (
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
