@@ -65,14 +65,15 @@ async function getShopifyCredentials(supabase: any, storeKey: string): Promise<S
     throw new Error(`Store not found: ${storeKey}`)
   }
 
-  // Get access token from system settings
+  // Get access token from system settings - use correct key format
   const { data: tokenSetting, error: tokenError } = await supabase
     .from('system_settings')
     .select('key_value')
-    .eq('key_name', `SHOPIFY_ACCESS_TOKEN_${storeKey.toUpperCase()}`)
+    .eq('key_name', `SHOPIFY_${storeKey.toUpperCase()}_ACCESS_TOKEN`)
     .single()
   
   if (tokenError || !tokenSetting) {
+    console.error(`Failed to get access token for ${storeKey}:`, tokenError)
     throw new Error(`Access token not found for store: ${storeKey}`)
   }
 
