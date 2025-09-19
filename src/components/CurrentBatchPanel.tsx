@@ -523,7 +523,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
                         {compact ? (
                           `$${item.price} • Qty: ${item.quantity}`
                         ) : (
-                          `${item.sku} • $${item.price} ${item.cost && `• Cost: $${item.cost}`} • Qty: ${item.quantity}`
+                          `${item.sku} • $${item.price} ${item.cost && `• Cost: $${Number(item.cost).toFixed(2)}`} • Qty: ${item.quantity}`
                         )}
                       </div>
                       {/* Show condition for raw cards only */}
