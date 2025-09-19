@@ -325,6 +325,8 @@ const Inventory = () => {
   }, [sendChunkedBatchToShopify, fetchItems]);
 
   const handlePrint = useCallback(async (item: any) => {
+    console.log('handlePrint called for item:', item.id, 'selectedPrinter:', selectedPrinter);
+    
     const itemType = item.type?.toLowerCase() || 'raw';
     
     // Only allow printing for Raw items
@@ -338,35 +340,60 @@ const Inventory = () => {
       return;
     }
 
-    try {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      if (!ctx) throw new Error('Cannot create canvas context');
-
-      const JsBarcode = (await import('jsbarcode')).default;
-      JsBarcode(canvas, item.sku, {
-        format: "CODE128",
-        displayValue: true,
-        fontSize: 14,
-        lineColor: "#111827",
-        margin: 8,
-        width: 2,
-        height: 100
-      });
-
-      const blob = await new Promise<Blob>((resolve) => {
-        canvas.toBlob((blob) => {
-          if (blob) resolve(blob);
-        }, 'image/png');
-      });
-
-      setPrintData({ blob, item });
-      setShowPrinterDialog(true);
-    } catch (error) {
-      console.error('Error preparing print:', error);
-      toast.error('Failed to prepare barcode for printing');
+    if (!selectedPrinter) {
+      toast.error('Please select a printer first. Go to Test Hardware > Printer Setup to configure a printer.');
+      return;
     }
-  }, []);
+
+    try {
+      setPrintingItem(item.id);
+      
+      // Generate proper title for raw card
+      const generateTitle = (item: any) => {
+        const parts = []
+        if (item.year) parts.push(item.year);
+        if (item.brand_title) parts.push(item.brand_title);
+        if (item.subject) parts.push(item.subject);
+        if (item.card_number) parts.push(`#${item.card_number}`);
+        return parts.length > 0 ? parts.join(' ') : 'Raw Card';
+      };
+
+      // Use enhanced ZPL template for raw cards
+      const { generateRawCardLabelZPL } = await import('@/lib/simpleZPLTemplates');
+      const zpl = generateRawCardLabelZPL({
+        title: generateTitle(item),
+        sku: item.sku || '',
+        price: item.price ? parseFloat(item.price).toFixed(2) : '0.00',
+        condition: item.condition || 'NM',
+        location: item.location || ''
+      }, {
+        dpi: 203,
+        speed: 4,
+        darkness: 10,
+        copies: 1
+      });
+
+      console.log('Generated ZPL for printing:', zpl);
+
+      await zebraNetworkService.printZPL(zpl, selectedPrinter, {
+        title: `Raw-Card-${item.sku}`,
+        copies: 1 
+      });
+
+      await supabase
+        .from('intake_items')
+        .update({ printed_at: new Date().toISOString() })
+        .eq('id', item.id);
+
+      toast.success('Raw card label printed successfully');
+      fetchItems(0, true);
+    } catch (error) {
+      console.error('Print error:', error);
+      toast.error('Failed to print label: ' + (error as Error).message);
+    } finally {
+      setPrintingItem(null);
+    }
+  }, [selectedPrinter, fetchItems]);
 
   const handlePrintWithPrinter = useCallback(async (printerId: number) => {
     if (!printData) return;
