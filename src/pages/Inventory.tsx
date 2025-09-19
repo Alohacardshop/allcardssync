@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, Upload, Search, CheckSquare, Square, Trash2 } from 'lucide-react';
+import { Loader2, Upload, Search, CheckSquare, Square, Trash2, Printer } from 'lucide-react';
 import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
@@ -828,35 +828,26 @@ const Inventory = () => {
                       )}
                       {bulkPrinting ? 'Printing...' : 'Print All Unprinted Raw'}
                     </Button>
-                  </div>
-                </div>
-                    
-                    {selectedItems.size > 0 && (
-                      <>
-                        <span className="text-sm text-muted-foreground">
-                          {selectedItems.size} selected
-                        </span>
-                        {isAdmin && (
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => {
-                              const selectedItemsArray = filteredItems.filter(item => selectedItems.has(item.id));
-                              setSelectedItemsForDeletion(selectedItemsArray);
-                              setShowDeleteDialog(true);
-                            }}
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Delete Selected
-                          </Button>
-                        )}
-                      </>
+
+                    {isAdmin && selectedItems.size > 0 && (
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => {
+                          const selectedItemsArray = filteredItems.filter(item => selectedItems.has(item.id));
+                          setSelectedItemsForDeletion(selectedItemsArray);
+                          setShowDeleteDialog(true);
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete Selected
+                      </Button>
                     )}
                   </div>
+                </div>
 
-                  <div className="text-sm text-muted-foreground">
-                    Showing {filteredItems.length} of {items.length} items
-                  </div>
+                <div className="text-sm text-muted-foreground">
+                  Showing {filteredItems.length} of {items.length} items
                 </div>
               </CardContent>
             </Card>
