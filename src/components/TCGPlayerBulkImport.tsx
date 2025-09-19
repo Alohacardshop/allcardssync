@@ -363,7 +363,16 @@ export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) =>
           entered_price: item.priceEach,
           calculated_cost: item.cost,
           type: 'tcgplayer_raw',
-          source: 'tcgplayer_bulk_import'
+          source: 'tcgplayer_bulk_import',
+          // Store image URLs in catalog_snapshot instead
+          image_urls: item.photoUrl ? [item.photoUrl] : null,
+          // Store source payload in catalog_snapshot instead  
+          source_payload: {
+            ...item,
+            import_source: 'tcgplayer_bulk_import',
+            imported_at: new Date().toISOString(),
+            filename: file?.name
+          }
         },
         // Enhanced pricing snapshot with TCGPlayer market data
         pricing_snapshot_in: {
@@ -380,15 +389,6 @@ export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) =>
           source: 'tcgplayer',
           captured_at: new Date().toISOString()
         },
-        // Store complete raw TCGPlayer data
-        source_payload_in: {
-          ...item,
-          import_source: 'tcgplayer_bulk_import',
-          imported_at: new Date().toISOString(),
-          filename: file?.name
-        },
-        // Use TCGPlayer photo for image URLs
-        image_urls_in: item.photoUrl ? [item.photoUrl] : null,
         processing_notes_in: createHumanReadableDescription(item)
       };
 
