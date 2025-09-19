@@ -77,7 +77,8 @@ Deno.serve(async (req) => {
         vendor: brandTitle || 'Trading Cards',
         product_type: 'Raw Card',
         tags: [
-          'Raw Card', 
+          'Raw Card',
+          'single', 
           brandTitle, 
           condition,
           intakeItem.category || 'Pokemon', // Game from intake item
