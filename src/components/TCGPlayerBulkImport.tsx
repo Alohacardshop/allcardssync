@@ -409,14 +409,14 @@ export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) =>
     }
   };
 
-  const handleImport = async () => {
+  const handleAddToBatch = async () => {
     if (items.length === 0) {
-      toast.error("No items to import");
+      toast.error("No items to add to batch");
       return;
     }
 
     if (!assignedStore || !selectedLocation) {
-      toast.error("Please select a store and location before importing");
+      toast.error("Please select a store and location before adding to batch");
       return;
     }
 
@@ -434,7 +434,7 @@ export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) =>
         updatedItems[i] = { ...item, status: 'processing' };
         setItems([...updatedItems]);
 
-        // Insert into database
+        // Add item to batch
         const result = await insertIntakeItem(item);
         
         updatedItems[i] = { 
@@ -725,9 +725,9 @@ Prices from Market Price on 8/24/2025 and are subject to change.`;
             
             {!importing && items.length > 0 && (
               <div className="mt-4 flex gap-2">
-                <Button onClick={handleImport}>
+                <Button onClick={handleAddToBatch}>
                   <Upload className="h-4 w-4 mr-2" />
-                  Import {items.length} Items
+                  Add {items.length} Items to Batch
                 </Button>
                 <Button variant="outline" onClick={handleClear}>
                   <X className="h-4 w-4 mr-2" />
@@ -740,7 +740,7 @@ Prices from Market Price on 8/24/2025 and are subject to change.`;
               <div className="mt-4">
                 <Progress value={progress} />
                 <p className="text-sm text-muted-foreground mt-2">
-                  Importing items... {Math.round(progress)}% complete
+                  Adding items to batch... {Math.round(progress)}% complete
                 </p>
               </div>
             )}
