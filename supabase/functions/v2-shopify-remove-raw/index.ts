@@ -27,20 +27,39 @@ Deno.serve(async (req) => {
     const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2')
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-    // Get intake item data
-    let query = supabase.from('intake_items').select('*')
+    // Get intake item data - prefer item_id over sku for uniqueness
+    let intakeItem = null
+    let fetchError = null
     
     if (item_id) {
-      query = query.eq('id', item_id)
+      const { data, error } = await supabase
+        .from('intake_items')
+        .select('*')
+        .eq('id', item_id)
+        .single()
+      intakeItem = data
+      fetchError = error
     } else if (sku) {
-      query = query.eq('sku', sku)
+      // For SKU, get the most recent non-deleted item
+      const { data, error } = await supabase
+        .from('intake_items')
+        .select('*')
+        .eq('sku', sku)
+        .is('deleted_at', null)
+        .gt('quantity', 0)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single()
+      intakeItem = data
+      fetchError = error
     }
-    
-    const { data: intakeItem, error: fetchError } = await query.single()
     
     if (fetchError || !intakeItem) {
+      console.error('Fetch error:', fetchError)
       throw new Error(`Failed to fetch intake item: ${fetchError?.message || 'Item not found'}`)
     }
+    
+    console.log(`Found item: ${intakeItem.sku} (ID: ${intakeItem.id}), quantity: ${intakeItem.quantity}`)
 
     // For raw cards, use the reduce function instead of complete removal
     const currentQuantity = intakeItem.quantity || 1
