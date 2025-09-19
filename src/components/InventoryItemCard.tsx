@@ -2,7 +2,7 @@ import React, { memo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Trash2, Package, Calendar, DollarSign, Eye, EyeOff, FileText, Tag, Printer, ExternalLink, RotateCcw, Loader2, CheckSquare, Square } from 'lucide-react';
+import { Trash2, Package, Calendar, DollarSign, Eye, EyeOff, FileText, Tag, Printer, ExternalLink, RotateCcw, Loader2, CheckSquare, Square, CheckCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 import { 
@@ -98,6 +98,26 @@ export const InventoryItemCard = memo(({
     return <Badge variant="outline">Unknown</Badge>;
   };
 
+  const getPrintStatusBadge = (item: any) => {
+    const itemType = item.type?.toLowerCase() || 'raw';
+    if (itemType !== 'raw') return null;
+    
+    if (item.printed_at) {
+      return (
+        <Badge variant="default" className="bg-green-100 text-green-800 border-green-300">
+          <CheckCircle className="h-3 w-3 mr-1" />
+          Printed
+        </Badge>
+      );
+    }
+    return (
+      <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-300">
+        <Printer className="h-3 w-3 mr-1" />
+        Not Printed
+      </Badge>
+    );
+  };
+
   return (
     <Card className={cn(
       "transition-all duration-200",
@@ -129,6 +149,7 @@ export const InventoryItemCard = memo(({
                   {item.sku}
                 </span>
                 {getStatusBadge(item)}
+                {getPrintStatusBadge(item)}
               </div>
             </div>
           </div>
@@ -207,19 +228,22 @@ export const InventoryItemCard = memo(({
             </Button>
           )}
           
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onPrint(item)}
-            disabled={printingItem === item.id}
-          >
-            {printingItem === item.id ? (
-              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-            ) : (
-              <Printer className="h-3 w-3 mr-1" />
-            )}
-            Print
-          </Button>
+          {/* Only show print button for Raw items */}
+          {(item.type?.toLowerCase() || 'raw') === 'raw' && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onPrint(item)}
+              disabled={printingItem === item.id}
+            >
+              {printingItem === item.id ? (
+                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+              ) : (
+                <Printer className="h-3 w-3 mr-1" />
+              )}
+              Print Label
+            </Button>
+          )}
           
           {item.shopify_product_id && (
             <Button

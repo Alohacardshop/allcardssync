@@ -40,6 +40,7 @@ const Inventory = () => {
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'sold' | 'deleted' | 'errors'>('active');
   const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [printStatusFilter, setPrintStatusFilter] = useState<'all' | 'printed' | 'not-printed'>('all');
   const [showSoldItems, setShowSoldItems] = useState(false);
   
   // UI state
@@ -48,6 +49,7 @@ const Inventory = () => {
   const [syncingAll, setSyncingAll] = useState(false);
   const [syncingRowId, setSyncingRowId] = useState<string | null>(null);
   const [printingItem, setPrintingItem] = useState<string | null>(null);
+  const [bulkPrinting, setBulkPrinting] = useState(false);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   
   // Dialog state
@@ -180,32 +182,44 @@ const Inventory = () => {
 
   // Memoized filtered items
   const filteredItems = useMemo(() => {
-    if (!debouncedSearchTerm && typeFilter === 'all') {
-      return items;
-    }
+    let filtered = items;
 
-    return items.filter(item => {
+    // Apply search filter
+    if (debouncedSearchTerm) {
       const searchLower = debouncedSearchTerm.toLowerCase();
-      const matchesSearch = !debouncedSearchTerm || (
+      filtered = filtered.filter(item => (
         item.sku?.toLowerCase().includes(searchLower) ||
         item.brand_title?.toLowerCase().includes(searchLower) ||
         item.subject?.toLowerCase().includes(searchLower) ||
-        item.category?.toLowerCase().includes(searchLower) ||
-        item.variant?.toLowerCase().includes(searchLower) ||
-        item.grade?.toLowerCase().includes(searchLower)
-      );
+        item.card_number?.toLowerCase().includes(searchLower)
+      ));
+    }
 
-      // Type filter
-      if (typeFilter !== 'all') {
+    // Apply type filter
+    if (typeFilter !== 'all') {
+      filtered = filtered.filter(item => {
         const itemType = item.type?.toLowerCase() || 'raw';
-        if (typeFilter !== itemType) {
-          return false;
-        }
-      }
+        return itemType === typeFilter.toLowerCase();
+      });
+    }
 
-      return matchesSearch;
-    });
-  }, [items, debouncedSearchTerm, typeFilter]);
+    // Apply print status filter (only for Raw items)
+    if (printStatusFilter !== 'all') {
+      filtered = filtered.filter(item => {
+        const itemType = item.type?.toLowerCase() || 'raw';
+        if (itemType !== 'raw') return true; // Non-raw items are always included
+        
+        if (printStatusFilter === 'printed') {
+          return item.printed_at !== null;
+        } else if (printStatusFilter === 'not-printed') {
+          return item.printed_at === null;
+        }
+        return true;
+      });
+    }
+
+    return filtered;
+  }, [items, debouncedSearchTerm, typeFilter, printStatusFilter]);
 
   // Reset pagination when filters change
   useEffect(() => {
@@ -311,6 +325,14 @@ const Inventory = () => {
   }, [sendChunkedBatchToShopify, fetchItems]);
 
   const handlePrint = useCallback(async (item: any) => {
+    const itemType = item.type?.toLowerCase() || 'raw';
+    
+    // Only allow printing for Raw items
+    if (itemType !== 'raw') {
+      toast.error('Printing is only available for Raw cards');
+      return;
+    }
+    
     if (!item.sku) {
       toast.error('No SKU available for printing');
       return;
@@ -349,33 +371,152 @@ const Inventory = () => {
   const handlePrintWithPrinter = useCallback(async (printerId: number) => {
     if (!printData) return;
     
-    setPrintingItem(printData.item.id);
+    const item = printData.item;
+    const itemType = item.type?.toLowerCase() || 'raw';
+    
+    // Only allow printing for Raw items
+    if (itemType !== 'raw') {
+      toast.error('Printing is only available for Raw cards');
+      setPrintData(null);
+      return;
+    }
+    
+    setPrintingItem(item.id);
     try {
       if (!selectedPrinter) {
         toast.error('No printer selected');
         return;
       }
-      const zpl = `^XA^LH0,0^LL203^PR6^MD8^FO50,30^A0N,25,25^FDLabel Print^FS^PQ1,0,1,Y^XZ`;
+
+      // Generate proper title for raw card
+      const generateTitle = (item: any) => {
+        const parts = []
+        if (item.year) parts.push(item.year);
+        if (item.brand_title) parts.push(item.brand_title);
+        if (item.subject) parts.push(item.subject);
+        if (item.card_number) parts.push(`#${item.card_number}`);
+        return parts.length > 0 ? parts.join(' ') : 'Raw Card';
+      };
+
+      // Use enhanced ZPL template for raw cards
+      const { generateRawCardLabelZPL } = await import('@/lib/simpleZPLTemplates');
+      const zpl = generateRawCardLabelZPL({
+        title: generateTitle(item),
+        sku: item.sku || '',
+        price: item.price ? parseFloat(item.price).toFixed(2) : '0.00',
+        condition: item.condition || 'NM',
+        location: item.location || ''
+      }, {
+        dpi: 203,
+        speed: 4,
+        darkness: 10,
+        copies: 1
+      });
+
       await zebraNetworkService.printZPL(zpl, selectedPrinter, {
-        title: `Barcode-${printData.item.sku}`,
+        title: `Raw-Card-${item.sku}`,
         copies: 1 
       });
 
       await supabase
         .from('intake_items')
         .update({ printed_at: new Date().toISOString() })
-        .eq('id', printData.item.id);
+        .eq('id', item.id);
 
-      toast.success('Barcode printed successfully');
+      toast.success('Raw card label printed successfully');
       fetchItems(0, true);
     } catch (error) {
       console.error('Print error:', error);
-      toast.error('Failed to print barcode');
+      toast.error('Failed to print label');
     } finally {
       setPrintingItem(null);
       setPrintData(null);
     }
   }, [printData, selectedPrinter, fetchItems]);
+
+  const handleBulkPrintRaw = useCallback(async () => {
+    if (!selectedPrinter) {
+      toast.error('Please select a printer first');
+      return;
+    }
+
+    setBulkPrinting(true);
+    
+    try {
+      // Filter for unpinted raw items
+      const unprintedRawItems = items.filter(item => {
+        const itemType = item.type?.toLowerCase() || 'raw';
+        return itemType === 'raw' && !item.printed_at && !item.deleted_at;
+      });
+
+      if (unprintedRawItems.length === 0) {
+        toast.info('No unprinted raw cards found');
+        return;
+      }
+
+      const { generateRawCardLabelZPL } = await import('@/lib/simpleZPLTemplates');
+      let successCount = 0;
+      let errorCount = 0;
+
+      // Generate proper title for raw card
+      const generateTitle = (item: any) => {
+        const parts = []
+        if (item.year) parts.push(item.year);
+        if (item.brand_title) parts.push(item.brand_title);
+        if (item.subject) parts.push(item.subject);
+        if (item.card_number) parts.push(`#${item.card_number}`);
+        return parts.length > 0 ? parts.join(' ') : 'Raw Card';
+      };
+
+      for (const item of unprintedRawItems) {
+        try {
+          const zpl = generateRawCardLabelZPL({
+            title: generateTitle(item),
+            sku: item.sku || '',
+            price: item.price ? parseFloat(item.price).toFixed(2) : '0.00',
+            condition: item.condition || 'NM',
+            location: item.location || ''
+          }, {
+            dpi: 203,
+            speed: 4,
+            darkness: 10,
+            copies: 1
+          });
+
+          await zebraNetworkService.printZPL(zpl, selectedPrinter, {
+            title: `Bulk-Raw-${item.sku}`,
+            copies: 1 
+          });
+
+          // Mark as printed
+          await supabase
+            .from('intake_items')
+            .update({ printed_at: new Date().toISOString() })
+            .eq('id', item.id);
+
+          successCount++;
+        } catch (error) {
+          console.error(`Failed to print ${item.sku}:`, error);
+          errorCount++;
+        }
+      }
+
+      if (successCount > 0) {
+        toast.success(`Successfully printed ${successCount} raw card labels`);
+        fetchItems(0, true); // Refresh the items list
+      }
+      
+      if (errorCount > 0) {
+        toast.error(`Failed to print ${errorCount} labels`);
+      }
+
+    } catch (error) {
+      console.error('Bulk print error:', error);
+      toast.error('Failed to start bulk printing');
+    } finally {
+      setBulkPrinting(false);
+    }
+  }, [items, selectedPrinter, fetchItems]);
 
   const selectAllVisible = useCallback(() => {
     const allVisibleIds = new Set(filteredItems.map(item => item.id));
@@ -597,7 +738,7 @@ const Inventory = () => {
                 <CardTitle>Filters & Search</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
@@ -631,6 +772,17 @@ const Inventory = () => {
                       <SelectItem value="raw">Raw</SelectItem>
                     </SelectContent>
                   </Select>
+
+                  <Select value={printStatusFilter} onValueChange={(value: any) => setPrintStatusFilter(value)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Print status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Print Status</SelectItem>
+                      <SelectItem value="printed">Printed</SelectItem>
+                      <SelectItem value="not-printed">Not Printed</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 {/* Bulk Actions */}
@@ -639,15 +791,45 @@ const Inventory = () => {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => selectedItems.size === filteredItems.length ? clearSelection() : selectAllVisible()}
+                      onClick={selectAllVisible}
+                      disabled={filteredItems.length === 0}
                     >
-                      {selectedItems.size === filteredItems.length ? (
-                        <CheckSquare className="h-4 w-4 mr-2" />
-                      ) : (
-                        <Square className="h-4 w-4 mr-2" />
-                      )}
-                      {selectedItems.size === filteredItems.length ? 'Deselect All' : 'Select All'}
+                      <CheckSquare className="h-4 w-4 mr-2" />
+                      Select All ({filteredItems.length})
                     </Button>
+                    
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={clearSelection}
+                      disabled={selectedItems.size === 0}
+                    >
+                      Clear Selection
+                    </Button>
+
+                    {selectedItems.size > 0 && (
+                      <span className="text-sm text-muted-foreground">
+                        {selectedItems.size} selected
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleBulkPrintRaw}
+                      disabled={bulkPrinting || !selectedPrinter}
+                    >
+                      {bulkPrinting ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Printer className="h-4 w-4 mr-2" />
+                      )}
+                      {bulkPrinting ? 'Printing...' : 'Print All Unprinted Raw'}
+                    </Button>
+                  </div>
+                </div>
                     
                     {selectedItems.size > 0 && (
                       <>

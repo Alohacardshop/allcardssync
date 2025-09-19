@@ -163,12 +163,50 @@ ${cutAfter ? '^MMC^XZ' : '^XZ'}`;
 }
 
 /**
+ * Generate raw card label ZPL with comprehensive card data
+ */
+export function generateRawCardLabelZPL(data: LabelData, options: ZPLOptions = {}): string {
+  const {
+    dpi = 203,
+    speed = 4,
+    darkness = 10,
+    copies = 1,
+    cutAfter = true
+  } = options;
+
+  const { title = '', sku = '', price = '', condition = '', location = '' } = data;
+
+  // 2x1 inch label for raw cards
+  const labelWidth = dpi * 2;
+  const labelHeight = dpi * 1;
+
+  return `^XA
+^MMT
+^PW${labelWidth}
+^LL${labelHeight}
+^LH0,0
+^PR${speed}
+^MD${darkness}
+
+~SD15
+^FO10,10^A0N,20,20^FD${title.substring(0, 35)}^FS
+^FO${labelWidth - 100},15^A0N,28,28^FD$${price}^FS
+${condition ? `^FO${labelWidth - 100},45^A0N,16,16^FD${condition}^FS` : ''}
+^FO20,${labelHeight - 60}^BCN,40,Y,N,N^FD${sku}^FS
+${location ? `^FO10,${labelHeight - 15}^A0N,12,12^FDLOC: ${location}^FS` : ''}
+
+^PQ${copies}
+${cutAfter ? '^MMC^XZ' : '^XZ'}`;
+}
+
+/**
  * Template registry for easy access
  */
 export const ZPL_TEMPLATES = {
   priceTag: generatePriceTagZPL,
   barcode: generateBarcodeLabelZPL,
   qrShelf: generateQRShelfLabelZPL,
+  rawCard: generateRawCardLabelZPL,
   test: generateTestLabelZPL
 } as const;
 
