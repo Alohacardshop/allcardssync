@@ -26,13 +26,25 @@ export function PrintNodeSettings() {
   const loadExistingSettings = async () => {
     setIsLoadingKey(true);
     try {
+      console.log('🖨️ PrintNode: Loading existing settings...');
       // Load existing API key
-      const { data: keyData } = await supabase.functions.invoke('get-system-setting', {
+      const { data: keyData, error } = await supabase.functions.invoke('get-system-setting', {
         body: { keyName: 'PRINTNODE_API_KEY' }
       });
       
+      console.log('🖨️ PrintNode: API key lookup result:', { keyData, error });
+      
+      if (error) {
+        console.error('🖨️ PrintNode: Failed to get API key:', error);
+        toast.error('Failed to load PrintNode API key');
+        return;
+      }
+      
       if (keyData?.value) {
+        console.log('🖨️ PrintNode: API key found, length:', keyData.value.length);
         setApiKey(keyData.value);
+      } else {
+        console.log('🖨️ PrintNode: No API key found');
       }
 
       // Load saved printer from localStorage
@@ -48,10 +60,16 @@ export function PrintNodeSettings() {
         }
       }
 
-      // Test connection after loading settings
-      await testConnection();
+      // Only test connection if we have an API key
+      if (keyData?.value) {
+        console.log('🖨️ PrintNode: Testing connection with API key...');
+        await testConnection();
+      } else {
+        console.log('🖨️ PrintNode: Skipping connection test - no API key');
+      }
     } catch (error) {
-      console.error('Failed to load existing settings:', error);
+      console.error('🖨️ PrintNode: Failed to load existing settings:', error);
+      toast.error('Failed to load PrintNode settings');
     } finally {
       setIsLoadingKey(false);
     }
@@ -60,13 +78,21 @@ export function PrintNodeSettings() {
   const testConnection = async () => {
     setIsTesting(true);
     try {
+      console.log('🖨️ PrintNode: Testing connection...');
       const connected = await printNodeService.testConnection();
+      console.log('🖨️ PrintNode: Connection test result:', connected);
       setIsConnected(connected);
       if (connected) {
+        console.log('🖨️ PrintNode: Loading printers...');
         await loadPrinters();
+      } else {
+        console.log('🖨️ PrintNode: Connection failed');
+        toast.error('PrintNode connection failed. Check your API key.');
       }
     } catch (error) {
+      console.error('🖨️ PrintNode: Connection test error:', error);
       setIsConnected(false);
+      toast.error('PrintNode connection error: ' + (error instanceof Error ? error.message : 'Unknown error'));
     } finally {
       setIsTesting(false);
     }

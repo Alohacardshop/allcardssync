@@ -25,18 +25,20 @@ class PrintNodeService {
 
   private async getApiKey(): Promise<string | null> {
     try {
+      console.log('🖨️ PrintNode Service: Getting API key from Supabase...');
       const { data, error } = await supabase.functions.invoke('get-system-setting', {
         body: { keyName: 'PRINTNODE_API_KEY' }
       });
 
       if (error) {
-        console.error('Failed to get PrintNode API key:', error);
+        console.error('🖨️ PrintNode Service: Failed to get API key:', error);
         return null;
       }
 
+      console.log('🖨️ PrintNode Service: API key retrieved:', data?.value ? 'Yes' : 'No');
       return data?.value || null;
     } catch (error) {
-      console.error('Error getting PrintNode API key:', error);
+      console.error('🖨️ PrintNode Service: Error getting API key:', error);
       return null;
     }
   }
@@ -47,6 +49,8 @@ class PrintNodeService {
       throw new Error('PrintNode API key not configured');
     }
 
+    console.log('🖨️ PrintNode Service: Making request to:', `${this.baseUrl}${endpoint}`);
+    
     const response = await fetch(`${this.baseUrl}${endpoint}`, {
       ...options,
       headers: {
@@ -56,12 +60,17 @@ class PrintNodeService {
       },
     });
 
+    console.log('🖨️ PrintNode Service: Response status:', response.status);
+
     if (!response.ok) {
       const errorText = await response.text();
+      console.error('🖨️ PrintNode Service: API error:', errorText);
       throw new Error(`PrintNode API error: ${response.status} - ${errorText}`);
     }
 
-    return response.json();
+    const result = await response.json();
+    console.log('🖨️ PrintNode Service: Response data:', result);
+    return result;
   }
 
   async getPrinters(): Promise<PrintNodePrinter[]> {
@@ -76,10 +85,15 @@ class PrintNodeService {
 
   async testConnection(): Promise<boolean> {
     try {
-      await this.makeRequest('/whoami');
+      console.log('🖨️ PrintNode Service: Testing connection...');
+      const result = await Promise.race([
+        this.makeRequest('/whoami'),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Connection test timeout')), 10000))
+      ]);
+      console.log('🖨️ PrintNode Service: Connection test successful:', result);
       return true;
     } catch (error) {
-      console.error('PrintNode connection test failed:', error);
+      console.error('🖨️ PrintNode Service: Connection test failed:', error);
       return false;
     }
   }
