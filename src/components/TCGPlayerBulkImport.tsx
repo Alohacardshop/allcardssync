@@ -134,7 +134,7 @@ export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) =>
       condition: card.condition,
       language: 'English', // Default, could be enhanced
       priceEach: calculateOurPrice(card.marketPrice || 0), // Apply new pricing formula for raw cards
-      cost: calculateOurPrice(card.marketPrice || 0) * 0.7, // Calculate cost as 70% of our selling price
+      cost: (card.marketPrice || 0) * 0.7, // Calculate cost as 70% of TCGPlayer price
       totalPrice: calculateOurPrice(card.marketPrice || 0) * (card.quantity || 1),
       status: 'pending' as const
     }));
@@ -232,7 +232,7 @@ export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) =>
           condition,
           language,
           priceEach: calculateOurPrice(priceEach), // Apply new pricing formula for raw cards
-          cost: calculateOurPrice(priceEach) * 0.7, // Calculate cost as 70% of our selling price
+          cost: priceEach * 0.7, // Calculate cost as 70% of TCGPlayer price
           totalPrice: calculateOurPrice(priceEach) * quantity,
           status: 'pending',
           // TCGPlayer data will be enhanced by CSV parsing if available
