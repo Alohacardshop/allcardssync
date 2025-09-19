@@ -62,7 +62,6 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
     category: "",
     variant: "",
     cardNumber: "",
-    condition: "",
     year: "",
     certNumber: "",
     grade: "",
@@ -132,7 +131,6 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
           subject: normalizedData.subject || "",
           category: normalizedData.category || "",
           cardNumber: normalizedData.cardNumber || "",
-          condition: "",
           year: normalizedData.year || "",
           grade: normalizedData.grade || "",
           varietyPedigree: normalizedData.varietyPedigree || "",
@@ -171,7 +169,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
       return;
     }
 
-    if (!formData.certNumber || !formData.grade || !formData.condition || !formData.price || !formData.cost) {
+    if (!formData.certNumber || !formData.grade || !formData.price || !formData.cost) {
       toast.error("Please fill in all required fields");
       return;
     }
@@ -183,7 +181,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         store_key_in: assignedStore,
         shopify_location_gid_in: selectedLocation,
         quantity_in: formData.quantity,
-        grade_in: `${formData.grade} (${formData.condition})`,
+        grade_in: formData.grade,
         brand_title_in: formData.brandTitle,
         subject_in: formData.subject,
         category_in: formData.category,
@@ -195,8 +193,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         catalog_snapshot_in: {
           ...cardData,
           psa_cert: formData.certNumber,
-          year: formData.year,
-          condition: formData.condition
+          year: formData.year
         }
       });
 
@@ -212,7 +209,6 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         category: "",
         variant: "",
         cardNumber: "",
-        condition: "",
         year: "",
         certNumber: "",
         grade: "",
@@ -398,22 +394,6 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
             </div>
 
             <div>
-              <Label htmlFor="condition">Condition</Label>
-              <Select value={formData.condition} onValueChange={(value) => updateFormField('condition', value)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select condition" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Near Mint">Near Mint</SelectItem>
-                  <SelectItem value="Lightly Played">Lightly Played</SelectItem>
-                  <SelectItem value="Moderately Played">Moderately Played</SelectItem>
-                  <SelectItem value="Heavily Played">Heavily Played</SelectItem>
-                  <SelectItem value="Damaged">Damaged</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
               <Label htmlFor="year">Year</Label>
               <Input
                 id="year"
@@ -465,7 +445,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
           <div className="flex justify-end gap-2 pt-4">
             <Button 
               onClick={handleSubmit}
-              disabled={submitting || !formData.certNumber || !formData.grade || !formData.condition || !formData.price || !formData.cost}
+              disabled={submitting || !formData.certNumber || !formData.grade || !formData.price || !formData.cost}
               className="px-8"
               size="lg"
             >
