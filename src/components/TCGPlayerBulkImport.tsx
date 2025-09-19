@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Upload, FileText, Download, X } from 'lucide-react';
@@ -811,16 +812,50 @@ Prices from Market Price on 8/24/2025 and are subject to change.`;
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label>Condition</Label>
+                  <Select 
+                    value={editingItem.condition || ""} 
+                    onValueChange={(value) => setEditingItem({...editingItem, condition: value})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select condition" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-background border shadow-md z-50">
+                      <SelectItem value="Near Mint">Near Mint</SelectItem>
+                      <SelectItem value="Lightly Played">Lightly Played</SelectItem>
+                      <SelectItem value="Moderately Played">Moderately Played</SelectItem>
+                      <SelectItem value="Heavily Played">Heavily Played</SelectItem>
+                      <SelectItem value="Damaged">Damaged</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Variant</Label>
                   <Input 
-                    value={editingItem.condition}
-                    onChange={(e) => setEditingItem({...editingItem, condition: e.target.value})}
+                    value={editingItem.foil || ''}
+                    onChange={(e) => {
+                      setEditingItem({
+                        ...editingItem, 
+                        foil: e.target.value
+                      });
+                    }}
+                    placeholder="e.g., Foil, Reverse Holo"
                   />
                 </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label>Rarity</Label>
                   <Input 
                     value={editingItem.rarity || ''}
                     onChange={(e) => setEditingItem({...editingItem, rarity: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <Label>Language</Label>
+                  <Input 
+                    value={editingItem.language || 'English'}
+                    onChange={(e) => setEditingItem({...editingItem, language: e.target.value})}
                   />
                 </div>
               </div>
