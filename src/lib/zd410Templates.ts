@@ -29,7 +29,7 @@ export function generateRawCardLabel(data: LabelData): string {
 
   return [
     '^XA',
-    '^MNN',           // continuous media (use ^MNY for gap media)
+    '^MNY',           // gap media (use ^MNN for continuous)
     '^MTD',           // direct thermal (ZD410)
     '^MMC',           // enable cutter mode
     '^PW448',         // 2" width @203dpi = 448 dots
@@ -58,7 +58,7 @@ export function generateTestLabel(): string {
   
   return [
     '^XA',
-    '^MNN',           // continuous media (use ^MNY for gap media)
+    '^MNY',           // gap media (use ^MNN for continuous)
     '^MTD',           // direct thermal (ZD410)
     '^MMC',           // enable cutter mode
     '^PW448',         // 2" width @203dpi = 448 dots
@@ -83,7 +83,7 @@ export const zd410TestLabelZPL = (timestamp?: string) => {
   
   return [
     '^XA',
-    '^MNN',           // continuous (or ^MNY if gap/notch)
+    '^MNY',           // gap media (use ^MNN for continuous)
     '^MTD',           // direct thermal (ZD410)
     '^MMC',           // cutter mode
     '^PW448',         // 2" width @203dpi
