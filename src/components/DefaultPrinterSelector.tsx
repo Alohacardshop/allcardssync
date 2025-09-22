@@ -1,84 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Settings, Printer, CheckCircle, AlertCircle, Cloud } from 'lucide-react';
-import { toast } from 'sonner';
-import { printNodeService, PrintNodePrinter } from '@/lib/printNodeService';
+import { Printer, CheckCircle, AlertCircle, Cloud } from 'lucide-react';
+import { usePrintNode } from '@/contexts/PrintNodeContext';
 
 export function DefaultPrinterSelector() {
-  const [printers, setPrinters] = useState<PrintNodePrinter[]>([]);
-  const [selectedPrinterId, setSelectedPrinterId] = useState<string>('');
-  const [isConnected, setIsConnected] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-
-  useEffect(() => {
-    loadPrintNodeSettings();
-  }, []);
-
-  const loadPrintNodeSettings = async () => {
-    setIsLoading(true);
-    try {
-      // Test connection to see if PrintNode is configured
-      const connected = await printNodeService.testConnection();
-      setIsConnected(connected);
-      
-      if (connected) {
-        // Load printers
-        const printerList = await printNodeService.getPrinters();
-        setPrinters(printerList);
-        
-        // Load saved default printer
-        const savedConfig = localStorage.getItem('zebra-printer-config');
-        let foundSavedPrinter = false;
-        
-        if (savedConfig) {
-          try {
-            const config = JSON.parse(savedConfig);
-            if (config.printNodeId && config.usePrintNode) {
-              setSelectedPrinterId(config.printNodeId.toString());
-              foundSavedPrinter = true;
-            }
-          } catch (error) {
-            console.error('Failed to parse saved printer config:', error);
-          }
-        }
-        
-        // Auto-select first online printer if no saved config
-        if (!foundSavedPrinter && printerList.length > 0) {
-          const onlinePrinter = printerList.find(p => p.status === 'online') || printerList[0];
-          handleSetDefault(onlinePrinter.id.toString());
-        }
-      }
-    } catch (error) {
-      console.error('Failed to load PrintNode settings:', error);
-      setIsConnected(false);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleSetDefault = (printerId: string) => {
-    setSelectedPrinterId(printerId);
-    
-    // Save as default printer
-    const printer = printers.find(p => p.id.toString() === printerId);
-    if (printer) {
-      const currentPrinter = localStorage.getItem('zebra-printer-config');
-      const config = currentPrinter ? JSON.parse(currentPrinter) : {};
-      
-      const updatedConfig = {
-        ...config,
-        name: printer.name,
-        printNodeId: printer.id,
-        usePrintNode: true
-      };
-      
-      localStorage.setItem('zebra-printer-config', JSON.stringify(updatedConfig));
-      toast.success(`Set default PrintNode printer: ${printer.name}`);
-    }
-  };
+  const {
+    isConnected,
+    isLoading,
+    printers,
+    selectedPrinterId,
+    setSelectedPrinterId
+  } = usePrintNode();
 
   const selectedPrinter = printers.find(p => p.id.toString() === selectedPrinterId);
 
@@ -141,7 +75,7 @@ export function DefaultPrinterSelector() {
         {/* Printer Selection */}
         {isConnected && printers.length > 0 && (
           <div className="space-y-2">
-            <Select value={selectedPrinterId} onValueChange={handleSetDefault}>
+            <Select value={selectedPrinterId} onValueChange={setSelectedPrinterId}>
               <SelectTrigger>
                 <SelectValue placeholder="Choose default PrintNode printer" />
               </SelectTrigger>

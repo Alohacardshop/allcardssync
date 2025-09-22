@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -6,155 +6,28 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, CheckCircle, XCircle, Cloud } from 'lucide-react';
-import { toast } from 'sonner';
-import { printNodeService, PrintNodePrinter } from '@/lib/printNodeService';
-import { supabase } from '@/integrations/supabase/client';
+import { usePrintNode } from '@/contexts/PrintNodeContext';
 
 export function PrintNodeSettings() {
-  const [apiKey, setApiKey] = useState('');
-  const [printers, setPrinters] = useState<PrintNodePrinter[]>([]);
-  const [selectedPrinterId, setSelectedPrinterId] = useState<string>('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [isConnected, setIsConnected] = useState(false);
-  const [isTesting, setIsTesting] = useState(false);
-  const [isLoadingKey, setIsLoadingKey] = useState(false);
+  const [localApiKey, setLocalApiKey] = useState('');
+  const {
+    isConnected,
+    isLoading,
+    printers,
+    selectedPrinterId,
+    apiKey,
+    testConnection,
+    saveApiKey,
+    setSelectedPrinterId,
+    refreshPrinters
+  } = usePrintNode();
 
-  useEffect(() => {
-    loadExistingSettings();
-  }, []);
-
-  const loadExistingSettings = async () => {
-    setIsLoadingKey(true);
+  const handleSaveApiKey = async () => {
     try {
-      console.log('🖨️ PrintNode: Loading existing settings...');
-      // Load existing API key
-      const { data: keyData, error } = await supabase.functions.invoke('get-system-setting', {
-        body: { keyName: 'PRINTNODE_API_KEY' }
-      });
-      
-      console.log('🖨️ PrintNode: API key lookup result:', { keyData, error });
-      
-      if (error) {
-        console.error('🖨️ PrintNode: Failed to get API key:', error);
-        toast.error('Failed to load PrintNode API key');
-        return;
-      }
-      
-      if (keyData?.value) {
-        console.log('🖨️ PrintNode: API key found, length:', keyData.value.length);
-        setApiKey(keyData.value);
-      } else {
-        console.log('🖨️ PrintNode: No API key found');
-      }
-
-      // Load saved printer from localStorage
-      const savedConfig = localStorage.getItem('zebra-printer-config');
-      if (savedConfig) {
-        try {
-          const config = JSON.parse(savedConfig);
-          if (config.printNodeId && config.usePrintNode) {
-            setSelectedPrinterId(config.printNodeId.toString());
-          }
-        } catch (error) {
-          console.error('Failed to parse saved printer config:', error);
-        }
-      }
-
-      // Only test connection if we have an API key
-      if (keyData?.value) {
-        console.log('🖨️ PrintNode: Testing connection with API key...');
-        await testConnection();
-      } else {
-        console.log('🖨️ PrintNode: Skipping connection test - no API key');
-      }
+      await saveApiKey(localApiKey || apiKey);
+      setLocalApiKey(''); // Clear local input after successful save
     } catch (error) {
-      console.error('🖨️ PrintNode: Failed to load existing settings:', error);
-      toast.error('Failed to load PrintNode settings');
-    } finally {
-      setIsLoadingKey(false);
-    }
-  };
-
-  const testConnection = async () => {
-    setIsTesting(true);
-    try {
-      console.log('🖨️ PrintNode: Testing connection...');
-      const connected = await printNodeService.testConnection();
-      console.log('🖨️ PrintNode: Connection test result:', connected);
-      setIsConnected(connected);
-      if (connected) {
-        console.log('🖨️ PrintNode: Loading printers...');
-        await loadPrinters();
-      } else {
-        console.log('🖨️ PrintNode: Connection failed');
-        toast.error('PrintNode connection failed. Check your API key.');
-      }
-    } catch (error) {
-      console.error('🖨️ PrintNode: Connection test error:', error);
-      setIsConnected(false);
-      toast.error('PrintNode connection error: ' + (error instanceof Error ? error.message : 'Unknown error'));
-    } finally {
-      setIsTesting(false);
-    }
-  };
-
-  const saveApiKey = async () => {
-    if (!apiKey.trim()) {
-      toast.error('Please enter an API key');
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      const { error } = await supabase.functions.invoke('set-system-setting', {
-        body: { 
-          keyName: 'PRINTNODE_API_KEY',
-          keyValue: apiKey.trim(),
-          description: 'PrintNode API key for cloud printing',
-          category: 'printing'
-        }
-      });
-
-      if (error) throw error;
-
-      toast.success('PrintNode API key saved');
-      await testConnection();
-    } catch (error) {
-      console.error('Failed to save API key:', error);
-      toast.error('Failed to save API key');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const loadPrinters = async () => {
-    try {
-      const printerList = await printNodeService.getPrinters();
-      setPrinters(printerList);
-    } catch (error) {
-      console.error('Failed to load printers:', error);
-      toast.error('Failed to load printers');
-    }
-  };
-
-  const updatePrinterSettings = (printerId: string) => {
-    setSelectedPrinterId(printerId);
-    
-    // Save to current printer config
-    const printer = printers.find(p => p.id.toString() === printerId);
-    if (printer) {
-      const currentPrinter = localStorage.getItem('zebra-printer-config');
-      const config = currentPrinter ? JSON.parse(currentPrinter) : {};
-      
-      const updatedConfig = {
-        ...config,
-        name: printer.name,
-        printNodeId: printer.id,
-        usePrintNode: true
-      };
-      
-      localStorage.setItem('zebra-printer-config', JSON.stringify(updatedConfig));
-      toast.success(`Selected PrintNode printer: ${printer.name}`);
+      // Error handling is done in the context
     }
   };
 
@@ -172,7 +45,7 @@ export function PrintNodeSettings() {
       <CardContent className="space-y-4">
         {/* Connection Status */}
         <div className="flex items-center gap-2">
-          {isTesting ? (
+          {isLoading ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : isConnected ? (
             <CheckCircle className="h-4 w-4 text-green-500" />
@@ -180,7 +53,7 @@ export function PrintNodeSettings() {
             <XCircle className="h-4 w-4 text-red-500" />
           )}
           <span className="text-sm">
-            {isTesting ? 'Testing connection...' : isConnected ? 'Connected to PrintNode' : 'Not connected'}
+            {isLoading ? 'Testing connection...' : isConnected ? 'Connected to PrintNode' : 'Not connected'}
           </span>
           {isConnected && (
             <Badge variant="secondary" className="ml-auto">
@@ -196,11 +69,11 @@ export function PrintNodeSettings() {
             <Input
               id="printnode-api-key"
               type="password"
-              placeholder="Enter your PrintNode API key"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
+              placeholder={apiKey ? "API key configured" : "Enter your PrintNode API key"}
+              value={localApiKey}
+              onChange={(e) => setLocalApiKey(e.target.value)}
             />
-            <Button onClick={saveApiKey} disabled={isLoading}>
+            <Button onClick={handleSaveApiKey} disabled={isLoading}>
               {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save'}
             </Button>
           </div>
@@ -221,7 +94,7 @@ export function PrintNodeSettings() {
         {isConnected && printers.length > 0 && (
           <div className="space-y-2">
             <Label htmlFor="printnode-printer">Select Printer</Label>
-            <Select value={selectedPrinterId} onValueChange={updatePrinterSettings}>
+            <Select value={selectedPrinterId} onValueChange={setSelectedPrinterId}>
               <SelectTrigger>
                 <SelectValue placeholder="Choose a PrintNode printer" />
               </SelectTrigger>
@@ -246,11 +119,11 @@ export function PrintNodeSettings() {
 
         {/* Actions */}
         <div className="flex gap-2">
-          <Button variant="outline" onClick={testConnection} disabled={isTesting}>
-            {isTesting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Test Connection'}
+          <Button variant="outline" onClick={testConnection} disabled={isLoading}>
+            {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Test Connection'}
           </Button>
           {isConnected && (
-            <Button variant="outline" onClick={loadPrinters}>
+            <Button variant="outline" onClick={refreshPrinters}>
               Refresh Printers
             </Button>
           )}

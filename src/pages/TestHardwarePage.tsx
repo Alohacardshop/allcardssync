@@ -22,6 +22,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { PrintNodeSettings } from "@/components/PrintNodeSettings";
 import { CutterSettings, CutterConfig } from "@/components/CutterSettings";
 import { DefaultPrinterSelector } from "@/components/DefaultPrinterSelector";
+import { PrintNodeProvider } from "@/contexts/PrintNodeContext";
 
 interface TestResult {
   status: 'idle' | 'running' | 'success' | 'error';
@@ -192,18 +193,19 @@ export default function TestHardwarePage() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <h1 className="text-2xl font-bold">Hardware Testing</h1>
-              <Badge variant="outline">Diagnostics</Badge>
+    <PrintNodeProvider>
+      <div className="min-h-screen bg-background">
+        <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-50">
+          <div className="container mx-auto px-4 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <h1 className="text-2xl font-bold">Hardware Testing</h1>
+                <Badge variant="outline">Diagnostics</Badge>
+              </div>
+              <Navigation />
             </div>
-            <Navigation />
           </div>
-        </div>
-      </header>
+        </header>
 
       <main className="container mx-auto px-4 py-8">
         {/* PrintNode Setup Section */}
@@ -400,5 +402,6 @@ export default function TestHardwarePage() {
         </div>
       </main>
     </div>
+    </PrintNodeProvider>
   );
 }
