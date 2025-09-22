@@ -143,18 +143,21 @@ export function PrintNodeSettings() {
                 <Button 
                   onClick={async () => {
                     try {
+                      // ZD410 specific cutting sequence
                       const testZpl = `^XA
-^FO50,50^A0N,30,30^FDTEST PRINT^FS
+^MMC
+^MT6
+^PQ1,1,0
+^FO50,50^A0N,30,30^FDTEST PRINT ZD410^FS
 ^FO50,100^A0N,20,20^FD${new Date().toLocaleString()}^FS
-^FO50,130^A0N,15,15^FDPrintNode Test Label^FS
-^XZ
-^XA^CN1^XZ`;
+^FO50,130^A0N,15,15^FDZD410 Cut Test^FS
+^XZ`;
                       
                       const result = await printNodeService.printZPL(testZpl, parseInt(selectedPrinterId), 1);
                       
                       if (result.success) {
-                        toast.success('Test print sent successfully!', {
-                          description: 'If the label didn\'t cut, try the MMC cut method'
+                        toast.success('ZD410 test print sent successfully!', {
+                          description: 'Using ^MMC + ^PQ1,1,0 for cutting'
                         });
                       } else {
                         toast.error(`Test print failed: ${result.error}`);
@@ -166,36 +169,45 @@ export function PrintNodeSettings() {
                   disabled={isLoading}
                   className="bg-blue-600 hover:bg-blue-700 flex-1 sm:flex-none"
                 >
-                  Test Print (CN1 Cut)
+                  Test Print (ZD410 Cut)
                 </Button>
                 
                 <Button 
                   onClick={async () => {
                     try {
+                      // Alternative method with media movement
                       const testZpl = `^XA
-^FO50,50^A0N,30,30^FDTEST PRINT MMC^FS
+^MMC
+^MT6
+^FO50,50^A0N,30,30^FDTEST ALT METHOD^FS
 ^FO50,100^A0N,20,20^FD${new Date().toLocaleString()}^FS
-^FO50,130^A0N,15,15^FDPrintNode MMC Cut Test^FS
-^XZ
-^XA^MMC^XZ`;
+^FO50,130^A0N,15,15^FDAlternative Cut^FS
+^PQ1,1,0
+^XZ`;
                       
                       const result = await printNodeService.printZPL(testZpl, parseInt(selectedPrinterId), 1);
                       
                       if (result.success) {
-                        toast.success('MMC test print sent successfully!');
+                        toast.success('Alternative test print sent successfully!');
                       } else {
-                        toast.error(`MMC test print failed: ${result.error}`);
+                        toast.error(`Alternative test print failed: ${result.error}`);
                       }
                     } catch (error) {
-                      toast.error(`MMC test print failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                      toast.error(`Alternative test print failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
                     }
                   }}
                   disabled={isLoading}
                   variant="outline"
                   className="flex-1 sm:flex-none"
                 >
-                  Test Print (MMC Cut)
+                  Test Print (Alt Method)
                 </Button>
+              </div>
+              <div className="text-xs text-muted-foreground space-y-1">
+                <p><strong>ZD410 Cutting Requirements:</strong></p>
+                <p>• ^MMC = Cutter mode enabled</p>
+                <p>• ^MT6 = Continuous media type</p>
+                <p>• ^PQ1,1,0 = Print 1 copy, pause and cut after each label</p>
               </div>
             </div>
           )}
