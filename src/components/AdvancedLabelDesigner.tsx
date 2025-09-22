@@ -277,7 +277,14 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
 
   const handleTestPrint = async () => {
     try {
-      const result = await testConnection();
+      // Import and use the corrected ZD410 test template
+      const { zd410TestLabelZPL } = await import('@/lib/zd410Templates');
+      const testZPL = zd410TestLabelZPL();
+      
+      console.log('🖨️ Printing ZD410 test label with corrected template');
+      console.log('Test ZPL:', testZPL);
+      
+      const result = await print(testZPL, 1);
       if (result.success) {
         toast.success('Test print sent successfully');
       } else {
