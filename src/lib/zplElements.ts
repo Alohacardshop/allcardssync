@@ -161,14 +161,18 @@ export function processTextOverflow(text: string, maxLength: number, overflow: s
   }
 }
 
-// Generate ZPL code from elements
+// Generate ZPL code from elements with ZD410 defaults
 export function generateZPLFromElements(label: ZPLLabel, xOffset: number = 0, yOffset: number = 0): string {
   const { width, height, dpi, elements } = label;
   
   let zpl = [
     '^XA', // Start format
-    '^LH0,0', // Label home position
+    '^MNY', // Gap media (use ^MNN for continuous) 
+    '^MTD', // Direct thermal (ZD410)
+    '^MMC', // Enable cutter mode
+    `^PW${width}`, // Print width from label dimensions
     `^LL${height}`, // Label length
+    '^LH0,0', // Label home position
     '^PR4', // Print rate (speed)
     '^MD10' // Media darkness
   ];
@@ -254,6 +258,7 @@ export function generateZPLFromElements(label: ZPLLabel, xOffset: number = 0, yO
     }
   });
 
+  zpl.push('^PQ1,1,0,Y'); // 1 label, cut after each
   zpl.push('^XZ'); // End format
   return zpl.join('\n');
 }

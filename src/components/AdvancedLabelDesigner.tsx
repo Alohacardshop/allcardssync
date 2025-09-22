@@ -8,7 +8,7 @@ import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
-import { Printer, Save, RotateCcw, Star, Trash2, Settings } from 'lucide-react';
+import { Printer, Save, RotateCcw, Star, Trash2, Settings, Copy, Download } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { ZPLVisualEditor } from '@/components/ZPLVisualEditor';
@@ -30,7 +30,7 @@ interface AdvancedLabelDesignerProps {
 }
 
 export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerProps) {
-  const { print, isLoading: isPrinting } = useSimplePrinting();
+  const { print, isLoading: isPrinting, testConnection } = useSimplePrinting();
   
   // Template management
   const {
@@ -44,7 +44,7 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
   
   const { selectedTemplateId } = useTemplateDefault();
 
-  // ZPL Label state
+  // ZPL Label state - this is the source of truth
   const [label, setLabel] = useState<ZPLLabel>(createDefaultLabelTemplate());
   const [selectedElement, setSelectedElement] = useState<ZPLElement | null>(null);
   const [showGrid, setShowGrid] = useState(true);
@@ -55,13 +55,22 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
   
   // Print settings with persistent calibration
   const [copies, setCopies] = useState(1);
-  const [cutAfter, setCutAfter] = useState(false);
+  const [cutAfter, setCutAfter] = useState(true); // Default to cut after for ZD410
   const [xOffset, setXOffset] = useLocalStorage('printer-x-offset', 0);
   const [yOffset, setYOffset] = useLocalStorage('printer-y-offset', 0);
   const [zplSettings, setZplSettings] = useState({
     darkness: 10,
     speed: 4
   });
+
+  // Keep preview ZPL in sync with elements and settings
+  const [previewZpl, setPreviewZpl] = useState('');
+
+  // Update preview whenever label or settings change
+  useEffect(() => {
+    const zpl = generateZPLFromElements(label, xOffset, yOffset);
+    setPreviewZpl(zpl);
+  }, [label, xOffset, yOffset]);
 
   // Load default template on component mount and when selectedTemplateId changes
   useEffect(() => {
@@ -266,6 +275,20 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
     }
   };
 
+  const handleTestPrint = async () => {
+    try {
+      const result = await testConnection();
+      if (result.success) {
+        toast.success('Test print sent successfully');
+      } else {
+        toast.error(`Test print failed: ${result.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Test print failed:', error);
+      toast.error('Failed to send test print');
+    }
+  };
+
   const handlePrint = async () => {
     try {
       const zplCode = generateZPLFromElements(label, xOffset, yOffset);
@@ -279,6 +302,34 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
     }
   };
 
+  const handleCopyZPL = async () => {
+    try {
+      await navigator.clipboard.writeText(previewZpl);
+      toast.success('ZPL code copied to clipboard');
+    } catch (error) {
+      console.error('Failed to copy ZPL:', error);
+      toast.error('Failed to copy ZPL code');
+    }
+  };
+
+  const handleDownloadZPL = () => {
+    try {
+      const blob = new Blob([previewZpl], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'label.zpl';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success('ZPL file downloaded');
+    } catch (error) {
+      console.error('Failed to download ZPL:', error);
+      toast.error('Failed to download ZPL file');
+    }
+  };
+
   const resetToDefaults = () => {
     setLabel(createDefaultLabelTemplate());
     setSelectedElement(null);
@@ -287,7 +338,7 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
       speed: 4
     });
     setCopies(1);
-    setCutAfter(false);
+    setCutAfter(true);
     toast.success('Reset to defaults');
   };
 
@@ -315,7 +366,7 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
   return (
     <div className={`space-y-6 ${className}`}>
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        {/* Main Editor */}
+        {/* Main Editor - Always mounted as source of truth */}
         <div className="xl:col-span-2 space-y-4">
           <ZPLVisualEditor
             label={label}
@@ -442,186 +493,185 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
                            disabled={!templateName.trim()}
                          >
                            <Save className="w-4 h-4" />
-                           {currentTemplateId ? 'Update Template' : 'Save Template'}
+                           {currentTemplateId ? 'Update' : 'Save'}
                          </Button>
                        </div>
                       <p className="text-xs text-muted-foreground">
-                        This will save your current label design and print settings
+                        {currentTemplateId ? 'Update the current template' : 'Save current label as a new template'}
                       </p>
                     </div>
-
-                    {defaultTemplate && (
-                      <div className="p-3 bg-muted rounded-lg">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Star className="w-4 h-4 fill-current" />
-                          <span className="text-sm font-medium">Default Template</span>
-                        </div>
-                        <div className="text-sm text-muted-foreground">
-                          {defaultTemplate.name}
-                        </div>
-                        <Button 
-                          variant="ghost" 
-                          size="sm"
-                          onClick={() => handleLoadTemplate(defaultTemplate.id)}
-                          className="mt-2 h-8"
-                        >
-                          Load Default
-                        </Button>
-                      </div>
-                    )}
                   </div>
                 </TabsContent>
 
-                {/* Print Settings */}
+                {/* Print Settings - PrintNode only */}
                 <TabsContent value="print" className="space-y-4">
                   <div className="space-y-4">
-                    <h4 className="text-sm font-medium">Print Settings</h4>
-                    
+                    {/* Print Buttons */}
                     <div className="space-y-2">
-                      <Label htmlFor="copies">Copies</Label>
-                      <Input
-                        id="copies"
-                        type="number"
-                        min="1"
-                        max="99"
-                        value={copies}
-                        onChange={(e) => setCopies(Number(e.target.value))}
-                      />
-                    </div>
-
-                    <div className="flex items-center space-x-2">
-                      <Switch 
-                        id="cut-after"
-                        checked={cutAfter} 
-                        onCheckedChange={setCutAfter} 
-                      />
-                      <Label htmlFor="cut-after">Cut after printing</Label>
-                    </div>
-
-                    <Separator />
-
-                    <h4 className="text-sm font-medium">ZPL Settings</h4>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="darkness">Darkness (0-30)</Label>
-                      <Input
-                        id="darkness"
-                        type="number"
-                        min="0"
-                        max="30"
-                        value={zplSettings.darkness}
-                        onChange={(e) => setZplSettings(prev => ({
-                          ...prev,
-                          darkness: Number(e.target.value)
-                        }))}
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="speed">Print Speed (1-14)</Label>
-                      <Input
-                        id="speed"
-                        type="number"
-                        min="1"
-                        max="14"
-                        value={zplSettings.speed}
-                        onChange={(e) => setZplSettings(prev => ({
-                          ...prev,
-                          speed: Number(e.target.value)
-                        }))}
-                      />
-                    </div>
-
-                    <Separator />
-
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <h4 className="text-sm font-medium">Print Calibration</h4>
-                        <Button
-                          size="sm"
+                      <Label>Printing (PrintNode)</Label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button 
+                          onClick={handleTestPrint} 
+                          disabled={isPrinting}
                           variant="outline"
-                          onClick={() => toast.success('Calibration settings saved!')}
+                          size="sm"
                         >
-                          <Settings className="w-3 h-3 mr-1" />
-                          Save
+                          <Printer className="w-4 h-4 mr-1" />
+                          Test Print
+                        </Button>
+                        <Button 
+                          onClick={handlePrint} 
+                          disabled={isPrinting}
+                          size="sm"
+                        >
+                          <Printer className="w-4 h-4 mr-1" />
+                          Print Label
                         </Button>
                       </div>
+                    </div>
+
+                    <Separator />
+
+                    {/* ZPL Actions */}
+                    <div className="space-y-2">
+                      <Label>ZPL Actions</Label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button 
+                          onClick={handleCopyZPL}
+                          variant="outline"
+                          size="sm"
+                        >
+                          <Copy className="w-4 h-4 mr-1" />
+                          Copy ZPL
+                        </Button>
+                        <Button 
+                          onClick={handleDownloadZPL}
+                          variant="outline"
+                          size="sm"
+                        >
+                          <Download className="w-4 h-4 mr-1" />
+                          Download .zpl
+                        </Button>
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    {/* Print Options */}
+                    <div className="space-y-3">
+                      <Label>Print Options</Label>
                       
-                      <div className="space-y-2">
-                        <Label htmlFor="xOffset">X Offset (-50 to 50)</Label>
+                      <div>
+                        <Label htmlFor="copies">Copies</Label>
                         <Input
-                          id="xOffset"
+                          id="copies"
                           type="number"
-                          min="-50"
-                          max="50"
-                          value={xOffset}
-                          onChange={(e) => setXOffset(Number(e.target.value))}
+                          min="1"
+                          max="99"
+                          value={copies}
+                          onChange={(e) => setCopies(Number(e.target.value))}
+                          className="mt-1"
                         />
                       </div>
 
-                      <div className="space-y-2">
-                        <Label htmlFor="yOffset">Y Offset (-50 to 50)</Label>
+                      <div className="flex items-center space-x-2">
+                        <Switch 
+                          checked={cutAfter} 
+                          onCheckedChange={setCutAfter}
+                        />
+                        <Label>Cut after printing</Label>
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    {/* Calibration Offsets */}
+                    <div className="space-y-3">
+                      <Label>Print Calibration</Label>
+                      
+                      <div>
+                        <Label htmlFor="x-offset">X Offset (dots)</Label>
                         <Input
-                          id="yOffset"
+                          id="x-offset"
                           type="number"
-                          min="-50"
-                          max="50"
+                          value={xOffset}
+                          onChange={(e) => setXOffset(Number(e.target.value))}
+                          className="mt-1"
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="y-offset">Y Offset (dots)</Label>
+                        <Input
+                          id="y-offset"
+                          type="number"
                           value={yOffset}
                           onChange={(e) => setYOffset(Number(e.target.value))}
+                          className="mt-1"
                         />
                       </div>
                     </div>
                   </div>
                 </TabsContent>
 
-                {/* Settings */}
+                {/* Display Settings */}
                 <TabsContent value="settings" className="space-y-4">
                   <div className="space-y-4">
-                    <h4 className="text-sm font-medium">Display Settings</h4>
-                    
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center justify-between">
+                      <Label>Show Grid</Label>
                       <Switch 
-                        id="show-grid"
                         checked={showGrid} 
-                        onCheckedChange={setShowGrid} 
+                        onCheckedChange={setShowGrid}
                       />
-                      <Label htmlFor="show-grid">Show grid</Label>
                     </div>
 
                     <Separator />
 
-                    <div className="space-y-2">
-                      <Label>Label Information</Label>
-                      <div className="text-sm text-muted-foreground space-y-1">
-                        <div>Size: 2" × 1" (406 × 203 dots)</div>
-                        <div>DPI: 203</div>
-                        <div>Elements: {label.elements.length}</div>
+                    <div className="space-y-3">
+                      <Label>ZPL Print Settings</Label>
+                      
+                      <div>
+                        <Label htmlFor="darkness">Darkness: {zplSettings.darkness}</Label>
+                        <input
+                          id="darkness"
+                          type="range"
+                          min="0"
+                          max="30"
+                          value={zplSettings.darkness}
+                          onChange={(e) => setZplSettings(prev => ({ ...prev, darkness: Number(e.target.value) }))}
+                          className="w-full"
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="speed">Speed (IPS): {zplSettings.speed}</Label>
+                        <input
+                          id="speed"
+                          type="range"
+                          min="2"
+                          max="6"
+                          value={zplSettings.speed}
+                          onChange={(e) => setZplSettings(prev => ({ ...prev, speed: Number(e.target.value) }))}
+                          className="w-full"
+                        />
                       </div>
                     </div>
+
+                    <Separator />
+
+                    <Button 
+                      onClick={resetToDefaults} 
+                      variant="outline"
+                      className="w-full"
+                    >
+                      <RotateCcw className="w-4 h-4 mr-2" />
+                      Reset to Defaults
+                    </Button>
                   </div>
                 </TabsContent>
               </Tabs>
             </CardContent>
           </Card>
-
-          {/* Action Buttons */}
-          <div className="flex gap-2">
-            <Button 
-              onClick={handlePrint} 
-              disabled={isPrinting}
-              className="flex-1"
-            >
-              <Printer className="w-4 h-4 mr-2" />
-              {isPrinting ? 'Printing...' : 'Print Label'}
-            </Button>
-            <Button 
-              onClick={resetToDefaults}
-              variant="outline"
-              size="icon"
-            >
-              <RotateCcw className="w-4 h-4" />
-            </Button>
-          </div>
         </div>
       </div>
     </div>

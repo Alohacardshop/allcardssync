@@ -1,7 +1,4 @@
 import React from 'react';
-import { Card, CardContent } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { SimpleLabelDesigner } from '@/components/SimpleLabelDesigner';
 import { AdvancedLabelDesigner } from '@/components/AdvancedLabelDesigner';
 import { Navigation } from '@/components/Navigation';
 
@@ -21,7 +18,6 @@ export function LabelDesigner() {
           </p>
         </div>
 
-        
         <AdvancedLabelDesigner />
       </main>
     </>
