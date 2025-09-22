@@ -19,9 +19,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { testLocalBridge } from "@/lib/localPrintBridge";
 import { PrintNodeSettings } from "@/components/PrintNodeSettings";
-import { SimplePrinterPanel } from "@/components/SimplePrinterPanel";
 import { CutterSettings, CutterConfig } from "@/components/CutterSettings";
 import { DefaultPrinterSelector } from "@/components/DefaultPrinterSelector";
 
@@ -36,7 +34,6 @@ export default function TestHardwarePage() {
   const { toast } = useToast();
   const [barcodeInput, setBarcodeInput] = useState('');
   const [scannedBarcode, setScannedBarcode] = useState('');
-  const [printerTest, setPrinterTest] = useState<TestResult>({ status: 'idle' });
   const [networkTest, setNetworkTest] = useState<TestResult>({ status: 'idle' });
   const [dbTest, setDbTest] = useState<TestResult>({ status: 'idle' });
   const [cutterConfig, setCutterConfig] = useState<CutterConfig>({
@@ -80,41 +77,6 @@ export default function TestHardwarePage() {
     }
   };
 
-  const handlePrinterTest = async () => {
-    setPrinterTest({ status: 'running' });
-    const startTime = Date.now();
-    
-    try {
-      const result = await testLocalBridge({
-        bridgeUrl: 'http://localhost:3001',
-        printerIp: '192.168.1.70',
-        printerPort: 9100
-      });
-      
-      const responseTime = Date.now() - startTime;
-      
-      if (result.success) {
-        setPrinterTest({
-          status: 'success',
-          message: 'Printer connection successful',
-          details: result.details,
-          responseTime
-        });
-      } else {
-        setPrinterTest({
-          status: 'error',
-          message: 'Printer connection failed',
-          details: result.error
-        });
-      }
-    } catch (error) {
-      setPrinterTest({
-        status: 'error',
-        message: 'Printer test failed',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      });
-    }
-  };
 
   const handleNetworkTest = async () => {
     setNetworkTest({ status: 'running' });
@@ -201,7 +163,6 @@ export default function TestHardwarePage() {
 
   const runAllTests = async () => {
     await Promise.all([
-      handlePrinterTest(),
       handleNetworkTest(),
       handleDatabaseTest()
     ]);
@@ -328,53 +289,6 @@ export default function TestHardwarePage() {
             </CardContent>
           </Card>
 
-          {/* Printer Connection Test */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Printer className="h-5 w-5" />
-                Printer Connection Test
-                {getStatusBadge(printerTest.status)}
-              </CardTitle>
-              <CardDescription>Test network printer connectivity</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <Button 
-                onClick={handlePrinterTest} 
-                disabled={printerTest.status === 'running'}
-                className="w-full"
-              >
-                {getStatusIcon(printerTest.status)}
-                <span className="ml-2">
-                  {printerTest.status === 'running' ? 'Testing...' : 'Test Printer'}
-                </span>
-              </Button>
-              
-              {printerTest.message && (
-                <Alert className={printerTest.status === 'error' ? 'border-red-200' : 'border-green-200'}>
-                  {getStatusIcon(printerTest.status)}
-                  <AlertDescription>
-                    <strong>{printerTest.message}</strong>
-                    {printerTest.details && <div className="mt-1 text-sm">{printerTest.details}</div>}
-                    {printerTest.responseTime && (
-                      <div className="mt-1 text-xs text-muted-foreground">
-                        Response time: {printerTest.responseTime}ms
-                      </div>
-                    )}
-                  </AlertDescription>
-                </Alert>
-              )}
-              
-              <div className="text-xs text-muted-foreground space-y-1">
-                <p><strong>Troubleshooting:</strong></p>
-                <p>• Check printer IP address (default: 192.168.1.70)</p>
-                <p>• Verify printer is on same network</p>
-                <p>• Ensure port 9100 is open</p>
-                <p>• Try pinging printer IP from command line</p>
-                <p>• Check local print bridge is running on port 3001</p>
-              </div>
-            </CardContent>
-          </Card>
 
           {/* Network Connectivity Test */}
           <Card>
