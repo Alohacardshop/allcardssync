@@ -1,3 +1,10 @@
+/**
+ * ZD410 Test Templates
+ * Thin wrappers around generateZPLFromElements for quick test printing
+ */
+
+import { generateZPLFromElements, ZPLLabel, ZPLElement } from '@/lib/zplElements';
+
 export interface LabelData {
   cardName?: string;
   setName?: string;
@@ -8,8 +15,7 @@ export interface LabelData {
 }
 
 /**
- * ZD410-specific ZPL template for raw card labels
- * Optimized for 2"x1" labels with proper positioning and no rotation
+ * Generate raw card label using unified ZPL builder
  */
 export function generateRawCardLabel(data: LabelData): string {
   const {
@@ -27,72 +33,121 @@ export function generateRawCardLabel(data: LabelData): string {
   // Create barcode data - use SKU if available, otherwise use cardName
   const barcodeData = sku || cardName.replace(/[^a-zA-Z0-9]/g, '').substring(0, 12);
 
-  return [
-    '^XA',
-    '^MNY',           // gap media (use ^MNN for continuous)
-    '^MTD',           // direct thermal (ZD410)
-    '^MMC',           // enable cutter mode
-    '^PW448',         // 2.2" width for ZD410 (448 dots at 203dpi)
-    '^LL203',         // 1" label height at 203dpi
-    '^LH0,0',
-    '^CI28',          // UTF-8 safe
-    '',
-    // No rotation (N), proper positioning for 2x1 label
-    `^FO20,15^AN,18,18^FD${condition}^FS`,
-    `^FO300,15^AN,20,20^FD${priceDisplay}^FS`,
-    `^FO20,50^BCN,35,N,N,N^FD${barcodeData}^FS`,
-    `^FO20,95^AN,14,14^FD${cardName}^FS`,
-    `^FO20,120^AN,10,10^FD${sku}^FS`,
-    '',
-    '^PQ1,1,0,Y',     // 1 label, cut after each
-    '^XZ'
-  ].join('\n');
+  const elements: ZPLElement[] = [
+    {
+      id: 'condition',
+      type: 'text',
+      position: { x: 20, y: 15 },
+      font: 'A',
+      rotation: 0,
+      fontSize: 18,
+      fontWidth: 18,
+      text: condition
+    },
+    {
+      id: 'price',
+      type: 'text',
+      position: { x: 300, y: 15 },
+      font: 'A',
+      rotation: 0,
+      fontSize: 20,
+      fontWidth: 20,
+      text: priceDisplay
+    },
+    {
+      id: 'barcode',
+      type: 'barcode',
+      position: { x: 20, y: 50 },
+      data: barcodeData,
+      size: { width: 2, height: 35 },
+      barcodeType: 'CODE128',
+      humanReadable: false,
+      height: 35
+    },
+    {
+      id: 'cardname',
+      type: 'text',
+      position: { x: 20, y: 95 },
+      font: 'A',
+      rotation: 0,
+      fontSize: 14,
+      fontWidth: 14,
+      text: cardName
+    },
+    {
+      id: 'sku',
+      type: 'text',
+      position: { x: 20, y: 120 },
+      font: 'A',
+      rotation: 0,
+      fontSize: 10,
+      fontWidth: 10,
+      text: sku
+    }
+  ];
+
+  const label: ZPLLabel = {
+    width: 448,  // 2.2" at 203 DPI
+    height: 203, // 1" at 203 DPI
+    dpi: 203,
+    elements
+  };
+
+  return generateZPLFromElements(label, 0, 0);
 }
 
 /**
- * Test label for ZD410 - optimized for 2"x1" labels with no rotation
+ * Generate test label using unified ZPL builder
  */
 export function generateTestLabel(): string {
   const timestamp = new Date().toLocaleString();
   
-  return [
-    '^XA',
-    '^MNY',           // gap media (use ^MNN for continuous)
-    '^MTD',           // direct thermal (ZD410)
-    '^MMC',           // enable cutter mode
-    '^PW448',         // 2.2" width for ZD410
-    '^LL203',         // 1" label height at 203dpi
-    '^LH0,0',
-    '^CI28',          // UTF-8 safe
-    '',
-    '^FO20,15^AN,18,18^FDTEST PRINT ZD410^FS',
-    `^FO20,50^AN,14,14^FD${timestamp}^FS`,
-    '^FO20,80^AN,12,12^FDZD410 2x1 Test^FS',
-    '',
-    '^PQ1,1,0,Y',     // 1 label, cut after each
-    '^XZ'
-  ].join('\n');
+  const elements: ZPLElement[] = [
+    {
+      id: 'title',
+      type: 'text',
+      position: { x: 20, y: 15 },
+      font: 'A',
+      rotation: 0,
+      fontSize: 18,
+      fontWidth: 18,
+      text: 'TEST PRINT ZD410'
+    },
+    {
+      id: 'timestamp',
+      type: 'text',
+      position: { x: 20, y: 50 },
+      font: 'A',
+      rotation: 0,
+      fontSize: 14,
+      fontWidth: 14,
+      text: timestamp
+    },
+    {
+      id: 'footer',
+      type: 'text',
+      position: { x: 20, y: 80 },
+      font: 'A',
+      rotation: 0,
+      fontSize: 12,
+      fontWidth: 12,
+      text: 'ZD410 2x1 Test'
+    }
+  ];
+
+  const label: ZPLLabel = {
+    width: 448,  // 2.2" at 203 DPI
+    height: 203, // 1" at 203 DPI
+    dpi: 203,
+    elements
+  };
+
+  return generateZPLFromElements(label, 0, 0);
 }
 
 /**
- * ZD410 test template function - standardized for 2"x1" labels with no rotation
+ * Legacy compatibility function
  */
 export const zd410TestLabelZPL = (timestamp?: string) => {
-  const ts = timestamp || new Date().toLocaleString();
-  
-  return [
-    '^XA',
-    '^MNY',           // gap media (use ^MNN for continuous)
-    '^MTD',           // direct thermal (ZD410)
-    '^MMC',           // cutter mode
-    '^PW448',         // 2.2" width for ZD410 
-    '^LL203',         // 1" label height at 203dpi
-    '^LH0,0',
-    '^CI28',
-    '^FO20,15^AN,18,18^FDTEST PRINT ZD410^FS',
-    `^FO20,50^AN,14,14^FD${ts}^FS`,
-    '^FO20,80^AN,12,12^FDZD410 2x1 Test^FS',
-    '^PQ1,1,0,Y',
-    '^XZ'
-  ].join('\n');
+  return generateTestLabel();
 };

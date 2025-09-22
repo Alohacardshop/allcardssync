@@ -14,9 +14,9 @@ import { useStore } from '@/contexts/StoreContext';
 import { Navigation } from '@/components/Navigation';
 import { useZebraNetwork } from "@/hooks/useZebraNetwork";
 import { ZebraPrinterSelectionDialog } from '@/components/ZebraPrinterSelectionDialog';
-import { zebraNetworkService } from "@/lib/zebraNetworkService";
 import { generateRawCardLabel } from '@/lib/zd410Templates';
-import { printNodeService } from '@/lib/printNodeService';
+import { generateZPLFromElements, ZPLLabel, ZPLElement } from '@/lib/zplElements';
+import { print } from '@/lib/printService';
 import { sendGradedToShopify, sendRawToShopify } from '@/hooks/useShopifySend';
 import { useBatchSendToShopify } from '@/hooks/useBatchSendToShopify';
 import { useDebounce } from '@/hooks/useDebounce';
@@ -345,29 +345,6 @@ const Inventory = () => {
     try {
       setPrintingItem(item.id);
       
-      // Load cutter settings
-      let cutterConfig = {
-        cutAfter: true,
-        cutTiming: 'after-each' as const,
-        cutInterval: 1,
-        hasCutter: true
-      };
-      
-      try {
-        const savedCutterConfig = localStorage.getItem('zebra-cutter-config');
-        if (savedCutterConfig) {
-          const parsedConfig = JSON.parse(savedCutterConfig);
-          cutterConfig = {
-            ...cutterConfig,
-            ...parsedConfig,
-            // Ensure cutTiming exists for backward compatibility
-            cutTiming: parsedConfig.cutTiming || 'after-each'
-          };
-        }
-      } catch (error) {
-        console.warn('Failed to load cutter config:', error);
-      }
-      
       // Generate proper title for raw card
       const generateTitle = (item: any) => {
         const parts = []
@@ -378,42 +355,77 @@ const Inventory = () => {
         return parts.length > 0 ? parts.join(' ') : 'Raw Card';
       };
 
-      // Generate ZPL using ZD410-specific template (matches working test print)
-      const zpl = generateRawCardLabel({
-        cardName: generateTitle(item),
-        setName: item.brand_title || '',
-        condition: item.condition || 'NM',
-        price: item.price || 0,
-        sku: item.sku || '',
-        barcode: item.sku || generateTitle(item).replace(/[^a-zA-Z0-9]/g, '').substring(0, 12)
-      });
+      // Create ZPL elements for raw card label
+      const elements: ZPLElement[] = [
+        {
+          id: 'condition',
+          type: 'text',
+          position: { x: 20, y: 15 },
+          font: 'A',
+          rotation: 0,
+          fontSize: 18,
+          fontWidth: 18,
+          text: item.condition || 'NM'
+        },
+        {
+          id: 'price',
+          type: 'text',
+          position: { x: 300, y: 15 },
+          font: 'A',
+          rotation: 0,
+          fontSize: 20,
+          fontWidth: 20,
+          text: item.price ? `$${item.price.toFixed(2)}` : '$0.00'
+        },
+        {
+          id: 'barcode',
+          type: 'barcode',
+          position: { x: 20, y: 50 },
+          data: item.sku || generateTitle(item).replace(/[^a-zA-Z0-9]/g, '').substring(0, 12),
+          size: { width: 2, height: 35 },
+          barcodeType: 'CODE128',
+          humanReadable: false,
+          height: 35
+        },
+        {
+          id: 'cardname',
+          type: 'text',
+          position: { x: 20, y: 95 },
+          font: 'A',
+          rotation: 0,
+          fontSize: 14,
+          fontWidth: 14,
+          text: generateTitle(item)
+        },
+        {
+          id: 'sku',
+          type: 'text',
+          position: { x: 20, y: 120 },
+          font: 'A',
+          rotation: 0,
+          fontSize: 10,
+          fontWidth: 10,
+          text: item.sku || ''
+        }
+      ];
 
-      console.log('Generated ZPL for printing:', zpl);
-      console.log('ZPL byte length:', zpl.length);
-      console.log('ZPL first 200 chars:', zpl.substring(0, 200));
-      console.log('ZPL last 50 chars:', zpl.substring(zpl.length - 50));
+      const label: ZPLLabel = {
+        width: 448,  // 2.2" at 203 DPI
+        height: 203, // 1" at 203 DPI
+        dpi: 203,
+        elements
+      };
 
-      console.log('🖨️ Starting ZD410 print process...');
+      // Generate ZPL using unified builder
+      const zpl = generateZPLFromElements(label, 0, 0);
 
-      // Get PrintNode configuration
-      const savedConfig = localStorage.getItem('zebra-printer-config');
-      if (!savedConfig) {
-        throw new Error('No PrintNode printer configured. Please configure in Admin > Test Hardware.');
-      }
-      
-      const config = JSON.parse(savedConfig);
-      if (!config.usePrintNode || !config.printNodeId) {
-        throw new Error('PrintNode not properly configured. Please reconfigure in Admin > Test Hardware.');
-      }
+      console.log('🖨️ Generated ZPL for printing:', zpl);
 
-      console.log('🖨️ Using PrintNode printer ID:', config.printNodeId);
-      console.log('🖨️ Generated ZPL:', zpl);
-
-      // Send to PrintNode with enhanced error handling
-      const result = await printNodeService.printZPL(zpl, config.printNodeId, 1);
+      // Print using unified service
+      const result = await print(zpl, 1);
       
       if (result.success) {
-        console.log('✅ ZD410 print job successful:', result);
+        console.log('✅ Print job successful:', result);
         toast.success(`Label printed successfully! Job ID: ${result.jobId}`);
         
         // Update the printed_at timestamp
@@ -424,7 +436,7 @@ const Inventory = () => {
           
         fetchItems(0, true);
       } else {
-        console.error('❌ ZD410 print failed:', result.error);
+        console.error('❌ Print failed:', result.error);
         throw new Error(`Print failed: ${result.error}`);
       }
     } catch (error) {
@@ -433,7 +445,7 @@ const Inventory = () => {
     } finally {
       setPrintingItem(null);
     }
-  }, [selectedPrinter, fetchItems]);
+  }, [fetchItems]);
 
   const handlePrintWithPrinter = useCallback(async (printerId: number) => {
     if (!printData) return;
@@ -465,25 +477,74 @@ const Inventory = () => {
         return parts.length > 0 ? parts.join(' ') : 'Raw Card';
       };
 
-      // Use enhanced ZPL template for raw cards
-      const { generateRawCardLabelZPL } = await import('@/lib/simpleZPLTemplates');
-      const zpl = generateRawCardLabelZPL({
-        title: generateTitle(item),
-        sku: item.sku || '',
-        price: item.price ? parseFloat(item.price).toFixed(2) : '0.00',
-        condition: item.condition || 'NM',
-        location: item.location || ''
-      }, {
-        dpi: 203,
-        speed: 4,
-        darkness: 10,
-        copies: 1
-      });
+      // Create ZPL elements for raw card label
+      const elements: ZPLElement[] = [
+        {
+          id: 'condition',
+          type: 'text',
+          position: { x: 20, y: 15 },
+          font: 'A',
+          rotation: 0,
+          fontSize: 18,
+          fontWidth: 18,
+          text: item.condition || 'NM'
+        },
+        {
+          id: 'price',
+          type: 'text',
+          position: { x: 300, y: 15 },
+          font: 'A',
+          rotation: 0,
+          fontSize: 20,
+          fontWidth: 20,
+          text: item.price ? `$${item.price.toFixed(2)}` : '$0.00'
+        },
+        {
+          id: 'barcode',
+          type: 'barcode',
+          position: { x: 20, y: 50 },
+          data: item.sku || generateTitle(item).replace(/[^a-zA-Z0-9]/g, '').substring(0, 12),
+          size: { width: 2, height: 35 },
+          barcodeType: 'CODE128',
+          humanReadable: false,
+          height: 35
+        },
+        {
+          id: 'cardname',
+          type: 'text',
+          position: { x: 20, y: 95 },
+          font: 'A',
+          rotation: 0,
+          fontSize: 14,
+          fontWidth: 14,
+          text: generateTitle(item)
+        },
+        {
+          id: 'sku',
+          type: 'text',
+          position: { x: 20, y: 120 },
+          font: 'A',
+          rotation: 0,
+          fontSize: 10,
+          fontWidth: 10,
+          text: item.sku || ''
+        }
+      ];
 
-      await zebraNetworkService.printZPL(zpl, selectedPrinter, {
-        title: `Raw-Card-${item.sku}`,
-        copies: 1 
-      });
+      const label: ZPLLabel = {
+        width: 448,  // 2.2" at 203 DPI
+        height: 203, // 1" at 203 DPI
+        dpi: 203,
+        elements
+      };
+
+      // Generate ZPL using unified builder and print through unified service
+      const zpl = generateZPLFromElements(label, 0, 0);
+      const result = await print(zpl, 1);
+
+      if (!result.success) {
+        throw new Error(result.error || 'Print failed');
+      }
 
       await supabase
         .from('intake_items')
@@ -526,7 +587,10 @@ const Inventory = () => {
         return;
       }
 
-      const { generateRawCardLabelZPL } = await import('@/lib/simpleZPLTemplates');
+      // Remove the outdated import and zebraNetworkService reference
+      console.log('Bulk printing - using unified print service only');
+      
+      // Direct loop with unified service
       let successCount = 0;
       let errorCount = 0;
 
@@ -542,34 +606,73 @@ const Inventory = () => {
 
       for (const item of unprintedRawItems) {
         try {
-          const zpl = generateRawCardLabelZPL({
-            title: generateTitle(item),
-            sku: item.sku || '',
-            price: item.price ? parseFloat(item.price).toFixed(2) : '0.00',
-            condition: item.condition || 'NM',
-            location: item.location || ''
-          }, {
-            dpi: 203,
-            speed: 4,
-            darkness: 10,
-            copies: 1
-          });
-
-          // Try PrintNode first if configured
-          if (usePrintNode) {
-            const printNodeService = await import('@/lib/printNodeService');
-            
-            const result = await printNodeService.printNodeService.printZPL(zpl, config.printNodeId, 1);
-            
-            if (!result.success) {
-              throw new Error(result.error || 'PrintNode print failed');
+          // Create ZPL elements for raw card label using generateZPLFromElements
+          const elements: ZPLElement[] = [
+            {
+              id: 'condition',
+              type: 'text',
+              position: { x: 20, y: 15 },
+              font: 'A',
+              rotation: 0,
+              fontSize: 18,
+              fontWidth: 18,
+              text: item.condition || 'NM'
+            },
+            {
+              id: 'price',
+              type: 'text',
+              position: { x: 300, y: 15 },
+              font: 'A',
+              rotation: 0,
+              fontSize: 20,
+              fontWidth: 20,
+              text: item.price ? `$${item.price.toFixed(2)}` : '$0.00'
+            },
+            {
+              id: 'barcode',
+              type: 'barcode',
+              position: { x: 20, y: 50 },
+              data: item.sku || generateTitle(item).replace(/[^a-zA-Z0-9]/g, '').substring(0, 12),
+              size: { width: 2, height: 35 },
+              barcodeType: 'CODE128',
+              humanReadable: false,
+              height: 35
+            },
+            {
+              id: 'cardname',
+              type: 'text',
+              position: { x: 20, y: 95 },
+              font: 'A',
+              rotation: 0,
+              fontSize: 14,
+              fontWidth: 14,
+              text: generateTitle(item)
+            },
+            {
+              id: 'sku',
+              type: 'text',
+              position: { x: 20, y: 120 },
+              font: 'A',
+              rotation: 0,
+              fontSize: 10,
+              fontWidth: 10,
+              text: item.sku || ''
             }
-          } else {
-            // Fallback to direct Zebra printing
-            await zebraNetworkService.printZPL(zpl, selectedPrinter!, {
-              title: `Bulk-Raw-${item.sku}`,
-              copies: 1 
-            });
+          ];
+
+          const label: ZPLLabel = {
+            width: 448,  // 2.2" at 203 DPI
+            height: 203, // 1" at 203 DPI
+            dpi: 203,
+            elements
+          };
+
+          // Generate ZPL using unified builder and print
+          const zpl = generateZPLFromElements(label, 0, 0);
+          const result = await print(zpl, 1);
+
+          if (!result.success) {
+            throw new Error(result.error || 'Print failed');
           }
 
           // Mark as printed
