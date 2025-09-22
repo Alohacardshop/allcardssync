@@ -100,7 +100,7 @@ class PrintNodeService {
 
   // UTF-8 safe base64 encoder
   private toBase64Utf8(s: string): string {
-    return btoa(unescape(encodeURIComponent(s)));
+    return btoa(String.fromCharCode(...new TextEncoder().encode(s)));
   }
 
   async printZPL(zpl: string, printerId: number, copies: number = 1): Promise<PrintNodeResult> {
