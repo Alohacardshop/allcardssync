@@ -31,15 +31,24 @@ export function DefaultPrinterSelector() {
         
         // Load saved default printer
         const savedConfig = localStorage.getItem('zebra-printer-config');
+        let foundSavedPrinter = false;
+        
         if (savedConfig) {
           try {
             const config = JSON.parse(savedConfig);
             if (config.printNodeId && config.usePrintNode) {
               setSelectedPrinterId(config.printNodeId.toString());
+              foundSavedPrinter = true;
             }
           } catch (error) {
             console.error('Failed to parse saved printer config:', error);
           }
+        }
+        
+        // Auto-select first online printer if no saved config
+        if (!foundSavedPrinter && printerList.length > 0) {
+          const onlinePrinter = printerList.find(p => p.status === 'online') || printerList[0];
+          handleSetDefault(onlinePrinter.id.toString());
         }
       }
     } catch (error) {

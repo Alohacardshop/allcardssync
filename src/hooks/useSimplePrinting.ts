@@ -60,6 +60,42 @@ export function useSimplePrinting() {
     try {
       // Check if PrintNode is configured
       if (!printer.usePrintNode || !printer.printNodeId) {
+        // Try to auto-configure if PrintNode is available
+        const connected = await printNodeService.testConnection();
+        if (connected) {
+          const printers = await printNodeService.getPrinters();
+          const onlinePrinter = printers.find(p => p.status === 'online') || printers[0];
+          if (onlinePrinter) {
+            // Auto-configure the first available printer
+            const autoConfig = {
+              ...printer,
+              name: onlinePrinter.name,
+              printNodeId: onlinePrinter.id,
+              usePrintNode: true
+            };
+            savePrinterConfig(autoConfig);
+            
+            toast.info(`Auto-configured PrintNode printer: ${onlinePrinter.name}`);
+            
+            // Use the auto-configured printer
+            const printNodeResult = await printNodeService.printZPL(zpl, onlinePrinter.id, copies);
+            const result: PrintResult = {
+              success: printNodeResult.success,
+              error: printNodeResult.error
+            };
+            
+            setPrintState({ isLoading: false, lastResult: result });
+            
+            if (result.success) {
+              toast.success(`Successfully sent ${copies} label(s) to PrintNode`);
+            } else {
+              toast.error(`PrintNode failed: ${result.error}`);
+            }
+            
+            return result;
+          }
+        }
+        
         throw new Error('No PrintNode printer configured. Please configure printing in Test Hardware > Printer Setup.');
       }
       
