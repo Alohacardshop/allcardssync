@@ -179,7 +179,7 @@ export function usePrintQueue() {
       }
 
       // Print the label
-      const result = await printZPL(zpl, { copies: job.copies });
+      const result = await print(zpl, job.copies);
 
       if (result.success) {
         // Mark as printed
@@ -198,7 +198,7 @@ export function usePrintQueue() {
 
         return true;
       } else {
-        throw new Error(result.message || 'Print failed');
+        throw new Error(result.error || 'Print failed');
       }
 
     } catch (error) {

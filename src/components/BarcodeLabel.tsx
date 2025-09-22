@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ZebraPrinterSelectionDialog } from '@/components/ZebraPrinterSelectionDialog';
-import { zebraNetworkService } from '@/lib/zebraNetworkService';
+import { print } from '@/lib/printService';
 
 interface BarcodeLabelProps {
   value: string;
@@ -45,21 +45,24 @@ const BarcodeLabel = ({ value, label, className, showPrintButton = true }: Barco
     if (!value) return;
     
     try {
-      // Generate ZPL for barcode
+      console.log('🖨️ Printing barcode label via unified print service');
+      
       const zpl = `^XA
-^LH0,0
+^MTD
+^MNY
+^PW448
 ^LL203
-^PR6
-^MD8
+^LH0,0
+^LS16
+^FWN
+^PON
+^CI28
 ^FO50,30^A0N,30,30^FD${label || 'Barcode'}^FS
 ^FO50,80^BCN,80,Y,N,N^FD${value}^FS
-^PQ1,0,1,Y
+^PQ1,1,0,Y
 ^XZ`;
 
-      const result = await zebraNetworkService.printZPL(zpl, printer, {
-        title: `Barcode: ${value}`,
-        copies: 1
-      });
+      const result = await print(zpl, 1);
 
       if (!result.success) {
         throw new Error(result.error);

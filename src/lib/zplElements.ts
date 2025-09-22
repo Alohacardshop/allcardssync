@@ -162,16 +162,27 @@ export function processTextOverflow(text: string, maxLength: number, overflow: s
 }
 
 // Generate ZPL code from elements with ZD410 defaults
-export function generateZPLFromElements(label: ZPLLabel, xOffset: number = 0, yOffset: number = 0): string {
+export function generateZPLFromElements(
+  label: ZPLLabel, 
+  xOffset: number = 0, 
+  yOffset: number = 0,
+  options?: {
+    speed?: number;
+    darkness?: number;
+    stockMode?: 'gap' | 'continuous';
+    copies?: number;
+  }
+): string {
   const { width, height, dpi, elements } = label;
   const widthDots = Math.round(width);
   const heightDots = Math.round(height);
+  const copies = options?.copies || 1;
   
   const zpl: string[] = [];
   zpl.push(
     '^XA',                    // Start format
     '^MTD',                   // ZD410 = Direct Thermal
-    '^MNY',                   // gap/notch stock (switch to ^MNN + ^LL if continuous)
+    options?.stockMode === 'continuous' ? '^MNN' : '^MNY', // Stock mode
     '^MMC',                   // Enable cutter mode for ZD410
     `^PW${widthDots}`,        // Print width in dots
     `^LL${heightDots}`,       // Label length in dots
@@ -181,6 +192,14 @@ export function generateZPLFromElements(label: ZPLLabel, xOffset: number = 0, yO
     '^PON',                   // Normal print orientation
     '^CI28'                   // UTF-8 character set
   );
+
+  // Add optional speed and darkness settings
+  if (options?.speed) {
+    zpl.push(`^PR${options.speed}`);  // Print speed in IPS
+  }
+  if (options?.darkness) {
+    zpl.push(`^MD${options.darkness}`); // Media darkness
+  }
 
   elements.forEach(element => {
     console.log('🔍 Processing element:', element.id, element.type, element);
@@ -273,8 +292,10 @@ export function generateZPLFromElements(label: ZPLLabel, xOffset: number = 0, yO
     }
   });
 
-  zpl.push('^PQ1,1,0,Y'); // 1 label, cut after each
-  zpl.push('^XZ'); // End format
+  // Finish with label count and end format
+  zpl.push(`^PQ${copies},1,0,Y`);  // Print quantity with copies, cut after each
+  zpl.push('^XZ');                 // End format
+  
   return zpl.join('\n');
 }
 

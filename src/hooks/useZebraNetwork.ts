@@ -173,12 +173,9 @@ export function useZebraNetwork() {
   }, [loadSavedPrinter, refreshPrinters]);
 
   const printZPL = useCallback(async (zplData: string, options?: { title?: string; copies?: number }) => {
-    if (!selectedPrinter) {
-      throw new Error('No printer selected');
-    }
-    const result = await zebraNetworkService.printZPL(zplData, selectedPrinter, options);
+    const result = await print(zplData, options?.copies || 1);
     return result;
-  }, [selectedPrinter]);
+  }, []);
 
   const testConnection = useCallback(async (printer?: ZebraPrinter) => {
     const targetPrinter = printer || selectedPrinter;

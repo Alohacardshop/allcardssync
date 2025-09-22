@@ -12,8 +12,44 @@ export interface PrintResult {
   error?: string;
 }
 
+// Stock mode configuration
+export interface StockModeConfig {
+  mode: 'gap' | 'continuous';
+  speed?: number;
+  darkness?: number;
+}
+
+// Get stock mode from localStorage
+function getStockModeConfig(): StockModeConfig {
+  try {
+    const saved = localStorage.getItem('zebra-stock-config');
+    if (saved) {
+      return JSON.parse(saved);
+    }
+  } catch (error) {
+    console.warn('Failed to load stock config:', error);
+  }
+  
+  // Default configuration
+  return {
+    mode: 'gap',
+    speed: 4,
+    darkness: 10
+  };
+}
+
+// Save stock mode to localStorage
+export function saveStockModeConfig(config: StockModeConfig): void {
+  try {
+    localStorage.setItem('zebra-stock-config', JSON.stringify(config));
+  } catch (error) {
+    console.warn('Failed to save stock config:', error);
+  }
+}
+
 /**
  * Unified print function - all printing routes through PrintNode
+ * Now applies stock mode configuration automatically
  */
 export async function print(zpl: string, copies: number = 1): Promise<PrintResult> {
   try {

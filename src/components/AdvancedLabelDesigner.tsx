@@ -18,6 +18,8 @@ import { useRawTemplates } from '@/hooks/useRawTemplates';
 import { useTemplateDefault } from '@/hooks/useTemplateDefault';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { useSimplePrinting } from '@/hooks/useSimplePrinting';
+import { StockModeSelector } from '@/components/StockModeSelector';
+import { StockModeConfig } from '@/lib/printService';
 import { 
   ZPLElement, 
   ZPLLabel, 
@@ -61,6 +63,11 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
   const [zplSettings, setZplSettings] = useState({
     darkness: 10,
     speed: 4
+  });
+  const [stockConfig, setStockConfig] = useLocalStorage<StockModeConfig>('zebra-stock-config', {
+    mode: 'gap',
+    speed: 4,
+    darkness: 10
   });
 
   // Keep preview ZPL in sync with elements and settings
@@ -275,34 +282,22 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
     }
   };
 
-  const handleTestPrint = async () => {
+  const handlePrintCurrentLabel = async () => {
     try {
-      // Import and use the corrected ZD410 test template
-      const { zd410TestLabelZPL } = await import('@/lib/zd410Templates');
-      const testZPL = zd410TestLabelZPL();
+      const zplCode = generateZPLFromElements(label, xOffset, yOffset, {
+        speed: zplSettings.speed,
+        darkness: zplSettings.darkness,
+        copies
+      });
+      console.log('🖨️ Printing current label with unified settings');
+      console.log('Generated ZPL:', zplCode);
       
-      console.log('🖨️ Printing ZD410 test label with corrected template');
-      console.log('Test ZPL:', testZPL);
-      
-      const result = await print(testZPL, 1);
+      const result = await print(zplCode, copies);
       if (result.success) {
-        toast.success('Test print sent successfully');
+        toast.success('Label sent to printer successfully');
       } else {
-        toast.error(`Test print failed: ${result.error || 'Unknown error'}`);
+        toast.error(`Print failed: ${result.error || 'Unknown error'}`);
       }
-    } catch (error) {
-      console.error('Test print failed:', error);
-      toast.error('Failed to send test print');
-    }
-  };
-
-  const handlePrint = async () => {
-    try {
-      const zplCode = generateZPLFromElements(label, xOffset, yOffset);
-      console.log('Generated ZPL for printing:', zplCode);
-      
-      await print(zplCode, copies);
-      toast.success('Label sent to printer');
     } catch (error) {
       console.error('Print failed:', error);
       toast.error('Failed to print label');
@@ -513,28 +508,18 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
                 {/* Print Settings - PrintNode only */}
                 <TabsContent value="print" className="space-y-4">
                   <div className="space-y-4">
-                    {/* Print Buttons */}
+                    {/* Print Button - Unified */}
                     <div className="space-y-2">
                       <Label>Printing (PrintNode)</Label>
-                      <div className="grid grid-cols-2 gap-2">
-                        <Button 
-                          onClick={handleTestPrint} 
-                          disabled={isPrinting}
-                          variant="outline"
-                          size="sm"
-                        >
-                          <Printer className="w-4 h-4 mr-1" />
-                          Test Print
-                        </Button>
-                        <Button 
-                          onClick={handlePrint} 
-                          disabled={isPrinting}
-                          size="sm"
-                        >
-                          <Printer className="w-4 h-4 mr-1" />
-                          Print Label
-                        </Button>
-                      </div>
+                      <Button 
+                        onClick={handlePrintCurrentLabel} 
+                        disabled={isPrinting}
+                        className="w-full"
+                        size="lg"
+                      >
+                        <Printer className="w-4 h-4 mr-2" />
+                        Print Current Label
+                      </Button>
                     </div>
 
                     <Separator />
@@ -634,35 +619,15 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
 
                     <Separator />
 
-                    <div className="space-y-3">
-                      <Label>ZPL Print Settings</Label>
-                      
-                      <div>
-                        <Label htmlFor="darkness">Darkness: {zplSettings.darkness}</Label>
-                        <input
-                          id="darkness"
-                          type="range"
-                          min="0"
-                          max="30"
-                          value={zplSettings.darkness}
-                          onChange={(e) => setZplSettings(prev => ({ ...prev, darkness: Number(e.target.value) }))}
-                          className="w-full"
-                        />
-                      </div>
+                    <StockModeSelector 
+                      config={stockConfig}
+                      onChange={setStockConfig}
+                    />
 
-                      <div>
-                        <Label htmlFor="speed">Speed (IPS): {zplSettings.speed}</Label>
-                        <input
-                          id="speed"
-                          type="range"
-                          min="2"
-                          max="6"
-                          value={zplSettings.speed}
-                          onChange={(e) => setZplSettings(prev => ({ ...prev, speed: Number(e.target.value) }))}
-                          className="w-full"
-                        />
-                      </div>
-                    </div>
+                    <StockModeSelector 
+                      config={stockConfig}
+                      onChange={setStockConfig}
+                    />
 
                     <Separator />
 

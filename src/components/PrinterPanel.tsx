@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 import { Printer, WifiOff, Wifi, Settings, TestTube, RefreshCw } from 'lucide-react';
-import { useZebraNetwork } from '@/hooks/useZebraNetwork';
+import { print } from '@/lib/printService';
 import { generateSampleZPL } from '@/lib/zplSamples';
 import { usePrinterNames } from '@/hooks/usePrinterNames';
 import { PrinterSelectionDialog } from '@/components/PrinterSelectionDialog';
@@ -106,7 +106,7 @@ export function PrinterPanel() {
 
     try {
       const testZPL = generateSampleZPL();
-      const result = await printZPL(testZPL, { title: "Test Print" });
+      const result = await print(testZPL, 1);
       
       if (result.success) {
         toast.success("Test print sent successfully!");

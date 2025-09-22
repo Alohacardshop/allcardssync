@@ -97,13 +97,10 @@ export function ZebraPrinterPanel() {
 
     try {
       const testZPL = generateSampleZPL();
-      const result = await printZPL(testZPL, {
-        title: "ZPL Test Print",
-        copies: 1
-      });
+      const result = await print(testZPL, 1);
 
       if (result.success) {
-        toast.success(result.message || "Test print sent successfully");
+        toast.success("Test print sent successfully");
       } else {
         throw new Error(result.error || 'Print failed');
       }
