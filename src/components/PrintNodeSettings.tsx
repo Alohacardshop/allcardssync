@@ -143,35 +143,44 @@ export function PrintNodeSettings() {
                 <Button 
                   onClick={async () => {
                     try {
-                      // Use the EXACT working ZPL format from before (that was printing and cutting)
-                      const workingZpl = `^XA
-^MMC
-^MT6
-^PQ1,1,0
-^FO50,50^A0N,30,30^FDTEST PRINT ZD410^FS
-^FO50,100^A0N,20,20^FD${new Date().toLocaleString()}^FS
-^FO50,130^A0N,15,15^FDZD410 Cut Test^FS
-^XZ`;
+                      // Use the corrected ZD410 template with proper commands
+                      const workingZpl = [
+                        '^XA',
+                        '^MNN',           // continuous media (use ^MNY for gap media)
+                        '^MTD',           // direct thermal (ZD410)
+                        '^MMC',           // enable cutter mode
+                        '^PW448',         // 2" width @203dpi = 448 dots
+                        '^LL400',         // label length in dots (~2.0")
+                        '^LH0,0',
+                        '^CI28',          // UTF-8 safe
+                        '',
+                        '^FO40,40^A0N,28,28^FDTEST PRINT ZD410^FS',
+                        `^FO40,90^A0N,22,22^FD${new Date().toLocaleString()}^FS`,
+                        '^FO40,130^A0N,18,18^FDZD410 Cut Test^FS',
+                        '',
+                        '^PQ1,1,0,Y',     // 1 label, cut after each
+                        '^XZ'
+                      ].join('\n');
                       
-                      console.log('🖨️ Using EXACT working ZPL format');
+                      console.log('🖨️ Using corrected ZD410 ZPL format');
                       
                       const result = await printNodeService.printZPL(workingZpl, parseInt(selectedPrinterId), 1);
                       
                       if (result.success) {
-                        toast.success('EXACT working format test sent!', {
-                          description: `Job ID: ${result.jobId} - This should work!`
+                        toast.success('ZD410 corrected format test sent!', {
+                          description: `Job ID: ${result.jobId} - This should work now!`
                         });
                       } else {
-                        toast.error(`Working format test failed: ${result.error}`);
+                        toast.error(`ZD410 test failed: ${result.error}`);
                       }
                     } catch (error) {
-                      toast.error(`Working format test failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                      toast.error(`ZD410 test failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
                     }
                   }}
                   disabled={isLoading}
                   className="bg-green-600 hover:bg-green-700 flex-1 sm:flex-none"
                 >
-                  Test EXACT Working Format
+                  Test ZD410 Format
                 </Button>
                 
                 <Button 
@@ -204,10 +213,10 @@ export function PrintNodeSettings() {
               </div>
               <div className="text-xs text-muted-foreground space-y-1">
                 <p><strong>ZD410 Debugging Tests:</strong></p>
-                <p>• <strong>Minimal ZPL:</strong> Tests basic printing without any special commands</p>
+                <p>• <strong>ZD410 Format:</strong> Uses correct ^MTD, ^MNN, and proper ZPL structure</p>
                 <p>• <strong>CRLF Format:</strong> Tests Windows-style line endings (\\r\\n)</p>
                 <p>• Check browser console for detailed ZPL analysis and encoding info</p>
-                <p><strong>Expected behavior:</strong> If none print, there's a ZPL format issue</p>
+                <p><strong>Expected behavior:</strong> ZD410 format should print and cut correctly</p>
               </div>
             </div>
           )}

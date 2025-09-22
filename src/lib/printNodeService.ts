@@ -109,6 +109,12 @@ class PrintNodeService {
       console.log(JSON.stringify(zpl)); // Use JSON.stringify to see all characters
       console.log('--- ZPL END ---');
       
+      // Log payload byte length + first/last 20 chars to catch empties/truncation
+      console.log('🖨️ ZPL payload analysis:');
+      console.log('- Byte length:', new TextEncoder().encode(zpl).length);
+      console.log('- First 20 chars:', JSON.stringify(zpl.substring(0, 20)));
+      console.log('- Last 20 chars:', JSON.stringify(zpl.substring(zpl.length - 20)));
+      
       // Check for potential encoding issues
       console.log('🖨️ ZPL character analysis:');
       console.log('- Contains \\r:', zpl.includes('\r'));
@@ -179,7 +185,8 @@ class PrintNodeService {
     const hasStart = zpl.includes('^XA');
     const hasEnd = zpl.includes('^XZ');
     const hasCutterMode = zpl.includes('^MMC');
-    const hasMediaType = zpl.includes('^MT6');
+    const hasMediaType = zpl.includes('^MTD'); // Direct thermal for ZD410
+    const hasMediaTracking = zpl.includes('^MNN') || zpl.includes('^MNY'); // Continuous or gap media
     const hasPrintQuantity = zpl.includes('^PQ');
     
     console.log('🖨️ ZPL Validation:', {
@@ -187,10 +194,11 @@ class PrintNodeService {
       hasEnd,
       hasCutterMode,
       hasMediaType,
+      hasMediaTracking,
       hasPrintQuantity
     });
     
-    return hasStart && hasEnd && hasCutterMode && hasMediaType && hasPrintQuantity;
+    return hasStart && hasEnd && hasCutterMode && hasMediaType && hasMediaTracking && hasPrintQuantity;
   }
 
   async getJobStatus(jobId: number): Promise<any> {
