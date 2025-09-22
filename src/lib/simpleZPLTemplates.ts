@@ -27,6 +27,7 @@ export interface ZPLOptions {
 
 /**
  * Generate cutting commands for ZPL based on options
+ * Updated for ZD410 compatibility
  */
 function generateCutCommands(options: ZPLOptions): string {
   const {
@@ -41,18 +42,23 @@ function generateCutCommands(options: ZPLOptions): string {
     return '';
   }
 
+  // ZD410-specific cutting sequence
   switch (cutTiming) {
     case 'after-each':
-      // Cut after each label
-      return '^MMC';
+      // ZD410 requires: ^MMC (cutter mode) + ^MT6 (continuous media) + ^PQ with pause parameter
+      return `^MMC
+^MT6`;
     case 'after-interval':
       // Cut after specified number of labels
-      return `^MMC^MC${cutInterval}`;
+      return `^MMC
+^MT6`;
     case 'end-of-job':
       // Cut only at the end of the entire job
-      return '^MMT^MC1'; // ^MMT sets mode to tear-off, ^MC1 cuts after job
+      return `^MMC
+^MT6`;
     default:
-      return '^MMC';
+      return `^MMC
+^MT6`;
   }
 }
 
@@ -206,13 +212,16 @@ ${cutCommands}
 
 /**
  * Generate raw card label ZPL with comprehensive card data
+ * Updated for ZD410 cutting compatibility
  */
 export function generateRawCardLabelZPL(data: LabelData, options: ZPLOptions = {}): string {
   const {
     dpi = 203,
     speed = 4,
     darkness = 10,
-    copies = 1
+    copies = 1,
+    cutAfter = false,
+    hasCutter = false
   } = options;
 
   const { title = '', sku = '', price = '', condition = '', location = '' } = data;
@@ -222,6 +231,9 @@ export function generateRawCardLabelZPL(data: LabelData, options: ZPLOptions = {
   const labelHeight = dpi * 1;
 
   const cutCommands = generateCutCommands(options);
+  
+  // ZD410 requires ^PQ with pause parameter for cutting
+  const pqCommand = cutAfter && hasCutter ? `^PQ${copies},1,0` : `^PQ${copies}`;
 
   return `^XA
 ^MMT
@@ -239,7 +251,7 @@ ${condition ? `^FO${labelWidth - 100},45^A0N,16,16^FD${condition}^FS` : ''}
 ^FO20,${labelHeight - 60}^BCN,40,Y,N,N^FD${sku}^FS
 ${location ? `^FO10,${labelHeight - 15}^A0N,12,12^FDLOC: ${location}^FS` : ''}
 
-^PQ${copies}
+${pqCommand}
 ^XZ`;
 }
 
