@@ -76,20 +76,24 @@ export function generateTestLabel(): string {
 }
 
 /**
- * ZD410 test template function
+ * ZD410 test template function - standardized for all test prints
  */
-export const zd410TestLabel = (ts: string) => [
-  '^XA',
-  '^MNN',           // or ^MNY for gap media
-  '^MTD',
-  '^MMC',
-  '^PW448',
-  '^LL400',
-  '^LH0,0',
-  '^CI28',
-  '^FO40,40^A0N,28,28^FDTEST PRINT ZD410^FS',
-  `^FO40,90^A0N,22,22^FD${ts}^FS`,
-  '^FO40,130^A0N,18,18^FDZD410 Cut Test^FS',
-  '^PQ1,1,0,Y',
-  '^XZ',
-].join('\n');
+export const zd410TestLabelZPL = (timestamp?: string) => {
+  const ts = timestamp || new Date().toLocaleString();
+  
+  return [
+    '^XA',
+    '^MNN',           // continuous (or ^MNY if gap/notch)
+    '^MTD',           // direct thermal (ZD410)
+    '^MMC',           // cutter mode
+    '^PW448',         // 2" width @203dpi
+    '^LL400',         // label length (dots)
+    '^LH0,0',
+    '^CI28',
+    '^FO40,40^A0N,28,28^FDTEST PRINT ZD410^FS',
+    `^FO40,90^A0N,22,22^FD${ts}^FS`,
+    '^FO40,130^A0N,18,18^FDZD410 Cut Test^FS',
+    '^PQ1,1,0,Y',
+    '^XZ'
+  ].join('\n');
+};

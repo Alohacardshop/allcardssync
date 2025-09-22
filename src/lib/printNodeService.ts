@@ -98,16 +98,17 @@ class PrintNodeService {
     }
   }
 
+  // UTF-8 safe base64 encoder
+  private toBase64Utf8(s: string): string {
+    return btoa(unescape(encodeURIComponent(s)));
+  }
+
   async printZPL(zpl: string, printerId: number, copies: number = 1): Promise<PrintNodeResult> {
     try {
       console.log('🖨️ PrintNode: Starting print job...');
       console.log('🖨️ PrintNode: Printer ID:', printerId);
       console.log('🖨️ PrintNode: Copies:', copies);
       console.log('🖨️ PrintNode: ZPL length:', zpl.length);
-      console.log('🖨️ PrintNode: ZPL content:');
-      console.log('--- ZPL START ---');
-      console.log(JSON.stringify(zpl)); // Use JSON.stringify to see all characters
-      console.log('--- ZPL END ---');
       
       // Log payload byte length + first/last 20 chars to catch empties/truncation
       console.log('🖨️ ZPL payload analysis:');
@@ -115,24 +116,21 @@ class PrintNodeService {
       console.log('- First 20 chars:', JSON.stringify(zpl.substring(0, 20)));
       console.log('- Last 20 chars:', JSON.stringify(zpl.substring(zpl.length - 20)));
       
-      // Check for potential encoding issues
-      console.log('🖨️ ZPL character analysis:');
-      console.log('- Contains \\r:', zpl.includes('\r'));
-      console.log('- Contains \\n:', zpl.includes('\n'));
-      console.log('- Contains \\r\\n:', zpl.includes('\r\n'));
-      console.log('- ASCII only:', /^[\x00-\x7F]*$/.test(zpl));
+      // Show actual ZPL content
+      console.log('🖨️ ZPL Content:');
+      console.log(zpl);
       
       // Validate ZPL for ZD410 compatibility
       if (!this.validateZD410ZPL(zpl)) {
         console.warn('⚠️ PrintNode: ZPL may not be ZD410 compatible');
       }
 
-      // Create print job with detailed logging
+      // Create print job with UTF-8 safe encoding
       const printJob = {
         printer: printerId,
-        title: `ZD410-Debug-${Date.now()}`,
+        title: `ZD410-Test-${Date.now()}`,
         contentType: 'raw_base64',
-        content: btoa(zpl),
+        content: this.toBase64Utf8(zpl),
         copies: copies
       };
       

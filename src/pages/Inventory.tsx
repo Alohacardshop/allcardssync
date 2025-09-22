@@ -519,9 +519,10 @@ const Inventory = () => {
         return;
       }
 
-      // Check for PrintNode configuration first
-      const savedPrinter = localStorage.getItem('printnode-selected-printer');
-      const usePrintNode = !!savedPrinter;
+      // Check for standardized printer configuration
+      const savedConfig = localStorage.getItem('zebra-printer-config');
+      const config = savedConfig ? JSON.parse(savedConfig) : {};
+      const usePrintNode = config.usePrintNode && config.printNodeId;
       
       if (!usePrintNode && !selectedPrinter) {
         toast.error('Please configure PrintNode or select a Zebra printer in Test Hardware > Printer Setup');
@@ -559,10 +560,9 @@ const Inventory = () => {
 
           // Try PrintNode first if configured
           if (usePrintNode) {
-            const printerConfig = JSON.parse(savedPrinter!);
             const printNodeService = await import('@/lib/printNodeService');
             
-            const result = await printNodeService.printNodeService.printZPL(zpl, printerConfig.id, 1);
+            const result = await printNodeService.printNodeService.printZPL(zpl, config.printNodeId, 1);
             
             if (!result.success) {
               throw new Error(result.error || 'PrintNode print failed');

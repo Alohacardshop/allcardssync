@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Loader2, CheckCircle, XCircle, Cloud } from 'lucide-react';
 import { usePrintNode } from '@/contexts/PrintNodeContext';
 import { printNodeService } from '@/lib/printNodeService';
+import { zd410TestLabelZPL } from '@/lib/zd410Templates';
 import { toast } from 'sonner';
 
 export function PrintNodeSettings() {
@@ -143,80 +144,63 @@ export function PrintNodeSettings() {
                 <Button 
                   onClick={async () => {
                     try {
-                      // Use the corrected ZD410 template with proper commands
-                      const workingZpl = [
-                        '^XA',
-                        '^MNN',           // continuous media (use ^MNY for gap media)
-                        '^MTD',           // direct thermal (ZD410)
-                        '^MMC',           // enable cutter mode
-                        '^PW448',         // 2" width @203dpi = 448 dots
-                        '^LL400',         // label length in dots (~2.0")
-                        '^LH0,0',
-                        '^CI28',          // UTF-8 safe
-                        '',
-                        '^FO40,40^A0N,28,28^FDTEST PRINT ZD410^FS',
-                        `^FO40,90^A0N,22,22^FD${new Date().toLocaleString()}^FS`,
-                        '^FO40,130^A0N,18,18^FDZD410 Cut Test^FS',
-                        '',
-                        '^PQ1,1,0,Y',     // 1 label, cut after each
-                        '^XZ'
-                      ].join('\n');
+                      const testZPL = zd410TestLabelZPL();
                       
-                      console.log('🖨️ Using corrected ZD410 ZPL format');
+                      console.log('🖨️ Using standardized ZD410 test template');
                       
-                      const result = await printNodeService.printZPL(workingZpl, parseInt(selectedPrinterId), 1);
+                      const result = await printNodeService.printZPL(testZPL, parseInt(selectedPrinterId), 1);
                       
                       if (result.success) {
-                        toast.success('ZD410 corrected format test sent!', {
-                          description: `Job ID: ${result.jobId} - This should work now!`
+                        toast.success('ZD410 test print sent!', {
+                          description: `Job ID: ${result.jobId} - Should print and cut`
                         });
                       } else {
-                        toast.error(`ZD410 test failed: ${result.error}`);
+                        toast.error(`Test print failed via PrintNode. Check API key & selected printer.`);
                       }
                     } catch (error) {
-                      toast.error(`ZD410 test failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                      toast.error(`Test print failed via PrintNode. Check API key & selected printer.`);
                     }
                   }}
                   disabled={isLoading}
                   className="bg-green-600 hover:bg-green-700 flex-1 sm:flex-none"
                 >
-                  Test ZD410 Format
+                  Test ZD410 Print
                 </Button>
                 
                 <Button 
                   onClick={async () => {
                     try {
-                      // Test with different line endings
-                      const crlfZpl = `^XA\r\n^FO50,50^A0N,30,30^FDCRLF TEST^FS\r\n^XZ\r\n`;
+                      // Test with gap media setting
+                      const gapZPL = zd410TestLabelZPL().replace('^MNN', '^MNY');
                       
-                      console.log('🖨️ Testing CRLF line endings ZPL');
+                      console.log('🖨️ Testing with gap media setting (^MNY)');
                       
-                      const result = await printNodeService.printZPL(crlfZpl, parseInt(selectedPrinterId), 1);
+                      const result = await printNodeService.printZPL(gapZPL, parseInt(selectedPrinterId), 1);
                       
                       if (result.success) {
-                        toast.success('CRLF test sent!', {
-                          description: 'Testing Windows-style line endings'
+                        toast.success('Gap media test sent!', {
+                          description: 'Testing gap/notch media detection'
                         });
                       } else {
-                        toast.error(`CRLF test failed: ${result.error}`);
+                        toast.error(`Gap media test failed via PrintNode. Check API key & selected printer.`);
                       }
                     } catch (error) {
-                      toast.error(`CRLF test failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                      toast.error(`Gap media test failed via PrintNode. Check API key & selected printer.`);
                     }
                   }}
                   disabled={isLoading}
                   variant="outline"
                   className="flex-1 sm:flex-none"
                 >
-                  Test CRLF Format
+                  Test Gap Media
                 </Button>
               </div>
               <div className="text-xs text-muted-foreground space-y-1">
-                <p><strong>ZD410 Debugging Tests:</strong></p>
-                <p>• <strong>ZD410 Format:</strong> Uses correct ^MTD, ^MNN, and proper ZPL structure</p>
-                <p>• <strong>CRLF Format:</strong> Tests Windows-style line endings (\\r\\n)</p>
-                <p>• Check browser console for detailed ZPL analysis and encoding info</p>
-                <p><strong>Expected behavior:</strong> ZD410 format should print and cut correctly</p>
+                <p><strong>ZD410 Print Tests:</strong></p>
+                <p>• <strong>ZD410 Print:</strong> Uses standardized template with ^MTD, ^MNN, proper cutter</p>
+                <p>• <strong>Gap Media:</strong> Tests ^MNY for gap/notch labels vs continuous</p>
+                <p>• Check browser console for ZPL content and byte length analysis</p>
+                <p><strong>Expected:</strong> Should print text and cut. No silent fallbacks.</p>
               </div>
             </div>
           )}
