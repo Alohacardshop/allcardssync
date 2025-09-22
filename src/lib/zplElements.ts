@@ -172,6 +172,7 @@ export function generateZPLFromElements(label: ZPLLabel, xOffset: number = 0, yO
     '^XA',                    // Start format
     '^MTD',                   // ZD410 = Direct Thermal
     '^MNY',                   // gap/notch stock (switch to ^MNN + ^LL if continuous)
+    '^MMC',                   // Enable cutter mode for ZD410
     `^PW${widthDots}`,        // Print width in dots
     `^LL${heightDots}`,       // Label length in dots
     '^LH0,0',                 // Label home position

@@ -182,7 +182,7 @@ class PrintNodeService {
   private validateZD410ZPL(zpl: string): boolean {
     const hasStart = zpl.includes('^XA');
     const hasEnd = zpl.includes('^XZ');
-    const hasCutterMode = zpl.includes('^MMC');
+    const hasCutterMode = zpl.includes('^MMC'); // Optional but recommended
     const hasMediaType = zpl.includes('^MTD'); // Direct thermal for ZD410
     const hasMediaTracking = zpl.includes('^MNN') || zpl.includes('^MNY'); // Continuous or gap media
     const hasPrintQuantity = zpl.includes('^PQ');
@@ -196,7 +196,8 @@ class PrintNodeService {
       hasPrintQuantity
     });
     
-    return hasStart && hasEnd && hasCutterMode && hasMediaType && hasMediaTracking && hasPrintQuantity;
+    // Cutter mode is optional - ZD410 will work without it
+    return hasStart && hasEnd && hasMediaType && hasMediaTracking && hasPrintQuantity;
   }
 
   async getJobStatus(jobId: number): Promise<any> {
