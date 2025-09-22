@@ -15,6 +15,8 @@ import { Navigation } from '@/components/Navigation';
 import { useZebraNetwork } from "@/hooks/useZebraNetwork";
 import { ZebraPrinterSelectionDialog } from '@/components/ZebraPrinterSelectionDialog';
 import { zebraNetworkService } from "@/lib/zebraNetworkService";
+import { generateRawCardLabel } from '@/lib/zd410Templates';
+import { printNodeService } from '@/lib/printNodeService';
 import { sendGradedToShopify, sendRawToShopify } from '@/hooks/useShopifySend';
 import { useBatchSendToShopify } from '@/hooks/useBatchSendToShopify';
 import { useDebounce } from '@/hooks/useDebounce';
@@ -376,11 +378,6 @@ const Inventory = () => {
         return parts.length > 0 ? parts.join(' ') : 'Raw Card';
       };
 
-      // Use enhanced ZPL template for raw cards with cutter settings
-      // Import ZD410 template and PrintNode service
-      const { generateRawCardLabel } = await import('@/lib/zd410Templates');
-      const { printNodeService } = await import('@/lib/printNodeService');
-      
       // Generate ZPL using ZD410-specific template (matches working test print)
       const zpl = generateRawCardLabel({
         cardName: generateTitle(item),
