@@ -233,10 +233,11 @@ export function generateRawCardLabelZPL(data: LabelData, options: ZPLOptions = {
   const cutCommands = generateCutCommands(options);
   
   // ZD410 requires ^PQ with pause parameter for cutting
-  const pqCommand = cutAfter && hasCutter ? `^PQ${copies},1,0` : `^PQ${copies}`;
+  const pqCommand = `^PQ${copies},1,0`; // Always use cutting format for ZD410
 
   return `^XA
-${cutCommands}
+^MMC
+^MT6
 ^LH0,0
 ^PR${speed}
 ^MD${darkness}

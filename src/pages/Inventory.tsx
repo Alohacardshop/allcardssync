@@ -396,6 +396,9 @@ const Inventory = () => {
       });
 
       console.log('Generated ZPL for printing:', zpl);
+      console.log('ZPL byte length:', zpl.length);
+      console.log('ZPL first 200 chars:', zpl.substring(0, 200));
+      console.log('ZPL last 50 chars:', zpl.substring(zpl.length - 50));
 
       // Try PrintNode first (preferred method)
       try {
