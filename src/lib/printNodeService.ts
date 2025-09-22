@@ -122,11 +122,25 @@ class PrintNodeService {
         body: JSON.stringify(printJob),
       });
 
-      console.log('🖨️ PrintNode: Print job created successfully', response);
+      console.log('🖨️ PrintNode: Raw API response:', JSON.stringify(response, null, 2));
+
+      // Extract job ID with better error handling
+      let jobId = null;
+      if (Array.isArray(response)) {
+        jobId = response[0]?.id || response[0];
+      } else if (response?.id) {
+        jobId = response.id;
+      } else if (typeof response === 'number') {
+        jobId = response;
+      } else if (typeof response === 'string') {
+        jobId = response;
+      }
+
+      console.log('🖨️ PrintNode: Extracted job ID:', jobId);
 
       return {
         success: true,
-        jobId: response.id || response[0]?.id,
+        jobId: jobId || 'Unknown',
       };
     } catch (error) {
       console.error('PrintNode print failed:', error);
