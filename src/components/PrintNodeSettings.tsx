@@ -7,6 +7,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Loader2, CheckCircle, XCircle, Cloud } from 'lucide-react';
 import { usePrintNode } from '@/contexts/PrintNodeContext';
+import { printNodeService } from '@/lib/printNodeService';
+import { toast } from 'sonner';
 
 export function PrintNodeSettings() {
   const [localApiKey, setLocalApiKey] = useState('');
@@ -23,8 +25,11 @@ export function PrintNodeSettings() {
   } = usePrintNode();
 
   const handleSaveApiKey = async () => {
+    const keyToSave = localApiKey.trim() || apiKey.trim();
+    if (!keyToSave) return;
+    
     try {
-      await saveApiKey(localApiKey || apiKey);
+      await saveApiKey(keyToSave);
       setLocalApiKey(''); // Clear local input after successful save
     } catch (error) {
       // Error handling is done in the context
@@ -69,7 +74,7 @@ export function PrintNodeSettings() {
             <Input
               id="printnode-api-key"
               type="password"
-              placeholder={apiKey ? "API key configured" : "Enter your PrintNode API key"}
+              placeholder={apiKey ? "Enter new API key to replace current" : "Enter your PrintNode API key"}
               value={localApiKey}
               onChange={(e) => setLocalApiKey(e.target.value)}
             />
@@ -123,9 +128,41 @@ export function PrintNodeSettings() {
             {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Test Connection'}
           </Button>
           {isConnected && (
-            <Button variant="outline" onClick={refreshPrinters}>
-              Refresh Printers
-            </Button>
+            <>
+              <Button variant="outline" onClick={refreshPrinters}>
+                Refresh Printers
+              </Button>
+              <Button 
+                onClick={async () => {
+                  if (!selectedPrinterId) {
+                    toast.error('Please select a printer first');
+                    return;
+                  }
+                  
+                  try {
+                    const testZpl = `^XA
+^FO50,50^A0N,30,30^FDTEST PRINT^FS
+^FO50,100^A0N,20,20^FD${new Date().toLocaleString()}^FS
+^FO50,130^A0N,15,15^FDPrintNode Test Label^FS
+^XZ`;
+                    
+                    const result = await printNodeService.printZPL(testZpl, parseInt(selectedPrinterId), 1);
+                    
+                    if (result.success) {
+                      toast.success('Test print sent successfully!');
+                    } else {
+                      toast.error(`Test print failed: ${result.error}`);
+                    }
+                  } catch (error) {
+                    toast.error(`Test print failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                  }
+                }}
+                disabled={!selectedPrinterId || isLoading}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                Test Print
+              </Button>
+            </>
           )}
         </div>
 
