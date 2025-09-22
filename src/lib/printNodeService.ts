@@ -100,22 +100,43 @@ class PrintNodeService {
 
   async printZPL(zpl: string, printerId: number, copies: number = 1): Promise<PrintNodeResult> {
     try {
-      console.log('🖨️ PrintNode: Sending ZPL to printer', { printerId, copies });
-      console.log('🖨️ PrintNode: ZPL content length:', zpl.length);
-      console.log('🖨️ PrintNode: ZPL preview:', zpl.substring(0, 200));
-
+      console.log('🖨️ PrintNode: Starting print job...');
+      console.log('🖨️ PrintNode: Printer ID:', printerId);
+      console.log('🖨️ PrintNode: Copies:', copies);
+      console.log('🖨️ PrintNode: ZPL length:', zpl.length);
+      console.log('🖨️ PrintNode: ZPL content:');
+      console.log('--- ZPL START ---');
+      console.log(zpl);
+      console.log('--- ZPL END ---');
+      
+      // Check for potential encoding issues
+      console.log('🖨️ ZPL character analysis:');
+      console.log('- Contains \\r:', zpl.includes('\r'));
+      console.log('- Contains \\n:', zpl.includes('\n'));
+      console.log('- Contains \\r\\n:', zpl.includes('\r\n'));
+      console.log('- ASCII only:', /^[\x00-\x7F]*$/.test(zpl));
+      
       // Validate ZPL for ZD410 compatibility
       if (!this.validateZD410ZPL(zpl)) {
         console.warn('⚠️ PrintNode: ZPL may not be ZD410 compatible');
       }
 
+      // Create print job with detailed logging
       const printJob = {
         printer: printerId,
-        title: `ZD410-Label-${Date.now()}`,
+        title: `ZD410-Debug-${Date.now()}`,
         contentType: 'raw_base64',
         content: btoa(zpl),
         copies: copies
       };
+      
+      console.log('🖨️ PrintNode: Print job payload:', {
+        printer: printJob.printer,
+        title: printJob.title,
+        contentType: printJob.contentType,
+        contentLength: printJob.content.length,
+        copies: printJob.copies
+      });
 
       const response = await this.makeRequest('/printjobs', {
         method: 'POST',
@@ -143,7 +164,7 @@ class PrintNodeService {
         jobId: jobId || 'Unknown',
       };
     } catch (error) {
-      console.error('PrintNode print failed:', error);
+      console.error('🖨️ PrintNode print failed:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown PrintNode error',

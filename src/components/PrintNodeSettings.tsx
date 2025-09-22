@@ -143,65 +143,64 @@ export function PrintNodeSettings() {
                 <Button 
                   onClick={async () => {
                     try {
-                      // Use the new ZD410 template system
-                      const { generateTestLabel } = await import('@/lib/zd410Templates');
-                      const zpl = generateTestLabel();
+                      // MINIMAL ZPL test - absolute basics only
+                      const minimalZpl = `^XA^FO50,50^A0N,30,30^FDMINIMAL TEST^FS^XZ`;
                       
-                      console.log('🖨️ Sending ZD410 test print:', zpl);
+                      console.log('🖨️ Testing MINIMAL ZPL:', minimalZpl);
                       
-                      const result = await printNodeService.printZPL(zpl, parseInt(selectedPrinterId), 1);
+                      const result = await printNodeService.printZPL(minimalZpl, parseInt(selectedPrinterId), 1);
                       
                       if (result.success) {
-                        toast.success('ZD410 test print sent successfully!', {
-                          description: `Job ID: ${result.jobId} - Should print and cut`
+                        toast.success('Minimal ZPL test sent!', {
+                          description: `Job ID: ${result.jobId} - Check console for detailed logs`
                         });
                       } else {
-                        toast.error(`Test print failed: ${result.error}`);
+                        toast.error(`Minimal test failed: ${result.error}`);
                       }
                     } catch (error) {
-                      toast.error(`Test print failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                      toast.error(`Minimal test failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
                     }
                   }}
                   disabled={isLoading}
-                  className="bg-blue-600 hover:bg-blue-700 flex-1 sm:flex-none"
+                  className="bg-green-600 hover:bg-green-700 flex-1 sm:flex-none"
                 >
-                  Test Print (ZD410)
+                  Test Minimal ZPL
                 </Button>
                 
                 <Button 
                   onClick={async () => {
                     try {
-                      // Basic test without cutting (for comparison)
-                      const basicZpl = `^XA
-^FO50,50^A0N,30,30^FDBASIC TEST^FS
-^FO50,100^A0N,20,20^FD${new Date().toLocaleString()}^FS
-^FO50,130^A0N,15,15^FDNo Cut Test^FS
-^PQ1
-^XZ`;
+                      // Test with different line endings
+                      const crlfZpl = `^XA\r\n^FO50,50^A0N,30,30^FDCRLF TEST^FS\r\n^XZ\r\n`;
                       
-                      const result = await printNodeService.printZPL(basicZpl, parseInt(selectedPrinterId), 1);
+                      console.log('🖨️ Testing CRLF line endings ZPL');
+                      
+                      const result = await printNodeService.printZPL(crlfZpl, parseInt(selectedPrinterId), 1);
                       
                       if (result.success) {
-                        toast.success('Basic test print sent (no cutting)');
+                        toast.success('CRLF test sent!', {
+                          description: 'Testing Windows-style line endings'
+                        });
                       } else {
-                        toast.error(`Basic test print failed: ${result.error}`);
+                        toast.error(`CRLF test failed: ${result.error}`);
                       }
                     } catch (error) {
-                      toast.error(`Basic test print failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                      toast.error(`CRLF test failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
                     }
                   }}
                   disabled={isLoading}
                   variant="outline"
                   className="flex-1 sm:flex-none"
                 >
-                  Test Print (No Cut)
+                  Test CRLF Format
                 </Button>
               </div>
               <div className="text-xs text-muted-foreground space-y-1">
-                <p><strong>ZD410 Cutting Requirements:</strong></p>
-                <p>• ^MMC = Cutter mode enabled</p>
-                <p>• ^MT6 = Continuous media type</p>
-                <p>• ^PQ1,1,0 = Print 1 copy, pause and cut after each label</p>
+                <p><strong>ZD410 Debugging Tests:</strong></p>
+                <p>• <strong>Minimal ZPL:</strong> Tests basic printing without any special commands</p>
+                <p>• <strong>CRLF Format:</strong> Tests Windows-style line endings (\\r\\n)</p>
+                <p>• Check browser console for detailed ZPL analysis and encoding info</p>
+                <p><strong>Expected behavior:</strong> If none print, there's a ZPL format issue</p>
               </div>
             </div>
           )}
