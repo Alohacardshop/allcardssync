@@ -9,7 +9,7 @@ export interface LabelData {
 
 /**
  * ZD410-specific ZPL template for raw card labels
- * Uses the exact format that works with the ZD410 cutter
+ * Optimized for 2"x1" labels with proper font sizing
  */
 export function generateRawCardLabel(data: LabelData): string {
   const {
@@ -32,18 +32,16 @@ export function generateRawCardLabel(data: LabelData): string {
     '^MNY',           // gap media (use ^MNN for continuous)
     '^MTD',           // direct thermal (ZD410)
     '^MMC',           // enable cutter mode
-    '^PW448',         // 2" width @203dpi = 448 dots
-    '^LL400',         // label length in dots (~2.0")
+    '^PW448',         // 2" width for ZD410 (2.2" at 203dpi)
+    '^LL203',         // 1" label height at 203dpi
     '^LH0,0',
     '^CI28',          // UTF-8 safe
     '',
-    `^FO40,30^A0N,28,28^FD${cardName}^FS`,
-    `^FO40,70^A0N,20,20^FD${setName}^FS`,
-    `^FO40,100^A0N,24,24^FD${condition}^FS`,
-    `^FO200,100^A0N,32,32^FD${priceDisplay}^FS`,
-    '',
-    `^FO40,140^BCN,60,Y,N,N^FD${barcodeData}^FS`,
-    `^FO40,210^A0N,16,16^FD${sku}^FS`,
+    `^FO20,20^A0N,24,24^FD${condition}^FS`,
+    `^FO320,20^A0N,28,28^FD${priceDisplay}^FS`,
+    `^FO50,60^BCN,40,N,N,N^FD${barcodeData}^FS`,
+    `^FO20,140^A0N,18,18^FD${cardName}^FS`,
+    `^FO20,170^A0N,14,14^FD${sku}^FS`,
     '',
     '^PQ1,1,0,Y',     // 1 label, cut after each
     '^XZ'
@@ -51,7 +49,7 @@ export function generateRawCardLabel(data: LabelData): string {
 }
 
 /**
- * Test label for ZD410 - using correct ZPL format
+ * Test label for ZD410 - optimized for 2"x1" labels
  */
 export function generateTestLabel(): string {
   const timestamp = new Date().toLocaleString();
@@ -61,14 +59,14 @@ export function generateTestLabel(): string {
     '^MNY',           // gap media (use ^MNN for continuous)
     '^MTD',           // direct thermal (ZD410)
     '^MMC',           // enable cutter mode
-    '^PW448',         // 2" width @203dpi = 448 dots
-    '^LL400',         // label length in dots (~2.0")
+    '^PW448',         // 2" width for ZD410
+    '^LL203',         // 1" label height at 203dpi
     '^LH0,0',
     '^CI28',          // UTF-8 safe
     '',
-    '^FO40,40^A0N,28,28^FDTEST PRINT ZD410^FS',
-    `^FO40,90^A0N,22,22^FD${timestamp}^FS`,
-    '^FO40,130^A0N,18,18^FDZD410 Cut Test^FS',
+    '^FO20,20^A0N,24,24^FDTEST PRINT ZD410^FS',
+    `^FO20,60^A0N,18,18^FD${timestamp}^FS`,
+    '^FO20,100^A0N,16,16^FDZD410 2x1 Test^FS',
     '',
     '^PQ1,1,0,Y',     // 1 label, cut after each
     '^XZ'
@@ -76,7 +74,7 @@ export function generateTestLabel(): string {
 }
 
 /**
- * ZD410 test template function - standardized for all test prints
+ * ZD410 test template function - standardized for 2"x1" labels
  */
 export const zd410TestLabelZPL = (timestamp?: string) => {
   const ts = timestamp || new Date().toLocaleString();
@@ -86,13 +84,13 @@ export const zd410TestLabelZPL = (timestamp?: string) => {
     '^MNY',           // gap media (use ^MNN for continuous)
     '^MTD',           // direct thermal (ZD410)
     '^MMC',           // cutter mode
-    '^PW448',         // 2" width @203dpi
-    '^LL400',         // label length (dots)
+    '^PW448',         // 2" width for ZD410
+    '^LL203',         // 1" label height at 203dpi
     '^LH0,0',
     '^CI28',
-    '^FO40,40^A0N,28,28^FDTEST PRINT ZD410^FS',
-    `^FO40,90^A0N,22,22^FD${ts}^FS`,
-    '^FO40,130^A0N,18,18^FDZD410 Cut Test^FS',
+    '^FO20,20^A0N,24,24^FDTEST PRINT ZD410^FS',
+    `^FO20,60^A0N,18,18^FD${ts}^FS`,
+    '^FO20,100^A0N,16,16^FDZD410 2x1 Test^FS',
     '^PQ1,1,0,Y',
     '^XZ'
   ].join('\n');

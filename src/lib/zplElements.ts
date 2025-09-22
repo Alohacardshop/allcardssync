@@ -170,7 +170,7 @@ export function generateZPLFromElements(label: ZPLLabel, xOffset: number = 0, yO
     '^MNY', // Gap media (use ^MNN for continuous) 
     '^MTD', // Direct thermal (ZD410)
     '^MMC', // Enable cutter mode
-    `^PW${width}`, // Print width from label dimensions
+    '^PW448', // Print width for 2" labels (2.2" at 203 DPI)
     `^LL${height}`, // Label length
     '^LH0,0', // Label home position
     '^PR4', // Print rate (speed)
@@ -263,7 +263,7 @@ export function generateZPLFromElements(label: ZPLLabel, xOffset: number = 0, yO
   return zpl.join('\n');
 }
 
-// Create default label template
+// Create default label template optimized for 2"x1" ZD410 labels
 export function createDefaultLabelTemplate(): ZPLLabel {
   return {
     width: LABEL_DIMENSIONS.width,
@@ -273,49 +273,49 @@ export function createDefaultLabelTemplate(): ZPLLabel {
       {
         id: 'condition',
         type: 'text',
-        position: { x: 60, y: 30 },
-        font: 'D',
-        fontSize: 20,
-        fontWidth: 20,
+        position: { x: 20, y: 20 },
+        font: '0', // Use font 0 for better readability
+        fontSize: 24,
+        fontWidth: 24,
         text: 'NM',
         rotation: 0,
-        boundingBox: { width: 200, height: 30 },
+        boundingBox: { width: 80, height: 30 },
         autoSize: 'shrink-to-fit',
         textOverflow: 'ellipsis'
       },
       {
         id: 'price',
         type: 'text',
-        position: { x: 280, y: 30 },
-        font: 'D',
-        fontSize: 20,
-        fontWidth: 20,
+        position: { x: 320, y: 20 },
+        font: '0', // Use font 0 for better readability
+        fontSize: 28,
+        fontWidth: 28,
         text: '$15.99',
         rotation: 0,
-        boundingBox: { width: 100, height: 30 },
+        boundingBox: { width: 80, height: 30 },
         autoSize: 'shrink-to-fit',
         textOverflow: 'ellipsis'
       },
       {
         id: 'barcode',
         type: 'barcode',
-        position: { x: 50, y: 80 },
-        size: { width: 300, height: 50 },
+        position: { x: 50, y: 60 },
+        size: { width: 300, height: 40 },
         barcodeType: 'CODE128',
         data: '120979260',
-        height: 50,
+        height: 40,
         humanReadable: false
       },
       {
         id: 'title',
         type: 'text',
-        position: { x: 89, y: 155 },
-        font: 'D',
-        fontSize: 16,
-        fontWidth: 16,
+        position: { x: 20, y: 140 },
+        font: '0', // Use font 0 for better readability  
+        fontSize: 18,
+        fontWidth: 18,
         text: 'POKEMON GENGAR VMAX #020',
         rotation: 0,
-        boundingBox: { width: 300, height: 40 },
+        boundingBox: { width: 380, height: 50 },
         autoSize: 'shrink-to-fit',
         textOverflow: 'wrap'
       }
