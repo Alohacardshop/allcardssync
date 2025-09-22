@@ -140,10 +140,11 @@ export function PrintNodeSettings() {
                   }
                   
                   try {
-                    const testZpl = `^XA
+                  const testZpl = `^XA
 ^FO50,50^A0N,30,30^FDTEST PRINT^FS
 ^FO50,100^A0N,20,20^FD${new Date().toLocaleString()}^FS
 ^FO50,130^A0N,15,15^FDPrintNode Test Label^FS
+^CN1
 ^XZ`;
                     
                     const result = await printNodeService.printZPL(testZpl, parseInt(selectedPrinterId), 1);
