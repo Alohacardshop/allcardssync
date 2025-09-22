@@ -377,10 +377,11 @@ const Inventory = () => {
       };
 
       // Use enhanced ZPL template for raw cards with cutter settings
-      // Import ZD410 template
+      // Import ZD410 template and PrintNode service
       const { generateRawCardLabel } = await import('@/lib/zd410Templates');
+      const { printNodeService } = await import('@/lib/printNodeService');
       
-      // Generate ZPL using ZD410-specific template
+      // Generate ZPL using ZD410-specific template (matches working test print)
       const zpl = generateRawCardLabel({
         cardName: generateTitle(item),
         setName: item.brand_title || '',
@@ -395,26 +396,28 @@ const Inventory = () => {
       console.log('ZPL first 200 chars:', zpl.substring(0, 200));
       console.log('ZPL last 50 chars:', zpl.substring(zpl.length - 50));
 
-      // Use PrintNode exclusively (direct TCP is failing)
-      console.log('🖨️ Printing via PrintNode...');
-      
-      // Get saved PrintNode printer ID from localStorage
+      console.log('🖨️ Starting ZD410 print process...');
+
+      // Get PrintNode configuration
       const savedConfig = localStorage.getItem('zebra-printer-config');
       if (!savedConfig) {
-        throw new Error('No PrintNode printer configured. Please configure in Test Hardware > Printer Setup.');
+        throw new Error('No PrintNode printer configured. Please configure in Admin > Test Hardware.');
       }
       
       const config = JSON.parse(savedConfig);
       if (!config.usePrintNode || !config.printNodeId) {
-        throw new Error('PrintNode not configured. Please configure in Test Hardware > Printer Setup.');
+        throw new Error('PrintNode not properly configured. Please reconfigure in Admin > Test Hardware.');
       }
 
-      const printNodeService = await import('@/lib/printNodeService');
-      const result = await printNodeService.printNodeService.printZPL(zpl, config.printNodeId, 1);
+      console.log('🖨️ Using PrintNode printer ID:', config.printNodeId);
+      console.log('🖨️ Generated ZPL:', zpl);
+
+      // Send to PrintNode with enhanced error handling
+      const result = await printNodeService.printZPL(zpl, config.printNodeId, 1);
       
       if (result.success) {
-        console.log('✅ PrintNode print successful:', result);
-        toast.success(`Label sent to PrintNode successfully (Job ID: ${result.jobId})`);
+        console.log('✅ ZD410 print job successful:', result);
+        toast.success(`Label printed successfully! Job ID: ${result.jobId}`);
         
         // Update the printed_at timestamp
         await supabase
@@ -424,8 +427,8 @@ const Inventory = () => {
           
         fetchItems(0, true);
       } else {
-        console.log('❌ PrintNode print failed:', result.error);
-        throw new Error(result.error || 'PrintNode print failed');
+        console.error('❌ ZD410 print failed:', result.error);
+        throw new Error(`Print failed: ${result.error}`);
       }
     } catch (error) {
       console.error('Print error:', error);

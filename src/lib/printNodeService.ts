@@ -101,10 +101,17 @@ class PrintNodeService {
   async printZPL(zpl: string, printerId: number, copies: number = 1): Promise<PrintNodeResult> {
     try {
       console.log('🖨️ PrintNode: Sending ZPL to printer', { printerId, copies });
+      console.log('🖨️ PrintNode: ZPL content length:', zpl.length);
+      console.log('🖨️ PrintNode: ZPL preview:', zpl.substring(0, 200));
+
+      // Validate ZPL for ZD410 compatibility
+      if (!this.validateZD410ZPL(zpl)) {
+        console.warn('⚠️ PrintNode: ZPL may not be ZD410 compatible');
+      }
 
       const printJob = {
         printer: printerId,
-        title: 'Label Print Job',
+        title: `ZD410-Label-${Date.now()}`,
         contentType: 'raw_base64',
         content: btoa(zpl),
         copies: copies
@@ -115,7 +122,7 @@ class PrintNodeService {
         body: JSON.stringify(printJob),
       });
 
-      console.log('🖨️ PrintNode: Print job created', response);
+      console.log('🖨️ PrintNode: Print job created successfully', response);
 
       return {
         success: true,
@@ -128,6 +135,27 @@ class PrintNodeService {
         error: error instanceof Error ? error.message : 'Unknown PrintNode error',
       };
     }
+  }
+
+  /**
+   * Validate ZPL commands for ZD410 compatibility
+   */
+  private validateZD410ZPL(zpl: string): boolean {
+    const hasStart = zpl.includes('^XA');
+    const hasEnd = zpl.includes('^XZ');
+    const hasCutterMode = zpl.includes('^MMC');
+    const hasMediaType = zpl.includes('^MT6');
+    const hasPrintQuantity = zpl.includes('^PQ');
+    
+    console.log('🖨️ ZPL Validation:', {
+      hasStart,
+      hasEnd,
+      hasCutterMode,
+      hasMediaType,
+      hasPrintQuantity
+    });
+    
+    return hasStart && hasEnd && hasCutterMode && hasMediaType && hasPrintQuantity;
   }
 
   async getJobStatus(jobId: number): Promise<any> {
