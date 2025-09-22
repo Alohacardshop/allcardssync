@@ -123,82 +123,81 @@ export function PrintNodeSettings() {
         )}
 
         {/* Actions */}
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={testConnection} disabled={isLoading}>
-            {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Test Connection'}
-          </Button>
-          {isConnected && (
-            <>
+        <div className="space-y-3">
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={testConnection} disabled={isLoading}>
+              {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Test Connection'}
+            </Button>
+            {isConnected && (
               <Button variant="outline" onClick={refreshPrinters}>
                 Refresh Printers
               </Button>
-              <Button 
-                onClick={async () => {
-                  if (!selectedPrinterId) {
-                    toast.error('Please select a printer first');
-                    return;
-                  }
-                  
-                  try {
-                    // Try different cut commands
-                    const testZpl = `^XA
+            )}
+          </div>
+          
+          {/* Test Print Buttons */}
+          {isConnected && selectedPrinterId && (
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Test Print Options:</p>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Button 
+                  onClick={async () => {
+                    try {
+                      const testZpl = `^XA
 ^FO50,50^A0N,30,30^FDTEST PRINT^FS
 ^FO50,100^A0N,20,20^FD${new Date().toLocaleString()}^FS
 ^FO50,130^A0N,15,15^FDPrintNode Test Label^FS
 ^XZ
 ^XA^CN1^XZ`;
-                    
-                    const result = await printNodeService.printZPL(testZpl, parseInt(selectedPrinterId), 1);
-                    
-                    if (result.success) {
-                      toast.success('Test print sent successfully!', {
-                        description: 'If the label didn\'t cut, try the MMC cut method below'
-                      });
-                    } else {
-                      toast.error(`Test print failed: ${result.error}`);
+                      
+                      const result = await printNodeService.printZPL(testZpl, parseInt(selectedPrinterId), 1);
+                      
+                      if (result.success) {
+                        toast.success('Test print sent successfully!', {
+                          description: 'If the label didn\'t cut, try the MMC cut method'
+                        });
+                      } else {
+                        toast.error(`Test print failed: ${result.error}`);
+                      }
+                    } catch (error) {
+                      toast.error(`Test print failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
                     }
-                  } catch (error) {
-                    toast.error(`Test print failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-                  }
-                }}
-                disabled={!selectedPrinterId || isLoading}
-                className="bg-blue-600 hover:bg-blue-700"
-              >
-                Test Print (CN1 Cut)
-              </Button>
-              <Button 
-                onClick={async () => {
-                  if (!selectedPrinterId) {
-                    toast.error('Please select a printer first');
-                    return;
-                  }
-                  
-                  try {
-                    // Alternative cut method using MMC
-                    const testZpl = `^XA
+                  }}
+                  disabled={isLoading}
+                  className="bg-blue-600 hover:bg-blue-700 flex-1 sm:flex-none"
+                >
+                  Test Print (CN1 Cut)
+                </Button>
+                
+                <Button 
+                  onClick={async () => {
+                    try {
+                      const testZpl = `^XA
 ^FO50,50^A0N,30,30^FDTEST PRINT MMC^FS
 ^FO50,100^A0N,20,20^FD${new Date().toLocaleString()}^FS
 ^FO50,130^A0N,15,15^FDPrintNode MMC Cut Test^FS
 ^XZ
 ^XA^MMC^XZ`;
-                    
-                    const result = await printNodeService.printZPL(testZpl, parseInt(selectedPrinterId), 1);
-                    
-                    if (result.success) {
-                      toast.success('MMC test print sent successfully!');
-                    } else {
-                      toast.error(`MMC test print failed: ${result.error}`);
+                      
+                      const result = await printNodeService.printZPL(testZpl, parseInt(selectedPrinterId), 1);
+                      
+                      if (result.success) {
+                        toast.success('MMC test print sent successfully!');
+                      } else {
+                        toast.error(`MMC test print failed: ${result.error}`);
+                      }
+                    } catch (error) {
+                      toast.error(`MMC test print failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
                     }
-                  } catch (error) {
-                    toast.error(`MMC test print failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-                  }
-                }}
-                disabled={!selectedPrinterId || isLoading}
-                variant="outline"
-              >
-                Test Print (MMC Cut)
-              </Button>
-            </>
+                  }}
+                  disabled={isLoading}
+                  variant="outline"
+                  className="flex-1 sm:flex-none"
+                >
+                  Test Print (MMC Cut)
+                </Button>
+              </div>
+            </div>
           )}
         </div>
 
