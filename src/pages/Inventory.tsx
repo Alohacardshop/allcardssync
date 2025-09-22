@@ -399,18 +399,22 @@ const Inventory = () => {
 
       // Try PrintNode first (preferred method)
       try {
-        // Get saved PrintNode printer ID from localStorage
-        const savedPrinter = localStorage.getItem('printnode-selected-printer');
-        if (savedPrinter) {
-          const printerConfig = JSON.parse(savedPrinter);
-          const printNodeService = await import('@/lib/printNodeService');
-          
-          const result = await printNodeService.printNodeService.printZPL(zpl, printerConfig.id, 1);
-          
-          if (result.success) {
-            toast.success('Raw card label sent to PrintNode successfully');
+        // Get saved PrintNode printer ID from localStorage (matches PrintNodeContext storage)
+        const savedConfig = localStorage.getItem('zebra-printer-config');
+        if (savedConfig) {
+          const config = JSON.parse(savedConfig);
+          if (config.usePrintNode && config.printNodeId) {
+            const printNodeService = await import('@/lib/printNodeService');
+            
+            const result = await printNodeService.printNodeService.printZPL(zpl, config.printNodeId, 1);
+            
+            if (result.success) {
+              toast.success('Raw card label sent to PrintNode successfully');
+            } else {
+              throw new Error(result.error || 'PrintNode print failed');
+            }
           } else {
-            throw new Error(result.error || 'PrintNode print failed');
+            throw new Error('No PrintNode printer configured');
           }
         } else {
           throw new Error('No PrintNode printer configured');
