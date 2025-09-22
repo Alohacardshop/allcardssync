@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { zebraNetworkService, type ZebraPrinter, type PrinterStatus } from '@/lib/zebraNetworkService';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { print } from '@/lib/printService';
 
 export function useZebraNetwork() {
   const [printers, setPrinters] = useState<ZebraPrinter[]>([]);

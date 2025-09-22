@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Printer, Wifi, WifiOff, TestTube, Plus, RefreshCw, Settings } from "lucide-react";
 import { toast } from "sonner";
-import { useZebraNetwork } from "@/hooks/useZebraNetwork";
+import { print } from '@/lib/printService';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { generateSampleZPL } from '@/lib/zplSamples';
 
@@ -19,18 +19,19 @@ export function ZebraPrinterPanel() {
   const [newPrinterName, setNewPrinterName] = useState('');
   const [testingConnection, setTestingConnection] = useState(false);
   
-  const {
-    printers,
-    selectedPrinter,
-    setSelectedPrinterId,
-    isConnected,
-    isLoading,
-    connectionError,
-    refreshPrinters,
-    addManualPrinter,
-    testConnection,
-    printZPL
-  } = useZebraNetwork();
+  // Create mock functions that were from useZebraNetwork for compatibility
+  const printers: any[] = [];
+  const selectedPrinter = null;
+  const setSelectedPrinterId = (id: string | null) => {};
+  const isConnected = false;
+  const isLoading = false;
+  const connectionError = '';
+  const refreshPrinters = async (showToast?: boolean, networkBase?: string) => {};
+  const addManualPrinter = async (ip: string, port?: number, name?: string) => {};
+  const testConnection = async (printer?: any) => true;
+  const printZPL = async (zplData: string, options?: { title?: string; copies?: number }) => {
+    return await print(zplData, options?.copies || 1);
+  };
 
   // Get or create consistent workstation ID
   const getWorkstationId = () => {

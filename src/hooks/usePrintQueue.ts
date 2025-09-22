@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useZebraNetwork } from './useZebraNetwork';
+import { print } from '@/lib/printService';
 import { LABEL_TEMPLATES } from '@/lib/templates';
 import { toast } from 'sonner';
 import { PrintJobData, PrintJobTarget } from "@/types/api"
@@ -37,7 +37,11 @@ export function usePrintQueue() {
     totalErrors: 0
   });
   
-  const { selectedPrinter, printZPL } = useZebraNetwork();
+  // Use unified print service instead of useZebraNetwork
+  const selectedPrinter = null; // Mock for compatibility
+  const printZPL = async (zplData: string, options?: { title?: string; copies?: number }) => {
+    return await print(zplData, options?.copies || 1);
+  };
   
   // Get workstation ID for this browser
   const getWorkstationId = () => {
