@@ -236,13 +236,12 @@ export function generateRawCardLabelZPL(data: LabelData, options: ZPLOptions = {
   const pqCommand = cutAfter && hasCutter ? `^PQ${copies},1,0` : `^PQ${copies}`;
 
   return `^XA
-^MMT
-^PW${labelWidth}
-^LL${labelHeight}
+${cutCommands}
 ^LH0,0
 ^PR${speed}
 ^MD${darkness}
-${cutCommands}
+^PW${labelWidth}
+^LL${labelHeight}
 
 ~SD15
 ^FO10,10^A0N,20,20^FD${title.substring(0, 35)}^FS
