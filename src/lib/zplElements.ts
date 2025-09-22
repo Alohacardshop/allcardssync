@@ -178,11 +178,21 @@ export function generateZPLFromElements(label: ZPLLabel, xOffset: number = 0, yO
   ];
 
   elements.forEach(element => {
+    console.log('🔍 Processing element:', element.id, element.type, element);
     switch (element.type) {
       case 'text':
         let fontSize = element.fontSize;
         let fontWidth = element.fontWidth;
         let processedText = element.text;
+        
+        console.log('📝 Text element details:', {
+          id: element.id,
+          font: element.font,
+          fontSize,
+          fontWidth,
+          text: processedText,
+          position: element.position
+        });
         
         // Handle auto-sizing if bounding box is defined
         if (element.boundingBox && element.autoSize && element.autoSize !== 'none') {
@@ -204,12 +214,12 @@ export function generateZPLFromElements(label: ZPLLabel, xOffset: number = 0, yO
             const lines = wrapTextToLines(element.text, maxCharsPerLine);
             const limitedLines = lines.slice(0, maxLines);
             
-            // Generate ZPL for each line
+            // Generate ZPL for each line - no rotation for ZD410
             limitedLines.forEach((line, index) => {
               const lineYOffset = element.position.y + (index * fontSize) + yOffset;
               zpl.push(
                 `^FO${element.position.x + xOffset},${lineYOffset}`,
-                `^A${element.font}${element.rotation === 0 ? 'N' : 'R'},${fontSize},${fontWidth}`,
+                `^A${element.font}N,${fontSize},${fontWidth}`, // Always use N (no rotation) for ZD410
                 `^FD${line}^FS`
               );
             });
@@ -221,7 +231,7 @@ export function generateZPLFromElements(label: ZPLLabel, xOffset: number = 0, yO
         
         zpl.push(
           `^FO${element.position.x + xOffset},${element.position.y + yOffset}`,
-          `^A${element.font}${element.rotation === 0 ? 'N' : 'R'},${fontSize},${fontWidth}`,
+          `^A${element.font}N,${fontSize},${fontWidth}`, // Always use N (no rotation) for ZD410
           `^FD${processedText}^FS`
         );
         break;
