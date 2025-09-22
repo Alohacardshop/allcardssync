@@ -253,11 +253,11 @@ export default function TestHardwarePage() {
               Printer Setup
             </CardTitle>
             <CardDescription>
-              Configure cloud-based printing with PrintNode or direct Zebra network printing
+              Configure PrintNode for reliable cloud-based printing
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Default Printer Selection */}
               <div>
                 <h3 className="text-lg font-semibold mb-4">Default Printer</h3>
@@ -266,14 +266,8 @@ export default function TestHardwarePage() {
 
               {/* PrintNode Configuration */}
               <div>
-                <h3 className="text-lg font-semibold mb-4">PrintNode (Recommended)</h3>
+                <h3 className="text-lg font-semibold mb-4">PrintNode Configuration</h3>
                 <PrintNodeSettings />
-              </div>
-              
-              {/* Direct Zebra Printing */}
-              <div>
-                <h3 className="text-lg font-semibold mb-4">Direct Zebra Printing</h3>
-                <SimplePrinterPanel />
               </div>
 
               {/* Cutter Settings */}

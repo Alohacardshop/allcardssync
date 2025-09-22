@@ -49,56 +49,30 @@ export function useSimplePrinting() {
     }
   }, []);
 
-  // Print ZPL with PrintNode or fallback to direct/bridge
+  // Print ZPL with PrintNode only
   const print = useCallback(async (zpl: string, copies: number = 1): Promise<PrintResult> => {
-    console.log('🖨️ Starting print process...', { copies, zplLength: zpl.length });
+    console.log('🖨️ Starting PrintNode print process...', { copies, zplLength: zpl.length });
     setPrintState(prev => ({ ...prev, isLoading: true }));
     
     const printer = getSavedPrinter();
     console.log('🖨️ Using printer:', printer);
     
     try {
-      toast.info(`Sending ${copies} label(s) to ${printer.name || printer.ip}...`);
-      
-      // Try PrintNode first if configured
-      if (printer.usePrintNode && printer.printNodeId) {
-        console.log('🖨️ Attempting PrintNode print...');
-        const printNodeResult = await printNodeService.printZPL(zpl, printer.printNodeId, copies);
-        console.log('🖨️ PrintNode result:', printNodeResult);
-        
-        if (printNodeResult.success) {
-          const result: PrintResult = { success: true };
-          setPrintState({
-            isLoading: false,
-            lastResult: result
-          });
-          toast.success(`Successfully sent ${copies} label(s) to PrintNode`);
-          return result;
-        } else {
-          toast.warning('PrintNode failed, trying direct printing...');
-        }
+      // Check if PrintNode is configured
+      if (!printer.usePrintNode || !printer.printNodeId) {
+        throw new Error('No PrintNode printer configured. Please configure printing in Test Hardware > Printer Setup.');
       }
       
-      // Fallback to direct HTTP
-      console.log('🖨️ Attempting direct HTTP print...');
-      let result = await printZPLDirect(zpl, printer, copies);
-      console.log('🖨️ Direct HTTP result:', result);
+      toast.info(`Sending ${copies} label(s) to PrintNode...`);
       
-      // If direct fails due to CORS, try local bridge
-      if (!result.success && (result.error?.includes('CORS') || result.error?.includes('Failed to fetch'))) {
-        console.log('🖨️ Direct failed, trying local bridge...');
-        toast.info('Direct printing blocked, trying local bridge...');
-        
-        const bridgeConfig: LocalBridgeConfig = {
-          ...DEFAULT_BRIDGE_CONFIG,
-          printerIp: printer.ip,
-          printerPort: printer.port
-        };
-        
-        const bridgeResult = await printViaLocalBridge(zpl, bridgeConfig, copies);
-        console.log('🖨️ Bridge result:', bridgeResult);
-        result = bridgeResult;
-      }
+      console.log('🖨️ Attempting PrintNode print...');
+      const printNodeResult = await printNodeService.printZPL(zpl, printer.printNodeId, copies);
+      console.log('🖨️ PrintNode result:', printNodeResult);
+      
+      const result: PrintResult = {
+        success: printNodeResult.success,
+        error: printNodeResult.error
+      };
       
       setPrintState({
         isLoading: false,
@@ -106,31 +80,20 @@ export function useSimplePrinting() {
       });
       
       if (result.success) {
-        toast.success(`Print sent successfully!`);
+        toast.success(`Successfully sent ${copies} label(s) to PrintNode`);
       } else {
-        toast.error(`Print failed: ${result.error}`);
+        toast.error(`PrintNode failed: ${result.error}`);
         
-        // Offer troubleshooting based on error type
+        // Offer PrintNode-specific troubleshooting
         setTimeout(() => {
-          if (result.error?.includes('Bridge not running')) {
-            toast.info('Local Print Bridge needed:', {
-              description: 'Run: cd local-print-bridge && npm install && npm start',
-              duration: 15000,
-              action: {
-                label: 'Open Printer Web UI',
-                onClick: () => window.open(`http://${printer.ip}`, '_blank')
-              }
-            });
-          } else {
-            toast.info('Troubleshooting:', {
-              description: 'Check: 1) Printer power 2) Network connection 3) Same WiFi network',
-              duration: 10000,
-              action: {
-                label: 'Open Printer Web UI',
-                onClick: () => window.open(`http://${printer.ip}`, '_blank')
-              }
-            });
-          }
+          toast.info('PrintNode Troubleshooting:', {
+            description: 'Check: 1) PrintNode client is running 2) Printer is online 3) API key is valid',
+            duration: 10000,
+            action: {
+              label: 'Open PrintNode Dashboard',
+              onClick: () => window.open('https://app.printnode.com', '_blank')
+            }
+          });
         }, 1000);
       }
       
