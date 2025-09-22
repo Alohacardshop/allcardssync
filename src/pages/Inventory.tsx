@@ -377,22 +377,17 @@ const Inventory = () => {
       };
 
       // Use enhanced ZPL template for raw cards with cutter settings
-      const { generateRawCardLabelZPL } = await import('@/lib/simpleZPLTemplates');
-      const zpl = generateRawCardLabelZPL({
-        title: generateTitle(item),
-        sku: item.sku || '',
-        price: item.price ? parseFloat(item.price).toFixed(2) : '0.00',
+      // Import ZD410 template
+      const { generateRawCardLabel } = await import('@/lib/zd410Templates');
+      
+      // Generate ZPL using ZD410-specific template
+      const zpl = generateRawCardLabel({
+        cardName: generateTitle(item),
+        setName: item.brand_title || '',
         condition: item.condition || 'NM',
-        location: item.location || ''
-      }, {
-        dpi: 203,
-        speed: 4,
-        darkness: 10,
-        copies: 1,
-        cutAfter: cutterConfig.cutAfter,
-        cutTiming: cutterConfig.cutTiming,
-        cutInterval: cutterConfig.cutInterval,
-        hasCutter: cutterConfig.hasCutter
+        price: item.price || 0,
+        sku: item.sku || '',
+        barcode: item.sku || generateTitle(item).replace(/[^a-zA-Z0-9]/g, '').substring(0, 12)
       });
 
       console.log('Generated ZPL for printing:', zpl);
@@ -400,51 +395,38 @@ const Inventory = () => {
       console.log('ZPL first 200 chars:', zpl.substring(0, 200));
       console.log('ZPL last 50 chars:', zpl.substring(zpl.length - 50));
 
-      // Try PrintNode first (preferred method)
-      try {
-        // Get saved PrintNode printer ID from localStorage (matches PrintNodeContext storage)
-        const savedConfig = localStorage.getItem('zebra-printer-config');
-        if (savedConfig) {
-          const config = JSON.parse(savedConfig);
-          if (config.usePrintNode && config.printNodeId) {
-            const printNodeService = await import('@/lib/printNodeService');
-            
-            const result = await printNodeService.printNodeService.printZPL(zpl, config.printNodeId, 1);
-            
-            if (result.success) {
-              toast.success('Raw card label sent to PrintNode successfully');
-            } else {
-              throw new Error(result.error || 'PrintNode print failed');
-            }
-          } else {
-            throw new Error('No PrintNode printer configured');
-          }
-        } else {
-          throw new Error('No PrintNode printer configured');
-        }
-      } catch (printNodeError) {
-        console.log('PrintNode failed, trying direct Zebra printing:', printNodeError);
-        
-        // Fallback to direct Zebra printing if available
-        if (!selectedPrinter) {
-          throw new Error('No PrintNode configuration and no Zebra printer selected. Please configure printing in Test Hardware > Printer Setup.');
-        }
-
-        await zebraNetworkService.printZPL(zpl, selectedPrinter, {
-          title: `Raw-Card-${item.sku}`,
-          copies: 1 
-        });
-
-        toast.success('Raw card label printed via direct connection');
+      // Use PrintNode exclusively (direct TCP is failing)
+      console.log('🖨️ Printing via PrintNode...');
+      
+      // Get saved PrintNode printer ID from localStorage
+      const savedConfig = localStorage.getItem('zebra-printer-config');
+      if (!savedConfig) {
+        throw new Error('No PrintNode printer configured. Please configure in Test Hardware > Printer Setup.');
+      }
+      
+      const config = JSON.parse(savedConfig);
+      if (!config.usePrintNode || !config.printNodeId) {
+        throw new Error('PrintNode not configured. Please configure in Test Hardware > Printer Setup.');
       }
 
-      // Mark as printed in database
-      await supabase
-        .from('intake_items')
-        .update({ printed_at: new Date().toISOString() })
-        .eq('id', item.id);
-
-      fetchItems(0, true);
+      const printNodeService = await import('@/lib/printNodeService');
+      const result = await printNodeService.printNodeService.printZPL(zpl, config.printNodeId, 1);
+      
+      if (result.success) {
+        console.log('✅ PrintNode print successful:', result);
+        toast.success(`Label sent to PrintNode successfully (Job ID: ${result.jobId})`);
+        
+        // Update the printed_at timestamp
+        await supabase
+          .from('intake_items')
+          .update({ printed_at: new Date().toISOString() })
+          .eq('id', item.id);
+          
+        fetchItems(0, true);
+      } else {
+        console.log('❌ PrintNode print failed:', result.error);
+        throw new Error(result.error || 'PrintNode print failed');
+      }
     } catch (error) {
       console.error('Print error:', error);
       toast.error('Failed to print label: ' + (error as Error).message);
