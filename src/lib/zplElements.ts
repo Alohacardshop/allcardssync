@@ -164,18 +164,22 @@ export function processTextOverflow(text: string, maxLength: number, overflow: s
 // Generate ZPL code from elements with ZD410 defaults
 export function generateZPLFromElements(label: ZPLLabel, xOffset: number = 0, yOffset: number = 0): string {
   const { width, height, dpi, elements } = label;
+  const widthDots = Math.round(width);
+  const heightDots = Math.round(height);
   
-  let zpl = [
-    '^XA', // Start format
-    '^MNY', // Gap media (use ^MNN for continuous) 
-    '^MTD', // Direct thermal (ZD410)
-    '^MMC', // Enable cutter mode
-    '^PW448', // Print width for 2" labels (2.2" at 203 DPI)
-    `^LL${height}`, // Label length
-    '^LH0,0', // Label home position
-    '^PR4', // Print rate (speed)
-    '^MD10' // Media darkness
-  ];
+  const zpl: string[] = [];
+  zpl.push(
+    '^XA',                    // Start format
+    '^MTD',                   // ZD410 = Direct Thermal
+    '^MNY',                   // gap/notch stock (switch to ^MNN + ^LL if continuous)
+    `^PW${widthDots}`,        // Print width in dots
+    `^LL${heightDots}`,       // Label length in dots
+    '^LH0,0',                 // Label home position
+    '^LS16',                  // Small right shift to avoid left-clip
+    '^FWN',                   // Force normal field orientation
+    '^PON',                   // Normal print orientation
+    '^CI28'                   // UTF-8 character set
+  );
 
   elements.forEach(element => {
     console.log('🔍 Processing element:', element.id, element.type, element);
@@ -238,8 +242,8 @@ export function generateZPLFromElements(label: ZPLLabel, xOffset: number = 0, yO
       
       case 'barcode':
         zpl.push(
-          `^FO${element.position.x + xOffset},${element.position.y + yOffset}`,
-          `^BCN,${element.height},${element.humanReadable ? 'Y' : 'N'},N,N`,
+          `^FO${element.position.x + xOffset},${element.position.y + yOffset + 8}`, // Add padding above barcode
+          `^BCN,${element.height},${element.humanReadable ? 'Y' : 'N'},N,N`, // Force normal orientation
           `^FD${element.data}^FS`
         );
         break;
@@ -247,7 +251,7 @@ export function generateZPLFromElements(label: ZPLLabel, xOffset: number = 0, yO
       case 'qr':
         zpl.push(
           `^FO${element.position.x + xOffset},${element.position.y + yOffset}`,
-          `^BQN,${element.model},${element.magnification}`,
+          `^BQN,${element.model},${element.magnification}`, // Force normal orientation
           `^FD${element.data}^FS`
         );
         break;
