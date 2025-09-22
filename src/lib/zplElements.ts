@@ -273,49 +273,49 @@ export function createDefaultLabelTemplate(): ZPLLabel {
       {
         id: 'condition',
         type: 'text',
-        position: { x: 20, y: 20 },
-        font: '0', // Use font 0 for better readability
-        fontSize: 24,
-        fontWidth: 24,
+        position: { x: 20, y: 15 },
+        font: 'A', // Use font A for crisp text
+        fontSize: 18,
+        fontWidth: 18,
         text: 'NM',
-        rotation: 0,
-        boundingBox: { width: 80, height: 30 },
+        rotation: 0, // No rotation
+        boundingBox: { width: 60, height: 25 },
         autoSize: 'shrink-to-fit',
         textOverflow: 'ellipsis'
       },
       {
         id: 'price',
         type: 'text',
-        position: { x: 320, y: 20 },
-        font: '0', // Use font 0 for better readability
-        fontSize: 28,
-        fontWidth: 28,
+        position: { x: 300, y: 15 },
+        font: 'A', // Use font A for crisp text
+        fontSize: 20,
+        fontWidth: 20,
         text: '$15.99',
-        rotation: 0,
-        boundingBox: { width: 80, height: 30 },
+        rotation: 0, // No rotation
+        boundingBox: { width: 90, height: 25 },
         autoSize: 'shrink-to-fit',
         textOverflow: 'ellipsis'
       },
       {
         id: 'barcode',
         type: 'barcode',
-        position: { x: 50, y: 60 },
-        size: { width: 300, height: 40 },
+        position: { x: 20, y: 50 },
+        size: { width: 250, height: 35 },
         barcodeType: 'CODE128',
         data: '120979260',
-        height: 40,
+        height: 35,
         humanReadable: false
       },
       {
         id: 'title',
         type: 'text',
-        position: { x: 20, y: 140 },
-        font: '0', // Use font 0 for better readability  
-        fontSize: 18,
-        fontWidth: 18,
+        position: { x: 20, y: 95 },
+        font: 'A', // Use font A for crisp text  
+        fontSize: 14,
+        fontWidth: 14,
         text: 'POKEMON GENGAR VMAX #020',
-        rotation: 0,
-        boundingBox: { width: 380, height: 50 },
+        rotation: 0, // No rotation
+        boundingBox: { width: 370, height: 45 },
         autoSize: 'shrink-to-fit',
         textOverflow: 'wrap'
       }
