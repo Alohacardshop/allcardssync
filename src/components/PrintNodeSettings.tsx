@@ -143,28 +143,35 @@ export function PrintNodeSettings() {
                 <Button 
                   onClick={async () => {
                     try {
-                      // MINIMAL ZPL test - absolute basics only
-                      const minimalZpl = `^XA^FO50,50^A0N,30,30^FDMINIMAL TEST^FS^XZ`;
+                      // Use the EXACT working ZPL format from before (that was printing and cutting)
+                      const workingZpl = `^XA
+^MMC
+^MT6
+^PQ1,1,0
+^FO50,50^A0N,30,30^FDTEST PRINT ZD410^FS
+^FO50,100^A0N,20,20^FD${new Date().toLocaleString()}^FS
+^FO50,130^A0N,15,15^FDZD410 Cut Test^FS
+^XZ`;
                       
-                      console.log('🖨️ Testing MINIMAL ZPL:', minimalZpl);
+                      console.log('🖨️ Using EXACT working ZPL format');
                       
-                      const result = await printNodeService.printZPL(minimalZpl, parseInt(selectedPrinterId), 1);
+                      const result = await printNodeService.printZPL(workingZpl, parseInt(selectedPrinterId), 1);
                       
                       if (result.success) {
-                        toast.success('Minimal ZPL test sent!', {
-                          description: `Job ID: ${result.jobId} - Check console for detailed logs`
+                        toast.success('EXACT working format test sent!', {
+                          description: `Job ID: ${result.jobId} - This should work!`
                         });
                       } else {
-                        toast.error(`Minimal test failed: ${result.error}`);
+                        toast.error(`Working format test failed: ${result.error}`);
                       }
                     } catch (error) {
-                      toast.error(`Minimal test failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                      toast.error(`Working format test failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
                     }
                   }}
                   disabled={isLoading}
                   className="bg-green-600 hover:bg-green-700 flex-1 sm:flex-none"
                 >
-                  Test Minimal ZPL
+                  Test EXACT Working Format
                 </Button>
                 
                 <Button 

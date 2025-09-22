@@ -106,7 +106,7 @@ class PrintNodeService {
       console.log('🖨️ PrintNode: ZPL length:', zpl.length);
       console.log('🖨️ PrintNode: ZPL content:');
       console.log('--- ZPL START ---');
-      console.log(zpl);
+      console.log(JSON.stringify(zpl)); // Use JSON.stringify to see all characters
       console.log('--- ZPL END ---');
       
       // Check for potential encoding issues
