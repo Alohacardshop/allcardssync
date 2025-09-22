@@ -1,12 +1,11 @@
 /**
  * Simple Printing Hook
- * Direct, immediate printing without queues or complex state
+ * PrintNode-only printing without local fallbacks
  */
 
 import { useState, useCallback } from 'react';
 import { toast } from 'sonner';
-import { printZPLDirect, testPrinterConnection, DEFAULT_ZD410_PRINTER, type PrinterConnection, type PrintResult } from '@/lib/directLocalPrint';
-import { printViaLocalBridge, testLocalBridge, DEFAULT_BRIDGE_CONFIG, type LocalBridgeConfig } from '@/lib/localPrintBridge';
+import { DEFAULT_ZD410_PRINTER, type PrinterConnection, type PrintResult } from '@/lib/directLocalPrint';
 import { printNodeService } from '@/lib/printNodeService';
 
 export interface PrintState {
@@ -96,7 +95,7 @@ export function useSimplePrinting() {
           }
         }
         
-        throw new Error('No PrintNode printer configured. Please configure printing in Test Hardware > Printer Setup.');
+        throw new Error('PrintNode is not configured or no printers are available. Please configure PrintNode in Test Hardware > Printer Setup.');
       }
       
       toast.info(`Sending ${copies} label(s) to PrintNode...`);
@@ -148,38 +147,32 @@ export function useSimplePrinting() {
       toast.error(`Print failed: ${errorResult.error}`);
       return errorResult;
     }
-  }, [getSavedPrinter]);
+  }, [getSavedPrinter, savePrinterConfig]);
 
-  // Test printer connection
+  // Test PrintNode connection
   const testConnection = useCallback(async (): Promise<PrintResult> => {
-    const printer = getSavedPrinter();
-    
-    toast.info(`Testing connection to ${printer.name || printer.ip}...`);
+    toast.info(`Testing PrintNode connection...`);
     
     try {
-      const result = await testPrinterConnection(printer);
+      const connected = await printNodeService.testConnection();
       
-      if (result.success) {
-        toast.success('Printer connection test successful!');
+      if (connected) {
+        toast.success('PrintNode connection test successful!');
+        return { success: true };
       } else {
-        if (result.error?.includes('CORS') || result.error?.includes('Failed to fetch')) {
-          toast.info('Connection test blocked by browser security - this is normal. Try printing a test label to verify the printer works.');
-        } else {
-          toast.error(`Connection test failed: ${result.error}`);
-        }
+        toast.error('PrintNode connection test failed. Check your API key.');
+        return { success: false, error: 'PrintNode connection failed' };
       }
-      
-      return result;
     } catch (error) {
       const errorResult: PrintResult = {
         success: false,
-        error: error instanceof Error ? error.message : 'Connection test failed'
+        error: error instanceof Error ? error.message : 'PrintNode connection test failed'
       };
       
-      toast.error(`Connection test failed: ${errorResult.error}`);
+      toast.error(`PrintNode connection test failed: ${errorResult.error}`);
       return errorResult;
     }
-  }, [getSavedPrinter]);
+  }, []);
 
   // Update printer settings
   const updatePrinter = useCallback((printer: PrinterConnection) => {
