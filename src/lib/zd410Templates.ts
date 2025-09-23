@@ -106,7 +106,7 @@ export function generateTestLabel(): string {
     {
       id: 'title',
       type: 'text',
-      position: { x: 10, y: 10 },
+      position: { x: 0, y: 0 },
       font: 'A',
       rotation: 0,
       fontSize: 16,
@@ -116,7 +116,7 @@ export function generateTestLabel(): string {
     {
       id: 'timestamp',
       type: 'text',
-      position: { x: 10, y: 40 },
+      position: { x: 0, y: 30 },
       font: 'A',
       rotation: 0,
       fontSize: 12,
@@ -126,7 +126,7 @@ export function generateTestLabel(): string {
     {
       id: 'footer',
       type: 'text',
-      position: { x: 10, y: 70 },
+      position: { x: 0, y: 60 },
       font: 'A',
       rotation: 0,
       fontSize: 10,

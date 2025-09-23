@@ -186,7 +186,8 @@ export function generateZPLFromElements(
     '^MMC',                   // Enable cutter mode for ZD410
     `^PW${widthDots}`,        // Print width in dots
     `^LL${heightDots}`,       // Label length in dots
-    '^LH0,0',                 // Label home position
+    '^LH0,0',                 // Label home position at 0,0
+    '^LT0',                   // Label top position at 0
     '^FWN',                   // Force normal field orientation
     '^PON',                   // Normal print orientation
     '^CI28'                   // UTF-8 character set
