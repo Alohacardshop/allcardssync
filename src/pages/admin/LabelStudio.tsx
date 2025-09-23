@@ -171,32 +171,15 @@ export default function LabelStudio() {
 
   const handleTestPrint = async () => {
     try {
-      let zplToSend = generatedZpl;
+      console.log('🖨️ Test print - Generated ZPL length:', generatedZpl.length);
+      console.log('🖨️ Test print - Generated ZPL:', generatedZpl);
       
-      // Fallback to simple test ZPL if generated ZPL is empty
-      if (!zplToSend || zplToSend.trim().length === 0) {
-        console.warn('Generated ZPL is empty, using fallback test ZPL');
-        zplToSend = `^XA
-^MTD
-^MNY
-^MMC
-^PW406
-^LL203
-^LH0,0
-^LS0
-^FWN
-^PON
-^CI28
-^PR4
-^MD10
-^FO20,20^A0,30,30^FDTEST LABEL^FS
-^FO20,70^A0,20,20^FDZebra ZD410^FS
-^FO20,120^BY2,3,52^BCN,52,N,N,N^FD123456789^FS
-^PQ1,1,0,Y
-^XZ`;
+      if (!generatedZpl || generatedZpl.trim().length === 0) {
+        toast.error('No ZPL generated. Check template configuration.');
+        return;
       }
       
-      await sendZplToPrinter(zplToSend, `Test-${Date.now()}`, printerPrefs);
+      await sendZplToPrinter(generatedZpl, `Test-${Date.now()}`, printerPrefs);
       toast.success('Test print sent');
     } catch (error) {
       console.error('Print failed:', error);
