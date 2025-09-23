@@ -20,7 +20,7 @@ const isTextEl = (e: ZPLElement): e is TextEl => e.type === 'text';
 const isBarcodeEl = (e: ZPLElement): e is BarcodeEl => e.type === 'barcode';
 const isLineEl = (e: ZPLElement): e is LineEl => e.type === 'line';
 
-type Handle = 'move' | 'nw' | 'ne' | 'se' | 'sw';
+type Handle = 'move' | 'n' | 's' | 'e' | 'w';
 
 export default function EditorCanvas({ template, scale, onChangeTemplate, onSelectElement, grid = 2 }: Props) {
   const layout = template?.layout;
@@ -122,14 +122,16 @@ export default function EditorCanvas({ template, scale, onChangeTemplate, onSele
     // Resize by handle: only supported for text & barcode (lines keep endpoints via future enhancement)
     if (isTextEl(el)) {
       const base = start.el as TextEl;
-      if (mode === 'se' || mode === 'ne' || mode === 'sw' || mode === 'nw') {
-        // Resize h/w by dy/dx
-        const newW = snap(Math.max(8, (base.w ?? 30) + (mode === 'se' || mode === 'ne' ? dx : -dx)));
-        const newH = snap(Math.max(8, (base.h ?? 30) + (mode === 'se' || mode === 'sw' ? dy : -dy)));
+      if (mode === 'e' || mode === 'w') {
+        // Horizontal resize
+        const newW = snap(Math.max(20, (base.w ?? 30) + (mode === 'e' ? dx : -dx)));
         el.w = newW;
+        if (mode === 'w') el.x = snap(Math.max(0, base.x + dx));
+      } else if (mode === 'n' || mode === 's') {
+        // Vertical resize
+        const newH = snap(Math.max(10, (base.h ?? 30) + (mode === 's' ? dy : -dy)));
         el.h = newH;
-        if (mode === 'nw' || mode === 'sw') el.x = snap(Math.max(0, base.x + dx));
-        if (mode === 'nw' || mode === 'ne') el.y = snap(Math.max(0, base.y + dy));
+        if (mode === 'n') el.y = snap(Math.max(0, base.y + dy));
       }
       clampInside(el, next.layout!.width, next.layout!.height);
       onChangeTemplate(next);
@@ -138,16 +140,18 @@ export default function EditorCanvas({ template, scale, onChangeTemplate, onSele
 
     if (isBarcodeEl(el)) {
       const base = start.el as BarcodeEl;
-      if (mode === 'se' || mode === 'ne' || mode === 'sw' || mode === 'nw') {
-        // Horizontal resize -> moduleWidth; Vertical -> height
-        const horizDelta = (mode === 'se' || mode === 'ne') ? dx : -dx;
-        const vertDelta  = (mode === 'se' || mode === 'sw') ? dy : -dy;
-        const newMW = snap(Math.max(1, (base.moduleWidth ?? 2) + horizDelta / 6)); // scale sensitivity
-        const newH  = snap(Math.max(10, (base.height ?? 52) + vertDelta));
+      if (mode === 'e' || mode === 'w') {
+        // Horizontal resize -> moduleWidth
+        const horizDelta = (mode === 'e') ? dx : -dx;
+        const newMW = snap(Math.max(1, (base.moduleWidth ?? 2) + horizDelta / 10)); // scale sensitivity
         el.moduleWidth = newMW;
+        if (mode === 'w') el.x = snap(Math.max(0, base.x + dx));
+      } else if (mode === 'n' || mode === 's') {
+        // Vertical resize -> height
+        const vertDelta = (mode === 's') ? dy : -dy;
+        const newH = snap(Math.max(10, (base.height ?? 52) + vertDelta));
         el.height = newH;
-        if (mode === 'nw' || mode === 'sw') el.x = snap(Math.max(0, base.x + dx));
-        if (mode === 'nw' || mode === 'ne') el.y = snap(Math.max(0, base.y + dy));
+        if (mode === 'n') el.y = snap(Math.max(0, base.y + dy));
       }
       clampInside(el, next.layout!.width, next.layout!.height);
       onChangeTemplate(next);
@@ -264,15 +268,17 @@ export default function EditorCanvas({ template, scale, onChangeTemplate, onSele
               {/* Selection handles */}
               {selected && (
                 <>
-                  {(['nw','ne','se','sw'] as Handle[]).map(hk => (
+                  {/* Edge handles for resizing */}
+                  {(['n','s','e','w'] as Handle[]).map(hk => (
                     <div
                       key={hk}
                       onMouseDown={(e) => startInteraction(e, i, hk)}
-                      className="absolute bg-primary border-2 border-background rounded-full hover:scale-110 transition-transform"
+                      className="absolute bg-primary border-2 border-background rounded hover:scale-110 transition-transform"
                       style={{
-                        width: 12, height: 12,
-                        left: hk.includes('w') ? -6 : (hk.includes('e') ? w - 6 : w/2 - 6),
-                        top:  hk.includes('n') ? -6 : (hk.includes('s') ? h - 6 : h/2 - 6),
+                        width: hk === 'e' || hk === 'w' ? 8 : 16,
+                        height: hk === 'n' || hk === 's' ? 8 : 16,
+                        left: hk === 'w' ? -4 : hk === 'e' ? w - 4 : w/2 - 8,
+                        top: hk === 'n' ? -4 : hk === 's' ? h - 4 : h/2 - 8,
                         cursor: handleCursor(hk),
                       }}
                     />
@@ -339,10 +345,10 @@ function clampInside(el: ZPLElement, width: number, height: number) {
 
 function handleCursor(h: Handle) {
   switch (h) {
-    case 'nw': return 'nwse-resize';
-    case 'se': return 'nwse-resize';
-    case 'ne': return 'nesw-resize';
-    case 'sw': return 'nesw-resize';
+    case 'n': return 'ns-resize';
+    case 's': return 'ns-resize';
+    case 'e': return 'ew-resize';
+    case 'w': return 'ew-resize';
     default: return 'move';
   }
 }
