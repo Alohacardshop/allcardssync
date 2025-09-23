@@ -23,6 +23,7 @@ import { PrintNodeSettings } from "@/components/PrintNodeSettings";
 import { CutterSettings, CutterConfig } from "@/components/CutterSettings";
 import { DefaultPrinterSelector } from "@/components/DefaultPrinterSelector";
 import { PrintNodeProvider } from "@/contexts/PrintNodeContext";
+import TemplateEditor from "@/components/admin/TemplateEditor";
 
 interface TestResult {
   status: 'idle' | 'running' | 'success' | 'error';
