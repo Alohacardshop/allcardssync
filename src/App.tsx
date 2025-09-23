@@ -9,6 +9,7 @@ import { ErrorBoundaryWrapper } from "@/components/ErrorBoundaryWrapper";
 import { AuthGuard } from "@/components/AuthGuard";
 import { AdminGuard } from "@/components/AdminGuard";
 import { StoreProvider } from "@/contexts/StoreContext";
+import { PrintNodeProvider } from "@/contexts/PrintNodeContext";
 import { NavigationBar } from "@/components/NavigationBar";
 import Index from "./pages/Index";
 import DashboardPage from "./pages/DashboardPage";
@@ -53,7 +54,8 @@ const App = () => (
     <ThemeProvider defaultTheme="system" storageKey="allcardssync-theme">
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
-          <StoreProvider>
+          <PrintNodeProvider>
+            <StoreProvider>
             <Toaster />
             <Sonner />
             <BrowserRouter>
@@ -95,10 +97,11 @@ const App = () => (
             <RecoveryMode />
           </BrowserRouter>
         </StoreProvider>
-      </TooltipProvider>
-    </QueryClientProvider>
-    </ThemeProvider>
-  </ErrorBoundary>
+      </PrintNodeProvider>
+    </TooltipProvider>
+  </QueryClientProvider>
+  </ThemeProvider>
+</ErrorBoundary>
 );
 
 export default App;
