@@ -3,7 +3,7 @@ import { useDragDrop } from './DragDropProvider';
 
 interface DraggableItemProps {
   id: string;
-  type: 'inventory-item' | 'batch-item' | 'card';
+  type: 'inventory-item' | 'batch-item' | 'card' | 'element';
   data: any;
   children: React.ReactNode;
   className?: string;

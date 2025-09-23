@@ -3,13 +3,13 @@ import { toast } from 'sonner';
 
 interface DragItem {
   id: string;
-  type: 'inventory-item' | 'batch-item' | 'card';
+  type: 'inventory-item' | 'batch-item' | 'card' | 'element';
   data: any;
 }
 
 interface DropZone {
   id: string;
-  type: 'batch' | 'inventory' | 'trash' | 'archive';
+  type: 'batch' | 'inventory' | 'trash' | 'archive' | 'canvas';
   accepts: string[];
 }
 

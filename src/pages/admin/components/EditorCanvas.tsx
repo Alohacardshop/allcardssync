@@ -1,10 +1,13 @@
 import React, { useMemo, useRef, useState } from 'react';
 import type { LabelTemplate, ZPLElement } from '@/lib/labels/types';
+import { DropZone } from '@/components/drag-drop/DropZone';
+import { useDragDrop } from '@/components/drag-drop/DragDropProvider';
 
 type Props = {
   template: LabelTemplate | null;
   scale: number;                        // e.g., 1.5 for precision editing
   onChangeTemplate: (t: LabelTemplate) => void;
+  onSelectElement?: (el: ZPLElement | null) => void;
   grid?: number;                        // dot units; default 2
 };
 
@@ -18,12 +21,13 @@ const isLineEl = (e: ZPLElement): e is LineEl => e.type === 'line';
 
 type Handle = 'move' | 'nw' | 'ne' | 'se' | 'sw';
 
-export default function EditorCanvas({ template, scale, onChangeTemplate, grid = 2 }: Props) {
+export default function EditorCanvas({ template, scale, onChangeTemplate, onSelectElement, grid = 2 }: Props) {
   const layout = template?.layout;
   const canvasRef = useRef<HTMLDivElement>(null);
   const [sel, setSel] = useState<number | null>(null);
   const [mode, setMode] = useState<Handle | null>(null);
   const [start, setStart] = useState<{ x: number; y: number; el?: ZPLElement } | null>(null);
+  const { isDragging, dragItem } = useDragDrop();
 
   const size = useMemo(() => {
     if (!layout) return { w: 0, h: 0 };
@@ -47,6 +51,7 @@ export default function EditorCanvas({ template, scale, onChangeTemplate, grid =
     setSel(index);
     setMode(handle);
     setStart({ ...toDotCoords(e.clientX, e.clientY), el: layout.elements[index] });
+    onSelectElement?.(layout.elements[index]);
   }
 
   function onCanvasMouseDown(e: React.MouseEvent) {
@@ -55,8 +60,27 @@ export default function EditorCanvas({ template, scale, onChangeTemplate, grid =
       setSel(null);
       setMode(null);
       setStart(null);
+      onSelectElement?.(null);
     }
   }
+
+  const handleDrop = (draggedItem: any, dropX: number, dropY: number) => {
+    if (!layout || !draggedItem?.data?.elementType) return;
+
+    const coords = toDotCoords(dropX, dropY);
+    const elementType = draggedItem.data.elementType as 'text' | 'barcode' | 'line';
+    
+    const newElement: ZPLElement = elementType === 'text' 
+      ? { type: 'text', x: coords.x, y: coords.y, text: 'New Text', h: 30, w: 100 }
+      : elementType === 'barcode'
+      ? { type: 'barcode', x: coords.x, y: coords.y, data: '123456', height: 52, moduleWidth: 2 }
+      : { type: 'line', x: coords.x, y: coords.y, x2: coords.x + 100, y2: coords.y, thickness: 1 };
+
+    const next = structuredClone(template!) as LabelTemplate;
+    next.layout!.elements.push(newElement);
+    onChangeTemplate(next);
+    onSelectElement?.(newElement);
+  };
 
   function onMouseMove(e: React.MouseEvent) {
     if (!layout || sel == null || !mode || !start) return;
@@ -128,13 +152,35 @@ export default function EditorCanvas({ template, scale, onChangeTemplate, grid =
 
   return (
     <div
-      ref={canvasRef}
-      className="relative bg-background border rounded shadow-inner"
+      className={`relative transition-colors ${
+        isDragging ? 'bg-primary/5' : ''
+      }`}
       style={{ width: size.w * scale, height: size.h * scale }}
-      onMouseDown={onCanvasMouseDown}
-      onMouseMove={onMouseMove}
-      onMouseUp={onMouseUp}
     >
+      <DropZone
+        id="editor-canvas"
+        type="canvas"
+        accepts={['element']}
+        onDrop={async (item) => {
+          const rect = canvasRef.current?.getBoundingClientRect();
+          if (rect) {
+            // Use mouse position from drag event
+            const mouseX = rect.left + rect.width / 2; // Default to center if no mouse pos
+            const mouseY = rect.top + rect.height / 2;
+            handleDrop(item, mouseX, mouseY);
+          }
+        }}
+        className={`w-full h-full bg-background border-2 rounded shadow-inner ${
+          isDragging ? 'border-primary border-dashed' : 'border-border'
+        }`}
+      >
+        <div
+          ref={canvasRef}
+          className="w-full h-full"
+          onMouseDown={onCanvasMouseDown}
+          onMouseMove={onMouseMove}
+          onMouseUp={onMouseUp}
+        >
       {/* Grid (light 2-dot) */}
       <div
         className="absolute inset-0 pointer-events-none"
@@ -146,48 +192,67 @@ export default function EditorCanvas({ template, scale, onChangeTemplate, grid =
         }}
       />
 
-      {layout.elements.map((el, i) => {
-        const screen = elementRect(el);
-        const left = screen.x * scale;
-        const top = screen.y * scale;
-        const w = screen.w * scale;
-        const h = screen.h * scale;
-        const selected = i === sel;
+        {layout.elements.map((el, i) => {
+          const screen = elementRect(el);
+          const left = screen.x * scale;
+          const top = screen.y * scale;
+          const w = screen.w * scale;
+          const h = screen.h * scale;
+          const selected = i === sel;
 
-        return (
-          <div
-            key={i}
-            className="absolute"
-            style={{ left, top, width: w, height: h, cursor: 'move' }}
-            onMouseDown={(e) => startInteraction(e, i, 'move')}
-            role="button"
-            aria-label={`element-${i}`}
-          >
-            {/* Element render (simple box; the Preview panel will show real ZPL) */}
-            <div className={`w-full h-full ${isTextEl(el) ? 'bg-blue-50' : isBarcodeEl(el) ? 'bg-green-50' : 'bg-muted'} border border-border`} />
+          return (
+            <div
+              key={i}
+              className={`absolute border-2 rounded transition-all ${
+                selected 
+                  ? 'border-primary shadow-lg z-10' 
+                  : 'border-border hover:border-primary/50 hover:shadow-md'
+              }`}
+              style={{ left, top, width: w, height: h, cursor: 'move' }}
+              onMouseDown={(e) => startInteraction(e, i, 'move')}
+              role="button"
+              aria-label={`element-${i}`}
+            >
+              {/* Element render with better styling */}
+              <div className={`w-full h-full rounded ${
+                isTextEl(el) 
+                  ? 'bg-blue-50 dark:bg-blue-950/20' 
+                  : isBarcodeEl(el) 
+                    ? 'bg-green-50 dark:bg-green-950/20' 
+                    : 'bg-muted'
+              } flex items-center justify-center text-xs font-medium overflow-hidden`}>
+                {isTextEl(el) ? (
+                  <span className="truncate px-1">{el.text}</span>
+                ) : isBarcodeEl(el) ? (
+                  <span className="font-mono">[{el.data}]</span>
+                ) : (
+                  <span>LINE</span>
+                )}
+              </div>
 
-            {/* Selection frame + handles */}
-            {selected && (
-              <>
-                <div className="absolute inset-0 border-2 border-primary pointer-events-none" />
-                {(['nw','ne','se','sw'] as Handle[]).map(hk => (
-                  <div
-                    key={hk}
-                    onMouseDown={(e) => startInteraction(e, i, hk)}
-                    className="absolute bg-primary rounded-sm"
-                    style={{
-                      width: 8, height: 8,
-                      left: hk.includes('w') ? -4 : (hk.includes('e') ? w - 4 : w/2 - 4),
-                      top:  hk.includes('n') ? -4 : (hk.includes('s') ? h - 4 : h/2 - 4),
-                      cursor: handleCursor(hk),
-                    }}
-                  />
-                ))}
-              </>
-            )}
-          </div>
-        );
-      })}
+              {/* Selection handles */}
+              {selected && (
+                <>
+                  {(['nw','ne','se','sw'] as Handle[]).map(hk => (
+                    <div
+                      key={hk}
+                      onMouseDown={(e) => startInteraction(e, i, hk)}
+                      className="absolute bg-primary border-2 border-background rounded-full hover:scale-110 transition-transform"
+                      style={{
+                        width: 12, height: 12,
+                        left: hk.includes('w') ? -6 : (hk.includes('e') ? w - 6 : w/2 - 6),
+                        top:  hk.includes('n') ? -6 : (hk.includes('s') ? h - 6 : h/2 - 6),
+                        cursor: handleCursor(hk),
+                      }}
+                    />
+                  ))}
+                </>
+              )}
+            </div>
+          );
+        })}
+        </div>
+      </DropZone>
     </div>
   );
 }

@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
 
 interface DropZoneProps {
   id: string;
-  type: 'batch' | 'inventory' | 'trash' | 'archive';
+  type: 'batch' | 'inventory' | 'trash' | 'archive' | 'canvas';
   accepts: string[];
   children: React.ReactNode;
   className?: string;

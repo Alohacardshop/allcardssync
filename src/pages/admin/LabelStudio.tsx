@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import EditorCanvas from './components/EditorCanvas';
+import ElementToolbar from './components/ElementToolbar';
+import { DragDropProvider } from '@/components/drag-drop/DragDropProvider';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -172,8 +174,27 @@ export default function LabelStudio() {
   const scale = 1.5; // Editor scale for precision
   const previewScale = 0.5; // Preview scale
 
+  const handleAddElement = (type: 'text' | 'barcode' | 'line') => {
+    if (!template.layout) return;
+    
+    const newElement: ZPLElement = type === 'text' 
+      ? { type: 'text', x: 50, y: 50, text: 'New Text', h: 30, w: 100 }
+      : type === 'barcode'
+      ? { type: 'barcode', x: 50, y: 50, data: '123456', height: 52, moduleWidth: 2 }
+      : { type: 'line', x: 50, y: 50, x2: 150, y2: 50, thickness: 1 };
+
+    setTemplate(prev => ({
+      ...prev,
+      layout: {
+        ...prev.layout!,
+        elements: [...prev.layout!.elements, newElement]
+      }
+    }));
+  };
+
   return (
-    <div className="container mx-auto p-6">
+    <DragDropProvider>
+      <div className="container mx-auto p-6">
       <div className="mb-6">
         <h1 className="text-3xl font-bold">Label Studio</h1>
         <p className="text-muted-foreground">Design and manage label templates</p>
@@ -239,37 +260,23 @@ export default function LabelStudio() {
             </CardContent>
           </Card>
 
-          {/* Simple visual editor placeholder */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Visual Editor</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div 
-                className="border-2 border-dashed border-gray-300 bg-white relative"
-                style={{ 
-                  width: `${(template.layout?.width || 406) * scale}px`, 
-                  height: `${(template.layout?.height || 203) * scale}px` 
-                }}
-              >
-                {template.format === 'elements' && template.layout?.elements.map((el, i) => (
-                  <div
-                    key={i}
-                    className="absolute border border-blue-500 bg-blue-50 cursor-pointer text-xs p-1"
-                    style={{
-                      left: `${el.x * scale}px`,
-                      top: `${el.y * scale}px`,
-                      width: el.type === 'text' ? `${(el.w || 30) * scale * 4}px` : 'auto',
-                      height: el.type === 'text' ? `${(el.h || 30) * scale}px` : 'auto'
-                    }}
-                    onClick={() => setSelectedElement(el)}
-                  >
-                    {el.type === 'text' ? el.text : el.type === 'barcode' ? `[${el.data}]` : 'line'}
+              {/* Enhanced Visual Editor with Toolbar */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Visual Editor</CardTitle>
+                  <div className="flex gap-2 mt-2">
+                    <ElementToolbar onAddElement={handleAddElement} />
                   </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                </CardHeader>
+                <CardContent>
+                  <EditorCanvas
+                    template={template}
+                    scale={scale}
+                    onChangeTemplate={setTemplate}
+                    onSelectElement={setSelectedElement}
+                  />
+                </CardContent>
+              </Card>
         </TabsContent>
 
         <TabsContent value="properties" className="space-y-4">
@@ -731,6 +738,7 @@ export default function LabelStudio() {
           </Card>
         </TabsContent>
       </Tabs>
-    </div>
+      </div>
+    </DragDropProvider>
   );
 }
