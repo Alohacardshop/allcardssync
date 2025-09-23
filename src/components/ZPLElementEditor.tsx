@@ -268,16 +268,58 @@ export function ZPLElementEditor({ element, onUpdate, onDelete }: ZPLElementEdit
               </Select>
             </div>
 
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="barcode-width">Width (Module)</Label>
+                <Input
+                  id="barcode-width"
+                  type="number"
+                  min="1"
+                  max="10"
+                  value={element.size?.width || 2}
+                  onChange={(e) => onUpdate({ 
+                    ...element, 
+                    size: { 
+                      ...element.size, 
+                      width: Number(e.target.value) 
+                    }
+                  })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="barcode-height">Height</Label>
+                <Input
+                  id="barcode-height"
+                  type="number"
+                  min="20"
+                  max="200"
+                  value={element.height}
+                  onChange={(e) => onUpdate({ ...element, height: Number(e.target.value) })}
+                />
+              </div>
+            </div>
+
             <div className="space-y-2">
-              <Label htmlFor="barcode-height">Height</Label>
-              <Input
-                id="barcode-height"
-                type="number"
-                min="20"
-                max="200"
-                value={element.height}
-                onChange={(e) => onUpdate({ ...element, height: Number(e.target.value) })}
-              />
+              <Label htmlFor="barcode-ratio">Wide:Narrow Ratio</Label>
+              <Select
+                value={(element.size?.height || 3).toString()}
+                onValueChange={(value) => onUpdate({ 
+                  ...element, 
+                  size: { 
+                    ...element.size, 
+                    height: Number(value) 
+                  }
+                })}
+              >
+                <SelectTrigger id="barcode-ratio">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="2">2:1</SelectItem>
+                  <SelectItem value="3">3:1 (Recommended)</SelectItem>
+                  <SelectItem value="4">4:1</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="flex items-center space-x-2">

@@ -81,18 +81,26 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
 
   // Load default template on component mount and when selectedTemplateId changes
   useEffect(() => {
-    // Load the template that should be selected by default
-    const templateToLoad = templates.find(t => t.id === selectedTemplateId) || defaultTemplate;
+    if (templatesLoading) return;
     
-    if (templateToLoad && !templatesLoading) {
+    console.log('Templates loaded:', templates.length);
+    console.log('Selected template ID:', selectedTemplateId);
+    console.log('Default template:', defaultTemplate?.name);
+    
+    // Find the template to load (selected or default)
+    let templateToLoad = templates.find(t => t.id === selectedTemplateId);
+    if (!templateToLoad && defaultTemplate) {
+      templateToLoad = defaultTemplate;
+    }
+    
+    if (templateToLoad) {
       try {
         console.log('Loading template:', templateToLoad.name, 'ID:', templateToLoad.id);
         setCurrentTemplateId(templateToLoad.id);
         setTemplateName(templateToLoad.name);
         
-        // Convert old template format to ZPL format if needed
-        if (templateToLoad.canvas && templateToLoad.canvas.zplLabel) {
-          // Load from new ZPL format
+        // Load from ZPL format if available
+        if (templateToLoad.canvas?.zplLabel) {
           console.log('Loading from ZPL format:', templateToLoad.canvas.zplLabel);
           const loadedLabel = { ...templateToLoad.canvas.zplLabel };
           
@@ -142,6 +150,14 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
       }
     }
   }, [templates, selectedTemplateId, defaultTemplate, templatesLoading]);
+
+  // Ensure we always have a default label to work with
+  useEffect(() => {
+    if (!label.elements || label.elements.length === 0) {
+      console.log('No label elements found, creating default template');
+      setLabel(createDefaultLabelTemplate());
+    }
+  }, [label]);
 
   const handleSaveTemplate = async () => {
     if (!templateName.trim()) {
