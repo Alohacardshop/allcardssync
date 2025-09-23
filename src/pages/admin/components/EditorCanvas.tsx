@@ -41,42 +41,6 @@ export default function EditorCanvas({ template, scale, onChangeTemplate, onSele
   const [keys, setKeys] = useState<Set<string>>(new Set());
   const { isDragging, dragItem } = useDragDrop();
 
-  // Helper function to get display text with test data
-  const getDisplayText = (element: ZPLElement) => {
-    if (!isTextEl(element) || !testVars) return element.text;
-    
-    let text = element.text;
-    
-    // Apply test variable replacements
-    if (element.id === 'cardinfo') {
-      const cardName = testVars.CARDNAME ?? 'CARD NAME';
-      const setInfo = testVars.SETNAME ?? 'Set Name';
-      const cardNumber = testVars.CARDNUMBER ?? '#001';
-      return `${cardName} • ${setInfo} • ${cardNumber}`;
-    }
-    if (element.id === 'condition') return testVars.CONDITION ?? text;
-    if (element.id === 'price') return testVars.PRICE ?? text;
-    if (element.id === 'sku') return testVars.SKU ?? text;
-    
-    // Handle placeholder replacements
-    if (text && typeof text === 'string') {
-      text = text
-        .replace(/{{CARDNAME}}/g, testVars.CARDNAME ?? 'CARD NAME')
-        .replace(/{{CONDITION}}/g, testVars.CONDITION ?? 'NM')
-        .replace(/{{PRICE}}/g, testVars.PRICE ?? '$0.00')
-        .replace(/{{SKU}}/g, testVars.SKU ?? 'SKU123');
-    }
-    
-    return text;
-  };
-
-  // Helper function to get display barcode data
-  const getDisplayBarcode = (element: ZPLElement) => {
-    if (!isBarcodeEl(element) || !testVars) return element.data;
-    if (element.id === 'barcode' || element.id?.startsWith('barcode-')) {
-      return testVars.BARCODE ?? element.data ?? 'SKU123';
-    }
-    return element.data;
   const size = useMemo(() => {
     if (!layout) return { w: 0, h: 0 };
     return { w: Math.max(1, layout.width), h: Math.max(1, layout.height) };
@@ -84,7 +48,7 @@ export default function EditorCanvas({ template, scale, onChangeTemplate, onSele
 
   // Helper function to get display text with test data
   const getDisplayText = (element: ZPLElement) => {
-    if (!isTextEl(element) || !testVars) return element.text;
+    if (!isTextEl(element) || !testVars) return isTextEl(element) ? element.text : '';
     
     let text = element.text;
     
@@ -113,7 +77,7 @@ export default function EditorCanvas({ template, scale, onChangeTemplate, onSele
 
   // Helper function to get display barcode data
   const getDisplayBarcode = (element: ZPLElement) => {
-    if (!isBarcodeEl(element) || !testVars) return element.data;
+    if (!isBarcodeEl(element) || !testVars) return isBarcodeEl(element) ? element.data : '';
     if (element.id === 'barcode' || element.id?.startsWith('barcode-')) {
       return testVars.BARCODE ?? element.data ?? 'SKU123';
     }
@@ -460,160 +424,160 @@ export default function EditorCanvas({ template, scale, onChangeTemplate, onSele
           onTouchMove={(e) => onMouseMove(e)}
           onTouchEnd={onMouseUp}
         >
-      {/* Grid (light 2-dot) */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          backgroundSize: `${2 * scale}px ${2 * scale}px`,
-          backgroundImage:
-            `linear-gradient(to right, hsl(var(--border)) 1px, transparent 1px),` +
-            `linear-gradient(to bottom, hsl(var(--border)) 1px, transparent 1px)`,
-        }}
-      />
+          {/* Grid (light 2-dot) */}
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              backgroundSize: `${2 * scale}px ${2 * scale}px`,
+              backgroundImage:
+                `linear-gradient(to right, hsl(var(--border)) 1px, transparent 1px),` +
+                `linear-gradient(to bottom, hsl(var(--border)) 1px, transparent 1px)`,
+            }}
+          />
 
-        {layout.elements.map((el, i) => {
-          const screen = elementRect(el);
-          const left = screen.x * scale;
-          const top = screen.y * scale;
-          const w = screen.w * scale;
-          const h = screen.h * scale;
-          const selected = i === sel;
+          {layout.elements.map((el, i) => {
+            const screen = elementRect(el);
+            const left = screen.x * scale;
+            const top = screen.y * scale;
+            const w = screen.w * scale;
+            const h = screen.h * scale;
+            const selected = i === sel;
 
-          return (
-            <div
-              key={i}
-              className={`absolute border-2 rounded transition-all duration-200 ${
-                selected 
-                  ? 'border-primary shadow-xl z-10 ring-2 ring-primary/20' 
-                  : 'border-border hover:border-primary/50 hover:shadow-md'
-              } ${isDraggingElement && selected ? 'shadow-2xl scale-[1.02]' : ''}`}
-              style={{ 
-                left, 
-                top, 
-                width: w, 
-                height: h, 
-                cursor: selected ? 'move' : 'pointer',
-                transform: isDraggingElement && selected ? 'rotate(0.5deg)' : 'none'
-              }}
-              onMouseDown={(e) => startInteraction(e, i, 'move')}
-              onTouchStart={(e) => startInteraction(e, i, 'move')}
-              role="button"
-              aria-label={`element-${i}`}
-            >
-              {/* Element render with better styling */}
-              <div className={`w-full h-full rounded overflow-hidden transition-all duration-200 ${
-                isTextEl(el) 
-                  ? 'bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800' 
-                  : isBarcodeEl(el) 
-                    ? 'bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800' 
-                    : 'bg-muted border border-muted-foreground/20'
-              } ${selected ? 'bg-opacity-80' : ''}`}>
-                {isTextEl(el) ? (
-                  <AutoSizeText
-                    text={getDisplayText(el)}
-                    width={w}
-                    height={h}
-                    minFontSize={4}
-                    maxFontSize={Math.min(w, h)}
-                    className="text-gray-800 dark:text-gray-200 font-medium"
-                  />
-                ) : isBarcodeEl(el) ? (
-                  <div className="flex items-center justify-center h-full">
-                    <span className="font-mono text-xs font-semibold">[{getDisplayBarcode(el)}]</span>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-center h-full">
-                    <span className="text-xs font-medium">LINE</span>
-                  </div>
+            return (
+              <div
+                key={i}
+                className={`absolute border-2 rounded transition-all duration-200 ${
+                  selected 
+                    ? 'border-primary shadow-xl z-10 ring-2 ring-primary/20' 
+                    : 'border-border hover:border-primary/50 hover:shadow-md'
+                } ${isDraggingElement && selected ? 'shadow-2xl scale-[1.02]' : ''}`}
+                style={{ 
+                  left, 
+                  top, 
+                  width: w, 
+                  height: h, 
+                  cursor: selected ? 'move' : 'pointer',
+                  transform: isDraggingElement && selected ? 'rotate(0.5deg)' : 'none'
+                }}
+                onMouseDown={(e) => startInteraction(e, i, 'move')}
+                onTouchStart={(e) => startInteraction(e, i, 'move')}
+                role="button"
+                aria-label={`element-${i}`}
+              >
+                {/* Element render with better styling */}
+                <div className={`w-full h-full rounded overflow-hidden transition-all duration-200 ${
+                  isTextEl(el) 
+                    ? 'bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800' 
+                    : isBarcodeEl(el) 
+                      ? 'bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800' 
+                      : 'bg-muted border border-muted-foreground/20'
+                } ${selected ? 'bg-opacity-80' : ''}`}>
+                  {isTextEl(el) ? (
+                    <AutoSizeText
+                      text={getDisplayText(el)}
+                      width={w}
+                      height={h}
+                      minFontSize={4}
+                      maxFontSize={Math.min(w, h)}
+                      className="text-gray-800 dark:text-gray-200 font-medium"
+                    />
+                  ) : isBarcodeEl(el) ? (
+                    <div className="flex items-center justify-center h-full">
+                      <span className="font-mono text-xs font-semibold">[{getDisplayBarcode(el)}]</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center h-full">
+                      <span className="text-xs font-medium">LINE</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Enhanced selection handles */}
+                {selected && (
+                  <>
+                    {/* Corner handles */}
+                    {(['nw', 'ne', 'se', 'sw'] as Handle[]).map(handle => (
+                      <ResizeHandle
+                        key={handle}
+                        type="corner"
+                        position={handle}
+                        onMouseDown={(e) => startInteraction(e, i, handle)}
+                        onTouchStart={(e) => startInteraction(e, i, handle)}
+                        style={{
+                          left: handle.includes('w') ? -6 : w - 6,
+                          top: handle.includes('n') ? -6 : h - 6,
+                        }}
+                      />
+                    ))}
+                    
+                    {/* Edge handles */}
+                    {(['n', 's', 'e', 'w'] as Handle[]).map(handle => (
+                      <ResizeHandle
+                        key={handle}
+                        type="edge"
+                        position={handle}
+                        onMouseDown={(e) => startInteraction(e, i, handle)}
+                        onTouchStart={(e) => startInteraction(e, i, handle)}
+                        style={{
+                          left: handle === 'w' ? -4 : handle === 'e' ? w - 4 : w/2 - 6,
+                          top: handle === 'n' ? -4 : handle === 's' ? h - 4 : h/2 - 6,
+                        }}
+                      />
+                    ))}
+
+                    {/* Move handle (center) */}
+                    <ResizeHandle
+                      type="move"
+                      position="move"
+                      onMouseDown={(e) => startInteraction(e, i, 'move')}
+                      onTouchStart={(e) => startInteraction(e, i, 'move')}
+                      style={{
+                        left: w/2 - 8,
+                        top: h/2 - 8,
+                      }}
+                    />
+                    
+                    {/* Enhanced delete button */}
+                    <div
+                      className="absolute bg-destructive text-destructive-foreground rounded-full flex items-center justify-center cursor-pointer hover:scale-125 active:scale-110 transition-all duration-200 text-xs font-bold shadow-lg border-2 border-background"
+                      style={{
+                        width: 20, height: 20,
+                        right: -10,
+                        top: -10,
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const next = structuredClone(template!) as LabelTemplate;
+                        next.layout!.elements.splice(i, 1);
+                        onChangeTemplate(next);
+                        setSel(null);
+                        onSelectElement?.(null);
+                      }}
+                      title="Delete element (Delete key)"
+                    >
+                      ×
+                    </div>
+                  </>
                 )}
               </div>
-
-              {/* Enhanced selection handles */}
-              {selected && (
-                <>
-                  {/* Corner handles */}
-                  {(['nw', 'ne', 'se', 'sw'] as Handle[]).map(handle => (
-                    <ResizeHandle
-                      key={handle}
-                      type="corner"
-                      position={handle}
-                      onMouseDown={(e) => startInteraction(e, i, handle)}
-                      onTouchStart={(e) => startInteraction(e, i, handle)}
-                      style={{
-                        left: handle.includes('w') ? -6 : w - 6,
-                        top: handle.includes('n') ? -6 : h - 6,
-                      }}
-                    />
-                  ))}
-                  
-                  {/* Edge handles */}
-                  {(['n', 's', 'e', 'w'] as Handle[]).map(handle => (
-                    <ResizeHandle
-                      key={handle}
-                      type="edge"
-                      position={handle}
-                      onMouseDown={(e) => startInteraction(e, i, handle)}
-                      onTouchStart={(e) => startInteraction(e, i, handle)}
-                      style={{
-                        left: handle === 'w' ? -4 : handle === 'e' ? w - 4 : w/2 - 6,
-                        top: handle === 'n' ? -4 : handle === 's' ? h - 4 : h/2 - 6,
-                      }}
-                    />
-                  ))}
-
-                  {/* Move handle (center) */}
-                  <ResizeHandle
-                    type="move"
-                    position="move"
-                    onMouseDown={(e) => startInteraction(e, i, 'move')}
-                    onTouchStart={(e) => startInteraction(e, i, 'move')}
-                    style={{
-                      left: w/2 - 8,
-                      top: h/2 - 8,
-                    }}
-                  />
-                  
-                  {/* Enhanced delete button */}
-                  <div
-                    className="absolute bg-destructive text-destructive-foreground rounded-full flex items-center justify-center cursor-pointer hover:scale-125 active:scale-110 transition-all duration-200 text-xs font-bold shadow-lg border-2 border-background"
-                    style={{
-                      width: 20, height: 20,
-                      right: -10,
-                      top: -10,
-                    }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const next = structuredClone(template!) as LabelTemplate;
-                      next.layout!.elements.splice(i, 1);
-                      onChangeTemplate(next);
-                      setSel(null);
-                      onSelectElement?.(null);
-                    }}
-                    title="Delete element (Delete key)"
-                  >
-                    ×
-                  </div>
-                </>
-              )}
-            </div>
-          );
-        })}
-        
-        {/* Snap guides overlay */}
-        <SnapGuides 
-          visible={showSnapGuides}
-          guides={snapGuides}
-          scale={scale}
-          canvasSize={{ width: size.w, height: size.h }}
-        />
-        
-        {/* Measurement tooltip */}
-        <MeasurementTooltip
-          visible={showMeasurements}
-          position={measurementPos}
-          measurements={measurements}
-          scale={scale}
-        />
+            );
+          })}
+          
+          {/* Snap guides overlay */}
+          <SnapGuides 
+            visible={showSnapGuides}
+            guides={snapGuides}
+            scale={scale}
+            canvasSize={{ width: size.w, height: size.h }}
+          />
+          
+          {/* Measurement tooltip */}
+          <MeasurementTooltip
+            visible={showMeasurements}
+            position={measurementPos}
+            measurements={measurements}
+            scale={scale}
+          />
         </div>
       </DropZone>
     </div>
@@ -638,7 +602,7 @@ function elementRect(el: ZPLElement): { x: number; y: number; w: number; h: numb
   if (isLineEl(el)) {
     const w = Math.max(1, Math.abs((el.x2 ?? el.x) - el.x));
     const h = Math.max(1, Math.abs((el.y2 ?? el.y) - el.y));
-    return { x: Math.min(el.x, el.x2), y: Math.min(el.y, el.y2), w, h };
+    return { x: Math.min(el.x, el.x2 ?? el.x), y: Math.min(el.y, el.y2 ?? el.y), w, h };
   }
   // Fallback
   return { x, y, w: 80, h: 30 };
