@@ -37,7 +37,9 @@ export interface PrinterPrefs {
 }
 
 export interface JobVars {
-  CARDNAME?: string; 
+  CARDNAME?: string;
+  SETNAME?: string;
+  CARDNUMBER?: string;
   CONDITION?: string; 
   PRICE?: string; 
   SKU?: string; 

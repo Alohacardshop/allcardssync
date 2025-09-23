@@ -60,6 +60,8 @@ export default function LabelStudio() {
   });
   const [testVars, setTestVars] = useState<JobVars>({
     CARDNAME: 'Pikachu VMAX',
+    SETNAME: 'Vivid Voltage',
+    CARDNUMBER: '#047',
     CONDITION: 'NM',
     PRICE: '$24.99',
     SKU: 'PKM-001',
@@ -112,11 +114,16 @@ export default function LabelStudio() {
     const copy = structuredClone(layout);
     copy.elements = copy.elements.map((el: ZPLElement) => {
       if (el.type === 'text') {
-        if (el.id === 'cardname') el.text = vars.CARDNAME ?? el.text;
+        if (el.id === 'cardinfo') {
+          // Combine card name, set name, and number into one field
+          const cardName = vars.CARDNAME ?? 'CARD NAME';
+          const setInfo = vars.SETNAME ?? 'Set Name';
+          const cardNumber = vars.CARDNUMBER ?? '#001';
+          el.text = `${cardName} • ${setInfo} • ${cardNumber}`;
+        }
         if (el.id === 'condition') el.text = vars.CONDITION ?? el.text;
         if (el.id === 'price') el.text = vars.PRICE ?? el.text;
         if (el.id === 'sku') el.text = vars.SKU ?? el.text;
-        if (el.id === 'desc') el.text = `${vars.CARDNAME} • Set • #001`;
       }
       if (el.type === 'barcode' && el.id === 'barcode') {
         el.data = vars.BARCODE ?? el.data;
@@ -699,6 +706,20 @@ export default function LabelStudio() {
                   <Input
                     value={testVars.CARDNAME || ''}
                     onChange={(e) => setTestVars(prev => ({ ...prev, CARDNAME: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label>Set Name</Label>
+                  <Input
+                    value={testVars.SETNAME || ''}
+                    onChange={(e) => setTestVars(prev => ({ ...prev, SETNAME: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label>Card Number</Label>
+                  <Input
+                    value={testVars.CARDNUMBER || ''}
+                    onChange={(e) => setTestVars(prev => ({ ...prev, CARDNUMBER: e.target.value }))}
                   />
                 </div>
                 <div>
