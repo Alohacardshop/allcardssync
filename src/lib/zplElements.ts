@@ -187,7 +187,6 @@ export function generateZPLFromElements(
     `^PW${widthDots}`,        // Print width in dots
     `^LL${heightDots}`,       // Label length in dots
     '^LH0,0',                 // Label home position
-    '^LS16',                  // Small right shift to avoid left-clip
     '^FWN',                   // Force normal field orientation
     '^PON',                   // Normal print orientation
     '^CI28'                   // UTF-8 character set
@@ -262,7 +261,7 @@ export function generateZPLFromElements(
       
       case 'barcode':
         zpl.push(
-          `^FO${element.position.x + xOffset},${element.position.y + yOffset + 8}`, // Add padding above barcode
+          `^FO${element.position.x + xOffset},${element.position.y + yOffset}`, // Exact positioning
           `^BCN,${element.height},${element.humanReadable ? 'Y' : 'N'},N,N`, // Force normal orientation
           `^FD${element.data}^FS`
         );
