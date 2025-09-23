@@ -65,6 +65,33 @@ function createDefaultLabelTemplate(): Omit<LabelTemplate, 'id' | 'type' | 'scop
   };
 }
 
+// Convert database element format to simple format
+function convertDatabaseElementToSimple(dbElement: any): SimpleZPLElement {
+  const simpleElement: SimpleZPLElement = {
+    type: dbElement.type,
+    id: dbElement.id,
+    x: dbElement.position?.x || dbElement.x || 0,
+    y: dbElement.position?.y || dbElement.y || 0,
+  };
+
+  if (dbElement.type === 'text') {
+    simpleElement.text = dbElement.properties?.text || dbElement.text || '';
+    simpleElement.font = dbElement.properties?.font || dbElement.font || '0';
+    simpleElement.h = dbElement.boundingBox?.height || dbElement.h || 30;
+    simpleElement.w = dbElement.boundingBox?.width || dbElement.w || 30;
+  } else if (dbElement.type === 'barcode') {
+    simpleElement.data = dbElement.properties?.barcodeData || dbElement.data || '';
+    simpleElement.height = dbElement.boundingBox?.height || dbElement.height || 52;
+    simpleElement.moduleWidth = dbElement.properties?.moduleWidth || dbElement.moduleWidth || 2;
+  } else if (dbElement.type === 'line') {
+    simpleElement.x2 = dbElement.position2?.x || dbElement.x2 || (simpleElement.x + (dbElement.boundingBox?.width || 50));
+    simpleElement.y2 = dbElement.position2?.y || dbElement.y2 || (simpleElement.y + (dbElement.boundingBox?.height || 2));
+    simpleElement.thickness = dbElement.properties?.thickness || dbElement.thickness || 2;
+  }
+
+  return simpleElement;
+}
+
 // ---- Supabase helpers ----
 export async function loadFromSupabase(id: string): Promise<LabelTemplate | null> {
   try {
@@ -77,21 +104,50 @@ export async function loadFromSupabase(id: string): Promise<LabelTemplate | null
     
     if (error || !data) return null;
     
+    console.log('📄 Loading template from DB:', id, data.canvas);
+    
     // Convert from existing schema to our format
     const canvas = data.canvas as any;
+    
+    // Check if canvas.zplLabel exists and what type it is
     if (canvas?.zplLabel) {
-      return {
-        id: data.id,
-        type: 'raw_card_2x1',
-        format: 'zpl' as const,
-        dpi: 203,
-        width: 406,
-        height: 203,
-        zpl: canvas.zplLabel as string,
-        scope: 'org',
-        is_default: data.is_default || false
-      };
-    } else {
+      // Case 1: zplLabel is a string (raw ZPL)
+      if (typeof canvas.zplLabel === 'string') {
+        console.log('📄 Loading as raw ZPL template');
+        return {
+          id: data.id,
+          type: 'raw_card_2x1',
+          format: 'zpl' as const,
+          dpi: 203,
+          width: 406,
+          height: 203,
+          zpl: canvas.zplLabel,
+          scope: 'org',
+          is_default: data.is_default || false
+        };
+      }
+      // Case 2: zplLabel is an object with elements (visual editor format)
+      else if (canvas.zplLabel.elements && Array.isArray(canvas.zplLabel.elements)) {
+        console.log('📄 Loading as visual editor template with elements:', canvas.zplLabel.elements.length);
+        const convertedElements = canvas.zplLabel.elements.map(convertDatabaseElementToSimple);
+        console.log('📄 Converted elements:', convertedElements);
+        return {
+          id: data.id,
+          type: 'raw_card_2x1',
+          format: 'elements' as const,
+          dpi: canvas.zplLabel.dpi || 203,
+          width: canvas.zplLabel.width || 406,
+          height: canvas.zplLabel.height || 203,
+          elements: convertedElements,
+          scope: 'org',
+          is_default: data.is_default || false
+        };
+      }
+    }
+    
+    // Case 3: Legacy format with elements directly in canvas
+    if (canvas?.elements && Array.isArray(canvas.elements)) {
+      console.log('📄 Loading as legacy elements template');
       return {
         id: data.id,
         type: 'raw_card_2x1',
@@ -99,11 +155,25 @@ export async function loadFromSupabase(id: string): Promise<LabelTemplate | null
         dpi: 203,
         width: 406,
         height: 203,
-        elements: canvas?.elements || [],
+        elements: canvas.elements.map(convertDatabaseElementToSimple),
         scope: 'org',
         is_default: data.is_default || false
       };
     }
+    
+    // Case 4: No recognizable format, return default
+    console.log('📄 No recognizable format, returning default template structure');
+    return {
+      id: data.id,
+      type: 'raw_card_2x1',
+      format: 'elements' as const,
+      dpi: 203,
+      width: 406,
+      height: 203,
+      elements: [],
+      scope: 'org',
+      is_default: data.is_default || false
+    };
   } catch (error) {
     console.error('Failed to load template from Supabase:', error);
     return null;
@@ -145,32 +215,10 @@ export async function loadAllFromSupabase(): Promise<Record<string, LabelTemplat
     
     const templates: Record<string, LabelTemplate> = {};
     for (const row of data) {
-      // Convert from existing schema to our format
-      const canvas = row.canvas as any;
-      if (canvas?.zplLabel) {
-        templates[row.id] = {
-          id: row.id,
-          type: 'raw_card_2x1',
-          format: 'zpl' as const,
-          dpi: 203,
-          width: 406,
-          height: 203,
-          zpl: canvas.zplLabel as string,
-          scope: 'org',
-          is_default: row.is_default || false
-        };
-      } else {
-        templates[row.id] = {
-          id: row.id,
-          type: 'raw_card_2x1',
-          format: 'elements' as const,
-          dpi: 203,
-          width: 406,
-          height: 203,
-          elements: canvas?.elements || [],
-          scope: 'org',
-          is_default: row.is_default || false
-        };
+      // Use the same loading logic as loadFromSupabase
+      const template = await loadFromSupabase(row.id);
+      if (template) {
+        templates[row.id] = template;
       }
     }
     return templates;

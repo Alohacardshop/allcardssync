@@ -93,7 +93,48 @@ export default function LabelStudio() {
     const loadTemplate = async () => {
       try {
         const tpl = await getTemplate('raw_card_2x1');
-        setTemplate(tpl);
+        console.log('🏷️ Loaded template from templateStore:', tpl);
+        
+        // Convert templateStore format to types format
+        let convertedTemplate: LabelTemplate;
+        
+        // Cast to the templateStore LabelTemplate type to access its properties
+        const storeTpl = tpl as any;
+        
+        if (storeTpl.format === 'elements' && storeTpl.elements) {
+          convertedTemplate = {
+            id: storeTpl.id,
+            name: storeTpl.id,
+            type: storeTpl.type,
+            format: 'elements' as const,
+            layout: {
+              width: storeTpl.width,
+              height: storeTpl.height,
+              dpi: storeTpl.dpi,
+              elements: storeTpl.elements as ZPLElement[]
+            },
+            is_default: storeTpl.is_default,
+            updated_at: storeTpl.updated_at,
+            scope: storeTpl.scope
+          };
+        } else if (storeTpl.format === 'zpl' && storeTpl.zpl) {
+          convertedTemplate = {
+            id: storeTpl.id,
+            name: storeTpl.id,
+            type: storeTpl.type,
+            format: 'zpl' as const,
+            zpl: storeTpl.zpl,
+            is_default: storeTpl.is_default,
+            updated_at: storeTpl.updated_at,
+            scope: storeTpl.scope
+          };
+        } else {
+          // Fallback to default template
+          convertedTemplate = codeDefaultRawCard2x1();
+        }
+        
+        console.log('🏷️ Converted template for LabelStudio:', convertedTemplate);
+        setTemplate(convertedTemplate);
       } catch (error) {
         console.error('Failed to load template:', error);
         toast.error('Failed to load template');
@@ -104,31 +145,50 @@ export default function LabelStudio() {
 
   // Generate ZPL whenever template or test vars change
   useEffect(() => {
+    console.log('🔄 ZPL Generation useEffect triggered');
+    console.log('📋 Template:', template);
+    console.log('🧪 Test vars:', testVars);
+    console.log('🖨️ Printer prefs:', printerPrefs);
+    
     try {
-      console.log('🏷️ Generating ZPL...');
-      console.log('Template format:', template.format);
-      console.log('Template layout:', template.layout);
-      console.log('Template elements:', template.layout?.elements);
-      
       let zpl = '';
       if (template.format === 'elements' && template.layout) {
+        console.log('🔧 Processing elements template with', template.layout.elements.length, 'elements');
         const filledLayout = fillElements(template.layout, testVars);
-        console.log('Filled layout:', filledLayout);
+        console.log('📝 Filled layout:', filledLayout);
         zpl = zplFromElements(filledLayout, printerPrefs);
-        console.log('Generated ZPL:', zpl);
+        console.log('✅ Generated ZPL from elements (length):', zpl.length);
       } else if (template.format === 'zpl' && template.zpl) {
+        console.log('📝 Processing raw ZPL template');
         zpl = zplFromTemplateString(template.zpl, testVars);
+        console.log('✅ Generated ZPL from template string (length):', zpl.length);
+      } else {
+        console.warn('⚠️ No valid template format found:', template);
+        console.warn('⚠️ Template format:', template.format);
+        console.warn('⚠️ Has layout:', !!template.layout);
+        console.warn('⚠️ Has zpl:', !!template.zpl);
       }
       setGeneratedZpl(zpl);
+      console.log('🎯 Final ZPL set:', zpl.length, 'characters');
     } catch (error) {
-      console.error('ZPL generation error:', error);
-      setGeneratedZpl('// Error generating ZPL');
+      console.error('❌ ZPL generation error:', error);
+      setGeneratedZpl('// Error generating ZPL: ' + (error instanceof Error ? error.message : String(error)));
     }
   }, [template, testVars, printerPrefs]);
 
   const fillElements = (layout: any, vars: JobVars) => {
+    console.log('🔧 fillElements input layout:', layout);
+    console.log('🔧 fillElements vars:', vars);
+    
     const copy = structuredClone(layout);
-    copy.elements = copy.elements.map((el: ZPLElement) => {
+    if (!copy.elements || !Array.isArray(copy.elements)) {
+      console.warn('⚠️ No elements array found in layout:', copy);
+      return copy;
+    }
+    
+    copy.elements = copy.elements.map((el: any) => {
+      console.log('🔧 Processing element:', el);
+      
       if (el.type === 'text') {
         if (el.id === 'cardinfo') {
           // Combine card name, set name, and number into one field
@@ -140,12 +200,28 @@ export default function LabelStudio() {
         if (el.id === 'condition') el.text = vars.CONDITION ?? el.text;
         if (el.id === 'price') el.text = vars.PRICE ?? el.text;
         if (el.id === 'sku') el.text = vars.SKU ?? el.text;
+        
+        // Handle elements that don't have specific IDs but might contain placeholder text
+        if (!el.id || el.id.startsWith('text-')) {
+          if (el.text && typeof el.text === 'string') {
+            // Replace common placeholders in the text
+            el.text = el.text
+              .replace(/{{CARDNAME}}/g, vars.CARDNAME ?? 'CARD NAME')
+              .replace(/{{CONDITION}}/g, vars.CONDITION ?? 'NM')
+              .replace(/{{PRICE}}/g, vars.PRICE ?? '$0.00')
+              .replace(/{{SKU}}/g, vars.SKU ?? 'SKU123');
+          }
+        }
       }
-      if (el.type === 'barcode' && el.id === 'barcode') {
-        el.data = vars.BARCODE ?? el.data;
+      if (el.type === 'barcode' && (el.id === 'barcode' || el.id?.startsWith('barcode-'))) {
+        el.data = vars.BARCODE ?? el.data ?? 'SKU123';
       }
+      
+      console.log('🔧 Processed element result:', el);
       return el;
     });
+    
+    console.log('🔧 fillElements result:', copy);
     return copy;
   };
 
