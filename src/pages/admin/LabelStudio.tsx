@@ -44,9 +44,11 @@ import {
   saveOrgTemplate,
   codeDefaultRawCard2x1 
 } from "@/lib/labels/templateStore";
+import { setAsDefault, deleteTemplate } from "@/lib/templateStore";
 import { zplFromElements, zplFromTemplateString } from "@/lib/labels/zpl";
 import { sendZplToPrinter } from "@/lib/labels/print";
 import { toast } from "sonner";
+import { supabase } from '@/integrations/supabase/client';
 
 export default function LabelStudio() {
   const [template, setTemplate] = useState<LabelTemplate>(codeDefaultRawCard2x1());
@@ -68,6 +70,9 @@ export default function LabelStudio() {
     SKU: 'PKM-001',
     BARCODE: 'PKM001'
   });
+  const [templateName, setTemplateName] = useState('');
+  const [availableTemplates, setAvailableTemplates] = useState<Array<{id: string, name: string, is_default: boolean}>>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState('');
   const [generatedZpl, setGeneratedZpl] = useState('');
 
   // Load printer config on mount and auto-load default printer
@@ -141,6 +146,11 @@ export default function LabelStudio() {
       }
     };
     loadTemplate();
+  }, []);
+
+  // Load available templates on mount
+  useEffect(() => {
+    loadAvailableTemplates();
   }, []);
 
   // Generate ZPL whenever template or test vars change
@@ -273,6 +283,89 @@ export default function LabelStudio() {
     }
   };
 
+  const loadAvailableTemplates = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('label_templates')
+        .select('id, name, is_default')
+        .eq('template_type', 'raw_card_2x1');
+      
+      if (error) throw error;
+      setAvailableTemplates(data || []);
+    } catch (error) {
+      console.error('Failed to load templates:', error);
+      toast.error('Failed to load available templates');
+    }
+  };
+
+  const handleLoadTemplate = async (templateId: string) => {
+    try {
+      const loadedTemplate = await getTemplate(templateId);
+      setTemplate(loadedTemplate);
+      setSelectedTemplateId(templateId);
+      toast.success('Template loaded successfully');
+    } catch (error) {
+      console.error('Failed to load template:', error);
+      toast.error('Failed to load template');
+    }
+  };
+
+  const handleSetAsDefault = async () => {
+    if (!template.id) {
+      toast.error('Please save template first');
+      return;
+    }
+    
+    try {
+      await setAsDefault(template.id, 'raw_card_2x1');
+      await loadAvailableTemplates(); // Refresh the list
+      toast.success('Template set as default');
+    } catch (error) {
+      console.error('Failed to set as default:', error);
+      toast.error('Failed to set as default');
+    }
+  };
+
+  const handleDeleteTemplate = async (templateId: string) => {
+    if (!confirm('Are you sure you want to delete this template?')) return;
+    
+    try {
+      await deleteTemplate(templateId);
+      await loadAvailableTemplates(); // Refresh the list
+      if (template.id === templateId) {
+        setTemplate(codeDefaultRawCard2x1()); // Reset to default
+        setSelectedTemplateId('');
+      }
+      toast.success('Template deleted');
+    } catch (error) {
+      console.error('Failed to delete template:', error);
+      toast.error('Failed to delete template');
+    }
+  };
+
+  const handleSaveWithName = async () => {
+    if (!templateName.trim()) {
+      toast.error('Please enter a template name');
+      return;
+    }
+    
+    try {
+      const templateToSave = {
+        ...template,
+        id: templateName.toLowerCase().replace(/\s+/g, '_'),
+        name: templateName
+      };
+      
+      await saveOrgTemplate(templateToSave);
+      await loadAvailableTemplates(); // Refresh the list
+      setTemplateName('');
+      toast.success('Template saved successfully');
+    } catch (error) {
+      console.error('Failed to save template:', error);
+      toast.error('Failed to save template');
+    }
+  };
+
   const copyZplToClipboard = () => {
     navigator.clipboard.writeText(generatedZpl);
     toast.success('ZPL copied to clipboard');
@@ -310,6 +403,7 @@ export default function LabelStudio() {
       <Tabs defaultValue="template" className="space-y-4">
         <TabsList>
           <TabsTrigger value="template">Template</TabsTrigger>
+          <TabsTrigger value="templates">Templates</TabsTrigger>
           <TabsTrigger value="properties">Properties</TabsTrigger>
           <TabsTrigger value="printer">Printer</TabsTrigger>
           <TabsTrigger value="preview">Preview</TabsTrigger>
@@ -388,6 +482,83 @@ export default function LabelStudio() {
                   />
                 </CardContent>
               </Card>
+        </TabsContent>
+
+        <TabsContent value="templates" className="space-y-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Save Template</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <Label>Template Name</Label>
+                  <Input
+                    value={templateName}
+                    onChange={(e) => setTemplateName(e.target.value)}
+                    placeholder="Enter template name..."
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Button onClick={handleSaveWithName} className="flex-1">
+                    <Save className="w-4 h-4 mr-2" />
+                    Save Template
+                  </Button>
+                  <Button onClick={handleSetAsDefault} variant="outline">
+                    Set as Default
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Load Template</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <Label>Available Templates</Label>
+                  <Select
+                    value={selectedTemplateId}
+                    onValueChange={setSelectedTemplateId}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a template..." />
+                    </SelectTrigger>
+                    <SelectContent className="bg-background border border-border shadow-md z-50">
+                      {availableTemplates.map((tpl) => (
+                        <SelectItem key={tpl.id} value={tpl.id}>
+                          {tpl.name} {tpl.is_default && <Badge variant="secondary" className="ml-2">Default</Badge>}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex gap-2">
+                  <Button 
+                    onClick={() => selectedTemplateId && handleLoadTemplate(selectedTemplateId)}
+                    disabled={!selectedTemplateId}
+                    className="flex-1"
+                  >
+                    <Upload className="w-4 h-4 mr-2" />
+                    Load Template
+                  </Button>
+                  <Button 
+                    onClick={() => selectedTemplateId && handleDeleteTemplate(selectedTemplateId)}
+                    disabled={!selectedTemplateId}
+                    variant="destructive"
+                  >
+                    Delete
+                  </Button>
+                </div>
+                {availableTemplates.length === 0 && (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    No templates available
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         <TabsContent value="properties" className="space-y-4">
