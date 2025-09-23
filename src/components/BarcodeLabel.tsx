@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ZebraPrinterSelectionDialog } from '@/components/ZebraPrinterSelectionDialog';
 import { print } from '@/lib/printService';
+import { ZPLLabel, generateZPLFromElements } from '@/lib/zplElements';
+import { toast } from 'sonner';
 
 interface BarcodeLabelProps {
   value: string;
@@ -41,35 +43,79 @@ const BarcodeLabel = ({ value, label, className, showPrintButton = true }: Barco
     setShowPrinterDialog(true);
   };
 
+  const printLabel = async (labelData: any, copies: number = 1) => {
+    try {
+      console.log('🖨️ BarcodeLabel: Printing with unified ZPL builder @ 300 DPI');
+      
+      // Create label structure for 300 DPI
+      const labelObj: ZPLLabel = {
+        width: 600,   // 2" at 300 DPI  
+        height: 300,  // 1" at 300 DPI
+        dpi: 300,
+        elements: [
+          {
+            id: 'title',
+            type: 'text',
+            position: { x: 30, y: 20 },
+            font: '0',
+            rotation: 0,
+            fontSize: 24, // 300 DPI scaled
+            fontWidth: 24,
+            text: labelData.title || 'Sample Item'
+          },
+          {
+            id: 'barcode',
+            type: 'barcode', 
+            position: { x: 30, y: 80 },
+            data: labelData.sku || '1234567890',
+            size: { width: 3, height: 80 },
+            barcodeType: 'CODE128',
+            humanReadable: true,
+            height: 80
+          },
+          {
+            id: 'price',
+            type: 'text',
+            position: { x: 30, y: 200 },
+            font: '0', 
+            rotation: 0,
+            fontSize: 21, // 300 DPI scaled
+            fontWidth: 21,
+            text: labelData.price ? `$${labelData.price}` : '$0.00'
+          }
+        ]
+      };
+
+      const zpl = generateZPLFromElements(labelObj, 0, 0);
+      const result = await print(zpl, copies);
+
+      if (result.success) {
+        toast.success('Barcode label printed!', {
+          description: `Job ID: ${result.jobId} - ZD410 @ 300 DPI`
+        });
+      } else {
+        toast.error('Print failed', {
+          description: result.error || 'Unknown error occurred'
+        });
+      }
+    } catch (error) {
+      console.error('Print error:', error);
+      toast.error('Print failed', {
+        description: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  };
+
   const handlePrintWithPrinter = async (printer: any) => {
     if (!value) return;
     
-    try {
-      console.log('🖨️ Printing barcode label via unified print service');
-      
-      const zpl = `^XA
-^MTD
-^MNY
-^PW448
-^LL203
-^LH0,0
-^LS16
-^FWN
-^PON
-^CI28
-^FO50,30^A0N,30,30^FD${label || 'Barcode'}^FS
-^FO50,80^BCN,80,Y,N,N^FD${value}^FS
-^PQ1,1,0,Y
-^XZ`;
-
-      const result = await print(zpl, 1);
-
-      if (!result.success) {
-        throw new Error(result.error);
-      }
-    } catch (error) {
-      throw error;
-    }
+    const labelData = {
+      title: label || 'Barcode',
+      sku: value,
+      price: null
+    };
+    
+    await printLabel(labelData, 1);
   };
 
   const handleLegacyPrint = () => {

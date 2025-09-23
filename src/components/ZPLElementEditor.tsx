@@ -78,11 +78,11 @@ export function ZPLElementEditor({ element, onUpdate, onDelete }: ZPLElementEdit
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {Object.entries(ZPL_FONTS).map(([key, font]) => (
-                      <SelectItem key={key} value={key}>
-                        {font.name}
-                      </SelectItem>
-                    ))}
+            {Object.entries(ZPL_FONTS).map(([key, font]) => (
+              <SelectItem key={key} value={key}>
+                Font {key} ({font.baseHeight}x{font.baseWidth})
+              </SelectItem>
+            ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -198,7 +198,7 @@ export function ZPLElementEditor({ element, onUpdate, onDelete }: ZPLElementEdit
                       <Label htmlFor="autoSize">Auto Size</Label>
                       <Select
                         value={element.autoSize || 'none'}
-                        onValueChange={(value: 'none' | 'shrink-to-fit' | 'grow-to-fit') =>
+                        onValueChange={(value: 'none' | 'shrink-to-fit') =>
                           onUpdate({ ...element, autoSize: value })
                         }
                       >
@@ -217,7 +217,7 @@ export function ZPLElementEditor({ element, onUpdate, onDelete }: ZPLElementEdit
                       <Label htmlFor="textOverflow">Text Overflow</Label>
                       <Select
                         value={element.textOverflow || 'clip'}
-                        onValueChange={(value: 'clip' | 'ellipsis' | 'wrap' | 'shrink') =>
+                        onValueChange={(value: 'clip' | 'ellipsis' | 'wrap') =>
                           onUpdate({ ...element, textOverflow: value })
                         }
                       >
@@ -227,8 +227,7 @@ export function ZPLElementEditor({ element, onUpdate, onDelete }: ZPLElementEdit
                         <SelectContent>
                           <SelectItem value="clip">Clip</SelectItem>
                           <SelectItem value="ellipsis">Ellipsis (...)</SelectItem>
-                          <SelectItem value="wrap">Wrap</SelectItem>
-                          <SelectItem value="shrink">Shrink</SelectItem>
+            <SelectItem value="wrap">Wrap</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>

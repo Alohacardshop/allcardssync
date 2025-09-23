@@ -1,72 +1,78 @@
-// ZPL Visual Editor Element Types and Utilities
+// ZPL Elements and Label Generation for ZD410 @ 300 DPI
+// This file provides types and functions for creating ZPL labels with visual editing support
 
+// Position interface
 export interface ZPLPosition {
   x: number;
   y: number;
 }
 
+// Size interface
 export interface ZPLSize {
   width: number;
   height: number;
 }
 
+// Text element
 export interface ZPLTextElement {
   id: string;
   type: 'text';
   position: ZPLPosition;
-  font: 'A' | '0' | 'B' | 'D' | 'E' | 'F' | 'G' | 'H';
+  font: string;
   fontSize: number;
   fontWidth: number;
   text: string;
-  rotation: 0 | 90 | 180 | 270;
+  rotation?: number;
   boundingBox?: ZPLSize;
-  autoSize?: 'none' | 'shrink-to-fit' | 'grow-to-fit';
-  textOverflow?: 'clip' | 'ellipsis' | 'wrap' | 'shrink';
-  selected?: boolean;
+  autoSize?: 'none' | 'shrink-to-fit';
+  textOverflow?: 'clip' | 'ellipsis' | 'wrap';
 }
 
+// Barcode element
 export interface ZPLBarcodeElement {
   id: string;
   type: 'barcode';
   position: ZPLPosition;
-  size: ZPLSize;
-  barcodeType: 'CODE128' | 'CODE39' | 'EAN13' | 'UPC';
   data: string;
+  barcodeType: string;
   height: number;
-  humanReadable: boolean;
-  selected?: boolean;
+  size?: ZPLSize;
+  humanReadable?: boolean;
 }
 
+// QR code element
 export interface ZPLQRElement {
   id: string;
   type: 'qr';
   position: ZPLPosition;
-  model: 1 | 2;
-  magnification: number;
   data: string;
-  selected?: boolean;
+  model?: number;
+  magnification?: number;
+  errorCorrection?: string;
 }
 
+// Box element
 export interface ZPLBoxElement {
   id: string;
   type: 'box';
   position: ZPLPosition;
   size: ZPLSize;
-  thickness: number;
-  selected?: boolean;
+  thickness?: number;
 }
 
+// Line element
 export interface ZPLLineElement {
   id: string;
   type: 'line';
   position: ZPLPosition;
   size: ZPLSize;
-  thickness: number;
-  selected?: boolean;
+  thickness?: number;
 }
 
+// Union type for all elements
 export type ZPLElement = ZPLTextElement | ZPLBarcodeElement | ZPLQRElement | ZPLBoxElement | ZPLLineElement;
 
+// Label interface
 export interface ZPLLabel {
   width: number;
   height: number;
@@ -74,41 +80,40 @@ export interface ZPLLabel {
   elements: ZPLElement[];
 }
 
-// Constants for 2x1 inch label at 203 DPI
+// Standard label dimensions at 300 DPI (ZD410 default)
 export const LABEL_DIMENSIONS = {
-  width: 406, // 2 inches * 203 DPI
-  height: 203, // 1 inch * 203 DPI
-  dpi: 203
+  width: 600,   // 2.00" at 300 DPI
+  height: 300,  // 1.00" at 300 DPI
+  dpi: 300
 };
 
-// ZPL Font mappings
-export const ZPL_FONTS = {
-  'A': { name: 'Font A', baseWidth: 9, baseHeight: 11 },
-  '0': { name: 'Font 0', baseWidth: 12, baseHeight: 20 },
-  'B': { name: 'Font B', baseWidth: 7, baseHeight: 9 },
-  'D': { name: 'Font D', baseWidth: 10, baseHeight: 12 },
-  'E': { name: 'Font E', baseWidth: 8, baseHeight: 10 },
-  'F': { name: 'Font F', baseWidth: 26, baseHeight: 39 },
-  'G': { name: 'Font G', baseWidth: 60, baseHeight: 40 },
-  'H': { name: 'Font H', baseWidth: 21, baseHeight: 13 }
+// ZPL font definitions with 300 DPI scaling
+export const ZPL_FONTS: Record<string, { baseHeight: number; baseWidth: number }> = {
+  '0': { baseHeight: 15, baseWidth: 12 },   // Scalable font (recommended)
+  'A': { baseHeight: 14, baseWidth: 10 },   // Fixed font A  
+  'B': { baseHeight: 21, baseWidth: 13 },   // Fixed font B
+  'C': { baseHeight: 28, baseWidth: 18 },   // Fixed font C
+  'D': { baseHeight: 42, baseWidth: 26 },   // Fixed font D
+  'E': { baseHeight: 56, baseWidth: 42 },   // Fixed font E
 };
 
-// Helper function to calculate optimal font size for text within bounds
+// Calculate optimal font size for given text and bounding box
 export function calculateOptimalFontSize(text: string, boundingBox: ZPLSize, font: string): { fontSize: number; fontWidth: number } {
-  const fontInfo = ZPL_FONTS[font as keyof typeof ZPL_FONTS];
-  if (!fontInfo || !text.length) return { fontSize: 20, fontWidth: 20 };
-
-  const maxWidth = boundingBox.width;
-  const maxHeight = boundingBox.height;
+  const fontInfo = ZPL_FONTS[font] || ZPL_FONTS['0'];
   
-  // Calculate maximum font size that fits within bounds
-  const maxFontSizeByWidth = Math.floor(maxWidth / (text.length * (fontInfo.baseWidth / fontInfo.baseHeight)));
-  const maxFontSizeByHeight = Math.floor(maxHeight);
+  // Calculate based on width constraint
+  const maxFontSizeByWidth = Math.floor((boundingBox.width * fontInfo.baseHeight) / (text.length * fontInfo.baseWidth));
   
-  const optimalSize = Math.min(maxFontSizeByWidth, maxFontSizeByHeight, 50); // Cap at 50
-  return { 
-    fontSize: Math.max(optimalSize, 8), // Minimum 8pt
-    fontWidth: Math.max(optimalSize, 8)
+  // Calculate based on height constraint  
+  const maxFontSizeByHeight = Math.floor(boundingBox.height * 0.8);
+  
+  // Use the smaller of the two constraints
+  const fontSize = Math.min(maxFontSizeByWidth, maxFontSizeByHeight, 60); // Cap at 60 for readability
+  const fontWidth = Math.floor((fontSize * fontInfo.baseWidth) / fontInfo.baseHeight);
+  
+  return {
+    fontSize: Math.max(fontSize, 8),  // Minimum readable size
+    fontWidth: Math.max(fontWidth, 6)
   };
 }
 
@@ -161,7 +166,7 @@ export function processTextOverflow(text: string, maxLength: number, overflow: s
   }
 }
 
-// Generate ZPL code from elements with ZD410 defaults
+// Generate ZPL code from elements with ZD410 @ 300 DPI defaults
 export function generateZPLFromElements(
   label: ZPLLabel, 
   xOffset: number = 0, 
@@ -173,11 +178,19 @@ export function generateZPLFromElements(
     copies?: number;
   }
 ): string {
-  const { width, height, dpi, elements } = label;
+  const { width, height, elements } = label;
+  const dpi = label.dpi || 300;  // Default to 300 DPI for ZD410
   const widthDots = Math.round(width);
   const heightDots = Math.round(height);
   const copies = options?.copies || 1;
   
+  // Log dimensions for verification
+  console.log('🖨️ ZPL Generation:', { dpi, widthDots, heightDots, stockMode: options?.stockMode || 'gap' });
+  
+  if (dpi !== 300) {
+    console.warn(`⚠️ Non-standard DPI detected: ${dpi}. ZD410 optimized for 300 DPI.`);
+  }
+
   const zpl: string[] = [];
   zpl.push(
     '^XA',                    // Start format
@@ -187,19 +200,13 @@ export function generateZPLFromElements(
     `^PW${widthDots}`,        // Print width in dots
     `^LL${heightDots}`,       // Label length in dots
     '^LH0,0',                 // Label home position at 0,0
-    '^LT0',                   // Label top position at 0
+    '^LS24',                  // Small right shift for 300 DPI (24 dots = ~0.08")
     '^FWN',                   // Force normal field orientation
-    '^PON',                   // Normal print orientation (not inverted)
-    '^CI28'                   // UTF-8 character set
+    '^PON',                   // Normal print orientation
+    '^CI28',                  // UTF-8 character set
+    `^PR${options?.speed || 4}`,   // Print speed
+    `^MD${options?.darkness || 10}` // Media darkness
   );
-
-  // Add optional speed and darkness settings
-  if (options?.speed) {
-    zpl.push(`^PR${options.speed}`);  // Print speed in IPS
-  }
-  if (options?.darkness) {
-    zpl.push(`^MD${options.darkness}`); // Media darkness
-  }
 
   elements.forEach(element => {
     console.log('🔍 Processing element:', element.id, element.type, element);
@@ -222,9 +229,13 @@ export function generateZPLFromElements(
         if (element.boundingBox && element.autoSize && element.autoSize !== 'none') {
           if (element.autoSize === 'shrink-to-fit') {
             const optimal = calculateOptimalFontSize(element.text, element.boundingBox, element.font);
-            fontSize = optimal.fontSize;
-            fontWidth = optimal.fontWidth;
+            fontSize = Math.round(optimal.fontSize * 1.48); // Scale for 300 DPI
+            fontWidth = Math.round(optimal.fontWidth * 1.48);
           }
+        } else {
+          // Scale font sizes for 300 DPI if not auto-sizing
+          fontSize = Math.round(fontSize * 1.48);
+          fontWidth = Math.round(fontWidth * 1.48);
         }
         
         // Handle text overflow and wrapping if bounding box is defined
@@ -241,11 +252,11 @@ export function generateZPLFromElements(
             // Generate ZPL for each line - no rotation for ZD410
             limitedLines.forEach((line, index) => {
               const lineYOffset = element.position.y + (index * fontSize) + yOffset;
-               zpl.push(
-                 `^FO${element.position.x + xOffset},${lineYOffset}`,
-                 `^A0N,${fontSize},${fontWidth}`, // Use A0 (scalable font) with normal orientation
-                 `^FD${line}^FS`
-               );
+              zpl.push(
+                `^FO${element.position.x + xOffset},${lineYOffset}`,
+                `^A0N,${fontSize},${fontWidth}`, // Use A0 (scalable font) with normal orientation
+                `^FD${line}^FS`
+              );
             });
             return; // Skip the single-line generation below
           } else {
@@ -262,8 +273,9 @@ export function generateZPLFromElements(
       
       case 'barcode':
         zpl.push(
-          `^FO${element.position.x + xOffset},${element.position.y + yOffset}`, // Exact positioning
-          `^BCN,${element.height},${element.humanReadable ? 'Y' : 'N'},N,N`, // Force normal orientation
+          `^FO${element.position.x + xOffset},${element.position.y + yOffset}`,
+          '^BY3,3,120', // 300 DPI barcode scaling
+          `^BCN,${Math.round(element.height * 1.48)},${element.humanReadable ? 'Y' : 'N'},N,N`, // Scale height for 300 DPI
           `^FD${element.data}^FS`
         );
         break;
@@ -299,67 +311,54 @@ export function generateZPLFromElements(
   return zpl.join('\n');
 }
 
-// Create default label template optimized for 2"x1" ZD410 labels
+// Create default label template for 300 DPI
 export function createDefaultLabelTemplate(): ZPLLabel {
   return {
-    width: LABEL_DIMENSIONS.width,
-    height: LABEL_DIMENSIONS.height,
-    dpi: LABEL_DIMENSIONS.dpi,
+    width: 600,   // 2" at 300 DPI
+    height: 300,  // 1" at 300 DPI  
+    dpi: 300,
     elements: [
       {
-        id: 'condition',
+        id: 'title',
         type: 'text',
-        position: { x: 20, y: 15 },
-        font: 'A', // Use font A for crisp text
-        fontSize: 18,
-        fontWidth: 18,
-        text: 'NM',
-        rotation: 0, // No rotation
-        boundingBox: { width: 60, height: 25 },
-        autoSize: 'shrink-to-fit',
-        textOverflow: 'ellipsis'
-      },
-      {
-        id: 'price',
-        type: 'text',
-        position: { x: 300, y: 15 },
-        font: 'A', // Use font A for crisp text
-        fontSize: 20,
-        fontWidth: 20,
-        text: '$15.99',
-        rotation: 0, // No rotation
-        boundingBox: { width: 90, height: 25 },
+        position: { x: 30, y: 20 },
+        font: '0',
+        rotation: 0,
+        fontSize: 24, // 300 DPI sized
+        fontWidth: 24,
+        text: 'Sample Label',
+        boundingBox: { width: 540, height: 60 },
         autoSize: 'shrink-to-fit',
         textOverflow: 'ellipsis'
       },
       {
         id: 'barcode',
         type: 'barcode',
-        position: { x: 20, y: 50 },
-        size: { width: 250, height: 35 },
+        position: { x: 30, y: 100 },
+        data: '1234567890',
+        size: { width: 300, height: 120 }, // 300 DPI scaled
         barcodeType: 'CODE128',
-        data: '120979260',
-        height: 35,
-        humanReadable: false
+        humanReadable: true,
+        height: 120
       },
       {
-        id: 'title',
-        type: 'text',
-        position: { x: 20, y: 95 },
-        font: 'A', // Use font A for crisp text  
-        fontSize: 14,
-        fontWidth: 14,
-        text: 'POKEMON GENGAR VMAX #020',
-        rotation: 0, // No rotation
-        boundingBox: { width: 370, height: 45 },
-        autoSize: 'shrink-to-fit',
-        textOverflow: 'wrap'
+        id: 'subtitle',
+        type: 'text', 
+        position: { x: 30, y: 240 },
+        font: '0',
+        rotation: 0,
+        fontSize: 18, // 300 DPI sized
+        fontWidth: 18,
+        text: 'ZD410 @ 300 DPI',
+        boundingBox: { width: 540, height: 40 },
+        autoSize: 'shrink-to-fit', 
+        textOverflow: 'ellipsis'
       }
     ]
   };
 }
 
-// Generate unique ID for elements
+// Generate a unique ID for elements
 export function generateElementId(): string {
   return `element-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 }
