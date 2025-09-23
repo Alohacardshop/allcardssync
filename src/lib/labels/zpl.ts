@@ -1,5 +1,29 @@
 import { LabelLayout, ZPLElement, JobVars, PrinterPrefs } from './types';
 
+// Calculate optimal font size for text elements based on dimensions
+function calculateOptimalFontSize(
+  text: string, 
+  width: number, 
+  height: number, 
+  minSize = 8, 
+  maxSize = 72
+): number {
+  // Approximate character width based on common label fonts
+  const avgCharWidth = 0.6; // Ratio of font height to average character width
+  const lineHeight = 1.2; // Line height multiplier
+  
+  // Calculate maximum font size based on height constraint
+  const maxFontByHeight = Math.floor(height / lineHeight);
+  
+  // Calculate maximum font size based on width constraint
+  const estimatedTextWidth = text.length * avgCharWidth;
+  const maxFontByWidth = estimatedTextWidth > 0 ? Math.floor(width / estimatedTextWidth) : maxSize;
+  
+  // Take the smaller of the two constraints and clamp to min/max
+  const optimalSize = Math.min(maxFontByHeight, maxFontByWidth);
+  return Math.max(minSize, Math.min(maxSize, optimalSize));
+}
+
 export function zplFromElements(layout: LabelLayout, prefs?: PrinterPrefs): string {
   const lines: string[] = [];
   lines.push('^XA');
@@ -18,7 +42,17 @@ export function zplFromElements(layout: LabelLayout, prefs?: PrinterPrefs): stri
 
   for (const el of layout.elements) {
     if (el.type === 'text') {
-      const font = el.font ?? '0', h = el.h ?? 30, w = el.w ?? 30;
+      const font = el.font ?? '0';
+      let h = el.h ?? 30;
+      let w = el.w ?? 30;
+      
+      // Auto-size font if element has dimensions but no explicit font size
+      if (!el.font && el.w && el.h && el.text) {
+        const optimalSize = calculateOptimalFontSize(el.text, el.w, el.h);
+        h = optimalSize;
+        w = Math.floor(optimalSize * 0.6); // Adjust width proportionally
+      }
+      
       lines.push(`^FO${el.x},${el.y}^A${font},${h},${w}^FD${esc(el.text)}^FS`);
     } else if (el.type === 'barcode') {
       const h = el.height ?? 52, m = el.moduleWidth ?? 2, hr = el.hr ? 'Y' : 'N';

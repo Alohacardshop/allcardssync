@@ -2,6 +2,7 @@ import React, { useMemo, useRef, useState } from 'react';
 import type { LabelTemplate, ZPLElement } from '@/lib/labels/types';
 import { DropZone } from '@/components/drag-drop/DropZone';
 import { useDragDrop } from '@/components/drag-drop/DragDropProvider';
+import { AutoSizeText } from '@/components/AutoSizeText';
 
 type Props = {
   template: LabelTemplate | null;
@@ -214,19 +215,30 @@ export default function EditorCanvas({ template, scale, onChangeTemplate, onSele
               aria-label={`element-${i}`}
             >
               {/* Element render with better styling */}
-              <div className={`w-full h-full rounded ${
+              <div className={`w-full h-full rounded overflow-hidden ${
                 isTextEl(el) 
                   ? 'bg-blue-50 dark:bg-blue-950/20' 
                   : isBarcodeEl(el) 
                     ? 'bg-green-50 dark:bg-green-950/20' 
                     : 'bg-muted'
-              } flex items-center justify-center text-xs font-medium overflow-hidden`}>
+              }`}>
                 {isTextEl(el) ? (
-                  <span className="truncate px-1">{el.text}</span>
+                  <AutoSizeText
+                    text={el.text}
+                    width={w}
+                    height={h}
+                    minFontSize={6}
+                    maxFontSize={Math.min(w / 2, h) * 0.8}
+                    className="text-gray-800 dark:text-gray-200"
+                  />
                 ) : isBarcodeEl(el) ? (
-                  <span className="font-mono">[{el.data}]</span>
+                  <div className="flex items-center justify-center h-full">
+                    <span className="font-mono text-xs">[{el.data}]</span>
+                  </div>
                 ) : (
-                  <span>LINE</span>
+                  <div className="flex items-center justify-center h-full">
+                    <span className="text-xs font-medium">LINE</span>
+                  </div>
                 )}
               </div>
 
