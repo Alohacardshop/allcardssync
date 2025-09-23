@@ -127,7 +127,6 @@ export function ZPLPreview({ label }: ZPLPreviewProps) {
                             padding: '1px', // Half of visual editor padding
                             whiteSpace: 'pre-wrap'
                           }}
-                          className={selectedElementId === element.id ? 'ring-2 ring-blue-500' : ''}
                         >
                           {element.text}
                         </div>
@@ -147,7 +146,6 @@ export function ZPLPreview({ label }: ZPLPreviewProps) {
                             justifyContent: 'center',
                             fontSize: '8px'
                           }}
-                          className={selectedElementId === element.id ? 'ring-2 ring-blue-500' : ''}
                         >
                           {element.humanReadable && (
                             <div style={{ background: '#fff', padding: '1px' }}>
@@ -171,7 +169,6 @@ export function ZPLPreview({ label }: ZPLPreviewProps) {
                             `,
                             border: '1px solid #000'
                           }}
-                          className={selectedElementId === element.id ? 'ring-2 ring-blue-500' : ''}
                         />
                       );
                     
@@ -185,7 +182,6 @@ export function ZPLPreview({ label }: ZPLPreviewProps) {
                             height: `${element.size.height / 2}px`,
                             border: `${element.thickness}px solid #000`
                           }}
-                          className={selectedElementId === element.id ? 'ring-2 ring-blue-500' : ''}
                         />
                       );
                     
@@ -199,7 +195,7 @@ export function ZPLPreview({ label }: ZPLPreviewProps) {
                             height: `${element.thickness}px`,
                             backgroundColor: '#000'
                           }}
-                          className={selectedElementId === element.id ? 'ring-2 ring-blue-500' : ''}
+                          
                         />
                       );
                     
