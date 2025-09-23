@@ -310,14 +310,15 @@ export default function LabelStudio() {
     }
   };
 
-  const handleSetAsDefault = async () => {
-    if (!template.id) {
-      toast.error('Please save template first');
+  const handleSetAsDefault = async (templateId?: string) => {
+    const idToUse = templateId || template.id;
+    if (!idToUse) {
+      toast.error('Please select or save template first');
       return;
     }
     
     try {
-      await setAsDefault(template.id, 'raw_card_2x1');
+      await setAsDefault(idToUse, 'raw_card_2x1');
       await loadAvailableTemplates(); // Refresh the list
       toast.success('Template set as default');
     } catch (error) {
@@ -400,9 +401,9 @@ export default function LabelStudio() {
         <p className="text-muted-foreground">Design and manage label templates</p>
       </div>
 
-      <Tabs defaultValue="template" className="space-y-4">
+      <Tabs defaultValue="editor" className="space-y-4">
         <TabsList>
-          <TabsTrigger value="template">Template</TabsTrigger>
+          <TabsTrigger value="editor">Editor</TabsTrigger>
           <TabsTrigger value="templates">Templates</TabsTrigger>
           <TabsTrigger value="properties">Properties</TabsTrigger>
           <TabsTrigger value="printer">Printer</TabsTrigger>
@@ -410,155 +411,145 @@ export default function LabelStudio() {
           <TabsTrigger value="test">Test</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="template" className="space-y-4">
+        <TabsContent value="editor" className="space-y-4">
+          {/* Enhanced Visual Editor with Toolbar */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Visual Editor</CardTitle>
+              <div className="flex gap-2 mt-2">
+                <ElementToolbar onAddElement={handleAddElement} />
+              </div>
+              <p className="text-sm text-muted-foreground mt-2">
+                Drag elements from the toolbar to the canvas. Select elements to resize or press Delete to remove them.
+              </p>
+            </CardHeader>
+            <CardContent>
+              <EditorCanvas
+                template={template}
+                scale={1.5}
+                onChangeTemplate={setTemplate}
+                onSelectElement={setSelectedElement}
+                testVars={testVars}
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="templates" className="space-y-4">
+          {/* Template Selection and Loading */}
           <Card>
             <CardHeader>
               <CardTitle>Template Management</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex gap-4">
-                <div className="flex-1">
-                  <Label htmlFor="template-name">Template Name</Label>
-                  <Input
-                    id="template-name"
-                    value={template.name}
-                    onChange={(e) => setTemplate(prev => ({ ...prev, name: e.target.value }))}
-                  />
-                </div>
-                <div className="flex-1">
-                  <Label htmlFor="template-format">Format</Label>
-                  <Select
-                    value={template.format}
-                    onValueChange={(value: 'elements' | 'zpl') => 
-                      setTemplate(prev => ({ ...prev, format: value }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="elements">Elements</SelectItem>
-                      <SelectItem value="zpl">Raw ZPL</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="flex gap-2">
-                <Button onClick={handleSaveLocal} variant="outline">
-                  Save (Local)
-                </Button>
-                <Button onClick={handleSaveOrg}>
-                  Save (Org)
-                </Button>
-              </div>
-
-              <div className="text-sm text-muted-foreground">
-                <strong>Current scope:</strong> {template.scope || 'unknown'}
-                <br />
-                <strong>Load order:</strong> Supabase (Org) → Local override → Code default
-              </div>
-            </CardContent>
-          </Card>
-
-              {/* Enhanced Visual Editor with Toolbar */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Visual Editor</CardTitle>
-                  <div className="flex gap-2 mt-2">
-                    <ElementToolbar onAddElement={handleAddElement} />
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Load Existing Template */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-medium">Load Template</h3>
+                  <div>
+                    <Label>Available Templates</Label>
+                    <Select
+                      value={selectedTemplateId}
+                      onValueChange={setSelectedTemplateId}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a template..." />
+                      </SelectTrigger>
+                      <SelectContent className="bg-background border border-border shadow-md z-50">
+                        {availableTemplates.map((tpl) => (
+                          <SelectItem key={tpl.id} value={tpl.id}>
+                            {tpl.name} {tpl.is_default && <Badge variant="secondary" className="ml-2">Default</Badge>}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    Drag elements from the toolbar to the canvas. Select elements to resize or press Delete to remove them.
-                  </p>
-                </CardHeader>
-                <CardContent>
-                  <EditorCanvas
-                    template={template}
-                    scale={1.5}
-                    onChangeTemplate={setTemplate}
-                    onSelectElement={setSelectedElement}
-                    testVars={testVars}
-                  />
-                </CardContent>
-              </Card>
-        </TabsContent>
+                  <div className="flex gap-2">
+                    <Button 
+                      onClick={() => selectedTemplateId && handleLoadTemplate(selectedTemplateId)}
+                      disabled={!selectedTemplateId}
+                      className="flex-1"
+                    >
+                      <Upload className="w-4 h-4 mr-2" />
+                      Load Template
+                    </Button>
+                    <Button 
+                      onClick={() => selectedTemplateId && handleSetAsDefault(selectedTemplateId)}
+                      disabled={!selectedTemplateId}
+                      variant="outline"
+                    >
+                      Set as Default
+                    </Button>
+                  </div>
+                  {availableTemplates.length === 0 && (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      No templates available
+                    </p>
+                  )}
+                </div>
 
-        <TabsContent value="templates" className="space-y-4">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Save Template</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <Label>Template Name</Label>
-                  <Input
-                    value={templateName}
-                    onChange={(e) => setTemplateName(e.target.value)}
-                    placeholder="Enter template name..."
-                  />
+                {/* Save Current Template */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-medium">Save Current Template</h3>
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="template-name">Template Name</Label>
+                      <Input
+                        id="template-name"
+                        value={template.name}
+                        onChange={(e) => setTemplate(prev => ({ ...prev, name: e.target.value }))}
+                        placeholder="Enter template name..."
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="template-format">Format</Label>
+                      <Select
+                        value={template.format}
+                        onValueChange={(value: 'elements' | 'zpl') => 
+                          setTemplate(prev => ({ ...prev, format: value }))
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="elements">Elements</SelectItem>
+                          <SelectItem value="zpl">Raw ZPL</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button onClick={handleSaveLocal} variant="outline" className="flex-1">
+                        Save (Local)
+                      </Button>
+                      <Button onClick={handleSaveOrg} className="flex-1">
+                        <Save className="w-4 h-4 mr-2" />
+                        Save (Org)
+                      </Button>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex gap-2">
-                  <Button onClick={handleSaveWithName} className="flex-1">
-                    <Save className="w-4 h-4 mr-2" />
-                    Save Template
-                  </Button>
-                  <Button onClick={handleSetAsDefault} variant="outline">
-                    Set as Default
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+              </div>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Load Template</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <Label>Available Templates</Label>
-                  <Select
-                    value={selectedTemplateId}
-                    onValueChange={setSelectedTemplateId}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a template..." />
-                    </SelectTrigger>
-                    <SelectContent className="bg-background border border-border shadow-md z-50">
-                      {availableTemplates.map((tpl) => (
-                        <SelectItem key={tpl.id} value={tpl.id}>
-                          {tpl.name} {tpl.is_default && <Badge variant="secondary" className="ml-2">Default</Badge>}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex gap-2">
-                  <Button 
-                    onClick={() => selectedTemplateId && handleLoadTemplate(selectedTemplateId)}
-                    disabled={!selectedTemplateId}
-                    className="flex-1"
-                  >
-                    <Upload className="w-4 h-4 mr-2" />
-                    Load Template
-                  </Button>
+              {/* Template Actions */}
+              <div className="border-t pt-4">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm text-muted-foreground">
+                    <strong>Current scope:</strong> {template.scope || 'unknown'}
+                    <br />
+                    <strong>Load order:</strong> Supabase (Org) → Local override → Code default
+                  </div>
                   <Button 
                     onClick={() => selectedTemplateId && handleDeleteTemplate(selectedTemplateId)}
                     disabled={!selectedTemplateId}
                     variant="destructive"
                   >
-                    Delete
+                    Delete Selected
                   </Button>
                 </div>
-                {availableTemplates.length === 0 && (
-                  <p className="text-sm text-muted-foreground text-center py-4">
-                    No templates available
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="properties" className="space-y-4">
