@@ -53,6 +53,14 @@ export function saveStockModeConfig(config: StockModeConfig): void {
  */
 export async function print(zpl: string, copies: number = 1): Promise<PrintResult> {
   try {
+    // Log the exact ZPL being sent
+    console.log('🖨️ Exact ZPL being sent to printer:');
+    console.log('='.repeat(50));
+    console.log(zpl);
+    console.log('='.repeat(50));
+    console.log(`📋 ZPL Length: ${zpl.length} characters`);
+    console.log(`🔢 Copies: ${copies}`);
+    
     // Get saved PrintNode configuration
     const savedConfig = localStorage.getItem('zebra-printer-config');
     if (!savedConfig) {
