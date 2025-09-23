@@ -148,11 +148,7 @@ export function NavigationBar() {
   const navItems = [
     { to: '/', label: 'Dashboard', icon: Home },
     { to: '/inventory', label: 'Inventory', icon: Archive },
-    { to: '/batches', label: 'Batches', icon: Package },
-    { to: '/labels', label: 'Labels', icon: Tags },
-    { to: '/shopify-mapping', label: 'Shopify', icon: ShoppingCart },
-    { to: '/print-logs', label: 'Print Logs', icon: Printer },
-    { to: '/test-hardware', label: 'Hardware', icon: Settings },
+    { to: '/admin/label-studio', label: 'Labels', icon: Tags },
   ];
 
   if (isAdmin) {
