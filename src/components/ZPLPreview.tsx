@@ -62,8 +62,8 @@ export function ZPLPreview({ label }: ZPLPreviewProps) {
               <div
                 className="relative bg-white border border-gray-400"
                 style={{
-                  width: `${label.width / 2}px`, // Scale down for display
-                  height: `${label.height / 2}px`,
+                  width: `${label.width * 0.5}px`, // Scale down for display
+                  height: `${label.height * 0.5}px`,
                   transform: 'scale(1)',
                   transformOrigin: 'top left'
                 }}
@@ -102,8 +102,8 @@ export function ZPLPreview({ label }: ZPLPreviewProps) {
 
                   const style: React.CSSProperties = {
                     position: 'absolute',
-                    left: `${element.position.x / 2}px`,
-                    top: `${element.position.y / 2}px`,
+                    left: `${element.position.x * 0.5}px`,
+                    top: `${element.position.y * 0.5}px`,
                     fontSize: `${getPreviewFontSize()}px`,
                     fontFamily: 'monospace',
                     color: '#000',
@@ -121,8 +121,8 @@ export function ZPLPreview({ label }: ZPLPreviewProps) {
                           key={element.id}
                           style={{
                             ...style,
-                            width: element.boundingBox ? `${element.boundingBox.width / 2}px` : 'auto',
-                            height: element.boundingBox ? `${element.boundingBox.height / 2}px` : 'auto',
+                            width: element.boundingBox ? `${element.boundingBox.width * 0.5}px` : 'auto',
+                            height: element.boundingBox ? `${element.boundingBox.height * 0.5}px` : 'auto',
                             overflow: 'hidden',
                             display: 'flex',
                             alignItems: 'center',
@@ -141,8 +141,8 @@ export function ZPLPreview({ label }: ZPLPreviewProps) {
                           key={element.id}
                           style={{
                             ...style,
-                            width: `${element.size.width / 2}px`,
-                            height: `${element.size.height / 2}px`,
+                            width: `${element.size.width * 0.5}px`,
+                            height: `${element.size.height * 0.5}px`,
                             background: 'repeating-linear-gradient(90deg, #000 0px, #000 1px, #fff 1px, #fff 2px)',
                             display: 'flex',
                             alignItems: 'end',
@@ -181,8 +181,8 @@ export function ZPLPreview({ label }: ZPLPreviewProps) {
                           key={element.id}
                           style={{
                             ...style,
-                            width: `${element.size.width / 2}px`,
-                            height: `${element.size.height / 2}px`,
+                            width: `${element.size.width * 0.5}px`,
+                            height: `${element.size.height * 0.5}px`,
                             border: `${element.thickness}px solid #000`
                           }}
                         />
@@ -194,7 +194,7 @@ export function ZPLPreview({ label }: ZPLPreviewProps) {
                           key={element.id}
                           style={{
                             ...style,
-                            width: `${element.size.width / 2}px`,
+                            width: `${element.size.width * 0.5}px`,
                             height: `${element.thickness}px`,
                             backgroundColor: '#000'
                           }}
@@ -209,7 +209,7 @@ export function ZPLPreview({ label }: ZPLPreviewProps) {
               </div>
             </div>
             <p className="text-sm text-muted-foreground">
-              Preview scaled to 50% of actual size (2" × 1" label at 203 DPI)
+              Preview scaled to 50% of actual size (2" × 1" label at 300 DPI)
             </p>
           </TabsContent>
           

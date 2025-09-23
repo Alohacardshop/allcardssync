@@ -315,8 +315,8 @@ export function ZPLVisualEditor({
         onElementSelect(updatedElement);
       }
     } else if (isDragging && dragStart && selectedElement && !isResizing) {
-      const newX = Math.max(0, Math.min(LABEL_DIMENSIONS.width - 10, (e.clientX - dragStart.x) / scale));
-      const newY = Math.max(0, Math.min(LABEL_DIMENSIONS.height - 10, (e.clientY - dragStart.y) / scale));
+      const newX = Math.max(0, Math.min(label.width - 10, (e.clientX - dragStart.x) / scale));
+      const newY = Math.max(0, Math.min(label.height - 10, (e.clientY - dragStart.y) / scale));
 
       const updatedElement = {
         ...selectedElement,
@@ -399,9 +399,9 @@ export function ZPLVisualEditor({
           <div 
             className="canvas-container relative bg-white border-2 border-gray-300 cursor-crosshair"
             style={{
-              width: `${LABEL_DIMENSIONS.width * scale}px`,
-              height: `${LABEL_DIMENSIONS.height * scale}px`,
-              backgroundImage: showGrid 
+              width: `${label.width * scale}px`,
+              height: `${label.height * scale}px`,
+              backgroundImage: showGrid
                 ? `
                   linear-gradient(to right, #e5e7eb 1px, transparent 1px),
                   linear-gradient(to bottom, #e5e7eb 1px, transparent 1px)
@@ -422,7 +422,7 @@ export function ZPLVisualEditor({
                 left: `${element.position.x * scale}px`,
                 top: `${element.position.y * scale}px`,
                 cursor: activeTool === 'select' ? 'move' : 'crosshair',
-                fontSize: `${(element.type === 'text' ? element.fontSize : 12) * scale / 2}px`,
+                fontSize: `${(element.type === 'text' ? element.fontSize || 20 : 12) / 2}px`,
                 fontFamily: 'monospace',
                 color: '#000',
                 whiteSpace: 'nowrap',
@@ -444,7 +444,7 @@ export function ZPLVisualEditor({
                   // Calculate font size to fit within bounding box
                   const getAdjustedFontSize = () => {
                     if (!element.boundingBox || element.autoSize !== 'shrink-to-fit') {
-                      return (element.fontSize || 20) * scale / 2;
+                      return (element.fontSize || 20) / 2;
                     }
                     
                     const canvas = document.createElement('canvas');
