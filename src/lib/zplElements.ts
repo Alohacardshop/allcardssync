@@ -176,6 +176,7 @@ export function generateZPLFromElements(
     darkness?: number;
     stockMode?: 'gap' | 'continuous';
     copies?: number;
+    leftShift?: number;  // Allow configurable left shift
   }
 ): string {
   const { width, height, elements } = label;
@@ -200,7 +201,7 @@ export function generateZPLFromElements(
     `^PW${widthDots}`,        // Print width in dots
     `^LL${heightDots}`,       // Label length in dots
     '^LH0,0',                 // Label home position at 0,0
-    '^LS24',                  // Small right shift for 300 DPI (24 dots = ~0.08")
+    `^LS${options?.leftShift ?? (dpi === 203 ? 0 : 24)}`, // Left shift: 0 for 203 DPI, 24 for 300 DPI
     '^FWN',                   // Force normal field orientation
     '^PON',                   // Normal print orientation
     '^CI28',                  // UTF-8 character set

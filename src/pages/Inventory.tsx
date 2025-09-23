@@ -370,7 +370,7 @@ const Inventory = () => {
         {
           id: 'price',
           type: 'text',
-          position: { x: 300, y: 15 },
+          position: { x: 270, y: 15 }, // Moved to fit 406 dot width
           font: 'A',
           rotation: 0,
           fontSize: 20,
@@ -382,10 +382,10 @@ const Inventory = () => {
           type: 'barcode',
           position: { x: 20, y: 50 },
           data: item.sku || generateTitle(item).replace(/[^a-zA-Z0-9]/g, '').substring(0, 12),
-          size: { width: 2, height: 35 },
+          size: { width: 2, height: 52 }, // Using BY2,3,52 settings
           barcodeType: 'CODE128',
           humanReadable: false,
-          height: 35
+          height: 52
         },
         {
           id: 'cardname',
@@ -410,14 +410,17 @@ const Inventory = () => {
       ];
 
       const label: ZPLLabel = {
-        width: 448,  // 2.2" at 203 DPI
-        height: 203, // 1" at 203 DPI
+        width: 406,  // 2.00" at 203 DPI (corrected)
+        height: 203, // 1.00" at 203 DPI
         dpi: 203,
         elements
       };
 
       // Generate ZPL using unified builder
-      const zpl = generateZPLFromElements(label, 0, 0);
+      const zpl = generateZPLFromElements(label, 0, 0, { 
+        stockMode: 'gap',
+        leftShift: 0  // Use ^LS0 for 203 DPI printing
+      });
 
       console.log('🖨️ Generated ZPL for printing:', zpl);
 
@@ -492,7 +495,7 @@ const Inventory = () => {
         {
           id: 'price',
           type: 'text',
-          position: { x: 300, y: 15 },
+          position: { x: 270, y: 15 }, // Moved to fit 406 dot width
           font: 'A',
           rotation: 0,
           fontSize: 20,
@@ -504,10 +507,10 @@ const Inventory = () => {
           type: 'barcode',
           position: { x: 20, y: 50 },
           data: item.sku || generateTitle(item).replace(/[^a-zA-Z0-9]/g, '').substring(0, 12),
-          size: { width: 2, height: 35 },
+          size: { width: 2, height: 52 }, // Using BY2,3,52 settings
           barcodeType: 'CODE128',
           humanReadable: false,
-          height: 35
+          height: 52
         },
         {
           id: 'cardname',
@@ -532,14 +535,17 @@ const Inventory = () => {
       ];
 
       const label: ZPLLabel = {
-        width: 448,  // 2.2" at 203 DPI
-        height: 203, // 1" at 203 DPI
+        width: 406,  // 2.00" at 203 DPI (corrected)
+        height: 203, // 1.00" at 203 DPI
         dpi: 203,
         elements
       };
 
       // Generate ZPL using unified builder and print through unified service
-      const zpl = generateZPLFromElements(label, 0, 0);
+      const zpl = generateZPLFromElements(label, 0, 0, { 
+        stockMode: 'gap',
+        leftShift: 0  // Use ^LS0 for 203 DPI printing
+      });
       const result = await print(zpl, 1);
 
       if (!result.success) {
