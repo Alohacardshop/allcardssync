@@ -13,6 +13,7 @@ type Props = {
   onChangeTemplate: (t: LabelTemplate) => void;
   onSelectElement?: (el: ZPLElement | null) => void;
   grid?: number;                        // dot units; default 2
+  testVars?: any;                       // Test variables for preview
 };
 
 type TextEl = Extract<ZPLElement, { type: 'text' }>;
@@ -25,7 +26,7 @@ const isLineEl = (e: ZPLElement): e is LineEl => e.type === 'line';
 
 type Handle = 'move' | 'n' | 's' | 'e' | 'w' | 'nw' | 'ne' | 'sw' | 'se';
 
-export default function EditorCanvas({ template, scale, onChangeTemplate, onSelectElement, grid = 2 }: Props) {
+export default function EditorCanvas({ template, scale, onChangeTemplate, onSelectElement, grid = 2, testVars }: Props) {
   const layout = template?.layout;
   const canvasRef = useRef<HTMLDivElement>(null);
   const [sel, setSel] = useState<number | null>(null);
@@ -40,10 +41,84 @@ export default function EditorCanvas({ template, scale, onChangeTemplate, onSele
   const [keys, setKeys] = useState<Set<string>>(new Set());
   const { isDragging, dragItem } = useDragDrop();
 
+  // Helper function to get display text with test data
+  const getDisplayText = (element: ZPLElement) => {
+    if (!isTextEl(element) || !testVars) return element.text;
+    
+    let text = element.text;
+    
+    // Apply test variable replacements
+    if (element.id === 'cardinfo') {
+      const cardName = testVars.CARDNAME ?? 'CARD NAME';
+      const setInfo = testVars.SETNAME ?? 'Set Name';
+      const cardNumber = testVars.CARDNUMBER ?? '#001';
+      return `${cardName} • ${setInfo} • ${cardNumber}`;
+    }
+    if (element.id === 'condition') return testVars.CONDITION ?? text;
+    if (element.id === 'price') return testVars.PRICE ?? text;
+    if (element.id === 'sku') return testVars.SKU ?? text;
+    
+    // Handle placeholder replacements
+    if (text && typeof text === 'string') {
+      text = text
+        .replace(/{{CARDNAME}}/g, testVars.CARDNAME ?? 'CARD NAME')
+        .replace(/{{CONDITION}}/g, testVars.CONDITION ?? 'NM')
+        .replace(/{{PRICE}}/g, testVars.PRICE ?? '$0.00')
+        .replace(/{{SKU}}/g, testVars.SKU ?? 'SKU123');
+    }
+    
+    return text;
+  };
+
+  // Helper function to get display barcode data
+  const getDisplayBarcode = (element: ZPLElement) => {
+    if (!isBarcodeEl(element) || !testVars) return element.data;
+    if (element.id === 'barcode' || element.id?.startsWith('barcode-')) {
+      return testVars.BARCODE ?? element.data ?? 'SKU123';
+    }
+    return element.data;
   const size = useMemo(() => {
     if (!layout) return { w: 0, h: 0 };
     return { w: Math.max(1, layout.width), h: Math.max(1, layout.height) };
   }, [layout]);
+
+  // Helper function to get display text with test data
+  const getDisplayText = (element: ZPLElement) => {
+    if (!isTextEl(element) || !testVars) return element.text;
+    
+    let text = element.text;
+    
+    // Apply test variable replacements
+    if (element.id === 'cardinfo') {
+      const cardName = testVars.CARDNAME ?? 'CARD NAME';
+      const setInfo = testVars.SETNAME ?? 'Set Name';
+      const cardNumber = testVars.CARDNUMBER ?? '#001';
+      return `${cardName} • ${setInfo} • ${cardNumber}`;
+    }
+    if (element.id === 'condition') return testVars.CONDITION ?? text;
+    if (element.id === 'price') return testVars.PRICE ?? text;
+    if (element.id === 'sku') return testVars.SKU ?? text;
+    
+    // Handle placeholder replacements
+    if (text && typeof text === 'string') {
+      text = text
+        .replace(/{{CARDNAME}}/g, testVars.CARDNAME ?? 'CARD NAME')
+        .replace(/{{CONDITION}}/g, testVars.CONDITION ?? 'NM')
+        .replace(/{{PRICE}}/g, testVars.PRICE ?? '$0.00')
+        .replace(/{{SKU}}/g, testVars.SKU ?? 'SKU123');
+    }
+    
+    return text;
+  };
+
+  // Helper function to get display barcode data
+  const getDisplayBarcode = (element: ZPLElement) => {
+    if (!isBarcodeEl(element) || !testVars) return element.data;
+    if (element.id === 'barcode' || element.id?.startsWith('barcode-')) {
+      return testVars.BARCODE ?? element.data ?? 'SKU123';
+    }
+    return element.data;
+  };
 
   function snap(v: number) {
     if (keys.has('Alt')) return v; // Disable snapping with Alt key
@@ -435,7 +510,7 @@ export default function EditorCanvas({ template, scale, onChangeTemplate, onSele
               } ${selected ? 'bg-opacity-80' : ''}`}>
                 {isTextEl(el) ? (
                   <AutoSizeText
-                    text={el.text}
+                    text={getDisplayText(el)}
                     width={w}
                     height={h}
                     minFontSize={4}
@@ -444,7 +519,7 @@ export default function EditorCanvas({ template, scale, onChangeTemplate, onSele
                   />
                 ) : isBarcodeEl(el) ? (
                   <div className="flex items-center justify-center h-full">
-                    <span className="font-mono text-xs font-semibold">[{el.data}]</span>
+                    <span className="font-mono text-xs font-semibold">[{getDisplayBarcode(el)}]</span>
                   </div>
                 ) : (
                   <div className="flex items-center justify-center h-full">

@@ -381,9 +381,10 @@ export default function LabelStudio() {
                 <CardContent>
                   <EditorCanvas
                     template={template}
-                    scale={scale}
+                    scale={1.5}
                     onChangeTemplate={setTemplate}
                     onSelectElement={setSelectedElement}
+                    testVars={testVars}
                   />
                 </CardContent>
               </Card>
