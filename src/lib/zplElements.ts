@@ -189,7 +189,7 @@ export function generateZPLFromElements(
     '^LH0,0',                 // Label home position at 0,0
     '^LT0',                   // Label top position at 0
     '^FWN',                   // Force normal field orientation
-    '^POI',                   // Invert print orientation to fix rotation
+    '^PON',                   // Normal print orientation (not inverted)
     '^CI28'                   // UTF-8 character set
   );
 
@@ -241,11 +241,11 @@ export function generateZPLFromElements(
             // Generate ZPL for each line - no rotation for ZD410
             limitedLines.forEach((line, index) => {
               const lineYOffset = element.position.y + (index * fontSize) + yOffset;
-              zpl.push(
-                `^FO${element.position.x + xOffset},${lineYOffset}`,
-                `^A${element.font}N,${fontSize},${fontWidth}`, // Always use N (no rotation) for ZD410
-                `^FD${line}^FS`
-              );
+               zpl.push(
+                 `^FO${element.position.x + xOffset},${lineYOffset}`,
+                 `^A0N,${fontSize},${fontWidth}`, // Use A0 (scalable font) with normal orientation
+                 `^FD${line}^FS`
+               );
             });
             return; // Skip the single-line generation below
           } else {
@@ -255,7 +255,7 @@ export function generateZPLFromElements(
         
         zpl.push(
           `^FO${element.position.x + xOffset},${element.position.y + yOffset}`,
-          `^A${element.font}N,${fontSize},${fontWidth}`, // Always use N (no rotation) for ZD410
+          `^A0N,${fontSize},${fontWidth}`, // Use A0 (scalable font) with normal orientation
           `^FD${processedText}^FS`
         );
         break;
