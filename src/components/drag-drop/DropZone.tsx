@@ -41,7 +41,7 @@ export function DropZone({
     return () => {
       unregisterDropZone(id);
     };
-  }, [id, type, accepts, disabled, registerDropZone, unregisterDropZone]);
+  }, [id, type, disabled, registerDropZone, unregisterDropZone, accepts.join(',')]); // Serialize accepts array to prevent infinite loops
 
   const handleDropAction = async () => {
     if (!dragItem || !accepts.includes(dragItem.type)) return;

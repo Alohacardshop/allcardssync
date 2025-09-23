@@ -713,44 +713,74 @@ export default function LabelStudio() {
                 <CardTitle>Preview</CardTitle>
               </CardHeader>
               <CardContent>
-                <div 
-                  className="border-2 border-gray-300 bg-white relative"
-                  style={{ 
-                    width: `${(template.layout?.width || 406) * previewScale}px`, 
-                    height: `${(template.layout?.height || 203) * previewScale}px` 
-                  }}
-                >
-                  {template.format === 'elements' && template.layout?.elements.map((el, i) => {
-                    // Fill with test data for preview
-                    let displayText = el.type === 'text' ? el.text : el.type === 'barcode' ? el.data : '';
-                    if (el.type === 'text') {
-                      if (el.id === 'cardname') displayText = testVars.CARDNAME || el.text;
-                      if (el.id === 'condition') displayText = testVars.CONDITION || el.text;
-                      if (el.id === 'price') displayText = testVars.PRICE || el.text;
-                      if (el.id === 'sku') displayText = testVars.SKU || el.text;
-                      if (el.id === 'desc') displayText = `${testVars.CARDNAME} • Set • #001`;
-                    }
-                    if (el.type === 'barcode') {
-                      displayText = testVars.BARCODE || el.data;
-                    }
+                 <div 
+                   className="border-2 border-gray-300 bg-white relative"
+                   style={{ 
+                     width: `${(template.layout?.width || 406) * previewScale}px`, 
+                     height: `${(template.layout?.height || 203) * previewScale}px` 
+                   }}
+                 >
+                   {template.format === 'elements' && template.layout?.elements && template.layout.elements.length > 0 ? 
+                     template.layout.elements.map((el, i) => {
+                       // Fill with test data for preview using same logic as visual editor
+                       let displayText = '';
+                       
+                       if (el.type === 'text') {
+                         displayText = el.text;
+                         
+                         // Apply test variable replacements
+                         if (el.id === 'cardinfo') {
+                           const cardName = testVars.CARDNAME ?? 'CARD NAME';
+                           const setInfo = testVars.SETNAME ?? 'Set Name';
+                           const cardNumber = testVars.CARDNUMBER ?? '#001';
+                           displayText = `${cardName} • ${setInfo} • ${cardNumber}`;
+                         } else if (el.id === 'condition') {
+                           displayText = testVars.CONDITION ?? el.text;
+                         } else if (el.id === 'price') {
+                           displayText = testVars.PRICE ?? el.text;
+                         } else if (el.id === 'sku') {
+                           displayText = testVars.SKU ?? el.text;
+                         } else {
+                           // Handle placeholder replacements
+                           if (displayText && typeof displayText === 'string') {
+                             displayText = displayText
+                               .replace(/{{CARDNAME}}/g, testVars.CARDNAME ?? 'CARD NAME')
+                               .replace(/{{CONDITION}}/g, testVars.CONDITION ?? 'NM')
+                               .replace(/{{PRICE}}/g, testVars.PRICE ?? '$0.00')
+                               .replace(/{{SKU}}/g, testVars.SKU ?? 'SKU123');
+                           }
+                         }
+                       } else if (el.type === 'barcode') {
+                         displayText = el.data;
+                         if (el.id === 'barcode' || el.id?.startsWith('barcode-')) {
+                           displayText = testVars.BARCODE ?? el.data ?? 'SKU123';
+                         }
+                       }
 
-                    return (
-                      <div
-                        key={i}
-                        className="absolute border border-gray-400 bg-gray-100 text-xs p-1"
-                        style={{
-                          left: `${el.x * previewScale}px`,
-                          top: `${el.y * previewScale}px`,
-                          width: el.type === 'text' ? `${((el as any).w || 30) * previewScale * 4}px` : 'auto',
-                          height: el.type === 'text' ? `${((el as any).h || 30) * previewScale}px` : 'auto',
-                          fontSize: `${Math.max(8, (el.type === 'text' ? (el as any).h || 30 : 20) * previewScale * 0.8)}px`
-                        }}
-                      >
-                        {el.type === 'barcode' ? `[${displayText}]` : displayText}
-                      </div>
-                    );
-                  })}
-                </div>
+                       return (
+                         <div
+                           key={i}
+                           className="absolute border border-gray-400 bg-gray-100 text-xs p-1 overflow-hidden"
+                           style={{
+                             left: `${el.x * previewScale}px`,
+                             top: `${el.y * previewScale}px`,
+                             width: el.type === 'text' ? `${((el as any).w || 100) * previewScale}px` : 'auto',
+                             height: el.type === 'text' ? `${((el as any).h || 30) * previewScale}px` : `${20 * previewScale}px`,
+                             fontSize: `${Math.max(6, Math.min(14, (el.type === 'text' ? (el as any).h || 30 : 12) * previewScale))}px`,
+                             lineHeight: '1.2'
+                           }}
+                         >
+                           {el.type === 'barcode' ? `[${displayText}]` : displayText}
+                         </div>
+                       );
+                     })
+                     : (
+                       <div className="absolute inset-0 flex items-center justify-center text-gray-500 text-sm">
+                         No elements in template
+                       </div>
+                     )
+                   }
+                 </div>
               </CardContent>
             </Card>
 
