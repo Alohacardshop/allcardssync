@@ -87,7 +87,7 @@ export function generateRawCardLabel(data: LabelData): string {
   ];
 
   const label: ZPLLabel = {
-    width: 448,  // 2.2" at 203 DPI
+    width: 406,  // 2" at 203 DPI
     height: 203, // 1" at 203 DPI
     dpi: 203,
     elements
@@ -106,37 +106,37 @@ export function generateTestLabel(): string {
     {
       id: 'title',
       type: 'text',
-      position: { x: 20, y: 15 },
+      position: { x: 10, y: 10 },
       font: 'A',
       rotation: 0,
-      fontSize: 18,
-      fontWidth: 18,
+      fontSize: 16,
+      fontWidth: 16,
       text: 'TEST PRINT ZD410'
     },
     {
       id: 'timestamp',
       type: 'text',
-      position: { x: 20, y: 50 },
+      position: { x: 10, y: 40 },
       font: 'A',
       rotation: 0,
-      fontSize: 14,
-      fontWidth: 14,
+      fontSize: 12,
+      fontWidth: 12,
       text: timestamp
     },
     {
       id: 'footer',
       type: 'text',
-      position: { x: 20, y: 80 },
+      position: { x: 10, y: 70 },
       font: 'A',
       rotation: 0,
-      fontSize: 12,
-      fontWidth: 12,
+      fontSize: 10,
+      fontWidth: 10,
       text: 'ZD410 2x1 Test'
     }
   ];
 
   const label: ZPLLabel = {
-    width: 448,  // 2.2" at 203 DPI
+    width: 406,  // 2" at 203 DPI
     height: 203, // 1" at 203 DPI
     dpi: 203,
     elements
