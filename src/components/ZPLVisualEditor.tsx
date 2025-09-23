@@ -38,7 +38,7 @@ export function ZPLVisualEditor({
   const [resizeHandle, setResizeHandle] = useState<string | null>(null);
   const [isResizing, setIsResizing] = useState(false);
 
-  const scale = 2; // Scale factor for display
+  const scale = 0.5; // Scale factor for display - matches ZPL preview
 
   // Helper function to calculate text dimensions
   const calculateTextDimensions = (text: string, fontSize: number, fontWidth?: number): { width: number; height: number } => {
