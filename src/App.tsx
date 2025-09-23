@@ -72,7 +72,7 @@ const App = () => (
                       <Route path="/test-hardware" element={<TestHardwarePage />} />
                       <Route path="/inventory" element={<ErrorBoundaryWrapper componentName="Inventory"><Inventory /></ErrorBoundaryWrapper>} />
                       <Route path="/batches" element={<ErrorBoundaryWrapper componentName="Batch Management"><Batches /></ErrorBoundaryWrapper>} />
-                      <Route path="/labels" element={<LabelDesigner />} />
+                      <Route path="/admin/label-studio" element={<LabelStudio />} />
                       <Route path="/bulk-import" element={<BulkImport />} />
                       <Route path="/admin" element={<AdminGuard><Admin /></AdminGuard>} />
                       <Route path="/admin/catalog" element={<AdminGuard><div className="p-8"><CatalogMigrationPlaceholder /></div></AdminGuard>} />
