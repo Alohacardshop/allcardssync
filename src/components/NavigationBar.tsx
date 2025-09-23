@@ -263,15 +263,15 @@ export function NavigationBar() {
               </div>
             )}
 
-            {/* Sign Out Button */}
+            {/* Sign Out Button - Always Visible */}
             <Button
               variant="ghost"
               size="sm"
               onClick={handleSignOut}
-              className="hidden sm:flex items-center gap-2"
+              className="flex items-center gap-2"
             >
               <LogOut className="h-4 w-4" />
-              Sign Out
+              <span className="hidden sm:inline">Sign Out</span>
             </Button>
 
             {/* Mobile Menu */}
