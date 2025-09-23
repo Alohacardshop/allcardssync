@@ -761,14 +761,14 @@ export default function LabelStudio() {
                          <div
                            key={i}
                            className="absolute border border-gray-400 bg-gray-100 text-xs p-1 overflow-hidden"
-                           style={{
-                             left: `${el.x * previewScale}px`,
-                             top: `${el.y * previewScale}px`,
-                             width: el.type === 'text' ? `${((el as any).w || 100) * previewScale}px` : 'auto',
-                             height: el.type === 'text' ? `${((el as any).h || 30) * previewScale}px` : `${20 * previewScale}px`,
-                             fontSize: `${Math.max(6, Math.min(14, (el.type === 'text' ? (el as any).h || 30 : 12) * previewScale))}px`,
-                             lineHeight: '1.2'
-                           }}
+                            style={{
+                              left: `${el.x * previewScale}px`,
+                              top: `${el.y * previewScale}px`,
+                              width: el.type === 'text' ? `${((el as any).w || 100) * previewScale}px` : 'auto',
+                              height: el.type === 'text' ? `${((el as any).h || 30) * previewScale}px` : `${20 * previewScale}px`,
+                              fontSize: `${Math.max(6, (el.type === 'text' ? (el as any).h || 30 : 12) * previewScale)}px`,
+                              lineHeight: '1.2'
+                            }}
                          >
                            {el.type === 'barcode' ? `[${displayText}]` : displayText}
                          </div>
