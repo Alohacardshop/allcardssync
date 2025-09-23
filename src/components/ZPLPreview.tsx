@@ -56,7 +56,10 @@ export function ZPLPreview({ label }: ZPLPreviewProps) {
           
           <TabsContent value="visual" className="space-y-4">
             <div className="bg-white border-2 border-dashed border-gray-300 rounded-lg p-4">
-              <div 
+              <div className="text-xs text-gray-500 mb-2">
+                Preview scaled to 50% of actual size (2" × 1" label at 300 DPI)
+              </div>
+              <div
                 className="relative bg-white border border-gray-400"
                 style={{
                   width: `${label.width / 2}px`, // Scale down for display

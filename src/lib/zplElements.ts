@@ -315,9 +315,9 @@ export function generateZPLFromElements(
 // Create default label template for 300 DPI
 export function createDefaultLabelTemplate(): ZPLLabel {
   return {
-    width: 600,   // 2" at 300 DPI
-    height: 300,  // 1" at 300 DPI  
-    dpi: 300,
+    width: LABEL_DIMENSIONS.width,   // 2" at 300 DPI
+    height: LABEL_DIMENSIONS.height, // 1" at 300 DPI  
+    dpi: LABEL_DIMENSIONS.dpi,
     elements: [
       {
         id: 'title',
