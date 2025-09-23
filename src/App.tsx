@@ -15,7 +15,7 @@ import DashboardPage from "./pages/DashboardPage";
 import TestHardwarePage from "./pages/TestHardwarePage";
 import Inventory from "./pages/Inventory";
 import Batches from "./pages/Batches";
-import { LabelDesigner } from "./pages/LabelDesigner";
+import LabelStudio from "./pages/admin/LabelStudio";
 import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
 import Auth from "./pages/Auth";

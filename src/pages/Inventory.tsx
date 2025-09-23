@@ -17,7 +17,7 @@ import { ZebraPrinterSelectionDialog } from '@/components/ZebraPrinterSelectionD
 import { getTemplate } from '@/lib/labels/templateStore';
 import { zplFromElements, zplFromTemplateString } from '@/lib/labels/zpl';
 import { sendZplToPrinter } from '@/lib/labels/print';
-import type { JobVars } from '@/lib/labels/types';
+import type { JobVars, ZPLElement } from '@/lib/labels/types';
 import { print } from '@/lib/printService';
 import { sendGradedToShopify, sendRawToShopify } from '@/hooks/useShopifySend';
 import { useBatchSendToShopify } from '@/hooks/useBatchSendToShopify';
@@ -536,73 +536,40 @@ const Inventory = () => {
 
       for (const item of unprintedRawItems) {
         try {
-          // Create ZPL elements for raw card label using generateZPLFromElements
-          const elements: ZPLElement[] = [
-            {
-              id: 'condition',
-              type: 'text',
-              position: { x: 20, y: 15 },
-              font: 'A',
-              rotation: 0,
-              fontSize: 18,
-              fontWidth: 18,
-              text: item.condition || 'NM'
-            },
-            {
-              id: 'price',
-              type: 'text',
-              position: { x: 300, y: 15 },
-              font: 'A',
-              rotation: 0,
-              fontSize: 20,
-              fontWidth: 20,
-              text: item.price ? `$${item.price.toFixed(2)}` : '$0.00'
-            },
-            {
-              id: 'barcode',
-              type: 'barcode',
-              position: { x: 20, y: 50 },
-              data: item.sku || generateTitle(item).replace(/[^a-zA-Z0-9]/g, '').substring(0, 12),
-              size: { width: 2, height: 35 },
-              barcodeType: 'CODE128',
-              humanReadable: false,
-              height: 35
-            },
-            {
-              id: 'cardname',
-              type: 'text',
-              position: { x: 20, y: 95 },
-              font: 'A',
-              rotation: 0,
-              fontSize: 14,
-              fontWidth: 14,
-              text: generateTitle(item)
-            },
-            {
-              id: 'sku',
-              type: 'text',
-              position: { x: 20, y: 120 },
-              font: 'A',
-              rotation: 0,
-              fontSize: 10,
-              fontWidth: 10,
-              text: item.sku || ''
-            }
-          ];
+          const tpl = await getTemplate('raw_card_2x1');
 
-          const label: ZPLLabel = {
-            width: 448,  // 2.2" at 203 DPI
-            height: 203, // 1" at 203 DPI
-            dpi: 203,
-            elements
+          const vars: JobVars = {
+            CARDNAME: generateTitle(item),
+            CONDITION: item?.condition ?? 'NM',
+            PRICE: item?.price != null ? `$${Number(item.price).toFixed(2)}` : '$0.00',
+            SKU: item?.sku ?? '',
+            BARCODE: item?.sku ?? generateTitle(item).replace(/[^a-z0-9]/gi,'').slice(0,12),
           };
 
-          // Generate ZPL using unified builder and print
-          const zpl = generateZPLFromElements(label, 0, 0);
-          const result = await print(zpl, 1);
+          const prefs = JSON.parse(localStorage.getItem('zebra-printer-config') || '{}');
 
-          if (!result.success) {
-            throw new Error(result.error || 'Print failed');
+          let zpl = '';
+          if (tpl.format === 'elements' && tpl.layout) {
+            const filled = {
+              ...tpl.layout,
+              elements: tpl.layout.elements.map((el: ZPLElement) => {
+                if (el.type === 'text') {
+                  if (el.id === 'cardname') return { ...el, text: vars.CARDNAME ?? el.text };
+                  if (el.id === 'condition') return { ...el, text: vars.CONDITION ?? el.text };
+                  if (el.id === 'price') return { ...el, text: vars.PRICE ?? el.text };
+                  if (el.id === 'sku') return { ...el, text: vars.SKU ?? el.text };
+                  if (el.id === 'desc') return { ...el, text: vars.CARDNAME ?? el.text };
+                } else if (el.type === 'barcode' && el.id === 'barcode') {
+                  return { ...el, data: vars.BARCODE ?? el.data };
+                }
+                return el;
+              }),
+            };
+            zpl = zplFromElements(filled, prefs);
+          } else if (tpl.format === 'zpl' && tpl.zpl) {
+            zpl = zplFromTemplateString(tpl.zpl, vars);
+          } else {
+            throw new Error('No valid label template');
           }
 
           // Mark as printed

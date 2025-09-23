@@ -8,7 +8,9 @@ import { Badge } from '@/components/ui/badge';
 import { Loader2, CheckCircle, XCircle, Cloud } from 'lucide-react';
 import { usePrintNode } from '@/contexts/PrintNodeContext';
 import { printNodeService } from '@/lib/printNodeService';
-import { zd410TestLabelZPL } from '@/lib/zd410Templates';
+import { codeDefaultRawCard2x1 } from '@/lib/labels/templateStore';
+import { zplFromElements } from '@/lib/labels/zpl';
+import { sendZplToPrinter } from '@/lib/labels/print';
 import { toast } from 'sonner';
 
 export function PrintNodeSettings() {
@@ -144,14 +146,19 @@ export function PrintNodeSettings() {
                 <Button 
                   onClick={async () => {
                     try {
-                      const testZPL = zd410TestLabelZPL();
+                      const tpl = codeDefaultRawCard2x1();
+                      const testZPL = zplFromElements(tpl.layout!, {
+                        speed: 4,
+                        darkness: 10,
+                        media: 'gap'
+                      });
                       
-                      console.log('🖨️ Using standardized ZD410 test template');
+                      console.log('🖨️ Using new label system test template');
                       
                       const result = await printNodeService.printZPL(testZPL, parseInt(selectedPrinterId), 1);
                       
                       if (result.success) {
-                        toast.success('ZD410 test print sent!', {
+                        toast.success('Label system test print sent!', {
                           description: `Job ID: ${result.jobId} - Should print and cut`
                         });
                       } else {
@@ -164,35 +171,39 @@ export function PrintNodeSettings() {
                   disabled={isLoading}
                   className="bg-green-600 hover:bg-green-700 flex-1 sm:flex-none"
                 >
-                  Test ZD410 Print
+                  Test Print
                 </Button>
                 
                 <Button 
                   onClick={async () => {
                     try {
-                      // Test with gap media setting
-                      const gapZPL = zd410TestLabelZPL().replace('^MNN', '^MNY');
+                      const tpl = codeDefaultRawCard2x1();
+                      const gapZPL = zplFromElements(tpl.layout!, {
+                        speed: 4,
+                        darkness: 10,
+                        media: 'blackmark'
+                      });
                       
-                      console.log('🖨️ Testing with gap media setting (^MNY)');
+                      console.log('🖨️ Testing with blackmark media setting');
                       
                       const result = await printNodeService.printZPL(gapZPL, parseInt(selectedPrinterId), 1);
                       
                       if (result.success) {
-                        toast.success('Gap media test sent!', {
-                          description: 'Testing gap/notch media detection'
+                        toast.success('Blackmark media test sent!', {
+                          description: 'Testing blackmark media detection'
                         });
                       } else {
-                        toast.error(`Gap media test failed via PrintNode. Check API key & selected printer.`);
+                        toast.error(`Blackmark media test failed via PrintNode. Check API key & selected printer.`);
                       }
                     } catch (error) {
-                      toast.error(`Gap media test failed via PrintNode. Check API key & selected printer.`);
+                      toast.error(`Blackmark media test failed via PrintNode. Check API key & selected printer.`);
                     }
                   }}
                   disabled={isLoading}
                   variant="outline"
                   className="flex-1 sm:flex-none"
                 >
-                  Test Gap Media
+                  Test Blackmark
                 </Button>
               </div>
               <div className="text-xs text-muted-foreground space-y-1">

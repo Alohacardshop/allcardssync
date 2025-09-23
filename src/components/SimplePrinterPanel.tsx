@@ -14,7 +14,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Printer, Settings, TestTube, Wifi, AlertCircle } from 'lucide-react';
 import { useSimplePrinting } from '@/hooks/useSimplePrinting';
-import { generateTestLabel } from '@/lib/zd410Templates';
+import { codeDefaultRawCard2x1 } from '@/lib/labels/templateStore';
+import { zplFromElements } from '@/lib/labels/zpl';
 import { PrintNodeSettings } from '@/components/PrintNodeSettings';
 import type { PrinterConnection } from '@/lib/directLocalPrint';
 
@@ -30,7 +31,8 @@ export function SimplePrinterPanel() {
   };
 
   const handleTestPrint = async () => {
-    const testZPL = generateTestLabel();
+    const tpl = codeDefaultRawCard2x1();
+    const testZPL = zplFromElements(tpl.layout!, { speed: 4, darkness: 10, media: 'gap' });
     await print(testZPL, 1);
   };
 

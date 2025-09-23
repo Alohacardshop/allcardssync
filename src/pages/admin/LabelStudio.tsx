@@ -1,17 +1,49 @@
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
-import { Switch } from '@/components/ui/switch';
-import { toast } from 'sonner';
-import { getTemplate, saveLocalTemplate, saveOrgTemplate, codeDefaultRawCard2x1 } from '@/lib/labels/templateStore';
-import { zplFromElements, zplFromTemplateString } from '@/lib/labels/zpl';
-import { sendZplToPrinter } from '@/lib/labels/print';
-import type { LabelTemplate, ZPLElement, JobVars, PrinterPrefs } from '@/lib/labels/types';
+import EditorCanvas from './components/EditorCanvas';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
+import { Slider } from "@/components/ui/slider";
+import { Separator } from "@/components/ui/separator";
+import { 
+  Save, 
+  Download, 
+  Upload, 
+  RefreshCw, 
+  Printer, 
+  Settings, 
+  Eye,
+  TestTube,
+  FileText,
+  Palette,
+  Square,
+  Type,
+  BarChart3,
+  Minus
+} from "lucide-react";
+import type { 
+  LabelTemplate, 
+  ZPLElement, 
+  LabelLayout,
+  PrinterPrefs,
+  JobVars
+} from "@/lib/labels/types";
+import { 
+  getTemplate,
+  saveLocalTemplate, 
+  saveOrgTemplate,
+  codeDefaultRawCard2x1 
+} from "@/lib/labels/templateStore";
+import { zplFromElements, zplFromTemplateString } from "@/lib/labels/zpl";
+import { sendZplToPrinter } from "@/lib/labels/print";
+import { toast } from "sonner";
 
 export default function LabelStudio() {
   const [template, setTemplate] = useState<LabelTemplate>(codeDefaultRawCard2x1());
@@ -610,9 +642,9 @@ export default function LabelStudio() {
                         style={{
                           left: `${el.x * previewScale}px`,
                           top: `${el.y * previewScale}px`,
-                          width: el.type === 'text' ? `${(el.w || 30) * previewScale * 4}px` : 'auto',
-                          height: el.type === 'text' ? `${(el.h || 30) * previewScale}px` : 'auto',
-                          fontSize: `${Math.max(8, (el.h || 30) * previewScale * 0.8)}px`
+                          width: el.type === 'text' ? `${((el as any).w || 30) * previewScale * 4}px` : 'auto',
+                          height: el.type === 'text' ? `${((el as any).h || 30) * previewScale}px` : 'auto',
+                          fontSize: `${Math.max(8, (el.type === 'text' ? (el as any).h || 30 : 20) * previewScale * 0.8)}px`
                         }}
                       >
                         {el.type === 'barcode' ? `[${displayText}]` : displayText}
