@@ -98,16 +98,36 @@ export function useTemplates(templateType: 'general' | 'raw' = 'general') {
     zplData?: any // Add optional ZPL data parameter
   ) => {
     try {
-      const templateData = {
-        name,
-        canvas: {
-          fieldConfig,
-          labelData,
-          tsplSettings,
-          ...(zplData && { zplLabel: zplData.zplLabel, zplSettings: zplData.zplSettings }) // Add ZPL data if provided
-        },
-        template_type: templateType
-      };
+      // Handle both old format (fieldConfig/labelData) and new ZPL format
+      let templateData;
+      
+      if (zplData && zplData.zplLabel) {
+        // New ZPL-based template format
+        console.log('Saving ZPL template:', name, zplData);
+        templateData = {
+          name,
+          canvas: {
+            zplLabel: zplData.zplLabel,
+            zplSettings: zplData.zplSettings || {},
+            // Keep old format for backward compatibility
+            fieldConfig: fieldConfig || {},
+            labelData: labelData || {},
+            tsplSettings: tsplSettings || {}
+          },
+          template_type: templateType
+        };
+      } else {
+        // Legacy format for old templates
+        templateData = {
+          name,
+          canvas: {
+            fieldConfig,
+            labelData,
+            tsplSettings,
+          },
+          template_type: templateType
+        };
+      }
 
       let result;
       if (templateId) {

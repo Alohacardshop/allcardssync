@@ -276,12 +276,13 @@ export function ZPLElementEditor({ element, onUpdate, onDelete }: ZPLElementEdit
                   type="number"
                   min="1"
                   max="10"
-                  value={element.size?.width || 2}
+                  value={element.size?.width || 120}
                   onChange={(e) => onUpdate({ 
                     ...element, 
                     size: { 
                       ...element.size, 
-                      width: Number(e.target.value) 
+                      width: Number(e.target.value),
+                      height: element.size?.height || element.height
                     }
                   })}
                 />
@@ -294,7 +295,15 @@ export function ZPLElementEditor({ element, onUpdate, onDelete }: ZPLElementEdit
                   min="20"
                   max="200"
                   value={element.height}
-                  onChange={(e) => onUpdate({ ...element, height: Number(e.target.value) })}
+                  onChange={(e) => onUpdate({ 
+                    ...element, 
+                    height: Number(e.target.value),
+                    size: {
+                      ...element.size,
+                      width: element.size?.width || 120,
+                      height: Number(e.target.value)
+                    }
+                  })}
                 />
               </div>
             </div>

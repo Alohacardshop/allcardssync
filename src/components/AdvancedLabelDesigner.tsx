@@ -165,74 +165,24 @@ export function AdvancedLabelDesigner({ className = "" }: AdvancedLabelDesignerP
       return;
     }
 
-    console.log('Attempting to save ZPL template:', templateName);
-    console.log('Label:', label);
-    console.log('ZPL settings:', zplSettings);
+    console.log('Saving template with data:', {
+      name: templateName.trim(),
+      label,
+      settings: { copies, xOffset, yOffset, darkness: zplSettings.darkness, speed: zplSettings.speed }
+    });
 
-    try {
-      // Structure the template data properly for ZPL labels
-      const titleElement = label.elements.find(e => e.id === 'title' && e.type === 'text') as any;
-      const priceElement = label.elements.find(e => e.id === 'price' && e.type === 'text') as any;
-      const conditionElement = label.elements.find(e => e.id === 'condition' && e.type === 'text') as any;
-      const barcodeElement = label.elements.find(e => e.id === 'barcode' && e.type === 'barcode') as any;
-      
-      const fieldConfig = {
-        includeTitle: true,
-        includeSku: true,
-        includePrice: true,
-        includeLot: false,
-        includeCondition: true,
-        barcodeMode: 'barcode' as const
-      };
-      
-      const labelData = {
-        title: titleElement?.text || 'POKEMON GENGAR VMAX #020',
-        sku: barcodeElement?.data || '120979260',
-        price: priceElement?.text?.replace('$', '') || '15.99',
-        lot: 'LOT-000001',
-        condition: abbreviateGrade(conditionElement?.text) || 'NM',
-        barcode: barcodeElement?.data || '120979260'
-      };
-      
-      const tsplSettings = { 
-        density: zplSettings.darkness, 
-        speed: zplSettings.speed, 
-        gapInches: 0
-      };
+    const result = await saveTemplate(
+      templateName.trim(),
+      {},
+      {},
+      {},
+      currentTemplateId || undefined,
+      { zplLabel: label, zplSettings: { copies, xOffset, yOffset, darkness: zplSettings.darkness, speed: zplSettings.speed } }
+    );
 
-      const result = await saveTemplate(
-        templateName,
-        fieldConfig,
-        labelData,
-        tsplSettings,
-        currentTemplateId,
-        { 
-          zplLabel: label, 
-          zplSettings: { 
-            ...zplSettings, 
-            xOffset: xOffset, 
-            yOffset: yOffset 
-          } 
-        } // Pass ZPL data with global offsets
-      );
-
-      console.log('Save template result:', result);
-
-      if (result) {
-        toast.success(currentTemplateId ? 'Template updated successfully' : 'Template saved successfully');
-        
-        if (!currentTemplateId) {
-          // For new templates, set the current template to the saved one
-          setCurrentTemplateId(result.id);
-          setTemplateName(result.name || templateName);
-        }
-        // Keep the user on their template instead of clearing
-      } else {
-        toast.error('Failed to save template - no result returned');
-      }
-    } catch (error) {
-      console.error('Error saving template:', error);
-      toast.error('Failed to save template');
+    if (result) {
+      setCurrentTemplateId(result.id);
+      console.log('Template saved successfully:', result.id);
     }
   };
 

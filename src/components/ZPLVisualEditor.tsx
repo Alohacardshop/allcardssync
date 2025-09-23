@@ -62,7 +62,10 @@ export function ZPLVisualEditor({
     } else if ('size' in element && element.size) {
       return element.size;
     } else if (element.type === 'barcode') {
-      return { width: 120, height: 60 };
+      // Use actual barcode size if available, otherwise use defaults
+      const width = element.size?.width || 120;
+      const height = element.height || 60;
+      return { width, height };
     } else if (element.type === 'qr') {
       const magnification = 'magnification' in element ? element.magnification : 3;
       return { width: 40 * magnification, height: 40 * magnification };
@@ -210,75 +213,107 @@ export function ZPLVisualEditor({
   }, [activeTool, onElementSelect, scale, isResizing]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (isResizing && resizeHandle && selectedElement && selectedElement.type === 'text' && selectedElement.boundingBox) {
+    if (isResizing && resizeHandle && selectedElement) {
+      // Handle resizing for both text and barcode elements
+      if ((selectedElement.type === 'text' && selectedElement.boundingBox) || 
+          (selectedElement.type === 'barcode' && selectedElement.size)) {
       const canvasContainer = e.currentTarget as HTMLElement;
       const rect = canvasContainer.getBoundingClientRect();
 
       const mouseX = (e.clientX - rect.left) / scale;
       const mouseY = (e.clientY - rect.top) / scale;
 
-      const elementX = selectedElement.position.x;
-      const elementY = selectedElement.position.y;
+        const elementX = selectedElement.position.x;
+        const elementY = selectedElement.position.y;
 
-      let newWidth = selectedElement.boundingBox.width;
-      let newHeight = selectedElement.boundingBox.height;
-      let newX = elementX;
-      let newY = elementY;
-
-      switch (resizeHandle) {
-        case 'se': // southeast
-          newWidth = Math.max(20, mouseX - elementX);
-          newHeight = Math.max(15, mouseY - elementY);
-          break;
-        case 'sw': // southwest
-          newWidth = Math.max(20, elementX + selectedElement.boundingBox.width - mouseX);
-          newHeight = Math.max(15, mouseY - elementY);
-          newX = mouseX;
-          break;
-        case 'ne': // northeast
-          newWidth = Math.max(20, mouseX - elementX);
-          newHeight = Math.max(15, elementY + selectedElement.boundingBox.height - mouseY);
-          newY = mouseY;
-          break;
-        case 'nw': // northwest
-          newWidth = Math.max(20, elementX + selectedElement.boundingBox.width - mouseX);
-          newHeight = Math.max(15, elementY + selectedElement.boundingBox.height - mouseY);
-          newX = mouseX;
-          newY = mouseY;
-          break;
-        case 'e': // east
-          newWidth = Math.max(20, mouseX - elementX);
-          break;
-        case 'w': // west
-          newWidth = Math.max(20, elementX + selectedElement.boundingBox.width - mouseX);
-          newX = mouseX;
-          break;
-        case 's': // south
-          newHeight = Math.max(15, mouseY - elementY);
-          break;
-        case 'n': // north
-          newHeight = Math.max(15, elementY + selectedElement.boundingBox.height - mouseY);
-          newY = mouseY;
-          break;
-      }
-
-      const updatedElement = {
-        ...selectedElement,
-        position: { x: Math.round(newX), y: Math.round(newY) },
-        boundingBox: {
-          width: Math.round(newWidth),
-          height: Math.round(newHeight)
+        // Get current dimensions based on element type
+        let currentWidth, currentHeight;
+        if (selectedElement.type === 'text' && selectedElement.boundingBox) {
+          currentWidth = selectedElement.boundingBox.width;
+          currentHeight = selectedElement.boundingBox.height;
+        } else if (selectedElement.type === 'barcode' && selectedElement.size) {
+          currentWidth = selectedElement.size.width;
+          currentHeight = selectedElement.size.height;
+        } else {
+          return; // Unsupported element type for resizing
         }
-      };
 
-      onLabelChange({
-        ...label,
-        elements: label.elements.map(el => 
-          el.id === selectedElement.id ? updatedElement : el
-        )
-      });
+        let newWidth = currentWidth;
+        let newHeight = currentHeight;
+        let newX = elementX;
+        let newY = elementY;
 
-      onElementSelect(updatedElement);
+        switch (resizeHandle) {
+          case 'se': // southeast
+            newWidth = Math.max(20, mouseX - elementX);
+            newHeight = Math.max(15, mouseY - elementY);
+            break;
+          case 'sw': // southwest
+            newWidth = Math.max(20, elementX + currentWidth - mouseX);
+            newHeight = Math.max(15, mouseY - elementY);
+            newX = mouseX;
+            break;
+          case 'ne': // northeast
+            newWidth = Math.max(20, mouseX - elementX);
+            newHeight = Math.max(15, elementY + currentHeight - mouseY);
+            newY = mouseY;
+            break;
+          case 'nw': // northwest
+            newWidth = Math.max(20, elementX + currentWidth - mouseX);
+            newHeight = Math.max(15, elementY + currentHeight - mouseY);
+            newX = mouseX;
+            newY = mouseY;
+            break;
+          case 'e': // east
+            newWidth = Math.max(20, mouseX - elementX);
+            break;
+          case 'w': // west
+            newWidth = Math.max(20, elementX + currentWidth - mouseX);
+            newX = mouseX;
+            break;
+          case 's': // south
+            newHeight = Math.max(15, mouseY - elementY);
+            break;
+          case 'n': // north
+            newHeight = Math.max(15, elementY + currentHeight - mouseY);
+            newY = mouseY;
+            break;
+        }
+
+        // Create updated element based on type
+        let updatedElement;
+        if (selectedElement.type === 'text') {
+          updatedElement = {
+            ...selectedElement,
+            position: { x: Math.round(newX), y: Math.round(newY) },
+            boundingBox: {
+              width: Math.round(newWidth),
+              height: Math.round(newHeight)
+            }
+          };
+        } else if (selectedElement.type === 'barcode') {
+          updatedElement = {
+            ...selectedElement,
+            position: { x: Math.round(newX), y: Math.round(newY) },
+            size: {
+              width: Math.round(newWidth),
+              height: Math.round(newHeight)
+            },
+            height: Math.round(newHeight) // Keep height property in sync
+          };
+        } else {
+          return; // Unsupported element type
+        }
+
+        onLabelChange({
+          ...label,
+          elements: label.elements.map(el => 
+            el.id === selectedElement.id ? updatedElement : el
+          )
+        });
+
+        onElementSelect(updatedElement);
+      }
     } else if (isDragging && dragStart && selectedElement && !isResizing) {
       const newX = Math.max(0, Math.min(LABEL_DIMENSIONS.width - 10, (e.clientX - dragStart.x) / scale));
       const newY = Math.max(0, Math.min(LABEL_DIMENSIONS.height - 10, (e.clientY - dragStart.y) / scale));
@@ -567,27 +602,74 @@ export function ZPLVisualEditor({
                 
                 case 'barcode':
                   return (
-                    <div
-                      key={element.id}
-                      style={{
-                        ...style,
-                        width: `${element.size.width * scale}px`,
-                        height: `${element.size.height * scale}px`,
-                        background: 'repeating-linear-gradient(90deg, #000 0px, #000 2px, #fff 2px, #fff 4px)',
-                        display: 'flex',
-                        alignItems: 'end',
-                        justifyContent: 'center',
-                        fontSize: `${10 * scale}px`
-                      }}
-                      className={`${selectionClass} rounded`}
-                      onMouseDown={(e) => handleElementMouseDown(e, element)}
-                    >
-                      {element.humanReadable && (
-                        <div style={{ background: '#fff', padding: '2px' }}>
-                          {element.data}
-                        </div>
+                    <React.Fragment key={element.id}>
+                      <div
+                        style={{
+                          ...style,
+                          width: `${element.size?.width * scale || 120 * scale}px`,
+                          height: `${element.height * scale}px`,
+                          background: 'repeating-linear-gradient(90deg, #000 0px, #000 2px, #fff 2px, #fff 4px)',
+                          display: 'flex',
+                          alignItems: 'end',
+                          justifyContent: 'center',
+                          fontSize: `${10 * scale}px`
+                        }}
+                        className={`${selectionClass} rounded`}
+                        onMouseDown={(e) => handleElementMouseDown(e, element)}
+                      >
+                        {element.humanReadable && (
+                          <div style={{ background: '#fff', padding: '2px' }}>
+                            {element.data}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Barcode resize handles */}
+                      {isSelected && (
+                        <>
+                          {[
+                            { handle: 'nw', left: -6, top: -6, cursor: 'nw-resize' },
+                            { handle: 'n', left: (element.size?.width || 120) * scale / 2 - 6, top: -6, cursor: 'n-resize' },
+                            { handle: 'ne', left: (element.size?.width || 120) * scale - 6, top: -6, cursor: 'ne-resize' },
+                            { handle: 'e', left: (element.size?.width || 120) * scale - 6, top: element.height * scale / 2 - 6, cursor: 'e-resize' },
+                            { handle: 'se', left: (element.size?.width || 120) * scale - 6, top: element.height * scale - 6, cursor: 'se-resize' },
+                            { handle: 's', left: (element.size?.width || 120) * scale / 2 - 6, top: element.height * scale - 6, cursor: 's-resize' },
+                            { handle: 'sw', left: -6, top: element.height * scale - 6, cursor: 'sw-resize' },
+                            { handle: 'w', left: -6, top: element.height * scale / 2 - 6, cursor: 'w-resize' }
+                          ].map(({ handle, left, top, cursor }) => {
+                            const size = 12;
+                            const isCorner = ['nw', 'ne', 'sw', 'se'].includes(handle);
+                            
+                            return (
+                              <div
+                                key={`resize-${handle}`}
+                                style={{
+                                  position: 'absolute',
+                                  left: `${element.position.x * scale + left}px`,
+                                  top: `${element.position.y * scale + top}px`,
+                                  width: `${size}px`,
+                                  height: `${size}px`,
+                                  backgroundColor: '#ffffff',
+                                  border: '2px solid rgb(59, 130, 246)',
+                                  borderRadius: isCorner ? '50%' : '2px',
+                                  cursor,
+                                  zIndex: 1001,
+                                  boxShadow: '0 2px 6px rgba(0,0,0,0.3)',
+                                  pointerEvents: 'auto',
+                                  transform: 'translate(0, 0)' // Force new stacking context
+                                }}
+                                onMouseDown={(e) => {
+                                  console.log('🎯 Barcode resize handle clicked:', handle, 'at', { x: e.clientX, y: e.clientY });
+                                  e.stopPropagation();
+                                  e.preventDefault();
+                                  handleResizeStart(e, handle);
+                                }}
+                              />
+                            );
+                          })}
+                        </>
                       )}
-                    </div>
+                    </React.Fragment>
                   );
                 
                 case 'qr':
