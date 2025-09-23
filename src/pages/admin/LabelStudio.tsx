@@ -274,6 +274,9 @@ export default function LabelStudio() {
                   <div className="flex gap-2 mt-2">
                     <ElementToolbar onAddElement={handleAddElement} />
                   </div>
+                  <p className="text-sm text-muted-foreground mt-2">
+                    Drag elements from the toolbar to the canvas. Select elements to resize or press Delete to remove them.
+                  </p>
                 </CardHeader>
                 <CardContent>
                   <EditorCanvas

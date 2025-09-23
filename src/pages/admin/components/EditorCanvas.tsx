@@ -65,6 +65,25 @@ export default function EditorCanvas({ template, scale, onChangeTemplate, onSele
     }
   }
 
+  // Handle keyboard events for deletion
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!layout || sel === null) return;
+      
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        const next = structuredClone(template!) as LabelTemplate;
+        next.layout!.elements.splice(sel, 1);
+        onChangeTemplate(next);
+        setSel(null);
+        onSelectElement?.(null);
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [layout, sel, template, onChangeTemplate, onSelectElement]);
+
   const handleDrop = (draggedItem: any, dropX: number, dropY: number) => {
     if (!layout || !draggedItem?.data?.elementType) return;
 
@@ -227,8 +246,8 @@ export default function EditorCanvas({ template, scale, onChangeTemplate, onSele
                     text={el.text}
                     width={w}
                     height={h}
-                    minFontSize={6}
-                    maxFontSize={Math.min(w / 2, h) * 0.8}
+                    minFontSize={4}
+                    maxFontSize={Math.min(w, h)}
                     className="text-gray-800 dark:text-gray-200"
                   />
                 ) : isBarcodeEl(el) ? (
@@ -258,6 +277,26 @@ export default function EditorCanvas({ template, scale, onChangeTemplate, onSele
                       }}
                     />
                   ))}
+                  {/* Delete button */}
+                  <div
+                    className="absolute bg-destructive text-destructive-foreground rounded-full flex items-center justify-center cursor-pointer hover:scale-110 transition-transform text-xs font-bold"
+                    style={{
+                      width: 16, height: 16,
+                      right: -8,
+                      top: -8,
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const next = structuredClone(template!) as LabelTemplate;
+                      next.layout!.elements.splice(i, 1);
+                      onChangeTemplate(next);
+                      setSel(null);
+                      onSelectElement?.(null);
+                    }}
+                    title="Delete element (or press Delete key)"
+                  >
+                    ×
+                  </div>
                 </>
               )}
             </div>
