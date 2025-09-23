@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import EditorCanvas from './components/EditorCanvas';
 import ElementToolbar from './components/ElementToolbar';
 import { DragDropProvider } from '@/components/drag-drop/DragDropProvider';
+import { EnhancedPrintNodeSelector } from '@/components/EnhancedPrintNodeSelector';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -69,11 +70,19 @@ export default function LabelStudio() {
   });
   const [generatedZpl, setGeneratedZpl] = useState('');
 
-  // Load printer config on mount
+  // Load printer config on mount and auto-load default printer
   useEffect(() => {
     try {
       const cfg = JSON.parse(localStorage.getItem('zebra-printer-config') || '{}');
-      setPrinterPrefs(prev => ({ ...prev, ...cfg }));
+      const defaultPrinterId = localStorage.getItem('printnode-default-printer');
+      
+      const updatedPrefs = { ...cfg };
+      if (defaultPrinterId && !updatedPrefs.printNodeId) {
+        updatedPrefs.usePrintNode = true;
+        updatedPrefs.printNodeId = parseInt(defaultPrinterId);
+      }
+      
+      setPrinterPrefs(prev => ({ ...prev, ...updatedPrefs }));
     } catch (error) {
       console.error('Failed to load printer config:', error);
     }
@@ -508,38 +517,19 @@ export default function LabelStudio() {
         </TabsContent>
 
         <TabsContent value="printer" className="space-y-4">
+          <EnhancedPrintNodeSelector 
+            printerPrefs={printerPrefs}
+            onPrefsChange={setPrinterPrefs}
+          />
+          
           <Card>
             <CardHeader>
-              <CardTitle>Printer Settings</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Settings className="h-5 w-5" />
+                Advanced Printer Settings
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="use-printnode"
-                  checked={printerPrefs.usePrintNode || false}
-                  onCheckedChange={(usePrintNode) => 
-                    setPrinterPrefs(prev => ({ ...prev, usePrintNode }))
-                  }
-                />
-                <Label htmlFor="use-printnode">Use PrintNode</Label>
-              </div>
-
-              {printerPrefs.usePrintNode && (
-                <div>
-                  <Label>PrintNode Printer ID</Label>
-                  <Input
-                    type="number"
-                    value={printerPrefs.printNodeId || ''}
-                    onChange={(e) => 
-                      setPrinterPrefs(prev => ({ 
-                        ...prev, 
-                        printNodeId: parseInt(e.target.value) || undefined 
-                      }))
-                    }
-                  />
-                </div>
-              )}
-
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label>Speed</Label>
@@ -609,7 +599,7 @@ export default function LabelStudio() {
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="bg-background border border-border shadow-md z-50">
                     <SelectItem value="gap">Gap</SelectItem>
                     <SelectItem value="blackmark">Blackmark</SelectItem>
                     <SelectItem value="continuous">Continuous</SelectItem>
@@ -617,7 +607,7 @@ export default function LabelStudio() {
                 </Select>
               </div>
 
-              <Button onClick={handleSavePrinterConfig}>
+              <Button onClick={handleSavePrinterConfig} className="w-full">
                 Save Printer Settings
               </Button>
             </CardContent>
