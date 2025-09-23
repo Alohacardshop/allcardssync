@@ -189,7 +189,7 @@ export function generateZPLFromElements(
     '^LH0,0',                 // Label home position at 0,0
     '^LT0',                   // Label top position at 0
     '^FWN',                   // Force normal field orientation
-    '^PON',                   // Normal print orientation
+    '^POI',                   // Invert print orientation to fix rotation
     '^CI28'                   // UTF-8 character set
   );
 
