@@ -287,7 +287,7 @@ async function createShopifyProduct(credentials: ShopifyCredentials, item: Inven
     console.log('DEBUG: No images found, using default placeholder image')
   }
   
-  const images = uniqueImageUrls.map((url, index) => ({
+  const images = [...uniqueImageUrls].reverse().map((url, index) => ({
     src: url,
     alt: `${title} - Image ${index + 1}`
   }))
