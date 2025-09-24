@@ -14,7 +14,7 @@ import { useStore } from '@/contexts/StoreContext';
 import { Navigation } from '@/components/Navigation';
 import { useZebraNetwork } from "@/hooks/useZebraNetwork";
 import { ZebraPrinterSelectionDialog } from '@/components/ZebraPrinterSelectionDialog';
-import { getTemplate } from '@/lib/labels/templateStore';
+import { getTemplate, loadOrgTemplate } from '@/lib/labels/templateStore';
 import { zplFromElements, zplFromTemplateString } from '@/lib/labels/zpl';
 import { sendZplToPrinter } from '@/lib/labels/print';
 import type { JobVars, ZPLElement } from '@/lib/labels/types';
@@ -357,17 +357,23 @@ const Inventory = () => {
         return parts.length > 0 ? parts.join(' ') : 'Raw Card';
       };
 
-      // Use the new priceBarcodeThirds2x1 template
-      const { zplPriceBarcodeThirds2x1 } = await import('@/lib/templates/priceBarcodeThirds2x1');
-      
-      const zpl = zplPriceBarcodeThirds2x1({
-        condition: item.condition || 'NM',
-        priceDisplay: item.price ? `$${item.price.toFixed(2)}` : '$0.00',
-        sku: item.sku || '',
-        title: generateTitle(item),
-        dpi: 203,
-        copies: 1
-      });
+      // Load barcode template from database
+      const template = await loadOrgTemplate('barcode');
+      if (!template || !template.zpl) {
+        throw new Error('Barcode template not found in database');
+      }
+
+      // Prepare variables for template substitution
+      const vars: JobVars = {
+        CONDITION: item.condition || 'NM',
+        PRICE: item.price ? `$${item.price.toFixed(2)}` : '$0.00',
+        SKU: item.sku || '',
+        CARDNAME: generateTitle(item),
+        BARCODE: item.sku || generateTitle(item).replace(/[^a-zA-Z0-9]/g, '').substring(0, 12),
+      };
+
+      // Generate ZPL using template string substitution
+      const zpl = zplFromTemplateString(template.zpl, vars);
 
       console.log('🖨️ Generated ZPL for printing:', zpl);
 
