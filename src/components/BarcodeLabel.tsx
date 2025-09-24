@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { ZebraPrinterSelectionDialog } from '@/components/ZebraPrinterSelectionDialog';
 import { print } from '@/lib/printService';
 import { ZPLLabel, generateZPLFromElements, LABEL_2x1_203, LABEL_2x1_300 } from '@/lib/zplElements';
+import { zplPriceBarcodeThirds2x1 } from '@/lib/templates/priceBarcodeThirds2x1';
 import { toast } from 'sonner';
 
 interface BarcodeLabelProps {
@@ -122,6 +123,39 @@ const BarcodeLabel = ({ value, label, className, showPrintButton = true }: Barco
     }
   };
 
+  // New code-only thirds template print function
+  const printThirdsPriceLabel = async (opts: {
+    condition: string;
+    priceDisplay: string;
+    sku: string;
+    title: string;
+    dpi: 203 | 300;
+    copies?: number;
+  }) => {
+    try {
+      const zpl = zplPriceBarcodeThirds2x1({
+        ...opts,
+        darkness: 10,
+        speedIps: 4,
+        copies: opts.copies ?? 1
+      });
+      const res = await print(zpl, opts.copies ?? 1);
+      
+      if (res?.success) {
+        toast.success('Thirds label printed!', {
+          description: `Job ID: ${res.jobId} - ZD410 @ ${opts.dpi} DPI`
+        });
+      } else {
+        throw new Error(res?.error || 'Failed to print');
+      }
+    } catch (error) {
+      console.error('Print thirds label error:', error);
+      toast.error('Print failed', {
+        description: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  };
+
   const printLabel = async (labelData: any, copies: number = 1) => {
     try {
       console.log('🖨️ BarcodeLabel: Printing with unified ZPL builder');
@@ -204,8 +238,22 @@ const BarcodeLabel = ({ value, label, className, showPrintButton = true }: Barco
       {label && <div className="text-sm text-muted-foreground mb-1">{label}</div>}
       <canvas ref={canvasRef} role="img" aria-label={`Barcode for ${value}`} />
       {showPrintButton && (
-        <div className="mt-3">
+        <div className="mt-3 space-y-2">
           <Button size="sm" variant="secondary" onClick={handlePrint}>Print Label</Button>
+          <Button 
+            size="sm" 
+            variant="outline" 
+            onClick={() => printThirdsPriceLabel({
+              condition: 'NM',
+              priceDisplay: '$24.99',
+              sku: value,
+              title: `${label || 'Barcode'} • Sample Set • #001`,
+              dpi: 203,
+              copies: 1
+            })}
+          >
+            Print Thirds (2×1)
+          </Button>
         </div>
       )}
       
@@ -220,3 +268,6 @@ const BarcodeLabel = ({ value, label, className, showPrintButton = true }: Barco
 };
 
 export default BarcodeLabel;
+
+// Export the thirds print function for use elsewhere
+export { zplPriceBarcodeThirds2x1 } from '@/lib/templates/priceBarcodeThirds2x1';
