@@ -24,6 +24,7 @@ import {
   Trash2
 } from "lucide-react";
 import { zplPriceBarcodeThirds2x1, type ThirdsLabelData } from "@/lib/templates/priceBarcodeThirds2x1";
+import { print } from '@/lib/printService';
 import { toast } from "sonner";
 import { supabase } from '@/integrations/supabase/client';
 
@@ -257,12 +258,24 @@ export default function LabelStudio() {
         return;
       }
       
-      // Here you would integrate with your print service
-      console.log('🖨️ Test print ZPL:', generatedZpl);
-      toast.success('Test print would be sent (printing disabled in demo)');
+      console.log('🖨️ Test print - Generated ZPL:', generatedZpl);
+      
+      const result = await print(generatedZpl, printerPrefs.copies || 1);
+      
+      if (result.success) {
+        toast.success('Test print sent successfully!', {
+          description: result.jobId ? `Job ID: ${result.jobId}` : 'Print job submitted'
+        });
+      } else {
+        toast.error('Print failed', {
+          description: result.error || 'Unknown error occurred'
+        });
+      }
     } catch (error) {
       console.error('Print failed:', error);
-      toast.error('Print failed');
+      toast.error('Print failed', {
+        description: error instanceof Error ? error.message : 'Unknown error'
+      });
     }
   };
 
