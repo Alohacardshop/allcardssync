@@ -124,21 +124,37 @@ export default function LabelStudio() {
           };
         } else if (storeTpl.format === 'zpl' && storeTpl.zpl) {
           const zplData = storeTpl.zpl as any; // Handle type mismatch
-          convertedTemplate = {
-            id: storeTpl.id,
-            name: storeTpl.name || storeTpl.id,
-            type: storeTpl.type,
-            format: 'elements' as const,
-            layout: {
-              dpi: zplData.dpi || 203,
-              width: zplData.width || 406,
-              height: zplData.height || 203,
-              elements: zplData.elements || []
-            },
-            is_default: storeTpl.is_default,
-            updated_at: storeTpl.updated_at,
-            scope: storeTpl.scope
-          };
+          // Check if zpl is a string (raw ZPL) or object (element data)
+          if (typeof zplData === 'string') {
+            // Raw ZPL string - keep as ZPL format
+            convertedTemplate = {
+              id: storeTpl.id,
+              name: storeTpl.name || storeTpl.id,
+              type: storeTpl.type,
+              format: 'zpl' as const,
+              zpl: zplData,
+              is_default: storeTpl.is_default,
+              updated_at: storeTpl.updated_at,
+              scope: storeTpl.scope
+            };
+          } else {
+            // Object with elements - convert to elements format
+            convertedTemplate = {
+              id: storeTpl.id,
+              name: storeTpl.name || storeTpl.id,
+              type: storeTpl.type,
+              format: 'elements' as const,
+              layout: {
+                dpi: zplData.dpi || 203,
+                width: zplData.width || 406,
+                height: zplData.height || 203,
+                elements: zplData.elements || []
+              },
+              is_default: storeTpl.is_default,
+              updated_at: storeTpl.updated_at,
+              scope: storeTpl.scope
+            };
+          }
         } else {
           // Fallback to default template
           convertedTemplate = codeDefaultRawCard2x1();
@@ -308,20 +324,27 @@ export default function LabelStudio() {
     try {
       const loadedTemplate = await getTemplate(templateId);
       
-      // Convert ZPL format to elements format for EditorCanvas
+      // Convert ZPL format to elements format for EditorCanvas if needed
       if (loadedTemplate.format === 'zpl' && loadedTemplate.zpl && !loadedTemplate.layout) {
         const zplData = loadedTemplate.zpl as any; // Handle type mismatch
-        const convertedTemplate = {
-          ...loadedTemplate,
-          format: 'elements' as const,
-          layout: {
-            dpi: zplData.dpi || 203,
-            width: zplData.width || 406,
-            height: zplData.height || 203,
-            elements: zplData.elements || []
-          }
-        };
-        setTemplate(convertedTemplate);
+        // Check if zpl is a string (raw ZPL) or object (element data)
+        if (typeof zplData === 'string') {
+          // Raw ZPL string - keep as is
+          setTemplate(loadedTemplate);
+        } else {
+          // Object with elements - convert to elements format
+          const convertedTemplate = {
+            ...loadedTemplate,
+            format: 'elements' as const,
+            layout: {
+              dpi: zplData.dpi || 203,
+              width: zplData.width || 406,
+              height: zplData.height || 203,
+              elements: zplData.elements || []
+            }
+          };
+          setTemplate(convertedTemplate);
+        }
       } else {
         setTemplate(loadedTemplate);
       }
