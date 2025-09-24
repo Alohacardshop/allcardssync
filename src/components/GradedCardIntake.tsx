@@ -42,7 +42,7 @@ const parsePSAGrade = (gradeStr: string): { numeric: string; original: string; h
 
 export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => {
   const logger = useLogger();
-  const [gradingCompany] = useState<'PSA'>('PSA'); // Simplified to PSA only
+  const [gradingCompany, setGradingCompany] = useState<'PSA' | 'CGC' | 'BGS'>('PSA');
   const { assignedStore, selectedLocation } = useStore();
 
   // Form state
@@ -79,6 +79,13 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
       setFormData(prev => ({ ...prev, certNumber: barcodeInput }));
     }
   }, [barcodeInput, certInput]);
+
+  // Auto-populate cert number from input field
+  useEffect(() => {
+    if (certInput) {
+      setFormData(prev => ({ ...prev, certNumber: certInput }));
+    }
+  }, [certInput]);
 
   // Auto-calculate cost as 70% of price
   useEffect(() => {
@@ -249,7 +256,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
       abortController.abort();
       setAbortController(null);
       setFetching(false);
-      toast.info(`PSA fetch cancelled`);
+      toast.info(`${gradingCompany} fetch cancelled`);
     }
   };
 
@@ -263,47 +270,71 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
+          {/* Grading Company Selection */}
+          <div className="space-y-3">
+            <Label htmlFor="grading-company">Grading Company</Label>
+            <Select value={gradingCompany} onValueChange={(value: 'PSA' | 'CGC' | 'BGS') => setGradingCompany(value)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select grading company" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="PSA">PSA (Professional Sports Authenticator)</SelectItem>
+                <SelectItem value="CGC">CGC (Certified Guaranty Company)</SelectItem>
+                <SelectItem value="BGS">BGS (Beckett Grading Services)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
           {/* Certificate Input Section */}
           <div className="space-y-3">
             <Label htmlFor="cert-input">Certificate Number</Label>
             <div className="flex gap-2">
               <Input
                 id="cert-input"
-                placeholder="Enter PSA certificate number"
+                placeholder={`Enter ${gradingCompany} certificate number`}
                 value={certInput}
                 onChange={(e) => setCertInput(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
+                  if (e.key === 'Enter' && gradingCompany === 'PSA') {
                     e.preventDefault();
                     handleFetchData();
                   }
                 }}
                 disabled={fetching}
               />
-              <Button 
-                onClick={handleFetchData}
-                disabled={!certInput.trim() || fetching}
-                size="default"
-              >
-                {fetching ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    Fetching...
-                  </>
-                ) : (
-                  'Fetch Data'
-                )}
-              </Button>
-              {fetching && (
-                <Button 
-                  onClick={cancelFetch}
-                  variant="outline" 
-                  size="default"
-                >
-                  Cancel
-                </Button>
+              {gradingCompany === 'PSA' && (
+                <>
+                  <Button 
+                    onClick={handleFetchData}
+                    disabled={!certInput.trim() || fetching}
+                    size="default"
+                  >
+                    {fetching ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        Fetching...
+                      </>
+                    ) : (
+                      'Fetch Data'
+                    )}
+                  </Button>
+                  {fetching && (
+                    <Button 
+                      onClick={cancelFetch}
+                      variant="outline" 
+                      size="default"
+                    >
+                      Cancel
+                    </Button>
+                  )}
+                </>
               )}
             </div>
+            {gradingCompany !== 'PSA' && (
+              <p className="text-sm text-muted-foreground">
+                Manual entry required for {gradingCompany} - API not available
+              </p>
+            )}
           </div>
 
           {/* Barcode Scanner Input */}
@@ -376,7 +407,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
               <Label htmlFor="grade">Grade <span className="text-destructive">*</span></Label>
               <Input
                 id="grade"
-                placeholder="PSA grade (e.g., 10)"
+                placeholder={`${gradingCompany} grade (e.g., ${gradingCompany === 'PSA' ? '10' : gradingCompany === 'CGC' ? '9.8' : '9.5'})`}
                 value={formData.grade}
                 onChange={(e) => updateFormField('grade', e.target.value)}
                 className={!formData.grade ? "border-destructive/50" : ""}
