@@ -66,6 +66,7 @@ export default function LabelStudio() {
   const [availableTemplates, setAvailableTemplates] = useState<Template[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
   const [generatedZpl, setGeneratedZpl] = useState('');
+  const [editableZpl, setEditableZpl] = useState('');
   
   const [printerPrefs, setPrinterPrefs] = useState<PrinterPrefs>({
     usePrintNode: true,
@@ -124,6 +125,7 @@ export default function LabelStudio() {
         .replace(/{{BARCODE}}/g, testVars.BARCODE);
       
       setGeneratedZpl(processedZpl);
+      setEditableZpl(processedZpl);
     }
   }, [zplCode, testVars]);
 
@@ -253,14 +255,14 @@ export default function LabelStudio() {
 
   const handleTestPrint = async () => {
     try {
-      if (!generatedZpl || generatedZpl.trim().length === 0) {
-        toast.error('No ZPL generated. Check template configuration.');
+      if (!editableZpl || editableZpl.trim().length === 0) {
+        toast.error('No ZPL to print. Check template configuration.');
         return;
       }
       
-      console.log('🖨️ Test print - Generated ZPL:', generatedZpl);
+      console.log('🖨️ Test print - Editable ZPL:', editableZpl);
       
-      const result = await print(generatedZpl, printerPrefs.copies || 1);
+      const result = await print(editableZpl, printerPrefs.copies || 1);
       
       if (result.success) {
         toast.success('Test print sent successfully!', {
@@ -280,8 +282,13 @@ export default function LabelStudio() {
   };
 
   const copyZplToClipboard = () => {
-    navigator.clipboard.writeText(generatedZpl);
+    navigator.clipboard.writeText(editableZpl);
     toast.success('ZPL copied to clipboard');
+  };
+
+  const resetZplToGenerated = () => {
+    setEditableZpl(generatedZpl);
+    toast.success('ZPL reset to generated version');
   };
 
   const handleNewTemplate = () => {
@@ -291,6 +298,7 @@ export default function LabelStudio() {
     setZplCode('');
     setSelectedTemplateId('');
     setGeneratedZpl('');
+    setEditableZpl('');
   };
 
   return (
@@ -519,20 +527,24 @@ export default function LabelStudio() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Eye className="w-5 h-5" />
-                  Generated ZPL Preview
+                  Editable ZPL Preview
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <Textarea
-                  value={generatedZpl}
-                  readOnly
+                  value={editableZpl}
+                  onChange={(e) => setEditableZpl(e.target.value)}
                   className="min-h-[300px] font-mono text-xs"
-                  placeholder="Generated ZPL will appear here..."
+                  placeholder="Generated ZPL will appear here. You can edit it directly for testing..."
                 />
                 <div className="flex gap-2">
                   <Button onClick={copyZplToClipboard} variant="outline" size="sm">
                     <Download className="w-4 h-4 mr-2" />
                     Copy ZPL
+                  </Button>
+                  <Button onClick={resetZplToGenerated} variant="outline" size="sm">
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Reset to Generated
                   </Button>
                   <Button onClick={handleTestPrint} size="sm">
                     <Printer className="w-4 h-4 mr-2" />
