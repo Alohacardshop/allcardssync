@@ -498,18 +498,47 @@ const Inventory = () => {
 
   const handleSendCutCommand = useCallback(async () => {
     try {
-      // Simple ZPL cut command
-      const cutZpl = '^XA^CN1^XZ';
-      
-      console.log('🔪 Sending cut command to printer:', cutZpl);
-      
-      const result = await print(cutZpl, 1);
-      
-      if (result.success) {
-        toast.success('Cut command sent successfully');
-      } else {
-        throw new Error(result.error || 'Cut command failed');
+      // Check if PrintNode is configured
+      const savedConfig = localStorage.getItem('zebra-printer-config');
+      if (!savedConfig) {
+        toast.error('No printer configured. Please configure PrintNode in Admin > Test Hardware.');
+        return;
       }
+      
+      const config = JSON.parse(savedConfig);
+      if (!config.usePrintNode || !config.printNodeId) {
+        toast.error('PrintNode not configured. Please set up PrintNode in Admin > Test Hardware.');
+        return;
+      }
+
+      // Try multiple cut commands in sequence for better compatibility
+      const cutCommands = [
+        '^XA^CN1^XZ',           // Standard cut now
+        '^XA^MMC^CN1^XZ',       // Media mode continuous with cut
+        '^XA^CF0^CN1^XZ'        // Change font with cut
+      ];
+      
+      console.log('🔪 Sending cut commands to printer...');
+      
+      let success = false;
+      for (const cutZpl of cutCommands) {
+        console.log('Trying cut command:', cutZpl);
+        
+        const result = await print(cutZpl, 1);
+        
+        if (result.success) {
+          toast.success('Cut command sent successfully');
+          success = true;
+          break;
+        } else {
+          console.warn('Cut command failed:', result.error);
+        }
+      }
+      
+      if (!success) {
+        throw new Error('All cut commands failed. Check printer connection and ensure it has a cutter installed.');
+      }
+      
     } catch (error) {
       console.error('Cut command error:', error);
       toast.error(`Failed to send cut command: ${error instanceof Error ? error.message : 'Unknown error'}`);
