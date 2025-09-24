@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, Upload, Search, CheckSquare, Square, Trash2, Printer } from 'lucide-react';
+import { Loader2, Upload, Search, CheckSquare, Square, Trash2, Printer, Scissors } from 'lucide-react';
 import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
@@ -496,6 +496,26 @@ const Inventory = () => {
     }
   }, [printData, selectedPrinter, fetchItems, fillElements]);
 
+  const handleSendCutCommand = useCallback(async () => {
+    try {
+      // Simple ZPL cut command
+      const cutZpl = '^XA^CN1^XZ';
+      
+      console.log('🔪 Sending cut command to printer:', cutZpl);
+      
+      const result = await print(cutZpl, 1);
+      
+      if (result.success) {
+        toast.success('Cut command sent successfully');
+      } else {
+        throw new Error(result.error || 'Cut command failed');
+      }
+    } catch (error) {
+      console.error('Cut command error:', error);
+      toast.error(`Failed to send cut command: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }, []);
+
   const handleBulkPrintRaw = useCallback(async () => {
     setBulkPrinting(true);
     
@@ -944,6 +964,16 @@ const Inventory = () => {
                         <Printer className="h-4 w-4 mr-2" />
                       )}
                       {bulkPrinting ? 'Printing...' : 'Print All Unprinted Raw'}
+                    </Button>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleSendCutCommand}
+                      title="Send cut command to printer"
+                    >
+                      <Scissors className="h-4 w-4 mr-2" />
+                      Cut
                     </Button>
 
                     {isAdmin && selectedItems.size > 0 && (
