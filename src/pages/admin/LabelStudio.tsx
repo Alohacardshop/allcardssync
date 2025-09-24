@@ -123,12 +123,18 @@ export default function LabelStudio() {
             scope: storeTpl.scope
           };
         } else if (storeTpl.format === 'zpl' && storeTpl.zpl) {
+          const zplData = storeTpl.zpl as any; // Handle type mismatch
           convertedTemplate = {
             id: storeTpl.id,
-            name: storeTpl.id,
+            name: storeTpl.name || storeTpl.id,
             type: storeTpl.type,
-            format: 'zpl' as const,
-            zpl: storeTpl.zpl,
+            format: 'elements' as const,
+            layout: {
+              dpi: zplData.dpi || 203,
+              width: zplData.width || 406,
+              height: zplData.height || 203,
+              elements: zplData.elements || []
+            },
             is_default: storeTpl.is_default,
             updated_at: storeTpl.updated_at,
             scope: storeTpl.scope
@@ -301,7 +307,25 @@ export default function LabelStudio() {
   const handleLoadTemplate = async (templateId: string) => {
     try {
       const loadedTemplate = await getTemplate(templateId);
-      setTemplate(loadedTemplate);
+      
+      // Convert ZPL format to elements format for EditorCanvas
+      if (loadedTemplate.format === 'zpl' && loadedTemplate.zpl && !loadedTemplate.layout) {
+        const zplData = loadedTemplate.zpl as any; // Handle type mismatch
+        const convertedTemplate = {
+          ...loadedTemplate,
+          format: 'elements' as const,
+          layout: {
+            dpi: zplData.dpi || 203,
+            width: zplData.width || 406,
+            height: zplData.height || 203,
+            elements: zplData.elements || []
+          }
+        };
+        setTemplate(convertedTemplate);
+      } else {
+        setTemplate(loadedTemplate);
+      }
+      
       setSelectedTemplateId(templateId);
       toast.success('Template loaded successfully');
     } catch (error) {
