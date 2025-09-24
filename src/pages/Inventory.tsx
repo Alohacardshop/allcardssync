@@ -357,10 +357,15 @@ const Inventory = () => {
         return parts.length > 0 ? parts.join(' ') : 'Raw Card';
       };
 
-      // Load barcode template from database using the actual template ID
-      const template = await loadOrgTemplate('5ea7f99c-0243-4827-9e33-76b4b422603c');
-      if (!template || !template.zpl) {
-        throw new Error('Optimized Barcode Template not found in database');
+      // Load barcode template from the new templates table
+      const { data: templateData, error } = await supabase
+        .from('label_templates_new')
+        .select('body')
+        .eq('id', 'barcode')
+        .maybeSingle();
+      
+      if (error || !templateData?.body) {
+        throw new Error('Barcode template not found in database');
       }
 
       // Prepare variables for template substitution
@@ -373,7 +378,7 @@ const Inventory = () => {
       };
 
       // Generate ZPL using template string substitution
-      const zpl = zplFromTemplateString(template.zpl, vars);
+      const zpl = zplFromTemplateString(templateData.body, vars);
 
       console.log('🖨️ Generated ZPL for printing:', zpl);
 
