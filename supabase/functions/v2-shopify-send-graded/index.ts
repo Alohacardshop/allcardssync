@@ -183,7 +183,7 @@ Deno.serve(async (req) => {
 
     const result = await createResponse.json()
     const product = result.product
-    const variant = product.variants[0]
+    const intakeVariant = product.variants[0];
 
     // Set inventory level at location
     const locationId = locationGid.replace('gid://shopify/Location/', '')

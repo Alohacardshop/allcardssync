@@ -51,7 +51,7 @@ serve(async (req) => {
         service: 'justtcg_api',
         status: 'down',
         responseTime: Date.now() - apiStart,
-        details: { error: error.message }
+        details: { error: error instanceof Error ? error.message : String(error) }
       })
     }
 
@@ -75,7 +75,7 @@ serve(async (req) => {
         service: 'database',
         status: 'down',
         responseTime: Date.now() - dbStart,
-        details: { error: error.message }
+        details: { error: error instanceof Error ? error.message : String(error) }
       })
     }
 
@@ -110,7 +110,7 @@ serve(async (req) => {
         })
       }
     } catch (logError) {
-      console.warn('Failed to log health checks:', logError.message)
+      console.warn('Failed to log health checks:', logError instanceof Error ? logError.message : String(logError))
     }
 
     // Calculate overall health
@@ -136,7 +136,7 @@ serve(async (req) => {
     console.error('Health check failed:', error)
     return new Response(JSON.stringify({
       overall_status: 'down',
-      error: error.message,
+      error: error instanceof Error ? error.message : String(error),
       timestamp: new Date().toISOString()
     }), {
       status: 500,

@@ -48,7 +48,7 @@ Deno.serve(async (req) => {
       const { data: users, error: userError } = await supabase.auth.admin.listUsers();
       if (userError) throw new Error("Failed to lookup users");
 
-      const targetUser = users.users.find(u => u.email === email);
+      const targetUser = users.users.find((u: any) => u.email === email);
       if (!targetUser) throw new Error("User not found");
 
       // If setting as default, unset other defaults for this user/store

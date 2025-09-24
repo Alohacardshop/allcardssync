@@ -175,7 +175,7 @@ Deno.serve(async (req) => {
     const configResult = await resolveShopifyConfig(supabase, storeKey);
     if (!configResult.ok) {
       return new Response(JSON.stringify(configResult), {
-        status: configResult.code === 'MISSING_DOMAIN' || configResult.code === 'MISSING_TOKEN' ? 400 : 500,
+        status: !configResult.ok ? 400 : 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }

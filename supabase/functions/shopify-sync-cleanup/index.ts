@@ -133,11 +133,11 @@ Deno.serve(async (req) => {
     const result = {
       success: true,
       cleanupStats: {
-        completedDeleted: deletedCompleted?.length || 0,
-        failedDeleted: deletedFailed?.length || 0,
-        webhooksDeleted: deletedWebhooks?.length || 0,
-        logsDeleted: deletedLogs?.length || 0,
-        stuckReset: resetStuck?.length || 0,
+        completedDeleted: (deletedCompleted as any)?.length ?? 0,
+        failedDeleted: (deletedFailed as any)?.length ?? 0,
+        webhooksDeleted: (deletedWebhooks as any)?.length ?? 0,
+        logsDeleted: (deletedLogs as any)?.length ?? 0,
+        stuckReset: (resetStuck as any)?.length ?? 0,
         cutoffDate: cutoffDate.toISOString(),
         cleanupDays
       },

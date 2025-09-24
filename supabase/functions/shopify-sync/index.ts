@@ -182,8 +182,8 @@ async function createShopifyProduct(credentials: ShopifyCredentials, item: Inven
     
     // Try to get year from various sources including catalog_snapshot
     let year = item.year || ''
-    if (!year && item.catalog_snapshot && typeof item.catalog_snapshot === 'object') {
-      year = item.catalog_snapshot.year || ''
+    if (!year && (item as any).catalog_snapshot && typeof (item as any).catalog_snapshot === 'object') {
+      year = (item as any).catalog_snapshot.year || ''
     }
     
     // Handle variant - include meaningful variants in the title
@@ -204,7 +204,7 @@ async function createShopifyProduct(credentials: ShopifyCredentials, item: Inven
       variant: variant,
       grade: item.grade,
       itemYear: item.year,
-      catalogSnapshot: item.catalog_snapshot
+      catalogSnapshot: (item as any).catalog_snapshot
     })
     
     const parts = []
@@ -219,7 +219,7 @@ async function createShopifyProduct(credentials: ShopifyCredentials, item: Inven
     console.log('DEBUG: Final graded card title:', title)
     
     // Get PSA cert number for description
-    const psaCertNumber = item.psa_cert || item.catalog_snapshot?.certNumber || item.catalog_snapshot?.psa_cert || item.sku
+    const psaCertNumber = (item as any).psa_cert || (item as any).catalog_snapshot?.certNumber || (item as any).catalog_snapshot?.psa_cert || item.sku
     description = `${title}\nPSA Cert: ${psaCertNumber}`
     
     // Tags for graded cards: brand, "graded", grade number, variant, category, lot number
@@ -228,7 +228,7 @@ async function createShopifyProduct(credentials: ShopifyCredentials, item: Inven
     if (item.grade) tags.push(`psa-${item.grade}`)
     if (variant) tags.push(variant.toLowerCase())
     if (item.category) tags.push(item.category.toLowerCase().replace(/\s+/g, '-'))
-    if (item.lot_number) tags.push(`lot-${item.lot_number}`)
+    if ((item as any).lot_number) tags.push(`lot-${(item as any).lot_number}`)
   } else {
     // For raw cards: keep simpler format but include variant if meaningful
     const cardNumber = item.card_number ? `#${item.card_number}` : ''
@@ -248,14 +248,14 @@ async function createShopifyProduct(credentials: ShopifyCredentials, item: Inven
     title = parts.filter(Boolean).join(' ').replace(/\s+/g, ' ').trim()
     
     // Get PSA cert number for description (fallback to SKU for raw cards)
-    const psaCertNumber = item.psa_cert || item.catalog_snapshot?.certNumber || item.catalog_snapshot?.psa_cert || item.sku
+    const psaCertNumber = (item as any).psa_cert || (item as any).catalog_snapshot?.certNumber || (item as any).catalog_snapshot?.psa_cert || item.sku
     description = `${title}\nSKU: ${psaCertNumber}`
     
     // Tags for raw cards: brand, condition, variant, category, lot number
     if (item.brand_title) tags.push(item.brand_title.toLowerCase())
     if (variant) tags.push(variant.toLowerCase())
     if (item.category) tags.push(item.category.toLowerCase().replace(/\s+/g, '-'))
-    if (item.lot_number) tags.push(`lot-${item.lot_number}`)
+    if ((item as any).lot_number) tags.push(`lot-${(item as any).lot_number}`)
     tags.push('raw')
   }
   
@@ -263,17 +263,17 @@ async function createShopifyProduct(credentials: ShopifyCredentials, item: Inven
   const imageUrls = []
   
   // Check item.image_urls array
-  if (item.image_urls && Array.isArray(item.image_urls)) {
-    imageUrls.push(...item.image_urls)
+  if ((item as any).image_urls && Array.isArray((item as any).image_urls)) {
+    imageUrls.push(...(item as any).image_urls)
   }
   
   // Check catalog_snapshot for images
-  if (item.catalog_snapshot && typeof item.catalog_snapshot === 'object') {
-    if (item.catalog_snapshot.imageUrls && Array.isArray(item.catalog_snapshot.imageUrls)) {
-      imageUrls.push(...item.catalog_snapshot.imageUrls)
+  if ((item as any).catalog_snapshot && typeof (item as any).catalog_snapshot === 'object') {
+    if ((item as any).catalog_snapshot.imageUrls && Array.isArray((item as any).catalog_snapshot.imageUrls)) {
+      imageUrls.push(...(item as any).catalog_snapshot.imageUrls)
     }
-    if (item.catalog_snapshot.imageUrl && typeof item.catalog_snapshot.imageUrl === 'string') {
-      imageUrls.push(item.catalog_snapshot.imageUrl)
+    if ((item as any).catalog_snapshot.imageUrl && typeof (item as any).catalog_snapshot.imageUrl === 'string') {
+      imageUrls.push((item as any).catalog_snapshot.imageUrl)
     }
   }
   

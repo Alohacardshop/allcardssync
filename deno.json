@@ -8,7 +8,7 @@
     "@supabase/functions-js": "https://esm.sh/@supabase/functions-js@2.1.5"
   },
   "compilerOptions": {
-    "allowJs": true,
-    "lib": ["deno.window", "dom"]
+    "lib": ["deno.window", "dom"],
+    "strict": false
   }
 }

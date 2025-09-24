@@ -52,7 +52,7 @@ Deno.serve(async (req) => {
       // Continue anyway - let the create operation handle duplicates
     }
     
-    const existingUser = existingUsers?.users?.find(u => u.email?.toLowerCase() === normalizedEmail);
+    const existingUser = existingUsers?.users?.find((u: any) => u.email?.toLowerCase() === normalizedEmail);
     if (existingUser) {
       throw new Error("User with this email already exists");
     }

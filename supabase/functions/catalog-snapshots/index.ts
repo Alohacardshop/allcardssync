@@ -88,7 +88,8 @@ async function saveSnapshot(game: string, cards: any[]): Promise<number> {
     const { error, count } = await supabaseClient
       .from('justtcg_analytics_snapshots')
       .insert(chunk)
-      .select('*', { count: 'exact' });
+      .select('*')
+      .order('created_at', { ascending: false })
       
     if (error) throw error;
     totalInserted += count || 0;

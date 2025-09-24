@@ -83,7 +83,7 @@ export async function resolveShopifyConfig(
     }
 
     const settingsMap = new Map<string, string>();
-    (settings || []).forEach(s => {
+    (settings || []).forEach((s: any) => {
       const value = s.key_value?.trim();
       if (value) {
         settingsMap.set(s.key_name, value);
