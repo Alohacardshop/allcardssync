@@ -138,7 +138,44 @@ export default function LabelStudio() {
               scope: storeTpl.scope
             };
           } else {
-            // Object with elements - convert to elements format
+            // Object with elements - convert to elements format and normalize element structure
+            const normalizedElements = (zplData.elements || []).map((el: any) => {
+              const baseEl = {
+                type: el.type,
+                id: el.id,
+                x: el.position?.x ?? el.x ?? 0,
+                y: el.position?.y ?? el.y ?? 0,
+              };
+
+              if (el.type === 'text') {
+                return {
+                  ...baseEl,
+                  text: el.text || '',
+                  font: el.font,
+                  h: el.boundingBox?.height ?? el.h ?? el.fontSize ?? 30,
+                  w: el.boundingBox?.width ?? el.w ?? el.fontWidth ?? 30,
+                  maxWidth: el.boundingBox?.width ?? el.maxWidth
+                };
+              } else if (el.type === 'barcode') {
+                return {
+                  ...baseEl,
+                  data: el.data || '',
+                  height: el.size?.height ?? el.height ?? 52,
+                  moduleWidth: el.moduleWidth ?? 2,
+                  hr: el.humanReadable ?? false
+                };
+              } else if (el.type === 'line') {
+                return {
+                  ...baseEl,
+                  x2: el.x2 ?? baseEl.x + 50,
+                  y2: el.y2 ?? baseEl.y + 50,
+                  thickness: el.thickness ?? 2
+                };
+              }
+              
+              return baseEl;
+            });
+
             convertedTemplate = {
               id: storeTpl.id,
               name: storeTpl.name || storeTpl.id,
@@ -148,7 +185,7 @@ export default function LabelStudio() {
                 dpi: zplData.dpi || 203,
                 width: zplData.width || 406,
                 height: zplData.height || 203,
-                elements: zplData.elements || []
+                elements: normalizedElements
               },
               is_default: storeTpl.is_default,
               updated_at: storeTpl.updated_at,
@@ -332,7 +369,44 @@ export default function LabelStudio() {
           // Raw ZPL string - keep as is
           setTemplate(loadedTemplate);
         } else {
-          // Object with elements - convert to elements format
+          // Object with elements - convert to elements format and normalize element structure
+          const normalizedElements = (zplData.elements || []).map((el: any) => {
+            const baseEl = {
+              type: el.type,
+              id: el.id,
+              x: el.position?.x ?? el.x ?? 0,
+              y: el.position?.y ?? el.y ?? 0,
+            };
+
+            if (el.type === 'text') {
+              return {
+                ...baseEl,
+                text: el.text || '',
+                font: el.font,
+                h: el.boundingBox?.height ?? el.h ?? el.fontSize ?? 30,
+                w: el.boundingBox?.width ?? el.w ?? el.fontWidth ?? 30,
+                maxWidth: el.boundingBox?.width ?? el.maxWidth
+              };
+            } else if (el.type === 'barcode') {
+              return {
+                ...baseEl,
+                data: el.data || '',
+                height: el.size?.height ?? el.height ?? 52,
+                moduleWidth: el.moduleWidth ?? 2,
+                hr: el.humanReadable ?? false
+              };
+            } else if (el.type === 'line') {
+              return {
+                ...baseEl,
+                x2: el.x2 ?? baseEl.x + 50,
+                y2: el.y2 ?? baseEl.y + 50,
+                thickness: el.thickness ?? 2
+              };
+            }
+            
+            return baseEl;
+          });
+
           const convertedTemplate = {
             ...loadedTemplate,
             format: 'elements' as const,
@@ -340,7 +414,7 @@ export default function LabelStudio() {
               dpi: zplData.dpi || 203,
               width: zplData.width || 406,
               height: zplData.height || 203,
-              elements: zplData.elements || []
+              elements: normalizedElements
             }
           };
           setTemplate(convertedTemplate);
