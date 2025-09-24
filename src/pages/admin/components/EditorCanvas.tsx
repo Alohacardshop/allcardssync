@@ -318,12 +318,16 @@ export default function EditorCanvas({ template, scale, onChangeTemplate, onSele
         }
       }
 
-      el.w = newW;
-      el.h = newH;
+      // Apply constraints before setting values
+      const maxW = next.layout!.width - newX;
+      const maxH = next.layout!.height - newY;
+      
+      el.w = Math.min(newW, maxW);
+      el.h = Math.min(newH, maxH);
       el.x = newX;
       el.y = newY;
       
-      setMeasurements({ width: newW, height: newH });
+      setMeasurements({ width: el.w, height: el.h });
     }
 
     if (isBarcodeEl(el)) {
@@ -361,12 +365,17 @@ export default function EditorCanvas({ template, scale, onChangeTemplate, onSele
         }
       }
 
-      el.moduleWidth = newMW;
-      el.height = newH;
+      // Apply constraints before setting values
+      const maxW = next.layout!.width - newX;
+      const maxH = next.layout!.height - newY;
+      const maxModuleWidth = maxW / 60;
+      
+      el.moduleWidth = Math.min(newMW, maxModuleWidth);
+      el.height = Math.min(newH, maxH);
       el.x = newX;
       el.y = newY;
       
-      setMeasurements({ width: newMW * 60, height: newH });
+      setMeasurements({ width: el.moduleWidth * 60, height: el.height });
     }
 
     clampInside(el, next.layout!.width, next.layout!.height);
@@ -622,8 +631,40 @@ function elementRect(el: ZPLElement): { x: number; y: number; w: number; h: numb
 }
 
 function clampInside(el: ZPLElement, width: number, height: number) {
-  el.x = Math.max(0, Math.min(width - 4, el.x ?? 0));
-  el.y = Math.max(0, Math.min(height - 4, el.y ?? 0));
+  const rect = elementRect(el);
+  
+  // Clamp position ensuring element doesn't go beyond canvas boundaries
+  el.x = Math.max(0, Math.min(width - rect.w, el.x ?? 0));
+  el.y = Math.max(0, Math.min(height - rect.h, el.y ?? 0));
+  
+  // Clamp element dimensions to fit within canvas
+  if (isTextEl(el)) {
+    const maxW = width - (el.x ?? 0);
+    const maxH = height - (el.y ?? 0);
+    if (el.w && el.w > maxW) el.w = maxW;
+    if (el.h && el.h > maxH) el.h = maxH;
+    if (el.maxWidth && el.maxWidth > maxW) el.maxWidth = maxW;
+  }
+  
+  if (isBarcodeEl(el)) {
+    const maxW = width - (el.x ?? 0);
+    const maxH = height - (el.y ?? 0);
+    const maxModuleWidth = maxW / 60; // Approximate modules per barcode
+    if (el.moduleWidth && el.moduleWidth > maxModuleWidth) {
+      el.moduleWidth = Math.max(1, maxModuleWidth);
+    }
+    if (el.height && el.height > maxH) el.height = maxH;
+  }
+  
+  if (isLineEl(el)) {
+    const x1 = el.x ?? 0;
+    const y1 = el.y ?? 0;
+    const x2 = el.x2 ?? x1;
+    const y2 = el.y2 ?? y1;
+    
+    el.x2 = Math.max(0, Math.min(width, x2));
+    el.y2 = Math.max(0, Math.min(height, y2));
+  }
 }
 
 function handleCursor(h: Handle) {
