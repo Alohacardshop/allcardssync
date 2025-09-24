@@ -297,8 +297,21 @@ export default function LabelStudio() {
   };
 
   const handleSaveLocal = () => {
+    if (!template.name) {
+      toast.error('Please enter a template name');
+      return;
+    }
+    
     try {
-      saveLocalTemplate(template);
+      // Always save as ZPL format - templateStore will convert elements to ZPL
+      const templateToSave: LabelTemplate = {
+        ...template,
+        format: 'elements', // Keep as elements internally for visual editor
+        id: template.id || template.name.toLowerCase().replace(/\s+/g, '_'),
+        scope: 'local'
+      };
+      
+      saveLocalTemplate(templateToSave);
       toast.success('Template saved locally');
     } catch (error) {
       console.error('Save failed:', error);
@@ -307,8 +320,25 @@ export default function LabelStudio() {
   };
 
   const handleSaveOrg = async () => {
+    if (!template.name) {
+      toast.error('Please enter a template name');
+      return;
+    }
+    
     try {
-      await saveOrgTemplate({ ...template, scope: 'org' });
+      // Always save as ZPL format - templateStore will convert elements to ZPL
+      const templateToSave: LabelTemplate = {
+        ...template,
+        format: 'elements', // Keep as elements internally for visual editor
+        id: template.id || template.name.toLowerCase().replace(/\s+/g, '_'),
+        name: template.name,
+        type: template.name.toLowerCase().replace(/\s+/g, '_'),
+        is_default: false,
+        scope: 'org'
+      };
+      
+      await saveOrgTemplate(templateToSave);
+      await loadAvailableTemplates(); // Refresh the list
       toast.success('Template saved to organization');
     } catch (error) {
       console.error('Save failed:', error);
@@ -562,23 +592,6 @@ export default function LabelStudio() {
                         placeholder="Enter template name..."
                       />
                     </div>
-                    <div>
-                      <Label htmlFor="template-format">Format</Label>
-                      <Select
-                        value={template.format}
-                        onValueChange={(value: 'elements' | 'zpl') => 
-                          setTemplate(prev => ({ ...prev, format: value }))
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="elements">Elements</SelectItem>
-                          <SelectItem value="zpl">Raw ZPL</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
                     <div className="flex gap-2">
                       <Button onClick={handleSaveLocal} variant="outline" className="flex-1">
                         Save (Local)
@@ -597,6 +610,8 @@ export default function LabelStudio() {
                 <div className="flex items-center justify-between">
                   <div className="text-sm text-muted-foreground">
                     <strong>Current scope:</strong> {template.scope || 'unknown'}
+                    <br />
+                    <strong>Format:</strong> ZPL (auto-converted from visual elements)
                     <br />
                     <strong>Load order:</strong> Supabase (Org) → Local override → Code default
                   </div>
