@@ -46,6 +46,7 @@ import {
 } from "@/lib/labels/templateStore";
 import { setAsDefault, deleteTemplate } from "@/lib/templateStore";
 import { zplFromElements, zplFromTemplateString } from "@/lib/labels/zpl";
+import { applyVariablesToZpl } from "@/lib/labels/zplElementConverter";
 import { sendZplToPrinter } from "@/lib/labels/print";
 import { toast } from "sonner";
 import { supabase } from '@/integrations/supabase/client';
@@ -227,10 +228,11 @@ export default function LabelStudio() {
         console.log('📝 Filled layout:', filledLayout);
         zpl = zplFromElements(filledLayout, printerPrefs);
         console.log('✅ Generated ZPL from elements (length):', zpl.length);
-      } else if (template.format === 'zpl' && template.zpl) {
-        console.log('📝 Processing raw ZPL template');
-        zpl = zplFromTemplateString(template.zpl, testVars);
-        console.log('✅ Generated ZPL from template string (length):', zpl.length);
+      } else if (template.zpl) {
+        console.log('📝 Processing ZPL template');
+        // Apply test variables to existing ZPL
+        zpl = applyVariablesToZpl(template.zpl, testVars);
+        console.log('✅ Generated ZPL with variables (length):', zpl.length);
       } else {
         console.warn('⚠️ No valid template format found:', template);
         console.warn('⚠️ Template format:', template.format);
@@ -360,69 +362,7 @@ export default function LabelStudio() {
   const handleLoadTemplate = async (templateId: string) => {
     try {
       const loadedTemplate = await getTemplate(templateId);
-      
-      // Convert ZPL format to elements format for EditorCanvas if needed
-      if (loadedTemplate.format === 'zpl' && loadedTemplate.zpl && !loadedTemplate.layout) {
-        const zplData = loadedTemplate.zpl as any; // Handle type mismatch
-        // Check if zpl is a string (raw ZPL) or object (element data)
-        if (typeof zplData === 'string') {
-          // Raw ZPL string - keep as is
-          setTemplate(loadedTemplate);
-        } else {
-          // Object with elements - convert to elements format and normalize element structure
-          const normalizedElements = (zplData.elements || []).map((el: any) => {
-            const baseEl = {
-              type: el.type,
-              id: el.id,
-              x: el.position?.x ?? el.x ?? 0,
-              y: el.position?.y ?? el.y ?? 0,
-            };
-
-            if (el.type === 'text') {
-              return {
-                ...baseEl,
-                text: el.text || '',
-                font: el.font,
-                h: el.boundingBox?.height ?? el.h ?? el.fontSize ?? 30,
-                w: el.boundingBox?.width ?? el.w ?? el.fontWidth ?? 30,
-                maxWidth: el.boundingBox?.width ?? el.maxWidth
-              };
-            } else if (el.type === 'barcode') {
-              return {
-                ...baseEl,
-                data: el.data || '',
-                height: el.size?.height ?? el.height ?? 52,
-                moduleWidth: el.moduleWidth ?? 2,
-                hr: el.humanReadable ?? false
-              };
-            } else if (el.type === 'line') {
-              return {
-                ...baseEl,
-                x2: el.x2 ?? baseEl.x + 50,
-                y2: el.y2 ?? baseEl.y + 50,
-                thickness: el.thickness ?? 2
-              };
-            }
-            
-            return baseEl;
-          });
-
-          const convertedTemplate = {
-            ...loadedTemplate,
-            format: 'elements' as const,
-            layout: {
-              dpi: zplData.dpi || 203,
-              width: zplData.width || 406,
-              height: zplData.height || 203,
-              elements: normalizedElements
-            }
-          };
-          setTemplate(convertedTemplate);
-        }
-      } else {
-        setTemplate(loadedTemplate);
-      }
-      
+      setTemplate(loadedTemplate);
       setSelectedTemplateId(templateId);
       toast.success('Template loaded successfully');
     } catch (error) {

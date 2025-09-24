@@ -1,4 +1,5 @@
 import { LabelTemplate } from './types';
+import { elementsToZpl, zplToElements } from './zplElementConverter';
 
 const LS_KEY = 'label-templates/v1';
 
@@ -11,8 +12,19 @@ export function loadLocalTemplates(): Record<string, LabelTemplate> {
 }
 
 export function saveLocalTemplate(t: LabelTemplate) {
+  // Convert elements format to ZPL for storage
+  let templateToSave = { ...t };
+  if (t.format === 'elements' && t.layout) {
+    templateToSave = {
+      ...t,
+      format: 'zpl',
+      zpl: elementsToZpl(t.layout),
+      layout: undefined // Remove layout, store only ZPL
+    };
+  }
+  
   const all = loadLocalTemplates();
-  all[t.id] = { ...t, scope: 'local', updated_at: new Date().toISOString() };
+  all[templateToSave.id] = { ...templateToSave, scope: 'local', updated_at: new Date().toISOString() };
   localStorage.setItem(LS_KEY, JSON.stringify(all));
 }
 
@@ -27,34 +39,48 @@ export async function loadOrgTemplate(id: string): Promise<LabelTemplate | null>
     
     if (error || !data?.canvas) return null;
     
-    // Convert from existing schema
+    // Convert from existing schema - now everything loads as ZPL
     const canvas = data.canvas as any;
-    if (canvas?.zplLabel) {
+    let zpl: string | undefined;
+    
+    if (typeof canvas === 'string') {
+      // Direct ZPL string
+      zpl = canvas;
+    } else if (canvas?.zplLabel) {
+      // Legacy zplLabel format
+      if (typeof canvas.zplLabel === 'string') {
+        zpl = canvas.zplLabel;
+      } else if (canvas.zplLabel?.elements) {
+        // Convert elements to ZPL
+        zpl = elementsToZpl({
+          dpi: canvas.zplLabel.dpi || 203,
+          width: canvas.zplLabel.width || 406,
+          height: canvas.zplLabel.height || 203,
+          elements: canvas.zplLabel.elements
+        });
+      }
+    } else if (canvas?.elements) {
+      // Legacy elements format - convert to ZPL
+      zpl = elementsToZpl({
+        dpi: 203,
+        width: 406,
+        height: 203,
+        elements: canvas.elements
+      });
+    }
+    
+    if (zpl) {
       return {
         id,
         name: data.name || id,
         type: id,
         format: 'zpl',
-        zpl: canvas.zplLabel,
-        is_default: data.is_default,
-        scope: 'org'
-      };
-    } else if (canvas?.elements) {
-      return {
-        id,
-        name: data.name || id,
-        type: id,
-        format: 'elements',
-        layout: {
-          dpi: 203,
-          width: 406,
-          height: 203,
-          elements: canvas.elements
-        },
+        zpl,
         is_default: data.is_default,
         scope: 'org'
       };
     }
+    
     return null;
   } catch (error) {
     console.error('Failed to load org template:', error);
@@ -65,16 +91,22 @@ export async function loadOrgTemplate(id: string): Promise<LabelTemplate | null>
 export async function saveOrgTemplate(t: LabelTemplate) {
   const { supabase } = await import('@/integrations/supabase/client');
   
-  // Convert to existing schema format
-  const canvas = t.format === 'zpl' 
-    ? { zplLabel: t.zpl }
-    : { elements: t.layout?.elements };
+  // Convert elements format to ZPL for storage
+  let zplToSave: string;
+  if (t.format === 'elements' && t.layout) {
+    zplToSave = elementsToZpl(t.layout);
+  } else if (t.format === 'zpl' && t.zpl) {
+    zplToSave = t.zpl;
+  } else {
+    throw new Error('Template must have either elements layout or ZPL string');
+  }
   
+  // Store as ZPL string in the canvas field
   await supabase.from('label_templates').upsert({
     id: t.id,
     name: t.name,
     template_type: 'general',
-    canvas: canvas as any,
+    canvas: zplToSave, // Store pure ZPL string
     is_default: t.is_default || false,
     updated_at: new Date().toISOString()
   });
@@ -104,12 +136,39 @@ export function codeDefaultRawCard2x1(): LabelTemplate {
 }
 
 export async function getTemplate(id: string): Promise<LabelTemplate> {
+  // Try to load from org first
   const org = await loadOrgTemplate(id); 
-  if (org) return org;
+  if (org) {
+    // Convert ZPL back to elements for visual editor
+    if (org.format === 'zpl' && org.zpl) {
+      const layout = zplToElements(org.zpl);
+      return {
+        ...org,
+        format: 'elements',
+        layout,
+        zpl: org.zpl // Keep original ZPL for reference
+      };
+    }
+    return org;
+  }
   
+  // Try local storage
   const local = loadLocalTemplates()[id]; 
-  if (local) return local;
+  if (local) {
+    // Convert ZPL back to elements for visual editor
+    if (local.format === 'zpl' && local.zpl) {
+      const layout = zplToElements(local.zpl);
+      return {
+        ...local,
+        format: 'elements',
+        layout,
+        zpl: local.zpl // Keep original ZPL for reference
+      };
+    }
+    return local;
+  }
   
+  // Fallback to default
   if (id === 'raw_card_2x1') return codeDefaultRawCard2x1();
   return codeDefaultRawCard2x1(); // fallback
 }
