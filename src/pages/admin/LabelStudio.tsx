@@ -288,7 +288,7 @@ export default function LabelStudio() {
       const { data, error } = await supabase
         .from('label_templates')
         .select('id, name, is_default')
-        .eq('template_type', 'raw_card_2x1');
+        .eq('template_type', 'raw');
       
       if (error) throw error;
       setAvailableTemplates(data || []);
