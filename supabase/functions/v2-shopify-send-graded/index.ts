@@ -140,7 +140,7 @@ Deno.serve(async (req) => {
         body_html: description,
         vendor: brandTitle || 'Trading Cards',
         product_type: 'Graded Card',
-        tags: ['PSA', `Grade ${grade}`, brandTitle, year].filter(Boolean).join(', '),
+        tags: ['PSA', grade, brandTitle, year, intakeItem.game || intakeItem.catalog_snapshot?.game].filter(Boolean).join(', '),
         variants: [{
           sku: item.sku,
           price: item.price?.toString() || '0.00',
