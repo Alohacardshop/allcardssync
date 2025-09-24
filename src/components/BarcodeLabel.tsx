@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ZebraPrinterSelectionDialog } from '@/components/ZebraPrinterSelectionDialog';
 import { print } from '@/lib/printService';
-import { ZPLLabel, generateZPLFromElements } from '@/lib/zplElements';
+import { ZPLLabel, generateZPLFromElements, LABEL_2x1_203, LABEL_2x1_300 } from '@/lib/zplElements';
 import { toast } from 'sonner';
 
 interface BarcodeLabelProps {
@@ -43,61 +43,97 @@ const BarcodeLabel = ({ value, label, className, showPrintButton = true }: Barco
     setShowPrinterDialog(true);
   };
 
+  // Unified print function supporting both 203 and 300 DPI
+  const printBarcodeLabelUnified = async (opts: {
+    sku: string;
+    title: string;
+    priceDisplay: string; // e.g. "$24.99"
+    condition: string;    // e.g. "NM"
+    dpi: 203 | 300;
+    copies?: number;
+  }) => {
+    const { sku, title, priceDisplay, condition, dpi, copies = 1 } = opts;
+
+    const dims = dpi === 300 ? LABEL_2x1_300 : LABEL_2x1_203;
+
+    const label: ZPLLabel = {
+      width: dims.width,
+      height: dims.height,
+      dpi: dims.dpi,
+      elements: [
+        // Condition (top-left)
+        {
+          id: 'condition',
+          type: 'text',
+          position: { x: 20, y: 20 },
+          font: '0',
+          rotation: 0,
+          fontSize: 24,
+          fontWidth: 24,
+          text: condition
+        },
+        // Price (top-right-ish; keep some margin)
+        {
+          id: 'price',
+          type: 'text',
+          position: { x: dpi === 300 ? 420 : 300, y: 20 },
+          font: '0',
+          rotation: 0,
+          fontSize: 28,
+          fontWidth: 28,
+          text: priceDisplay
+        },
+        // Barcode (center area)
+        {
+          id: 'barcode',
+          type: 'barcode',
+          position: { x: 50, y: 60 },
+          data: sku,
+          size: { width: 300, height: 40 }, // width is informational here; height is enforced below
+          barcodeType: 'CODE128',
+          height: 40,
+          humanReadable: false
+        },
+        // Title (bottom line)
+        {
+          id: 'title',
+          type: 'text',
+          position: { x: 20, y: 140 },
+          font: '0',
+          rotation: 0,
+          fontSize: 18,
+          fontWidth: 18,
+          text: title
+        }
+      ]
+    };
+
+    const zpl = generateZPLFromElements(label, 0, 0);
+    const result = await print(zpl, copies);
+
+    if (result.success) {
+      toast.success('Barcode label printed!', {
+        description: `Job ID: ${result.jobId} - ZD410 @ ${dpi} DPI`
+      });
+    } else {
+      toast.error('Print failed', {
+        description: result.error || 'Unknown error occurred'
+      });
+    }
+  };
+
   const printLabel = async (labelData: any, copies: number = 1) => {
     try {
-      console.log('🖨️ BarcodeLabel: Printing with unified ZPL builder @ 300 DPI');
+      console.log('🖨️ BarcodeLabel: Printing with unified ZPL builder');
       
-      // Create label structure for 300 DPI
-      const labelObj: ZPLLabel = {
-        width: 600,   // 2" at 300 DPI  
-        height: 300,  // 1" at 300 DPI
-        dpi: 300,
-        elements: [
-          {
-            id: 'title',
-            type: 'text',
-            position: { x: 30, y: 20 },
-            font: '0',
-            rotation: 0,
-            fontSize: 24, // 300 DPI scaled
-            fontWidth: 24,
-            text: labelData.title || 'Sample Item'
-          },
-          {
-            id: 'barcode',
-            type: 'barcode', 
-            position: { x: 30, y: 80 },
-            data: labelData.sku || '1234567890',
-            size: { width: 3, height: 80 },
-            barcodeType: 'CODE128',
-            humanReadable: true,
-            height: 80
-          },
-          {
-            id: 'price',
-            type: 'text',
-            position: { x: 30, y: 200 },
-            font: '0', 
-            rotation: 0,
-            fontSize: 21, // 300 DPI scaled
-            fontWidth: 21,
-            text: labelData.price ? `$${labelData.price}` : '$0.00'
-          }
-        ]
-      };
-
-      const zpl = generateZPLFromElements(labelObj, 0, 0);
-      const result = await print(zpl, copies);
-
-      if (result.success) {
-        toast.success('Barcode label printed!', {
-          description: `Job ID: ${result.jobId} - ZD410 @ 300 DPI`
-        });
-      } else {
-        toast.error('Print failed', {
-          description: result.error || 'Unknown error occurred'
-        });
-      }
+      await printBarcodeLabelUnified({
+        sku: labelData.sku || '1234567890',
+        title: labelData.title || 'Sample Item',
+        priceDisplay: labelData.price ? `$${labelData.price}` : '$0.00',
+        condition: 'NM',
+        dpi: 203, // Default to 203 DPI for compatibility
+        copies
+      });
     } catch (error) {
       console.error('Print error:', error);
       toast.error('Print failed', {
