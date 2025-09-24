@@ -42,7 +42,7 @@ const PDFLabelPreview: React.FC<{ item: CardItem }> = ({ item }) => {
         if (!mounted) return;
 
         // Create blob and trigger download
-        const blob = new Blob([bytes.buffer], { type: "application/pdf" });
+        const blob = new Blob([bytes.buffer as ArrayBuffer], { type: "application/pdf" });
         const url = URL.createObjectURL(blob);
         
         // Create invisible download link and trigger it
@@ -79,7 +79,7 @@ const PDFLabelPreview: React.FC<{ item: CardItem }> = ({ item }) => {
       const pdfBase64 = await generateLabelPDF(fieldConfig, labelData);
       const bytes = ensureUint8Array(pdfBase64);
 
-      const blob = new Blob([bytes], { type: "application/pdf" });
+      const blob = new Blob([bytes.buffer as ArrayBuffer], { type: "application/pdf" });
       const url = URL.createObjectURL(blob);
       
       const link = document.createElement('a');
