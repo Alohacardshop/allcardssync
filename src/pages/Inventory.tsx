@@ -357,43 +357,36 @@ const Inventory = () => {
         return parts.length > 0 ? parts.join(' ') : 'Raw Card';
       };
 
-      // Load template and generate ZPL using new system
-      const template = await getTemplate('raw_card_2x1');
+      // Use the new priceBarcodeThirds2x1 template
+      const { zplPriceBarcodeThirds2x1 } = await import('@/lib/templates/priceBarcodeThirds2x1');
       
-      const vars: JobVars = {
-        CARDNAME: generateTitle(item),
-        CONDITION: item.condition || 'NM',
-        PRICE: item.price ? `$${item.price.toFixed(2)}` : '$0.00',
-        SKU: item.sku || '',
-        BARCODE: item.sku || generateTitle(item).replace(/[^a-zA-Z0-9]/g, '').substring(0, 12),
-      };
-
-      const prefs = JSON.parse(localStorage.getItem('zebra-printer-config') || '{}');
-
-      let zpl: string;
-      if (template.format === 'elements' && template.layout) {
-        const filledLayout = fillElements(template.layout, vars);
-        zpl = zplFromElements(filledLayout, prefs);
-      } else if (template.format === 'zpl' && template.zpl) {
-        zpl = zplFromTemplateString(template.zpl, vars);
-      } else {
-        throw new Error('No valid template found');
-      }
+      const zpl = zplPriceBarcodeThirds2x1({
+        condition: item.condition || 'NM',
+        priceDisplay: item.price ? `$${item.price.toFixed(2)}` : '$0.00',
+        sku: item.sku || '',
+        title: generateTitle(item),
+        dpi: 203,
+        copies: 1
+      });
 
       console.log('🖨️ Generated ZPL for printing:', zpl);
 
       // Print using unified service
-      await sendZplToPrinter(zpl, `Inventory-${Date.now()}`, prefs);
+      const result = await print(zpl, 1);
       
-      toast.success('Label printed successfully!');
-      
-      // Update the printed_at timestamp
-      await supabase
-        .from('intake_items')
-        .update({ printed_at: new Date().toISOString() })
-        .eq('id', item.id);
+      if (result.success) {
+        toast.success('Label printed successfully!');
         
-      fetchItems(0, true);
+        // Update the printed_at timestamp
+        await supabase
+          .from('intake_items')
+          .update({ printed_at: new Date().toISOString() })
+          .eq('id', item.id);
+          
+        fetchItems(0, true);
+      } else {
+        throw new Error(result.error || 'Print failed');
+      }
     } catch (error) {
       console.error('Print error:', error);
       toast.error('Failed to print label: ' + (error as Error).message);
