@@ -524,13 +524,15 @@ const Inventory = () => {
       // Remove the outdated import and zebraNetworkService reference
       console.log('Bulk printing - using unified print service only');
       
-      // Direct loop with unified service
+      // Generate ZPL for all items in batch
       let successCount = 0;
       let errorCount = 0;
+      let batchZpl = '';
+      const printedItemIds: string[] = [];
 
       // Generate proper title for raw card
       const generateTitle = (item: any) => {
-        const parts = []
+        const parts: string[] = [];
         if (item.year) parts.push(item.year);
         if (item.brand_title) parts.push(item.brand_title);
         if (item.subject) parts.push(item.subject);
@@ -538,10 +540,11 @@ const Inventory = () => {
         return parts.length > 0 ? parts.join(' ') : 'Raw Card';
       };
 
+      // Get template once for all items
+      const tpl = await getTemplate('raw_card_2x1');
+
       for (const item of unprintedRawItems) {
         try {
-          const tpl = await getTemplate('raw_card_2x1');
-
           const vars: JobVars = {
             CARDNAME: generateTitle(item),
             CONDITION: item?.condition ?? 'NM',
@@ -576,16 +579,42 @@ const Inventory = () => {
             throw new Error('No valid label template');
           }
 
-          // Mark as printed
-          await supabase
-            .from('intake_items')
-            .update({ printed_at: new Date().toISOString() })
-            .eq('id', item.id);
-
+          // Add this label's ZPL to the batch (remove ^XZ from individual labels)
+          const cleanZpl = zpl.replace(/\^XZ\s*$/, '');
+          batchZpl += cleanZpl + '\n';
+          
+          printedItemIds.push(item.id);
           successCount++;
         } catch (error) {
-          console.error(`Failed to print ${item.sku}:`, error);
+          console.error(`Failed to generate ZPL for ${item.sku}:`, error);
           errorCount++;
+        }
+      }
+
+      // Send the entire batch with cut command at the end
+      if (batchZpl && printedItemIds.length > 0) {
+        try {
+          // Add cut command and end the batch
+          batchZpl += '^CN1\n^XZ';
+          
+          console.log('🖨️ Sending batch ZPL with cut command:', batchZpl);
+          
+          // Send the complete batch to printer
+          const result = await print(batchZpl, 1);
+          
+          if (result.success) {
+            // Mark all items as printed only after successful print
+            await supabase
+              .from('intake_items')
+              .update({ printed_at: new Date().toISOString() })
+              .in('id', printedItemIds);
+          } else {
+            throw new Error(result.error || 'Print job failed');
+          }
+        } catch (error) {
+          console.error('Failed to send batch to printer:', error);
+          toast.error(`Failed to send batch to printer: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          return;
         }
       }
 
