@@ -612,7 +612,7 @@ function elementRect(el: ZPLElement): { x: number; y: number; w: number; h: numb
   const y = el.y ?? 0;
 
   if (isTextEl(el)) {
-    const w = el.maxWidth ?? Math.max(80, (el.w ?? 30) * 6);
+    const w = el.maxWidth ?? (el.w ?? Math.max(80, 30));
     const h = el.h ?? 30;
     return { x, y, w, h };
   }
