@@ -21,10 +21,11 @@ export function ResizeHandle({
 }: ResizeHandleProps) {
   const isCorner = type === 'corner';
   const isMove = type === 'move';
+  const isEdge = type === 'edge';
   
   const getIcon = () => {
-    if (isMove) return <Move className="w-3 h-3" />;
-    if (isCorner) return <RotateCcw className="w-2 h-2" />;
+    if (isMove) return <Move className="w-4 h-4" />;
+    if (isCorner) return <RotateCcw className="w-3 h-3" />;
     return null;
   };
 
@@ -46,15 +47,18 @@ export function ResizeHandle({
   return (
     <div
       className={cn(
-        'absolute bg-primary border-2 border-background rounded transition-all duration-200',
-        'hover:scale-125 hover:shadow-lg active:scale-110',
+        'absolute border-2 border-background rounded-sm transition-all duration-200',
+        'hover:scale-110 hover:shadow-xl active:scale-95',
         'flex items-center justify-center',
         'touch-manipulation select-none',
+        'shadow-md backdrop-blur-sm',
         {
-          'w-4 h-4': isCorner || isMove,
-          'w-3 h-3': !isCorner && !isMove,
-          'bg-primary/80 border-primary': isCorner,
-          'bg-secondary border-secondary-foreground': isMove,
+          // Corner handles - largest and most prominent
+          'w-6 h-6 bg-primary border-primary-foreground rounded-md': isCorner,
+          // Move handle - distinctive styling
+          'w-7 h-7 bg-secondary border-secondary-foreground rounded-full': isMove,
+          // Edge handles - medium size, less prominent
+          'w-5 h-5 bg-primary/80 border-primary-foreground/80': isEdge,
         },
         className
       )}
@@ -65,7 +69,8 @@ export function ResizeHandle({
       onMouseDown={onMouseDown}
       onTouchStart={onTouchStart}
       role="button"
-      aria-label={`Resize handle ${position}`}
+      aria-label={`${type === 'move' ? 'Move' : 'Resize'} handle ${position}`}
+      tabIndex={0}
     >
       {getIcon()}
     </div>

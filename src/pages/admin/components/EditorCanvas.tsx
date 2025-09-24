@@ -492,10 +492,10 @@ export default function EditorCanvas({ template, scale, onChangeTemplate, onSele
                   )}
                 </div>
 
-                {/* Enhanced selection handles */}
+                {/* Enhanced selection handles with better positioning */}
                 {selected && (
                   <>
-                    {/* Corner handles */}
+                    {/* Corner handles - positioned for better grab area */}
                     {(['nw', 'ne', 'se', 'sw'] as Handle[]).map(handle => (
                       <ResizeHandle
                         key={handle}
@@ -504,38 +504,51 @@ export default function EditorCanvas({ template, scale, onChangeTemplate, onSele
                         onMouseDown={(e) => startInteraction(e, i, handle)}
                         onTouchStart={(e) => startInteraction(e, i, handle)}
                         style={{
-                          left: handle.includes('w') ? -6 : w - 6,
-                          top: handle.includes('n') ? -6 : h - 6,
+                          left: handle.includes('w') ? -12 : w - 12,
+                          top: handle.includes('n') ? -12 : h - 12,
+                          zIndex: 20,
                         }}
                       />
                     ))}
                     
-                    {/* Edge handles */}
-                    {(['n', 's', 'e', 'w'] as Handle[]).map(handle => (
+                    {/* Edge handles - better positioning for sides */}
+                    {(['n', 's', 'e', 'w'] as Handle[]).map(handle => {
+                      const isHorizontal = handle === 'n' || handle === 's';
+                      const isVertical = handle === 'e' || handle === 'w';
+                      
+                      return (
+                        <ResizeHandle
+                          key={handle}
+                          type="edge"
+                          position={handle}
+                          onMouseDown={(e) => startInteraction(e, i, handle)}
+                          onTouchStart={(e) => startInteraction(e, i, handle)}
+                          style={{
+                            left: handle === 'w' ? -10 : handle === 'e' ? w - 10 : w/2 - 10,
+                            top: handle === 'n' ? -10 : handle === 's' ? h - 10 : h/2 - 10,
+                            zIndex: 15,
+                            // Make edge handles slightly rectangular for better visual feedback
+                            ...(isHorizontal && { width: Math.min(w * 0.3, 40) }),
+                            ...(isVertical && { height: Math.min(h * 0.3, 40) }),
+                          }}
+                        />
+                      );
+                    })}
+
+                    {/* Move handle (center) - only show if element is large enough */}
+                    {(w > 60 && h > 60) && (
                       <ResizeHandle
-                        key={handle}
-                        type="edge"
-                        position={handle}
-                        onMouseDown={(e) => startInteraction(e, i, handle)}
-                        onTouchStart={(e) => startInteraction(e, i, handle)}
+                        type="move"
+                        position="move"
+                        onMouseDown={(e) => startInteraction(e, i, 'move')}
+                        onTouchStart={(e) => startInteraction(e, i, 'move')}
                         style={{
-                          left: handle === 'w' ? -4 : handle === 'e' ? w - 4 : w/2 - 6,
-                          top: handle === 'n' ? -4 : handle === 's' ? h - 4 : h/2 - 6,
+                          left: w/2 - 14,
+                          top: h/2 - 14,
+                          zIndex: 10,
                         }}
                       />
-                    ))}
-
-                    {/* Move handle (center) */}
-                    <ResizeHandle
-                      type="move"
-                      position="move"
-                      onMouseDown={(e) => startInteraction(e, i, 'move')}
-                      onTouchStart={(e) => startInteraction(e, i, 'move')}
-                      style={{
-                        left: w/2 - 8,
-                        top: h/2 - 8,
-                      }}
-                    />
+                    )}
                     
                     {/* Enhanced delete button */}
                     <div
