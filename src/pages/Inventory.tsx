@@ -357,10 +357,10 @@ const Inventory = () => {
         return parts.length > 0 ? parts.join(' ') : 'Raw Card';
       };
 
-      // Load barcode template from database
-      const template = await loadOrgTemplate('barcode');
+      // Load barcode template from database using the actual template ID
+      const template = await loadOrgTemplate('5ea7f99c-0243-4827-9e33-76b4b422603c');
       if (!template || !template.zpl) {
-        throw new Error('Barcode template not found in database');
+        throw new Error('Optimized Barcode Template not found in database');
       }
 
       // Prepare variables for template substitution
