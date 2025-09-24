@@ -174,7 +174,8 @@ export function processTextOverflow(text: string, maxLength: number, overflow: s
 export function generateZPLFromElements(
   label: ZPLLabel,
   xOffset: number = 0,
-  yOffset: number = 0
+  yOffset: number = 0,
+  cutterSettings?: { enableCutter: boolean; cutMode: 'per_label' | 'batch' }
 ): string {
   const { width, height, dpi, elements } = label;
   const widthDots = Math.round(width);
@@ -184,7 +185,20 @@ export function generateZPLFromElements(
   zpl.push(
     '^XA',
     '^MTD',                 // ZD410 = Direct Thermal
-    '^MNY',                 // gap/notch stock
+    '^MNY'                  // gap/notch stock
+  );
+
+  // Add cutter setup commands if enabled
+  if (cutterSettings?.enableCutter) {
+    zpl.push('^MMC', '^CN1'); // Set print mode = Cutter, enable cutter
+    if (cutterSettings.cutMode === 'per_label') {
+      zpl.push('^MCY');  // Cut after every label
+    } else {
+      zpl.push('^MCN');  // Cut only after batch completion
+    }
+  }
+
+  zpl.push(
     `^PW${widthDots}`,      // Print width in dots
     `^LL${heightDots}`,     // Label height in dots
     '^LH0,0',

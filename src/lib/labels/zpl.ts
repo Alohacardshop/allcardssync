@@ -1,4 +1,5 @@
 import { LabelLayout, ZPLElement, JobVars, PrinterPrefs } from './types';
+import { generateCutterCommands, type CutterSettings } from '@/hooks/useCutterSettings';
 
 // Calculate optimal font size for text elements based on dimensions
 function calculateOptimalFontSize(
@@ -24,12 +25,19 @@ function calculateOptimalFontSize(
   return Math.max(minSize, Math.min(maxSize, optimalSize));
 }
 
-export function zplFromElements(layout: LabelLayout, prefs?: PrinterPrefs): string {
+export function zplFromElements(layout: LabelLayout, prefs?: PrinterPrefs, cutterSettings?: CutterSettings): string {
   const lines: string[] = [];
   lines.push('^XA');
   lines.push('^MTD');                         // direct thermal
   lines.push(mediaCommand(prefs?.media ?? 'gap'));
-  lines.push('^MMC');                         // cutter on when available
+  
+  // Add cutter setup commands if enabled
+  if (cutterSettings?.enableCutter) {
+    const { setupCommands, cutCommand } = generateCutterCommands(cutterSettings);
+    setupCommands.forEach(cmd => lines.push(cmd));
+    if (cutCommand) lines.push(cutCommand);
+  }
+  
   lines.push('^PW' + layout.width);
   lines.push('^LL' + layout.height);
   lines.push('^LH0,0');

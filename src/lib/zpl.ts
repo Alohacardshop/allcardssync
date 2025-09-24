@@ -24,13 +24,14 @@ export function mmToDots(mm: number, dpi: Dpi): number {
 }
 
 export function buildZPL(opts: ZPLOptions): string {
-  return buildZPLWithCut(opts, 'none', false);
+  return buildZPLWithCut(opts, 'none', false, undefined);
 }
 
 export function buildZPLWithCut(
   opts: ZPLOptions, 
   cutBehavior: 'none'|'every-label'|'end-of-job', 
-  hasCutter: boolean
+  hasCutter: boolean,
+  cutterSettings?: { enableCutter: boolean; cutMode: 'per_label' | 'batch' }
 ): string {
   const lines: string[] = [];
   
@@ -49,9 +50,20 @@ export function buildZPLWithCut(
   // Set label length in dots
   lines.push(`^LL${opts.heightDots}`);
   
-  // Handle cutter settings if printer has cutter
-  if (hasCutter && cutBehavior !== 'none') {
-    // Enable cutter mode
+  // Handle cutter settings - use new cutter settings if provided
+  if (cutterSettings?.enableCutter) {
+    // Set print mode = Cutter
+    lines.push('^MMC');
+    // Enable cutter
+    lines.push('^CN1');
+    
+    if (cutterSettings.cutMode === 'per_label') {
+      lines.push('^MCY'); // Cut after every label
+    } else {
+      lines.push('^MCN'); // Cut only after batch completion
+    }
+  } else if (hasCutter && cutBehavior !== 'none') {
+    // Fallback to old behavior for backward compatibility
     lines.push('^MMC');
     
     if (cutBehavior === 'every-label') {

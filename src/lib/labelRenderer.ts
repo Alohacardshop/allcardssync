@@ -425,7 +425,8 @@ export const generateZPLFromLabelData = (
   copies: number = 1,
   cutAfter: boolean = true,
   darkness: number = 10,
-  speed: number = 4
+  speed: number = 4,
+  cutterSettings?: { enableCutter: boolean; cutMode: 'per_label' | 'batch' }
 ): string => {
   const elements: ZPLElement[] = [];
   const { widthDots, heightDots } = getLabelSizeInDots('2x1', 203);
@@ -570,5 +571,5 @@ export const generateZPLFromLabelData = (
     elements
   };
 
-  return buildZPLWithCut(zplOptions, cutAfter ? 'every-label' : 'none', true);
+  return buildZPLWithCut(zplOptions, cutterSettings?.cutMode === 'per_label' ? 'every-label' : 'end-of-job', true, cutterSettings);
 };

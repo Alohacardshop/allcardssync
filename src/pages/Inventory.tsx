@@ -28,6 +28,8 @@ import { ShopifyRemovalDialog } from '@/components/ShopifyRemovalDialog';
 import { ShopifySyncDetailsDialog } from '@/components/ShopifySyncDetailsDialog';
 import { QueueStatusIndicator } from '@/components/QueueStatusIndicator';
 import { InventoryDeleteDialog } from '@/components/InventoryDeleteDialog';
+import { useCutterSettings } from '@/hooks/useCutterSettings';
+import { CutterSettingsPanel } from '@/components/CutterSettingsPanel';
 
 const ITEMS_PER_PAGE = 50;
 
@@ -70,6 +72,7 @@ const Inventory = () => {
   const { printZPL, selectedPrinter } = useZebraNetwork();
   const { assignedStore, selectedLocation } = useStore();
   const { sendChunkedBatchToShopify, isSending: isBatchSending, progress } = useBatchSendToShopify();
+  const { settings: cutterSettings } = useCutterSettings();
 
   // Check admin role on mount
   useEffect(() => {
@@ -471,7 +474,7 @@ const Inventory = () => {
       let zpl: string;
       if (template.format === 'elements' && template.layout) {
         const filledLayout = fillElements(template.layout, vars);
-        zpl = zplFromElements(filledLayout, prefs);
+        zpl = zplFromElements(filledLayout, prefs, cutterSettings);
       } else if (template.format === 'zpl' && template.zpl) {
         zpl = zplFromTemplateString(template.zpl, vars);
       } else {
@@ -511,32 +514,17 @@ const Inventory = () => {
         return;
       }
 
-      // Try multiple cut commands in sequence for better compatibility
-      const cutCommands = [
-        '^XA^CN1^XZ',           // Standard cut now
-        '^XA^MMC^CN1^XZ',       // Media mode continuous with cut
-        '^XA^CF0^CN1^XZ'        // Change font with cut
-      ];
+      // Use the specified immediate cut command
+      const cutZpl = '^XA^MMC^CN1^MCY^XZ';
       
-      console.log('🔪 Sending cut commands to printer...');
+      console.log('🔪 Sending cut command to printer:', cutZpl);
       
-      let success = false;
-      for (const cutZpl of cutCommands) {
-        console.log('Trying cut command:', cutZpl);
-        
-        const result = await print(cutZpl, 1);
-        
-        if (result.success) {
-          toast.success('Cut command sent successfully');
-          success = true;
-          break;
-        } else {
-          console.warn('Cut command failed:', result.error);
-        }
-      }
+      const result = await print(cutZpl, 1);
       
-      if (!success) {
-        throw new Error('All cut commands failed. Check printer connection and ensure it has a cutter installed.');
+      if (result.success) {
+        toast.success('Cut command sent successfully');
+      } else {
+        throw new Error(result.error || 'Cut command failed');
       }
       
     } catch (error) {
@@ -621,7 +609,7 @@ const Inventory = () => {
                 return el;
               }),
             };
-            zpl = zplFromElements(filled, prefs);
+            zpl = zplFromElements(filled, prefs, cutterSettings);
           } else if (tpl.format === 'zpl' && tpl.zpl) {
             zpl = zplFromTemplateString(tpl.zpl, vars);
           } else {
@@ -892,9 +880,10 @@ const Inventory = () => {
         </div>
 
         <Tabs defaultValue="inventory" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="inventory">Inventory Management</TabsTrigger>
             <TabsTrigger value="analytics">Analytics</TabsTrigger>
+            <TabsTrigger value="settings">Printer Settings</TabsTrigger>
           </TabsList>
 
           <TabsContent value="inventory" className="space-y-6">
@@ -1088,6 +1077,31 @@ const Inventory = () => {
 
           <TabsContent value="analytics">
             <InventoryAnalytics />
+          </TabsContent>
+          
+          <TabsContent value="settings">
+            <div className="grid gap-6 md:grid-cols-2">
+              <CutterSettingsPanel />
+              
+              <Card>
+                <CardHeader>
+                  <CardTitle>Quick Actions</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <Button
+                    variant="outline"
+                    onClick={handleSendCutCommand}
+                    className="w-full"
+                  >
+                    <Scissors className="h-4 w-4 mr-2" />
+                    Send Cut Command Now
+                  </Button>
+                  <p className="text-sm text-muted-foreground">
+                    Sends an immediate cut command (^XA^MMC^CN1^MCY^XZ) to trigger the cutter without printing a label.
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
         </Tabs>
 
