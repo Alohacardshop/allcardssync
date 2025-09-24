@@ -15,7 +15,6 @@ import { parseFunctionError } from "@/lib/fns";
 import { useLogger } from "@/hooks/useLogger";
 import { validateCompleteStoreContext, logStoreContext } from "@/utils/storeValidation";
 import { PSACertificateDisplay } from "@/components/PSACertificateDisplay";
-import { CurrentBatchPanel } from "./CurrentBatchPanel";
 
 interface GradedCardIntakeProps {
   onBatchAdd?: () => void;
@@ -468,11 +467,6 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
           </div>
         </CardContent>
       </Card>
-      
-      {/* Current Batch Panel */}
-      <div className="max-w-4xl mx-auto">
-        <CurrentBatchPanel />
-      </div>
     </div>
   );
 };
