@@ -579,8 +579,8 @@ const Inventory = () => {
             throw new Error('No valid label template');
           }
 
-          // Add this label's ZPL to the batch (remove ^XZ from individual labels)
-          const cleanZpl = zpl.replace(/\^XZ\s*$/, '');
+          // Add this label's ZPL to the batch (remove ^XZ and ^PQ commands from individual labels)
+          const cleanZpl = zpl.replace(/\^XZ\s*$/, '').replace(/\^PQ\d+,\d+,\d+,\w+\s*/, '');
           batchZpl += cleanZpl + '\n';
           
           printedItemIds.push(item.id);
@@ -594,8 +594,8 @@ const Inventory = () => {
       // Send the entire batch with cut command at the end
       if (batchZpl && printedItemIds.length > 0) {
         try {
-          // Add cut command and end the batch
-          batchZpl += '^CN1\n^XZ';
+          // Add print quantity and cut command at the end of the batch
+          batchZpl += `^PQ1,1,0,Y\n^CN1\n^XZ`;
           
           console.log('🖨️ Sending batch ZPL with cut command:', batchZpl);
           
