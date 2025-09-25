@@ -38,6 +38,7 @@ import TCGDatabaseSettings from '@/components/admin/TCGDatabaseSettings';
 import { SystemLogsViewer } from '@/components/admin/SystemLogsViewer';
 import { UserAssignmentManager } from '@/components/UserAssignmentManager';
 import { RawIntakeSettings } from '@/components/admin/RawIntakeSettings';
+import { BatchProcessingSettings } from '@/components/admin/BatchProcessingSettings';
 import CatalogTab from '@/components/admin/CatalogTab';
 import { InventorySyncSettings } from '@/components/admin/InventorySyncSettings';
 import { ShopifyTagImport } from '@/components/admin/ShopifyTagImport';
@@ -359,6 +360,7 @@ const Admin = () => {
             </div>
             <TCGDatabaseSettings />
             <RawIntakeSettings />
+            <BatchProcessingSettings />
             <CatalogTab />
             <PSAApiSettings />
           </div>

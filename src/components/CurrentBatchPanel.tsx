@@ -9,6 +9,10 @@ import EditIntakeItemDialog from "./EditIntakeItemDialog";
 import { useStore } from "@/contexts/StoreContext";
 import { logStoreContext, validateCompleteStoreContext } from "@/utils/storeValidation";
 import { StoreContextDebug } from "./StoreContextDebug";
+import { useBatchSendToShopify } from '@/hooks/useBatchSendToShopify';
+import { useBatchAutoProcessSettings } from '@/hooks/useBatchAutoProcessSettings';
+import { BatchConfigDialog } from '@/components/BatchConfigDialog';
+import { BatchProgressDialog } from '@/components/BatchProgressDialog';
 
 interface IntakeItem {
   id: string;
@@ -53,7 +57,12 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
   const [isAdmin, setIsAdmin] = useState(false);
   const [sendingBatch, setSendingBatch] = useState(false);
   const [lastAddedItemId, setLastAddedItemId] = useState<string | null>(null);
+  const [batchConfigOpen, setBatchConfigOpen] = useState(false);
+  const [batchProgressOpen, setBatchProgressOpen] = useState(false);
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const { sendChunkedBatchToShopify, isSending, progress } = useBatchSendToShopify();
+  const { getAutoProcessConfig, getProcessingMode } = useBatchAutoProcessSettings();
 
   // Helper to format card name
   const formatCardName = (item: IntakeItem) => {
@@ -358,70 +367,87 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
   };
 
   const handleSendBatchToShopify = async () => {
-    if (recentItems.length === 0) {
-      toast({ title: "Info", description: "No items to send" });
+    if (!assignedStore || !selectedLocation) {
+      toast({ title: "Error", description: "Store context missing" });
+      return;
+    }
+    
+    const itemIds = recentItems.map(item => item.id);
+    if (itemIds.length === 0) {
+      toast({ title: "Info", description: "No items in current batch" });
       return;
     }
 
-    setSendingBatch(true);
-    try {
-      const itemIds = recentItems.map(item => item.id);
-      
-      // Step 1: Send to inventory first
-      const { data, error } = await supabase.rpc("send_intake_items_to_inventory", {
-        item_ids: itemIds
-      });
+    console.log('🛍️ [CurrentBatchPanel] Starting batch send to Shopify:', {
+      itemCount: itemIds.length,
+      storeKey: assignedStore,
+      locationGid: selectedLocation
+    });
 
-      if (error) throw error;
-
-      const processedIds = (data as any)?.processed_ids || [];
+    const processingMode = getProcessingMode(itemIds.length);
+    
+    if (processingMode === 'immediate' || processingMode === 'auto') {
+      // Auto-process with safe defaults
+      const config = getAutoProcessConfig();
+      console.log('🚀 [CurrentBatchPanel] Auto-processing batch:', { processingMode, config });
       
-      if (processedIds.length === 0) {
-        toast({ title: "Warning", description: "No items were successfully sent to inventory" });
-        return;
-      }
-
-      // Step 2: Queue items for Shopify sync by calling the v2 send function
-      let successCount = 0;
-      let errorCount = 0;
+      setBatchProgressOpen(true);
       
-      for (const itemId of processedIds) {
-        try {
-          const { error: shopifyError } = await supabase.functions.invoke('v2-shopify-send-raw', {
-            body: { item_id: itemId }
-          });
-          
-          if (shopifyError) {
-            console.error(`Shopify sync failed for item ${itemId}:`, shopifyError);
-            errorCount++;
-          } else {
-            successCount++;
-          }
-        } catch (err) {
-          console.error(`Shopify sync error for item ${itemId}:`, err);
-          errorCount++;
+      try {
+        const result = await sendChunkedBatchToShopify(
+          itemIds,
+          assignedStore as "hawaii" | "las_vegas",
+          selectedLocation,
+          config,
+          undefined,
+          true // autoProcess flag
+        );
+        
+        if (result.ok) {
+          await fetchRecentItemsWithRetry();
+          toast({ title: "Success", description: `Auto-processed ${result.processed} items successfully` });
         }
+      } catch (error) {
+        console.error('Auto-processing failed:', error);
+        toast({ title: "Error", description: `Auto-processing failed: ${error instanceof Error ? error.message : 'Unknown error'}` });
+      } finally {
+        setBatchProgressOpen(false);
       }
+    } else {
+      // Show manual configuration dialog for large batches
+      setBatchConfigOpen(true);
+    }
+  };
 
-      const inventoryCount = processedIds.length;
-      let message = `Sent ${inventoryCount} items to inventory`;
+  const handleManualBatchConfig = async (config: any) => {
+    if (!assignedStore || !selectedLocation) {
+      toast({ title: "Error", description: "Store context missing" });
+      return;
+    }
+    
+    const itemIds = recentItems.map(item => item.id);
+    setBatchConfigOpen(false);
+    setBatchProgressOpen(true);
+    
+    try {
+      const result = await sendChunkedBatchToShopify(
+        itemIds,
+        assignedStore as "hawaii" | "las_vegas",
+        selectedLocation,
+        config,
+        undefined,
+        false // manual config
+      );
       
-      if (successCount > 0) {
-        message += ` and ${successCount} to Shopify`;
+      if (result.ok) {
+        await fetchRecentItemsWithRetry();
+        toast({ title: "Success", description: `Processed ${result.processed} items successfully` });
       }
-      
-      if (errorCount > 0) {
-        message += `. ${errorCount} Shopify sync(s) failed`;
-      }
-
-      // Removed toast notification - information will be shown in inventory screen
-      
-      fetchRecentItemsWithRetry();
-    } catch (error: any) {
-      console.error("Error sending batch to inventory + Shopify:", error);
-      toast({ title: "Error", description: error.message });
+    } catch (error) {
+      console.error('Manual batch processing failed:', error);
+      toast({ title: "Error", description: `Processing failed: ${error instanceof Error ? error.message : 'Unknown error'}` });
     } finally {
-      setSendingBatch(false);
+      setBatchProgressOpen(false);
     }
   };
 
@@ -487,10 +513,10 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
             <div className="flex gap-2">
               <Button
                 onClick={handleSendBatchToShopify}
-                disabled={recentItems.length === 0 || sendingBatch}
+                disabled={recentItems.length === 0 || isSending}
                 size="sm"
               >
-                {sendingBatch ? (
+                {isSending ? (
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
                 ) : (
                   <Send className="h-4 w-4 mr-2" />
@@ -737,6 +763,21 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
           }}
         />
       )}
+
+      {/* Batch Configuration Dialog */}
+      <BatchConfigDialog
+        itemCount={recentItems.length}
+        onStartBatch={handleManualBatchConfig}
+        open={batchConfigOpen}
+        onOpenChange={setBatchConfigOpen}
+      />
+
+      {/* Batch Progress Dialog */}
+      <BatchProgressDialog
+        open={batchProgressOpen}
+        progress={progress}
+        onCancel={() => setBatchProgressOpen(false)}
+      />
     </>
   );
 };

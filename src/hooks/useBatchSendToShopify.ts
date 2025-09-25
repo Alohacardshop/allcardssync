@@ -76,13 +76,15 @@ export function useBatchSendToShopify() {
     storeKey: "hawaii" | "las_vegas",
     locationGid: string,
     config: BatchConfig = { batchSize: 5, delayBetweenChunks: 1000, failFast: false },
-    onProgress?: (progress: BatchProgress) => void
+    onProgress?: (progress: BatchProgress) => void,
+    autoProcess: boolean = false
   ): Promise<BatchSendResponse> => {
     console.log(`🔵 [useBatchSendToShopify] Starting chunked batch send:`, { 
       itemCount: itemIds.length, 
       storeKey, 
       locationGid: locationGid?.substring(0, 20) + '...',
-      config
+      config,
+      autoProcess
     })
     
     if (!storeKey || !locationGid) {
@@ -121,7 +123,11 @@ export function useBatchSendToShopify() {
     const allQueuedItems: string[] = []
 
     try {
-      toast.info(`Starting batch processing: ${totalChunks} chunks of ${config.batchSize} items`)
+      if (autoProcess) {
+        toast.info(`Auto-processing ${itemIds.length} items in ${totalChunks} chunks`)
+      } else {
+        toast.info(`Starting batch processing: ${totalChunks} chunks of ${config.batchSize} items`)
+      }
 
       for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
         const chunk = chunks[chunkIndex]
@@ -298,8 +304,11 @@ export function useBatchSendToShopify() {
   const sendBatchToShopify = (
     itemIds: string[],
     storeKey: "hawaii" | "las_vegas",
-    locationGid: string
-  ) => sendChunkedBatchToShopify(itemIds, storeKey, locationGid)
+    locationGid: string,
+    config?: BatchConfig,
+    onProgress?: (progress: BatchProgress) => void,
+    autoProcess?: boolean
+  ) => sendChunkedBatchToShopify(itemIds, storeKey, locationGid, config, onProgress, autoProcess)
 
   return {
     sendBatchToShopify,

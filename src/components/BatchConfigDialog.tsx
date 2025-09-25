@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Settings, Upload } from "lucide-react"
+import { Settings, Upload, Zap } from "lucide-react"
 import { BatchConfig } from "@/hooks/useBatchSendToShopify"
 
 interface BatchConfigDialogProps {
@@ -13,15 +13,32 @@ interface BatchConfigDialogProps {
   onStartBatch: (config: BatchConfig) => void
   disabled?: boolean
   children?: React.ReactNode
+  autoProcessAvailable?: boolean
+  onAutoProcess?: () => void
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }
 
-export function BatchConfigDialog({ itemCount, onStartBatch, disabled, children }: BatchConfigDialogProps) {
-  const [open, setOpen] = useState(false)
+export function BatchConfigDialog({ 
+  itemCount, 
+  onStartBatch, 
+  disabled, 
+  children, 
+  autoProcessAvailable = false,
+  onAutoProcess,
+  open: externalOpen,
+  onOpenChange: externalOnOpenChange
+}: BatchConfigDialogProps) {
+  const [internalOpen, setInternalOpen] = useState(false)
   const [config, setConfig] = useState<BatchConfig>({
     batchSize: 5,
     delayBetweenChunks: 1000,
     failFast: false
   })
+
+  // Use external open state if provided, otherwise use internal
+  const open = externalOpen !== undefined ? externalOpen : internalOpen
+  const setOpen = externalOnOpenChange !== undefined ? externalOnOpenChange : setInternalOpen
 
   const handleStart = () => {
     onStartBatch(config)
@@ -134,8 +151,20 @@ export function BatchConfigDialog({ itemCount, onStartBatch, disabled, children 
             <Button variant="outline" onClick={() => setOpen(false)}>
               Cancel
             </Button>
+            {autoProcessAvailable && onAutoProcess && (
+              <Button 
+                variant="secondary" 
+                onClick={() => {
+                  onAutoProcess();
+                  setOpen(false);
+                }}
+              >
+                <Zap className="w-4 h-4 mr-2" />
+                Auto Process
+              </Button>
+            )}
             <Button onClick={handleStart}>
-              Start Batch Processing
+              Manual Configure
             </Button>
           </div>
         </div>
