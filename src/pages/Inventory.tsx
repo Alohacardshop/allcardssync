@@ -799,14 +799,8 @@ const Inventory = () => {
       setBulkPrinting(false);
     }
   }, [items, selectedItems]);
-          
-          printedItemIds.push(item.id);
-          successCount++;
-        } catch (error) {
-          console.error(`Failed to generate ZPL for ${item.sku}:`, error);
-          errorCount++;
-        }
-      }
+
+  const selectAllVisible = useCallback(() => {
 
       // Send the entire batch with cut command at the end
       if (batchZpl && printedItemIds.length > 0) {
