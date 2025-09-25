@@ -11,9 +11,10 @@ interface BarcodeLabelProps {
   label?: string;
   className?: string;
   showPrintButton?: boolean;
+  quantity?: number;
 }
 
-const BarcodeLabel = ({ value, label, className, showPrintButton = true }: BarcodeLabelProps) => {
+const BarcodeLabel = ({ value, label, className, showPrintButton = true, quantity = 1 }: BarcodeLabelProps) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [showPrinterDialog, setShowPrinterDialog] = useState(false);
 
@@ -156,7 +157,7 @@ const BarcodeLabel = ({ value, label, className, showPrintButton = true }: Barco
     }
   };
 
-  const printLabel = async (labelData: any, copies: number = 1) => {
+  const printLabel = async (labelData: any, copies: number = quantity) => {
     try {
       console.log('🖨️ BarcodeLabel: Printing with unified ZPL builder');
       

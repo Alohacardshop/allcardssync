@@ -386,7 +386,7 @@ const Inventory = () => {
       console.log('🖨️ Generated ZPL for printing:', zpl);
 
       // Print using unified service
-      const result = await print(zpl, 1);
+      const result = await print(zpl, item.quantity || 1);
       
       if (result.success) {
         toast.success('Label printed successfully!');
