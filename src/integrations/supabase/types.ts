@@ -1082,6 +1082,7 @@ export type Database = {
           completed_at: string | null
           created_at: string
           error_message: string | null
+          error_type: string | null
           id: string
           inventory_item_id: string
           max_retries: number
@@ -1099,6 +1100,7 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           error_message?: string | null
+          error_type?: string | null
           id?: string
           inventory_item_id: string
           max_retries?: number
@@ -1116,6 +1118,7 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           error_message?: string | null
+          error_type?: string | null
           id?: string
           inventory_item_id?: string
           max_retries?: number
