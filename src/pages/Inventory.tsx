@@ -948,7 +948,12 @@ const Inventory = () => {
     printStatusFilter,
     searchTerm,
     assignedStore,
-    selectedLocation
+    selectedLocation,
+    filterDetails: {
+      statusFilterApplied: statusFilter !== 'all',
+      filteredByStatus: statusFilter === 'errors' ? items.filter(item => item.shopify_sync_status === 'error').length : 'N/A',
+      allStatuses: items.map(item => item.shopify_sync_status).filter((v, i, a) => a.indexOf(v) === i)
+    }
   });
 
   if (loading) {
