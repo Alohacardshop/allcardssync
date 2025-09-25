@@ -384,18 +384,7 @@ const Inventory = () => {
       const zpl = zplFromTemplateString(templateData.body, vars);
 
       console.log('🖨️ Generated ZPL for printing:', zpl);
-      console.error('🚨 QUANTITY DEBUG - Item quantity:', item.quantity);
-      console.error('🚨 QUANTITY DEBUG - Full item object:', item);
       console.log('🖨️ Item quantity for printing:', item.quantity || 1);
-      console.log('🖨️ ZPL contains PQ command:', zpl.includes('^PQ'));
-      console.log('🖨️ Full ZPL analysis:', {
-        hasStart: zpl.includes('^XA'),
-        hasEnd: zpl.includes('^XZ'),
-        hasPQ: zpl.includes('^PQ'),
-        pqMatches: zpl.match(/\^PQ\d+,\d+,\d+,\w+/g),
-        length: zpl.length
-      });
-      console.log('🖨️ About to call print() with copies:', item.quantity || 1);
 
       // Print using unified service
       const result = await print(zpl, item.quantity || 1);

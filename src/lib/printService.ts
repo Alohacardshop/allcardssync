@@ -4,6 +4,7 @@
  */
 
 import { printNodeService } from '@/lib/printNodeService';
+import { injectQuantityIntoZPL } from '@/lib/labels/zpl';
 import { toast } from 'sonner';
 
 export interface PrintResult {
@@ -53,18 +54,26 @@ export function saveStockModeConfig(config: StockModeConfig): void {
  */
 export async function print(zpl: string, copies: number = 1): Promise<PrintResult> {
   try {
-    // Log the exact ZPL being sent
-    console.log('🖨️ Exact ZPL being sent to printer:');
-    console.log('='.repeat(50));
-    console.log(zpl);
-    console.log('='.repeat(50));
-    console.log(`📋 ZPL Length: ${zpl.length} characters`);
-    console.log(`🔢 Copies: ${copies}`);
-    console.log('🖨️ ZPL PQ Analysis:', {
-      containsPQ: zpl.includes('^PQ'),
-      pqCommands: zpl.match(/\^PQ[^\^]*/g),
-      willOverrideCopies: zpl.includes('^PQ') ? 'YES - ZPL contains ^PQ command' : 'NO'
+    // Inject quantity into ZPL to ensure proper printing
+    const zplWithQuantity = injectQuantityIntoZPL(zpl, copies);
+    
+    // Log the ZPL transformation
+    console.log('🖨️ Print Service: ZPL Quantity Injection');
+    console.log(`📋 Original ZPL Length: ${zpl.length} characters`);
+    console.log(`📋 Modified ZPL Length: ${zplWithQuantity.length} characters`);
+    console.log(`🔢 Requested Copies: ${copies}`);
+    console.log('🖨️ ZPL Analysis:', {
+      originalPQ: zpl.match(/\^PQ[^\^]*/g),
+      modifiedPQ: zplWithQuantity.match(/\^PQ[^\^]*/g),
+      injected: zpl !== zplWithQuantity
     });
+    
+    if (zpl !== zplWithQuantity) {
+      console.log('🔄 ZPL modified to include quantity:');
+      console.log('='.repeat(50));
+      console.log(zplWithQuantity);
+      console.log('='.repeat(50));
+    }
     
     // Get saved PrintNode configuration
     const savedConfig = localStorage.getItem('zebra-printer-config');
@@ -77,8 +86,9 @@ export async function print(zpl: string, copies: number = 1): Promise<PrintResul
       throw new Error('PrintNode not properly configured. Please reconfigure in Admin > Test Hardware.');
     }
 
-    // Send to PrintNode
-    const result = await printNodeService.printZPL(zpl, config.printNodeId, copies);
+    // Send to PrintNode with modified ZPL and copies=1 (since ZPL handles quantity)
+    const printNodeCopies = zplWithQuantity.includes('^PQ') ? 1 : copies;
+    const result = await printNodeService.printZPL(zplWithQuantity, config.printNodeId, printNodeCopies);
     
     if (result.success) {
       return {
