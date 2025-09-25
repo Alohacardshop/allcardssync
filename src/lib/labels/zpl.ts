@@ -113,8 +113,8 @@ export function injectQuantityIntoZPL(zpl: string, quantity: number): string {
     return zpl;
   }
   
-  // Insert ^PQ right before ^XZ
-  return zpl.substring(0, xzIndex) + `^PQ${finalQuantity}\n^XZ` + zpl.substring(xzIndex + 3);
+  // Insert ^PQ right before ^XZ and remove any content after ^XZ
+  return zpl.substring(0, xzIndex) + `^PQ${finalQuantity}\n^XZ`;
 }
 
 const esc = (s?: string) => (s ?? '').replace(/\^/g, ' ').replace(/~/g, ' ');
