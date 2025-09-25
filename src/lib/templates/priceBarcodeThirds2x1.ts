@@ -121,7 +121,7 @@ export function zplPriceBarcodeThirds2x1({
     '^CI28',
     `^PR${speedIps}`,
     `^MD${darkness}`,
-    '~SD15',
+    '^SD15',
 
     // TOP third: condition (left), price (right, right-aligned, auto-fit)
     `^FO0,${condY}^A0N,${condSize},${condSize}^FD${(condition ?? '').trim()}^FS`,
