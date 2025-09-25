@@ -75,60 +75,81 @@ export default function Auth() {
     setRoleError(null);
     
     try {
-      console.log('Processing auth for user:', userId);
+      console.log('🔐 Processing auth for user:', userId);
       
       // Use the same RPC function as AuthGuard for consistency
       const { data: access, error } = await supabase.rpc('verify_user_access', { _user_id: userId });
       
+      console.log('🔍 RPC Response - data:', access, 'error:', error);
+      console.log('🔍 Access type:', typeof access, 'Keys:', access ? Object.keys(access) : 'none');
+      
       if (error) {
-        console.error('Access verification failed:', error);
+        console.error('❌ Access verification failed:', error);
         // Try bootstrap for initial admin setup if access check fails
         try {
-          console.log('Attempting admin bootstrap...');
+          console.log('🚀 Attempting admin bootstrap...');
           const { data: bootstrap, error: bootstrapError } = await supabase.functions.invoke('bootstrap-admin');
-          console.log('Bootstrap result:', bootstrap, bootstrapError);
+          console.log('🚀 Bootstrap result:', bootstrap, bootstrapError);
           
           if (!bootstrapError && bootstrap?.success) {
-            console.log('Bootstrap successful, navigating to dashboard');
+            console.log('✅ Bootstrap successful, navigating to dashboard');
             navigate("/", { replace: true });
             return;
           }
         } catch (bootstrapError) {
-          console.log('Bootstrap attempt failed:', bootstrapError);
+          console.log('❌ Bootstrap attempt failed:', bootstrapError);
         }
         
         setRoleError("Your account is signed in but not authorized. Ask an admin to grant Staff access.");
         return;
       }
       
-      console.log('Access check result:', access);
+      // Handle different possible response formats
+      let hasAccess = false;
       
-      if (access && typeof access === 'object' && 'access_granted' in access && access.access_granted) {
-        console.log('Access granted, navigating to dashboard');
+      if (access === true) {
+        hasAccess = true;
+      } else if (access && typeof access === 'object') {
+        if ('access_granted' in access) {
+          hasAccess = access.access_granted === true;
+        } else if (Array.isArray(access) && access.length > 0) {
+          // Handle array response
+          hasAccess = true;
+        } else {
+          // Handle other object formats
+          hasAccess = Object.keys(access).length > 0;
+        }
+      }
+      
+      console.log('🔐 Final access decision:', hasAccess);
+      
+      if (hasAccess) {
+        console.log('✅ Access granted, navigating to dashboard');
         navigate("/", { replace: true });
       } else {
         // No access found, try bootstrap for first user
         try {
-          console.log('No access granted, attempting admin bootstrap...');
+          console.log('🚀 No access granted, attempting admin bootstrap...');
           const { data: bootstrap, error: bootstrapError } = await supabase.functions.invoke('bootstrap-admin');
-          console.log('Bootstrap result:', bootstrap, bootstrapError);
+          console.log('🚀 Bootstrap result:', bootstrap, bootstrapError);
           
           if (!bootstrapError && bootstrap?.success) {
-            console.log('Bootstrap successful, navigating to dashboard');
+            console.log('✅ Bootstrap successful, navigating to dashboard');
             navigate("/", { replace: true });
           } else {
-            console.log('Bootstrap failed or not allowed');
+            console.log('❌ Bootstrap failed or not allowed');
             setRoleError("Your account is signed in but not authorized. Ask an admin to grant Staff access.");
           }
         } catch (bootstrapError) {
-          console.log('Bootstrap attempt failed (expected for non-first users):', bootstrapError);
+          console.log('❌ Bootstrap attempt failed (expected for non-first users):', bootstrapError);
           setRoleError("Your account is signed in but not authorized. Ask an admin to grant Staff access.");
         }
       }
     } catch (error) {
-      console.error('Auth processing failed:', error);
+      console.error('❌ Auth processing failed:', error);
       setRoleError("Failed to verify account permissions. Please try again.");
     } finally {
+      console.log('🔄 Setting loading to false');
       setLoading(false);
     }
   };
