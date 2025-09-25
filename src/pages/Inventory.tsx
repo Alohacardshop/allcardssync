@@ -490,6 +490,13 @@ const Inventory = () => {
         throw new Error('No valid template found');
       }
 
+      console.log('🖨️ handlePrintWithPrinter - Item details:', {
+        itemId: item.id,
+        quantity: item.quantity,
+        sku: item.sku,
+        type: itemType
+      });
+
       await sendZplToPrinter(zpl, `Inventory-${Date.now()}`, { copies: item.quantity || 1 });
 
       await supabase
