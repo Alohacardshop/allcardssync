@@ -51,8 +51,7 @@ export function elementsToZpl(layout: LabelLayout, prefs?: PrinterPrefs): string
     }
   }
   
-  // ZPL footer
-  lines.push(`^PQ${prefs?.copies ?? 1},1,0,Y`);
+  // ZPL footer - let PrintNode handle copies
   lines.push('^XZ');
   
   return lines.join('\n');

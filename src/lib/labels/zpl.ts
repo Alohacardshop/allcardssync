@@ -70,7 +70,7 @@ export function zplFromElements(layout: LabelLayout, prefs?: PrinterPrefs, cutte
       lines.push(`^FO${Math.min(el.x, el.x2)},${Math.min(el.y, el.y2)}^GB${wpx},${hpx},${t}^FS`);
     }
   }
-  lines.push('^PQ' + (prefs?.copies ?? 1) + ',1,0,Y');
+  // Don't add ^PQ command - let PrintNode handle copies
   lines.push('^XZ');
   return lines.join('\n');
 }
