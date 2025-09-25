@@ -1,10 +1,11 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Progress } from '@/components/ui/progress'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 import { useShopifySync } from '@/hooks/useShopifySync'
-import { Play, RotateCcw, Trash2, RefreshCw, AlertCircle, CheckCircle, Clock, XCircle } from 'lucide-react'
+import { Play, RotateCcw, Trash2, RefreshCw, AlertCircle, CheckCircle, Clock, XCircle, Activity } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 
 export function ShopifySyncPanel() {
@@ -57,6 +58,57 @@ export function ShopifySyncPanel() {
 
   return (
     <div className="space-y-6">
+      {/* Enhanced Progress Display */}
+      {stats.total > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Activity className="h-5 w-5" />
+              Sync Progress
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between text-sm">
+                <span>Progress: {stats.completed + stats.failed} / {stats.total}</span>
+                <span>{stats.success_rate}% Success Rate</span>
+              </div>
+              <Progress 
+                value={(stats.completed + stats.failed) / stats.total * 100} 
+                className="h-3"
+              />
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div>
+                  <div className="text-muted-foreground">Processing Rate</div>
+                  <div className="font-semibold">
+                    {stats.processingRate ? `${stats.processingRate.toFixed(1)}/min` : 'N/A'}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground">Est. Time Left</div>
+                  <div className="font-semibold">
+                    {stats.estimatedTimeRemaining ? `${stats.estimatedTimeRemaining} min` : 'N/A'}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground">Current Item</div>
+                  <div className="font-mono text-xs">
+                    {stats.currentProcessing ? 
+                      `...${stats.currentProcessing.inventory_item_id.slice(-8)}` : 
+                      'None'
+                    }
+                  </div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground">Queue Size</div>
+                  <div className="font-semibold text-yellow-600">{stats.queued}</div>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Stats Overview */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <Card>

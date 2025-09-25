@@ -42,7 +42,8 @@ interface ShopifyCredentials {
 
 // Rate limiting state
 let lastRequestTime = 0
-const MIN_REQUEST_INTERVAL = 500 // 500ms between requests
+const MIN_REQUEST_INTERVAL = 750 // 750ms between requests (reduced from 500ms)
+const RATE_LIMIT_BACKOFF_BASE = 2000 // Base delay for rate limit backoff
 
 async function rateLimitDelay() {
   const now = Date.now()
@@ -52,6 +53,23 @@ async function rateLimitDelay() {
     await new Promise(resolve => setTimeout(resolve, delayNeeded))
   }
   lastRequestTime = Date.now()
+}
+
+async function handleRateLimitError(response: Response, retryCount: number = 0): Promise<number> {
+  // Parse retry-after header (can be in seconds or HTTP date)
+  const retryAfter = response.headers.get('retry-after')
+  let delayMs = RATE_LIMIT_BACKOFF_BASE * Math.pow(2, retryCount) // Exponential backoff
+  
+  if (retryAfter) {
+    const retrySeconds = parseInt(retryAfter)
+    if (!isNaN(retrySeconds)) {
+      delayMs = Math.max(delayMs, retrySeconds * 1000)
+    }
+  }
+  
+  console.log(`🚫 Rate limited. Waiting ${delayMs}ms before retry (attempt ${retryCount + 1})`)
+  await new Promise(resolve => setTimeout(resolve, delayMs))
+  return delayMs
 }
 
 async function getShopifyCredentials(supabase: any, storeKey: string): Promise<ShopifyCredentials> {
@@ -83,7 +101,9 @@ async function getShopifyCredentials(supabase: any, storeKey: string): Promise<S
   }
 }
 
-async function shopifyRequest(credentials: ShopifyCredentials, endpoint: string, options: RequestInit = {}) {
+async function shopifyRequest(credentials: ShopifyCredentials, endpoint: string, options: RequestInit = {}, retryCount: number = 0): Promise<any> {
+  const maxRetries = 3
+  
   await rateLimitDelay()
   
   const url = `https://${credentials.domain}/admin/api/2024-10/${endpoint}`
@@ -97,10 +117,25 @@ async function shopifyRequest(credentials: ShopifyCredentials, endpoint: string,
     }
   })
 
+  // Handle rate limiting with smart retry
+  if (response.status === 429 && retryCount < maxRetries) {
+    await handleRateLimitError(response, retryCount)
+    return shopifyRequest(credentials, endpoint, options, retryCount + 1)
+  }
+
   if (!response.ok) {
     const errorText = await response.text()
     console.error(`Shopify API error: ${response.status} - ${errorText}`)
-    throw new Error(`Shopify API error: ${response.status} - ${errorText}`)
+    
+    // Categorize the error
+    const errorType = response.status === 429 ? 'RATE_LIMIT' : 
+                     response.status >= 500 ? 'SERVER_ERROR' : 
+                     response.status === 404 ? 'NOT_FOUND' : 'CLIENT_ERROR'
+    
+    const error = new Error(`Shopify API error: ${response.status} - ${errorText}`)
+    ;(error as any).type = errorType
+    ;(error as any).status = response.status
+    throw error
   }
 
   const responseText = await response.text()
@@ -492,11 +527,21 @@ async function processQueueItem(supabase: any, queueItem: SyncQueueItem) {
   } catch (error) {
     console.error(`❌ Error processing queue item ${queueItem.id}:`, error)
     
+    const errorType = (error as any).type || 'UNKNOWN'
     const shouldRetry = queueItem.retry_count < queueItem.max_retries
-    const retryAfter = shouldRetry ? new Date(Date.now() + Math.pow(2, queueItem.retry_count) * 30000) : null
     
-    // Update queue item with error details and better retry logic
-    const errorMessage = `Attempt ${queueItem.retry_count + 1}/${queueItem.max_retries}: ${error.message}`
+    // Calculate retry delay based on error type
+    let retryDelayMs = 30000 // Default 30 seconds
+    if (errorType === 'RATE_LIMIT') {
+      retryDelayMs = RATE_LIMIT_BACKOFF_BASE * Math.pow(2, queueItem.retry_count)
+    } else if (errorType === 'SERVER_ERROR') {
+      retryDelayMs = 60000 * Math.pow(2, queueItem.retry_count) // Longer delay for server errors
+    }
+    
+    const retryAfter = shouldRetry ? new Date(Date.now() + retryDelayMs) : null
+    
+    // Enhanced error message with categorization
+    const errorMessage = `[${errorType}] Attempt ${queueItem.retry_count + 1}/${queueItem.max_retries}: ${error.message}`
     
     await supabase
       .from('shopify_sync_queue')
@@ -504,7 +549,8 @@ async function processQueueItem(supabase: any, queueItem: SyncQueueItem) {
         status: shouldRetry ? 'queued' : 'failed',
         retry_count: queueItem.retry_count + 1,
         retry_after: retryAfter?.toISOString(),
-        error_message: errorMessage
+        error_message: errorMessage,
+        error_type: errorType
       })
       .eq('id', queueItem.id)
     
@@ -519,9 +565,9 @@ async function processQueueItem(supabase: any, queueItem: SyncQueueItem) {
       .eq('id', queueItem.inventory_item_id)
     
     if (shouldRetry) {
-      console.log(`🔄 Will retry queue item ${queueItem.id} in ${Math.pow(2, queueItem.retry_count) * 30} seconds`)
+      console.log(`🔄 Will retry queue item ${queueItem.id} in ${Math.floor(retryDelayMs / 1000)} seconds (${errorType})`)
     } else {
-      console.log(`💀 Queue item ${queueItem.id} failed permanently after ${queueItem.retry_count} retries`)
+      console.log(`💀 Queue item ${queueItem.id} failed permanently after ${queueItem.retry_count} retries (${errorType})`)
     }
   }
 }
@@ -607,14 +653,15 @@ Deno.serve(async (req) => {
       .delete()
       .like('error_message', '%GraphQL%')
     
-    // Get pending queue items (max 5 at a time for stability)  
+    // Get pending queue items (max 2 at a time for better stability)  
     const { data: queueItems, error: queueError } = await supabase
       .from('shopify_sync_queue')
       .select('*')
       .eq('status', 'queued')
       .or('retry_after.is.null,retry_after.lte.now()')
+      .order('retry_count', { ascending: true }) // Process items with fewer retries first
       .order('created_at', { ascending: true })
-      .limit(5)
+      .limit(2)
     
     if (queueError) {
       throw new Error(`Failed to fetch queue items: ${queueError.message}`)

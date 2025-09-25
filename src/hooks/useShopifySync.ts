@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useEffect } from 'react'
 import { supabase } from '@/integrations/supabase/client'
 import { toast } from 'sonner'
 
@@ -27,7 +28,7 @@ interface QueueStats {
 export function useShopifySync() {
   const queryClient = useQueryClient()
 
-  // Fetch queue items
+  // Fetch queue items with real-time updates
   const { data: queueItems = [], isLoading, error } = useQuery({
     queryKey: ['shopify-sync-queue'],
     queryFn: async () => {
@@ -40,11 +41,38 @@ export function useShopifySync() {
       if (error) throw error
       return data as QueueItem[]
     },
-    refetchInterval: 5000 // Auto-refresh every 5 seconds
+    refetchInterval: 3000 // Faster refresh every 3 seconds
   })
 
-  // Calculate stats
-  const stats: QueueStats = {
+  // Set up real-time subscription for queue updates
+  useEffect(() => {
+    const channel = supabase
+      .channel('shopify-sync-queue-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'shopify_sync_queue'
+        },
+        () => {
+          // Invalidate and refetch when queue changes
+          queryClient.invalidateQueries({ queryKey: ['shopify-sync-queue'] })
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [queryClient])
+
+  // Calculate enhanced stats with processing metrics
+  const stats: QueueStats & { 
+    currentProcessing?: QueueItem;
+    processingRate?: number;
+    estimatedTimeRemaining?: number;
+  } = {
     total: queueItems.length,
     queued: queueItems.filter(item => item.status === 'queued').length,
     processing: queueItems.filter(item => item.status === 'processing').length,
@@ -52,7 +80,29 @@ export function useShopifySync() {
     failed: queueItems.filter(item => item.status === 'failed').length,
     success_rate: queueItems.length > 0 
       ? Math.round((queueItems.filter(item => item.status === 'completed').length / queueItems.length) * 100)
-      : 0
+      : 0,
+    currentProcessing: queueItems.find(item => item.status === 'processing'),
+    processingRate: (() => {
+      // Calculate items processed in last 5 minutes
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000)
+      const recentlyCompleted = queueItems.filter(item => 
+        item.status === 'completed' && 
+        item.completed_at && 
+        new Date(item.completed_at) > fiveMinutesAgo
+      ).length
+      return recentlyCompleted / 5 // items per minute
+    })(),
+    estimatedTimeRemaining: (() => {
+      const queued = queueItems.filter(item => item.status === 'queued').length
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000)
+      const recentlyCompleted = queueItems.filter(item => 
+        item.status === 'completed' && 
+        item.completed_at && 
+        new Date(item.completed_at) > fiveMinutesAgo
+      ).length
+      const rate = recentlyCompleted / 5
+      return rate > 0 ? Math.ceil(queued / rate) : null
+    })()
   }
 
   // Trigger sync processor
