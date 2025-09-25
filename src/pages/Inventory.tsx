@@ -748,6 +748,11 @@ const Inventory = () => {
   }, []);
 
   const handleReprintSelected = useCallback(async () => {
+    if (selectedItems.size === 0) {
+      toast.info('No items selected for reprinting');
+      return;
+    }
+
     setBulkPrinting(true);
     try {
       const selectedRawItems = items.filter(item => {
@@ -791,6 +796,8 @@ const Inventory = () => {
         printQueue.enqueueMany(queueItems);
         toast.success(`Queued ${queueItems.length} labels for reprinting`);
         setSelectedItems(new Set());
+      } else {
+        toast.error('Failed to generate any labels for printing');
       }
     } catch (error) {
       console.error('Reprint error:', error);
