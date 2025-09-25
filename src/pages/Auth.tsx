@@ -77,28 +77,46 @@ export default function Auth() {
     try {
       console.log('Processing auth for user:', userId);
       
-      // Use the new verify_user_access function for cleaner checking
-      const { data: access, error } = await supabase.rpc('verify_user_access', { _user_id: userId });
+      // Check if user has any role in user_roles table
+      const { data: userRoles, error: roleError } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', userId);
       
-      if (error) {
-        console.error('Access verification failed:', error);
-        setRoleError("Failed to verify account permissions. Please try again.");
+      if (roleError) {
+        console.error('Role check failed:', roleError);
+        // Try bootstrap for initial admin setup if role check fails
+        try {
+          console.log('Attempting admin bootstrap...');
+          const { data: bootstrap, error: bootstrapError } = await supabase.functions.invoke('bootstrap-admin');
+          console.log('Bootstrap result:', bootstrap, bootstrapError);
+          
+          if (!bootstrapError && bootstrap?.success) {
+            console.log('Bootstrap successful, navigating to dashboard');
+            navigate("/", { replace: true });
+            return;
+          }
+        } catch (bootstrapError) {
+          console.log('Bootstrap attempt failed:', bootstrapError);
+        }
+        
+        setRoleError("Your account is signed in but not authorized. Ask an admin to grant Staff access.");
         return;
       }
       
-      console.log('Access verification result:', access);
+      console.log('User roles:', userRoles);
       
-      if (access && typeof access === 'object' && 'access_granted' in access && access.access_granted) {
-        console.log('Access granted, navigating to dashboard');
+      if (userRoles && userRoles.length > 0) {
+        console.log('User has roles, navigating to dashboard');
         navigate("/", { replace: true });
       } else {
-        // Try bootstrap for initial admin setup
+        // No roles found, try bootstrap for first user
         try {
-          console.log('Attempting bootstrap...');
-          const { data: bootstrap } = await supabase.rpc('bootstrap_user_admin', { _target_user_id: userId });
-          console.log('Bootstrap result:', bootstrap);
+          console.log('No roles found, attempting admin bootstrap...');
+          const { data: bootstrap, error: bootstrapError } = await supabase.functions.invoke('bootstrap-admin');
+          console.log('Bootstrap result:', bootstrap, bootstrapError);
           
-          if (bootstrap && typeof bootstrap === 'object' && 'success' in bootstrap && bootstrap.success) {
+          if (!bootstrapError && bootstrap?.success) {
             console.log('Bootstrap successful, navigating to dashboard');
             navigate("/", { replace: true });
           } else {
@@ -106,7 +124,7 @@ export default function Auth() {
             setRoleError("Your account is signed in but not authorized. Ask an admin to grant Staff access.");
           }
         } catch (bootstrapError) {
-          console.log('Bootstrap attempt failed (expected for non-admins):', bootstrapError);
+          console.log('Bootstrap attempt failed (expected for non-first users):', bootstrapError);
           setRoleError("Your account is signed in but not authorized. Ask an admin to grant Staff access.");
         }
       }
