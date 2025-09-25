@@ -938,6 +938,19 @@ const Inventory = () => {
     }
   }, [isAdmin, fetchItems, clearSelection]);
 
+  // Debug logging
+  console.log('Inventory Debug:', {
+    loading,
+    itemsLength: items.length,
+    filteredItemsLength: filteredItems.length,
+    statusFilter,
+    typeFilter,
+    printStatusFilter,
+    searchTerm,
+    assignedStore,
+    selectedLocation
+  });
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
