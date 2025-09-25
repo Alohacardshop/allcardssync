@@ -229,18 +229,23 @@ const Inventory = () => {
     return filtered;
   }, [items, debouncedSearchTerm, typeFilter, printStatusFilter]);
 
-  // Reset pagination when filters change
+  // Reset pagination when filters change (only after store context is ready)
   useEffect(() => {
-    fetchItems(0, true);
-  }, [fetchItems]);
+    // Only fetch if store context is properly initialized
+    if (assignedStore && selectedLocation) {
+      fetchItems(0, true);
+    }
+  }, [fetchItems, assignedStore, selectedLocation]);
 
-  // Auto-refresh every 30 seconds to show latest sync status
+  // Auto-refresh every 30 seconds to show latest sync status (only when initialized)
   useEffect(() => {
+    if (!assignedStore || !selectedLocation) return;
+    
     const interval = setInterval(() => {
       fetchItems(0, true);
     }, 30000);
     return () => clearInterval(interval);
-  }, [fetchItems]);
+  }, [fetchItems, assignedStore, selectedLocation]);
 
   const loadMore = useCallback(() => {
     if (!loadingMore && hasMore) {
@@ -938,7 +943,7 @@ const Inventory = () => {
     }
   }, [isAdmin, fetchItems, clearSelection]);
 
-  // Debug logging
+  // Debug logging with better context
   console.log('Inventory Debug:', {
     loading,
     itemsLength: items.length,
@@ -949,6 +954,7 @@ const Inventory = () => {
     searchTerm,
     assignedStore,
     selectedLocation,
+    storeContextReady: assignedStore && selectedLocation,
     filterDetails: {
       statusFilterApplied: statusFilter !== 'all',
       filteredByStatus: statusFilter === 'errors' ? items.filter(item => item.shopify_sync_status === 'error').length : 'N/A',
@@ -956,12 +962,22 @@ const Inventory = () => {
     }
   });
 
-  if (loading) {
+  // Show loading until both data is loaded AND store context is ready
+  if (loading || !assignedStore || !selectedLocation) {
     return (
       <div className="min-h-screen bg-background">
         <Navigation />
         <div className="container mx-auto p-6">
-          <InventorySkeleton />
+          <div className="flex items-center justify-center py-8">
+            <div className="text-center space-y-2">
+              <Loader2 className="h-8 w-8 animate-spin mx-auto" />
+              <p className="text-sm text-muted-foreground">
+                {loading ? 'Loading inventory...' : 
+                 !assignedStore ? 'Loading store...' : 
+                 'Loading location...'}
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     );
