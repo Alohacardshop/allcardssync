@@ -437,28 +437,43 @@ const Inventory = () => {
         return parts.length > 0 ? parts.join(' ') : 'Raw Card';
       };
 
-      // Load barcode template from the new templates table
-      const { data: templateData, error } = await supabase
-        .from('label_templates_new')
-        .select('body')
-        .eq('id', 'barcode')
-        .maybeSingle();
-      
-      if (error || !templateData?.body) {
-        throw new Error('Barcode template not found in database');
-      }
+      // Use the same template system as bulk printing for consistency
+      const tpl = await getTemplate('raw_card_2x1');
 
       // Prepare variables for template substitution
       const vars: JobVars = {
+        CARDNAME: generateTitle(item),
         CONDITION: item.condition || 'NM',
         PRICE: item.price ? `$${item.price.toFixed(2)}` : '$0.00',
         SKU: item.sku || '',
-        CARDNAME: generateTitle(item),
         BARCODE: item.sku || generateTitle(item).replace(/[^a-zA-Z0-9]/g, '').substring(0, 12),
       };
 
-      // Generate ZPL using template string substitution
-      const zpl = zplFromTemplateString(templateData.body, vars);
+      const prefs = JSON.parse(localStorage.getItem('zebra-printer-config') || '{}');
+
+      let zpl = '';
+      if (tpl.format === 'elements' && tpl.layout) {
+        const filled = {
+          ...tpl.layout,
+          elements: tpl.layout.elements.map((el: ZPLElement) => {
+            if (el.type === 'text') {
+              if (el.id === 'cardname') return { ...el, text: vars.CARDNAME ?? el.text };
+              if (el.id === 'condition') return { ...el, text: vars.CONDITION ?? el.text };
+              if (el.id === 'price') return { ...el, text: vars.PRICE ?? el.text };
+              if (el.id === 'sku') return { ...el, text: vars.SKU ?? el.text };
+              if (el.id === 'desc') return { ...el, text: vars.CARDNAME ?? el.text };
+            } else if (el.type === 'barcode' && el.id === 'barcode') {
+              return { ...el, data: vars.BARCODE ?? el.data };
+            }
+            return el;
+          }),
+        };
+        zpl = zplFromElements(filled, prefs, cutterSettings);
+      } else if (tpl.format === 'zpl' && tpl.zpl) {
+        zpl = zplFromTemplateString(tpl.zpl, vars);
+      } else {
+        throw new Error('No valid label template');
+      }
 
       console.log('🖨️ Generated ZPL for printing:', zpl);
       console.log('🖨️ Item quantity for printing:', item.quantity || 1);
@@ -485,7 +500,7 @@ const Inventory = () => {
     } finally {
       setPrintingItem(null);
     }
-  }, [fetchItems]);
+  }, [fetchItems, cutterSettings]);
 
   // Helper function to fill template elements with data
   const fillElements = (layout: any, vars: JobVars) => {
