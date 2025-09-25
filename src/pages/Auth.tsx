@@ -77,15 +77,12 @@ export default function Auth() {
     try {
       console.log('Processing auth for user:', userId);
       
-      // Check if user has any role in user_roles table
-      const { data: userRoles, error: roleError } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', userId);
+      // Use the same RPC function as AuthGuard for consistency
+      const { data: access, error } = await supabase.rpc('verify_user_access', { _user_id: userId });
       
-      if (roleError) {
-        console.error('Role check failed:', roleError);
-        // Try bootstrap for initial admin setup if role check fails
+      if (error) {
+        console.error('Access verification failed:', error);
+        // Try bootstrap for initial admin setup if access check fails
         try {
           console.log('Attempting admin bootstrap...');
           const { data: bootstrap, error: bootstrapError } = await supabase.functions.invoke('bootstrap-admin');
@@ -104,15 +101,15 @@ export default function Auth() {
         return;
       }
       
-      console.log('User roles:', userRoles);
+      console.log('Access check result:', access);
       
-      if (userRoles && userRoles.length > 0) {
-        console.log('User has roles, navigating to dashboard');
+      if (access && typeof access === 'object' && 'access_granted' in access && access.access_granted) {
+        console.log('Access granted, navigating to dashboard');
         navigate("/", { replace: true });
       } else {
-        // No roles found, try bootstrap for first user
+        // No access found, try bootstrap for first user
         try {
-          console.log('No roles found, attempting admin bootstrap...');
+          console.log('No access granted, attempting admin bootstrap...');
           const { data: bootstrap, error: bootstrapError } = await supabase.functions.invoke('bootstrap-admin');
           console.log('Bootstrap result:', bootstrap, bootstrapError);
           
