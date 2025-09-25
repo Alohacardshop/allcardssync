@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, Upload, Search, CheckSquare, Square, Trash2, Printer, Scissors } from 'lucide-react';
+import { Loader2, Upload, Search, CheckSquare, Square, Trash2, Printer, Scissors, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
@@ -56,6 +56,7 @@ const Inventory = () => {
   const [syncingRowId, setSyncingRowId] = useState<string | null>(null);
   const [printingItem, setPrintingItem] = useState<string | null>(null);
   const [bulkPrinting, setBulkPrinting] = useState(false);
+  const [bulkRetrying, setBulkRetrying] = useState(false);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   
   // Dialog state
@@ -318,18 +319,89 @@ const Inventory = () => {
         return;
       }
       
-      const result = await sendChunkedBatchToShopify(
-        [item.id],
-        item.store_key as "hawaii" | "las_vegas",
-        item.shopify_location_gid
-      );
+      setSyncingRowId(item.id);
       
-      toast.success(`Sync retry initiated for ${item.store_key} store`);
+      // Queue item for retry
+      const { error: queueError } = await supabase.rpc('queue_shopify_sync', {
+        item_id: item.id,
+        sync_action: 'create'
+      });
+
+      if (queueError) {
+        throw new Error(`Failed to queue for retry: ${queueError.message}`);
+      }
+
+      // Trigger the processor
+      await supabase.functions.invoke('shopify-sync', { body: {} });
+      
+      toast.success(`${item.sku} queued for retry`);
       fetchItems(0, true);
     } catch (error) {
       toast.error('Failed to retry sync: ' + (error as Error).message);
+    } finally {
+      setSyncingRowId(null);
     }
-  }, [sendChunkedBatchToShopify, fetchItems]);
+  }, [fetchItems]);
+
+  const handleBulkRetrySync = useCallback(async () => {
+    const errorItems = filteredItems.filter(item => 
+      selectedItems.has(item.id) && 
+      item.shopify_sync_status === 'error' &&
+      item.store_key && 
+      item.shopify_location_gid
+    );
+    
+    if (errorItems.length === 0) {
+      toast.error('No selected items with sync errors found');
+      return;
+    }
+
+    setBulkRetrying(true);
+    try {
+      let successCount = 0;
+      let failCount = 0;
+
+      // Queue each item for retry
+      for (const item of errorItems) {
+        try {
+          const { error: queueError } = await supabase.rpc('queue_shopify_sync', {
+            item_id: item.id,
+            sync_action: 'create'
+          });
+
+          if (queueError) {
+            console.error(`Failed to queue ${item.sku}:`, queueError);
+            failCount++;
+          } else {
+            successCount++;
+          }
+          
+          // Small delay between queue operations
+          await new Promise(resolve => setTimeout(resolve, 100));
+        } catch (error) {
+          console.error(`Error queuing ${item.sku}:`, error);
+          failCount++;
+        }
+      }
+
+      if (successCount > 0) {
+        // Trigger the processor
+        await supabase.functions.invoke('shopify-sync', { body: {} });
+        toast.success(`${successCount} items queued for retry sync`);
+      }
+      
+      if (failCount > 0) {
+        toast.error(`${failCount} items failed to queue for retry`);
+      }
+
+      fetchItems(0, true);
+    } catch (error) {
+      console.error('Bulk retry error:', error);
+      toast.error('Failed to start bulk retry');
+    } finally {
+      setBulkRetrying(false);
+    }
+  }, [filteredItems, selectedItems, fetchItems]);
 
   const handlePrint = useCallback(async (item: any) => {
     console.log('handlePrint called for item:', item.id);
@@ -991,6 +1063,22 @@ const Inventory = () => {
                       )}
                       {bulkPrinting ? 'Printing...' : 'Print All Unprinted Raw'}
                     </Button>
+
+                    {statusFilter === 'errors' && selectedItems.size > 0 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleBulkRetrySync}
+                        disabled={bulkRetrying}
+                      >
+                        {bulkRetrying ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <RotateCcw className="h-4 w-4 mr-2" />
+                        )}
+                        {bulkRetrying ? 'Retrying...' : 'Retry Selected'}
+                      </Button>
+                    )}
 
                     <Button
                       variant="outline"
