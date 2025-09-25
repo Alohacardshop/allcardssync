@@ -116,9 +116,20 @@ class PrintNodeService {
       console.log('- First 20 chars:', JSON.stringify(zpl.substring(0, 20)));
       console.log('- Last 20 chars:', JSON.stringify(zpl.substring(zpl.length - 20)));
       
-      // Show actual ZPL content
-      console.log('🖨️ ZPL Content:');
-      console.log(zpl);
+      // Count labels in batch ZPL
+      const labelCount = (zpl.match(/\^XA/g) || []).length;
+      console.log('🖨️ Detected labels in ZPL:', labelCount);
+      
+      // Show actual ZPL content (truncated for large batches)
+      if (zpl.length > 1000) {
+        console.log('🖨️ ZPL Content (first 500 chars):');
+        console.log(zpl.substring(0, 500) + '...');
+        console.log('🖨️ ZPL Content (last 500 chars):');  
+        console.log('...' + zpl.substring(zpl.length - 500));
+      } else {
+        console.log('🖨️ ZPL Content:');
+        console.log(zpl);
+      }
       
       // Validate ZPL for ZD410 compatibility
       if (!this.validateZD410ZPL(zpl)) {
@@ -128,7 +139,7 @@ class PrintNodeService {
       // Create print job with UTF-8 safe encoding
       const printJob = {
         printer: printerId,
-        title: `ZD410-Test-${Date.now()}`,
+        title: `Batch-${labelCount}-labels-${Date.now()}`,
         contentType: 'raw_base64',
         content: this.toBase64Utf8(zpl),
         copies: copies
@@ -139,7 +150,8 @@ class PrintNodeService {
         title: printJob.title,
         contentType: printJob.contentType,
         contentLength: printJob.content.length,
-        copies: printJob.copies
+        copies: printJob.copies,
+        estimatedLabels: labelCount
       });
 
       const response = await this.makeRequest('/printjobs', {
@@ -162,6 +174,7 @@ class PrintNodeService {
       }
 
       console.log('🖨️ PrintNode: Extracted job ID:', jobId);
+      console.log('🖨️ PrintNode: Job submitted successfully for', labelCount, 'labels');
 
       return {
         success: true,

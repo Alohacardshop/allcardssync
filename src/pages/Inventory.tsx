@@ -720,9 +720,12 @@ const Inventory = () => {
           batchZpl += `^PQ1,1,0,Y\n^CN1\n^XZ`;
           
           console.log('🖨️ Sending batch ZPL with cut command:', batchZpl);
+          console.log('🖨️ About to print', printedItemIds.length, 'labels');
           
           // Send the complete batch to printer
           const result = await print(batchZpl, 1);
+          
+          console.log('🖨️ Print result:', result);
           
           if (result.success) {
             // Mark all items as printed only after successful print
@@ -730,6 +733,10 @@ const Inventory = () => {
               .from('intake_items')
               .update({ printed_at: new Date().toISOString() })
               .in('id', printedItemIds);
+              
+            // Only show success after confirmed printing
+            toast.success(`Successfully printed ${printedItemIds.length} raw card labels`);
+            fetchItems(0, true); // Refresh the items list
           } else {
             throw new Error(result.error || 'Print job failed');
           }
@@ -738,15 +745,13 @@ const Inventory = () => {
           toast.error(`Failed to send batch to printer: ${error instanceof Error ? error.message : 'Unknown error'}`);
           return;
         }
+      } else {
+        toast.error('No valid labels to print');
+        return;
       }
 
-      if (successCount > 0) {
-        toast.success(`Successfully printed ${successCount} raw card labels`);
-        fetchItems(0, true); // Refresh the items list
-      }
-      
       if (errorCount > 0) {
-        toast.error(`Failed to print ${errorCount} labels`);
+        toast.warning(`Generated ${successCount} labels but failed to generate ${errorCount} labels`);
       }
 
     } catch (error) {
