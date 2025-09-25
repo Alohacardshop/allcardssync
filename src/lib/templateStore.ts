@@ -318,7 +318,7 @@ export function generateZPLFromElements(
     }
   }
   
-  lines.push('^PQ1,1,0,Y'); // 1 copy; cut between labels if supported
+  // Don't add ^PQ command here - let PrintNode handle copies
   lines.push('^XZ');
   return lines.join('');
 }

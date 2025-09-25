@@ -108,7 +108,6 @@ export default function TemplateEditor() {
 ^FO160,48^A0,28,28^FD{{PRICE}}^FS
 ^FO16,78^A0,22,22^FD{{SKU}}^FS
 ^FO16,106^BY2^BCN,72,Y,N,N^FD{{BARCODE}}^FS
-^PQ1,1,0,Y
 ^XZ`;
 
     const template: LabelTemplate = {

@@ -270,7 +270,8 @@ export function generateZPLFromElements(
     }
   });
 
-  zpl.push('^PQ1,1,0,Y', '^XZ');
+  // Don't add ^PQ command here - let PrintNode handle copies
+  zpl.push('^XZ');
   return zpl.join('\n');
 }
 
