@@ -5,6 +5,7 @@ import { Lock, Package, Layers } from 'lucide-react';
 import { GradedCardIntake } from '@/components/GradedCardIntake';
 import { TCGPlayerBulkImport } from '@/components/TCGPlayerBulkImport';
 import { CurrentBatchPanel } from '@/components/CurrentBatchPanel';
+import PrintTestLabel from '@/components/PrintTestLabel';
 import { toast } from "@/hooks/use-toast";
 
 export default function Index() {
@@ -44,6 +45,11 @@ export default function Index() {
   return (
     <div className="min-h-screen bg-background pt-20">
       <div className="container mx-auto p-4">
+        {/* PRINT TEST SECTION */}
+        <div className="mb-6">
+          <PrintTestLabel />
+        </div>
+        
         {/* TAB NAVIGATION */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-3 mb-6">
