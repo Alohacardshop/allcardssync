@@ -60,6 +60,11 @@ export async function print(zpl: string, copies: number = 1): Promise<PrintResul
     console.log('='.repeat(50));
     console.log(`📋 ZPL Length: ${zpl.length} characters`);
     console.log(`🔢 Copies: ${copies}`);
+    console.log('🖨️ ZPL PQ Analysis:', {
+      containsPQ: zpl.includes('^PQ'),
+      pqCommands: zpl.match(/\^PQ[^\^]*/g),
+      willOverrideCopies: zpl.includes('^PQ') ? 'YES - ZPL contains ^PQ command' : 'NO'
+    });
     
     // Get saved PrintNode configuration
     const savedConfig = localStorage.getItem('zebra-printer-config');
