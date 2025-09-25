@@ -35,33 +35,41 @@ export default function Auth() {
   useSEO({ title: "Sign In | Aloha", description: "Secure sign in for Aloha Inventory staff." });
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true); // Start as loading to handle initial session check
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [roleError, setRoleError] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
-    console.log('Auth page mount');
+    console.log('🚀 Auth page mount');
     setMounted(true);
     
     // Check for existing session first
     supabase.auth.getSession().then(async ({ data: { session } }) => {
+      console.log('🔍 Session check result:', session?.user?.email || 'No session');
+      
       if (session?.user) {
-        console.log('Existing session found for:', session.user.email);
+        console.log('📋 Existing session found, processing auth...');
         await handleUserAuthentication(session.user.id);
       } else {
+        console.log('❌ No existing session, setting loading to false');
         setLoading(false);
       }
+    }).catch((error) => {
+      console.error('❌ Session check error:', error);
+      setLoading(false);
     });
 
     // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth state change:', event, session?.user?.email);
+      console.log('🔄 Auth state change:', event, session?.user?.email || 'No user');
       
       if (event === 'SIGNED_IN' && session?.user) {
+        console.log('✅ User signed in, processing auth...');
         await handleUserAuthentication(session.user.id);
       } else if (event === 'SIGNED_OUT') {
+        console.log('👋 User signed out, resetting state');
         setLoading(false);
         setRoleError(null);
       }
