@@ -1,7 +1,7 @@
 // PrintTestLabel.tsx
 import React, { useCallback, useState } from "react";
 import { renderLabelV2 } from "@/lib/print/templates";
-import { printRawZpl } from "@/lib/print/printRawZpl";
+import { printQueue } from "@/lib/print/queueInstance";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -25,13 +25,14 @@ export default function PrintTestLabel() {
   }, [safe]);
 
   const handlePrint = useCallback(async () => {
-    const zpl = renderLabelV2({
+    const rawZpl = renderLabelV2({
       CONDITION: "NM",
       PRICE: "$4.00",
       BARCODE: "5459953",
       CARDNAME: "SWSH09: Brilliant Stars Trainer Gallery Ariados #TG09/TG30",
     });
-    await printRawZpl(zpl);
+    const safeZpl = rawZpl.replace(/\^XZ\s*$/, "").concat("\n^PQ1\n^XZ");
+    printQueue.enqueue({ zpl: safeZpl, qty: 1, usePQ: true });
   }, []);
 
   const onClick = useCallback(debounce(handlePrint, 500), [handlePrint]);

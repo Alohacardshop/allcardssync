@@ -17,6 +17,7 @@ import { ZebraPrinterSelectionDialog } from '@/components/ZebraPrinterSelectionD
 import { getTemplate, loadOrgTemplate } from '@/lib/labels/templateStore';
 import { zplFromElements, zplFromTemplateString } from '@/lib/labels/zpl';
 import { sendZplToPrinter } from '@/lib/labels/print';
+import { printQueue } from '@/lib/print/queueInstance';
 import type { JobVars, ZPLElement } from '@/lib/labels/types';
 import { print } from '@/lib/printService';
 import { sendGradedToShopify, sendRawToShopify } from '@/hooks/useShopifySend';
@@ -581,7 +582,10 @@ const Inventory = () => {
         type: itemType
       });
 
-      await sendZplToPrinter(zpl, `Inventory-${Date.now()}`, { copies: item.quantity || 1 });
+      // Convert to queue-compatible format
+      const safeZpl = zpl.replace(/\^XZ\s*$/, "").concat("\n^PQ1\n^XZ");
+      const qty = item.quantity || 1;
+      printQueue.enqueue({ zpl: safeZpl, qty, usePQ: true });
 
       await supabase
         .from('intake_items')
@@ -648,25 +652,6 @@ const Inventory = () => {
         return;
       }
 
-      // Check for standardized printer configuration
-      const savedConfig = localStorage.getItem('zebra-printer-config');
-      const config = savedConfig ? JSON.parse(savedConfig) : {};
-      const usePrintNode = config.usePrintNode && config.printNodeId;
-      
-      if (!usePrintNode && !selectedPrinter) {
-        toast.error('Please configure PrintNode or select a Zebra printer in Test Hardware > Printer Setup');
-        return;
-      }
-
-      // Remove the outdated import and zebraNetworkService reference
-      console.log('Bulk printing - using unified print service only');
-      
-      // Generate ZPL for all items in batch
-      let successCount = 0;
-      let errorCount = 0;
-      let batchZpl = '';
-      const printedItemIds: string[] = [];
-
       // Generate proper title for raw card
       const generateTitle = (item: any) => {
         const parts: string[] = [];
@@ -679,6 +664,7 @@ const Inventory = () => {
 
       // Get template once for all items
       const tpl = await getTemplate('raw_card_2x1');
+      const queueItems = [];
 
       for (const item of unprintedRawItems) {
         try {
@@ -692,7 +678,7 @@ const Inventory = () => {
 
           const prefs = JSON.parse(localStorage.getItem('zebra-printer-config') || '{}');
 
-          let zpl = '';
+          let rawZpl = '';
           if (tpl.format === 'elements' && tpl.layout) {
             const filled = {
               ...tpl.layout,
@@ -709,16 +695,110 @@ const Inventory = () => {
                 return el;
               }),
             };
-            zpl = zplFromElements(filled, prefs, cutterSettings);
+            rawZpl = zplFromElements(filled, prefs, cutterSettings);
           } else if (tpl.format === 'zpl' && tpl.zpl) {
-            zpl = zplFromTemplateString(tpl.zpl, vars);
+            rawZpl = zplFromTemplateString(tpl.zpl, vars);
           } else {
             throw new Error('No valid label template');
           }
 
-          // Add this label's ZPL to the batch (remove ^XZ and ^PQ commands from individual labels)
-          const cleanZpl = zpl.replace(/\^XZ\s*$/, '').replace(/\^PQ\d+,\d+,\d+,\w+\s*/, '');
-          batchZpl += cleanZpl + '\n';
+          // Convert to queue-compatible format
+          const safeZpl = rawZpl.replace(/\^XZ\s*$/, "").concat("\n^PQ1\n^XZ");
+          const qty = item.quantity || 1;
+          queueItems.push({ zpl: safeZpl, qty, usePQ: true });
+        } catch (error) {
+          console.error(`Failed to generate ZPL for ${item.sku}:`, error);
+        }
+      }
+
+      if (queueItems.length > 0) {
+        // Enqueue all items as a batch
+        printQueue.enqueueMany(queueItems);
+        
+        // Mark all items as printed (the queue will handle actual printing)
+        const printedItemIds = unprintedRawItems.map(item => item.id);
+        await supabase
+          .from('intake_items')
+          .update({ printed_at: new Date().toISOString() })
+          .in('id', printedItemIds);
+          
+        toast.success(`Queued ${queueItems.length} raw card labels for printing`);
+        fetchItems(0, true); // Refresh the items list
+      } else {
+        toast.error('Failed to generate any labels for printing');
+      }
+      
+    } catch (error) {
+      console.error('Bulk print error:', error);
+      toast.error(`Failed to queue bulk print: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setBulkPrinting(false);
+    }
+  }, [items, fetchItems, cutterSettings]);
+
+  const handleCutOnly = useCallback(async () => {
+    try {
+      const cutZpl = "^XA^MMC^PW420^LL203^XZ";
+      printQueue.enqueue({ zpl: cutZpl, qty: 1, usePQ: true });
+      toast.success('Cut command sent successfully');
+    } catch (error) {
+      console.error('Cut command error:', error);
+      toast.error(`Failed to send cut command: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }, []);
+
+  const handleReprintSelected = useCallback(async () => {
+    setBulkPrinting(true);
+    try {
+      const selectedRawItems = items.filter(item => {
+        const itemType = item.type?.toLowerCase() || 'raw';
+        return selectedItems.has(item.id) && itemType === 'raw' && !item.deleted_at;
+      });
+
+      if (selectedRawItems.length === 0) {
+        toast.info('No selected raw cards to reprint');
+        return;
+      }
+
+      const tpl = await getTemplate('raw_card_2x1');
+      const queueItems = [];
+
+      for (const item of selectedRawItems) {
+        try {
+          const vars: JobVars = {
+            CARDNAME: item.subject || 'Raw Card',
+            CONDITION: item?.condition ?? 'NM',
+            PRICE: item?.price != null ? `$${Number(item.price).toFixed(2)}` : '$0.00',
+            SKU: item?.sku ?? '',
+            BARCODE: item?.sku ?? 'BARCODE',
+          };
+
+          let rawZpl = '';
+          if (tpl.format === 'zpl' && tpl.zpl) {
+            rawZpl = zplFromTemplateString(tpl.zpl, vars);
+          } else {
+            throw new Error('No valid template');
+          }
+
+          const safeZpl = rawZpl.replace(/\^XZ\s*$/, "").concat("\n^PQ1\n^XZ");
+          queueItems.push({ zpl: safeZpl, qty: 1, usePQ: true });
+        } catch (error) {
+          console.error(`Failed to generate ZPL for ${item.sku}:`, error);
+        }
+      }
+
+      if (queueItems.length > 0) {
+        printQueue.enqueueMany(queueItems);
+        toast.success(`Queued ${queueItems.length} labels for reprinting`);
+        setSelectedItems(new Set());
+      }
+    } catch (error) {
+      console.error('Reprint error:', error);
+      toast.error('Failed to queue reprint');
+    } finally {
+      setBulkPrinting(false);
+    }
+  }, [items, selectedItems]);
           
           printedItemIds.push(item.id);
           successCount++;
@@ -789,6 +869,65 @@ const Inventory = () => {
 
       if (selectedRawItems.length === 0) {
         toast.info('No selected raw cards to reprint');
+        return;
+      }
+
+      // Generate proper title for raw card
+      const generateTitle = (item: any) => {
+        const parts: string[] = [];
+        if (item.year) parts.push(item.year);
+        if (item.brand_title) parts.push(item.brand_title);
+        if (item.subject) parts.push(item.subject);
+        if (item.card_number) parts.push(`#${item.card_number}`);
+        return parts.length > 0 ? parts.join(' ') : 'Raw Card';
+      };
+
+      // Get template and queue items
+      const tpl = await getTemplate('raw_card_2x1');
+      const queueItems = [];
+
+      for (const item of selectedRawItems) {
+        try {
+          const vars: JobVars = {
+            CARDNAME: generateTitle(item),
+            CONDITION: item?.condition ?? 'NM',
+            PRICE: item?.price != null ? `$${Number(item.price).toFixed(2)}` : '$0.00',
+            SKU: item?.sku ?? '',
+            BARCODE: item?.sku ?? generateTitle(item).replace(/[^a-z0-9]/gi,'').slice(0,12),
+          };
+
+          const prefs = JSON.parse(localStorage.getItem('zebra-printer-config') || '{}');
+          let rawZpl = '';
+
+          if (tpl.format === 'zpl' && tpl.zpl) {
+            rawZpl = zplFromTemplateString(tpl.zpl, vars);
+          } else {
+            throw new Error('No valid label template');
+          }
+
+          const safeZpl = rawZpl.replace(/\^XZ\s*$/, "").concat("\n^PQ1\n^XZ");
+          const qty = item.quantity || 1;
+          queueItems.push({ zpl: safeZpl, qty, usePQ: true });
+        } catch (error) {
+          console.error(`Failed to generate ZPL for ${item.sku}:`, error);
+        }
+      }
+
+      if (queueItems.length > 0) {
+        printQueue.enqueueMany(queueItems);
+        toast.success(`Queued ${queueItems.length} selected labels for reprinting`);
+        setSelectedItems(new Set());
+      } else {
+        toast.error('Failed to generate any labels for printing');
+      }
+
+    } catch (error) {
+      console.error('Reprint error:', error);
+      toast.error(`Failed to queue reprint: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setBulkPrinting(false);
+    }
+  }, [items, selectedItems, fetchItems]);
         return;
       }
 

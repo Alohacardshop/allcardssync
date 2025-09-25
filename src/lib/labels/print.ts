@@ -1,5 +1,5 @@
 import { PrinterPrefs } from './types';
-import { printNodeService } from '@/lib/printNodeService';
+import { printQueue } from '@/lib/print/queueInstance';
 
 export async function sendZplToPrinter(zpl: string, title: string, prefs?: PrinterPrefs) {
   console.log('🖨️ sendZplToPrinter called with:', {
@@ -9,26 +9,13 @@ export async function sendZplToPrinter(zpl: string, title: string, prefs?: Print
     zplLength: zpl.length
   });
   
-  const cfg = JSON.parse(localStorage.getItem('zebra-printer-config') || '{}');
+  // Convert to queue-compatible format
+  const safeZpl = zpl.replace(/\^XZ\s*$/, "").concat("\n^PQ1\n^XZ");
+  const qty = prefs?.copies || 1;
   
-  if (cfg?.usePrintNode && cfg?.printNodeId) {
-    try {
-      console.log('🖨️ Sending ZPL via PrintNode service...');
-      console.log('🖨️ Final copies being sent to PrintNode:', prefs?.copies || 1);
-      const result = await printNodeService.printZPL(zpl, cfg.printNodeId, prefs?.copies || 1);
-      
-      if (result.success) {
-        console.log('✅ Print job sent successfully, Job ID:', result.jobId);
-        return result;
-      } else {
-        throw new Error(result.error || 'Print job failed');
-      }
-    } catch (error) {
-      console.error('❌ Print failed:', error);
-      throw error;
-    }
-  }
+  // Enqueue the print job
+  printQueue.enqueue({ zpl: safeZpl, qty, usePQ: true });
   
-  console.warn('No PrintNode configured. ZPL output:', zpl);
-  // Fallback: show ZPL in console for debugging
+  console.log('✅ Print job queued successfully');
+  return { success: true, jobId: `queued-${Date.now()}` };
 }

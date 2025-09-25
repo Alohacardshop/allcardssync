@@ -10,7 +10,7 @@ import { usePrintNode } from '@/contexts/PrintNodeContext';
 import { printNodeService } from '@/lib/printNodeService';
 import { codeDefaultRawCard2x1 } from '@/lib/labels/templateStore';
 import { zplFromElements } from '@/lib/labels/zpl';
-import { sendZplToPrinter } from '@/lib/labels/print';
+import { printQueue } from '@/lib/print/queueInstance';
 import { toast } from 'sonner';
 
 export function PrintNodeSettings() {
