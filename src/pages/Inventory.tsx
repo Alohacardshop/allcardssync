@@ -235,7 +235,7 @@ const Inventory = () => {
     if (assignedStore && selectedLocation) {
       fetchItems(0, true);
     }
-  }, [fetchItems, assignedStore, selectedLocation]);
+  }, [statusFilter, typeFilter, assignedStore, selectedLocation, showSoldItems]);
 
   // Auto-refresh every 30 seconds to show latest sync status (only when initialized)
   useEffect(() => {
