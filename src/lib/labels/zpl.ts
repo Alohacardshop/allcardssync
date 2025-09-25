@@ -93,40 +93,28 @@ function mediaCommand(m: PrinterPrefs['media']) {
 /**
  * Injects quantity (^PQ) command into ZPL string to ensure proper print copies
  * This is necessary because PrintNode's copies parameter doesn't work reliably with raw ZPL
+ * Always adds ^PQ command, even for single copies, as required by printer validation
  */
 export function injectQuantityIntoZPL(zpl: string, quantity: number): string {
-  // If quantity is 1 or less, don't modify ZPL
-  if (quantity <= 1) {
-    return zpl;
-  }
+  // Ensure minimum quantity of 1
+  const finalQuantity = Math.max(1, quantity);
   
   // Check if ZPL already has ^PQ command
   const existingPQ = zpl.match(/\^PQ\d+/);
   if (existingPQ) {
     // Replace existing ^PQ with new quantity
-    return zpl.replace(/\^PQ\d+[,\d\w]*/, `^PQ${quantity}`);
+    return zpl.replace(/\^PQ\d+[,\d\w]*/, `^PQ${finalQuantity}`);
   }
   
-  // Find position after ^XA to insert ^PQ
-  const xaIndex = zpl.indexOf('^XA');
-  if (xaIndex === -1) {
-    console.warn('ZPL missing ^XA command, cannot inject quantity');
+  // Find position to insert ^PQ before ^XZ
+  const xzIndex = zpl.lastIndexOf('^XZ');
+  if (xzIndex === -1) {
+    console.warn('ZPL missing ^XZ command, cannot inject quantity');
     return zpl;
   }
   
-  // Insert ^PQ after ^XA and any immediate setup commands (but before field commands)
-  const setupCommands = /^(\^XA\s*(?:\^[A-Z]{2,3}[^\^]*\s*)*)/;
-  const match = zpl.match(setupCommands);
-  
-  if (match) {
-    const setupPart = match[1];
-    const restPart = zpl.substring(setupPart.length);
-    return `${setupPart}^PQ${quantity}\n${restPart}`;
-  } else {
-    // Fallback: insert right after ^XA
-    const insertPos = xaIndex + 3;
-    return zpl.substring(0, insertPos) + `\n^PQ${quantity}` + zpl.substring(insertPos);
-  }
+  // Insert ^PQ right before ^XZ
+  return zpl.substring(0, xzIndex) + `^PQ${finalQuantity}\n^XZ` + zpl.substring(xzIndex + 3);
 }
 
 const esc = (s?: string) => (s ?? '').replace(/\^/g, ' ').replace(/~/g, ' ');
