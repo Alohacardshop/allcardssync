@@ -762,6 +762,152 @@ const Inventory = () => {
     }
   }, [items, selectedPrinter, fetchItems]);
 
+  const handleReprintSelected = useCallback(async () => {
+    setBulkPrinting(true);
+    
+    try {
+      // Get selected raw items
+      const selectedRawItems = items.filter(item => {
+        const itemType = item.type?.toLowerCase() || 'raw';
+        return selectedItems.has(item.id) && itemType === 'raw' && !item.deleted_at;
+      });
+
+      if (selectedRawItems.length === 0) {
+        toast.info('No selected raw cards to reprint');
+        return;
+      }
+
+      // Check for standardized printer configuration
+      const savedConfig = localStorage.getItem('zebra-printer-config');
+      const config = savedConfig ? JSON.parse(savedConfig) : {};
+      const usePrintNode = config.usePrintNode && config.printNodeId;
+      
+      if (!usePrintNode && !selectedPrinter) {
+        toast.error('Please configure PrintNode or select a Zebra printer in Test Hardware > Printer Setup');
+        return;
+      }
+
+      console.log('Reprinting selected items - using unified print service only');
+      
+      // Generate ZPL for all selected items in batch
+      let successCount = 0;
+      let errorCount = 0;
+      let batchZpl = '';
+      const reprintedItemIds: string[] = [];
+
+      // Generate proper title for raw card
+      const generateTitle = (item: any) => {
+        const parts: string[] = [];
+        if (item.year) parts.push(item.year);
+        if (item.brand_title) parts.push(item.brand_title);
+        if (item.subject) parts.push(item.subject);
+        if (item.card_number) parts.push(`#${item.card_number}`);
+        return parts.length > 0 ? parts.join(' ') : 'Raw Card';
+      };
+
+      // Get template once for all items
+      const tpl = await getTemplate('raw_card_2x1');
+
+      for (const item of selectedRawItems) {
+        try {
+          const vars: JobVars = {
+            CARDNAME: generateTitle(item),
+            CONDITION: item?.condition ?? 'NM',
+            PRICE: item?.price != null ? `$${Number(item.price).toFixed(2)}` : '$0.00',
+            SKU: item?.sku ?? '',
+            BARCODE: item?.sku ?? generateTitle(item).replace(/[^a-z0-9]/gi,'').slice(0,12),
+          };
+
+          const prefs = JSON.parse(localStorage.getItem('zebra-printer-config') || '{}');
+
+          let zpl = '';
+          if (tpl.format === 'elements' && tpl.layout) {
+            const filled = {
+              ...tpl.layout,
+              elements: tpl.layout.elements.map((el: ZPLElement) => {
+                if (el.type === 'text') {
+                  if (el.id === 'cardname') return { ...el, text: vars.CARDNAME ?? el.text };
+                  if (el.id === 'condition') return { ...el, text: vars.CONDITION ?? el.text };
+                  if (el.id === 'price') return { ...el, text: vars.PRICE ?? el.text };
+                  if (el.id === 'sku') return { ...el, text: vars.SKU ?? el.text };
+                  if (el.id === 'desc') return { ...el, text: vars.CARDNAME ?? el.text };
+                } else if (el.type === 'barcode' && el.id === 'barcode') {
+                  return { ...el, data: vars.BARCODE ?? el.data };
+                }
+                return el;
+              }),
+            };
+            zpl = zplFromElements(filled, prefs, cutterSettings);
+          } else if (tpl.format === 'zpl' && tpl.zpl) {
+            zpl = zplFromTemplateString(tpl.zpl, vars);
+          } else {
+            throw new Error('No valid label template');
+          }
+
+          // Add this label's ZPL to the batch (remove ^XZ and ^PQ commands from individual labels)
+          const cleanZpl = zpl.replace(/\^XZ\s*$/, '').replace(/\^PQ\d+,\d+,\d+,\w+\s*/, '');
+          batchZpl += cleanZpl + '\n';
+          
+          reprintedItemIds.push(item.id);
+          successCount++;
+        } catch (error) {
+          console.error(`Failed to generate ZPL for ${item.sku}:`, error);
+          errorCount++;
+        }
+      }
+
+      // Send the entire batch with cut command at the end
+      if (batchZpl && reprintedItemIds.length > 0) {
+        try {
+          // Add print quantity and cut command at the end of the batch
+          batchZpl += `^PQ1,1,0,Y\n^CN1\n^XZ`;
+          
+          console.log('🖨️ Sending reprint batch ZPL with cut command:', batchZpl);
+          console.log('🖨️ About to reprint', reprintedItemIds.length, 'labels');
+          
+          // Send the complete batch to printer
+          const result = await print(batchZpl, 1);
+          
+          console.log('🖨️ Reprint result:', result);
+          
+          if (result.success) {
+            // Update printed_at timestamp for reprinted items
+            await supabase
+              .from('intake_items')
+              .update({ printed_at: new Date().toISOString() })
+              .in('id', reprintedItemIds);
+              
+            // Clear selection after successful reprint
+            setSelectedItems(new Set());
+            
+            // Only show success after confirmed printing
+            toast.success(`Successfully reprinted ${reprintedItemIds.length} selected labels`);
+            fetchItems(0, true); // Refresh the items list
+          } else {
+            throw new Error(result.error || 'Print job failed');
+          }
+        } catch (error) {
+          console.error('Failed to send reprint batch to printer:', error);
+          toast.error(`Failed to send reprint batch to printer: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          return;
+        }
+      } else {
+        toast.error('No valid labels to reprint');
+        return;
+      }
+
+      if (errorCount > 0) {
+        toast.warning(`Reprinted ${successCount} labels but failed to generate ${errorCount} labels`);
+      }
+
+    } catch (error) {
+      console.error('Reprint selected error:', error);
+      toast.error('Failed to start reprinting selected items');
+    } finally {
+      setBulkPrinting(false);
+    }
+  }, [items, selectedItems, selectedPrinter, fetchItems]);
+
   const selectAllVisible = useCallback(() => {
     const allVisibleIds = new Set(filteredItems.map(item => item.id));
     setSelectedItems(allVisibleIds);
@@ -1102,6 +1248,22 @@ const Inventory = () => {
                       )}
                       {bulkPrinting ? 'Printing...' : 'Print All Unprinted Raw'}
                     </Button>
+
+                    {selectedItems.size > 0 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleReprintSelected}
+                        disabled={bulkPrinting}
+                      >
+                        {bulkPrinting ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <Printer className="h-4 w-4 mr-2" />
+                        )}
+                        {bulkPrinting ? 'Reprinting...' : `Reprint Selected (${selectedItems.size})`}
+                      </Button>
+                    )}
 
                     {statusFilter === 'errors' && selectedItems.size > 0 && (
                       <Button
