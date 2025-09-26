@@ -31,6 +31,7 @@ import { QueueStatusIndicator } from '@/components/QueueStatusIndicator';
 import { InventoryDeleteDialog } from '@/components/InventoryDeleteDialog';
 import { useCutterSettings } from '@/hooks/useCutterSettings';
 import { CutterSettingsPanel } from '@/components/CutterSettingsPanel';
+import { TestLabelButton } from '@/components/TestLabelButton';
 
 const ITEMS_PER_PAGE = 50;
 
@@ -1153,6 +1154,8 @@ const Inventory = () => {
                   </div>
 
                   <div className="flex items-center space-x-2">
+                    <TestLabelButton />
+                    
                     <Button
                       variant="outline"
                       size="sm"

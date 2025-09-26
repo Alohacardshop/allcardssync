@@ -1,12 +1,12 @@
 // PrintTestLabel.tsx
 import React, { useCallback, useState } from "react";
-import { renderLabelV2 } from "@/lib/print/templates";
+import { testLabelZpl } from "@/lib/print/templates";
 import { printQueue } from "@/lib/print/queueInstance";
-import { sanitizeLabel } from "@/lib/print/sanitizeZpl";
 import { oncePer } from "@/lib/print/debounce";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
 
 export default function PrintTestLabel() {
   const [safe, setSafe] = useState(localStorage.getItem("safePrintMode") === "true");
@@ -18,21 +18,19 @@ export default function PrintTestLabel() {
   }, [safe]);
 
   const handlePrint = useCallback(async () => {
-    const rawZpl = renderLabelV2({
-      CONDITION: "NM",
-      PRICE: "$4.00",
-      BARCODE: "5459953",
-      CARDNAME: "SWSH09: Brilliant Stars Trainer Gallery Ariados #TG09/TG30",
+    console.debug("[test_label_print]", {
+      zplLength: testLabelZpl.length,
+      preview: testLabelZpl.slice(0, 50).replace(/\n/g, "\\n")
     });
     
-    console.debug("[print_prepare]", {
-      template: "test_label",
-      qty: 1,
-      preview: rawZpl.slice(0, 120).replace(/\n/g, "\\n")
+    // Use the standardized test ZPL
+    await printQueue.enqueueSafe({ 
+      zpl: testLabelZpl, 
+      qty: 1, 
+      usePQ: true 
     });
     
-    const safeZpl = sanitizeLabel(rawZpl);
-    await printQueue.enqueueSafe({ zpl: safeZpl, qty: 1, usePQ: true });
+    toast.success("Test label sent - should print exactly once");
   }, []);
 
   const onClick = useCallback(oncePer()(handlePrint), [handlePrint]);
