@@ -608,7 +608,7 @@ const Inventory = () => {
         throw new Error('Invalid template format');
       }
 
-      console.log('🖨️ Generated ZPL for printing (first 200 chars):', zpl.slice(0, 200));
+      console.log('🖨️ Generated ZPL for printing (FULL):', zpl);
       console.log('🖨️ Generated ZPL contains vars:', {
         hasCardname: zpl.includes(vars.CARDNAME || ''),
         hasCondition: zpl.includes(vars.CONDITION || ''), 
