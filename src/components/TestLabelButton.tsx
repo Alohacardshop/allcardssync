@@ -13,8 +13,8 @@ export function TestLabelButton() {
       preview: testLabelZpl.slice(0, 50).replace(/\n/g, "\\n")
     });
     
-    // Send raw test ZPL without any modifications
-    await printQueue.enqueueSafe({ 
+    // Send test ZPL using single mode to avoid cut tail
+    await printQueue.enqueueSingle({ 
       zpl: testLabelZpl, 
       qty: 1, 
       usePQ: true 

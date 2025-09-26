@@ -3,7 +3,8 @@ import { sha1Hex } from "./hash";
 export type QueueItem = { 
   zpl: string; 
   qty?: number; 
-  usePQ?: boolean; 
+  usePQ?: boolean;
+  _skipCutTail?: boolean;
 };
 
 export type CutMode = "none" | "end-of-batch";
@@ -37,6 +38,13 @@ export class PrintQueue {
   enqueue(item: QueueItem) { 
     this.q.push(item); 
     this.scheduleFlush(); 
+  }
+  
+  // Enqueue single item that bypasses cut tail logic
+  enqueueSingle(item: QueueItem) {
+    // Force immediate processing to avoid batching with cut tail
+    this.q.push({ ...item, _skipCutTail: true });
+    this.scheduleFlush(0);
   }
   
   enqueueMany(items: QueueItem[]) { 
@@ -113,9 +121,13 @@ export class PrintQueue {
         
         let payload = parts.join("\n");
 
-        // Append single cut tail once at end of batch (ZD410-friendly)
-        if (cutMode === "end-of-batch" && this.opts.endCutTail) {
+        // Only append cut tail for multi-item batches (unless any item requests to skip)
+        const shouldSkipCutTail = batch.some(item => item._skipCutTail);
+        if (cutMode === "end-of-batch" && this.opts.endCutTail && batch.length > 1 && !shouldSkipCutTail) {
           payload = `${payload}\n${this.opts.endCutTail}`;
+          console.debug("[cut_tail_added]", { batchSize: batch.length });
+        } else if (shouldSkipCutTail) {
+          console.debug("[cut_tail_skipped]", { reason: "single_label_mode" });
         }
 
         // Split big payloads at ^XA boundaries

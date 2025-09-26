@@ -23,8 +23,8 @@ export default function PrintTestLabel() {
       preview: testLabelZpl.slice(0, 50).replace(/\n/g, "\\n")
     });
     
-    // Use the standardized test ZPL
-    await printQueue.enqueueSafe({ 
+    // Use single mode for test labels to avoid cut tail
+    await printQueue.enqueueSingle({ 
       zpl: testLabelZpl, 
       qty: 1, 
       usePQ: true 
