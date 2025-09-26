@@ -135,8 +135,9 @@ export default function LabelStudio() {
     console.log('🔄 Loading available templates...');
     try {
       const { data, error } = await supabase
-        .from('label_templates_new')
+        .from('label_templates')
         .select('*')
+        .eq('template_type', 'zpl_studio')
         .order('updated_at', { ascending: false });
       
       console.log('🔄 Templates data:', data);
@@ -146,12 +147,12 @@ export default function LabelStudio() {
       
       const templates: Template[] = (data || []).map(t => ({
         id: t.id,
-        name: t.id,
-        description: `Template with ${t.required_fields?.length || 0} required fields`,
-        is_default: false,
-        zpl_code: t.body,
-        template_type: 'custom',
-        created_at: t.updated_at,
+        name: t.name || t.id,
+        description: (t.canvas as any)?.description || `ZPL Studio Template`,
+        is_default: t.is_default || false,
+        zpl_code: (t.canvas as any)?.zplLabel || '',
+        template_type: t.template_type,
+        created_at: t.created_at,
         updated_at: t.updated_at
       }));
       
@@ -208,9 +209,6 @@ export default function LabelStudio() {
     }
     
     try {
-      const templateId = templateName.toLowerCase().replace(/\s+/g, '_');
-      console.log('🔧 Save Template: Generated template ID:', templateId);
-      
       // Extract placeholders from ZPL code
       const placeholderPattern = /{{(\w+)}}/g;
       const matches = [...zplCode.matchAll(placeholderPattern)];
@@ -219,26 +217,49 @@ export default function LabelStudio() {
       console.log('🔧 Save Template: Extracted required fields:', requiredFields);
       console.log('🔧 Save Template: ZPL preview:', zplCode.substring(0, 200) + '...');
       
+      // Save in unified format compatible with useTemplates hook
       const payload = {
-        id: templateId,
-        body: zplCode,
-        required_fields: requiredFields,
-        optional_fields: []
+        name: templateName,
+        template_type: 'zpl_studio',
+        canvas: {
+          zplLabel: zplCode,
+          description: templateDescription || 'ZPL Studio Template',
+          requiredFields: requiredFields,
+          // Include fieldConfig for backward compatibility
+          fieldConfig: {
+            includeTitle: requiredFields.includes('CARDNAME'),
+            includeSku: requiredFields.includes('SKU'),
+            includePrice: requiredFields.includes('PRICE'),
+            includeCondition: requiredFields.includes('CONDITION'),
+            barcodeMode: requiredFields.includes('BARCODE') ? 'barcode' : 'none'
+          }
+        },
+        is_default: false
       };
       
-      console.log('🔧 Save Template: Supabase payload:', payload);
+      console.log('🔧 Save Template: Unified payload:', payload);
       
-      const { data, error } = await supabase
-        .from('label_templates_new')
-        .upsert(payload)
-        .select();
+      let result;
+      if (currentTemplate?.id) {
+        // Update existing template
+        result = await supabase
+          .from('label_templates')
+          .update(payload)
+          .eq('id', currentTemplate.id)
+          .select();
+      } else {
+        // Create new template
+        result = await supabase
+          .from('label_templates')
+          .insert(payload)
+          .select();
+      }
       
-      console.log('🔧 Save Template: Supabase response data:', data);
-      console.log('🔧 Save Template: Supabase response error:', error);
+      console.log('🔧 Save Template: Supabase response:', result);
       
-      if (error) {
-        console.error('❌ Save Template: Supabase error details:', error);
-        throw error;
+      if (result.error) {
+        console.error('❌ Save Template: Supabase error details:', result.error);
+        throw result.error;
       }
       
       console.log('✅ Save Template: Successfully saved, reloading templates');
@@ -250,12 +271,36 @@ export default function LabelStudio() {
     }
   };
 
+  const handleSetAsDefault = async (templateId: string) => {
+    try {
+      // First, unset all defaults for this template type
+      await supabase
+        .from('label_templates')
+        .update({ is_default: false })
+        .eq('template_type', 'zpl_studio');
+
+      // Then set the selected template as default
+      const { error } = await supabase
+        .from('label_templates')
+        .update({ is_default: true })
+        .eq('id', templateId);
+
+      if (error) throw error;
+
+      await loadAvailableTemplates();
+      toast.success('Default template set successfully');
+    } catch (error) {
+      console.error('Failed to set default template:', error);
+      toast.error('Failed to set default template');
+    }
+  };
+
   const handleDeleteTemplate = async (templateId: string) => {
     if (!confirm('Are you sure you want to delete this template?')) return;
     
     try {
       const { error } = await supabase
-        .from('label_templates_new')
+        .from('label_templates')
         .delete()
         .eq('id', templateId);
       
@@ -421,6 +466,13 @@ export default function LabelStudio() {
                           onClick={() => handleLoadTemplate(template.id)}
                         >
                           Load
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant={template.is_default ? "secondary" : "outline"}
+                          onClick={() => handleSetAsDefault(template.id)}
+                        >
+                          {template.is_default ? 'Default' : 'Set Default'}
                         </Button>
                         <Button 
                           size="sm" 

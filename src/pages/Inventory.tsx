@@ -439,8 +439,38 @@ const Inventory = () => {
         return parts.length > 0 ? parts.join(' ') : 'Raw Card';
       };
 
-      // Load the default template (try org default, then fallback to raw_card_2x1)
-      const tpl = await getTemplate('raw_card_2x1');
+      // Load the default template (prioritize ZPL Studio templates, then fallback to raw_card_2x1)
+      let tpl = null;
+      
+      // First try to find a default ZPL Studio template
+      try {
+        const { data: zplTemplates } = await supabase
+          .from('label_templates')
+          .select('*')
+          .eq('template_type', 'zpl_studio')
+          .eq('is_default', true)
+          .limit(1);
+          
+        if (zplTemplates && zplTemplates.length > 0) {
+          const zplTemplate = zplTemplates[0];
+          tpl = {
+            id: zplTemplate.id,
+            name: zplTemplate.name,
+            format: 'zpl_studio' as const,
+            zpl: (zplTemplate.canvas as any)?.zplLabel || '',
+            scope: 'org'
+          };
+          console.log('🖨️ Using ZPL Studio template:', tpl.name);
+        }
+      } catch (error) {
+        console.warn('🖨️ Failed to load ZPL Studio template, falling back:', error);
+      }
+      
+      // Fallback to regular template system if no ZPL Studio template found
+      if (!tpl || !tpl.zpl) {
+        tpl = await getTemplate('raw_card_2x1');
+      }
+      
       if (!tpl) {
         toast.error('No label template available. Please contact administrator.');
         setPrintingItem(null);
@@ -489,7 +519,24 @@ const Inventory = () => {
       console.log('🖨️ Template variables:', vars);
 
       let zpl = '';
-      if (tpl.format === 'elements' && tpl.layout) {
+      
+      // Handle different template formats
+      if (tpl.format === 'zpl_studio' && tpl.zpl) {
+        console.log('🖨️ Processing ZPL Studio template...');
+        zpl = tpl.zpl;
+        
+        // Replace ZPL Studio variables with item data
+        zpl = zpl
+          .replace(/{{CARDNAME}}/g, vars.CARDNAME || 'Unknown Card')
+          .replace(/{{SETNAME}}/g, vars.SETNAME || '')
+          .replace(/{{CARDNUMBER}}/g, vars.CARDNUMBER || '')
+          .replace(/{{CONDITION}}/g, vars.CONDITION || 'NM')
+          .replace(/{{PRICE}}/g, vars.PRICE || '$0.00')
+          .replace(/{{SKU}}/g, vars.SKU || '')
+          .replace(/{{BARCODE}}/g, vars.BARCODE || '');
+          
+        console.log('🖨️ Generated ZPL from ZPL Studio template');
+      } else if (tpl.format === 'elements' && tpl.layout) {
         console.log('🖨️ Processing elements template...');
         const filled = {
           ...tpl.layout,
@@ -655,8 +702,36 @@ const Inventory = () => {
         return parts.length > 0 ? parts.join(' ') : 'Raw Card';
       };
 
-      // Load template and generate ZPL using new system
-      const template = await getTemplate('raw_card_2x1');
+      // Load template and generate ZPL using unified system (prioritize ZPL Studio templates)
+      let template = null;
+      
+      // First try to find a default ZPL Studio template
+      try {
+        const { data: zplTemplates } = await supabase
+          .from('label_templates')
+          .select('*')
+          .eq('template_type', 'zpl_studio')
+          .eq('is_default', true)
+          .limit(1);
+          
+        if (zplTemplates && zplTemplates.length > 0) {
+          const zplTemplate = zplTemplates[0];
+          template = {
+            id: zplTemplate.id,
+            name: zplTemplate.name,
+            format: 'zpl_studio' as const,
+            zpl: (zplTemplate.canvas as any)?.zplLabel || '',
+            scope: 'org'
+          };
+        }
+      } catch (error) {
+        console.warn('🖨️ Failed to load ZPL Studio template, falling back:', error);
+      }
+      
+      // Fallback to regular template system
+      if (!template || !template.zpl) {
+        template = await getTemplate('raw_card_2x1');
+      }
       
       const vars: JobVars = {
         CARDNAME: generateTitle(item),
@@ -669,7 +744,21 @@ const Inventory = () => {
       const prefs = JSON.parse(localStorage.getItem('zebra-printer-config') || '{}');
 
       let zpl: string;
-      if (template.format === 'elements' && template.layout) {
+      
+      if (template.format === 'zpl_studio' && template.zpl) {
+        console.log('🖨️ Processing ZPL Studio template for printer...');
+        zpl = template.zpl;
+        
+        // Replace ZPL Studio variables with item data
+        zpl = zpl
+          .replace(/{{CARDNAME}}/g, vars.CARDNAME || 'Unknown Card')
+          .replace(/{{SETNAME}}/g, vars.SETNAME || '')
+          .replace(/{{CARDNUMBER}}/g, vars.CARDNUMBER || '')
+          .replace(/{{CONDITION}}/g, vars.CONDITION || 'NM')
+          .replace(/{{PRICE}}/g, vars.PRICE || '$0.00')
+          .replace(/{{SKU}}/g, vars.SKU || '')
+          .replace(/{{BARCODE}}/g, vars.BARCODE || '');
+      } else if (template.format === 'elements' && template.layout) {
         const filledLayout = fillElements(template.layout, vars);
         zpl = zplFromElements(filledLayout, prefs, cutterSettings);
       } else if (template.format === 'zpl' && template.zpl) {

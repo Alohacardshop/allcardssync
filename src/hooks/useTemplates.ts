@@ -43,15 +43,25 @@ export function useTemplates(templateType: 'general' | 'raw' = 'general') {
 
   const fetchTemplates = async () => {
     try {
-      const { data, error } = await supabase
-        .from('label_templates')
-        .select('*')
-        .eq('template_type', templateType)
-        .order('created_at', { ascending: false });
+      // Load both old format templates and ZPL studio templates
+      const [oldTemplatesResult, zplTemplatesResult] = await Promise.all([
+        supabase
+          .from('label_templates')
+          .select('*')
+          .eq('template_type', templateType)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('label_templates')
+          .select('*')
+          .eq('template_type', 'zpl_studio')
+          .order('created_at', { ascending: false })
+      ]);
 
-      if (error) throw error;
+      if (oldTemplatesResult.error) throw oldTemplatesResult.error;
+      if (zplTemplatesResult.error) throw zplTemplatesResult.error;
 
-      const typedData = (data || []).map(item => ({
+      // Process old format templates
+      const oldTypedData = (oldTemplatesResult.data || []).map(item => ({
         ...item,
         canvas: item.canvas as {
           fieldConfig: {
@@ -78,9 +88,50 @@ export function useTemplates(templateType: 'general' | 'raw' = 'general') {
           };
         }
       })) as LabelTemplate[];
+
+      // Process ZPL studio templates and convert to old format for compatibility
+      const zplTypedData = (zplTemplatesResult.data || []).map(item => {
+        const canvas = item.canvas as any;
+        return {
+          ...item,
+          canvas: {
+            zplLabel: canvas?.zplLabel || '',
+            // Convert ZPL templates to include fieldConfig for compatibility
+            fieldConfig: canvas?.fieldConfig || {
+              includeTitle: true,
+              includeSku: true,
+              includePrice: true,
+              includeLot: false,
+              includeCondition: true,
+              barcodeMode: 'barcode' as const
+            },
+            labelData: {
+              title: 'Sample Card',
+              sku: 'SKU123',
+              price: '$0.00',
+              lot: '',
+              condition: 'NM',
+              barcode: 'SKU123'
+            },
+            tsplSettings: {
+              density: 10,
+              speed: 4,
+              gapInches: 0
+            }
+          }
+        };
+      }) as LabelTemplate[];
       
-      setTemplates(typedData);
-      setDefaultTemplate(typedData.find(t => t.is_default) || null);
+      // Combine both template types
+      const allTemplates = [...oldTypedData, ...zplTypedData];
+      
+      setTemplates(allTemplates);
+      
+      // Find default template from either source
+      const defaultFromOld = oldTypedData.find(t => t.is_default);
+      const defaultFromZpl = zplTypedData.find(t => t.is_default);
+      setDefaultTemplate(defaultFromZpl || defaultFromOld || null);
+      
     } catch (error) {
       console.error('Failed to fetch templates:', error);
       toast.error('Failed to load templates');
