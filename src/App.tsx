@@ -28,6 +28,7 @@ import { GlobalKeyboardHandler } from "./components/GlobalKeyboardHandler";
 import { FloatingActionButton } from "./components/FloatingActionButton";
 import { PerformanceMonitor } from "./components/PerformanceMonitor";
 import { SessionTimeoutWarning, RecoveryMode } from "./components/OperationalSafeguards";
+import { PrintQueueStatus } from "./components/PrintQueueStatus";
 
 import { supabase } from "@/integrations/supabase/client";
 import { CatalogMigrationPlaceholder } from "@/components/CatalogMigrationPlaceholder";
@@ -95,6 +96,7 @@ const App = () => (
             <PerformanceMonitor />
             <SessionTimeoutWarning />
             <RecoveryMode />
+            <PrintQueueStatus />
           </BrowserRouter>
         </StoreProvider>
       </PrintNodeProvider>

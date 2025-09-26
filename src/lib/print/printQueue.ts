@@ -1,10 +1,19 @@
-export type QueueItem = {
-  zpl: string;       // full ^XA…^XZ for ONE label (ends with ^PQ1 and ^XZ)
-  qty?: number;      // default 1
-  usePQ?: boolean;   // default true (repeat via ^PQ)
+import { sha1Hex } from "./hash";
+
+export type QueueItem = { 
+  zpl: string; 
+  qty?: number; 
+  usePQ?: boolean; 
 };
 
-export type CutMode = "none" | "per-label" | "end-of-batch";
+export type CutMode = "none" | "end-of-batch";
+
+const MAX_PAYLOAD_BYTES = 250_000;
+const SUPPRESS_MS = 3000;
+
+function byteLen(s: string) { 
+  return new Blob([s]).size; 
+}
 
 type Transport = (payload: string) => Promise<void>;
 
@@ -12,19 +21,66 @@ export class PrintQueue {
   private q: QueueItem[] = [];
   private running = false;
   private timer: any = null;
+  private recent = new Map<string, number>();
 
   constructor(
     private send: Transport,
-    private opts: {
-      flushMs?: number;
-      batchMax?: number;
-      cutMode?: CutMode;
-      endCutTail?: string; // appended once at end of batch when cutMode = "end-of-batch"
+    private opts: { 
+      flushMs?: number; 
+      batchMax?: number; 
+      cutMode?: CutMode; 
+      endCutTail?: string 
     } = {}
   ) {}
 
-  enqueue(item: QueueItem) { this.q.push(item); this.scheduleFlush(); }
-  enqueueMany(items: QueueItem[]) { this.q.push(...items); this.scheduleFlush(0); }
+  // Option A: pure enqueue (no coalescing)
+  enqueue(item: QueueItem) { 
+    this.q.push(item); 
+    this.scheduleFlush(); 
+  }
+  
+  enqueueMany(items: QueueItem[]) { 
+    this.q.push(...items); 
+    this.scheduleFlush(0); 
+  }
+
+  // Dedupe identical job requests in quick succession (UI double click protection)
+  public async enqueueSafe(item: QueueItem) {
+    const key = await sha1Hex(`${item.zpl}|${item.qty ?? 1}`);
+    const now = Date.now();
+    
+    // Clean up expired entries
+    for (const [k, exp] of [...this.recent.entries()]) {
+      if (exp <= now) this.recent.delete(k);
+    }
+    
+    const exp = this.recent.get(key);
+    if (exp && exp > now) { 
+      console.warn("[print_suppressed_duplicate]", { key }); 
+      return; 
+    }
+    
+    this.recent.set(key, now + SUPPRESS_MS);
+    this.enqueue(item);
+  }
+
+  public size() { 
+    return this.q.length; 
+  }
+  
+  public clear() { 
+    this.q = []; 
+  }
+  
+  public async flushNow() { 
+    if (this.timer) { 
+      clearTimeout(this.timer); 
+      this.timer = null; 
+    } 
+    if (!this.running && this.q.length) {
+      await this.process(); 
+    }
+  }
 
   private scheduleFlush(ms = this.opts.flushMs ?? 500) {
     if (this.timer) clearTimeout(this.timer);
@@ -47,51 +103,50 @@ export class PrintQueue {
 
       while (this.q.length) {
         const batch = this.q.splice(0, max);
-        
-        console.log('🔄 Print Queue: Processing batch:', {
-          itemCount: batch.length,
-          cutMode,
-          batchMax: max
-        });
-
         const parts: string[] = [];
+        
         for (const it of batch) {
           const qty = it.qty && it.qty > 1 ? it.qty : 1;
           const usePQ = it.usePQ !== false;
-          const processedZpl = this.withQty(it.zpl, qty, usePQ);
-          parts.push(processedZpl);
-          
-          console.log('📝 Queue Item:', {
-            originalLength: it.zpl.length,
-            processedLength: processedZpl.length,
-            qty,
-            usePQ,
-            preview: processedZpl.substring(0, 80) + '...'
-          });
+          parts.push(this.withQty(it.zpl, qty, usePQ));
         }
-
+        
         let payload = parts.join("\n");
 
-        // ✅ cut once at the very end of the whole batch
+        // Append single cut tail once at end of batch (ZD410-friendly)
         if (cutMode === "end-of-batch" && this.opts.endCutTail) {
           payload = `${payload}\n${this.opts.endCutTail}`;
-          console.log('✂️ Queue: Added end-of-batch cut command');
         }
 
-        console.log('📤 Queue: Final payload being sent:');
-        console.log('='.repeat(60));
-        console.log(payload);
-        console.log('='.repeat(60));
-        console.log('📊 Payload stats:', {
-          totalLength: payload.length,
-          lineCount: payload.split('\n').length,
-          labelCount: parts.length
-        });
-
-        await this.send(payload);
+        // Split big payloads at ^XA boundaries
+        if (byteLen(payload) > MAX_PAYLOAD_BYTES) {
+          const blocks = payload.split(/\n(?=\^XA)/);
+          let chunk = "";
+          
+          for (const b of blocks) {
+            const next = chunk ? chunk + "\n" + b : b;
+            if (byteLen(next) > MAX_PAYLOAD_BYTES) {
+              if (chunk) { 
+                console.info("[print_batch_send]", { bytes: byteLen(chunk) }); 
+                await this.send(chunk); 
+              }
+              chunk = b;
+            } else {
+              chunk = next;
+            }
+          }
+          
+          if (chunk) { 
+            console.info("[print_batch_send]", { bytes: byteLen(chunk) }); 
+            await this.send(chunk); 
+          }
+        } else {
+          console.info("[print_batch_send]", { bytes: byteLen(payload) });
+          await this.send(payload);
+        }
       }
-    } finally {
-      this.running = false;
+    } finally { 
+      this.running = false; 
     }
   }
 }

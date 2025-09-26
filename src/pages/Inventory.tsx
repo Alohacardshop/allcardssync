@@ -488,27 +488,16 @@ const Inventory = () => {
       console.log('🖨️ Generated ZPL for printing:', zpl);
 
       // Use the new print queue system with ensurePQ1
-      const { ensurePQ1 } = await import('@/lib/print/ensurePQ1');
-      const safeZpl = ensurePQ1(zpl);
+      const { sanitizeLabel } = await import('@/lib/print/sanitizeZpl');
+      const safeZpl = sanitizeLabel(zpl);
       
-      console.log('🔍 Queue Debug - Original ZPL:');
-      console.log('='.repeat(50));
-      console.log(zpl);
-      console.log('='.repeat(50));
-      
-      console.log('🔍 Queue Debug - Safe ZPL (with ^PQ1):');
-      console.log('='.repeat(50)); 
-      console.log(safeZpl);
-      console.log('='.repeat(50));
-      
-      console.log('🔍 Queue Debug - Enqueuing item:', {
-        zpl: safeZpl.substring(0, 100) + '...', // First 100 chars
+      console.debug("[print_prepare]", {
+        template: 'inventory_item',
         qty: item.quantity || 1,
-        usePQ: true,
-        fullZplLength: safeZpl.length
+        preview: safeZpl.slice(0, 120).replace(/\n/g, "\\n")
       });
       
-      printQueue.enqueue({ 
+      await printQueue.enqueueSafe({ 
         zpl: safeZpl, 
         qty: item.quantity || 1, 
         usePQ: true 
