@@ -185,6 +185,16 @@ export default function LabelStudio() {
     console.log('🔧 Template Name:', templateName);
     console.log('🔧 ZPL Code length:', zplCode.length);
     
+    // Check authentication first
+    const { data: { user } } = await supabase.auth.getUser();
+    console.log('🔧 Save Template: Current user:', user);
+    
+    if (!user) {
+      console.log('❌ Save Template: User not authenticated');
+      toast.error('You must be signed in to save templates');
+      return;
+    }
+    
     if (!templateName.trim()) {
       console.log('❌ Save Template: Missing template name');
       toast.error('Please enter a template name');
