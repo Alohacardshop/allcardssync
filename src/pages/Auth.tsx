@@ -37,31 +37,70 @@ export default function Auth() {
   useSEO({ title: "Sign In | Aloha", description: "Secure sign in for Aloha Inventory staff." });
   const navigate = useNavigate();
 
-  // ✅ Start NOT loading
+  // ✅ never start in loading
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [roleError, setRoleError] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
-  const guardTimerRef = useRef<number | null>(null);
+
+  // Re-entrancy and cancellation
   const mountedRef = useRef(true);
+  const subRef = useRef<ReturnType<typeof supabase.auth.onAuthStateChange>["data"]["subscription"] | null>(null);
+  const guardTimerRef = useRef<number | null>(null);
+  const roleTimeoutRef = useRef<number | null>(null);
+  const currentAttemptId = useRef<string | null>(null);
+  const cancelRoleCheckRef = useRef<() => void>(() => {});
+  const verificationInFlightRef = useRef(false);
+
+  const clearGuardTimer = () => {
+    if (guardTimerRef.current) {
+      window.clearTimeout(guardTimerRef.current);
+      guardTimerRef.current = null;
+    }
+  };
+  const clearRoleTimer = () => {
+    if (roleTimeoutRef.current) {
+      window.clearTimeout(roleTimeoutRef.current);
+      roleTimeoutRef.current = null;
+    }
+  };
 
   useEffect(() => {
     mountedRef.current = true;
     console.log('Auth page mount');
     setMounted(true);
 
-    // On mount, check for existing session without blocking the UI.
+    // Single subscription, StrictMode-safe
+    if (!subRef.current) {
+      subRef.current = supabase.auth.onAuthStateChange(async (event, session) => {
+        console.log('Auth state change:', event, session?.user?.email);
+        if (!mountedRef.current) return;
+        if (event === "SIGNED_IN" && session?.user) {
+          clearGuardTimer();
+          const attempt = crypto.randomUUID();
+          currentAttemptId.current = attempt;
+          await verifyAccessThenNavigate(session.user.id, attempt);
+        }
+        if (event === "SIGNED_OUT") {
+          clearGuardTimer();
+          setLoading(false);
+          setRoleError(null);
+        }
+      }).data.subscription;
+    }
+
+    // Check existing session but don't block UI
     (async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
           console.log('Existing session found for:', session.user.email);
-          // We have a session; verify access but don't brick the UI.
-          await verifyAccessThenNavigate(session.user.id);
+          const attempt = crypto.randomUUID();
+          currentAttemptId.current = attempt;
+          await verifyAccessThenNavigate(session.user.id, attempt);
         } else {
-          // No session — keep the form interactive.
           setLoading(false);
         }
       } catch {
@@ -69,66 +108,89 @@ export default function Auth() {
       }
     })();
 
-    // Subscribe once to auth state changes.
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth state change:', event, session?.user?.email);
-      if (!mountedRef.current) return;
-      if (event === "SIGNED_IN" && session?.user) {
-        clearGuardTimer();
-        await verifyAccessThenNavigate(session.user.id);
-      }
-      if (event === "SIGNED_OUT") {
-        clearGuardTimer();
-        setLoading(false);
-        setRoleError(null);
-      }
-    });
-
+    // Cleanup
     return () => {
       mountedRef.current = false;
-      subscription.unsubscribe();
       clearGuardTimer();
+      clearRoleTimer();
+      cancelRoleCheckRef.current?.();
+      if (subRef.current) {
+        subRef.current.unsubscribe();
+        subRef.current = null;
+      }
     };
   }, [navigate]);
 
-  function clearGuardTimer() {
-    if (guardTimerRef.current) {
-      window.clearTimeout(guardTimerRef.current);
-      guardTimerRef.current = null;
-    }
-  }
+  async function handleSignIn(e: React.FormEvent) {
+    e.preventDefault();
+    if (loading) return; // guard double submit
+    clearGuardTimer();
+    clearRoleTimer();
+    cancelRoleCheckRef.current?.(); // cancel any in-flight role checks
 
-  async function verifyAccessThenNavigate(userId: string) {
     setLoading(true);
     setRoleError(null);
     try {
+      console.log('Starting sign in process');
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      console.log('Sign in successful');
+      toast.success("Signed in successfully!");
+
+      // If auth event doesn't arrive, unlock UI
+      guardTimerRef.current = window.setTimeout(() => {
+        if (!mountedRef.current) return;
+        setLoading(false);
+        toast.error("Login is taking too long. Please try again.");
+      }, AUTH_CHANGE_GUARD_MS);
+    } catch (err: any) {
+      console.error('Sign in error:', err);
+      setLoading(false);
+      toast.error(err?.message || "Sign-in failed");
+    }
+  }
+
+  async function verifyAccessThenNavigate(userId: string, attemptId: string) {
+    // Ignore stale attempts
+    if (currentAttemptId.current !== attemptId) return;
+
+    setLoading(true);
+    setRoleError(null);
+    verificationInFlightRef.current = true;
+
+    // Build a cancelable promise around the role RPC
+    let canceled = false;
+    cancelRoleCheckRef.current = () => { canceled = true; };
+
+    const roleCheckPromise = (async () => {
       console.log('Processing auth for user:', userId);
+      const { data, error } = await supabase.rpc("verify_user_access", { _user_id: userId });
+      if (error) throw error;
+      return data as { access_granted?: boolean } | null;
+    })();
 
-      // Race the RPC against a timeout so we never hang
-      const roleCheck = (async () => {
-        const { data, error } = await supabase.rpc("verify_user_access", { _user_id: userId });
-        if (error) throw error;
-        return data as { access_granted?: boolean } | null;
-      })();
+    // Manual timeout (so we can clear it deterministically)
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      roleTimeoutRef.current = window.setTimeout(() => {
+        reject(new Error("Role check timeout"));
+      }, ROLE_TIMEOUT_MS);
+    });
 
-      const timeout = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("Role check timeout")), ROLE_TIMEOUT_MS)
-      );
-
-      const result = await Promise.race([roleCheck, timeout]);
+    try {
+      const result = await Promise.race([roleCheckPromise, timeoutPromise]);
+      if (canceled || currentAttemptId.current !== attemptId) return; // new attempt started
       console.log('Access verification result:', result);
       const granted = !!(result && typeof result === "object" && "access_granted" in result && (result as any).access_granted);
-
       if (granted) {
         console.log('Access granted, navigating to dashboard');
         navigate("/", { replace: true });
       } else {
-        // Not granted — show message but don't trap the user forever
-        setRoleError("Your account is signed in but not authorized. Ask an admin to grant Staff access.");
+        toast.warning("Signed in, but access not fully verified yet. Some features may be limited.");
+        navigate("/", { replace: true });
       }
     } catch (err: any) {
+      if (canceled || currentAttemptId.current !== attemptId) return;
       console.error('Role check failed:', err?.message || err);
-      // If we DO have a session, don't brick the UI
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
         toast.warning("Signed in, but role verification failed. Continuing with limited access.");
@@ -137,34 +199,13 @@ export default function Auth() {
         setRoleError("Failed to verify account permissions. Please try again.");
       }
     } finally {
-      if (mountedRef.current) setLoading(false);
+      clearRoleTimer();
+      verificationInFlightRef.current = false;
+      if (mountedRef.current && currentAttemptId.current === attemptId) {
+        setLoading(false);
+      }
     }
   }
-
-  const handleSignIn = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setRoleError(null);
-    try {
-      console.log('Starting sign in process');
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) throw error;
-      console.log('Sign in successful', data);
-      toast.success("Signed in successfully!");
-      
-      // Guard: if onAuthStateChange doesn't arrive, unlock UI
-      guardTimerRef.current = window.setTimeout(() => {
-        if (mountedRef.current) {
-          setLoading(false);
-          toast.error("Login is taking too long. Please try again.");
-        }
-      }, AUTH_CHANGE_GUARD_MS);
-    } catch (err: any) {
-      console.error('Sign in error:', err);
-      toast.error(err?.message || "Sign in failed");
-      setLoading(false);
-    }
-  };
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
