@@ -137,7 +137,7 @@ export default function LabelStudio() {
       const { data, error } = await supabase
         .from('label_templates')
         .select('*')
-        .eq('template_type', 'zpl_studio')
+        .eq('template_type', 'general')
         .order('updated_at', { ascending: false });
       
       console.log('🔄 Templates data:', data);
@@ -220,7 +220,7 @@ export default function LabelStudio() {
       // Save in unified format compatible with useTemplates hook
       const payload = {
         name: templateName,
-        template_type: 'zpl_studio',
+        template_type: 'general', // Use valid template type
         canvas: {
           zplLabel: zplCode,
           description: templateDescription || 'ZPL Studio Template',
@@ -277,7 +277,7 @@ export default function LabelStudio() {
       await supabase
         .from('label_templates')
         .update({ is_default: false })
-        .eq('template_type', 'zpl_studio');
+        .eq('template_type', 'general');
 
       // Then set the selected template as default
       const { error } = await supabase

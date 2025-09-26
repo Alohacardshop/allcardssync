@@ -447,7 +447,7 @@ const Inventory = () => {
         const { data: zplTemplates } = await supabase
           .from('label_templates')
           .select('*')
-          .eq('template_type', 'zpl_studio')
+          .eq('template_type', 'general')
           .eq('is_default', true)
           .limit(1);
           
@@ -710,7 +710,7 @@ const Inventory = () => {
         const { data: zplTemplates } = await supabase
           .from('label_templates')
           .select('*')
-          .eq('template_type', 'zpl_studio')
+          .eq('template_type', 'general')
           .eq('is_default', true)
           .limit(1);
           
