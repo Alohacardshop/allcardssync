@@ -132,11 +132,15 @@ export default function LabelStudio() {
   }, [zplCode, testVars]);
 
   const loadAvailableTemplates = async () => {
+    console.log('🔄 Loading available templates...');
     try {
       const { data, error } = await supabase
         .from('label_templates_new')
         .select('*')
         .order('updated_at', { ascending: false });
+      
+      console.log('🔄 Templates data:', data);
+      console.log('🔄 Templates error:', error);
       
       if (error) throw error;
       
@@ -151,9 +155,10 @@ export default function LabelStudio() {
         updated_at: t.updated_at
       }));
       
+      console.log('🔄 Processed templates:', templates);
       setAvailableTemplates(templates);
     } catch (error) {
-      console.error('Failed to load templates:', error);
+      console.error('❌ Failed to load templates:', error);
       toast.error('Failed to load available templates');
     }
   };
@@ -176,40 +181,62 @@ export default function LabelStudio() {
   };
 
   const handleSaveTemplate = async () => {
+    console.log('🔧 Save Template: Starting save process');
+    console.log('🔧 Template Name:', templateName);
+    console.log('🔧 ZPL Code length:', zplCode.length);
+    
     if (!templateName.trim()) {
+      console.log('❌ Save Template: Missing template name');
       toast.error('Please enter a template name');
       return;
     }
     
     if (!zplCode.trim()) {
+      console.log('❌ Save Template: Missing ZPL code');
       toast.error('ZPL code cannot be empty');
       return;
     }
     
     try {
       const templateId = templateName.toLowerCase().replace(/\s+/g, '_');
+      console.log('🔧 Save Template: Generated template ID:', templateId);
       
       // Extract placeholders from ZPL code
       const placeholderPattern = /{{(\w+)}}/g;
       const matches = [...zplCode.matchAll(placeholderPattern)];
       const requiredFields = [...new Set(matches.map(match => match[1]))];
       
-      const { error } = await supabase
+      console.log('🔧 Save Template: Extracted required fields:', requiredFields);
+      console.log('🔧 Save Template: ZPL preview:', zplCode.substring(0, 200) + '...');
+      
+      const payload = {
+        id: templateId,
+        body: zplCode,
+        required_fields: requiredFields,
+        optional_fields: []
+      };
+      
+      console.log('🔧 Save Template: Supabase payload:', payload);
+      
+      const { data, error } = await supabase
         .from('label_templates_new')
-        .upsert({
-          id: templateId,
-          body: zplCode,
-          required_fields: requiredFields,
-          optional_fields: []
-        });
+        .upsert(payload)
+        .select();
       
-      if (error) throw error;
+      console.log('🔧 Save Template: Supabase response data:', data);
+      console.log('🔧 Save Template: Supabase response error:', error);
       
+      if (error) {
+        console.error('❌ Save Template: Supabase error details:', error);
+        throw error;
+      }
+      
+      console.log('✅ Save Template: Successfully saved, reloading templates');
       await loadAvailableTemplates();
       toast.success('Template saved successfully');
     } catch (error) {
-      console.error('Failed to save template:', error);
-      toast.error('Failed to save template');
+      console.error('❌ Save Template: Caught error:', error);
+      toast.error('Failed to save template: ' + (error instanceof Error ? error.message : 'Unknown error'));
     }
   };
 
