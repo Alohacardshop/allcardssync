@@ -106,10 +106,20 @@ export default function LabelStudio() {
     }
   }, []);
 
-  // Load available templates on mount
+  // Load available templates on mount and auto-load default
   useEffect(() => {
     loadAvailableTemplates();
   }, []);
+  
+  // Auto-load default template after templates are loaded
+  useEffect(() => {
+    if (availableTemplates.length > 0 && !currentTemplate) {
+      const defaultTemplate = availableTemplates.find(t => t.is_default);
+      if (defaultTemplate) {
+        handleLoadTemplate(defaultTemplate.id);
+      }
+    }
+  }, [availableTemplates, currentTemplate]);
 
   // Generate ZPL when test vars change
   useEffect(() => {

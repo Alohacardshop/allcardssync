@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from "react";
 import { generateLabelPDF } from "@/lib/labelRenderer";
 import { buildLabelDataFromItem, CardItem } from "@/lib/labelData";
-import { getLabelDesignerSettings } from "@/lib/labelDesignerSettings";
+import { getDefaultTemplateFieldConfig } from "@/lib/defaultTemplate";
 
 function base64ToUint8Array(base64: string): Uint8Array {
   if (base64.startsWith("data:")) base64 = base64.split(",")[1] || "";
@@ -33,8 +33,8 @@ const PDFLabelPreview: React.FC<{ item: CardItem }> = ({ item }) => {
         setLoading(true);
         setError(null);
 
-        // Build the exact same data as print
-        const { fieldConfig } = getLabelDesignerSettings();
+        // Build the exact same data as print using default template
+        const fieldConfig = await getDefaultTemplateFieldConfig();
         const labelData = buildLabelDataFromItem(item);
         const pdfBase64 = await generateLabelPDF(fieldConfig, labelData);
         const bytes = ensureUint8Array(pdfBase64);
@@ -74,7 +74,7 @@ const PDFLabelPreview: React.FC<{ item: CardItem }> = ({ item }) => {
 
   const downloadAgain = async () => {
     try {
-      const { fieldConfig } = getLabelDesignerSettings();
+      const fieldConfig = await getDefaultTemplateFieldConfig();
       const labelData = buildLabelDataFromItem(item);
       const pdfBase64 = await generateLabelPDF(fieldConfig, labelData);
       const bytes = ensureUint8Array(pdfBase64);

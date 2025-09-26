@@ -23,6 +23,7 @@ export default function TemplateEditor() {
   const [error, setError] = useState<string | null>(null);
   const [allTemplates, setAllTemplates] = useState<Record<string, LabelTemplate>>({});
   const [loading, setLoading] = useState(false);
+  const [defaultLoaded, setDefaultLoaded] = useState(false);
 
   async function loadTemplate() {
     setError(null);
@@ -128,6 +129,18 @@ export default function TemplateEditor() {
     loadTemplate();
     loadAllTemplates();
   }, [selectedId]);
+  
+  // Auto-load default template once templates are loaded
+  useEffect(() => {
+    if (!defaultLoaded && Object.keys(allTemplates).length > 0) {
+      const templatesList = Object.values(allTemplates).filter(t => t.type === selectedId);
+      const defaultTemplate = templatesList.find(t => t.is_default);
+      if (defaultTemplate) {
+        setJson(JSON.stringify(defaultTemplate, null, 2));
+        setDefaultLoaded(true);
+      }
+    }
+  }, [allTemplates, selectedId, defaultLoaded]);
 
   const templatesList = Object.values(allTemplates).filter(t => t.type === selectedId);
 
