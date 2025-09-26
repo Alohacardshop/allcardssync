@@ -447,6 +447,34 @@ const Inventory = () => {
         return;
       }
 
+      // Debug: Log the item data being processed
+      console.log('🖨️ Item data:', {
+        id: item.id,
+        subject: item.subject,
+        brand_title: item.brand_title,
+        card_number: item.card_number,
+        condition: item.condition,
+        price: item.price,
+        sku: item.sku,
+        year: item.year
+      });
+
+      // Debug: Log the template structure
+      console.log('🖨️ Template loaded:', {
+        id: tpl.id,
+        name: tpl.name,
+        format: tpl.format,
+        hasLayout: !!tpl.layout,
+        hasZpl: !!tpl.zpl,
+        elements: tpl.layout?.elements?.map(el => ({ 
+          id: el.id, 
+          type: el.type, 
+          content: el.type === 'text' ? (el as any).text : 
+                   el.type === 'barcode' ? (el as any).data : 
+                   'N/A'
+        }))
+      });
+
       // Prepare variables for template substitution
       const vars: JobVars = {
         CARDNAME: generateTitle(item),
@@ -458,41 +486,90 @@ const Inventory = () => {
         BARCODE: item.sku || generateTitle(item).replace(/[^a-zA-Z0-9]/g, '').substring(0, 12),
       };
 
-      console.log('🖨️ Using template:', tpl.name);
       console.log('🖨️ Template variables:', vars);
 
       let zpl = '';
       if (tpl.format === 'elements' && tpl.layout) {
+        console.log('🖨️ Processing elements template...');
         const filled = {
           ...tpl.layout,
           elements: tpl.layout.elements.map((el: ZPLElement) => {
             console.debug('[template_element]', { id: el.id, type: el.type });
             
             if (el.type === 'text') {
-              // Map to correct element IDs from template
-              if (el.id === 'cardinfo') return { ...el, text: vars.CARDNAME ?? el.text };
-              if (el.id === 'condition') return { ...el, text: vars.CONDITION ?? el.text };
-              if (el.id === 'price') return { ...el, text: vars.PRICE ?? el.text };
-              if (el.id === 'sku') return { ...el, text: vars.SKU ?? el.text };
+              let updatedElement = { ...el };
+              let wasUpdated = false;
               
+              // Map to correct element IDs from template
+              if (el.id === 'cardinfo') {
+                updatedElement.text = vars.CARDNAME ?? el.text;
+                wasUpdated = true;
+                console.log(`🖨️ Updated cardinfo: "${el.text}" → "${updatedElement.text}"`);
+              } else if (el.id === 'condition') {
+                updatedElement.text = vars.CONDITION ?? el.text;
+                wasUpdated = true;
+                console.log(`🖨️ Updated condition: "${el.text}" → "${updatedElement.text}"`);
+              } else if (el.id === 'price') {
+                updatedElement.text = vars.PRICE ?? el.text;
+                wasUpdated = true;
+                console.log(`🖨️ Updated price: "${el.text}" → "${updatedElement.text}"`);
+              } else if (el.id === 'sku') {
+                updatedElement.text = vars.SKU ?? el.text;
+                wasUpdated = true;
+                console.log(`🖨️ Updated sku: "${el.text}" → "${updatedElement.text}"`);
+              } 
               // Legacy fallbacks for older templates
-              if (el.id === 'cardname') return { ...el, text: vars.CARDNAME ?? el.text };
-              if (el.id === 'setname') return { ...el, text: vars.SETNAME ?? el.text };
-              if (el.id === 'cardnumber') return { ...el, text: vars.CARDNUMBER ?? el.text };
+              else if (el.id === 'cardname') {
+                updatedElement.text = vars.CARDNAME ?? el.text;
+                wasUpdated = true;
+                console.log(`🖨️ Updated cardname (legacy): "${el.text}" → "${updatedElement.text}"`);
+              } else if (el.id === 'setname') {
+                updatedElement.text = vars.SETNAME ?? el.text;
+                wasUpdated = true;
+                console.log(`🖨️ Updated setname: "${el.text}" → "${updatedElement.text}"`);
+              } else if (el.id === 'cardnumber') {
+                updatedElement.text = vars.CARDNUMBER ?? el.text;
+                wasUpdated = true;
+                console.log(`🖨️ Updated cardnumber: "${el.text}" → "${updatedElement.text}"`);
+              }
+              
+              if (!wasUpdated) {
+                console.log(`🖨️ No mapping for text element with id: "${el.id}", text: "${el.text}"`);
+              }
+              
+              return updatedElement;
             } else if (el.type === 'barcode' && el.id === 'barcode') {
-              return { ...el, data: vars.BARCODE ?? el.data };
+              const updatedElement = { ...el, data: vars.BARCODE ?? el.data };
+              console.log(`🖨️ Updated barcode: "${el.data}" → "${updatedElement.data}"`);
+              return updatedElement;
             }
+            
+            console.log(`🖨️ No mapping for element type: ${el.type}, id: ${el.id}`);
             return el;
           }),
         };
         zpl = zplFromElements(filled);
+        console.log('🖨️ Generated ZPL from elements');
       } else if (tpl.format === 'zpl' && tpl.zpl) {
+        console.log('🖨️ Processing ZPL string template...');
         zpl = zplFromTemplateString(tpl.zpl, vars);
+        console.log('🖨️ Generated ZPL from string template');
       } else {
+        console.error('🖨️ Invalid template format:', { format: tpl.format, hasLayout: !!tpl.layout, hasZpl: !!tpl.zpl });
         throw new Error('Invalid template format');
       }
 
-      console.log('🖨️ Generated ZPL for printing:', zpl);
+      console.log('🖨️ Generated ZPL for printing (first 200 chars):', zpl.slice(0, 200));
+      console.log('🖨️ Generated ZPL contains vars:', {
+        hasCardname: zpl.includes(vars.CARDNAME || ''),
+        hasCondition: zpl.includes(vars.CONDITION || ''), 
+        hasPrice: zpl.includes(vars.PRICE || ''),
+        hasSku: zpl.includes(vars.SKU || ''),
+        cardnameInZpl: vars.CARDNAME,
+        conditionInZpl: vars.CONDITION,
+        priceInZpl: vars.PRICE,
+        skuInZpl: vars.SKU
+      });
 
       // Use the new print queue system with ensurePQ1
       const { sanitizeLabel } = await import('@/lib/print/sanitizeZpl');
