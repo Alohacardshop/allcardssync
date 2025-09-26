@@ -47,12 +47,27 @@ export class PrintQueue {
 
       while (this.q.length) {
         const batch = this.q.splice(0, max);
+        
+        console.log('🔄 Print Queue: Processing batch:', {
+          itemCount: batch.length,
+          cutMode,
+          batchMax: max
+        });
 
         const parts: string[] = [];
         for (const it of batch) {
           const qty = it.qty && it.qty > 1 ? it.qty : 1;
           const usePQ = it.usePQ !== false;
-          parts.push(this.withQty(it.zpl, qty, usePQ));
+          const processedZpl = this.withQty(it.zpl, qty, usePQ);
+          parts.push(processedZpl);
+          
+          console.log('📝 Queue Item:', {
+            originalLength: it.zpl.length,
+            processedLength: processedZpl.length,
+            qty,
+            usePQ,
+            preview: processedZpl.substring(0, 80) + '...'
+          });
         }
 
         let payload = parts.join("\n");
@@ -60,7 +75,18 @@ export class PrintQueue {
         // ✅ cut once at the very end of the whole batch
         if (cutMode === "end-of-batch" && this.opts.endCutTail) {
           payload = `${payload}\n${this.opts.endCutTail}`;
+          console.log('✂️ Queue: Added end-of-batch cut command');
         }
+
+        console.log('📤 Queue: Final payload being sent:');
+        console.log('='.repeat(60));
+        console.log(payload);
+        console.log('='.repeat(60));
+        console.log('📊 Payload stats:', {
+          totalLength: payload.length,
+          lineCount: payload.split('\n').length,
+          labelCount: parts.length
+        });
 
         await this.send(payload);
       }
