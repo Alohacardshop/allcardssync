@@ -457,7 +457,9 @@ const Inventory = () => {
             id: zplTemplate.id,
             name: zplTemplate.name,
             format: 'zpl_studio' as const,
-            zpl: (zplTemplate.canvas as any)?.zplLabel || '',
+            zpl: typeof (zplTemplate.canvas as any)?.zplLabel === 'string' 
+              ? (zplTemplate.canvas as any).zplLabel 
+              : '^XA^FO50,50^A0N,30,30^FD{{CARDNAME}}^FS^FO50,100^A0N,20,20^FD{{CONDITION}}^FS^FO50,150^BY2^BCN,60,Y,N,N^FD{{BARCODE}}^FS^XZ',
             scope: 'org'
           };
           console.log('🖨️ Using ZPL Studio template:', tpl.name);
@@ -720,7 +722,9 @@ const Inventory = () => {
             id: zplTemplate.id,
             name: zplTemplate.name,
             format: 'zpl_studio' as const,
-            zpl: (zplTemplate.canvas as any)?.zplLabel || '',
+            zpl: typeof (zplTemplate.canvas as any)?.zplLabel === 'string' 
+              ? (zplTemplate.canvas as any).zplLabel 
+              : '^XA^FO50,50^A0N,30,30^FD{{CARDNAME}}^FS^FO50,100^A0N,20,20^FD{{CONDITION}}^FS^FO50,150^BY2^BCN,60,Y,N,N^FD{{BARCODE}}^FS^XZ',
             scope: 'org'
           };
         }

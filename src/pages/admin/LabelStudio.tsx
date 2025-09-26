@@ -150,7 +150,7 @@ export default function LabelStudio() {
         name: t.name || t.id,
         description: (t.canvas as any)?.description || `ZPL Studio Template`,
         is_default: t.is_default || false,
-        zpl_code: (t.canvas as any)?.zplLabel || '',
+        zpl_code: typeof (t.canvas as any)?.zplLabel === 'string' ? (t.canvas as any).zplLabel : '',
         template_type: t.template_type,
         created_at: t.created_at,
         updated_at: t.updated_at
