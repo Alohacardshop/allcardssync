@@ -466,13 +466,19 @@ const Inventory = () => {
         const filled = {
           ...tpl.layout,
           elements: tpl.layout.elements.map((el: ZPLElement) => {
+            console.debug('[template_element]', { id: el.id, type: el.type });
+            
             if (el.type === 'text') {
-              if (el.id === 'cardname') return { ...el, text: vars.CARDNAME ?? el.text };
-              if (el.id === 'setname') return { ...el, text: vars.SETNAME ?? el.text };
-              if (el.id === 'cardnumber') return { ...el, text: vars.CARDNUMBER ?? el.text };
+              // Map to correct element IDs from template
+              if (el.id === 'cardinfo') return { ...el, text: vars.CARDNAME ?? el.text };
               if (el.id === 'condition') return { ...el, text: vars.CONDITION ?? el.text };
               if (el.id === 'price') return { ...el, text: vars.PRICE ?? el.text };
               if (el.id === 'sku') return { ...el, text: vars.SKU ?? el.text };
+              
+              // Legacy fallbacks for older templates
+              if (el.id === 'cardname') return { ...el, text: vars.CARDNAME ?? el.text };
+              if (el.id === 'setname') return { ...el, text: vars.SETNAME ?? el.text };
+              if (el.id === 'cardnumber') return { ...el, text: vars.CARDNUMBER ?? el.text };
             } else if (el.type === 'barcode' && el.id === 'barcode') {
               return { ...el, data: vars.BARCODE ?? el.data };
             }
