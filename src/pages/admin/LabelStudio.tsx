@@ -24,7 +24,9 @@ import {
   Trash2
 } from "lucide-react";
 import { zplPriceBarcodeThirds2x1, type ThirdsLabelData } from "@/lib/templates/priceBarcodeThirds2x1";
-import { print } from '@/lib/printService';
+import { printQueue } from '@/lib/print/queueInstance';
+import { sanitizeLabel } from '@/lib/print/sanitizeZpl';
+import { oncePer } from '@/lib/print/debounce';
 import { toast } from "sonner";
 import { supabase } from '@/integrations/supabase/client';
 
@@ -253,33 +255,37 @@ export default function LabelStudio() {
     toast.success('Thirds template created');
   };
 
-  const handleTestPrint = async () => {
+  const handleTestPrint = oncePer()(async () => {
     try {
       if (!editableZpl || editableZpl.trim().length === 0) {
         toast.error('No ZPL to print. Check template configuration.');
         return;
       }
       
-      console.log('🖨️ Test print - Editable ZPL:', editableZpl);
+      console.debug("[print_prepare]", {
+        template: templateName || 'label_studio_test',
+        qty: printerPrefs.copies || 1,
+        preview: editableZpl.slice(0, 120).replace(/\n/g, "\\n")
+      });
       
-      const result = await print(editableZpl, printerPrefs.copies || 1);
+      // Sanitize and enqueue the ZPL
+      const safeZpl = sanitizeLabel(editableZpl);
+      await printQueue.enqueueSafe({ 
+        zpl: safeZpl, 
+        qty: printerPrefs.copies || 1, 
+        usePQ: true 
+      });
       
-      if (result.success) {
-        toast.success('Test print sent successfully!', {
-          description: result.jobId ? `Job ID: ${result.jobId}` : 'Print job submitted'
-        });
-      } else {
-        toast.error('Print failed', {
-          description: result.error || 'Unknown error occurred'
-        });
-      }
+      toast.success('Test print queued successfully!', {
+        description: `Sending ${printerPrefs.copies || 1} copy(ies) to printer`
+      });
     } catch (error) {
       console.error('Print failed:', error);
       toast.error('Print failed', {
         description: error instanceof Error ? error.message : 'Unknown error'
       });
     }
-  };
+  });
 
   const copyZplToClipboard = () => {
     navigator.clipboard.writeText(editableZpl);
