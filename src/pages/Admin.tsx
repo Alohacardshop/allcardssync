@@ -48,6 +48,12 @@ import ShopifyQueueTest from '@/components/admin/ShopifyQueueTest';
 import ShopifyQueueSettings from '@/components/admin/ShopifyQueueSettings';
 import ShopifyQueueHealth from '@/components/admin/ShopifyQueueHealth';
 import ShopifyEnvironmentSetup from '@/components/admin/ShopifyEnvironmentSetup';
+import { DefaultPrinterSelector } from '@/components/DefaultPrinterSelector';
+import { PrintNodeSettings } from '@/components/PrintNodeSettings';
+import { CutterSettingsPanel } from '@/components/CutterSettingsPanel';
+import { ZebraPrinterPanel } from '@/components/ZebraPrinterPanel';
+import { ZebraDiagnosticsPanel } from '@/components/ZebraDiagnosticsPanel';
+import { TCGHealthCheck } from '@/components/admin/TCGHealthCheck';
 
 const Admin = () => {
   const [activeSection, setActiveSection] = useState('overview');
@@ -88,6 +94,13 @@ const Admin = () => {
       icon: Shield,
       description: 'Monitor queue health and alerts',
       url: '#queue-health'
+    },
+    {
+      id: 'hardware',
+      title: 'Hardware Test',
+      icon: Wrench,
+      description: 'Test printers, scanners, and network connectivity',
+      url: '#hardware'
     },
     {
       id: 'catalog',
@@ -376,6 +389,74 @@ const Admin = () => {
               </p>
             </div>
             <UserAssignmentManager />
+          </div>
+        );
+
+      case 'hardware':
+        return (
+          <div className="space-y-6">
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight">Hardware Test & Diagnostics</h1>
+              <p className="text-muted-foreground">
+                Test printers, scanners, network connectivity, and hardware diagnostics.
+              </p>
+            </div>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Printer Configuration */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Settings className="w-5 h-5" />
+                    Printer Setup
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <DefaultPrinterSelector />
+                  <PrintNodeSettings />
+                  <CutterSettingsPanel />
+                </CardContent>
+              </Card>
+
+              {/* Network Printers */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Wrench className="w-5 h-5" />
+                    Network Printers
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ZebraPrinterPanel />
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Zebra Diagnostics */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Wrench className="w-5 h-5" />
+                  Zebra Printer Diagnostics
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ZebraDiagnosticsPanel />
+              </CardContent>
+            </Card>
+
+            {/* TCG Health Check */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Database className="w-5 h-5" />
+                  TCG Database Health
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <TCGHealthCheck />
+              </CardContent>
+            </Card>
           </div>
         );
 
