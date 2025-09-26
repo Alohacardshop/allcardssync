@@ -438,19 +438,27 @@ const Inventory = () => {
         return parts.length > 0 ? parts.join(' ') : 'Raw Card';
       };
 
-      // Use the same template system as bulk printing for consistency
+      // Load the default template (try org default, then fallback to raw_card_2x1)
       const tpl = await getTemplate('raw_card_2x1');
+      if (!tpl) {
+        toast.error('No label template available. Please contact administrator.');
+        setPrintingItem(null);
+        return;
+      }
 
       // Prepare variables for template substitution
       const vars: JobVars = {
         CARDNAME: generateTitle(item),
+        SETNAME: item.brand_title || '',
+        CARDNUMBER: item.card_number || '',
         CONDITION: item.condition || 'NM',
         PRICE: item.price ? `$${item.price.toFixed(2)}` : '$0.00',
         SKU: item.sku || '',
         BARCODE: item.sku || generateTitle(item).replace(/[^a-zA-Z0-9]/g, '').substring(0, 12),
       };
 
-      const prefs = JSON.parse(localStorage.getItem('zebra-printer-config') || '{}');
+      console.log('🖨️ Using template:', tpl.name);
+      console.log('🖨️ Template variables:', vars);
 
       let zpl = '';
       if (tpl.format === 'elements' && tpl.layout) {
@@ -459,49 +467,54 @@ const Inventory = () => {
           elements: tpl.layout.elements.map((el: ZPLElement) => {
             if (el.type === 'text') {
               if (el.id === 'cardname') return { ...el, text: vars.CARDNAME ?? el.text };
+              if (el.id === 'setname') return { ...el, text: vars.SETNAME ?? el.text };
+              if (el.id === 'cardnumber') return { ...el, text: vars.CARDNUMBER ?? el.text };
               if (el.id === 'condition') return { ...el, text: vars.CONDITION ?? el.text };
               if (el.id === 'price') return { ...el, text: vars.PRICE ?? el.text };
               if (el.id === 'sku') return { ...el, text: vars.SKU ?? el.text };
-              if (el.id === 'desc') return { ...el, text: vars.CARDNAME ?? el.text };
             } else if (el.type === 'barcode' && el.id === 'barcode') {
               return { ...el, data: vars.BARCODE ?? el.data };
             }
             return el;
           }),
         };
-        zpl = zplFromElements(filled, prefs, cutterSettings);
+        zpl = zplFromElements(filled);
       } else if (tpl.format === 'zpl' && tpl.zpl) {
         zpl = zplFromTemplateString(tpl.zpl, vars);
       } else {
-        throw new Error('No valid label template');
+        throw new Error('Invalid template format');
       }
 
       console.log('🖨️ Generated ZPL for printing:', zpl);
-      console.log('🖨️ Item quantity for printing:', item.quantity || 1);
 
-      // Print using unified service
-      const result = await print(zpl, item.quantity || 1);
+      // Use the new print queue system with ensurePQ1
+      const { ensurePQ1 } = await import('@/lib/print/ensurePQ1');
+      const safeZpl = ensurePQ1(zpl);
       
-      if (result.success) {
-        toast.success('Label printed successfully!');
+      printQueue.enqueue({ 
+        zpl: safeZpl, 
+        qty: item.quantity || 1, 
+        usePQ: true 
+      });
+
+      console.log('🖨️ Label queued for printing');
+      
+      toast.success('Label queued for printing!');
+      
+      // Update the printed_at timestamp
+      await supabase
+        .from('intake_items')
+        .update({ printed_at: new Date().toISOString() })
+        .eq('id', item.id);
         
-        // Update the printed_at timestamp
-        await supabase
-          .from('intake_items')
-          .update({ printed_at: new Date().toISOString() })
-          .eq('id', item.id);
-          
-        fetchItems(0, true);
-      } else {
-        throw new Error(result.error || 'Print failed');
-      }
+      fetchItems(0, true);
     } catch (error) {
       console.error('Print error:', error);
       toast.error('Failed to print label: ' + (error as Error).message);
     } finally {
       setPrintingItem(null);
     }
-  }, [fetchItems, cutterSettings]);
+  }, [fetchItems]);
 
   // Helper function to fill template elements with data
   const fillElements = (layout: any, vars: JobVars) => {
