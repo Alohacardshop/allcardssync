@@ -790,8 +790,8 @@ const Inventory = () => {
         type: itemType
       });
 
-      // Convert to queue-compatible format
-      const safeZpl = zpl.replace(/\^XZ\s*$/, "").concat("\n^PQ1\n^XZ");
+      // Convert to queue-compatible format - let print queue handle quantity
+      const safeZpl = zpl.replace(/\^XZ\s*$/, "").concat("\n^XZ");
       const qty = item.quantity || 1;
       printQueue.enqueue({ zpl: safeZpl, qty, usePQ: true });
 
@@ -916,8 +916,8 @@ const Inventory = () => {
             throw new Error('No valid label template');
           }
 
-          // Convert to queue-compatible format
-          const safeZpl = rawZpl.replace(/\^XZ\s*$/, "").concat("\n^PQ1\n^XZ");
+          // Convert to queue-compatible format - let print queue handle quantity
+          const safeZpl = rawZpl.replace(/\^XZ\s*$/, "").concat("\n^XZ");
           const qty = item.quantity || 1;
           queueItems.push({ zpl: safeZpl, qty, usePQ: true });
         } catch (error) {
@@ -999,7 +999,7 @@ const Inventory = () => {
             throw new Error('No valid template');
           }
 
-          const safeZpl = rawZpl.replace(/\^XZ\s*$/, "").concat("\n^PQ1\n^XZ");
+          const safeZpl = rawZpl.replace(/\^XZ\s*$/, "").concat("\n^XZ");
           queueItems.push({ zpl: safeZpl, qty: 1, usePQ: true });
         } catch (error) {
           console.error(`Failed to generate ZPL for ${item.sku}:`, error);

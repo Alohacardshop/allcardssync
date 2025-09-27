@@ -10,7 +10,7 @@ export function ensurePQ1(zpl: string) {
     return `^PQ${qty}`;
   });
   
-  // Ensure we have a basic ^PQ command if none exists
+  // Only add ^PQ1 if no ^PQ command exists at all - preserve existing quantities
   return /\^PQ\d+/.test(cleaned) ? cleaned : cleaned.replace(/\^XZ\s*$/m, "^PQ1\n^XZ");
 }
 
