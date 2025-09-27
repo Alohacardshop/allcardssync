@@ -85,20 +85,20 @@ export function LockScreen({ isLocked, onUnlock }: { isLocked: boolean; onUnlock
 
 // Session Timeout Warning
 export function SessionTimeoutWarning() {
-  const [timeLeft, setTimeLeft] = useState(300); // 5 minutes warning
+  const [timeLeft, setTimeLeft] = useState(900); // 15 minutes warning
   const [showWarning, setShowWarning] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
     let lastActivity = Date.now();
-    const TIMEOUT_DURATION = 30 * 60 * 1000; // 30 minutes
-    const WARNING_DURATION = 5 * 60 * 1000; // 5 minutes before timeout
+    const TIMEOUT_DURATION = 8 * 60 * 60 * 1000; // 8 hours
+    const WARNING_DURATION = 15 * 60 * 1000; // 15 minutes before timeout
 
     const resetTimer = () => {
       lastActivity = Date.now();
       if (showWarning) {
         setShowWarning(false);
-        setTimeLeft(300);
+        setTimeLeft(900);
       }
     };
 
@@ -146,7 +146,7 @@ export function SessionTimeoutWarning() {
 
   const extendSession = () => {
     setShowWarning(false);
-    setTimeLeft(300);
+    setTimeLeft(900);
   };
 
   const formatTime = (seconds: number) => {
@@ -176,7 +176,7 @@ export function SessionTimeoutWarning() {
             </AlertDescription>
           </Alert>
           
-          <Progress value={(timeLeft / 300) * 100} className="w-full" />
+          <Progress value={(timeLeft / 900) * 100} className="w-full" />
           
           <Button onClick={extendSession} className="w-full">
             <RefreshCw className="h-4 w-4 mr-2" />
