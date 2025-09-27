@@ -521,7 +521,7 @@ const Inventory = () => {
         CONDITION: item.condition || 'NM',
         PRICE: item.price ? `$${item.price.toFixed(2)}` : '$0.00',
         SKU: item.sku || '',
-        BARCODE: item.sku || generateTitle(item).replace(/[^a-zA-Z0-9]/g, '').substring(0, 12),
+        BARCODE: item.sku || item.id?.slice(-8) || 'NO-SKU',
       };
 
       console.log('🖨️ Template variables:', vars);
@@ -754,7 +754,7 @@ const Inventory = () => {
         CONDITION: item.condition || 'NM',
         PRICE: item.price ? `$${item.price.toFixed(2)}` : '$0.00',
         SKU: item.sku || '',
-        BARCODE: item.sku || generateTitle(item).replace(/[^a-zA-Z0-9]/g, '').substring(0, 12),
+        BARCODE: item.sku || item.id?.slice(-8) || 'NO-SKU',
       };
 
       const prefs = JSON.parse(localStorage.getItem('zebra-printer-config') || '{}');
@@ -887,7 +887,7 @@ const Inventory = () => {
             CONDITION: item?.condition ?? 'NM',
             PRICE: item?.price != null ? `$${Number(item.price).toFixed(2)}` : '$0.00',
             SKU: item?.sku ?? '',
-            BARCODE: item?.sku ?? generateTitle(item).replace(/[^a-z0-9]/gi,'').slice(0,12),
+            BARCODE: item?.sku ?? item?.id?.slice(-8) ?? 'NO-SKU',
           };
 
           const prefs = JSON.parse(localStorage.getItem('zebra-printer-config') || '{}');
@@ -989,7 +989,7 @@ const Inventory = () => {
             CONDITION: item?.condition ?? 'NM',
             PRICE: item?.price != null ? `$${Number(item.price).toFixed(2)}` : '$0.00',
             SKU: item?.sku ?? '',
-            BARCODE: item?.sku ?? 'BARCODE',
+            BARCODE: item?.sku ?? item?.id?.slice(-8) ?? 'NO-SKU',
           };
 
           let rawZpl = '';
