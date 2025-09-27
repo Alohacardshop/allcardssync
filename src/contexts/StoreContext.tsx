@@ -268,12 +268,16 @@ export function StoreProvider({ children }: StoreProviderProps) {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Auto-recovery when store/assignments change
+  // Auto-recovery when store/assignments change (with debounce to prevent loops)
   useEffect(() => {
     if (assignedStore && userAssignments.length > 0 && !selectedLocation) {
-      recoverSelectedLocation();
+      // Debounce the recovery to prevent loops
+      const timeoutId = setTimeout(() => {
+        recoverSelectedLocation();
+      }, 1000);
+      return () => clearTimeout(timeoutId);
     }
-  }, [assignedStore, userAssignments, selectedLocation]);
+  }, [assignedStore, userAssignments.length]); // Removed selectedLocation to prevent loops
   // Load cached locations when assigned store changes (no automatic refresh)
   useEffect(() => {
     if (!assignedStore) {

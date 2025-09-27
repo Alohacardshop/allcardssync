@@ -32,6 +32,8 @@ import { InventoryDeleteDialog } from '@/components/InventoryDeleteDialog';
 import { useCutterSettings } from '@/hooks/useCutterSettings';
 import { CutterSettingsPanel } from '@/components/CutterSettingsPanel';
 import { TestLabelButton } from '@/components/TestLabelButton';
+import { RefreshControls } from '@/components/RefreshControls';
+import { useStablePolling } from '@/hooks/useStablePolling';
 
 const ITEMS_PER_PAGE = 50;
 
@@ -42,6 +44,10 @@ const Inventory = () => {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [currentPage, setCurrentPage] = useState(0);
+  
+  // Auto-refresh state
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   
   // Search and filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -98,6 +104,10 @@ const Inventory = () => {
   }, []);
 
   const fetchItems = useCallback(async (page = 0, reset = false) => {
+    // Prevent multiple simultaneous fetches
+    if (loading && reset) return;
+    if (loadingMore && !reset) return;
+    
     if (reset) {
       setLoading(true);
       setCurrentPage(0);
@@ -181,14 +191,20 @@ const Inventory = () => {
         setItems(prev => [...prev, ...newItems]);
       }
       setCurrentPage(page);
+      setLastRefresh(new Date());
     } catch (error) {
       console.error('Error fetching inventory items:', error);
       toast.error('Failed to load inventory items');
+      // Disable auto-refresh on repeated failures
+      if (error && typeof error === 'object' && 'message' in error) {
+        setAutoRefreshEnabled(false);
+        setTimeout(() => setAutoRefreshEnabled(true), 60000); // Re-enable after 1 minute
+      }
     } finally {
       setLoading(false);
       setLoadingMore(false);
     }
-  }, [statusFilter, typeFilter, assignedStore, selectedLocation, showSoldItems]);
+  }, [statusFilter, typeFilter, assignedStore, selectedLocation, showSoldItems, loading, loadingMore]);
 
   // Memoized filtered items
   const filteredItems = useMemo(() => {
@@ -239,15 +255,24 @@ const Inventory = () => {
     }
   }, [statusFilter, typeFilter, assignedStore, selectedLocation, showSoldItems]);
 
-  // Auto-refresh every 30 seconds to show latest sync status (only when initialized)
+  // Smart auto-refresh with circuit breaker - only refresh when sync status might have changed
+  const { isPolling, error: pollingError, resetCircuitBreaker } = useStablePolling(
+    () => fetchItems(0, true),
+    {
+      interval: 120000, // 2 minutes
+      enabled: autoRefreshEnabled && !!assignedStore && !!selectedLocation,
+      maxRetries: 3,
+      backoffMultiplier: 2,
+      maxInterval: 300000 // 5 minutes max
+    }
+  );
+
+  // Show polling error if circuit breaker is triggered
   useEffect(() => {
-    if (!assignedStore || !selectedLocation) return;
-    
-    const interval = setInterval(() => {
-      fetchItems(0, true);
-    }, 30000);
-    return () => clearInterval(interval);
-  }, [fetchItems, assignedStore, selectedLocation]);
+    if (pollingError) {
+      toast.error(`Auto-refresh paused due to errors. Click refresh controls to resume.`);
+    }
+  }, [pollingError]);
 
   const loadMore = useCallback(() => {
     if (!loadingMore && hasMore) {
@@ -1264,8 +1289,17 @@ const Inventory = () => {
             <TabsTrigger value="settings">Printer Settings</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="inventory" className="space-y-6">
-            {/* Filters and Search */}
+            <TabsContent value="inventory" className="space-y-6">
+              {/* Refresh Controls */}
+              <RefreshControls
+                autoRefreshEnabled={autoRefreshEnabled}
+                onAutoRefreshToggle={setAutoRefreshEnabled}
+                onManualRefresh={() => fetchItems(0, true)}
+                isRefreshing={loading}
+                lastRefresh={lastRefresh}
+              />
+              
+              {/* Filters and Search */}
             <Card>
               <CardHeader>
                 <CardTitle>Filters & Search</CardTitle>
