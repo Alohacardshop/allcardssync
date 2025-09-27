@@ -93,6 +93,18 @@ serve(async (req) => {
         await handleInventoryLevelUpdate(supabase, payload, shopifyDomain);
         break;
       
+      case 'orders/cancelled':
+        await handleOrderCancellation(supabase, payload, shopifyDomain);
+        break;
+      
+      case 'refunds/create':
+        await handleRefundCreated(supabase, payload, shopifyDomain);
+        break;
+      
+      case 'products/update':
+        await handleProductUpdate(supabase, payload, shopifyDomain);
+        break;
+      
       default:
         console.log(`Unhandled webhook topic: ${topic}`);
     }
@@ -298,6 +310,178 @@ async function handleInventoryLevelUpdate(supabase: any, payload: any, shopifyDo
   // Update matching items
   for (const item of items) {
     await updateItemQuantity(supabase, item, available);
+  }
+}
+
+async function handleOrderCancellation(supabase: any, payload: any, shopifyDomain: string | null) {
+  const orderId = payload.id?.toString();
+  const lineItems = payload.line_items || [];
+
+  if (!orderId || lineItems.length === 0) return;
+
+  console.log(`Handling order cancellation: ${orderId} with ${lineItems.length} line items`);
+
+  const storeKey = await getStoreKeyFromDomain(supabase, shopifyDomain);
+  if (!storeKey) return;
+
+  for (const lineItem of lineItems) {
+    const sku = lineItem.sku;
+    const quantity = lineItem.quantity || 0;
+
+    if (!sku) continue;
+
+    // Find items that were sold in this order
+    const { data: items, error } = await supabase
+      .from('intake_items')
+      .select('id, quantity, type, sold_at')
+      .eq('store_key', storeKey)
+      .eq('sku', sku)
+      .eq('sold_order_id', orderId);
+
+    if (error || !items?.length) continue;
+
+    for (const item of items) {
+      // Restore inventory for cancelled items
+      if (item.type === 'Graded') {
+        // For graded items, restore to quantity 1
+        const { error: updateError } = await supabase
+          .from('intake_items')
+          .update({
+            quantity: 1,
+            sold_at: null,
+            sold_price: null,
+            sold_order_id: null,
+            sold_channel: null,
+            updated_by: 'shopify_webhook'
+          })
+          .eq('id', item.id);
+
+        if (updateError) {
+          console.error('Failed to restore graded item:', updateError);
+        } else {
+          console.log(`Restored graded item ${item.id} from cancellation`);
+        }
+      } else {
+        // For raw items, add back the cancelled quantity
+        const { error: updateError } = await supabase
+          .from('intake_items')
+          .update({
+            quantity: (item.quantity || 0) + quantity,
+            updated_by: 'shopify_webhook'
+          })
+          .eq('id', item.id);
+
+        if (updateError) {
+          console.error('Failed to restore raw item quantity:', updateError);
+        } else {
+          console.log(`Restored raw item ${item.id} quantity by ${quantity}`);
+        }
+      }
+    }
+  }
+}
+
+async function handleRefundCreated(supabase: any, payload: any, shopifyDomain: string | null) {
+  const orderId = payload.order_id?.toString();
+  const refundLineItems = payload.refund_line_items || [];
+
+  if (!orderId || refundLineItems.length === 0) return;
+
+  console.log(`Handling refund for order: ${orderId} with ${refundLineItems.length} line items`);
+
+  const storeKey = await getStoreKeyFromDomain(supabase, shopifyDomain);
+  if (!storeKey) return;
+
+  for (const refundItem of refundLineItems) {
+    const lineItem = refundItem.line_item;
+    const sku = lineItem?.sku;
+    const refundQuantity = refundItem.quantity || 0;
+
+    if (!sku) continue;
+
+    // Find items that were sold in this order
+    const { data: items, error } = await supabase
+      .from('intake_items')
+      .select('id, quantity, type')
+      .eq('store_key', storeKey)
+      .eq('sku', sku)
+      .eq('sold_order_id', orderId);
+
+    if (error || !items?.length) continue;
+
+    for (const item of items) {
+      if (item.type === 'Graded') {
+        // For graded items, restore to available
+        const { error: updateError } = await supabase
+          .from('intake_items')
+          .update({
+            quantity: 1,
+            sold_at: null,
+            sold_price: null,
+            updated_by: 'shopify_webhook'
+          })
+          .eq('id', item.id);
+
+        if (updateError) {
+          console.error('Failed to restore refunded graded item:', updateError);
+        } else {
+          console.log(`Restored graded item ${item.id} from refund`);
+        }
+      } else {
+        // For raw items, add back refunded quantity
+        const { error: updateError } = await supabase
+          .from('intake_items')
+          .update({
+            quantity: (item.quantity || 0) + refundQuantity,
+            updated_by: 'shopify_webhook'
+          })
+          .eq('id', item.id);
+
+        if (updateError) {
+          console.error('Failed to restore refunded raw item:', updateError);
+        } else {
+          console.log(`Restored raw item ${item.id} quantity by ${refundQuantity}`);
+        }
+      }
+    }
+  }
+}
+
+async function handleProductUpdate(supabase: any, payload: any, shopifyDomain: string | null) {
+  const productId = payload.id?.toString();
+  const variants = payload.variants || [];
+
+  if (!productId) return;
+
+  console.log(`Handling product update: ${productId} with ${variants.length} variants`);
+
+  const storeKey = await getStoreKeyFromDomain(supabase, shopifyDomain);
+  if (!storeKey) return;
+
+  for (const variant of variants) {
+    const sku = variant.sku;
+    const price = variant.price;
+    const title = payload.title;
+
+    if (!sku) continue;
+
+    // Update matching items with new price/title
+    const { error: updateError } = await supabase
+      .from('intake_items')
+      .update({
+        price: parseFloat(price),
+        subject: title, // Update title if needed
+        updated_by: 'shopify_webhook'
+      })
+      .eq('store_key', storeKey)
+      .eq('sku', sku)
+      .eq('shopify_product_id', productId);
+
+    if (updateError) {
+      console.error(`Failed to update item for SKU ${sku}:`, updateError);
+    } else {
+      console.log(`Updated item pricing for SKU ${sku}: $${price}`);
+    }
   }
 }
 
