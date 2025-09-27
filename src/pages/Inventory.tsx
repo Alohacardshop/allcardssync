@@ -429,6 +429,12 @@ const Inventory = () => {
     try {
       setPrintingItem(item.id);
       
+      // Helper function to truncate text for labels
+      const truncateForLabel = (text: string, maxLength: number = 70): string => {
+        if (text.length <= maxLength) return text;
+        return text.substring(0, maxLength - 3) + '...';
+      };
+
       // Generate proper title for raw card
       const generateTitle = (item: any) => {
         const parts = []
@@ -694,6 +700,12 @@ const Inventory = () => {
         return;
       }
 
+      // Helper function to truncate text for labels
+      const truncateForLabel = (text: string, maxLength: number = 70): string => {
+        if (text.length <= maxLength) return text;
+        return text.substring(0, maxLength - 3) + '...';
+      };
+
       // Generate proper title for raw card
       const generateTitle = (item: any) => {
         const parts = []
@@ -701,7 +713,7 @@ const Inventory = () => {
         if (item.brand_title) parts.push(item.brand_title);
         if (item.subject) parts.push(item.subject);
         if (item.card_number) parts.push(`#${item.card_number}`);
-        return parts.length > 0 ? parts.join(' ') : 'Raw Card';
+        return parts.length > 0 ? truncateForLabel(parts.join(' ')) : 'Raw Card';
       };
 
       // Load template and generate ZPL using unified system (prioritize ZPL Studio templates)
@@ -848,6 +860,12 @@ const Inventory = () => {
         return;
       }
 
+      // Helper function to truncate text for labels
+      const truncateForLabel = (text: string, maxLength: number = 70): string => {
+        if (text.length <= maxLength) return text;
+        return text.substring(0, maxLength - 3) + '...';
+      };
+
       // Generate proper title for raw card
       const generateTitle = (item: any) => {
         const parts: string[] = [];
@@ -855,7 +873,7 @@ const Inventory = () => {
         if (item.brand_title) parts.push(item.brand_title);
         if (item.subject) parts.push(item.subject);
         if (item.card_number) parts.push(`#${item.card_number}`);
-        return parts.length > 0 ? parts.join(' ') : 'Raw Card';
+        return parts.length > 0 ? truncateForLabel(parts.join(' ')) : 'Raw Card';
       };
 
       // Get template once for all items
