@@ -105,22 +105,6 @@ serve(async (req) => {
         await handleProductUpdate(supabase, payload, shopifyDomain);
         break;
       
-      case 'orders/create':
-        await handleOrderCreated(supabase, payload, shopifyDomain);
-        break;
-      
-      case 'app/uninstalled':
-        await handleAppUninstalled(supabase, payload, shopifyDomain);
-        break;
-      
-      case 'checkouts/create':
-        await handleCheckoutCreated(supabase, payload, shopifyDomain);
-        break;
-      
-      case 'checkouts/delete':
-        await handleCheckoutDeleted(supabase, payload, shopifyDomain);
-        break;
-      
       default:
         console.log(`Unhandled webhook topic: ${topic}`);
     }
@@ -525,104 +509,6 @@ async function updateItemQuantity(supabase: any, item: any, newQuantity: number)
   } else {
     console.log(`Updated item ${item.id} (SKU: ${item.sku}) quantity from ${item.quantity} to ${newQuantity}`);
   }
-}
-
-async function handleOrderCreated(supabase: any, payload: any, shopifyDomain: string | null) {
-  const orderId = payload.id?.toString();
-  const lineItems = payload.line_items || [];
-
-  if (!orderId || lineItems.length === 0) return;
-
-  console.log(`Handling order creation: ${orderId} - reserving inventory`);
-
-  const storeKey = await getStoreKeyFromDomain(supabase, shopifyDomain);
-  if (!storeKey) return;
-
-  // For high-value items, you might want to temporarily reduce available quantity
-  // This prevents overselling while payment is processing
-  for (const lineItem of lineItems) {
-    const sku = lineItem.sku;
-    const quantity = lineItem.quantity || 0;
-
-    if (!sku) continue;
-
-    console.log(`Order created - SKU ${sku} reserved ${quantity} units (Order: ${orderId})`);
-    
-    // Log the reservation for potential cleanup later
-    await supabase
-      .from('system_logs')
-      .insert({
-        level: 'info',
-        message: 'Inventory reserved for order creation',
-        context: {
-          order_id: orderId,
-          sku: sku,
-          reserved_quantity: quantity,
-          store_key: storeKey
-        }
-      });
-  }
-}
-
-async function handleAppUninstalled(supabase: any, payload: any, shopifyDomain: string | null) {
-  console.log(`App uninstalled from store: ${shopifyDomain}`);
-  
-  const storeKey = await getStoreKeyFromDomain(supabase, shopifyDomain);
-  if (!storeKey) return;
-
-  // Clean up sync statuses for this store
-  const { error: cleanupError } = await supabase
-    .from('intake_items')
-    .update({
-      shopify_sync_status: 'pending',
-      shopify_product_id: null,
-      shopify_variant_id: null,
-      shopify_inventory_item_id: null,
-      last_shopify_synced_at: null,
-      updated_by: 'app_uninstalled'
-    })
-    .eq('store_key', storeKey);
-
-  if (cleanupError) {
-    console.error('Failed to cleanup after app uninstall:', cleanupError);
-  } else {
-    console.log(`Cleaned up Shopify sync data for store: ${storeKey}`);
-  }
-
-  // Log the uninstall
-  await supabase
-    .from('system_logs')
-    .insert({
-      level: 'info',
-      message: 'Shopify app uninstalled - cleaned up sync data',
-      context: {
-        store_key: storeKey,
-        shopify_domain: shopifyDomain
-      }
-    });
-}
-
-async function handleCheckoutCreated(supabase: any, payload: any, shopifyDomain: string | null) {
-  const checkoutId = payload.id?.toString();
-  const lineItems = payload.line_items || [];
-
-  if (!checkoutId || lineItems.length === 0) return;
-
-  console.log(`Checkout created: ${checkoutId} - tracking for potential reservation`);
-
-  // For high-demand items, you could implement temporary holds here
-  // This would prevent multiple customers from checking out the same rare card
-}
-
-async function handleCheckoutDeleted(supabase: any, payload: any, shopifyDomain: string | null) {
-  const checkoutId = payload.id?.toString();
-
-  if (!checkoutId) return;
-
-  console.log(`Checkout abandoned: ${checkoutId} - releasing any holds`);
-  
-  // Release any temporary holds that were placed during checkout
-  // This ensures abandoned carts don't permanently reserve inventory
 }
 
 async function getStoreKeyFromDomain(supabase: any, shopifyDomain: string | null): Promise<string | null> {
