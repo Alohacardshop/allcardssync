@@ -69,7 +69,119 @@ Deno.serve(async (req) => {
     if (cardNumber) description += ` #${cardNumber}`
     if (condition) description += ` - ${condition} Condition`
 
-    // Create Shopify product
+    // Check for existing products with the same SKU first
+    const existingResponse = await fetch(`https://${domain}/admin/api/2024-07/products.json?fields=id,variants&limit=250`, {
+      method: 'GET',
+      headers: {
+        'X-Shopify-Access-Token': token,
+        'Content-Type': 'application/json'
+      }
+    })
+
+    let existingProduct = null
+    if (existingResponse.ok) {
+      const existingData = await existingResponse.json()
+      for (const product of existingData.products) {
+        const existingVariant = product.variants.find(v => v.sku === intakeItem.sku)
+        if (existingVariant) {
+          existingProduct = { product, variant: existingVariant }
+          break
+        }
+      }
+    }
+
+    // If SKU exists, update quantity instead of creating new product
+    if (existingProduct && intakeItem.sku) {
+      const { product, variant } = existingProduct
+      const locationId = intakeItem.shopify_location_gid.replace('gid://shopify/Location/', '')
+      
+      // Get current inventory level
+      const inventoryLevelResponse = await fetch(
+        `https://${domain}/admin/api/2024-07/inventory_levels.json?inventory_item_ids=${variant.inventory_item_id}&location_ids=${locationId}`,
+        {
+          method: 'GET',
+          headers: {
+            'X-Shopify-Access-Token': token,
+            'Content-Type': 'application/json'
+          }
+        }
+      )
+
+      let currentQuantity = 0
+      if (inventoryLevelResponse.ok) {
+        const inventoryData = await inventoryLevelResponse.json()
+        if (inventoryData.inventory_levels && inventoryData.inventory_levels.length > 0) {
+          currentQuantity = inventoryData.inventory_levels[0].available || 0
+        }
+      }
+
+      const newQuantity = currentQuantity + (intakeItem.quantity || 1)
+      
+      // Update inventory level
+      const updateInventoryResponse = await fetch(`https://${domain}/admin/api/2024-07/inventory_levels/set.json`, {
+        method: 'POST',
+        headers: {
+          'X-Shopify-Access-Token': token,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          location_id: locationId,
+          inventory_item_id: variant.inventory_item_id,
+          available: newQuantity
+        })
+      })
+
+      if (!updateInventoryResponse.ok) {
+        const errorText = await updateInventoryResponse.text()
+        throw new Error(`Failed to update inventory level: ${errorText}`)
+      }
+
+      // Create shopify snapshot with adjustment data
+      const shopifySnapshot = {
+        action: 'quantity_adjusted',
+        existing_product_id: product.id,
+        old_quantity: currentQuantity,
+        new_quantity: newQuantity,
+        sync_timestamp: new Date().toISOString(),
+        graded: false
+      }
+
+      // Update intake item
+      const { error: updateError } = await supabase
+        .from('intake_items')
+        .update({
+          shopify_product_id: product.id.toString(),
+          shopify_variant_id: variant.id.toString(),
+          shopify_inventory_item_id: variant.inventory_item_id.toString(),
+          last_shopify_synced_at: new Date().toISOString(),
+          shopify_sync_status: 'synced',
+          pushed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          shopify_sync_snapshot: shopifySnapshot,
+          updated_by: 'shopify_sync'
+        })
+        .eq('id', item_id)
+
+      if (updateError) {
+        throw new Error(`Failed to update intake item: ${updateError.message}`)
+      }
+
+      return new Response(JSON.stringify({
+        success: true,
+        action: 'quantity_adjusted',
+        shopify_product_id: product.id.toString(),
+        shopify_variant_id: variant.id.toString(),
+        old_quantity: currentQuantity,
+        new_quantity: newQuantity,
+        message: `SKU ${intakeItem.sku} already exists. Quantity adjusted from ${currentQuantity} to ${newQuantity}`,
+        product_url: `https://${domain}/products/${product.handle}`,
+        admin_url: `https://admin.shopify.com/store/${domain.replace('.myshopify.com', '')}/products/${product.id}`
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
+    }
+
+    // Create Shopify product (new SKU)
     const productData = {
       product: {
         title: title,
@@ -80,12 +192,12 @@ Deno.serve(async (req) => {
           'Raw Card',
           'single', 
           brandTitle, 
-          condition,
+          condition, // Condition as separate tag
           intakeItem.category || 'Pokemon', // Game from intake item
           intakeItem.lot_number || 'Unknown Lot', // Lot number
           subject ? `Card: ${subject}` : null, // Card name
           cardNumber ? `Number: ${cardNumber}` : null // Card number
-        ].filter(Boolean).join(', '),
+        ].filter(Boolean),
         variants: [{
           sku: intakeItem.sku,
           price: intakeItem.price?.toString() || '0.00',
