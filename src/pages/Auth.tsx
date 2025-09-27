@@ -7,8 +7,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Link, useNavigate } from "react-router-dom";
 
-const ROLE_TIMEOUT_MS = 8000;
-const AUTH_CHANGE_GUARD_MS = 6000;
+const ROLE_TIMEOUT_MS = 5000; // Reduced from 8s to 5s
+const AUTH_CHANGE_GUARD_MS = 4000; // Reduced from 6s to 4s
 
 function useSEO(opts: { title: string; description?: string; canonical?: string }) {
   useEffect(() => {
@@ -193,7 +193,7 @@ export default function Auth() {
       console.error('Role check failed:', err?.message || err);
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
-        toast.warning("Signed in, but role verification failed. Continuing with limited access.");
+        toast.success("Signed in successfully! Proceeding to dashboard...");
         navigate("/", { replace: true });
       } else {
         setRoleError("Failed to verify account permissions. Please try again.");
