@@ -34,6 +34,8 @@ import { CutterSettingsPanel } from '@/components/CutterSettingsPanel';
 import { TestLabelButton } from '@/components/TestLabelButton';
 import { RefreshControls } from '@/components/RefreshControls';
 import { useStablePolling } from '@/hooks/useStablePolling';
+import { AuthStatusDebug } from '@/components/AuthStatusDebug';
+import { InventoryLoadingStates } from '@/components/InventoryLoadingStates';
 
 const ITEMS_PER_PAGE = 50;
 
@@ -66,6 +68,11 @@ const Inventory = () => {
   const [bulkPrinting, setBulkPrinting] = useState(false);
   const [bulkRetrying, setBulkRetrying] = useState(false);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
+  
+  // Auth and error states
+  const [authError, setAuthError] = useState<boolean>(false);
+  const [roleError, setRoleError] = useState<boolean>(false);
+  const [showDebug, setShowDebug] = useState<boolean>(false);
   
   // Dialog state
   const [showRemovalDialog, setShowRemovalDialog] = useState(false);
@@ -104,6 +111,19 @@ const Inventory = () => {
   }, []);
 
   const fetchItems = useCallback(async (page = 0, reset = false) => {
+    // Check authentication first
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    
+    if (authError || !user) {
+      console.error('Authentication error in fetchItems:', authError);
+      toast.error('Authentication required. Please sign in again.');
+      setLoading(false);
+      setLoadingMore(false);
+      return;
+    }
+
+    console.log('Fetching items for authenticated user:', user.email);
+    
     // Prevent multiple simultaneous fetches
     if (loading && reset) return;
     if (loadingMore && !reset) return;
@@ -178,9 +198,30 @@ const Inventory = () => {
         query = query.gt('quantity', 0);
       }
 
+      console.log('Executing inventory query with filters:', {
+        assignedStore,
+        selectedLocation,
+        statusFilter,
+        page,
+        userId: user.id
+      });
+
       const { data, error } = await query.order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Database query error:', error);
+        
+        // Check for common RLS/auth issues
+        if (error.code === 'PGRST116' || error.message?.includes('JWT') || error.message?.includes('row-level security')) {
+          console.error('RLS/Authentication issue detected');
+          toast.error('Authentication session expired. Please refresh the page.');
+        } else {
+          toast.error(`Database error: ${error.message}`);
+        }
+        throw error;
+      }
+
+      console.log(`Successfully fetched ${data?.length || 0} items for page ${page}`);
 
       const newItems = data || [];
       setHasMore(newItems.length === ITEMS_PER_PAGE);
@@ -194,12 +235,24 @@ const Inventory = () => {
       setLastRefresh(new Date());
     } catch (error) {
       console.error('Error fetching inventory items:', error);
-      toast.error('Failed to load inventory items');
-      // Disable auto-refresh on repeated failures
-      if (error && typeof error === 'object' && 'message' in error) {
-        setAutoRefreshEnabled(false);
-        setTimeout(() => setAutoRefreshEnabled(true), 60000); // Re-enable after 1 minute
+      
+      // More specific error messages
+      if (error && typeof error === 'object' && 'code' in error) {
+        const dbError = error as any;
+        if (dbError.code === 'PGRST116') {
+          toast.error('Access denied. Please check your permissions.');
+        } else if (dbError.message?.includes('JWT')) {
+          toast.error('Session expired. Please refresh the page.');
+        } else {
+          toast.error(`Database error: ${dbError.message || 'Unknown error'}`);
+        }
+      } else {
+        toast.error('Failed to load inventory items');
       }
+      
+      // Disable auto-refresh on repeated failures
+      setAutoRefreshEnabled(false);
+      setTimeout(() => setAutoRefreshEnabled(true), 60000); // Re-enable after 1 minute
     } finally {
       setLoading(false);
       setLoadingMore(false);
@@ -249,11 +302,26 @@ const Inventory = () => {
 
   // Reset pagination when filters change (only after store context is ready)
   useEffect(() => {
-    // Only fetch if store context is properly initialized
-    if (assignedStore && selectedLocation) {
-      fetchItems(0, true);
-    }
-  }, [statusFilter, typeFilter, assignedStore, selectedLocation, showSoldItems]);
+    // Add delay to ensure authentication is fully ready
+    const timeoutId = setTimeout(() => {
+      // Only fetch if store context is properly initialized
+      if (assignedStore && selectedLocation) {
+        console.log('Triggering fetchItems due to filter change:', {
+          statusFilter,
+          typeFilter,
+          assignedStore,
+          selectedLocation,
+          showSoldItems
+        });
+        fetchItems(0, true);
+      } else {
+        console.log('Store context not ready for fetch:', { assignedStore, selectedLocation });
+        setLoading(false); // Stop loading if store context isn't ready
+      }
+    }, 100); // Small delay to ensure auth state is ready
+
+    return () => clearTimeout(timeoutId);
+  }, [statusFilter, typeFilter, assignedStore, selectedLocation, showSoldItems, fetchItems]);
 
   // Smart auto-refresh with circuit breaker - only refresh when sync status might have changed
   const { isPolling, error: pollingError, resetCircuitBreaker } = useStablePolling(
@@ -1257,16 +1325,35 @@ const Inventory = () => {
       <div className="min-h-screen bg-background">
         <Navigation />
         <div className="container mx-auto p-6">
-          <div className="flex items-center justify-center py-8">
-            <div className="text-center space-y-2">
-              <Loader2 className="h-8 w-8 animate-spin mx-auto" />
-              <p className="text-sm text-muted-foreground">
-                {loading ? 'Loading inventory...' : 
-                 !assignedStore ? 'Loading store...' : 
-                 'Loading location...'}
-              </p>
+          {/* Auth Debug Panel (only in development) */}
+          {process.env.NODE_ENV === 'development' && (
+            <div className="flex justify-end mb-4">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowDebug(!showDebug)}
+                className="text-xs"
+              >
+                {showDebug ? 'Hide' : 'Show'} Debug
+              </Button>
             </div>
-          </div>
+          )}
+          
+          <AuthStatusDebug visible={showDebug} />
+          
+          <InventoryLoadingStates
+            loading={loading}
+            hasAuthError={authError}
+            hasStoreContext={!!assignedStore && !!selectedLocation}
+            hasRoleError={roleError}
+            itemCount={0}
+            onRetry={() => {
+              setAuthError(false);
+              setRoleError(false);
+              fetchItems(0, true);
+            }}
+            onForceRefresh={() => fetchItems(0, true)}
+          />
         </div>
       </div>
     );
@@ -1279,8 +1366,24 @@ const Inventory = () => {
       <div className="container mx-auto p-6 space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-3xl font-bold">Inventory Management</h1>
-          <QueueStatusIndicator />
+          <div className="flex items-center space-x-2">
+            {/* Debug Toggle (development only) */}
+            {process.env.NODE_ENV === 'development' && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowDebug(!showDebug)}
+                className="text-xs"
+              >
+                {showDebug ? 'Hide' : 'Show'} Debug
+              </Button>
+            )}
+            <QueueStatusIndicator />
+          </div>
         </div>
+
+        {/* Auth Debug Panel */}
+        <AuthStatusDebug visible={showDebug} />
 
         <Tabs defaultValue="inventory" className="w-full">
           <TabsList className="grid w-full grid-cols-3">
