@@ -11,6 +11,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useStore } from "@/contexts/StoreContext";
 import { validateCompleteStoreContext } from "@/utils/storeValidation";
+import { generateTCGSKU } from "@/lib/sku";
+import { useRawIntakeSettings } from "@/hooks/useRawIntakeSettings";
 
 interface RawCardIntakeProps {
   onBatchAdd?: (item: any) => void;
@@ -18,6 +20,7 @@ interface RawCardIntakeProps {
 
 export const RawCardIntake = ({ onBatchAdd }: RawCardIntakeProps) => {
   const { assignedStore, selectedLocation } = useStore();
+  const { settings } = useRawIntakeSettings();
   const [brand, setBrand] = useState("");
   const [subject, setSubject] = useState("");
   const [cardNumber, setCardNumber] = useState("");
@@ -53,6 +56,14 @@ export const RawCardIntake = ({ onBatchAdd }: RawCardIntakeProps) => {
       
       setIsLoading(true);
 
+      // Generate SKU using TCGPlayer logic (will fall back to appropriate format for manual entry)
+      const generatedSku = generateTCGSKU(
+        null, // No TCGPlayer ID for manual entry
+        settings.defaultGame,
+        null, // No variant ID
+        `${brand}-${subject}-${cardNumber || 'unknown'}`.replace(/\s+/g, '-').toLowerCase()
+      );
+
       const { data, error } = await supabase.rpc("create_raw_intake_item", {
         store_key_in: storeKey,
         shopify_location_gid_in: locationGid,
@@ -64,7 +75,7 @@ export const RawCardIntake = ({ onBatchAdd }: RawCardIntakeProps) => {
         card_number_in: cardNumber,
         grade_in: condition,
         price_in: parseFloat(price) || 0,
-        sku_in: `RAW-${Date.now()}`,
+        sku_in: generatedSku,
         processing_notes_in: notes,
         catalog_snapshot_in: {
           type: "raw_card",
