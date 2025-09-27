@@ -48,6 +48,7 @@ import ShopifyQueueTest from '@/components/admin/ShopifyQueueTest';
 import ShopifyQueueSettings from '@/components/admin/ShopifyQueueSettings';
 import ShopifyQueueHealth from '@/components/admin/ShopifyQueueHealth';
 import ShopifyEnvironmentSetup from '@/components/admin/ShopifyEnvironmentSetup';
+import { WebhookTestPanel } from '@/components/admin/WebhookTestPanel';
 import { DefaultPrinterSelector } from '@/components/DefaultPrinterSelector';
 import { PrintNodeSettings } from '@/components/PrintNodeSettings';
 import { CutterSettingsPanel } from '@/components/CutterSettingsPanel';
@@ -318,6 +319,7 @@ const Admin = () => {
             <ShopifyEnvironmentSetup />
             <ShopifyConfig />
             <InventorySyncSettings />
+            <WebhookTestPanel />
             <ShopifyTagImport />
             <ShopifyQueueTest />
           </div>
