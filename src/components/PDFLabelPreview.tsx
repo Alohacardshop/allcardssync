@@ -1,8 +1,9 @@
 // src/components/PDFLabelPreview.tsx
 import React, { useEffect, useState } from "react";
 import { generateLabelPDF } from "@/lib/labelRenderer";
+import { generatePDFFromZPL } from "@/lib/zplToPdf";
 import { buildLabelDataFromItem, CardItem } from "@/lib/labelData";
-import { getDefaultTemplateFieldConfig } from "@/lib/defaultTemplate";
+import { getDefaultTemplate } from "@/lib/defaultTemplate";
 
 function base64ToUint8Array(base64: string): Uint8Array {
   if (base64.startsWith("data:")) base64 = base64.split(",")[1] || "";
@@ -33,10 +34,14 @@ const PDFLabelPreview: React.FC<{ item: CardItem }> = ({ item }) => {
         setLoading(true);
         setError(null);
 
-        // Build the exact same data as print using default template
-        const fieldConfig = await getDefaultTemplateFieldConfig();
+        // Use the "Optimized Barcode Template" ZPL for PDF generation
+        const defaultTemplate = await getDefaultTemplate();
         const labelData = buildLabelDataFromItem(item);
-        const pdfBase64 = await generateLabelPDF(fieldConfig, labelData);
+        
+        // Use ZPL-to-PDF converter if we have ZPL, fallback to field config rendering
+        const pdfBase64 = defaultTemplate.zpl.trim() 
+          ? await generatePDFFromZPL(defaultTemplate.zpl, labelData)
+          : await generateLabelPDF(defaultTemplate.fieldConfig!, labelData);
         const bytes = ensureUint8Array(pdfBase64);
 
         if (!mounted) return;
@@ -74,9 +79,12 @@ const PDFLabelPreview: React.FC<{ item: CardItem }> = ({ item }) => {
 
   const downloadAgain = async () => {
     try {
-      const fieldConfig = await getDefaultTemplateFieldConfig();
+      const defaultTemplate = await getDefaultTemplate();
       const labelData = buildLabelDataFromItem(item);
-      const pdfBase64 = await generateLabelPDF(fieldConfig, labelData);
+      
+      const pdfBase64 = defaultTemplate.zpl.trim()
+        ? await generatePDFFromZPL(defaultTemplate.zpl, labelData)
+        : await generateLabelPDF(defaultTemplate.fieldConfig!, labelData);
       const bytes = ensureUint8Array(pdfBase64);
 
       const blob = new Blob([bytes.buffer as ArrayBuffer], { type: "application/pdf" });

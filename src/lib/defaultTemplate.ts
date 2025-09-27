@@ -20,7 +20,34 @@ export interface DefaultTemplate {
  */
 export async function getDefaultTemplate(): Promise<DefaultTemplate> {
   try {
-    // Try to get default template from database
+    // Try to get "Optimized Barcode Template" specifically first
+    const { data: optimizedTemplate } = await supabase
+      .from('label_templates')
+      .select('*')
+      .eq('template_type', 'raw')
+      .eq('name', 'Optimized Barcode Template')
+      .limit(1);
+      
+    if (optimizedTemplate && optimizedTemplate.length > 0) {
+      const template = optimizedTemplate[0];
+      const canvas = template.canvas as any;
+      
+      return {
+        id: template.id,
+        name: template.name,
+        zpl: canvas?.zplLabel || '',
+        fieldConfig: canvas?.fieldConfig || {
+          includeTitle: true,
+          includeSku: true,
+          includePrice: true,
+          includeLot: false,
+          includeCondition: true,
+          barcodeMode: 'barcode' as const
+        }
+      };
+    }
+    
+    // Fallback to any default template
     const { data: templates } = await supabase
       .from('label_templates')
       .select('*')
