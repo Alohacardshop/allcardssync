@@ -1,5 +1,5 @@
 import { PrintQueue } from "./printQueue";
-import { print } from "@/lib/printService";
+import { printNodeService } from "@/lib/printNodeService";
 
 // ZD410: tiny throwaway label in cutter mode to fire ONE cut at end of batch, then revert to tear-off.
 const ZD410_END_CUT_TAIL = `^XA
@@ -14,7 +14,19 @@ const ZD410_END_CUT_TAIL = `^XA
 // PrintNode-compatible transport function
 async function printNodeTransport(payload: string): Promise<void> {
   try {
-    const result = await print(payload, 1); // PrintNode handles quantity via ZPL ^PQ commands
+    // Get saved PrintNode configuration (same logic as printService.ts)
+    const savedConfig = localStorage.getItem('zebra-printer-config');
+    if (!savedConfig) {
+      throw new Error('No PrintNode printer configured. Please configure in Admin > Test Hardware.');
+    }
+    
+    const config = JSON.parse(savedConfig);
+    if (!config.usePrintNode || !config.printNodeId) {
+      throw new Error('PrintNode not properly configured. Please reconfigure in Admin > Test Hardware.');
+    }
+
+    // Call PrintNode directly - print queue has already handled quantity in ZPL
+    const result = await printNodeService.printZPL(payload, config.printNodeId, 1);
     if (!result.success) {
       throw new Error(result.error || 'Print failed');
     }
