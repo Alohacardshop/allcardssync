@@ -4,13 +4,7 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import { META_KEY_EXTERNAL_ID, META_KEY_INTAKE_ID, META_NS } from "./ids";
-
-// Mock shopifyGraphQL function - replace with actual implementation
-async function shopifyGraphQL(query: string, variables: Record<string, any>) {
-  // This would be implemented with actual Shopify GraphQL client
-  console.log("GraphQL Query:", query, variables);
-  return { data: null };
-}
+import { shopifyGraphQL } from "./client";
 
 export interface ShopifyProduct {
   id: string;
@@ -33,7 +27,7 @@ export interface ShopifyVariant {
   };
 }
 
-export async function findProductByHandle(handle: string): Promise<ShopifyProduct | null> {
+export async function findProductByHandle(storeKey: string, handle: string): Promise<ShopifyProduct | null> {
   const query = `
     query($handle: String!) {
       productByHandle(handle: $handle) {
@@ -51,7 +45,7 @@ export async function findProductByHandle(handle: string): Promise<ShopifyProduc
   `;
   
   try {
-    const response = await shopifyGraphQL(query, { handle });
+    const response = await shopifyGraphQL(storeKey, query, { handle });
     return response?.data?.productByHandle ?? null;
   } catch (error) {
     console.error("Error finding product by handle:", error);
@@ -59,7 +53,7 @@ export async function findProductByHandle(handle: string): Promise<ShopifyProduc
   }
 }
 
-export async function findVariantBySku(sku: string): Promise<ShopifyVariant | null> {
+export async function findVariantBySku(storeKey: string, sku: string): Promise<ShopifyVariant | null> {
   const query = `
     query($query: String!) {
       productVariants(first: 50, query: $query) {
@@ -76,7 +70,7 @@ export async function findVariantBySku(sku: string): Promise<ShopifyVariant | nu
   `;
   
   try {
-    const response = await shopifyGraphQL(query, { q: `sku:${JSON.stringify(sku)}` });
+    const response = await shopifyGraphQL(storeKey, query, { q: `sku:${JSON.stringify(sku)}` });
     return response?.data?.productVariants?.nodes?.[0] ?? null;
   } catch (error) {
     console.error("Error finding variant by SKU:", error);
@@ -84,7 +78,7 @@ export async function findVariantBySku(sku: string): Promise<ShopifyVariant | nu
   }
 }
 
-export async function findProductByExternalId(externalId: string): Promise<ShopifyProduct | null> {
+export async function findProductByExternalId(storeKey: string, externalId: string): Promise<ShopifyProduct | null> {
   const query = `
     query($query: String!) {
       products(first: 10, query: $query) {
@@ -105,7 +99,7 @@ export async function findProductByExternalId(externalId: string): Promise<Shopi
   
   try {
     const filter = `metafield:${META_NS}.${META_KEY_EXTERNAL_ID}:${externalId}`;
-    const response = await shopifyGraphQL(query, { q: filter });
+    const response = await shopifyGraphQL(storeKey, query, { q: filter });
     return response?.data?.products?.nodes?.[0] ?? null;
   } catch (error) {
     console.error("Error finding product by external ID:", error);
@@ -113,7 +107,7 @@ export async function findProductByExternalId(externalId: string): Promise<Shopi
   }
 }
 
-export async function findProductByIntakeId(intakeId: string): Promise<ShopifyProduct | null> {
+export async function findProductByIntakeId(storeKey: string, intakeId: string): Promise<ShopifyProduct | null> {
   const query = `
     query($query: String!) {
       products(first: 10, query: $query) {
@@ -134,7 +128,7 @@ export async function findProductByIntakeId(intakeId: string): Promise<ShopifyPr
   
   try {
     const filter = `metafield:${META_NS}.${META_KEY_INTAKE_ID}:${intakeId}`;
-    const response = await shopifyGraphQL(query, { q: filter });
+    const response = await shopifyGraphQL(storeKey, query, { q: filter });
     return response?.data?.products?.nodes?.[0] ?? null;
   } catch (error) {
     console.error("Error finding product by intake ID:", error);

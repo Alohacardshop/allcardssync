@@ -1,4 +1,3 @@
-import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -12,11 +11,12 @@ import {
   XCircle, 
   Clock,
   TrendingUp,
-  Mail,
   RefreshCw,
   Trash2
 } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { RefreshButton } from '@/components/RefreshButton'
 
 interface HealthMetrics {
   lastProcessorRun?: string
@@ -29,118 +29,100 @@ interface HealthMetrics {
   healthScore: number
 }
 
-export default function ShopifyQueueHealth() {
-  const [health, setHealth] = useState<HealthMetrics>({
-    processorStatus: 'healthy',
-    failureRate: 0,
-    avgProcessingTime: 0,
-    queueBacklog: 0,
-    totalItems: 0,
-    rateLimitStatus: 'normal',
-    healthScore: 100
-  })
+async function checkHealth(): Promise<HealthMetrics> {
+  // Get queue stats
+  const { data: queueItems, error: queueError } = await supabase
+    .from('shopify_sync_queue')
+    .select('*')
+
+  if (queueError) throw queueError
+
+  const now = new Date()
+  const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000)
+
+  const allItems = queueItems || []
   
-  const [loading, setLoading] = useState(true)
-  const [cleaningUp, setCleaningUp] = useState(false)
+  // Calculate metrics
+  const queued = allItems.filter(item => item.status === 'queued').length
+  const processing = allItems.filter(item => item.status === 'processing').length
+  const completed = allItems.filter(item => item.status === 'completed').length
+  const failed = allItems.filter(item => item.status === 'failed').length
 
-  useEffect(() => {
-    checkHealth()
-    const interval = setInterval(checkHealth, 30000) // Check every 30 seconds
-    return () => clearInterval(interval)
-  }, [])
+  // Find last successful processing
+  const lastCompleted = allItems
+    .filter(item => item.status === 'completed' && item.completed_at)
+    .sort((a, b) => new Date(b.completed_at!).getTime() - new Date(a.completed_at!).getTime())[0]
 
-  const checkHealth = async () => {
-    try {
-      // Get queue stats
-      const { data: queueItems, error: queueError } = await supabase
-        .from('shopify_sync_queue')
-        .select('*')
+  // Calculate failure rate
+  const totalProcessed = completed + failed
+  const failureRate = totalProcessed > 0 ? (failed / totalProcessed) * 100 : 0
 
-      if (queueError) throw queueError
+  // Calculate processing times
+  const completedWithTimes = allItems.filter(item => 
+    item.status === 'completed' && item.started_at && item.completed_at
+  )
+  
+  const processingTimes = completedWithTimes.map(item => 
+    new Date(item.completed_at!).getTime() - new Date(item.started_at!).getTime()
+  )
+  
+  const avgProcessingTime = processingTimes.length > 0 
+    ? processingTimes.reduce((sum, time) => sum + time, 0) / processingTimes.length / 1000
+    : 0
 
-      const now = new Date()
-      const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000)
-      const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000)
-
-      const allItems = queueItems || []
-      const recentItems = allItems.filter(item => new Date(item.created_at) >= oneHourAgo)
-      const todayItems = allItems.filter(item => new Date(item.created_at) >= oneDayAgo)
-
-      // Calculate metrics
-      const queued = allItems.filter(item => item.status === 'queued').length
-      const processing = allItems.filter(item => item.status === 'processing').length
-      const completed = allItems.filter(item => item.status === 'completed').length
-      const failed = allItems.filter(item => item.status === 'failed').length
-
-      // Find last successful processing
-      const lastCompleted = allItems
-        .filter(item => item.status === 'completed' && item.completed_at)
-        .sort((a, b) => new Date(b.completed_at!).getTime() - new Date(a.completed_at!).getTime())[0]
-
-      // Calculate failure rate
-      const totalProcessed = completed + failed
-      const failureRate = totalProcessed > 0 ? (failed / totalProcessed) * 100 : 0
-
-      // Calculate processing times
-      const completedWithTimes = allItems.filter(item => 
-        item.status === 'completed' && item.started_at && item.completed_at
-      )
-      
-      const processingTimes = completedWithTimes.map(item => 
-        new Date(item.completed_at!).getTime() - new Date(item.started_at!).getTime()
-      )
-      
-      const avgProcessingTime = processingTimes.length > 0 
-        ? processingTimes.reduce((sum, time) => sum + time, 0) / processingTimes.length / 1000
-        : 0
-
-      // Determine processor status
-      let processorStatus: 'healthy' | 'warning' | 'critical' = 'healthy'
-      if (!lastCompleted) {
-        processorStatus = 'warning'
-      } else {
-        const timeSinceLastRun = now.getTime() - new Date(lastCompleted.completed_at!).getTime()
-        const minutesSinceLastRun = timeSinceLastRun / (1000 * 60)
-        
-        if (minutesSinceLastRun > 60) {
-          processorStatus = 'critical'
-        } else if (minutesSinceLastRun > 15) {
-          processorStatus = 'warning'
-        }
-      }
-
-      // Calculate health score
-      let healthScore = 100
-      if (failureRate > 20) healthScore -= 30
-      else if (failureRate > 10) healthScore -= 15
-      
-      if (processorStatus === 'critical') healthScore -= 40
-      else if (processorStatus === 'warning') healthScore -= 20
-      
-      if (queued > 100) healthScore -= 20
-      else if (queued > 50) healthScore -= 10
-
-      setHealth({
-        lastProcessorRun: lastCompleted?.completed_at,
-        processorStatus,
-        failureRate: Math.round(failureRate * 10) / 10,
-        avgProcessingTime: Math.round(avgProcessingTime * 10) / 10,
-        queueBacklog: queued,
-        totalItems: allItems.length,
-        rateLimitStatus: failureRate > 15 ? 'elevated' : 'normal',
-        healthScore: Math.max(0, healthScore)
-      })
-
-    } catch (error) {
-      console.error('Error checking health:', error)
-      toast.error('Failed to check queue health')
-    } finally {
-      setLoading(false)
+  // Determine processor status
+  let processorStatus: 'healthy' | 'warning' | 'critical' = 'healthy'
+  if (!lastCompleted) {
+    processorStatus = 'warning'
+  } else {
+    const timeSinceLastRun = now.getTime() - new Date(lastCompleted.completed_at!).getTime()
+    const minutesSinceLastRun = timeSinceLastRun / (1000 * 60)
+    
+    if (minutesSinceLastRun > 60) {
+      processorStatus = 'critical'
+    } else if (minutesSinceLastRun > 15) {
+      processorStatus = 'warning'
     }
   }
 
+  // Calculate health score
+  let healthScore = 100
+  if (failureRate > 20) healthScore -= 30
+  else if (failureRate > 10) healthScore -= 15
+  
+  if (processorStatus === 'critical') healthScore -= 40
+  else if (processorStatus === 'warning') healthScore -= 20
+  
+  if (queued > 100) healthScore -= 20
+  else if (queued > 50) healthScore -= 10
+
+  return {
+    lastProcessorRun: lastCompleted?.completed_at,
+    processorStatus,
+    failureRate: Math.round(failureRate * 10) / 10,
+    avgProcessingTime: Math.round(avgProcessingTime * 10) / 10,
+    queueBacklog: queued,
+    totalItems: allItems.length,
+    rateLimitStatus: failureRate > 15 ? 'elevated' : 'normal',
+    healthScore: Math.max(0, healthScore)
+  }
+}
+
+export default function ShopifyQueueHealth() {
+  const queryClient = useQueryClient()
+  
+  const { data: health, isLoading } = useQuery({
+    queryKey: ['shopify-queue-health'],
+    queryFn: checkHealth,
+    refetchOnWindowFocus: true,
+    // Only poll when health score is low (< 80)
+    refetchInterval: (query) => {
+      const data = query.state.data as HealthMetrics | undefined
+      return data && data.healthScore < 80 ? 30000 : false // Poll every 30s only if unhealthy
+    }
+  })
+
   const runCleanup = async () => {
-    setCleaningUp(true)
     try {
       // Delete completed items older than 7 days
       const sevenDaysAgo = new Date()
@@ -155,12 +137,10 @@ export default function ShopifyQueueHealth() {
       if (error) throw error
 
       toast.success('Queue cleanup completed')
-      checkHealth()
+      queryClient.invalidateQueries({ queryKey: ['shopify-queue-health'] })
     } catch (error) {
       console.error('Error running cleanup:', error)
       toast.error('Failed to run cleanup')
-    } finally {
-      setCleaningUp(false)
     }
   }
 
@@ -182,7 +162,7 @@ export default function ShopifyQueueHealth() {
     }
   }
 
-  if (loading) {
+  if (isLoading || !health) {
     return <div className="text-center py-4">Checking queue health...</div>
   }
 
@@ -199,13 +179,10 @@ export default function ShopifyQueueHealth() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={checkHealth} disabled={loading}>
-            <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
-          <Button variant="outline" size="sm" onClick={runCleanup} disabled={cleaningUp}>
+          <RefreshButton queryKey={['shopify-queue-health']} />
+          <Button variant="outline" size="sm" onClick={runCleanup}>
             <Trash2 className="w-4 h-4 mr-2" />
-            {cleaningUp ? 'Cleaning...' : 'Cleanup'}
+            Cleanup
           </Button>
         </div>
       </div>

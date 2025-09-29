@@ -296,13 +296,16 @@ export function usePrintQueue() {
     }
   }, [updateQueueLength]);
 
-  // Set up polling for new jobs
+  // Set up conditional polling for print jobs
   useEffect(() => {
     if (!selectedPrinter) return;
 
+    // Only poll when there are items in the queue
     const pollInterval = setInterval(() => {
-      processQueue();
-    }, 3000); // Check every 3 seconds
+      if (queueStatus.queueLength > 0) {
+        processQueue();
+      }
+    }, 3000); // Check every 3 seconds only when queue has items
 
     // Initial queue length check
     updateQueueLength();
@@ -311,7 +314,7 @@ export function usePrintQueue() {
     return () => {
       clearInterval(pollInterval);
     };
-  }, [selectedPrinter, processQueue, updateQueueLength]);
+  }, [selectedPrinter, processQueue, updateQueueLength, queueStatus.queueLength]);
 
   // Set up realtime subscription for queue updates
   useEffect(() => {

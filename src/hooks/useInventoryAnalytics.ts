@@ -9,9 +9,7 @@ export function useInventoryAnalytics(storeKey?: string, locationGid?: string) {
     queryFn: () => getInventoryAnalytics(storeKey, locationGid),
     staleTime: 30 * 60 * 1000, // 30 minutes - much longer cache
     gcTime: 60 * 60 * 1000, // 60 minutes - keep in cache longer
-    refetchOnWindowFocus: false,
-    refetchInterval: 10 * 60 * 1000, // Background refresh every 10 minutes (less frequent)
-    refetchIntervalInBackground: false, // Disable background refresh to reduce load
+    refetchOnWindowFocus: true, // Refresh when user returns to tab
     retry: 2, // Retry failed requests
     retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 30000), // Exponential backoff
   })

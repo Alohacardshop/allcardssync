@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react"
+import { useEffect } from "react"
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from "@/integrations/supabase/client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
@@ -53,87 +54,88 @@ interface QueueStats {
 }
 
 export function RealTimeSyncMonitor() {
-  const [queueItems, setQueueItems] = useState<QueueItem[]>([])
-  const [stats, setStats] = useState<QueueStats>({
-    total: 0,
-    queued: 0,
-    processing: 0,
-    completed: 0,
-    failed: 0,
-    processingRate: 0,
-    avgProcessingTime: 0,
-    successRate: 0
-  })
-  const [isProcessorRunning, setIsProcessorRunning] = useState(false)
-  const [loading, setLoading] = useState(true)
-
-  const fetchQueueData = async () => {
-    try {
+  const queryClient = useQueryClient()
+  
+  const { data: queueData, isLoading } = useQuery({
+    queryKey: ['sync-monitor-queue'],
+    queryFn: async () => {
       // Fetch recent queue items
-      const { data: items } = await supabase
-        .from('shopify_sync_queue')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(50)
+    const { data: items } = await supabase
+      .from('shopify_sync_queue')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(50)
 
-      if (items) {
-        setQueueItems(items)
-        
-        // Calculate stats
-        const total = items.length
-        const queued = items.filter(i => i.status === 'queued').length
-        const processing = items.filter(i => i.status === 'processing').length
-        const completed = items.filter(i => i.status === 'completed').length
-        const failed = items.filter(i => i.status === 'failed').length
-        
-        // Calculate processing rate (items completed in last hour)
-        const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000)
-        const recentCompleted = items.filter(i => 
-          i.status === 'completed' && 
-          new Date(i.completed_at!) > oneHourAgo
-        )
-        const processingRate = recentCompleted.length
+    if (!items) return { items: [], stats: getEmptyStats() }
+    
+    // Calculate stats
+    const total = items.length
+    const queued = items.filter(i => i.status === 'queued').length
+    const processing = items.filter(i => i.status === 'processing').length
+    const completed = items.filter(i => i.status === 'completed').length
+    const failed = items.filter(i => i.status === 'failed').length
+    
+    // Calculate processing rate (items completed in last hour)
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000)
+    const recentCompleted = items.filter(i => 
+      i.status === 'completed' && 
+      new Date(i.completed_at!) > oneHourAgo
+    )
+    const processingRate = recentCompleted.length
 
-        // Calculate average processing time
-        const completedWithTimes = items.filter(i => 
-          i.status === 'completed' && i.started_at && i.completed_at
-        )
-        let avgProcessingTime = 0
-        if (completedWithTimes.length > 0) {
-          const totalTime = completedWithTimes.reduce((sum, item) => {
-            const start = new Date(item.started_at!).getTime()
-            const end = new Date(item.completed_at!).getTime()
-            return sum + (end - start)
-          }, 0)
-          avgProcessingTime = Math.round(totalTime / completedWithTimes.length / 1000)
-        }
+    // Calculate average processing time
+    const completedWithTimes = items.filter(i => 
+      i.status === 'completed' && i.started_at && i.completed_at
+    )
+    let avgProcessingTime = 0
+    if (completedWithTimes.length > 0) {
+      const totalTime = completedWithTimes.reduce((sum, item) => {
+        const start = new Date(item.started_at!).getTime()
+        const end = new Date(item.completed_at!).getTime()
+        return sum + (end - start)
+      }, 0)
+      avgProcessingTime = Math.round(totalTime / completedWithTimes.length / 1000)
+    }
 
-        // Calculate success rate
-        const processed = completed + failed
-        const successRate = processed > 0 ? Math.round((completed / processed) * 100) : 0
+    // Calculate success rate
+    const processed = completed + failed
+    const successRate = processed > 0 ? Math.round((completed / processed) * 100) : 0
 
-        setStats({
-          total,
-          queued,
-          processing,
-          completed,
-          failed,
-          processingRate,
-          avgProcessingTime,
-          successRate
-        })
-      }
-    } catch (error) {
-      console.error('Error fetching queue data:', error)
-    } finally {
-      setLoading(false)
+    const stats: QueueStats = {
+      total,
+      queued,
+      processing,
+      completed,
+      failed,
+      processingRate,
+      avgProcessingTime,
+      successRate
+    }
+
+    return { items, stats }
+    },
+    refetchOnWindowFocus: true,
+    // No fixed polling - rely on real-time subscription
+  })
+
+  const queueItems = queueData?.items || []
+  const stats = queueData?.stats || getEmptyStats()
+
+  function getEmptyStats(): QueueStats {
+    return {
+      total: 0,
+      queued: 0,
+      processing: 0,
+      completed: 0,
+      failed: 0,
+      processingRate: 0,
+      avgProcessingTime: 0,
+      successRate: 0
     }
   }
 
+  // Set up real-time subscription
   useEffect(() => {
-    fetchQueueData()
-
-    // Set up real-time subscription
     const channel = supabase
       .channel('sync-queue-changes')
       .on(
@@ -144,34 +146,27 @@ export function RealTimeSyncMonitor() {
           table: 'shopify_sync_queue'
         },
         () => {
-          fetchQueueData()
+          queryClient.invalidateQueries({ queryKey: ['sync-monitor-queue'] })
         }
       )
       .subscribe()
 
-    // Auto-refresh every 30 seconds
-    const interval = setInterval(fetchQueueData, 30000)
-
     return () => {
       supabase.removeChannel(channel)
-      clearInterval(interval)
     }
-  }, [])
+  }, [queryClient])
 
   const handleStartProcessor = async () => {
     try {
-      setIsProcessorRunning(true)
       const { data, error } = await supabase.functions.invoke('shopify-sync-processor')
       
       if (error) throw error
       
       toast.success('Sync processor started successfully')
-      fetchQueueData()
+      queryClient.invalidateQueries({ queryKey: ['sync-monitor-queue'] })
     } catch (error: any) {
       console.error('Error starting processor:', error)
       toast.error(`Failed to start processor: ${error.message}`)
-    } finally {
-      setIsProcessorRunning(false)
     }
   }
 
@@ -186,7 +181,7 @@ export function RealTimeSyncMonitor() {
       if (error) throw error
 
       toast.success('Failed items queued for retry')
-      fetchQueueData()
+      queryClient.invalidateQueries({ queryKey: ['sync-monitor-queue'] })
     } catch (error: any) {
       console.error('Error retrying failed items:', error)
       toast.error(`Failed to retry items: ${error.message}`)
@@ -204,7 +199,7 @@ export function RealTimeSyncMonitor() {
       if (error) throw error
 
       toast.success('Completed items cleared')
-      fetchQueueData()
+      queryClient.invalidateQueries({ queryKey: ['sync-monitor-queue'] })
     } catch (error: any) {
       console.error('Error clearing completed items:', error)
       toast.error(`Failed to clear items: ${error.message}`)
@@ -322,11 +317,10 @@ export function RealTimeSyncMonitor() {
           <div className="flex flex-wrap gap-2">
             <Button 
               onClick={handleStartProcessor}
-              disabled={isProcessorRunning}
               className="flex items-center gap-2"
             >
               <PlayCircle className="h-4 w-4" />
-              {isProcessorRunning ? 'Processing...' : 'Start Processor'}
+              Start Processor
             </Button>
 
             <Button 
@@ -376,7 +370,7 @@ export function RealTimeSyncMonitor() {
           <CardTitle>Recent Queue Items</CardTitle>
         </CardHeader>
         <CardContent>
-          {loading ? (
+          {isLoading ? (
             <div className="space-y-2">
               {[...Array(5)].map((_, i) => (
                 <div key={i} className="h-16 bg-muted animate-pulse rounded" />

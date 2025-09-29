@@ -41,7 +41,8 @@ export function useShopifySync() {
       if (error) throw error
       return data as QueueItem[]
     },
-    refetchInterval: 3000 // Faster refresh every 3 seconds
+    refetchOnWindowFocus: true,
+    // No fixed polling - rely on real-time subscription
   })
 
   // Set up real-time subscription for queue updates

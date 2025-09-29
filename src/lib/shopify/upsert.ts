@@ -13,26 +13,7 @@ import {
   ShopifyVariant 
 } from "./lookup";
 import { supabase } from "@/integrations/supabase/client";
-
-// Mock shopifyGraphQL function - replace with actual implementation  
-async function shopifyGraphQL(query: string, variables: Record<string, any>) {
-  console.log("GraphQL Mutation:", query, variables);
-  return { 
-    data: { 
-      productSet: { 
-        product: { 
-          id: "gid://shopify/Product/12345", 
-          handle: "test-product", 
-          title: "Test Product",
-          variants: {
-            nodes: [{ id: "gid://shopify/ProductVariant/67890", sku: "TEST-001" }]
-          }
-        },
-        userErrors: []
-      } 
-    } 
-  };
-}
+import { shopifyGraphQL } from "./client";
 
 export interface UpsertCard extends CardIdentifiers {
   externalId: string;
@@ -58,7 +39,7 @@ export interface UpsertResult {
   wasUpdate?: boolean;
 }
 
-export async function pushProductUpsert(card: UpsertCard): Promise<UpsertResult> {
+export async function pushProductUpsert(storeKey: string, card: UpsertCard): Promise<UpsertResult> {
   const handle = buildHandle(card);
   const sku = buildSku(card);
   
@@ -66,12 +47,12 @@ export async function pushProductUpsert(card: UpsertCard): Promise<UpsertResult>
   
   try {
     // Comprehensive existence checks (makes retries idempotent)
-    let existing = null;
+    let existing: ShopifyProduct | null = null;
     let wasUpdate = false;
     
     // Check by intake ID first (most specific)
     if (card.intakeId) {
-      existing = await findProductByIntakeId(card.intakeId);
+      existing = await findProductByIntakeId(storeKey, card.intakeId);
       if (existing) {
         console.log(`Found existing product by intake ID: ${existing.id}`);
         wasUpdate = true;
@@ -80,7 +61,7 @@ export async function pushProductUpsert(card: UpsertCard): Promise<UpsertResult>
     
     // Check by external ID
     if (!existing) {
-      existing = await findProductByExternalId(card.externalId);
+      existing = await findProductByExternalId(storeKey, card.externalId);
       if (existing) {
         console.log(`Found existing product by external ID: ${existing.id}`);
         wasUpdate = true;
@@ -89,7 +70,7 @@ export async function pushProductUpsert(card: UpsertCard): Promise<UpsertResult>
     
     // Check by handle
     if (!existing) {
-      existing = await findProductByHandle(handle);
+      existing = await findProductByHandle(storeKey, handle);
       if (existing) {
         console.log(`Found existing product by handle: ${existing.id}`);
         wasUpdate = true;
@@ -98,7 +79,7 @@ export async function pushProductUpsert(card: UpsertCard): Promise<UpsertResult>
     
     // Check by SKU (variant level)
     if (!existing) {
-      const variantResult = await findVariantBySku(sku);
+      const variantResult = await findVariantBySku(storeKey, sku);
       if (variantResult?.product) {
         existing = {
           id: variantResult.product.id,
@@ -158,7 +139,7 @@ export async function pushProductUpsert(card: UpsertCard): Promise<UpsertResult>
     // Execute with backoff retry
     const result = await withBackoff(async () => {
       console.log(`${wasUpdate ? 'Updating' : 'Creating'} product with productSet`);
-      const response = await shopifyGraphQL(mutation, variables);
+      const response = await shopifyGraphQL(storeKey, mutation, variables);
       
       const userErrors = response?.data?.productSet?.userErrors;
       if (userErrors?.length) {

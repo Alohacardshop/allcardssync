@@ -6,6 +6,7 @@ import { useState, useCallback } from 'react';
 import { toast } from '@/hooks/use-toast';
 import { pushProductUpsert, markItemAsPushed, markItemPushFailed, UpsertCard } from '@/lib/shopify/upsert';
 import { checkShopifyPushStatus } from '@/lib/shopify/lookup';
+import { useStore } from '@/contexts/StoreContext';
 
 interface UpsertState {
   processing: boolean;
@@ -16,6 +17,8 @@ interface UpsertState {
 }
 
 export function useShopifyUpsert() {
+  const { assignedStore } = useStore();
+  
   const [state, setState] = useState<UpsertState>({
     processing: false,
     processed: 0,
@@ -25,6 +28,9 @@ export function useShopifyUpsert() {
   });
 
   const upsertItem = useCallback(async (intakeItemId: string, card: UpsertCard) => {
+    if (!assignedStore) {
+      throw new Error('No store selected');
+    }
     try {
       // Check if already pushed to avoid duplicates
       const pushStatus = await checkShopifyPushStatus(intakeItemId);
@@ -38,7 +44,7 @@ export function useShopifyUpsert() {
       }
 
       // Perform the upsert
-      const result = await pushProductUpsert(card);
+      const result = await pushProductUpsert(assignedStore, card);
       
       if (result.success && result.product) {
         // Mark as pushed only after successful upsert
@@ -69,7 +75,7 @@ export function useShopifyUpsert() {
         error: errorMessage
       };
     }
-  }, []);
+  }, [assignedStore]);
 
   const upsertBatch = useCallback(async (items: Array<{ id: string; card: UpsertCard }>) => {
     setState({

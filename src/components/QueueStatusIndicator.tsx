@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { supabase } from "@/integrations/supabase/client"
 import { Package, ExternalLink } from "lucide-react"
+import { useQuery } from '@tanstack/react-query'
+import { useEffect } from 'react'
 
 interface QueueStatus {
   queued: number
@@ -12,11 +13,9 @@ interface QueueStatus {
 }
 
 export function QueueStatusIndicator() {
-  const [queueStatus, setQueueStatus] = useState<QueueStatus>({ queued: 0, processing: 0, failed: 0 })
-  const [loading, setLoading] = useState(true)
-
-  const fetchQueueStatus = async () => {
-    try {
+  const { data: queueStatus, isLoading } = useQuery({
+    queryKey: ['shopify-queue-status'],
+    queryFn: async () => {
       const { data, error } = await supabase
         .from('shopify_sync_queue')
         .select('status')
@@ -29,23 +28,40 @@ export function QueueStatusIndicator() {
         return acc
       }, { queued: 0, processing: 0, failed: 0 })
 
-      setQueueStatus(stats)
-    } catch (error) {
-      console.error('Error fetching queue status:', error)
-    } finally {
-      setLoading(false)
+      return stats
+    },
+    refetchOnWindowFocus: true,
+    // Only poll when there are active items (queued or processing)
+    refetchInterval: (query) => {
+      const data = query.state.data as QueueStatus | undefined
+      const hasActiveItems = data && (data.queued > 0 || data.processing > 0)
+      return hasActiveItems ? 10000 : false // Poll every 10s only if items are active
     }
-  }
+  })
 
+  // Set up real-time subscription
   useEffect(() => {
-    fetchQueueStatus()
-    
-    // Refresh every 10 seconds
-    const interval = setInterval(fetchQueueStatus, 10000)
-    return () => clearInterval(interval)
+    const channel = supabase
+      .channel('queue-status-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'shopify_sync_queue'
+        },
+        () => {
+          // Invalidate query to refetch on any change
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
   }, [])
 
-  if (loading) return null
+  if (isLoading || !queueStatus) return null
 
   const totalPending = queueStatus.queued + queueStatus.processing
   if (totalPending === 0 && queueStatus.failed === 0) return null
