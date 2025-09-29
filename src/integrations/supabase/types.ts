@@ -1865,7 +1865,7 @@ export type Database = {
         Returns: boolean
       }
       normalize_game_slug: {
-        Args: { input_game: string }
+        Args: { slug_in: string }
         Returns: string
       }
       queue_shopify_sync: {
