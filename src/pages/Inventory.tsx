@@ -321,7 +321,7 @@ const Inventory = () => {
     }, 100); // Small delay to ensure auth state is ready
 
     return () => clearTimeout(timeoutId);
-  }, [statusFilter, typeFilter, assignedStore, selectedLocation, showSoldItems, fetchItems]);
+  }, [statusFilter, typeFilter, assignedStore, selectedLocation, showSoldItems]); // Removed fetchItems to prevent infinite loop
 
   // Smart auto-refresh with circuit breaker - only refresh when sync status might have changed
   const { isPolling, error: pollingError, resetCircuitBreaker } = useStablePolling(
