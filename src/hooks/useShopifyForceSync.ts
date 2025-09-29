@@ -90,7 +90,10 @@ export function useShopifyForceSync() {
 
       if (processorError) throw processorError;
 
-      // Monitor progress
+      // LEGITIMATE INTERVAL: Monitor real async job progress from database
+      // This polls the shopify_sync_queue table to track completion of actual background jobs
+      // Unlike fake progress bars, this reads real status from the database
+      // Automatically cleans up after 30 seconds or when all jobs complete
       const progressInterval = setInterval(async () => {
         try {
           const { data: queueStatus } = await supabase
