@@ -39,21 +39,7 @@ import { PrintQueueStatus } from "./components/PrintQueueStatus";
 import { supabase } from "@/integrations/supabase/client";
 import { CatalogMigrationPlaceholder } from "@/components/CatalogMigrationPlaceholder";
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 1 * 60 * 1000, // 1 minute
-      refetchOnWindowFocus: false,
-      retry: (failureCount, error: any) => {
-        // Don't retry on auth errors
-        if (error?.message?.includes('auth') || error?.status === 401) {
-          return false;
-        }
-        return failureCount < 3;
-      },
-    },
-  },
-});
+import { queryClient } from "@/lib/queryClient";
 
 
 const App = () => (

@@ -1,6 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import React from 'react';
 
 export interface HealthStatus {
   database: 'healthy' | 'degraded' | 'down';
@@ -11,16 +13,7 @@ export interface HealthStatus {
   errorRate: number;
 }
 
-export function useHealthMonitor() {
-  const [healthStatus, setHealthStatus] = useState<HealthStatus>({
-    database: 'healthy',
-    shopifySync: 'healthy', 
-    printServices: 'healthy',
-    lastSync: null,
-    queueBacklog: 0,
-    errorRate: 0
-  });
-
+export function useHealthMonitor(liveMode: boolean = false) {
   const [lastHealthCheck, setLastHealthCheck] = useState<Date | null>(null);
 
   const checkSystemHealth = async (): Promise<HealthStatus> => {
@@ -86,28 +79,6 @@ export function useHealthMonitor() {
         errorRate: Math.round(errorRate)
       };
 
-      setHealthStatus(status);
-      setLastHealthCheck(new Date());
-
-      // Alert on critical issues
-      if (databaseHealth === 'down') {
-        toast.error('Database connection lost', {
-          description: 'Please refresh the page or contact IT support'
-        });
-      }
-
-      if (shopifySyncHealth === 'down') {
-        toast.error('Shopify sync is down', {
-          description: 'Items may not sync properly. Contact administrator.'
-        });
-      }
-
-      if (queueBacklog > 200) {
-        toast.warning(`High sync queue backlog: ${queueBacklog} items`, {
-          description: 'Consider processing the queue manually'
-        });
-      }
-
       return status;
 
     } catch (error) {
@@ -121,29 +92,64 @@ export function useHealthMonitor() {
         queueBacklog: 0,
         errorRate: 100
       };
-
-      setHealthStatus(failedStatus);
-      setLastHealthCheck(new Date());
       
       return failedStatus;
     }
   };
 
-  // Run health check every 5 minutes
-  useEffect(() => {
-    checkSystemHealth();
-    
-    const interval = setInterval(checkSystemHealth, 5 * 60 * 1000);
-    
-    return () => clearInterval(interval);
-  }, []);
+  const { data: healthStatus, refetch, isLoading, error } = useQuery<HealthStatus>({
+    queryKey: ['systemHealth'],
+    queryFn: checkSystemHealth,
+    staleTime: 60_000, // Fresh for 1 minute
+    refetchInterval: liveMode ? 120_000 : false, // Only poll in live mode (2 min)
+    refetchOnWindowFocus: true,
+  });
+
+  // Set last health check when data changes
+  React.useEffect(() => {
+    if (healthStatus || error) {
+      setLastHealthCheck(new Date());
+    }
+  }, [healthStatus, error]);
+
+  // Handle critical alerts when data changes
+  React.useEffect(() => {
+    if (healthStatus && !isLoading) {
+      if (healthStatus.database === 'down') {
+        toast.error('Database connection lost', {
+          description: 'Please refresh the page or contact IT support'
+        });
+      }
+
+      if (healthStatus.shopifySync === 'down') {
+        toast.error('Shopify sync is down', {
+          description: 'Items may not sync properly. Contact administrator.'
+        });
+      }
+
+      if (healthStatus.queueBacklog > 200) {
+        toast.warning(`High sync queue backlog: ${healthStatus.queueBacklog} items`, {
+          description: 'Consider processing the queue manually'
+        });
+      }
+    }
+  }, [healthStatus, isLoading]);
 
   return {
-    healthStatus,
+    healthStatus: healthStatus || {
+      database: 'healthy',
+      shopifySync: 'healthy', 
+      printServices: 'healthy',
+      lastSync: null,
+      queueBacklog: 0,
+      errorRate: 0
+    },
     lastHealthCheck,
-    checkSystemHealth,
-    isHealthy: healthStatus.database === 'healthy' && 
-               healthStatus.shopifySync === 'healthy' && 
-               healthStatus.printServices === 'healthy'
+    checkSystemHealth: refetch,
+    isLoading,
+    isHealthy: healthStatus ? 
+      (healthStatus.database === 'healthy' && 
+       healthStatus.shopifySync === 'healthy' && 
+       healthStatus.printServices === 'healthy') : true
   };
 }
