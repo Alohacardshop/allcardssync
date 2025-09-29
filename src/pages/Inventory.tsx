@@ -23,8 +23,13 @@ import { print } from '@/lib/printService';
 import { sendGradedToShopify, sendRawToShopify } from '@/hooks/useShopifySend';
 import { useBatchSendToShopify } from '@/hooks/useBatchSendToShopify';
 import { useDebounce } from '@/hooks/useDebounce';
+import { useStablePolling } from '@/hooks/useStablePolling';
+import { useLoadingStateManager } from '@/lib/loading/LoadingStateManager';
+import { InventorySkeleton } from '@/components/SmartLoadingSkeleton';
+import { classifyError } from '@/lib/loading/errorClassifier';
+import { shouldRefetch } from '@/lib/loading/refreshPolicy';
+import { useLoadingMetrics, incrementRefresh, incrementDismissedRefresh } from '@/lib/loading/metrics';
 import { InventoryItemCard } from '@/components/InventoryItemCard';
-import { InventorySkeleton } from '@/components/InventorySkeleton';
 import { ShopifyRemovalDialog } from '@/components/ShopifyRemovalDialog';
 import { ShopifySyncDetailsDialog } from '@/components/ShopifySyncDetailsDialog';
 import { QueueStatusIndicator } from '@/components/QueueStatusIndicator';
@@ -33,19 +38,22 @@ import { useCutterSettings } from '@/hooks/useCutterSettings';
 import { CutterSettingsPanel } from '@/components/CutterSettingsPanel';
 import { TestLabelButton } from '@/components/TestLabelButton';
 import { RefreshControls } from '@/components/RefreshControls';
-import { useStablePolling } from '@/hooks/useStablePolling';
 import { AuthStatusDebug } from '@/components/AuthStatusDebug';
-import { InventoryLoadingStates } from '@/components/InventoryLoadingStates';
 
 const ITEMS_PER_PAGE = 50;
 
 const Inventory = () => {
+  // Unified loading state management
+  const loadingManager = useLoadingStateManager({ pageType: 'inventory' });
+  const { snapshot, setPhase, setMessage, setProgress, setA11yAnnouncement, setNextRefreshAt } = loadingManager;
+  const metrics = useLoadingMetrics('inventory');
+
   // Core state
   const [items, setItems] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [currentPage, setCurrentPage] = useState(0);
+  const [lastFetchTime, setLastFetchTime] = useState<number>(0);
   
   // Auto-refresh state
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
@@ -67,12 +75,10 @@ const Inventory = () => {
   const [printingItem, setPrintingItem] = useState<string | null>(null);
   const [bulkPrinting, setBulkPrinting] = useState(false);
   const [bulkRetrying, setBulkRetrying] = useState(false);
-  const [isAdmin, setIsAdmin] = useState<boolean>(false);
-  
-  // Auth and error states
-  const [authError, setAuthError] = useState<boolean>(false);
-  const [roleError, setRoleError] = useState<boolean>(false);
   const [showDebug, setShowDebug] = useState<boolean>(false);
+
+  // Auth and error states
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
   
   // Dialog state
   const [showRemovalDialog, setShowRemovalDialog] = useState(false);
@@ -90,10 +96,12 @@ const Inventory = () => {
   const { sendChunkedBatchToShopify, isSending: isBatchSending, progress } = useBatchSendToShopify();
   const { settings: cutterSettings } = useCutterSettings();
 
-  // Check admin role on mount
+  // Check admin role on mount and set auth phase
   useEffect(() => {
     const checkAdminRole = async () => {
       try {
+        setPhase('auth', 'loading', { message: 'Checking authentication...' });
+        
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
           const { data } = await supabase.rpc("has_role", { 
@@ -101,14 +109,18 @@ const Inventory = () => {
             _role: "admin" as any 
           });
           setIsAdmin(Boolean(data));
+          setPhase('auth', 'success');
+        } else {
+          setPhase('auth', 'error', { message: 'Please sign in to continue' });
         }
       } catch (error) {
         console.error('Error checking admin role:', error);
         setIsAdmin(false);
+        setPhase('auth', 'error', { message: 'Authentication check failed' });
       }
     };
     checkAdminRole();
-  }, []);
+  }, [setPhase]);
 
   const fetchItems = useCallback(async (page = 0, reset = false) => {
     // Check authentication first
@@ -117,7 +129,7 @@ const Inventory = () => {
     if (authError || !user) {
       console.error('Authentication error in fetchItems:', authError);
       toast.error('Authentication required. Please sign in again.');
-      setLoading(false);
+      setPhase('auth', 'error', { message: 'Authentication required. Please sign in again.' });
       setLoadingMore(false);
       return;
     }
@@ -125,11 +137,11 @@ const Inventory = () => {
     console.log('Fetching items for authenticated user:', user.email);
     
     // Prevent multiple simultaneous fetches
-    if (loading && reset) return;
+    if (snapshot.phases.data === 'loading' && reset) return;
     if (loadingMore && !reset) return;
     
     if (reset) {
-      setLoading(true);
+      setPhase('data', 'loading', { message: 'Loading inventory...' });
       setCurrentPage(0);
       setHasMore(true);
       setItems([]);
@@ -254,10 +266,11 @@ const Inventory = () => {
       setAutoRefreshEnabled(false);
       setTimeout(() => setAutoRefreshEnabled(true), 60000); // Re-enable after 1 minute
     } finally {
-      setLoading(false);
+      setPhase('data', 'success');
+      setLastFetchTime(Date.now());
       setLoadingMore(false);
     }
-  }, [statusFilter, typeFilter, assignedStore, selectedLocation, showSoldItems, loading, loadingMore]);
+  }, [statusFilter, typeFilter, assignedStore, selectedLocation, showSoldItems, snapshot.phases.data, loadingMore, setPhase]);
 
   // Memoized filtered items
   const filteredItems = useMemo(() => {
@@ -316,7 +329,7 @@ const Inventory = () => {
         fetchItems(0, true);
       } else {
         console.log('Store context not ready for fetch:', { assignedStore, selectedLocation });
-        setLoading(false); // Stop loading if store context isn't ready
+        setPhase('store', 'error', { message: 'Store context not ready' }); // Stop loading if store context isn't ready
       }
     }, 100); // Small delay to ensure auth state is ready
 
@@ -1302,7 +1315,7 @@ const Inventory = () => {
 
   // Debug logging with better context
   console.log('Inventory Debug:', {
-    loading,
+    snapshot,
     itemsLength: items.length,
     filteredItemsLength: filteredItems.length,
     statusFilter,
@@ -1319,8 +1332,12 @@ const Inventory = () => {
     }
   });
 
-  // Show loading until both data is loaded AND store context is ready
-  if (loading || !assignedStore || !selectedLocation) {
+  // Show loading states based on unified loading manager
+  const needsLoadingState = snapshot.dominantPhase || 
+    !assignedStore || !selectedLocation ||
+    (filteredItems.length === 0 && (statusFilter !== 'all' || typeFilter !== 'all' || printStatusFilter !== 'all' || searchTerm.trim()));
+
+  if (needsLoadingState) {
     return (
       <div className="min-h-screen bg-background">
         <Navigation />
@@ -1341,18 +1358,22 @@ const Inventory = () => {
           
           <AuthStatusDebug visible={showDebug} />
           
-          <InventoryLoadingStates
-            loading={loading}
-            hasAuthError={authError}
-            hasStoreContext={!!assignedStore && !!selectedLocation}
-            hasRoleError={roleError}
-            itemCount={0}
+          <InventorySkeleton
+            snapshot={snapshot}
             onRetry={() => {
-              setAuthError(false);
-              setRoleError(false);
+              resetCircuitBreaker();
               fetchItems(0, true);
             }}
-            onForceRefresh={() => fetchItems(0, true)}
+            onSignIn={() => window.location.href = '/auth'}
+            onApproveRefresh={() => {
+              incrementRefresh('inventory');
+              setNextRefreshAt(null);
+              fetchItems(0, true);
+            }}
+            onDismissRefresh={() => {
+              incrementDismissedRefresh('inventory');
+              setNextRefreshAt(Date.now() + 300000); // Snooze for 5 minutes
+            }}
           />
         </div>
       </div>
@@ -1398,7 +1419,7 @@ const Inventory = () => {
                 autoRefreshEnabled={autoRefreshEnabled}
                 onAutoRefreshToggle={setAutoRefreshEnabled}
                 onManualRefresh={() => fetchItems(0, true)}
-                isRefreshing={loading}
+                isRefreshing={snapshot.phases.data === 'loading'}
                 lastRefresh={lastRefresh}
               />
               
@@ -1614,7 +1635,7 @@ const Inventory = () => {
                 </div>
               )}
 
-              {filteredItems.length === 0 && !loading && (
+              {filteredItems.length === 0 && snapshot.phases.data !== 'loading' && (
                 <Card>
                   <CardContent className="text-center py-12">
                     <p className="text-muted-foreground">No items found matching your criteria.</p>
