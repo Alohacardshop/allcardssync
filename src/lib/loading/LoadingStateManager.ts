@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, createContext, useContext } from 'react';
+import React, { useState, useEffect, useCallback, useRef, createContext, useContext } from 'react';
 
 export type LoadingPhase = 'auth' | 'store' | 'data' | 'ui';
 export type LoadingSeverity = 'idle' | 'loading' | 'success' | 'empty' | 'error' | 'degraded';
@@ -171,13 +171,9 @@ export function useLoadingStateManager(opts: UseLoadingStateManagerOptions = {})
 // Context for app-wide access
 const LoadingContext = createContext<ReturnType<typeof useLoadingStateManager> | null>(null);
 
-export const LoadingProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const LoadingProvider = ({ children }: { children: React.ReactNode }) => {
   const manager = useLoadingStateManager();
-  return (
-    <LoadingContext.Provider value={manager}>
-      {children}
-    </LoadingContext.Provider>
-  );
+  return React.createElement(LoadingContext.Provider, { value: manager }, children);
 };
 
 export const useLoadingContext = () => {
