@@ -40,7 +40,7 @@ export async function getTemplateById(id: string): Promise<TemplateRecord> {
     .from('label_templates')
     .select('*')
     .eq('id', id)
-    .single();
+    .maybeSingle();
     
   if (error || !data) {
     throw new Error(`Template with id '${id}' not found`);

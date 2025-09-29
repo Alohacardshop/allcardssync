@@ -1,3 +1,4 @@
+import React, { Suspense } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -11,19 +12,22 @@ import { AdminGuard } from "@/components/AdminGuard";
 import { StoreProvider } from "@/contexts/StoreContext";
 import { PrintNodeProvider } from "@/contexts/PrintNodeContext";
 import { NavigationBar } from "@/components/NavigationBar";
-import Index from "./pages/Index";
-import DashboardPage from "./pages/DashboardPage";
-import TestHardwarePage from "./pages/TestHardwarePage";
-import Inventory from "./pages/Inventory";
-import Batches from "./pages/Batches";
-import LabelStudio from "./pages/admin/LabelStudio";
-import Admin from "./pages/Admin";
-import NotFound from "./pages/NotFound";
-import Auth from "./pages/Auth";
-import PrintLogs from "./pages/PrintLogs";
-import ZPLSettings from "./pages/ZPLSettings";
-import ShopifyMapping from "./pages/ShopifyMapping";
-import BulkImport from "./pages/BulkImport";
+import { GlobalLoading } from "@/components/GlobalLoading";
+import { LoadingSpinner } from "@/components/LoadingSpinner";
+// Lazy load heavy routes
+const Index = React.lazy(() => import("./pages/Index"));
+const DashboardPage = React.lazy(() => import("./pages/DashboardPage"));
+const TestHardwarePage = React.lazy(() => import("./pages/TestHardwarePage"));
+const Inventory = React.lazy(() => import("./pages/Inventory"));
+const Batches = React.lazy(() => import("./pages/Batches"));
+const LabelStudio = React.lazy(() => import("./pages/admin/LabelStudio"));
+const Admin = React.lazy(() => import("./pages/Admin"));
+const NotFound = React.lazy(() => import("./pages/NotFound"));
+const Auth = React.lazy(() => import("./pages/Auth"));
+const PrintLogs = React.lazy(() => import("./pages/PrintLogs"));
+const ZPLSettings = React.lazy(() => import("./pages/ZPLSettings"));
+const ShopifyMapping = React.lazy(() => import("./pages/ShopifyMapping"));
+const BulkImport = React.lazy(() => import("./pages/BulkImport"));
 import { GlobalKeyboardHandler } from "./components/GlobalKeyboardHandler";
 import { FloatingActionButton } from "./components/FloatingActionButton";
 import { PerformanceMonitor } from "./components/PerformanceMonitor";
@@ -59,36 +63,41 @@ const App = () => (
             <StoreProvider>
             <Toaster />
             <Sonner />
+            <GlobalLoading />
             <BrowserRouter>
-            <Routes>
-              {/* Auth route - accessible without authentication */}
-              <Route path="/auth" element={<Auth />} />
-              
-              {/* Protected routes */}
-              <Route path="/*" element={
-                <>
-                  <NavigationBar />
-                  <AuthGuard>
-                    <Routes>
-                      <Route path="/" element={<ErrorBoundaryWrapper componentName="Index"><Index /></ErrorBoundaryWrapper>} />
-                      <Route path="/dashboard" element={<ErrorBoundaryWrapper componentName="Dashboard"><DashboardPage /></ErrorBoundaryWrapper>} />
-                      <Route path="/test-hardware" element={<TestHardwarePage />} />
-                      <Route path="/inventory" element={<ErrorBoundaryWrapper componentName="Inventory"><Inventory /></ErrorBoundaryWrapper>} />
-                      <Route path="/batches" element={<ErrorBoundaryWrapper componentName="Batch Management"><Batches /></ErrorBoundaryWrapper>} />
-                      <Route path="/admin/label-studio" element={<LabelStudio />} />
-                      <Route path="/bulk-import" element={<BulkImport />} />
-                      <Route path="/admin" element={<AdminGuard><Admin /></AdminGuard>} />
-                      <Route path="/admin/catalog" element={<AdminGuard><div className="p-8"><CatalogMigrationPlaceholder /></div></AdminGuard>} />
-                      <Route path="/shopify-mapping" element={<ShopifyMapping />} />
-                      <Route path="/print-logs" element={<PrintLogs />} />
-                      
-                      {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-                      <Route path="*" element={<NotFound />} />
-                    </Routes>
-                  </AuthGuard>
-                </>
-              } />
-            </Routes>
+            <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><LoadingSpinner size="lg" /></div>}>
+              <Routes>
+                {/* Auth route - accessible without authentication */}
+                <Route path="/auth" element={<Auth />} />
+                
+                {/* Protected routes */}
+                <Route path="/*" element={
+                  <>
+                    <NavigationBar />
+                    <AuthGuard>
+                      <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><LoadingSpinner size="lg" /></div>}>
+                        <Routes>
+                          <Route path="/" element={<ErrorBoundaryWrapper componentName="Index"><Index /></ErrorBoundaryWrapper>} />
+                          <Route path="/dashboard" element={<ErrorBoundaryWrapper componentName="Dashboard"><DashboardPage /></ErrorBoundaryWrapper>} />
+                          <Route path="/test-hardware" element={<TestHardwarePage />} />
+                          <Route path="/inventory" element={<ErrorBoundaryWrapper componentName="Inventory"><Inventory /></ErrorBoundaryWrapper>} />
+                          <Route path="/batches" element={<ErrorBoundaryWrapper componentName="Batch Management"><Batches /></ErrorBoundaryWrapper>} />
+                          <Route path="/admin/label-studio" element={<LabelStudio />} />
+                          <Route path="/bulk-import" element={<BulkImport />} />
+                          <Route path="/admin" element={<AdminGuard><Admin /></AdminGuard>} />
+                          <Route path="/admin/catalog" element={<AdminGuard><div className="p-8"><CatalogMigrationPlaceholder /></div></AdminGuard>} />
+                          <Route path="/shopify-mapping" element={<ShopifyMapping />} />
+                          <Route path="/print-logs" element={<PrintLogs />} />
+                          
+                          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                          <Route path="*" element={<NotFound />} />
+                        </Routes>
+                      </Suspense>
+                    </AuthGuard>
+                  </>
+                } />
+              </Routes>
+            </Suspense>
             
             {/* Global Components */}
             <GlobalKeyboardHandler />

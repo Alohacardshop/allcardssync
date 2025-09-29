@@ -33,6 +33,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { GradedCardIntake } from "@/components/GradedCardIntake";
 import { TCGPlayerBulkImport } from "@/components/TCGPlayerBulkImport";
 import { CurrentBatchPanel } from "@/components/CurrentBatchPanel";
+import { SystemHealthCard } from "@/components/SystemHealthCard";
 
 // Interface for stats
 interface SystemStats {
@@ -155,8 +156,8 @@ export default function DashboardPage() {
       </header>
 
       <main className="container mx-auto px-4 py-8">
-        {/* System Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 max-w-md mb-6">
+        {/* System Stats and Health */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 mb-6">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Items Pushed</CardTitle>
@@ -167,6 +168,10 @@ export default function DashboardPage() {
               <p className="text-xs text-muted-foreground mt-1">Synced to Shopify</p>
             </CardContent>
           </Card>
+          
+          <div className="lg:col-span-2">
+            <SystemHealthCard />
+          </div>
         </div>
 
         {/* Main Content Tabs */}
