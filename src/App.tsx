@@ -14,6 +14,7 @@ import { PrintNodeProvider } from "@/contexts/PrintNodeContext";
 import { NavigationBar } from "@/components/NavigationBar";
 import { GlobalLoading } from "@/components/GlobalLoading";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
+import { FontPreloader } from "@/components/fonts/FontPreloader";
 // Lazy load heavy routes
 const Index = React.lazy(() => import("./pages/Index"));
 const DashboardPage = React.lazy(() => import("./pages/DashboardPage"));
@@ -27,6 +28,7 @@ const Auth = React.lazy(() => import("./pages/Auth"));
 const PrintLogs = React.lazy(() => import("./pages/PrintLogs"));
 const ZPLSettings = React.lazy(() => import("./pages/ZPLSettings"));
 const ShopifyMapping = React.lazy(() => import("./pages/ShopifyMapping"));
+const ShopifySync = React.lazy(() => import("./pages/ShopifySync"));
 const BulkImport = React.lazy(() => import("./pages/BulkImport"));
 import { GlobalKeyboardHandler } from "./components/GlobalKeyboardHandler";
 import { FloatingActionButton } from "./components/FloatingActionButton";
@@ -64,6 +66,7 @@ const App = () => (
             <Toaster />
             <Sonner />
             <GlobalLoading />
+            <FontPreloader />
             <BrowserRouter>
             <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><LoadingSpinner size="lg" /></div>}>
               <Routes>
@@ -87,6 +90,7 @@ const App = () => (
                           <Route path="/admin" element={<AdminGuard><Admin /></AdminGuard>} />
                           <Route path="/admin/catalog" element={<AdminGuard><div className="p-8"><CatalogMigrationPlaceholder /></div></AdminGuard>} />
                           <Route path="/shopify-mapping" element={<ShopifyMapping />} />
+                          <Route path="/shopify-sync" element={<ShopifySync />} />
                           <Route path="/print-logs" element={<PrintLogs />} />
                           
                           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
