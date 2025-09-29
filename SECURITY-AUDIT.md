@@ -12,12 +12,14 @@
 - ✅ Attempted automated fix for all remaining vulnerable functions
 - ✅ Verified via multiple migration runs
 
-**Remaining Function Warnings:** These 4 warnings are likely:
-1. Functions in `catalog_v2` schema (not `public`)
-2. SQL functions that don't support `SET search_path` syntax
-3. False positives from the linter
+**Remaining Function Warnings:** ✅ All 4 are in **Supabase-managed schemas** that we cannot modify:
+- `graphql.get_schema_version()` - Supabase internal
+- `graphql.increment_schema_version()` - Supabase internal  
+- `pgbouncer.get_auth()` - Connection pooler function
+- `storage.add_prefixes()` - Storage system function
+- `storage.delete_prefix()` - Storage system function
 
-**Action:** ✅ No further SQL fixes possible - these are acceptable
+**Action:** ✅ **No action needed** - These are Supabase's responsibility, not security risks for your application
 
 ---
 
