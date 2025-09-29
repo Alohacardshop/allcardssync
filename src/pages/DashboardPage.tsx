@@ -178,12 +178,11 @@ export default function DashboardPage() {
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="graded" className="mt-6 space-y-6">
+          <TabsContent value="graded" className="mt-6">
             <GradedCardIntake onBatchAdd={handleBatchAdd} />
-            <CurrentBatchPanel onViewFullBatch={() => setActiveTab("batch")} />
           </TabsContent>
 
-          <TabsContent value="raw" className="mt-6 space-y-6">
+          <TabsContent value="raw" className="mt-6">
             <Card>
               <CardHeader>
                 <CardTitle>Raw Cards Intake</CardTitle>
@@ -193,7 +192,6 @@ export default function DashboardPage() {
                 <TCGPlayerBulkImport onBatchAdd={handleBatchAdd} />
               </CardContent>
             </Card>
-            <CurrentBatchPanel onViewFullBatch={() => setActiveTab("batch")} />
           </TabsContent>
 
           <TabsContent value="batch" className="mt-6">
