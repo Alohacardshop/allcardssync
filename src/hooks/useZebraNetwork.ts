@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { zebraNetworkService, type ZebraPrinter, type PrinterStatus } from '@/lib/zebraNetworkService';
+import { useState, useEffect, useCallback } from 'react';
+import { zebraNetworkService, type ZebraPrinter } from '@/lib/zebraNetworkService';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { print } from '@/lib/printService';
+import { useZebraPrinterStatus } from './useZebraPrinterStatus';
 
 export function useZebraNetwork() {
   const [printers, setPrinters] = useState<ZebraPrinter[]>([]);
@@ -10,8 +11,12 @@ export function useZebraNetwork() {
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [connectionError, setConnectionError] = useState<string>('');
-  const [printerStatus, setPrinterStatus] = useState<PrinterStatus | null>(null);
-  const statusPollingRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Use React Query-based status polling instead of manual setInterval
+  const { data: printerStatus } = useZebraPrinterStatus({ 
+    printer: selectedPrinter,
+    enabled: !!selectedPrinter 
+  });
 
   // Get or create consistent workstation ID
   const getWorkstationId = () => {
@@ -234,76 +239,48 @@ export function useZebraNetwork() {
     return printer;
   }, []);
 
-  // Polling for printer status
-  const startStatusPolling = useCallback((printer: ZebraPrinter) => {
-    // Clear any existing polling
-    if (statusPollingRef.current) {
-      clearInterval(statusPollingRef.current);
-    }
-
-    const pollStatus = async () => {
-      try {
-        const status = await zebraNetworkService.queryStatus(printer.ip, printer.port);
-        setPrinterStatus(prevStatus => {
-          // Check for status changes and show notifications
-          if (prevStatus && prevStatus.ready !== status.ready) {
-            if (!status.ready) {
-              const issues = [];
-              if (status.paused) issues.push('paused');
-              if (status.headOpen) issues.push('head open');
-              if (status.mediaOut) issues.push('media out');
-              toast.warning(`Printer issue detected: ${issues.join(', ')}`);
-            } else {
-              toast.success('Printer is now ready');
-            }
-          }
-          return { ...status, lastSeenAt: Date.now() };
-        });
-      } catch (error) {
-        setPrinterStatus(prev => prev ? { ...prev, ready: false, lastSeenAt: Date.now() } : null);
-      }
-    };
-
-    // Initial status check
-    pollStatus();
-    
-    // Set up polling every 25 seconds
-    statusPollingRef.current = setInterval(pollStatus, 25000);
-  }, []);
-
-  const stopStatusPolling = useCallback(() => {
-    if (statusPollingRef.current) {
-      clearInterval(statusPollingRef.current);
-      statusPollingRef.current = null;
-    }
-  }, []);
-
-  // Enhanced setSelectedPrinterId with status polling
-  const setSelectedPrinterIdWithPolling = useCallback((printer: ZebraPrinter | null) => {
-    // Stop existing polling
-    stopStatusPolling();
-    setPrinterStatus(null);
-    
-    // Set the printer
-    setSelectedPrinterId(printer);
-    
-    // Start polling for the new printer
-    if (printer) {
-      startStatusPolling(printer);
-    }
-  }, [setSelectedPrinterId, startStatusPolling, stopStatusPolling]);
-
-  // Cleanup on unmount
+  // Status polling is now handled by useZebraPrinterStatus hook
+  // Show toast notifications when printer status changes
   useEffect(() => {
-    return () => {
-      stopStatusPolling();
-    };
-  }, [stopStatusPolling]);
+    if (!printerStatus) return;
+
+    const prevStatusKey = 'prev-printer-status';
+    const prevStatusStr = sessionStorage.getItem(prevStatusKey);
+    
+    if (prevStatusStr) {
+      try {
+        const prevStatus = JSON.parse(prevStatusStr);
+        
+        // Check for status changes and show notifications
+        if (prevStatus.ready !== printerStatus.ready) {
+          if (!printerStatus.ready) {
+            const issues = [];
+            if (printerStatus.paused) issues.push('paused');
+            if (printerStatus.headOpen) issues.push('head open');
+            if (printerStatus.mediaOut) issues.push('media out');
+            toast.warning(`Printer issue detected: ${issues.join(', ')}`);
+          } else {
+            toast.success('Printer is now ready');
+          }
+        }
+      } catch (error) {
+        // Ignore parsing errors
+      }
+    }
+    
+    // Save current status for next comparison
+    sessionStorage.setItem(prevStatusKey, JSON.stringify({
+      ready: printerStatus.ready,
+      paused: printerStatus.paused,
+      headOpen: printerStatus.headOpen,
+      mediaOut: printerStatus.mediaOut
+    }));
+  }, [printerStatus]);
 
   return {
     printers,
     selectedPrinter,
-    setSelectedPrinterId: setSelectedPrinterIdWithPolling,
+    setSelectedPrinterId,
     isConnected,
     isLoading,
     connectionError,

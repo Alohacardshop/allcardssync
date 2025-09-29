@@ -38,8 +38,10 @@ This document tracks the comprehensive codebase cleanup implemented to improve c
 
 **Files Modified:**
 - Created `src/hooks/useZebraPrinterStatus.ts`
-- Updated `src/hooks/useZebraNetwork.ts` to use the new hook
-- Removed manual `setInterval` and `clearInterval` calls
+- ✅ Updated `src/hooks/useZebraNetwork.ts` to use the new hook
+- ✅ Removed manual `setInterval`, `statusPollingRef`, and `clearInterval` calls
+- ✅ Status change notifications now use sessionStorage for comparison
+- ✅ Removed unused `PrinterStatus` type import (now from hook)
 
 ### Print Queue Polling
 
