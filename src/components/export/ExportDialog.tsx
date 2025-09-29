@@ -125,21 +125,9 @@ export function ExportDialog({
     }
 
     setIsExporting(true);
-    setExportProgress(0);
     setExportComplete(false);
 
     try {
-      // Simulate export progress
-      const progressInterval = setInterval(() => {
-        setExportProgress(prev => {
-          if (prev >= 95) {
-            clearInterval(progressInterval);
-            return prev;
-          }
-          return prev + Math.random() * 15;
-        });
-      }, 200);
-
       // Prepare export data
       const exportData = data.map(item => {
         const exportItem: Record<string, any> = {};
@@ -149,12 +137,6 @@ export function ExportDialog({
         return exportItem;
       });
 
-      // Simulate export delay
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      clearInterval(progressInterval);
-      setExportProgress(100);
-
       // Trigger actual export based on format
       await performExport(selectedFormat, exportData);
 
@@ -162,17 +144,15 @@ export function ExportDialog({
       toast.success(`Successfully exported ${totalItems} items`);
 
     } catch (error) {
-      console.error('Export error:', error);
       toast.error('Failed to export data');
     } finally {
       setTimeout(() => {
         setIsExporting(false);
-        setExportProgress(0);
         if (exportComplete) {
           onOpenChange(false);
           setExportComplete(false);
         }
-      }, 1000);
+      }, 500);
     }
   };
 
@@ -389,9 +369,7 @@ export function ExportDialog({
           <Alert>
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              {isExporting ? (
-                `Exporting ${totalItems} items with ${selectedCount} columns...`
-              ) : exportComplete ? (
+              {exportComplete ? (
                 `Successfully exported ${totalItems} items!`
               ) : (
                 `Ready to export ${totalItems} items with ${selectedCount} columns in ${
@@ -403,11 +381,9 @@ export function ExportDialog({
 
           {/* Progress */}
           {isExporting && (
-            <div className="space-y-2">
-              <Progress value={exportProgress} />
-              <div className="text-sm text-muted-foreground text-center">
-                {exportProgress < 100 ? 'Processing...' : 'Almost done...'}
-              </div>
+            <div className="flex items-center justify-center gap-2 py-4">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary" />
+              <span className="text-sm text-muted-foreground">Preparing export...</span>
             </div>
           )}
 

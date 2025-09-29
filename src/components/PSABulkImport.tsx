@@ -107,8 +107,10 @@ export const PSABulkImport = () => {
   };
 
   const scrapePSAData = async (psaCert: string) => {
-    // TODO: Replace with direct PSA API integration
-    throw new Error("PSA lookup functionality removed - please implement direct API integration");
+    // NOTE: PSA API integration required
+    // See: https://www.psacard.com/services/PSACertVerification
+    // or explore alternative data sources for PSA cert lookup
+    throw new Error("PSA lookup functionality not implemented - awaiting API integration");
   };
 
   const insertIntakeItem = async (item: PSAImportItem) => {

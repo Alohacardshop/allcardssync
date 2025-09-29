@@ -11,13 +11,14 @@ interface ShopifyStore {
 
 // Get store credentials from system settings (encrypted)
 export async function getShopifyStore(storeKey: string): Promise<ShopifyStore> {
-  const { data: store } = await supabase
+  const { data: store, error } = await supabase
     .from('shopify_stores')
     .select('domain, api_version')
     .eq('key', storeKey)
-    .single();
+    .maybeSingle();
     
-  if (!store) throw new Error(`Store not found: ${storeKey}`);
+  if (error) throw new Error(`Failed to fetch store: ${error.message}`);
+  if (!store) throw new Error(`Store '${storeKey}' not found. Please check your Shopify configuration.`);
   
   return {
     domain: store.domain,

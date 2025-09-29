@@ -71,8 +71,8 @@ export function useLabelSettings() {
     // Save to localStorage
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedSettings));
     
-    // TODO: Save to database when types are available
-    console.log('Settings saved to localStorage:', updatedSettings);
+    // NOTE: Database persistence not implemented yet - using localStorage only
+    // Future: Add workstation_settings table for multi-device sync
   }, [settings]);
 
   // Initialize on mount

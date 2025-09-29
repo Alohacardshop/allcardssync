@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { User, Session } from '@supabase/supabase-js';
 import { toast } from 'sonner';
 import { resetLogin } from '@/lib/authUtils';
+import { logger } from '@/lib/logger';
 
 interface AuthGuardProps {
   children: React.ReactNode;
@@ -19,7 +20,10 @@ export function AuthGuard({ children }: AuthGuardProps) {
     // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
-        console.log('AuthGuard auth state change:', event, session?.user?.email);
+        logger.authEvent(`Auth state changed: ${event}`, { 
+          email: session?.user?.email,
+          userId: session?.user?.id 
+        });
         setSession(session);
         setUser(session?.user ?? null);
         
@@ -33,32 +37,35 @@ export function AuthGuard({ children }: AuthGuardProps) {
               const { data: access, error } = await supabase.rpc('verify_user_access', { _user_id: uid });
               
               if (error) {
-                console.error('Access verification failed:', error);
+                logger.error('Access verification failed', error as Error, { userId: uid });
                 setHasRole(false);
                 setLoading(false);
                 return;
               }
               
               if (access && typeof access === 'object' && 'access_granted' in access && access.access_granted) {
+                logger.authEvent('User access granted', { userId: uid });
                 setHasRole(true);
               } else {
                 // Try bootstrap for admin role (for initial setup)
                 try {
                   const { data: bootstrap } = await supabase.rpc('bootstrap_user_admin', { _target_user_id: uid });
                   if (bootstrap && typeof bootstrap === 'object' && 'success' in bootstrap && bootstrap.success) {
+                    logger.authEvent('User bootstrapped as admin', { userId: uid });
                     setHasRole(true);
                   } else {
+                    logger.warn('User not authorized', { userId: uid });
                     setHasRole(false);
                     toast.error("Your account is not authorized. Contact an admin for access.");
                   }
                 } catch (e) {
-                  console.log('Bootstrap failed (expected for non-admins):', e);
+                  logger.info('Bootstrap failed (expected for non-admins)', { userId: uid });
                   setHasRole(false);
                   toast.error("Your account is not authorized. Contact an admin for access.");
                 }
               }
             } catch (error) {
-              console.error('Role check failed:', error);
+              logger.error('Role check failed', error as Error, { userId: uid });
               setHasRole(false);
             } finally {
               setLoading(false);

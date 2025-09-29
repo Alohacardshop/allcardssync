@@ -1,13 +1,10 @@
 import { supabase } from "@/integrations/supabase/client";
 
 /**
- * Get catalog sync status - DEPRECATED
- * TODO: Replace with API call to alohacardshopcarddatabase
+ * NOTE: Catalog sync functionality has been moved to external service
+ * See: https://github.com/Alohacardshop/alohacardshopcarddatabase
+ * This file now only contains error parsing utilities.
  */
-export async function getCatalogSyncStatus(game: string, limit: number = 50) {
-  // Catalog sync functionality moved to external service
-  throw new Error('Catalog sync functionality moved to Alohacardshop/alohacardshopcarddatabase');
-}
 
 /**
  * Parse error responses from Supabase function calls to extract server-provided error messages

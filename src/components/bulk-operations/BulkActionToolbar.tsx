@@ -138,15 +138,7 @@ export function BulkActionToolbar({
     try {
       const itemIds = Array.from(selectedItems);
       
-      // Simulate progress for better UX
-      const progressInterval = setInterval(() => {
-        setProcessingProgress(prev => Math.min(prev + 10, 90));
-      }, 100);
-
       await onBulkAction(operation.id, itemIds);
-      
-      clearInterval(progressInterval);
-      setProcessingProgress(100);
       
       toast.success(`${operation.label} completed for ${selectedCount} items`);
       
@@ -154,7 +146,6 @@ export function BulkActionToolbar({
       onClearSelection();
       
     } catch (error) {
-      console.error(`Error during ${operation.id}:`, error);
       toast.error(`Failed to ${operation.label.toLowerCase()} items`);
     } finally {
       setTimeout(() => {
@@ -204,9 +195,9 @@ export function BulkActionToolbar({
 
           {/* Action buttons */}
           {isProcessing ? (
-            <div className="flex items-center space-x-3 min-w-48">
+            <div className="flex items-center space-x-3">
               <div className="text-sm font-medium">{processingAction}...</div>
-              <Progress value={processingProgress} className="flex-1" />
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary" />
             </div>
           ) : (
             <div className="flex items-center space-x-2">

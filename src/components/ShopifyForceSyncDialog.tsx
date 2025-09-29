@@ -78,7 +78,6 @@ export function ShopifyForceSyncDialog({
       setSelectedForSync(data.items?.map((item: ForceSyncItem) => item.id) || []);
       setPhase('executing');
     } catch (error: any) {
-      console.error('Dry run failed:', error);
       toast.error(`Dry run failed: ${error.message}`);
       setPhase('preview');
     } finally {
@@ -107,28 +106,12 @@ export function ShopifyForceSyncDialog({
 
       if (error) throw error;
 
-      // Simulate progress
-      const progressInterval = setInterval(() => {
-        setProgress(prev => {
-          if (prev >= 90) {
-            clearInterval(progressInterval);
-            return 90;
-          }
-          return prev + 10;
-        });
-      }, 500);
-
-      // Check completion
-      setTimeout(() => {
-        clearInterval(progressInterval);
-        setProgress(100);
-        toast.success(`Force sync completed for ${selectedForSync.length} items`);
-        onComplete?.();
-        onOpenChange(false);
-      }, 5000);
+      // Show success immediately - no fake progress
+      toast.success(`Force sync initiated for ${selectedForSync.length} items`);
+      onComplete?.();
+      onOpenChange(false);
 
     } catch (error: any) {
-      console.error('Force sync failed:', error);
       toast.error(`Force sync failed: ${error.message}`);
     } finally {
       setLoading(false);
