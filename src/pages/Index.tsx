@@ -15,22 +15,15 @@ export default function Index() {
   // Listen for batch updates
   useEffect(() => {
     const handleBatchItemAdded = () => {
-      // Batch count will be updated by CurrentBatchPanel callback
       toast({
         title: "Success",
-        description: "Item added to batch! Switch to Batch tab to view."
+        description: "Item added to batch!"
       });
     };
 
-    const handleSwitchToBatchTab = () => {
-      setActiveTab('batch');
-    };
-
     window.addEventListener('batchItemAdded', handleBatchItemAdded as EventListener);
-    window.addEventListener('switchToBatchTab', handleSwitchToBatchTab as EventListener);
     return () => {
       window.removeEventListener('batchItemAdded', handleBatchItemAdded as EventListener);
-      window.removeEventListener('switchToBatchTab', handleSwitchToBatchTab as EventListener);
     };
   }, []);
 
@@ -38,7 +31,7 @@ export default function Index() {
   const handleBatchAdd = () => {
     toast({
       title: "Success", 
-      description: "Item added to batch! Switch to Batch tab to view."
+      description: "Item added to batch!"
     });
   };
 
@@ -52,7 +45,7 @@ export default function Index() {
         
         {/* TAB NAVIGATION */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-3 mb-6">
+          <TabsList className="grid w-full grid-cols-2 mb-6">
             <TabsTrigger value="graded" className="flex items-center gap-2">
               <Lock className="h-4 w-4" />
               Graded
@@ -60,15 +53,6 @@ export default function Index() {
             <TabsTrigger value="raw" className="flex items-center gap-2">
               <Package className="h-4 w-4" />
               Raw
-            </TabsTrigger>
-            <TabsTrigger value="batch" className="flex items-center gap-2">
-              <Layers className="h-4 w-4" />
-              Batch
-              {batchCount > 0 && (
-                <Badge variant="secondary" className="ml-1">
-                  {batchCount}
-                </Badge>
-              )}
             </TabsTrigger>
           </TabsList>
           
@@ -79,11 +63,12 @@ export default function Index() {
           <TabsContent value="raw">
             <TCGPlayerBulkImport onBatchAdd={handleBatchAdd} />
           </TabsContent>
-          
-          <TabsContent value="batch">
-            <CurrentBatchPanel onBatchCountUpdate={(count) => setBatchCount(count)} />
-          </TabsContent>
         </Tabs>
+
+        {/* BATCH PANEL - Always Visible */}
+        <div className="mt-8 border-t border-border pt-6">
+          <CurrentBatchPanel onBatchCountUpdate={(count) => setBatchCount(count)} />
+        </div>
       </div>
     </div>
   );
