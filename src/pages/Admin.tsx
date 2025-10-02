@@ -55,6 +55,7 @@ import { CutterSettingsPanel } from '@/components/CutterSettingsPanel';
 import { ZebraPrinterPanel } from '@/components/ZebraPrinterPanel';
 import { ZebraDiagnosticsPanel } from '@/components/ZebraDiagnosticsPanel';
 import { TCGHealthCheck } from '@/components/admin/TCGHealthCheck';
+import { DuplicateCleanup } from '@/components/admin/DuplicateCleanup';
 
 const Admin = () => {
   const [activeSection, setActiveSection] = useState('overview');
@@ -316,6 +317,7 @@ const Admin = () => {
                 Configure Shopify integration, inventory sync, and product management.
               </p>
             </div>
+            <DuplicateCleanup />
             <ShopifyEnvironmentSetup />
             <ShopifyConfig />
             <InventorySyncSettings />
