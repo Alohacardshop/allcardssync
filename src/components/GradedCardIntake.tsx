@@ -120,7 +120,8 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleFetchData = useCallback(async () => {
+  const handleFetchData = async () => {
+    console.log('[BUTTON CLICKED] handleFetchData started', { certInput });
     const certNumber = sanitizeCertNumber(certInput.trim());
     
     // Always call the edge function, even if empty - server will handle validation
@@ -207,7 +208,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
     } finally {
       setAbortController(null);
     }
-  }, [certInput]);
+  };
 
   const handleSubmit = async () => {
     try {
@@ -347,7 +348,10 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
               {/* PSA Fetch Button and Controls */}
               <Button 
                 type="button"
-                onClick={handleFetchData}
+                onClick={(e) => { 
+                  console.log('Button click event fired', e); 
+                  handleFetchData(); 
+                }}
                 disabled={fetchState === 'loading'}
                 size="default"
               >
