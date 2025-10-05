@@ -15,6 +15,8 @@ import { parseFunctionError } from "@/lib/fns";
 import { useLogger } from "@/hooks/useLogger";
 import { validateCompleteStoreContext, logStoreContext } from "@/utils/storeValidation";
 import { PSACertificateDisplay } from "@/components/PSACertificateDisplay";
+import { useDebounce } from "@/hooks/useDebounce";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface GradedCardIntakeProps {
   onBatchAdd?: () => void;
@@ -49,9 +51,13 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
   const [fetching, setFetching] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [cardData, setCardData] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
   const [abortController, setAbortController] = useState<AbortController | null>(null);
   const [showRawData, setShowRawData] = useState(false);
   const [populatedFieldsCount, setPopulatedFieldsCount] = useState(0);
+
+  // Debounce barcode input for auto-fetch
+  const debouncedBarcode = useDebounce(barcodeInput, 250);
 
   // Form fields that can be edited after fetching
   const [formData, setFormData] = useState({
@@ -70,15 +76,25 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
     varietyPedigree: "",
   });
 
+  // Helper function to sanitize certificate input (digits only)
+  const sanitizeCertNumber = (input: string): string => {
+    return input.replace(/\D+/g, '').slice(0, 12); // Max 12 digits
+  };
+
   // Auto-populate cert number when barcode is scanned/entered
   useEffect(() => {
-    console.log('[GradedCardIntake] Barcode effect triggered:', { barcodeInput, certInput });
-    if (barcodeInput && !certInput) {
-      console.log('[GradedCardIntake] Auto-populating certInput from barcode:', barcodeInput);
-      setCertInput(barcodeInput);
-      setFormData(prev => ({ ...prev, certNumber: barcodeInput }));
+    if (debouncedBarcode && debouncedBarcode !== certInput) {
+      const sanitized = sanitizeCertNumber(debouncedBarcode);
+      setCertInput(sanitized);
+      setFormData(prev => ({ ...prev, certNumber: sanitized }));
+      // Auto-trigger fetch if we have a valid cert number
+      if (sanitized.length >= 5) {
+        handleFetchData();
+      }
+      // Clear barcode input after processing
+      setBarcodeInput("");
     }
-  }, [barcodeInput, certInput]);
+  }, [debouncedBarcode]);
 
   // Auto-populate cert number from input field
   useEffect(() => {
@@ -109,40 +125,43 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
   };
 
   const handleFetchData = useCallback(async () => {
-    console.log('[GradedCardIntake] handleFetchData called', { certInput, fetching });
-    const certNumber = certInput.trim();
-    if (!certNumber) {
-      console.log('[GradedCardIntake] No cert number, returning early');
-      toast.error("Please enter a certificate number");
+    const certNumber = sanitizeCertNumber(certInput.trim());
+    
+    if (!certNumber || certNumber.length < 5) {
+      setError("Please enter a valid certificate number (at least 5 digits)");
       return;
     }
 
     // Cancel any existing fetch
     if (abortController) {
-      console.log('[GradedCardIntake] Aborting previous fetch');
       abortController.abort();
     }
 
     const newAbortController = new AbortController();
     setAbortController(newAbortController);
+    setError(null);
 
     try {
-      console.log('[GradedCardIntake] Setting fetching = true');
       setFetching(true);
       updateFormField('certNumber', certNumber);
 
-      const { data, error } = await supabase.functions.invoke('psa-lookup', {
+      const { data, error: invokeError } = await supabase.functions.invoke('psa-lookup', {
         body: { cert_number: certNumber }
       });
 
       if (newAbortController.signal.aborted) {
-        console.log('[GradedCardIntake] Fetch aborted, returning early');
         return;
       }
 
-      if (error) throw error;
+      if (invokeError) {
+        throw new Error(invokeError.message || 'Failed to invoke PSA lookup function');
+      }
 
-      if (data && data.success) {
+      if (!data) {
+        throw new Error('No response from PSA lookup service');
+      }
+
+      if (data.success) {
         const normalizedData = normalizePSAData(data.data);
         setCardData({ ...normalizedData, source: data.source });
         
@@ -159,23 +178,27 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         }));
 
         toast.success("Card data fetched successfully!");
+        setError(null);
       } else {
-        toast.error("No data found for this certificate number");
+        const errorMsg = data.error || "No data found for this certificate number";
+        setError(errorMsg);
+        setCardData(null);
+        toast.error(errorMsg);
       }
     } catch (error: any) {
       if (error.name === 'AbortError') {
-        console.log('[GradedCardIntake] Fetch aborted (AbortError)');
         return;
       }
       console.error("[GradedCardIntake] Fetch error:", error);
-      toast.error(`Failed to fetch card data: ${error.message}`);
+      const errorMsg = error.message || 'Could not fetch graded card data. Please check your connection and try again.';
+      setError(errorMsg);
+      setCardData(null);
+      toast.error(errorMsg);
     } finally {
-      console.log('[GradedCardIntake] Finally block - resetting state (fetching = false)');
-      // Always reset fetching state, even if aborted
       setFetching(false);
       setAbortController(null);
     }
-  }, [certInput, fetching, abortController]);
+  }, [certInput, abortController]);
 
   const handleSubmit = async () => {
     try {
@@ -289,26 +312,39 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         </CardHeader>
         <CardContent className="space-y-6">
           {/* Certificate Input Section */}
-          <div className="space-y-3">
+          <div className="space-y-2">
             <Label htmlFor="cert-input">Certificate Number</Label>
             <div className="flex gap-2">
-              <Input
-                id="cert-input"
-                placeholder="Enter PSA certificate number"
-                value={certInput}
-                onChange={(e) => setCertInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleFetchData();
-                  }
-                }}
-                disabled={fetching}
-              />
+              <div className="flex-1">
+                <Input
+                  id="cert-input"
+                  placeholder="Enter PSA certificate number (digits only)"
+                  value={certInput}
+                  onChange={(e) => {
+                    const sanitized = sanitizeCertNumber(e.target.value);
+                    setCertInput(sanitized);
+                    if (error) setError(null); // Clear error on input change
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleFetchData();
+                    }
+                  }}
+                  disabled={fetching}
+                  className={error ? "border-destructive" : ""}
+                />
+                {certInput && certInput.length < 5 && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Enter at least 5 digits
+                  </p>
+                )}
+              </div>
               {/* PSA Fetch Button and Controls */}
               <Button 
+                type="button"
                 onClick={handleFetchData}
-                disabled={!certInput.trim() || fetching}
+                disabled={!certInput.trim() || certInput.length < 5 || fetching}
                 size="default"
               >
                 {fetching ? (
@@ -322,6 +358,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
               </Button>
               {fetching && (
                 <Button 
+                  type="button"
                   onClick={cancelFetch}
                   variant="outline" 
                   size="default"
@@ -330,18 +367,28 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
                 </Button>
               )}
             </div>
+            {error && (
+              <Alert variant="destructive" className="mt-2">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
           </div>
 
           {/* Barcode Scanner Input */}
-          <div className="space-y-3">
+          <div className="space-y-2">
             <Label htmlFor="barcode-input">Barcode Scanner</Label>
             <Input
               id="barcode-input"
-              placeholder="Scan barcode here (auto-populates certificate number)"
+              placeholder="Scan barcode here (auto-populates and fetches)"
               value={barcodeInput}
               onChange={(e) => setBarcodeInput(e.target.value)}
-              className="bg-yellow-50 border-yellow-200"
+              disabled={fetching}
+              className="bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200 dark:border-yellow-800"
             />
+            <p className="text-xs text-muted-foreground">
+              Scanning will auto-populate the certificate field and fetch data
+            </p>
           </div>
 
           {/* PSA Certificate Display */}
