@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Lock, Package, Layers } from 'lucide-react';
@@ -27,13 +27,13 @@ export default function Index() {
     };
   }, []);
 
-  // Handle batch add callback
-  const handleBatchAdd = () => {
+  // Handle batch add callback (memoized to prevent remounting children)
+  const handleBatchAdd = useCallback(() => {
     toast({
       title: "Success", 
       description: "Item added to batch!"
     });
-  };
+  }, []);
 
   return (
     <div className="min-h-screen bg-background pt-20">

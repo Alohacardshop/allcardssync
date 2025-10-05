@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Navigation } from "@/components/Navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -73,10 +73,10 @@ export default function DashboardPage() {
     };
   }
 
-  const handleBatchAdd = () => {
+  const handleBatchAdd = useCallback(() => {
     // Refresh stats when items are added to batch - invalidate the query
     // queryClient.invalidateQueries(['dashboard', 'stats']); // Can be called if needed
-  };
+  }, []);
 
   const handleQuickAction = (action: string) => {
     switch (action) {
