@@ -42,6 +42,7 @@ const parsePSAGrade = (gradeStr: string): { numeric: string; original: string; h
 };
 
 export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => {
+  console.log('[GradedCardIntake] Component mounted/rendered');
   const logger = useLogger();
   const { assignedStore, selectedLocation } = useStore();
 
@@ -349,11 +350,15 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
               <Button 
                 type="button"
                 onClick={(e) => { 
-                  console.log('Button click event fired', e); 
+                  e.preventDefault();
+                  e.stopPropagation();
+                  alert('Button clicked!');
+                  console.log('Button click event fired', e, { fetchState }); 
                   handleFetchData(); 
                 }}
                 disabled={fetchState === 'loading'}
                 size="default"
+                style={{ position: 'relative', zIndex: 9999 }}
               >
                 {fetchState === 'loading' ? (
                   <>
