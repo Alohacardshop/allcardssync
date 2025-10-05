@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,8 +47,6 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
   const [certInput, setCertInput] = useState("");
   const [barcodeInput, setBarcodeInput] = useState("");
   const [fetching, setFetching] = useState(false);
-  
-  console.log('[GradedCardIntake] State initialized:', { certInput, barcodeInput, fetching });
   const [submitting, setSubmitting] = useState(false);
   const [cardData, setCardData] = useState<any>(null);
   const [abortController, setAbortController] = useState<AbortController | null>(null);
@@ -110,7 +108,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleFetchData = async () => {
+  const handleFetchData = useCallback(async () => {
     console.log('[GradedCardIntake] handleFetchData called', { certInput, fetching });
     const certNumber = certInput.trim();
     if (!certNumber) {
@@ -177,7 +175,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
       setFetching(false);
       setAbortController(null);
     }
-  };
+  }, [certInput, fetching, abortController]);
 
   const handleSubmit = async () => {
     try {
@@ -309,14 +307,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
               />
               {/* PSA Fetch Button and Controls */}
               <Button 
-                onClick={() => {
-                  console.log('[GradedCardIntake] Fetch Data button clicked', { 
-                    certInput: certInput.trim(), 
-                    fetching, 
-                    disabled: !certInput.trim() || fetching 
-                  });
-                  handleFetchData();
-                }}
+                onClick={handleFetchData}
                 disabled={!certInput.trim() || fetching}
                 size="default"
               >
