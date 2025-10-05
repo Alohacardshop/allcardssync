@@ -48,7 +48,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
   // Form state
   const [certInput, setCertInput] = useState("");
   const [barcodeInput, setBarcodeInput] = useState("");
-  const [fetching, setFetching] = useState(false);
+  const [fetchState, setFetchState] = useState<'idle' | 'loading' | 'success' | 'empty' | 'error'>('idle');
   const [submitting, setSubmitting] = useState(false);
   const [cardData, setCardData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
@@ -113,10 +113,10 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
     }
   }, [formData.price]);
 
-  // Reset fetching state on mount to recover from stuck states
+  // Reset fetch state on mount to recover from stuck states
   useEffect(() => {
     console.log('[GradedCardIntake] Component mounted, resetting state');
-    setFetching(false);
+    setFetchState('idle');
     setAbortController(null);
   }, []);
 
@@ -127,10 +127,10 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
   const handleFetchData = useCallback(async () => {
     const certNumber = sanitizeCertNumber(certInput.trim());
     
-    if (!certNumber || certNumber.length < 5) {
-      setError("Please enter a valid certificate number (at least 5 digits)");
-      return;
-    }
+    // Always call the edge function, even if empty - server will handle validation
+    setFetchState('loading');
+    setError(null);
+    setCardData(null);
 
     // Cancel any existing fetch
     if (abortController) {
@@ -139,10 +139,8 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
 
     const newAbortController = new AbortController();
     setAbortController(newAbortController);
-    setError(null);
 
     try {
-      setFetching(true);
       updateFormField('certNumber', certNumber);
 
       const { data, error: invokeError } = await supabase.functions.invoke('psa-lookup', {
@@ -161,41 +159,56 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         throw new Error('No response from PSA lookup service');
       }
 
-      if (data.success) {
-        const normalizedData = normalizePSAData(data.data);
-        setCardData({ ...normalizedData, source: data.source });
-        
-        // Auto-populate form with fetched data
-        setFormData(prev => ({
-          ...prev,
-          brandTitle: normalizedData.brandTitle || "",
-          subject: normalizedData.subject || "",
-          category: normalizedData.category || "",
-          cardNumber: normalizedData.cardNumber || "",
-          year: normalizedData.year || "",
-          grade: normalizedData.grade || "",
-          varietyPedigree: normalizedData.varietyPedigree || "",
-        }));
-
-        toast.success("Card data fetched successfully!");
-        setError(null);
-      } else {
-        const errorMsg = data.error || "No data found for this certificate number";
-        setError(errorMsg);
-        setCardData(null);
-        toast.error(errorMsg);
+      // Normalize response to { ok, data?, error? } pattern
+      if (!data.ok) {
+        // Handle specific "NO_DATA" signal
+        if (data.error === 'NO_DATA') {
+          setFetchState('empty');
+          setError('No data found for that certificate number.');
+          toast.info('No data found for that certificate number.');
+          return;
+        }
+        setFetchState('error');
+        setError(data.error || 'Unknown error occurred');
+        toast.error(data.error || 'Failed to fetch card data');
+        return;
       }
+
+      if (!data.data) {
+        setFetchState('empty');
+        setError('No data found.');
+        toast.info('No data found.');
+        return;
+      }
+
+      // Success path
+      const normalizedData = normalizePSAData(data.data);
+      setCardData({ ...normalizedData, source: data.source });
+      
+      // Auto-populate form with fetched data
+      setFormData(prev => ({
+        ...prev,
+        brandTitle: normalizedData.brandTitle || "",
+        subject: normalizedData.subject || "",
+        category: normalizedData.category || "",
+        cardNumber: normalizedData.cardNumber || "",
+        year: normalizedData.year || "",
+        grade: normalizedData.grade || "",
+        varietyPedigree: normalizedData.varietyPedigree || "",
+      }));
+
+      setFetchState('success');
+      toast.success("Card data fetched successfully!");
     } catch (error: any) {
       if (error.name === 'AbortError') {
         return;
       }
       console.error("[GradedCardIntake] Fetch error:", error);
-      const errorMsg = error.message || 'Could not fetch graded card data. Please check your connection and try again.';
+      setFetchState('error');
+      const errorMsg = error.message || 'Could not reach server. Check network/CORS/connection.';
       setError(errorMsg);
-      setCardData(null);
       toast.error(errorMsg);
     } finally {
-      setFetching(false);
       setAbortController(null);
     }
   }, [certInput, abortController]);
@@ -296,7 +309,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
     if (abortController) {
       abortController.abort();
       setAbortController(null);
-      setFetching(false);
+      setFetchState('idle');
       toast.info("PSA fetch cancelled");
     }
   };
@@ -331,7 +344,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
                       handleFetchData();
                     }
                   }}
-                  disabled={fetching}
+                  disabled={fetchState === 'loading'}
                   className={error ? "border-destructive" : ""}
                 />
                 {certInput && certInput.length < 5 && (
@@ -344,10 +357,10 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
               <Button 
                 type="button"
                 onClick={handleFetchData}
-                disabled={!certInput.trim() || certInput.length < 5 || fetching}
+                disabled={fetchState === 'loading'}
                 size="default"
               >
-                {fetching ? (
+                {fetchState === 'loading' ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin mr-2" />
                     Fetching...
@@ -356,7 +369,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
                   'Fetch Data'
                 )}
               </Button>
-              {fetching && (
+              {fetchState === 'loading' && (
                 <Button 
                   type="button"
                   onClick={cancelFetch}
@@ -367,10 +380,16 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
                 </Button>
               )}
             </div>
-            {error && (
+            {fetchState === 'error' && error && (
               <Alert variant="destructive" className="mt-2">
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+            {fetchState === 'empty' && (
+              <Alert className="mt-2">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{error || 'No data found.'}</AlertDescription>
               </Alert>
             )}
           </div>
@@ -383,7 +402,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
               placeholder="Scan barcode here (auto-populates and fetches)"
               value={barcodeInput}
               onChange={(e) => setBarcodeInput(e.target.value)}
-              disabled={fetching}
+              disabled={fetchState === 'loading'}
               className="bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200 dark:border-yellow-800"
             />
             <p className="text-xs text-muted-foreground">
@@ -392,7 +411,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
           </div>
 
           {/* PSA Certificate Display */}
-          {cardData && (
+          {fetchState === 'success' && cardData && (
             <div className="space-y-3">
               <PSACertificateDisplay 
                 psaData={cardData} 
