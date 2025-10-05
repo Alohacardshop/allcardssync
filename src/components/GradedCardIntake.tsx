@@ -207,7 +207,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
     } finally {
       setAbortController(null);
     }
-  }, [certInput, abortController]);
+  }, [certInput]);
 
   const handleSubmit = async () => {
     try {
