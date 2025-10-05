@@ -87,10 +87,6 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
       const sanitized = sanitizeCertNumber(debouncedBarcode);
       setCertInput(sanitized);
       setFormData(prev => ({ ...prev, certNumber: sanitized }));
-      // Auto-trigger fetch if we have a valid cert number
-      if (sanitized.length >= 5) {
-        handleFetchData();
-      }
       // Clear barcode input after processing
       setBarcodeInput("");
     }
@@ -347,11 +343,6 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
                   disabled={fetchState === 'loading'}
                   className={error ? "border-destructive" : ""}
                 />
-                {certInput && certInput.length < 5 && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Enter at least 5 digits
-                  </p>
-                )}
               </div>
               {/* PSA Fetch Button and Controls */}
               <Button 
