@@ -94,6 +94,12 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
     }
   }, [formData.price]);
 
+  // Reset fetching state on mount to recover from stuck states
+  useEffect(() => {
+    setFetching(false);
+    setAbortController(null);
+  }, []);
+
   const updateFormField = (field: string, value: string | number) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
@@ -150,10 +156,9 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
       console.error("Fetch error:", error);
       toast.error(`Failed to fetch card data: ${error.message}`);
     } finally {
-      if (!newAbortController.signal.aborted) {
-        setFetching(false);
-        setAbortController(null);
-      }
+      // Always reset fetching state, even if aborted
+      setFetching(false);
+      setAbortController(null);
     }
   };
 
