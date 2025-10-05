@@ -47,6 +47,8 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
   const [certInput, setCertInput] = useState("");
   const [barcodeInput, setBarcodeInput] = useState("");
   const [fetching, setFetching] = useState(false);
+  
+  console.log('[GradedCardIntake] State initialized:', { certInput, barcodeInput, fetching });
   const [submitting, setSubmitting] = useState(false);
   const [cardData, setCardData] = useState<any>(null);
   const [abortController, setAbortController] = useState<AbortController | null>(null);
@@ -72,7 +74,9 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
 
   // Auto-populate cert number when barcode is scanned/entered
   useEffect(() => {
+    console.log('[GradedCardIntake] Barcode effect triggered:', { barcodeInput, certInput });
     if (barcodeInput && !certInput) {
+      console.log('[GradedCardIntake] Auto-populating certInput from barcode:', barcodeInput);
       setCertInput(barcodeInput);
       setFormData(prev => ({ ...prev, certNumber: barcodeInput }));
     }
@@ -80,6 +84,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
 
   // Auto-populate cert number from input field
   useEffect(() => {
+    console.log('[GradedCardIntake] certInput changed:', certInput);
     if (certInput) {
       setFormData(prev => ({ ...prev, certNumber: certInput }));
     }
@@ -96,6 +101,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
 
   // Reset fetching state on mount to recover from stuck states
   useEffect(() => {
+    console.log('[GradedCardIntake] Component mounted, resetting state');
     setFetching(false);
     setAbortController(null);
   }, []);
@@ -105,14 +111,17 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
   };
 
   const handleFetchData = async () => {
+    console.log('[GradedCardIntake] handleFetchData called', { certInput, fetching });
     const certNumber = certInput.trim();
     if (!certNumber) {
+      console.log('[GradedCardIntake] No cert number, returning early');
       toast.error("Please enter a certificate number");
       return;
     }
 
     // Cancel any existing fetch
     if (abortController) {
+      console.log('[GradedCardIntake] Aborting previous fetch');
       abortController.abort();
     }
 
@@ -120,6 +129,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
     setAbortController(newAbortController);
 
     try {
+      console.log('[GradedCardIntake] Setting fetching = true');
       setFetching(true);
       updateFormField('certNumber', certNumber);
 
@@ -127,7 +137,10 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         body: { cert_number: certNumber }
       });
 
-      if (newAbortController.signal.aborted) return;
+      if (newAbortController.signal.aborted) {
+        console.log('[GradedCardIntake] Fetch aborted, returning early');
+        return;
+      }
 
       if (error) throw error;
 
@@ -152,10 +165,14 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         toast.error("No data found for this certificate number");
       }
     } catch (error: any) {
-      if (error.name === 'AbortError') return;
-      console.error("Fetch error:", error);
+      if (error.name === 'AbortError') {
+        console.log('[GradedCardIntake] Fetch aborted (AbortError)');
+        return;
+      }
+      console.error("[GradedCardIntake] Fetch error:", error);
       toast.error(`Failed to fetch card data: ${error.message}`);
     } finally {
+      console.log('[GradedCardIntake] Finally block - resetting state (fetching = false)');
       // Always reset fetching state, even if aborted
       setFetching(false);
       setAbortController(null);
@@ -292,7 +309,14 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
               />
               {/* PSA Fetch Button and Controls */}
               <Button 
-                onClick={handleFetchData}
+                onClick={() => {
+                  console.log('[GradedCardIntake] Fetch Data button clicked', { 
+                    certInput: certInput.trim(), 
+                    fetching, 
+                    disabled: !certInput.trim() || fetching 
+                  });
+                  handleFetchData();
+                }}
                 disabled={!certInput.trim() || fetching}
                 size="default"
               >
