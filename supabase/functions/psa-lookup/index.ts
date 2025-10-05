@@ -69,7 +69,7 @@ Deno.serve(async (req) => {
         status: 'pending'
       })
       .select()
-      .single()
+      .maybeSingle()
 
     // Check for cached data first
     const { data: cachedData, error: cacheError } = await supabaseClient
@@ -80,14 +80,16 @@ Deno.serve(async (req) => {
 
     if (cachedData && !cacheError) {
       console.log('[psa-lookup] Found cached data')
-      await supabaseServiceClient
-        .from('psa_request_log')
-        .update({ 
-          status: 'success',
-          response_data: cachedData,
-          completed_at: new Date().toISOString()
-        })
-        .eq('id', logEntry.id)
+      if (logEntry?.id) {
+        await supabaseServiceClient
+          .from('psa_request_log')
+          .update({ 
+            status: 'success',
+            response_data: cachedData,
+            completed_at: new Date().toISOString()
+          })
+          .eq('id', logEntry.id)
+      }
 
       return new Response(
         JSON.stringify({
@@ -125,14 +127,16 @@ Deno.serve(async (req) => {
         imagesStatus: imagesResponse.status
       })
       
-      await supabaseServiceClient
-        .from('psa_request_log')
-        .update({ 
-          status: 'failed',
-          error_message: `PSA API error: cert ${certDetailsResponse.status}, images ${imagesResponse.status}`,
-          completed_at: new Date().toISOString()
-        })
-        .eq('id', logEntry.id)
+      if (logEntry?.id) {
+        await supabaseServiceClient
+          .from('psa_request_log')
+          .update({ 
+            status: 'failed',
+            error_message: `PSA API error: cert ${certDetailsResponse.status}, images ${imagesResponse.status}`,
+            completed_at: new Date().toISOString()
+          })
+          .eq('id', logEntry.id)
+      }
 
       // Return specific NO_DATA signal if 404
       if (certDetailsResponse.status === 404) {
@@ -159,14 +163,16 @@ Deno.serve(async (req) => {
 
     if (!certData?.PSACert?.PSACertID) {
       console.log('[psa-lookup] No valid data in PSA response')
-      await supabaseServiceClient
-        .from('psa_request_log')
-        .update({ 
-          status: 'failed',
-          error_message: 'No valid data in PSA response',
-          completed_at: new Date().toISOString()
-        })
-        .eq('id', logEntry.id)
+      if (logEntry?.id) {
+        await supabaseServiceClient
+          .from('psa_request_log')
+          .update({ 
+            status: 'failed',
+            error_message: 'No valid data in PSA response',
+            completed_at: new Date().toISOString()
+          })
+          .eq('id', logEntry.id)
+      }
 
       return new Response(
         JSON.stringify({
@@ -229,14 +235,16 @@ Deno.serve(async (req) => {
       })
 
     // Update log
-    await supabaseServiceClient
-      .from('psa_request_log')
-      .update({ 
-        status: 'success',
-        response_data: responseData,
-        completed_at: new Date().toISOString()
-      })
-      .eq('id', logEntry.id)
+    if (logEntry?.id) {
+      await supabaseServiceClient
+        .from('psa_request_log')
+        .update({ 
+          status: 'success',
+          response_data: responseData,
+          completed_at: new Date().toISOString()
+        })
+        .eq('id', logEntry.id)
+    }
 
     console.log('[psa-lookup] Successfully processed and cached PSA data')
 

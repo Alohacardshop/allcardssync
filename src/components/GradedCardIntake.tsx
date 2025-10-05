@@ -352,8 +352,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
                 onClick={(e) => { 
                   e.preventDefault();
                   e.stopPropagation();
-                  alert('Button clicked!');
-                  console.log('Button click event fired', e, { fetchState }); 
+                  console.log('Fetch Data button clicked');
                   handleFetchData(); 
                 }}
                 disabled={fetchState === 'loading'}
