@@ -770,6 +770,8 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
         onStartBatch={handleManualBatchConfig}
         open={batchConfigOpen}
         onOpenChange={setBatchConfigOpen}
+        storeKey={assignedStore || undefined}
+        locationGid={selectedLocation || undefined}
       />
 
       {/* Batch Progress Dialog */}

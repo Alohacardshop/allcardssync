@@ -7,6 +7,7 @@ export interface BatchConfig {
   batchSize: number
   delayBetweenChunks: number
   failFast: boolean
+  vendor?: string
 }
 
 export interface BatchProgress {

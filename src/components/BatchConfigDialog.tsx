@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
@@ -7,6 +7,8 @@ import { Switch } from "@/components/ui/switch"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Settings, Upload, Zap } from "lucide-react"
 import { BatchConfig } from "@/hooks/useBatchSendToShopify"
+import { supabase } from "@/integrations/supabase/client"
+import { useToast } from "@/hooks/use-toast"
 
 interface BatchConfigDialogProps {
   itemCount: number
@@ -17,6 +19,8 @@ interface BatchConfigDialogProps {
   onAutoProcess?: () => void
   open?: boolean
   onOpenChange?: (open: boolean) => void
+  storeKey?: string
+  locationGid?: string
 }
 
 export function BatchConfigDialog({ 
@@ -27,18 +31,65 @@ export function BatchConfigDialog({
   autoProcessAvailable = false,
   onAutoProcess,
   open: externalOpen,
-  onOpenChange: externalOnOpenChange
+  onOpenChange: externalOnOpenChange,
+  storeKey,
+  locationGid
 }: BatchConfigDialogProps) {
+  const { toast } = useToast()
   const [internalOpen, setInternalOpen] = useState(false)
   const [config, setConfig] = useState<BatchConfig>({
     batchSize: 5,
     delayBetweenChunks: 1000,
-    failFast: false
+    failFast: false,
+    vendor: undefined
   })
+  const [vendors, setVendors] = useState<Array<{ vendor_name: string; is_default: boolean }>>([])
+  const [loadingVendors, setLoadingVendors] = useState(false)
 
   // Use external open state if provided, otherwise use internal
   const open = externalOpen !== undefined ? externalOpen : internalOpen
   const setOpen = externalOnOpenChange !== undefined ? externalOnOpenChange : setInternalOpen
+
+  // Load vendors when store/location changes or dialog opens
+  useEffect(() => {
+    if (open && storeKey && locationGid) {
+      loadVendors()
+    }
+  }, [open, storeKey, locationGid])
+
+  const loadVendors = async () => {
+    if (!storeKey || !locationGid) return
+    
+    setLoadingVendors(true)
+    try {
+      const { data, error } = await supabase
+        .from('shopify_location_vendors')
+        .select('vendor_name, is_default')
+        .eq('store_key', storeKey)
+        .eq('location_gid', locationGid)
+        .order('is_default', { ascending: false })
+        .order('vendor_name', { ascending: true })
+
+      if (error) throw error
+
+      setVendors(data || [])
+      
+      // Auto-select default vendor
+      const defaultVendor = data?.find(v => v.is_default)
+      if (defaultVendor) {
+        setConfig(prev => ({ ...prev, vendor: defaultVendor.vendor_name }))
+      }
+    } catch (error) {
+      console.error('Error loading vendors:', error)
+      toast({
+        title: "Error Loading Vendors",
+        description: "Could not load vendor options. Please try again.",
+        variant: "destructive"
+      })
+    } finally {
+      setLoadingVendors(false)
+    }
+  }
 
   const handleStart = () => {
     onStartBatch(config)
@@ -89,6 +140,28 @@ export function BatchConfigDialog({
           </Card>
 
           <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="vendor">Vendor</Label>
+              <Select 
+                value={config.vendor || ''} 
+                onValueChange={(value) => setConfig({ ...config, vendor: value })}
+                disabled={loadingVendors || vendors.length === 0}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={loadingVendors ? "Loading vendors..." : "Select vendor"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {vendors.map((vendor) => (
+                    <SelectItem key={vendor.vendor_name} value={vendor.vendor_name}>
+                      {vendor.vendor_name} {vendor.is_default && "(default)"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Products will be tagged with this vendor in Shopify
+              </p>
+            </div>
             <div className="space-y-2">
               <Label htmlFor="batch-size">Batch Size</Label>
               <Select 

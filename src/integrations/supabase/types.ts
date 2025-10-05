@@ -1046,6 +1046,44 @@ export type Database = {
         }
         Relationships: []
       }
+      shopify_location_vendors: {
+        Row: {
+          created_at: string
+          id: string
+          is_default: boolean
+          location_gid: string
+          store_key: string
+          updated_at: string
+          vendor_name: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          location_gid: string
+          store_key: string
+          updated_at?: string
+          vendor_name: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          location_gid?: string
+          store_key?: string
+          updated_at?: string
+          vendor_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shopify_location_vendors_store_key_fkey"
+            columns: ["store_key"]
+            isOneToOne: false
+            referencedRelation: "shopify_stores"
+            referencedColumns: ["key"]
+          },
+        ]
+      }
       shopify_stores: {
         Row: {
           api_version: string | null

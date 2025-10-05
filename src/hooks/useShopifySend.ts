@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client"
 export type SendGradedArgs = {
   storeKey: "hawaii" | "las_vegas"
   locationGid: string
+  vendor?: string
   item: {
     id?: string
     sku?: string
@@ -27,6 +28,7 @@ export type SendGradedArgs = {
 export type SendRawArgs = {
   storeKey: "hawaii" | "las_vegas"
   locationGid: string
+  vendor?: string
   item: {
     id?: string
     sku: string

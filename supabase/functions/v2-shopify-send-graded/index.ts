@@ -3,6 +3,7 @@ import { corsHeaders } from '../_shared/cors.ts'
 interface SendGradedArgs {
   storeKey: "hawaii" | "las_vegas"
   locationGid: string
+  vendor?: string
   item: {
     id?: string
     sku?: string
@@ -29,7 +30,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { storeKey, locationGid, item }: SendGradedArgs = await req.json()
+    const { storeKey, locationGid, vendor, item }: SendGradedArgs = await req.json()
 
     // Get environment variables for Supabase
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
@@ -138,9 +139,9 @@ Deno.serve(async (req) => {
       product: {
         title: title,
         body_html: description,
-        vendor: brandTitle || 'Trading Cards',
+        vendor: vendor || brandTitle || 'Trading Cards',
         product_type: 'Graded Card',
-        tags: ['PSA', grade, brandTitle, year, intakeItem.game || intakeItem.catalog_snapshot?.game].filter(Boolean).join(', '),
+        tags: ['PSA', grade, brandTitle, year, intakeItem.game || intakeItem.catalog_snapshot?.game, vendor].filter(Boolean).join(', '),
         variants: [{
           sku: item.sku,
           price: item.price?.toString() || '0.00',

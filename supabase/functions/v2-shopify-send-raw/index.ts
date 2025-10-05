@@ -2,6 +2,7 @@ import { corsHeaders } from '../_shared/cors.ts'
 
 interface SendRawArgs {
   item_id: string
+  vendor?: string
 }
 
 Deno.serve(async (req) => {
@@ -10,7 +11,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { item_id }: SendRawArgs = await req.json()
+    const { item_id, vendor }: SendRawArgs = await req.json()
 
     // Get environment variables for Supabase
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
@@ -186,7 +187,7 @@ Deno.serve(async (req) => {
       product: {
         title: title,
         body_html: description,
-        vendor: brandTitle || 'Trading Cards',
+        vendor: vendor || brandTitle || 'Trading Cards',
         product_type: 'Raw Card',
         tags: [
           'Raw Card',
@@ -196,7 +197,8 @@ Deno.serve(async (req) => {
           intakeItem.category || 'Pokemon', // Game from intake item
           intakeItem.lot_number || 'Unknown Lot', // Lot number
           subject ? `Card: ${subject}` : null, // Card name
-          cardNumber ? `Number: ${cardNumber}` : null // Card number
+          cardNumber ? `Number: ${cardNumber}` : null, // Card number
+          vendor // Add vendor to tags
         ].filter(Boolean),
         variants: [{
           sku: intakeItem.sku,
