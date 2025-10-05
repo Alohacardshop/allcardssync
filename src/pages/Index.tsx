@@ -35,6 +35,11 @@ export default function Index() {
     });
   }, []);
 
+  // Memoized batch count update to prevent remounting children
+  const handleBatchCountUpdate = useCallback((count: number) => {
+    setBatchCount(count);
+  }, []);
+
   return (
     <div className="min-h-screen bg-background pt-20">
       <div className="container mx-auto p-4">
@@ -67,7 +72,7 @@ export default function Index() {
 
         {/* BATCH PANEL - Always Visible */}
         <div className="mt-8 border-t border-border pt-6">
-          <CurrentBatchPanel onBatchCountUpdate={(count) => setBatchCount(count)} />
+          <CurrentBatchPanel onBatchCountUpdate={handleBatchCountUpdate} />
         </div>
       </div>
     </div>
