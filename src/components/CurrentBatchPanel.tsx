@@ -384,39 +384,8 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
       locationGid: selectedLocation
     });
 
-    const processingMode = getProcessingMode(itemIds.length);
-    
-    if (processingMode === 'immediate' || processingMode === 'auto') {
-      // Auto-process with safe defaults
-      const config = getAutoProcessConfig();
-      console.log('🚀 [CurrentBatchPanel] Auto-processing batch:', { processingMode, config });
-      
-      setBatchProgressOpen(true);
-      
-      try {
-        const result = await sendChunkedBatchToShopify(
-          itemIds,
-          assignedStore as "hawaii" | "las_vegas",
-          selectedLocation,
-          config,
-          undefined,
-          true // autoProcess flag
-        );
-        
-        if (result.ok) {
-          await fetchRecentItemsWithRetry();
-          toast({ title: "Success", description: `Auto-processed ${result.processed} items successfully` });
-        }
-      } catch (error) {
-        console.error('Auto-processing failed:', error);
-        toast({ title: "Error", description: `Auto-processing failed: ${error instanceof Error ? error.message : 'Unknown error'}` });
-      } finally {
-        setBatchProgressOpen(false);
-      }
-    } else {
-      // Show manual configuration dialog for large batches
-      setBatchConfigOpen(true);
-    }
+    // Always show configuration dialog for vendor selection and batch settings
+    setBatchConfigOpen(true);
   };
 
   const handleManualBatchConfig = async (config: any) => {
