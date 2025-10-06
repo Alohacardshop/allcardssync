@@ -435,7 +435,12 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
   // Load vendors when store/location changes
   useEffect(() => {
     const loadVendors = async () => {
-      if (!assignedStore || !selectedLocation) return;
+      console.log('[CurrentBatchPanel] Loading vendors...', { assignedStore, selectedLocation });
+      
+      if (!assignedStore || !selectedLocation) {
+        console.log('[CurrentBatchPanel] Missing context, skipping vendor load');
+        return;
+      }
       
       setLoadingVendors(true);
       try {
@@ -449,6 +454,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
 
         if (error) throw error;
 
+        console.log('[CurrentBatchPanel] Loaded vendors:', data);
         setVendors(data || []);
         
         // Auto-select default vendor
@@ -457,7 +463,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
           setSelectedVendor(defaultVendor.vendor_name);
         }
       } catch (error) {
-        console.error('Failed to load vendors:', error);
+        console.error('[CurrentBatchPanel] Failed to load vendors:', error);
         toast({ 
           title: "Warning", 
           description: "Failed to load vendors. You may need to configure vendors in settings." 
@@ -546,7 +552,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
         </CardHeader>
         
         {/* Vendor Selector */}
-        {!compact && vendors.length > 0 && (
+        {!compact && (
           <div className="px-6 pb-4 border-b">
             <div className="flex items-center gap-3">
               <Label htmlFor="vendor-select" className="text-sm font-medium whitespace-nowrap">
@@ -555,19 +561,34 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
               <Select 
                 value={selectedVendor} 
                 onValueChange={setSelectedVendor}
-                disabled={loadingVendors}
+                disabled={loadingVendors || vendors.length === 0}
               >
                 <SelectTrigger id="vendor-select" className="h-9 w-[200px]">
-                  <SelectValue placeholder={loadingVendors ? "Loading..." : "Select vendor"} />
+                  <SelectValue placeholder={
+                    loadingVendors ? "Loading vendors..." : 
+                    vendors.length === 0 ? "No vendors configured" :
+                    "Select vendor"
+                  } />
                 </SelectTrigger>
-                <SelectContent className="z-[10000]">
-                  {vendors.map((vendor) => (
-                    <SelectItem key={vendor.vendor_name} value={vendor.vendor_name}>
-                      {vendor.vendor_name} {vendor.is_default && "(default)"}
+                <SelectContent className="z-[10000] bg-background border shadow-md">
+                  {vendors.length === 0 ? (
+                    <SelectItem value="_none_" disabled>
+                      No vendors available
                     </SelectItem>
-                  ))}
+                  ) : (
+                    vendors.map((vendor) => (
+                      <SelectItem key={vendor.vendor_name} value={vendor.vendor_name}>
+                        {vendor.vendor_name} {vendor.is_default && "(default)"}
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
+              {vendors.length === 0 && !loadingVendors && (
+                <span className="text-xs text-muted-foreground">
+                  Configure vendors in Admin settings
+                </span>
+              )}
             </div>
           </div>
         )}
