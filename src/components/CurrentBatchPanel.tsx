@@ -432,13 +432,13 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
     }
   }, [assignedStore, selectedLocation, lastAddedItemId, fetchRecentItemsWithRetry]);
 
-  // Load vendors when store/location changes
+  // Load vendors when store changes
   useEffect(() => {
     const loadVendors = async () => {
-      console.log('[CurrentBatchPanel] Loading vendors...', { assignedStore, selectedLocation });
+      console.log('[CurrentBatchPanel] Loading vendors...', { assignedStore });
       
-      if (!assignedStore || !selectedLocation) {
-        console.log('[CurrentBatchPanel] Missing context, skipping vendor load');
+      if (!assignedStore) {
+        console.log('[CurrentBatchPanel] Missing store, skipping vendor load');
         return;
       }
       
@@ -448,7 +448,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
           .from('shopify_location_vendors')
           .select('vendor_name, is_default')
           .eq('store_key', assignedStore)
-          .eq('location_gid', selectedLocation)
+          .is('location_gid', null)
           .order('is_default', { ascending: false })
           .order('vendor_name', { ascending: true });
 
@@ -474,7 +474,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
     };
 
     loadVendors();
-  }, [assignedStore, selectedLocation]);
+  }, [assignedStore]);
 
   // Event-based refresh listener
   useEffect(() => {

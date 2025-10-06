@@ -1051,7 +1051,7 @@ export type Database = {
           created_at: string
           id: string
           is_default: boolean
-          location_gid: string
+          location_gid: string | null
           store_key: string
           updated_at: string
           vendor_name: string
@@ -1060,7 +1060,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_default?: boolean
-          location_gid: string
+          location_gid?: string | null
           store_key: string
           updated_at?: string
           vendor_name: string
@@ -1069,7 +1069,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_default?: boolean
-          location_gid?: string
+          location_gid?: string | null
           store_key?: string
           updated_at?: string
           vendor_name?: string

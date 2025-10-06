@@ -31,9 +31,7 @@ interface Location {
 export function VendorManagement() {
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
-  const [locations, setLocations] = useState<Location[]>([]);
   const [selectedStore, setSelectedStore] = useState<string>('');
-  const [selectedLocation, setSelectedLocation] = useState<string>('');
   const [newVendorName, setNewVendorName] = useState<string>('');
   const [loading, setLoading] = useState(false);
 
@@ -42,19 +40,12 @@ export function VendorManagement() {
     loadStores();
   }, []);
 
-  // Load locations when store changes
+  // Load vendors when store changes
   useEffect(() => {
     if (selectedStore) {
-      loadLocations(selectedStore);
-    }
-  }, [selectedStore]);
-
-  // Load vendors when location changes
-  useEffect(() => {
-    if (selectedStore && selectedLocation) {
       loadVendors();
     }
-  }, [selectedStore, selectedLocation]);
+  }, [selectedStore]);
 
   const loadStores = async () => {
     try {
@@ -71,37 +62,13 @@ export function VendorManagement() {
     }
   };
 
-  const loadLocations = async (storeKey: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('shopify_location_cache')
-        .select('location_gid, location_name')
-        .eq('store_key', storeKey)
-        .order('location_name');
-
-      if (error) throw error;
-      
-      const uniqueLocations = (data || []).reduce((acc, loc) => {
-        if (!acc.find(l => l.id === loc.location_gid)) {
-          acc.push({ id: loc.location_gid, name: loc.location_name || loc.location_gid });
-        }
-        return acc;
-      }, [] as Location[]);
-      
-      setLocations(uniqueLocations);
-    } catch (error) {
-      console.error('Failed to load locations:', error);
-      toast.error('Failed to load locations');
-    }
-  };
-
   const loadVendors = async () => {
     try {
       const { data, error } = await supabase
         .from('shopify_location_vendors')
         .select('*')
         .eq('store_key', selectedStore)
-        .eq('location_gid', selectedLocation)
+        .is('location_gid', null)
         .order('vendor_name');
 
       if (error) throw error;
@@ -118,8 +85,8 @@ export function VendorManagement() {
       return;
     }
 
-    if (!selectedStore || !selectedLocation) {
-      toast.error('Please select a store and location');
+    if (!selectedStore) {
+      toast.error('Please select a store');
       return;
     }
 
@@ -129,7 +96,7 @@ export function VendorManagement() {
         .from('shopify_location_vendors')
         .insert({
           store_key: selectedStore,
-          location_gid: selectedLocation,
+          location_gid: null,
           vendor_name: newVendorName.trim(),
           is_default: vendors.length === 0 // First vendor is default
         });
@@ -150,12 +117,12 @@ export function VendorManagement() {
   const setDefaultVendor = async (vendorId: string) => {
     setLoading(true);
     try {
-      // Remove default from all vendors at this location
+      // Remove default from all vendors at this store
       await supabase
         .from('shopify_location_vendors')
         .update({ is_default: false })
         .eq('store_key', selectedStore)
-        .eq('location_gid', selectedLocation);
+        .is('location_gid', null);
 
       // Set new default
       const { error } = await supabase
@@ -202,50 +169,28 @@ export function VendorManagement() {
       <CardHeader>
         <CardTitle>Vendor Management</CardTitle>
         <CardDescription>
-          Configure vendors for each store location. Vendors will appear in the batch intake dropdown.
+          Configure vendors for each store. Vendors will appear in the batch intake dropdown.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Store & Location Selection */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label>Store</Label>
-            <Select value={selectedStore} onValueChange={setSelectedStore}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select store" />
-              </SelectTrigger>
-              <SelectContent>
-                {stores.map((store) => (
-                  <SelectItem key={store.key} value={store.key}>
-                    {store.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Location</Label>
-            <Select 
-              value={selectedLocation} 
-              onValueChange={setSelectedLocation}
-              disabled={!selectedStore}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select location" />
-              </SelectTrigger>
-              <SelectContent>
-                {locations.map((location) => (
-                  <SelectItem key={location.id} value={location.id}>
-                    {location.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+        {/* Store Selection */}
+        <div className="space-y-2">
+          <Label>Store</Label>
+          <Select value={selectedStore} onValueChange={setSelectedStore}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select store" />
+            </SelectTrigger>
+            <SelectContent className="z-[10000] bg-background border shadow-md">
+              {stores.map((store) => (
+                <SelectItem key={store.key} value={store.key}>
+                  {store.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
-        {selectedStore && selectedLocation && (
+        {selectedStore && (
           <>
             {/* Add New Vendor */}
             <div className="flex gap-2">
