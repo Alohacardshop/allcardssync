@@ -56,6 +56,7 @@ import { ZebraPrinterPanel } from '@/components/ZebraPrinterPanel';
 import { ZebraDiagnosticsPanel } from '@/components/ZebraDiagnosticsPanel';
 import { TCGHealthCheck } from '@/components/admin/TCGHealthCheck';
 import { DuplicateCleanup } from '@/components/admin/DuplicateCleanup';
+import { VendorManagement } from '@/components/admin/VendorManagement';
 
 const Admin = () => {
   const [activeSection, setActiveSection] = useState('overview');
@@ -317,6 +318,7 @@ const Admin = () => {
                 Configure Shopify integration, inventory sync, and product management.
               </p>
             </div>
+            <VendorManagement />
             <DuplicateCleanup />
             <ShopifyEnvironmentSetup />
             <ShopifyConfig />
