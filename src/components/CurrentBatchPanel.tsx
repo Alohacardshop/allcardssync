@@ -481,9 +481,15 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
           {!compact && (
             <div className="flex gap-2">
               <Button
-                onClick={handleSendBatchToShopify}
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleSendBatchToShopify();
+                }}
                 disabled={recentItems.length === 0 || isSending}
                 size="sm"
+                style={{ position: 'relative', zIndex: 9999 }}
               >
                 {isSending ? (
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -539,26 +545,44 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
                     {!compact && (
                       <>
                         <Button
+                          type="button"
                           size="sm"
                           variant="outline"
-                          onClick={() => handleEditItem(item)}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleEditItem(item);
+                          }}
+                          style={{ position: 'relative', zIndex: 9999 }}
                         >
                           <Pencil className="h-4 w-4" />
                         </Button>
                         <Button
+                          type="button"
                           size="sm"
                           variant="outline"
-                          onClick={() => handleSendToInventory(item.id)}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleSendToInventory(item.id);
+                          }}
+                          style={{ position: 'relative', zIndex: 9999 }}
                         >
                           <Send className="h-4 w-4" />
                         </Button>
                       </>
                     )}
                     <Button
+                      type="button"
                       size="sm"
                       variant={compact ? "ghost" : "outline"}
-                      onClick={() => handleDeleteItem(item.id)}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleDeleteItem(item.id);
+                      }}
                       className={compact ? "h-8 w-8 p-0 text-destructive hover:text-destructive" : ""}
+                      style={{ position: 'relative', zIndex: 9999 }}
                     >
                       <Trash2 className={compact ? "h-3 w-3" : "h-4 w-4"} />
                     </Button>
@@ -576,25 +600,43 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
           {recentItems.length > 0 && !compact && (
             <div className="mt-4 pt-4 border-t flex gap-2">
               <Button
+                type="button"
                 variant="outline"
-                onClick={handleClearBatch}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleClearBatch();
+                }}
                 size="sm"
+                style={{ position: 'relative', zIndex: 9999 }}
               >
                 Clear Batch
               </Button>
               <Button
+                type="button"
                 variant="outline"
-                onClick={handleStartNewLot}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleStartNewLot();
+                }}
                 size="sm"
+                style={{ position: 'relative', zIndex: 9999 }}
               >
                 <Plus className="h-4 w-4 mr-2" />
                 Start New Lot
               </Button>
               {onViewFullBatch && (
                 <Button
+                  type="button"
                   variant="outline"
-                  onClick={onViewFullBatch}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onViewFullBatch?.();
+                  }}
                   size="sm"
+                  style={{ position: 'relative', zIndex: 9999 }}
                 >
                   <Eye className="h-4 w-4 mr-2" />
                   View Full Batch
@@ -606,8 +648,14 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
           {compact && recentItems.length > 0 && (
             <div className="mt-3 pt-3 border-t space-y-2">
               <Button
-                onClick={handleSendBatchToShopify}
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleSendBatchToShopify();
+                }}
                 disabled={recentItems.length === 0 || sendingBatch}
+                style={{ position: 'relative', zIndex: 9999 }}
                 size="sm"
                 className="w-full"
               >
