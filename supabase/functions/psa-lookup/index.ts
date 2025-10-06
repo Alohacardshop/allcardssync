@@ -158,12 +158,18 @@ Deno.serve(async (req) => {
       )
     }
 
+    console.log('[psa-lookup] About to parse JSON responses')
     const certData = await certDetailsResponse.json()
+    console.log('[psa-lookup] Cert data parsed, checking structure...')
+    console.log('[psa-lookup] certData keys:', Object.keys(certData || {}))
+    console.log('[psa-lookup] certData.PSACert exists:', !!certData?.PSACert)
+    if (certData?.PSACert) {
+      console.log('[psa-lookup] PSACert keys:', Object.keys(certData.PSACert))
+    }
+    console.log('[psa-lookup] Full certData:', JSON.stringify(certData))
+    
     const imagesData = await imagesResponse.json()
-
-    // Debug: Log raw PSA API response to see structure
-    console.log('[psa-lookup] PSA API raw response:', JSON.stringify(certData, null, 2))
-    console.log('[psa-lookup] PSA API images response:', JSON.stringify(imagesData, null, 2))
+    console.log('[psa-lookup] Images data parsed')
 
     if (!certData?.PSACert?.PSACertID) {
       console.log('[psa-lookup] No valid data in PSA response')
