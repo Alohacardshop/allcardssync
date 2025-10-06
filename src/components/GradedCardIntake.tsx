@@ -535,10 +535,17 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
           {/* Submit Button */}
           <div className="flex justify-end gap-2 pt-4">
             <Button 
-              onClick={handleSubmit}
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('Add to Batch button clicked');
+                handleSubmit();
+              }}
               disabled={submitting || !formData.certNumber || !formData.grade || !formData.price || !formData.cost}
               className="px-8"
               size="lg"
+              style={{ position: 'relative', zIndex: 9999 }}
             >
               {submitting ? (
                 <>
