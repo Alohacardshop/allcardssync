@@ -163,7 +163,7 @@ Deno.serve(async (req) => {
 
     // PSA API changed: they now use CertNumber instead of PSACertID
     if (!certData?.PSACert?.CertNumber) {
-      console.log('[psa-lookup] No valid data in PSA response')
+      console.log('[psa-lookup] No valid certificate data in PSA response')
       if (logEntry?.id) {
         await supabaseServiceClient
           .from('psa_request_log')
