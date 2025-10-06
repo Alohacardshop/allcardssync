@@ -161,6 +161,10 @@ Deno.serve(async (req) => {
     const certData = await certDetailsResponse.json()
     const imagesData = await imagesResponse.json()
 
+    // Debug: Log raw PSA API response to see structure
+    console.log('[psa-lookup] PSA API raw response:', JSON.stringify(certData, null, 2))
+    console.log('[psa-lookup] PSA API images response:', JSON.stringify(imagesData, null, 2))
+
     if (!certData?.PSACert?.PSACertID) {
       console.log('[psa-lookup] No valid data in PSA response')
       if (logEntry?.id) {
