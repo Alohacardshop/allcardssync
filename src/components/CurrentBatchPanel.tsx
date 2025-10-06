@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import { Pencil, Send, Trash2, Eye, Plus, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
@@ -58,6 +60,9 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
   const [sendingBatch, setSendingBatch] = useState(false);
   const [lastAddedItemId, setLastAddedItemId] = useState<string | null>(null);
   const [batchConfigOpen, setBatchConfigOpen] = useState(false);
+  const [vendors, setVendors] = useState<Array<{ vendor_name: string; is_default: boolean }>>([]);
+  const [selectedVendor, setSelectedVendor] = useState<string>('');
+  const [loadingVendors, setLoadingVendors] = useState(false);
   const [batchProgressOpen, setBatchProgressOpen] = useState(false);
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -427,6 +432,44 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
     }
   }, [assignedStore, selectedLocation, lastAddedItemId, fetchRecentItemsWithRetry]);
 
+  // Load vendors when store/location changes
+  useEffect(() => {
+    const loadVendors = async () => {
+      if (!assignedStore || !selectedLocation) return;
+      
+      setLoadingVendors(true);
+      try {
+        const { data, error } = await supabase
+          .from('shopify_location_vendors')
+          .select('vendor_name, is_default')
+          .eq('store_key', assignedStore)
+          .eq('location_gid', selectedLocation)
+          .order('is_default', { ascending: false })
+          .order('vendor_name', { ascending: true });
+
+        if (error) throw error;
+
+        setVendors(data || []);
+        
+        // Auto-select default vendor
+        const defaultVendor = data?.find(v => v.is_default);
+        if (defaultVendor && !selectedVendor) {
+          setSelectedVendor(defaultVendor.vendor_name);
+        }
+      } catch (error) {
+        console.error('Failed to load vendors:', error);
+        toast({ 
+          title: "Warning", 
+          description: "Failed to load vendors. You may need to configure vendors in settings." 
+        });
+      } finally {
+        setLoadingVendors(false);
+      }
+    };
+
+    loadVendors();
+  }, [assignedStore, selectedLocation]);
+
   // Event-based refresh listener
   useEffect(() => {
     const handleBatchItemAdded = (event: CustomEvent) => {
@@ -501,6 +544,34 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
             </div>
           )}
         </CardHeader>
+        
+        {/* Vendor Selector */}
+        {!compact && vendors.length > 0 && (
+          <div className="px-6 pb-4 border-b">
+            <div className="flex items-center gap-3">
+              <Label htmlFor="vendor-select" className="text-sm font-medium whitespace-nowrap">
+                Vendor:
+              </Label>
+              <Select 
+                value={selectedVendor} 
+                onValueChange={setSelectedVendor}
+                disabled={loadingVendors}
+              >
+                <SelectTrigger id="vendor-select" className="h-9 w-[200px]">
+                  <SelectValue placeholder={loadingVendors ? "Loading..." : "Select vendor"} />
+                </SelectTrigger>
+                <SelectContent className="z-[10000]">
+                  {vendors.map((vendor) => (
+                    <SelectItem key={vendor.vendor_name} value={vendor.vendor_name}>
+                      {vendor.vendor_name} {vendor.is_default && "(default)"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        )}
+        
         <CardContent>
           {recentItems.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
@@ -789,6 +860,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
         onOpenChange={setBatchConfigOpen}
         storeKey={assignedStore || undefined}
         locationGid={selectedLocation || undefined}
+        initialVendor={selectedVendor}
       />
 
       {/* Batch Progress Dialog */}

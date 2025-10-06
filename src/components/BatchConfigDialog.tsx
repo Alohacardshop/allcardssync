@@ -21,6 +21,7 @@ interface BatchConfigDialogProps {
   onOpenChange?: (open: boolean) => void
   storeKey?: string
   locationGid?: string
+  initialVendor?: string
 }
 
 export function BatchConfigDialog({ 
@@ -33,7 +34,8 @@ export function BatchConfigDialog({
   open: externalOpen,
   onOpenChange: externalOnOpenChange,
   storeKey,
-  locationGid
+  locationGid,
+  initialVendor
 }: BatchConfigDialogProps) {
   const { toast } = useToast()
   const [internalOpen, setInternalOpen] = useState(false)
@@ -56,6 +58,13 @@ export function BatchConfigDialog({
       loadVendors()
     }
   }, [open, storeKey, locationGid])
+
+  // Set initial vendor when provided
+  useEffect(() => {
+    if (initialVendor && open) {
+      setConfig(prev => ({ ...prev, vendor: initialVendor }));
+    }
+  }, [initialVendor, open]);
 
   const loadVendors = async () => {
     if (!storeKey || !locationGid) return
