@@ -5,9 +5,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Progress } from "@/components/ui/progress";
 import { TransferItemsList } from "./TransferItemsList";
-import { Loader2, ScanBarcode } from "lucide-react";
+import { ConfirmationDialog } from "./ConfirmationDialog";
+import { Loader2, ScanBarcode, Undo2, Volume2, VolumeX } from "lucide-react";
 import { useStore } from "@/contexts/StoreContext";
+import { getLocationNameFromGid } from "@/lib/locationUtils";
+import { playSuccessSound, playErrorSound, playCompletionSound, areSoundsEnabled, toggleSounds } from "@/lib/soundEffects";
+import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface ScannedItem {
   id: string;
@@ -20,11 +26,16 @@ interface ScannedItem {
   shopify_product_id: string;
   shopify_variant_id: string;
   shopify_inventory_item_id: string;
+  unique_item_uid: string;
 }
 
 interface BulkTransferScannerProps {
   onTransferComplete?: () => void;
 }
+
+const MAX_ITEMS = 100;
+const WARNING_THRESHOLD = 50;
+const DEBOUNCE_MS = 300;
 
 export function BulkTransferScanner({ onTransferComplete }: BulkTransferScannerProps) {
   const { toast } = useToast();
@@ -32,33 +43,82 @@ export function BulkTransferScanner({ onTransferComplete }: BulkTransferScannerP
   const [barcode, setBarcode] = useState("");
   const [destinationLocation, setDestinationLocation] = useState("");
   const [scannedItems, setScannedItems] = useState<ScannedItem[]>([]);
+  const [sourceLocation, setSourceLocation] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [isTransferring, setIsTransferring] = useState(false);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [transferProgress, setTransferProgress] = useState(0);
+  const [soundsEnabled, setSoundsEnabled] = useState(areSoundsEnabled());
   const inputRef = useRef<HTMLInputElement>(null);
+  const lastScanRef = useRef<number>(0);
 
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // ESC to clear all
+      if (e.key === 'Escape' && scannedItems.length > 0 && !isTransferring) {
+        e.preventDefault();
+        handleClearAll();
+      }
+      // Ctrl+Enter to submit transfer
+      if (e.ctrlKey && e.key === 'Enter' && scannedItems.length > 0 && destinationLocation && !isTransferring) {
+        e.preventDefault();
+        setShowConfirmDialog(true);
+      }
+      // Ctrl+Z to undo
+      if (e.ctrlKey && e.key === 'z' && scannedItems.length > 0 && !isTransferring) {
+        e.preventDefault();
+        handleUndoLast();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [scannedItems, destinationLocation, isTransferring]);
+
   const handleScan = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Debounce rapid scans
+    const now = Date.now();
+    if (now - lastScanRef.current < DEBOUNCE_MS) {
+      return;
+    }
+    lastScanRef.current = now;
+
     if (!barcode.trim() || !destinationLocation) {
       toast({
         title: "Missing information",
         description: "Please select a destination location and enter a barcode",
         variant: "destructive",
       });
+      playErrorSound();
+      return;
+    }
+
+    // Check batch size limit
+    if (scannedItems.length >= MAX_ITEMS) {
+      toast({
+        title: "Batch limit reached",
+        description: `Maximum ${MAX_ITEMS} items per transfer`,
+        variant: "destructive",
+      });
+      playErrorSound();
       return;
     }
 
     setIsScanning(true);
 
     try {
-      // Search for item by SKU or lot_number
+      // Search by SKU, lot_number, or unique_item_uid
       const { data: items, error } = await supabase
         .from('intake_items')
         .select('*')
-        .or(`sku.eq.${barcode},lot_number.eq.${barcode}`)
+        .or(`sku.eq.${barcode},lot_number.eq.${barcode},unique_item_uid.eq.${barcode}`)
         .is('deleted_at', null)
         .not('removed_from_batch_at', 'is', null) // Only items in inventory
         .limit(1);
@@ -71,6 +131,7 @@ export function BulkTransferScanner({ onTransferComplete }: BulkTransferScannerP
           description: "No inventory item found with this barcode",
           variant: "destructive",
         });
+        playErrorSound();
         setBarcode("");
         inputRef.current?.focus();
         return;
@@ -85,18 +146,37 @@ export function BulkTransferScanner({ onTransferComplete }: BulkTransferScannerP
           description: "This item is already in the list",
           variant: "destructive",
         });
+        playErrorSound();
         setBarcode("");
         inputRef.current?.focus();
         return;
       }
 
-      // Check if item is at a valid source location
+      // Check if item has location
       if (!item.shopify_location_gid) {
         toast({
           title: "Invalid item",
           description: "Item has no location assigned",
           variant: "destructive",
         });
+        playErrorSound();
+        setBarcode("");
+        inputRef.current?.focus();
+        return;
+      }
+
+      // Source location validation
+      if (sourceLocation === null) {
+        // First item - set source location
+        setSourceLocation(item.shopify_location_gid);
+      } else if (sourceLocation !== item.shopify_location_gid) {
+        // Subsequent items - validate same source
+        toast({
+          title: "Location mismatch",
+          description: `Item is at ${getLocationNameFromGid(item.shopify_location_gid, locations)}, but source is ${getLocationNameFromGid(sourceLocation, locations)}`,
+          variant: "destructive",
+        });
+        playErrorSound();
         setBarcode("");
         inputRef.current?.focus();
         return;
@@ -109,6 +189,7 @@ export function BulkTransferScanner({ onTransferComplete }: BulkTransferScannerP
           description: "Item is already at the destination location",
           variant: "destructive",
         });
+        playErrorSound();
         setBarcode("");
         inputRef.current?.focus();
         return;
@@ -119,6 +200,16 @@ export function BulkTransferScanner({ onTransferComplete }: BulkTransferScannerP
         title: "Item added",
         description: `${item.brand_title} ${item.subject} ${item.card_number}`,
       });
+      playSuccessSound();
+
+      // Warning at threshold
+      if (scannedItems.length + 1 === WARNING_THRESHOLD) {
+        toast({
+          title: "Approaching limit",
+          description: `${WARNING_THRESHOLD} items scanned. Maximum is ${MAX_ITEMS}.`,
+        });
+      }
+
       setBarcode("");
       inputRef.current?.focus();
 
@@ -129,19 +220,52 @@ export function BulkTransferScanner({ onTransferComplete }: BulkTransferScannerP
         description: error instanceof Error ? error.message : "Unknown error",
         variant: "destructive",
       });
+      playErrorSound();
     } finally {
       setIsScanning(false);
     }
   };
 
   const handleRemoveItem = (id: string) => {
-    setScannedItems(prev => prev.filter(item => item.id !== id));
+    setScannedItems(prev => {
+      const filtered = prev.filter(item => item.id !== id);
+      // Reset source location if all items removed
+      if (filtered.length === 0) {
+        setSourceLocation(null);
+      }
+      return filtered;
+    });
+  };
+
+  const handleUndoLast = () => {
+    if (scannedItems.length === 0) return;
+    
+    const lastItem = scannedItems[scannedItems.length - 1];
+    setScannedItems(prev => {
+      const newItems = prev.slice(0, -1);
+      // Reset source location if all items removed
+      if (newItems.length === 0) {
+        setSourceLocation(null);
+      }
+      return newItems;
+    });
+    
+    toast({
+      title: "Removed",
+      description: `${lastItem.brand_title} ${lastItem.subject} ${lastItem.card_number}`,
+    });
   };
 
   const handleClearAll = () => {
     setScannedItems([]);
+    setSourceLocation(null);
     setBarcode("");
     inputRef.current?.focus();
+  };
+
+  const handleConfirmTransfer = async () => {
+    setShowConfirmDialog(false);
+    await handleTransfer();
   };
 
   const handleTransfer = async () => {
@@ -154,19 +278,17 @@ export function BulkTransferScanner({ onTransferComplete }: BulkTransferScannerP
       return;
     }
 
-    if (!destinationLocation) {
+    if (!destinationLocation || !sourceLocation) {
       toast({
-        title: "No destination",
+        title: "Missing information",
         description: "Please select a destination location",
         variant: "destructive",
       });
       return;
     }
 
-    // Get source location from first item (all should be from same source)
-    const sourceLocation = scannedItems[0].shopify_location_gid;
-
     setIsTransferring(true);
+    setTransferProgress(0);
 
     try {
       // Create transfer record
@@ -184,6 +306,8 @@ export function BulkTransferScanner({ onTransferComplete }: BulkTransferScannerP
 
       if (createError) throw createError;
 
+      setTransferProgress(20);
+
       // Call edge function to process transfer
       const { data, error: transferError } = await supabase.functions.invoke('bulk-location-transfer', {
         body: {
@@ -197,13 +321,18 @@ export function BulkTransferScanner({ onTransferComplete }: BulkTransferScannerP
 
       if (transferError) throw transferError;
 
+      setTransferProgress(100);
+
       toast({
         title: "Transfer complete",
         description: `${data.successful} items transferred successfully${data.failed > 0 ? `, ${data.failed} failed` : ''}`,
       });
+      playCompletionSound();
 
       setScannedItems([]);
+      setSourceLocation(null);
       setBarcode("");
+      setTransferProgress(0);
       inputRef.current?.focus();
       onTransferComplete?.();
 
@@ -214,13 +343,55 @@ export function BulkTransferScanner({ onTransferComplete }: BulkTransferScannerP
         description: error instanceof Error ? error.message : "Unknown error",
         variant: "destructive",
       });
+      playErrorSound();
+      setTransferProgress(0);
     } finally {
       setIsTransferring(false);
     }
   };
 
+  const handleToggleSounds = () => {
+    const newState = toggleSounds();
+    setSoundsEnabled(newState);
+    toast({
+      title: newState ? "Sounds enabled" : "Sounds disabled",
+      description: newState ? "You'll hear feedback when scanning" : "Sound effects are now muted",
+    });
+  };
+
+  const sourceName = sourceLocation ? getLocationNameFromGid(sourceLocation, locations) : null;
+  const destinationName = destinationLocation ? getLocationNameFromGid(destinationLocation, locations) : null;
+
   return (
     <div className="space-y-6">
+      {/* Source Location Display */}
+      {sourceName && (
+        <div className="bg-muted/50 border rounded-lg p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <Label className="text-sm text-muted-foreground">Source Location</Label>
+              <p className="text-lg font-medium">{sourceName}</p>
+            </div>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleToggleSounds}
+                  >
+                    {soundsEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {soundsEnabled ? "Disable sounds" : "Enable sounds"}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+        </div>
+      )}
+
       <div className="grid gap-4 md:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="destination">Destination Location</Label>
@@ -230,7 +401,7 @@ export function BulkTransferScanner({ onTransferComplete }: BulkTransferScannerP
             </SelectTrigger>
             <SelectContent>
               {locations
-                .filter(loc => loc.gid !== locationGid) // Exclude current location
+                .filter(loc => loc.gid !== locationGid && loc.gid !== sourceLocation)
                 .map(loc => (
                   <SelectItem key={loc.gid} value={loc.gid}>
                     {loc.name}
@@ -241,7 +412,25 @@ export function BulkTransferScanner({ onTransferComplete }: BulkTransferScannerP
         </div>
 
         <form onSubmit={handleScan} className="space-y-2">
-          <Label htmlFor="barcode">Scan Barcode</Label>
+          <div className="flex items-center justify-between">
+            <Label htmlFor="barcode">Scan Barcode</Label>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge variant="outline" className="text-xs">
+                    ESC • Ctrl+Enter • Ctrl+Z
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <div className="text-xs space-y-1">
+                    <p>ESC: Clear all</p>
+                    <p>Ctrl+Enter: Transfer</p>
+                    <p>Ctrl+Z: Undo last</p>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
           <div className="flex gap-2">
             <Input
               ref={inputRef}
@@ -249,9 +438,9 @@ export function BulkTransferScanner({ onTransferComplete }: BulkTransferScannerP
               value={barcode}
               onChange={(e) => setBarcode(e.target.value)}
               placeholder="Scan or enter barcode..."
-              disabled={isScanning || !destinationLocation}
+              disabled={isScanning || !destinationLocation || scannedItems.length >= MAX_ITEMS}
             />
-            <Button type="submit" disabled={isScanning || !destinationLocation}>
+            <Button type="submit" disabled={isScanning || !destinationLocation || scannedItems.length >= MAX_ITEMS}>
               {isScanning ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
@@ -262,17 +451,37 @@ export function BulkTransferScanner({ onTransferComplete }: BulkTransferScannerP
         </form>
       </div>
 
+      {/* Transfer Progress */}
+      {isTransferring && transferProgress > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-sm">
+            <span>Processing transfer...</span>
+            <span>{transferProgress}%</span>
+          </div>
+          <Progress value={transferProgress} />
+        </div>
+      )}
+
       {scannedItems.length > 0 && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-medium">
-              Scanned Items ({scannedItems.length})
+              Scanned Items ({scannedItems.length}/{MAX_ITEMS})
             </h3>
             <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={handleUndoLast} 
+                disabled={isTransferring}
+              >
+                <Undo2 className="mr-2 h-4 w-4" />
+                Undo Last
+              </Button>
               <Button variant="outline" onClick={handleClearAll} disabled={isTransferring}>
                 Clear All
               </Button>
-              <Button onClick={handleTransfer} disabled={isTransferring}>
+              <Button onClick={() => setShowConfirmDialog(true)} disabled={isTransferring}>
                 {isTransferring ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -288,6 +497,23 @@ export function BulkTransferScanner({ onTransferComplete }: BulkTransferScannerP
           <TransferItemsList items={scannedItems} onRemove={handleRemoveItem} />
         </div>
       )}
+
+      {/* Confirmation Dialog */}
+      <ConfirmationDialog
+        open={showConfirmDialog}
+        onOpenChange={setShowConfirmDialog}
+        onConfirm={handleConfirmTransfer}
+        title="Confirm Transfer"
+        description={`Transfer ${scannedItems.length} item${scannedItems.length !== 1 ? 's' : ''} from ${sourceName} to ${destinationName}?`}
+        confirmText="Confirm Transfer"
+        variant="default"
+        icon="sync"
+      >
+        <div className="text-sm space-y-1 bg-muted/50 p-3 rounded-md">
+          <div><strong>From:</strong> {sourceName}</div>
+          <div><strong>To:</strong> {destinationName}</div>
+        </div>
+      </ConfirmationDialog>
     </div>
   );
 }

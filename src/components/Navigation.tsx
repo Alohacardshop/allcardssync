@@ -7,7 +7,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Home, Package, Tags, Settings, FileText, Menu, LogOut, Upload, BarChart3, Archive, MapPin, Palmtree, Dice1 } from "lucide-react";
+import { Home, Package, Tags, Settings, FileText, Menu, LogOut, Upload, BarChart3, Archive, MapPin, Palmtree, Dice1, ArrowRightLeft } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { cleanupAuthState } from "@/lib/auth";
 import { useEffect, useState } from "react";
@@ -110,6 +110,7 @@ export function Navigation({ showMobileMenu = true }: NavigationProps) {
     { to: "/", label: "Dashboard", icon: Home },
     { to: "/inventory", label: "Inventory", icon: Package },
     { to: "/batches", label: "Batches", icon: Archive },
+    { to: "/bulk-transfer", label: "Bulk Transfer", icon: ArrowRightLeft },
     { to: "/labels", label: "Labels", icon: Tags },
     { to: "/shopify-mapping", label: "Shopify", icon: FileText },
     { to: "/print-logs", label: "Print Logs", icon: FileText },

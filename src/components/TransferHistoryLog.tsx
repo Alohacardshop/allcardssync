@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useStore } from "@/contexts/StoreContext";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ChevronDown, ChevronRight, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Loader2, Download } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import { getLocationNameFromGid } from "@/lib/locationUtils";
+import Papa from "papaparse";
 
 interface Transfer {
   id: string;
@@ -33,6 +36,7 @@ interface TransferItem {
 
 export function TransferHistoryLog() {
   const { toast } = useToast();
+  const { availableLocations: locations } = useStore();
   const [transfers, setTransfers] = useState<Transfer[]>([]);
   const [expandedTransfer, setExpandedTransfer] = useState<string | null>(null);
   const [transferItems, setTransferItems] = useState<Record<string, TransferItem[]>>({});
@@ -106,6 +110,75 @@ export function TransferHistoryLog() {
     }
   };
 
+  const handleExportToCSV = () => {
+    try {
+      // Prepare data for export
+      const exportData = transfers.flatMap(transfer => {
+        const items = transferItems[transfer.id] || [];
+        const sourceName = getLocationNameFromGid(transfer.source_location_gid, locations);
+        const destName = getLocationNameFromGid(transfer.destination_location_gid, locations);
+        
+        if (items.length === 0) {
+          // Export transfer summary only
+          return [{
+            'Transfer Date': new Date(transfer.created_at).toLocaleString(),
+            'Source Location': sourceName,
+            'Destination Location': destName,
+            'Total Items': transfer.total_items,
+            'Successful': transfer.successful_items,
+            'Failed': transfer.failed_items,
+            'Status': transfer.status,
+            'SKU': '',
+            'Item Name': '',
+            'Quantity': '',
+            'Item Status': '',
+            'Error Message': '',
+          }];
+        }
+        
+        // Export with item details
+        return items.map(item => ({
+          'Transfer Date': new Date(transfer.created_at).toLocaleString(),
+          'Source Location': sourceName,
+          'Destination Location': destName,
+          'Total Items': transfer.total_items,
+          'Successful': transfer.successful_items,
+          'Failed': transfer.failed_items,
+          'Status': transfer.status,
+          'SKU': item.sku,
+          'Item Name': item.item_name || 'Unknown',
+          'Quantity': String(item.quantity),
+          'Item Status': item.status,
+          'Error Message': item.error_message || '',
+        }));
+      });
+
+      const csv = Papa.unparse(exportData);
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      
+      link.setAttribute('href', url);
+      link.setAttribute('download', `transfer-history-${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      toast({
+        title: "Export successful",
+        description: "Transfer history has been exported to CSV",
+      });
+    } catch (error) {
+      console.error('Export error:', error);
+      toast({
+        title: "Export failed",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     const variants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
       completed: "default",
@@ -115,11 +188,6 @@ export function TransferHistoryLog() {
       pending: "outline",
     };
     return <Badge variant={variants[status] || "outline"}>{status}</Badge>;
-  };
-
-  const getLocationName = (gid: string) => {
-    // Extract location name from GID or return last part
-    return gid.split('/').pop() || gid;
   };
 
   if (isLoading) {
@@ -139,85 +207,94 @@ export function TransferHistoryLog() {
   }
 
   return (
-    <div className="space-y-2">
-      {transfers.map((transfer) => (
-        <Collapsible
-          key={transfer.id}
-          open={expandedTransfer === transfer.id}
-          onOpenChange={() => handleToggleExpand(transfer.id)}
-        >
-          <div className="border rounded-lg">
-            <CollapsibleTrigger asChild>
-              <Button
-                variant="ghost"
-                className="w-full justify-between p-4 h-auto"
-              >
-                <div className="flex items-center gap-4 text-left">
-                  {expandedTransfer === transfer.id ? (
-                    <ChevronDown className="h-4 w-4" />
-                  ) : (
-                    <ChevronRight className="h-4 w-4" />
-                  )}
-                  <div>
-                    <div className="font-medium">
-                      {getLocationName(transfer.source_location_gid)} → {getLocationName(transfer.destination_location_gid)}
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                      {formatDistanceToNow(new Date(transfer.created_at), { addSuffix: true })}
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-4">
-                  <div className="text-sm">
-                    {transfer.successful_items}/{transfer.total_items} succeeded
-                  </div>
-                  {getStatusBadge(transfer.status)}
-                </div>
-              </Button>
-            </CollapsibleTrigger>
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <Button variant="outline" size="sm" onClick={handleExportToCSV}>
+          <Download className="mr-2 h-4 w-4" />
+          Export to CSV
+        </Button>
+      </div>
 
-            <CollapsibleContent>
-              <div className="border-t p-4">
-                {loadingItems === transfer.id ? (
-                  <div className="flex items-center justify-center p-4">
-                    <Loader2 className="h-5 w-5 animate-spin" />
+      <div className="space-y-2">
+        {transfers.map((transfer) => (
+          <Collapsible
+            key={transfer.id}
+            open={expandedTransfer === transfer.id}
+            onOpenChange={() => handleToggleExpand(transfer.id)}
+          >
+            <div className="border rounded-lg">
+              <CollapsibleTrigger asChild>
+                <Button
+                  variant="ghost"
+                  className="w-full justify-between p-4 h-auto"
+                >
+                  <div className="flex items-center gap-4 text-left">
+                    {expandedTransfer === transfer.id ? (
+                      <ChevronDown className="h-4 w-4" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4" />
+                    )}
+                    <div>
+                      <div className="font-medium">
+                        {getLocationNameFromGid(transfer.source_location_gid, locations)} → {getLocationNameFromGid(transfer.destination_location_gid, locations)}
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        {formatDistanceToNow(new Date(transfer.created_at), { addSuffix: true })}
+                      </div>
+                    </div>
                   </div>
-                ) : transferItems[transfer.id] ? (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Item</TableHead>
-                        <TableHead>SKU</TableHead>
-                        <TableHead className="text-right">Qty</TableHead>
-                        <TableHead>Status</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {transferItems[transfer.id].map((item) => (
-                        <TableRow key={item.id}>
-                          <TableCell>{item.item_name || 'Unknown'}</TableCell>
-                          <TableCell className="font-mono text-sm">{item.sku}</TableCell>
-                          <TableCell className="text-right">{item.quantity}</TableCell>
-                          <TableCell>
-                            <div className="space-y-1">
-                              {getStatusBadge(item.status)}
-                              {item.error_message && (
-                                <div className="text-xs text-destructive">
-                                  {item.error_message}
-                                </div>
-                              )}
-                            </div>
-                          </TableCell>
+                  <div className="flex items-center gap-4">
+                    <div className="text-sm">
+                      {transfer.successful_items}/{transfer.total_items} succeeded
+                    </div>
+                    {getStatusBadge(transfer.status)}
+                  </div>
+                </Button>
+              </CollapsibleTrigger>
+
+              <CollapsibleContent>
+                <div className="border-t p-4">
+                  {loadingItems === transfer.id ? (
+                    <div className="flex items-center justify-center p-4">
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                    </div>
+                  ) : transferItems[transfer.id] ? (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Item</TableHead>
+                          <TableHead>SKU</TableHead>
+                          <TableHead className="text-right">Qty</TableHead>
+                          <TableHead>Status</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                ) : null}
-              </div>
-            </CollapsibleContent>
-          </div>
-        </Collapsible>
-      ))}
+                      </TableHeader>
+                      <TableBody>
+                        {transferItems[transfer.id].map((item) => (
+                          <TableRow key={item.id}>
+                            <TableCell>{item.item_name || 'Unknown'}</TableCell>
+                            <TableCell className="font-mono text-sm">{item.sku}</TableCell>
+                            <TableCell className="text-right">{item.quantity}</TableCell>
+                            <TableCell>
+                              <div className="space-y-1">
+                                {getStatusBadge(item.status)}
+                                {item.error_message && (
+                                  <div className="text-xs text-destructive">
+                                    {item.error_message}
+                                  </div>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  ) : null}
+                </div>
+              </CollapsibleContent>
+            </div>
+          </Collapsible>
+        ))}
+      </div>
     </div>
   );
 }
