@@ -150,7 +150,7 @@ export function useBatchSendToShopify() {
             console.log(`🏷️ [useBatchSendToShopify] Setting vendor "${config.vendor}" for ${chunk.length} items`)
             const { error: vendorError } = await supabase
               .from('intake_items')
-              .update({ vendor: config.vendor })
+              .update({ vendor: config.vendor } as any) // Cast until types regenerate
               .in('id', chunk)
             
             if (vendorError) {

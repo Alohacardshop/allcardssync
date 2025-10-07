@@ -225,6 +225,7 @@ export type Database = {
           updated_at: string
           updated_by: string | null
           variant: string | null
+          vendor: string | null
           year: string | null
         }
         Insert: {
@@ -294,6 +295,7 @@ export type Database = {
           updated_at?: string
           updated_by?: string | null
           variant?: string | null
+          vendor?: string | null
           year?: string | null
         }
         Update: {
@@ -363,6 +365,7 @@ export type Database = {
           updated_at?: string
           updated_by?: string | null
           variant?: string | null
+          vendor?: string | null
           year?: string | null
         }
         Relationships: [
@@ -2006,6 +2009,7 @@ export type Database = {
           updated_at: string
           updated_by: string | null
           variant: string | null
+          vendor: string | null
           year: string | null
         }
       }
