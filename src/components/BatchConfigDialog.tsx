@@ -20,7 +20,6 @@ interface BatchConfigDialogProps {
   open?: boolean
   onOpenChange?: (open: boolean) => void
   storeKey?: string
-  locationGid?: string
   initialVendor?: string
 }
 
@@ -34,7 +33,6 @@ export function BatchConfigDialog({
   open: externalOpen,
   onOpenChange: externalOnOpenChange,
   storeKey,
-  locationGid,
   initialVendor
 }: BatchConfigDialogProps) {
   const { toast } = useToast()
@@ -52,12 +50,12 @@ export function BatchConfigDialog({
   const open = externalOpen !== undefined ? externalOpen : internalOpen
   const setOpen = externalOnOpenChange !== undefined ? externalOnOpenChange : setInternalOpen
 
-  // Load vendors when store/location changes or dialog opens
+  // Load vendors when store changes or dialog opens
   useEffect(() => {
-    if (open && storeKey && locationGid) {
+    if (open && storeKey) {
       loadVendors()
     }
-  }, [open, storeKey, locationGid])
+  }, [open, storeKey])
 
   // Set initial vendor when provided
   useEffect(() => {
@@ -67,7 +65,7 @@ export function BatchConfigDialog({
   }, [initialVendor, open]);
 
   const loadVendors = async () => {
-    if (!storeKey || !locationGid) return
+    if (!storeKey) return
     
     setLoadingVendors(true)
     try {
@@ -75,7 +73,7 @@ export function BatchConfigDialog({
         .from('shopify_location_vendors')
         .select('vendor_name, is_default')
         .eq('store_key', storeKey)
-        .eq('location_gid', locationGid)
+        .is('location_gid', null)
         .order('is_default', { ascending: false })
         .order('vendor_name', { ascending: true })
 

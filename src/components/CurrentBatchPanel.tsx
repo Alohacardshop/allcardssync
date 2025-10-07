@@ -880,7 +880,6 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
         open={batchConfigOpen}
         onOpenChange={setBatchConfigOpen}
         storeKey={assignedStore || undefined}
-        locationGid={selectedLocation || undefined}
         initialVendor={selectedVendor}
       />
 
