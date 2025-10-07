@@ -145,7 +145,20 @@ export function useBatchSendToShopify() {
         console.log(`🔄 [useBatchSendToShopify] Processing chunk ${chunkIndex + 1}/${totalChunks} with ${chunk.length} items`)
         
         try {
-          // Step 1: Send items to inventory (without Shopify sync)
+          // Step 1: Update vendor on items if provided
+          if (config.vendor) {
+            console.log(`🏷️ [useBatchSendToShopify] Setting vendor "${config.vendor}" for ${chunk.length} items`)
+            const { error: vendorError } = await supabase
+              .from('intake_items')
+              .update({ vendor: config.vendor })
+              .in('id', chunk)
+            
+            if (vendorError) {
+              console.error(`⚠️ [useBatchSendToShopify] Failed to set vendor:`, vendorError)
+            }
+          }
+
+          // Step 2: Send items to inventory (without Shopify sync)
           const { data: inventoryData, error: inventoryError } = await supabase.rpc('send_intake_items_to_inventory', {
             item_ids: chunk
           })
@@ -164,7 +177,7 @@ export function useBatchSendToShopify() {
             continue
           }
 
-          // Step 2: Queue successful items for Shopify sync
+          // Step 3: Queue successful items for Shopify sync
           const inventoryResult = inventoryData as any
           if (inventoryResult?.processed_ids && inventoryResult.processed_ids.length > 0) {
             console.log(`📋 [useBatchSendToShopify] Queueing ${inventoryResult.processed_ids.length} items for Shopify sync`)
@@ -241,7 +254,7 @@ export function useBatchSendToShopify() {
         }
       }
 
-      // Step 3: Trigger the new Shopify sync processor if we have queued items
+      // Step 4: Trigger the new Shopify sync processor if we have queued items
       if (totalQueued > 0) {
         console.log(`🚀 [useBatchSendToShopify] Triggering Shopify sync processor for ${totalQueued} queued items`)
         try {

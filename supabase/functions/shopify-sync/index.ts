@@ -337,7 +337,7 @@ async function createShopifyProduct(credentials: ShopifyCredentials, item: Inven
       body_html: description,
       handle,
       product_type: item.category,
-      vendor: 'aloha card shop hawaii',
+      vendor: (item as any).vendor || 'aloha card shop hawaii', // Use vendor from item or fallback
       status: 'active',
       tags: tags.join(', '),
       images: images, // Add images array
