@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { PSACertificateData, PSA_GRADE_COLORS } from "@/types/psa";
 import { ExternalLink, Shield, Calendar, Trophy, User, Hash, Tag } from "lucide-react";
+import noImagePlaceholder from "@/assets/no-image-available.png";
 
 interface PSACertificateDisplayProps {
   psaData: PSACertificateData;
@@ -9,6 +11,8 @@ interface PSACertificateDisplayProps {
 }
 
 export function PSACertificateDisplay({ psaData, className }: PSACertificateDisplayProps) {
+  const [imageError, setImageError] = useState(false);
+  
   if (!psaData.isValid) {
     return (
       <Card className={`p-4 border-destructive bg-destructive/5 ${className || ''}`}>
@@ -53,19 +57,14 @@ export function PSACertificateDisplay({ psaData, className }: PSACertificateDisp
         )}
 
         {/* Image */}
-        {psaData.imageUrl && (
-          <div className="flex justify-center">
-            <img 
-              src={psaData.imageUrl} 
-              alt={`PSA Certificate ${psaData.certNumber}`}
-              className="max-w-full h-auto rounded border max-h-80 object-contain"
-              onError={(e) => {
-                const target = e.target as HTMLImageElement;
-                target.style.display = 'none';
-              }}
-            />
-          </div>
-        )}
+        <div className="flex justify-center">
+          <img 
+            src={imageError || !psaData.imageUrl ? noImagePlaceholder : psaData.imageUrl}
+            alt={`PSA Certificate ${psaData.certNumber}`}
+            className="max-w-full h-auto rounded border max-h-80 object-contain"
+            onError={() => setImageError(true)}
+          />
+        </div>
 
         {/* Certificate Number */}
         <div className="flex justify-center">
