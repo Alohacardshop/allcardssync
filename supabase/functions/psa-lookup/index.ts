@@ -118,21 +118,19 @@ Deno.serve(async (req) => {
           'authorization': `bearer ${psaApiToken}`,
           'Content-Type': 'application/json'
         }
-      })
+      }).catch(() => null) // Make images fetch optional
     ])
 
-    if (!certDetailsResponse.ok || !imagesResponse.ok) {
-      console.error('[psa-lookup] PSA API error:', {
-        certStatus: certDetailsResponse.status,
-        imagesStatus: imagesResponse.status
-      })
+    // Check certificate API (required)
+    if (!certDetailsResponse.ok) {
+      console.error('[psa-lookup] Certificate API error:', certDetailsResponse.status)
       
       if (logEntry?.id) {
         await supabaseServiceClient
           .from('psa_request_log')
           .update({ 
             status: 'failed',
-            error_message: `PSA API error: cert ${certDetailsResponse.status}, images ${imagesResponse.status}`,
+            error_message: `PSA API error: cert ${certDetailsResponse.status}`,
             completed_at: new Date().toISOString()
           })
           .eq('id', logEntry.id)
@@ -159,7 +157,18 @@ Deno.serve(async (req) => {
     }
 
     const certData = await certDetailsResponse.json()
-    const imagesData = await imagesResponse.json()
+    
+    // Images are optional - try to get them but don't fail if unavailable
+    let imagesData = null
+    if (imagesResponse && imagesResponse.ok) {
+      try {
+        imagesData = await imagesResponse.json()
+      } catch (e) {
+        console.warn('[psa-lookup] Failed to parse images data:', e)
+      }
+    } else {
+      console.warn('[psa-lookup] Images API unavailable or failed, continuing without images')
+    }
 
     // PSA API changed: they now use CertNumber instead of PSACertID
     if (!certData?.PSACert?.CertNumber) {
@@ -195,7 +204,7 @@ Deno.serve(async (req) => {
     let imageUrls: string[] = []
     let primaryImageUrl: string | undefined = undefined
     
-    if (Array.isArray(imagesData)) {
+    if (imagesData && Array.isArray(imagesData)) {
       imageUrls = imagesData.map(img => img.ImageURL).filter(url => url)
       const frontImage = imagesData.find(img => img.IsFrontImage === true)
       primaryImageUrl = frontImage?.ImageURL || imageUrls[0]
