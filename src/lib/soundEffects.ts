@@ -19,11 +19,7 @@ export function toggleSounds(): boolean {
   return !current;
 }
 
-/**
- * Play a beep sound using Web Audio API
- * Reuses a single AudioContext to avoid memory leaks
- */
-// Reuse a single AudioContext instance
+// Reuse a single AudioContext to avoid memory leaks
 let audioContext: AudioContext | null = null;
 
 function getAudioContext(): AudioContext {
@@ -33,6 +29,9 @@ function getAudioContext(): AudioContext {
   return audioContext;
 }
 
+/**
+ * Play a beep sound using Web Audio API
+ */
 function playBeep(frequency: number, duration: number, volume: number = 0.3) {
   if (!areSoundsEnabled()) return;
 
