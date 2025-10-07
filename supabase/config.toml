@@ -100,3 +100,7 @@ verify_jwt = true
 # CGC certificate lookup (requires authentication)
 [functions.cgc-lookup]
 verify_jwt = true
+
+# Bulk location transfer (requires staff/admin role)
+[functions.bulk-location-transfer]
+verify_jwt = true

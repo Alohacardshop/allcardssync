@@ -674,6 +674,114 @@ export type Database = {
         }
         Relationships: []
       }
+      location_transfer_items: {
+        Row: {
+          barcode: string | null
+          error_message: string | null
+          id: string
+          intake_item_id: string
+          item_name: string | null
+          processed_at: string | null
+          quantity: number
+          shopify_product_id: string | null
+          shopify_variant_id: string | null
+          sku: string
+          status: string
+          transfer_id: string
+        }
+        Insert: {
+          barcode?: string | null
+          error_message?: string | null
+          id?: string
+          intake_item_id: string
+          item_name?: string | null
+          processed_at?: string | null
+          quantity: number
+          shopify_product_id?: string | null
+          shopify_variant_id?: string | null
+          sku: string
+          status?: string
+          transfer_id: string
+        }
+        Update: {
+          barcode?: string | null
+          error_message?: string | null
+          id?: string
+          intake_item_id?: string
+          item_name?: string | null
+          processed_at?: string | null
+          quantity?: number
+          shopify_product_id?: string | null
+          shopify_variant_id?: string | null
+          sku?: string
+          status?: string
+          transfer_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "location_transfer_items_intake_item_id_fkey"
+            columns: ["intake_item_id"]
+            isOneToOne: false
+            referencedRelation: "intake_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "location_transfer_items_transfer_id_fkey"
+            columns: ["transfer_id"]
+            isOneToOne: false
+            referencedRelation: "location_transfers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      location_transfers: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          created_by: string | null
+          destination_location_gid: string
+          error_details: Json | null
+          failed_items: number
+          id: string
+          notes: string | null
+          source_location_gid: string
+          status: string
+          store_key: string
+          successful_items: number
+          total_items: number
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          destination_location_gid: string
+          error_details?: Json | null
+          failed_items?: number
+          id?: string
+          notes?: string | null
+          source_location_gid: string
+          status?: string
+          store_key: string
+          successful_items?: number
+          total_items?: number
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          destination_location_gid?: string
+          error_details?: Json | null
+          failed_items?: number
+          id?: string
+          notes?: string | null
+          source_location_gid?: string
+          status?: string
+          store_key?: string
+          successful_items?: number
+          total_items?: number
+        }
+        Relationships: []
+      }
       pricing_job_runs: {
         Row: {
           actual_batches: number
