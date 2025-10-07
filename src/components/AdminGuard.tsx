@@ -13,9 +13,13 @@ export function AdminGuard({ children }: AdminGuardProps) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let isMounted = true;
+
     const checkAdminAccess = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
+        
+        if (!isMounted) return;
         
         if (!session?.user) {
           logger.authEvent('Admin access check failed - no session');
@@ -26,55 +30,64 @@ export function AdminGuard({ children }: AdminGuardProps) {
 
         logger.authEvent('Checking admin access', { userId: session.user.id });
 
-        // Try both methods to ensure compatibility
-        const [verifyResult, roleResult] = await Promise.all([
+        // Use verify_user_access as primary method with timeout
+        const timeoutPromise = new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('Admin check timeout')), 8000)
+        );
+
+        const verifyResult = await Promise.race([
           supabase.rpc('verify_user_access', { _user_id: session.user.id }),
-          supabase.rpc('has_role', { _user_id: session.user.id, _role: 'admin' })
+          timeoutPromise
         ]);
 
-        // Check verify_user_access first
+        if (!isMounted) return;
+
+        // Check verify_user_access result
         if (verifyResult.data && typeof verifyResult.data === 'object' && 
             !Array.isArray(verifyResult.data) && 
             'has_admin_access' in verifyResult.data && 
             verifyResult.data.has_admin_access) {
           logger.authEvent('Admin access granted', { method: 'verify_user_access', userId: session.user.id });
           setIsAdmin(true);
-        }
-        // Fallback to has_role check
-        else if (roleResult.data === true) {
-          logger.authEvent('Admin access granted', { method: 'has_role', userId: session.user.id });
-          setIsAdmin(true);
-        }
-        // Both methods failed
-        else {
+        } else {
           logger.warn('Admin access denied', { 
             userId: session.user.id,
-            verifyError: verifyResult.error,
-            roleError: roleResult.error 
+            verifyError: verifyResult.error
           });
           setIsAdmin(false);
           toast.error('Admin access required for this page');
         }
       } catch (error) {
+        if (!isMounted) return;
+        
         const { data: { session: currentSession } } = await supabase.auth.getSession();
         logger.error('Admin access check failed', error as Error, { userId: currentSession?.user?.id });
         setIsAdmin(false);
         toast.error('Authentication error - please try refreshing the page');
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
 
     checkAdminAccess();
 
-    // Set up auth state listener to recheck on auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
-      logger.authEvent('Auth state changed - rechecking admin access');
-      setLoading(true);
-      checkAdminAccess();
+    // Only recheck on sign-in/sign-out events, not on token refresh
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (!isMounted) return;
+      
+      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
+        logger.authEvent('Auth state changed - rechecking admin access', { event });
+        setLoading(true);
+        checkAdminAccess();
+      }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   if (loading) {
