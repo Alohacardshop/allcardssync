@@ -83,10 +83,12 @@ export function BatchConfigDialog({
 
       setVendors(data || [])
       
-      // Auto-select default vendor
-      const defaultVendor = data?.find(v => v.is_default)
-      if (defaultVendor) {
-        setConfig(prev => ({ ...prev, vendor: defaultVendor.vendor_name }))
+      // Auto-select default vendor only if no initialVendor is provided
+      if (!initialVendor) {
+        const defaultVendor = data?.find(v => v.is_default)
+        if (defaultVendor) {
+          setConfig(prev => ({ ...prev, vendor: defaultVendor.vendor_name }))
+        }
       }
     } catch (error) {
       console.error('Error loading vendors:', error)
