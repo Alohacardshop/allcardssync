@@ -64,11 +64,12 @@ Deno.serve(async (req) => {
 
     const { data: domainData } = await supabase
       .from('shopify_stores')
-      .select('domain')
+      .select('domain, api_version')
       .eq('key', store_key)
       .single();
 
     const shopifyDomain = domainData?.domain;
+    const apiVersion = domainData?.api_version || '2024-01';
 
     // Process each item
     for (const item of items) {
@@ -81,49 +82,94 @@ Deno.serve(async (req) => {
           const sourceLocationId = source_location_gid.split('/').pop();
           const destLocationId = destination_location_gid.split('/').pop();
 
-          // Set source location inventory to 0
-          const setZeroResponse = await fetch(
-            `https://${shopifyDomain}/admin/api/2024-01/inventory_levels/set.json`,
-            {
-              method: 'POST',
-              headers: {
-                'X-Shopify-Access-Token': shopifyToken,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                location_id: sourceLocationId,
-                inventory_item_id: item.shopify_inventory_item_id,
-                available: 0,
-              }),
+          let sourceInventorySet = false;
+
+          try {
+            // Set source location inventory to 0 with timeout
+            const setZeroController = new AbortController();
+            const setZeroTimeout = setTimeout(() => setZeroController.abort(), 30000); // 30s timeout
+
+            const setZeroResponse = await fetch(
+              `https://${shopifyDomain}/admin/api/${apiVersion}/inventory_levels/set.json`,
+              {
+                method: 'POST',
+                headers: {
+                  'X-Shopify-Access-Token': shopifyToken,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  location_id: sourceLocationId,
+                  inventory_item_id: item.shopify_inventory_item_id,
+                  available: 0,
+                }),
+                signal: setZeroController.signal,
+              }
+            );
+            clearTimeout(setZeroTimeout);
+
+            if (!setZeroResponse.ok) {
+              throw new Error(`Failed to set source inventory to 0: ${setZeroResponse.statusText}`);
             }
-          );
+            sourceInventorySet = true;
 
-          if (!setZeroResponse.ok) {
-            throw new Error(`Failed to set source inventory to 0: ${setZeroResponse.statusText}`);
-          }
+            // Set destination location inventory with timeout
+            const setDestController = new AbortController();
+            const setDestTimeout = setTimeout(() => setDestController.abort(), 30000); // 30s timeout
 
-          // Set destination location inventory
-          const setDestResponse = await fetch(
-            `https://${shopifyDomain}/admin/api/2024-01/inventory_levels/set.json`,
-            {
-              method: 'POST',
-              headers: {
-                'X-Shopify-Access-Token': shopifyToken,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                location_id: destLocationId,
-                inventory_item_id: item.shopify_inventory_item_id,
-                available: item.quantity,
-              }),
+            const setDestResponse = await fetch(
+              `https://${shopifyDomain}/admin/api/${apiVersion}/inventory_levels/set.json`,
+              {
+                method: 'POST',
+                headers: {
+                  'X-Shopify-Access-Token': shopifyToken,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  location_id: destLocationId,
+                  inventory_item_id: item.shopify_inventory_item_id,
+                  available: item.quantity,
+                }),
+                signal: setDestController.signal,
+              }
+            );
+            clearTimeout(setDestTimeout);
+
+            if (!setDestResponse.ok) {
+              // Rollback: restore source inventory if destination fails
+              if (sourceInventorySet) {
+                console.log(`⚠️ Rolling back source inventory for item ${item.id}`);
+                const rollbackController = new AbortController();
+                const rollbackTimeout = setTimeout(() => rollbackController.abort(), 30000);
+                
+                await fetch(
+                  `https://${shopifyDomain}/admin/api/${apiVersion}/inventory_levels/set.json`,
+                  {
+                    method: 'POST',
+                    headers: {
+                      'X-Shopify-Access-Token': shopifyToken,
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                      location_id: sourceLocationId,
+                      inventory_item_id: item.shopify_inventory_item_id,
+                      available: item.quantity,
+                    }),
+                    signal: rollbackController.signal,
+                  }
+                );
+                clearTimeout(rollbackTimeout);
+              }
+              throw new Error(`Failed to set destination inventory: ${setDestResponse.statusText}`);
             }
-          );
 
-          if (!setDestResponse.ok) {
-            throw new Error(`Failed to set destination inventory: ${setDestResponse.statusText}`);
+            console.log(`✅ Shopify inventory updated for item ${item.id}`);
+          } catch (fetchError) {
+            // Handle timeout or network errors
+            if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+              throw new Error('Shopify API request timed out after 30 seconds');
+            }
+            throw fetchError;
           }
-
-          console.log(`✅ Shopify inventory updated for item ${item.id}`);
         }
 
         // Update intake_items location

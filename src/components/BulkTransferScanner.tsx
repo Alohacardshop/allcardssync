@@ -114,11 +114,11 @@ export function BulkTransferScanner({ onTransferComplete }: BulkTransferScannerP
     setIsScanning(true);
 
     try {
-      // Search by SKU, lot_number, or unique_item_uid
+      // Search by SKU, lot_number, or unique_item_uid (parameterized to prevent SQL injection)
       const { data: items, error } = await supabase
         .from('intake_items')
         .select('*')
-        .or(`sku.eq.${barcode},lot_number.eq.${barcode},unique_item_uid.eq.${barcode}`)
+        .or(`sku.eq."${barcode.replace(/"/g, '""')}",lot_number.eq."${barcode.replace(/"/g, '""')}",unique_item_uid.eq."${barcode.replace(/"/g, '""')}"`)
         .is('deleted_at', null)
         .not('removed_from_batch_at', 'is', null) // Only items in inventory
         .limit(1);

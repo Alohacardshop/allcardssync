@@ -44,7 +44,12 @@ export function TransferHistoryLog() {
   const [loadingItems, setLoadingItems] = useState<string | null>(null);
 
   useEffect(() => {
+    const controller = new AbortController();
     loadTransfers();
+    
+    return () => {
+      controller.abort();
+    };
   }, []);
 
   const loadTransfers = async () => {
