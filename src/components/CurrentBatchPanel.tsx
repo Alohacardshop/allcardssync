@@ -530,7 +530,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
       <CardHeader className="space-y-2">
         <CardTitle>Current Batch</CardTitle>
         <div className="text-sm text-muted-foreground">
-          Store: {assignedStore} | Location: {selectedLocation ? `${availableLocations.find(l => l.gid === selectedLocation)?.name || 'Unknown'}` : 'None'}
+          Store: {assignedStore || 'None'} | Location: {selectedLocation ? (availableLocations?.find(l => l.gid === selectedLocation)?.name || 'Unknown') : 'None'}
         </div>
       </CardHeader>
         <CardContent>
@@ -549,7 +549,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
           <div>
             <CardTitle className={compact ? 'text-lg' : ''}>Current Batch</CardTitle>
             <p className="text-sm text-muted-foreground">
-              {counts.activeItems} active items
+              {counts.activeItems} active items • Store: {assignedStore || 'None'} | Location: {selectedLocation ? (availableLocations?.find(l => l.gid === selectedLocation)?.name || 'Unknown') : 'None'}
             </p>
           </div>
           {!compact && (
