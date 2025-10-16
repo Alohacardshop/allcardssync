@@ -51,7 +51,7 @@ interface CurrentBatchPanelProps {
 }
 
 export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact = false }: CurrentBatchPanelProps) => {
-  const { assignedStore, selectedLocation } = useStore();
+  const { assignedStore, selectedLocation, availableLocations } = useStore();
   const [recentItems, setRecentItems] = useState<IntakeItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [counts, setCounts] = useState({ activeItems: 0, totalItems: 0 });
@@ -238,12 +238,16 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
         return;
       }
 
+      const currentUserId = (await supabase.auth.getUser()).data.user?.id;
       console.log(`[CurrentBatchPanel] Querying items for lot:`, {
         lot_id: lot.id,
         lot_number: lot.lot_number,
         lot_created_by: lot.created_by,
         lot_store_key: lot.store_key,
-        lot_location_gid: lot.shopify_location_gid
+        lot_location_gid: lot.shopify_location_gid,
+        current_user_id: currentUserId,
+        query_store: store,
+        query_location: location
       });
 
       // Then get recent items from this lot
@@ -521,11 +525,14 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
   }, []);
 
   if (loading) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Current Batch</CardTitle>
-        </CardHeader>
+  return (
+    <Card>
+      <CardHeader className="space-y-2">
+        <CardTitle>Current Batch</CardTitle>
+        <div className="text-sm text-muted-foreground">
+          Store: {assignedStore} | Location: {selectedLocation ? `${availableLocations.find(l => l.gid === selectedLocation)?.name || 'Unknown'}` : 'None'}
+        </div>
+      </CardHeader>
         <CardContent>
           <div className="flex items-center justify-center py-8">
             <Loader2 className="h-8 w-8 animate-spin" />
