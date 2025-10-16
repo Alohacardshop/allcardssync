@@ -238,6 +238,14 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
         return;
       }
 
+      console.log(`[CurrentBatchPanel] Querying items for lot:`, {
+        lot_id: lot.id,
+        lot_number: lot.lot_number,
+        lot_created_by: lot.created_by,
+        lot_store_key: lot.store_key,
+        lot_location_gid: lot.shopify_location_gid
+      });
+
       // Then get recent items from this lot
       const { data: items, error: itemsError } = await supabase
         .from("intake_items")
@@ -249,11 +257,21 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
         .limit(20);
 
       if (itemsError) {
-        console.error("Error fetching items:", itemsError);
+        console.error("[CurrentBatchPanel] Error fetching items:", itemsError);
         return;
       }
 
-      console.log(`[CurrentBatchPanel] Loaded ${items?.length || 0} items from lot ${lot.lot_number}`);
+      console.log(`[CurrentBatchPanel] Loaded ${items?.length || 0} items from lot ${lot.lot_number}`, {
+        items: items?.map(i => ({
+          id: i.id,
+          created_by: i.created_by,
+          created_at: i.created_at,
+          lot_id: i.lot_id,
+          subject: i.subject,
+          deleted_at: i.deleted_at,
+          removed_from_batch_at: i.removed_from_batch_at
+        }))
+      });
       // Cast the database items to our interface with proper type handling
       const typedItems: IntakeItem[] = (items || []).map(item => ({
         ...item,
