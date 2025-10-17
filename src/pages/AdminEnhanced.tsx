@@ -7,6 +7,7 @@ import { RealTimeSyncMonitor } from "@/components/shopify/RealTimeSyncMonitor"
 import { InventoryAnalytics } from "@/components/analytics/InventoryAnalytics"
 import { KeyboardShortcuts, useKeyboardShortcuts } from "@/components/interactions/KeyboardShortcuts"
 import { ErrorBoundaryWithRecovery } from "@/components/error-boundary/ErrorBoundaryWithRecovery"
+import { SyncMonitor } from "@/components/catalog/SyncMonitor"
 import { 
   Activity, 
   BarChart3, 
@@ -132,6 +133,21 @@ const AdminEnhanced = () => {
                 </CardHeader>
                 <CardContent>
                   <RealTimeSyncMonitor />
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Database className="h-5 w-5" />
+                    Catalog Sync Monitor
+                  </CardTitle>
+                  <CardDescription>
+                    JustTCG catalog synchronization queue and job monitoring
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <SyncMonitor game="pokemon" />
                 </CardContent>
               </Card>
             </TabsContent>
