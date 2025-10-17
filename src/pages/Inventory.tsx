@@ -611,11 +611,11 @@ const Inventory = () => {
     );
 
     if (itemsToResync.length === 0) {
+      (bulkSyncingRef as any) = false;
+      setBulkSyncing(false);
       toast.info('No synced items in selection to resync');
       return;
     }
-
-    setBulkSyncing(true);
     try {
       let successCount = 0;
       let failCount = 0;
