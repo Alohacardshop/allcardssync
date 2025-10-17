@@ -1458,6 +1458,48 @@ export type Database = {
         }
         Relationships: []
       }
+      user_printer_preferences: {
+        Row: {
+          created_at: string
+          id: string
+          location_gid: string | null
+          printer_id: string | null
+          printer_ip: string | null
+          printer_name: string | null
+          printer_port: number | null
+          printer_type: string
+          store_key: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          location_gid?: string | null
+          printer_id?: string | null
+          printer_ip?: string | null
+          printer_name?: string | null
+          printer_port?: number | null
+          printer_type: string
+          store_key?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          location_gid?: string | null
+          printer_id?: string | null
+          printer_ip?: string | null
+          printer_name?: string | null
+          printer_port?: number | null
+          printer_type?: string
+          store_key?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string

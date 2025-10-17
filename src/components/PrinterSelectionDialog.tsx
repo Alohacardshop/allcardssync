@@ -11,6 +11,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { RefreshCw, Printer, CheckCircle, AlertCircle } from 'lucide-react';
 import { useZebraNetwork } from '@/hooks/useZebraNetwork';
 import { usePrinterNames } from '@/hooks/usePrinterNames';
+import { useUserPrinterPreferences } from '@/hooks/useUserPrinterPreferences';
+import { useStore } from '@/contexts/StoreContext';
 import { toast } from '@/hooks/use-toast';
 
 interface PrinterSelectionDialogProps {
@@ -38,16 +40,25 @@ export function PrinterSelectionDialog({
   } = useZebraNetwork();
   
   const { getDisplayName } = usePrinterNames();
+  const { preference, savePreference } = useUserPrinterPreferences();
+  const { availableLocations, selectedLocation } = useStore();
   const [selectedPrinterId, setSelectedPrinterId] = useState<string | null>(null);
   const [setAsDefault, setSetAsDefault] = useState(false);
   const [printing, setPrinting] = useState(false);
+  
+  const currentLocationName = availableLocations.find(l => l.gid === selectedLocation)?.name;
 
-  // Initialize with current default printer
+  // Initialize with user preference or default printer
   useEffect(() => {
-    if (open && selectedPrinter?.id) {
-      setSelectedPrinterId(selectedPrinter.id);
+    if (open) {
+      // Prioritize user's location-specific preference
+      if (preference?.printer_id) {
+        setSelectedPrinterId(preference.printer_id);
+      } else if (selectedPrinter?.id) {
+        setSelectedPrinterId(selectedPrinter.id);
+      }
     }
-  }, [open, selectedPrinter?.id]);
+  }, [open, selectedPrinter?.id, preference]);
 
   // Refresh printers when dialog opens
   useEffect(() => {
@@ -69,14 +80,14 @@ export function PrinterSelectionDialog({
     try {
       const selectedZebraPrinter = printers.find(p => p.id === selectedPrinterId);
       if (selectedZebraPrinter) {
-        setDefaultPrinter(selectedZebraPrinter);
+        // Save as user's location-specific default
+        await savePreference({
+          printer_type: 'printnode',
+          printer_id: selectedZebraPrinter.id,
+          printer_name: selectedZebraPrinter.name,
+        });
       }
       onOpenChange(false);
-      
-      toast({
-        title: "Default printer set",
-        description: "Your default printer has been updated.",
-      });
     } catch (error) {
       console.error('Error setting default printer:', error);
       toast({
@@ -99,11 +110,15 @@ export function PrinterSelectionDialog({
 
     setPrinting(true);
     try {
-      // Set as default if requested
+      // Save as user's location-specific default if requested
       if (setAsDefault) {
         const selectedZebraPrinter = printers.find(p => p.id === selectedPrinterId);
         if (selectedZebraPrinter) {
-          setDefaultPrinter(selectedZebraPrinter);
+          await savePreference({
+            printer_type: 'printnode',
+            printer_id: selectedZebraPrinter.id,
+            printer_name: selectedZebraPrinter.name,
+          });
         }
       }
       
@@ -138,6 +153,11 @@ export function PrinterSelectionDialog({
             <Printer className="h-5 w-5" />
             {title}
           </DialogTitle>
+          {currentLocationName && (
+            <p className="text-sm text-muted-foreground mt-1">
+              Printing to: {currentLocationName}
+            </p>
+          )}
         </DialogHeader>
 
         <div className="space-y-4">
@@ -193,9 +213,14 @@ export function PrinterSelectionDialog({
                       <span className="font-medium truncate">
                         {printer.name}
                       </span>
-                      {selectedPrinter?.id === printer.id && (
-                        <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded">
-                          Default
+                      {preference?.printer_id === printer.id && (
+                        <span className="text-xs bg-primary text-primary-foreground px-2 py-1 rounded">
+                          Your Default
+                        </span>
+                      )}
+                      {selectedPrinter?.id === printer.id && preference?.printer_id !== printer.id && (
+                        <span className="text-xs bg-muted text-muted-foreground px-2 py-1 rounded">
+                          System Default
                         </span>
                       )}
                     </div>
@@ -224,7 +249,7 @@ export function PrinterSelectionDialog({
                     htmlFor="set-default" 
                     className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                   >
-                    Set as default printer
+                    Set as default for {currentLocationName || 'this location'}
                   </label>
                 </div>
               )}
