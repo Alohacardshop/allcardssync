@@ -78,6 +78,7 @@ const Inventory = () => {
   const [printingItem, setPrintingItem] = useState<string | null>(null);
   const [bulkPrinting, setBulkPrinting] = useState(false);
   const [bulkRetrying, setBulkRetrying] = useState(false);
+  const [bulkSyncing, setBulkSyncing] = useState(false);
   const [showDebug, setShowDebug] = useState<boolean>(false);
 
   // Auth and error states
@@ -521,6 +522,114 @@ const Inventory = () => {
       setSyncingRowId(null);
     }
   }, [fetchItems]);
+
+  const handleSyncSelected = useCallback(async () => {
+    if (selectedItems.size === 0) {
+      toast.info('No items selected');
+      return;
+    }
+
+    const selectedItemsArray = filteredItems.filter(item => selectedItems.has(item.id));
+    const itemsToSync = selectedItemsArray.filter(item => 
+      !item.shopify_product_id && item.store_key && item.shopify_location_gid
+    );
+
+    if (itemsToSync.length === 0) {
+      toast.info('No unsynced items in selection');
+      return;
+    }
+
+    setBulkSyncing(true);
+    try {
+      let successCount = 0;
+      let failCount = 0;
+
+      for (const item of itemsToSync) {
+        try {
+          const { error } = await supabase.rpc('queue_shopify_sync', {
+            item_id: item.id,
+            sync_action: 'create'
+          });
+
+          if (error) throw error;
+          successCount++;
+        } catch (error) {
+          console.error(`Failed to queue ${item.sku}:`, error);
+          failCount++;
+        }
+      }
+
+      if (successCount > 0) {
+        await supabase.functions.invoke('shopify-sync-processor', { body: {} });
+        toast.success(`${successCount} items queued for sync to Shopify`);
+      }
+
+      if (failCount > 0) {
+        toast.error(`${failCount} items failed to queue for sync`);
+      }
+
+      fetchItems(0, true);
+    } catch (error) {
+      console.error('Bulk sync error:', error);
+      toast.error('Failed to start bulk sync');
+    } finally {
+      setBulkSyncing(false);
+    }
+  }, [filteredItems, selectedItems, fetchItems]);
+
+  const handleResyncSelected = useCallback(async () => {
+    if (selectedItems.size === 0) {
+      toast.info('No items selected');
+      return;
+    }
+
+    const selectedItemsArray = filteredItems.filter(item => selectedItems.has(item.id));
+    const itemsToResync = selectedItemsArray.filter(item => 
+      item.shopify_product_id && item.store_key && item.shopify_location_gid
+    );
+
+    if (itemsToResync.length === 0) {
+      toast.info('No synced items in selection to resync');
+      return;
+    }
+
+    setBulkSyncing(true);
+    try {
+      let successCount = 0;
+      let failCount = 0;
+
+      for (const item of itemsToResync) {
+        try {
+          const { error } = await supabase.rpc('queue_shopify_sync', {
+            item_id: item.id,
+            sync_action: 'update'
+          });
+
+          if (error) throw error;
+          successCount++;
+        } catch (error) {
+          console.error(`Failed to queue ${item.sku}:`, error);
+          failCount++;
+        }
+      }
+
+      if (successCount > 0) {
+        await supabase.functions.invoke('shopify-sync-processor', { body: {} });
+        toast.success(`${successCount} items queued for resync to Shopify`);
+      }
+
+      if (failCount > 0) {
+        toast.error(`${failCount} items failed to queue for resync`);
+      }
+
+      fetchItems(0, true);
+    } catch (error) {
+      console.error('Bulk resync error:', error);
+      toast.error('Failed to start bulk resync');
+    } finally {
+      setBulkSyncing(false);
+    }
+  }, [filteredItems, selectedItems, fetchItems]);
 
   const handleBulkRetrySync = useCallback(async () => {
     const errorItems = filteredItems.filter(item => 
@@ -1160,7 +1269,7 @@ const Inventory = () => {
     } finally {
       setBulkPrinting(false);
     }
-  }, [fetchItems, cutterSettings, assignedStore, selectedLocation, bulkPrinting]);
+  }, [items, fetchItems, cutterSettings, assignedStore, selectedLocation, bulkPrinting]);
 
   const handleCutOnly = useCallback(async () => {
     try {
@@ -1679,6 +1788,38 @@ const Inventory = () => {
                         )}
                         {bulkRetrying ? 'Retrying...' : 'Retry Selected'}
                       </Button>
+                    )}
+
+                    {selectedItems.size > 0 && (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleSyncSelected}
+                          disabled={bulkSyncing}
+                        >
+                          {bulkSyncing ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          ) : (
+                            <Upload className="h-4 w-4 mr-2" />
+                          )}
+                          {bulkSyncing ? 'Syncing...' : 'Sync Selected'}
+                        </Button>
+
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleResyncSelected}
+                          disabled={bulkSyncing}
+                        >
+                          {bulkSyncing ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          ) : (
+                            <RotateCcw className="h-4 w-4 mr-2" />
+                          )}
+                          {bulkSyncing ? 'Resyncing...' : 'Resync Selected'}
+                        </Button>
+                      </>
                     )}
 
                     <Button
