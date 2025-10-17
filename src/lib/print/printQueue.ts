@@ -119,7 +119,7 @@ export class PrintQueue {
           parts.push(this.withQty(it.zpl, qty, usePQ));
         }
         
-        let payload = parts.join("\n");
+        let payload = parts.join("\n^JUS\n");
 
         // Only append cut tail for multi-item batches (unless any item requests to skip)
         const shouldSkipCutTail = batch.some(item => item._skipCutTail);
