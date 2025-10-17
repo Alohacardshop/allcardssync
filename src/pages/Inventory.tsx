@@ -1205,7 +1205,15 @@ const Inventory = () => {
 
       // Get template once for all items
       const tpl = await getTemplate('raw_card_2x1');
+      console.log('[handleBulkPrintRaw] Loaded template:', {
+        format: tpl.format,
+        hasLayout: !!tpl.layout,
+        hasZpl: !!tpl.zpl,
+        elementCount: tpl.layout?.elements?.length
+      });
+      
       const queueItems = [];
+      const errors: string[] = [];
 
       for (const item of unprintedRawItems) {
         try {
@@ -1247,7 +1255,11 @@ const Inventory = () => {
           } else if (tpl.format === 'zpl' && tpl.zpl) {
             rawZpl = zplFromTemplateString(tpl.zpl, vars);
           } else {
-            throw new Error('No valid label template');
+            throw new Error(`Invalid template format: ${tpl.format}, hasLayout: ${!!tpl.layout}, hasZpl: ${!!tpl.zpl}`);
+          }
+
+          if (!rawZpl || rawZpl.trim().length === 0) {
+            throw new Error('Generated ZPL is empty');
           }
 
           // Convert to queue-compatible format - let print queue handle quantity
@@ -1257,7 +1269,9 @@ const Inventory = () => {
           
           console.log(`[handleBulkPrintRaw] Queued label for ${item.sku} (qty: ${qty})`);
         } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : String(error);
           console.error(`Failed to generate ZPL for ${item.sku}:`, error);
+          errors.push(`${item.sku}: ${errorMsg}`);
         }
       }
 
@@ -1286,7 +1300,13 @@ const Inventory = () => {
           fetchItems(0, true);
         }, 500);
       } else {
-        toast.error('Failed to generate any labels for printing');
+        console.error('[handleBulkPrintRaw] Failed to generate labels. Errors:', errors);
+        toast.error(
+          'Failed to generate any labels for printing',
+          {
+            description: errors.length > 0 ? `First error: ${errors[0]}` : 'Check console for details'
+          }
+        );
       }
       
     } catch (error) {
