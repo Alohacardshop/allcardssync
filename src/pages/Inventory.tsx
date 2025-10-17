@@ -955,6 +955,16 @@ const Inventory = () => {
     setBulkPrinting(true);
     
     try {
+      // Pre-flight check: Ensure printer is configured
+      const { getPrinterConfig } = await import('@/lib/printerConfigService');
+      const printerConfig = await getPrinterConfig(assignedStore || undefined, selectedLocation || undefined);
+      
+      if (!printerConfig || !printerConfig.usePrintNode || !printerConfig.printNodeId) {
+        toast.error('No printer configured. Please select a default printer first.');
+        setShowPrinterDialog(true);
+        setBulkPrinting(false);
+        return;
+      }
       // Filter for unprinted raw items
       const unprintedRawItems = items.filter(item => {
         const itemType = item.type?.toLowerCase() || 'raw';
@@ -1054,7 +1064,7 @@ const Inventory = () => {
     } finally {
       setBulkPrinting(false);
     }
-  }, [items, fetchItems, cutterSettings]);
+  }, [items, fetchItems, cutterSettings, assignedStore, selectedLocation]);
 
   const handleCutOnly = useCallback(async () => {
     try {
@@ -1075,6 +1085,16 @@ const Inventory = () => {
 
     setBulkPrinting(true);
     try {
+      // Pre-flight check: Ensure printer is configured
+      const { getPrinterConfig } = await import('@/lib/printerConfigService');
+      const printerConfig = await getPrinterConfig(assignedStore || undefined, selectedLocation || undefined);
+      
+      if (!printerConfig || !printerConfig.usePrintNode || !printerConfig.printNodeId) {
+        toast.error('No printer configured. Please select a default printer first.');
+        setShowPrinterDialog(true);
+        setBulkPrinting(false);
+        return;
+      }
       const selectedRawItems = items.filter(item => {
         const itemType = item.type?.toLowerCase() || 'raw';
         return selectedItems.has(item.id) && itemType === 'raw' && !item.deleted_at;
@@ -1125,7 +1145,7 @@ const Inventory = () => {
     } finally {
       setBulkPrinting(false);
     }
-  }, [items, selectedItems]);
+  }, [items, selectedItems, assignedStore, selectedLocation]);
 
   const selectAllVisible = useCallback(() => {
     const allVisibleIds = new Set(filteredItems.map(item => item.id));
