@@ -1,5 +1,5 @@
 
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useRef, ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useLocalStorageString } from "@/hooks/useLocalStorage";
@@ -268,14 +268,29 @@ export function StoreProvider({ children }: StoreProviderProps) {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Auto-recovery when store/assignments change (with debounce to prevent loops)
+  // Auto-recovery when store/assignments change (with improved debounce and guard)
+  const isRecoveringRef = useRef(false);
+  
   useEffect(() => {
-    if (assignedStore && userAssignments.length > 0 && !selectedLocation) {
-      // Debounce the recovery to prevent loops
-      const timeoutId = setTimeout(() => {
-        recoverSelectedLocation();
-      }, 1000);
-      return () => clearTimeout(timeoutId);
+    if (assignedStore && userAssignments.length > 0 && !selectedLocation && !isRecoveringRef.current) {
+      // Increase debounce to prevent loops and add recovery guard
+      const timeoutId = setTimeout(async () => {
+        if (!isRecoveringRef.current) {
+          isRecoveringRef.current = true;
+          try {
+            await recoverSelectedLocation();
+          } finally {
+            // Reset after a delay to allow for next recovery if needed
+            setTimeout(() => {
+              isRecoveringRef.current = false;
+            }, 3000);
+          }
+        }
+      }, 2000);
+      
+      return () => {
+        clearTimeout(timeoutId);
+      };
     }
   }, [assignedStore, userAssignments.length]); // Removed selectedLocation to prevent loops
   // Load cached locations when assigned store changes (no automatic refresh)

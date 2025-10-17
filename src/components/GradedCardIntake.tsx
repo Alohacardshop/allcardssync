@@ -17,6 +17,7 @@ import { validateCompleteStoreContext, logStoreContext } from "@/utils/storeVali
 import { PSACertificateDisplay } from "@/components/PSACertificateDisplay";
 import { useDebounce } from "@/hooks/useDebounce";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import type { PSACertificateData } from "@/types/psa";
 
 interface GradedCardIntakeProps {
   onBatchAdd?: () => void;
@@ -42,8 +43,7 @@ const parsePSAGrade = (gradeStr: string): { numeric: string; original: string; h
 };
 
 export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => {
-  console.log('[GradedCardIntake] Component mounted/rendered');
-  const logger = useLogger();
+  const logger = useLogger('GradedCardIntake');
   const { assignedStore, selectedLocation } = useStore();
 
   // Form state
@@ -51,7 +51,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
   const [barcodeInput, setBarcodeInput] = useState("");
   const [fetchState, setFetchState] = useState<'idle' | 'loading' | 'success' | 'empty' | 'error'>('idle');
   const [submitting, setSubmitting] = useState(false);
-  const [cardData, setCardData] = useState<any>(null);
+  const [cardData, setCardData] = useState<PSACertificateData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [abortController, setAbortController] = useState<AbortController | null>(null);
   const [showRawData, setShowRawData] = useState(false);
@@ -122,7 +122,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
   };
 
   const handleFetchData = async () => {
-    console.log('[BUTTON CLICKED] handleFetchData started', { certInput });
+    logger.logDebug('Fetch button clicked', { certInput });
     const certNumber = sanitizeCertNumber(certInput.trim());
     
     // Always call the edge function, even if empty - server will handle validation
@@ -197,11 +197,12 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
 
       setFetchState('success');
       toast.success("Card data fetched successfully!");
+      logger.logInfo('PSA data fetched successfully', { certNumber, source: data.source });
     } catch (error: any) {
       if (error.name === 'AbortError') {
         return;
       }
-      console.error("[GradedCardIntake] Fetch error:", error);
+      logger.logError('PSA fetch error', error);
       setFetchState('error');
       const errorMsg = error.message || 'Could not reach server. Check network/CORS/connection.';
       setError(errorMsg);

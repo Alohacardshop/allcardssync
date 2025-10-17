@@ -16,33 +16,7 @@ import { useBatchAutoProcessSettings } from '@/hooks/useBatchAutoProcessSettings
 import { BatchConfigDialog } from '@/components/BatchConfigDialog';
 import { BatchProgressDialog } from '@/components/BatchProgressDialog';
 
-interface IntakeItem {
-  id: string;
-  subject?: string;
-  brand_title?: string;
-  sku?: string;
-  card_number?: string;
-  quantity: number;
-  price: number;
-  cost?: number;
-  lot_number: string;
-  lot_id?: string;
-  type?: string;
-  processing_notes?: string;
-  printed_at?: string;
-  pushed_at?: string;
-  removed_from_batch_at?: string;
-  created_at: string;
-  psa_cert?: string;
-  grade?: string;
-  variant?: string;
-  category?: string;
-  year?: string;
-  catalog_snapshot?: any;
-  store_key?: string;
-  shopify_location_gid?: string;
-  image_urls?: string[];
-}
+import type { IntakeItem } from "@/types/intake";
 
 interface CurrentBatchPanelProps {
   onViewFullBatch?: () => void;
@@ -156,21 +130,9 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
             item.catalog_snapshot.type === 'card_bulk');
   };
 
-  // Enhanced fetch with retry logic
-  const fetchRecentItemsWithRetry = useCallback(async (retries = 3): Promise<void> => {
-    // If context is missing, wait and retry
-    if (!selectedLocation && retries > 0) {
-      console.log(`[CurrentBatchPanel] Location missing, retrying in 500ms... (${retries} retries left)`);
-      if (retryTimeoutRef.current) {
-        clearTimeout(retryTimeoutRef.current);
-      }
-      retryTimeoutRef.current = setTimeout(() => {
-        fetchRecentItemsWithRetry(retries - 1);
-      }, 500);
-      return;
-    }
-    
-    // If still no location after retries, try to get it from the active lot
+  // Simplified fetch with single recovery attempt
+  const fetchRecentItemsWithRetry = useCallback(async (): Promise<void> => {
+    // If context is missing, try one recovery from active lot
     if (!selectedLocation && assignedStore) {
       try {
         const { data: activeLot } = await supabase
@@ -183,11 +145,11 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
           .maybeSingle();
           
         if (activeLot?.shopify_location_gid) {
-          console.log('[CurrentBatchPanel] Recovered location from active lot:', activeLot.shopify_location_gid);
           return fetchRecentItems(assignedStore, activeLot.shopify_location_gid);
         }
       } catch (error) {
-        console.error('[CurrentBatchPanel] Failed to recover location from active lot:', error);
+        // Silent failure - user will see empty batch
+        return;
       }
     }
     
@@ -277,12 +239,19 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
         }))
       });
       // Cast the database items to our interface with proper type handling
-      const typedItems: IntakeItem[] = (items || []).map(item => ({
-        ...item,
-        image_urls: Array.isArray(item.image_urls) ? 
-          (item.image_urls as any[]).map(url => String(url)) : 
-          item.image_urls ? [String(item.image_urls)] : []
-      }));
+      const typedItems: IntakeItem[] = (items || []).map(item => {
+        const catalogSnapshot = item.catalog_snapshot && typeof item.catalog_snapshot === 'object' 
+          ? (item.catalog_snapshot as Record<string, any>) 
+          : null;
+          
+        return {
+          ...item,
+          catalog_snapshot: catalogSnapshot,
+          image_urls: Array.isArray(item.image_urls) ? 
+            (item.image_urls as any[]).map(url => String(url)) : 
+            item.image_urls ? [String(item.image_urls)] : []
+        };
+      });
       setRecentItems(typedItems);
 
       // Update counts
@@ -447,20 +416,25 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
     }
   };
 
-  // Load items when store context changes
+  // Load items when store context changes (with cleanup)
   useEffect(() => {
     if (assignedStore) {
       fetchRecentItemsWithRetry();
     }
+    
+    // Cleanup any pending retry timeouts
+    return () => {
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+        retryTimeoutRef.current = null;
+      }
+    };
   }, [assignedStore, selectedLocation, lastAddedItemId, fetchRecentItemsWithRetry]);
 
   // Load vendors when store changes
   useEffect(() => {
-    const loadVendors = async () => {
-      console.log('[CurrentBatchPanel] Loading vendors...', { assignedStore });
-      
+  const loadVendors = async () => {
       if (!assignedStore) {
-        console.log('[CurrentBatchPanel] Missing store, skipping vendor load');
         return;
       }
       
@@ -476,7 +450,6 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
 
         if (error) throw error;
 
-        console.log('[CurrentBatchPanel] Loaded vendors:', data);
         setVendors(data || []);
         
         // Auto-select default vendor
@@ -485,7 +458,6 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
           setSelectedVendor(defaultVendor.vendor_name);
         }
       } catch (error) {
-        console.error('[CurrentBatchPanel] Failed to load vendors:', error);
         toast({ 
           title: "Warning", 
           description: "Failed to load vendors. You may need to configure vendors in settings." 

@@ -28,20 +28,10 @@ export const RawCardIntake = ({ onBatchAdd }: RawCardIntakeProps) => {
   const [price, setPrice] = useState("");
   const [notes, setNotes] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  
-  // Store context ref to prevent loss during async operations
-  const storeContextRef = useRef({ assignedStore, selectedLocation });
-  
-  // Update ref when context changes
-  useEffect(() => {
-    storeContextRef.current = { assignedStore, selectedLocation };
-  }, [assignedStore, selectedLocation]);
 
   const handleSubmit = async () => {
-    // Use ref to get consistent context during async operation
-    const { assignedStore: storeKey, selectedLocation: locationGid } = storeContextRef.current;
-    
-    if (!storeKey || !locationGid) {
+    // StoreContext is now stable - use directly
+    if (!assignedStore || !selectedLocation) {
       console.error('[RawCardIntake] Cannot add item - store context missing');
       toast({
         title: "Store/Location Required",
@@ -52,7 +42,7 @@ export const RawCardIntake = ({ onBatchAdd }: RawCardIntakeProps) => {
     }
 
     try {
-      validateCompleteStoreContext({ assignedStore: storeKey, selectedLocation: locationGid }, 'add raw card');
+      validateCompleteStoreContext({ assignedStore, selectedLocation }, 'add raw card');
       
       setIsLoading(true);
 
@@ -65,8 +55,8 @@ export const RawCardIntake = ({ onBatchAdd }: RawCardIntakeProps) => {
       );
 
       const { data, error } = await supabase.rpc("create_raw_intake_item", {
-        store_key_in: storeKey,
-        shopify_location_gid_in: locationGid,
+        store_key_in: assignedStore,
+        shopify_location_gid_in: selectedLocation,
         quantity_in: 1,
         brand_title_in: brand,
         subject_in: subject,
@@ -110,8 +100,8 @@ export const RawCardIntake = ({ onBatchAdd }: RawCardIntakeProps) => {
       window.dispatchEvent(new CustomEvent('intake:item-added', { 
         detail: { 
           item: item,
-          store: storeKey,
-          location: locationGid
+          store: assignedStore,
+          location: selectedLocation
         }
       }));
       
@@ -119,8 +109,8 @@ export const RawCardIntake = ({ onBatchAdd }: RawCardIntakeProps) => {
         detail: { 
           itemId: item.id,
           lot: item.lot_number,
-          store: storeKey,
-          location: locationGid
+          store: assignedStore,
+          location: selectedLocation
         }
       }));
 
