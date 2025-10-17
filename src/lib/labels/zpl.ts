@@ -53,15 +53,26 @@ export function zplFromElements(layout: LabelLayout, prefs?: PrinterPrefs, cutte
       const font = el.font ?? '0';
       let h = el.h ?? 30;
       let w = el.w ?? 30;
+      let text = el.text || '';
+      
+      // Truncate text if maxWidth is specified
+      if (el.maxWidth && text.length > 0) {
+        // Estimate character width (approx 0.6 * font height)
+        const avgCharWidth = (h * 0.6);
+        const maxChars = Math.floor(el.maxWidth / avgCharWidth);
+        if (text.length > maxChars && maxChars > 3) {
+          text = text.substring(0, maxChars - 3) + '...';
+        }
+      }
       
       // Auto-size font if element has dimensions but no explicit font size
-      if (!el.font && el.w && el.h && el.text) {
-        const optimalSize = calculateOptimalFontSize(el.text, el.w, el.h);
+      if (!el.font && el.w && el.h && text) {
+        const optimalSize = calculateOptimalFontSize(text, el.w, el.h);
         h = optimalSize;
         w = Math.floor(optimalSize * 0.6); // Adjust width proportionally
       }
       
-      lines.push(`^FO${el.x},${el.y}^A${font},${h},${w}^FD${esc(el.text)}^FS`);
+      lines.push(`^FO${el.x},${el.y}^A${font},${h},${w}^FD${esc(text)}^FS`);
     } else if (el.type === 'barcode') {
       const h = el.height ?? 52, m = el.moduleWidth ?? 2, hr = el.hr ? 'Y' : 'N';
       lines.push(`^FO${el.x},${el.y}^BY${m},3,${h}^BCN,${h},${hr},N,N^FD${esc(el.data)}^FS`);

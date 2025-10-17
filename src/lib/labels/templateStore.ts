@@ -125,8 +125,8 @@ export function codeDefaultRawCard2x1(): LabelTemplate {
       width: 406, 
       height: 203,
       elements: [
-        { type: 'text', id: 'cardinfo', x: 16, y: 12, font: '0', h: 36, w: 36, text: 'CARD NAME • Set Name • #001', maxWidth: 360 },
-        { type: 'text', id: 'condition', x: 16, y: 58, font: '0', h: 20, w: 40, text: 'NM' },
+        { type: 'text', id: 'cardname', x: 16, y: 10, font: '0', h: 28, w: 28, text: 'CARD NAME', maxWidth: 380 },
+        { type: 'text', id: 'condition', x: 16, y: 50, font: '0', h: 24, w: 24, text: 'NM' },
         { type: 'text', id: 'price', x: 270, y: 15, font: '0', h: 30, w: 30, text: '$0.00' },
         { type: 'barcode', id: 'barcode', x: 16, y: 85, height: 52, moduleWidth: 2, hr: false, data: '5150233' },
         { type: 'text', id: 'sku', x: 16, y: 145, font: '0', h: 15, w: 15, text: '5150233' },

@@ -1009,11 +1009,13 @@ const Inventory = () => {
       // Generate proper title for raw card
       const generateTitle = (item: any) => {
         const parts: string[] = [];
-        if (item.year) parts.push(item.year);
-        if (item.brand_title) parts.push(item.brand_title);
         if (item.subject) parts.push(item.subject);
+        if (item.brand_title) parts.push(item.brand_title);
         if (item.card_number) parts.push(`#${item.card_number}`);
-        return parts.length > 0 ? truncateForLabel(parts.join(' ')) : 'Raw Card';
+        
+        // Join and limit to reasonable length for label
+        const title = parts.join(' • ');
+        return title.length > 50 ? title.substring(0, 47) + '...' : title;
       };
 
       // Get template once for all items
@@ -1024,11 +1026,18 @@ const Inventory = () => {
         try {
           const vars: JobVars = {
             CARDNAME: generateTitle(item),
-            CONDITION: item?.condition ?? 'NM',
+            CONDITION: item?.variant ?? item?.condition ?? 'NM',
             PRICE: item?.price != null ? `$${Number(item.price).toFixed(2)}` : '$0.00',
             SKU: item?.sku ?? '',
             BARCODE: item?.sku ?? item?.id?.slice(-8) ?? 'NO-SKU',
           };
+          
+          console.log(`[handleBulkPrintRaw] Generating label for SKU ${item.sku}:`, {
+            cardname: vars.CARDNAME,
+            condition: vars.CONDITION,
+            price: vars.PRICE,
+            sku: vars.SKU
+          });
 
           const prefs = JSON.parse(localStorage.getItem('zebra-printer-config') || '{}');
 
@@ -1060,6 +1069,8 @@ const Inventory = () => {
           const safeZpl = rawZpl.replace(/\^XZ\s*$/, "").concat("\n^XZ");
           const qty = item.quantity || 1;
           queueItems.push({ zpl: safeZpl, qty, usePQ: true });
+          
+          console.log(`[handleBulkPrintRaw] Queued label for ${item.sku} (qty: ${qty})`);
         } catch (error) {
           console.error(`Failed to generate ZPL for ${item.sku}:`, error);
         }
