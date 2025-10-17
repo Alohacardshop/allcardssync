@@ -968,6 +968,12 @@ const Inventory = () => {
   }, []);
 
   const handleBulkPrintRaw = useCallback(async () => {
+    // Guard against concurrent execution
+    if (bulkPrinting) {
+      console.warn('[handleBulkPrintRaw] Already printing, ignoring duplicate call');
+      return;
+    }
+    
     setBulkPrinting(true);
     
     try {
@@ -978,10 +984,10 @@ const Inventory = () => {
       if (!printerConfig || !printerConfig.usePrintNode || !printerConfig.printNodeId) {
         toast.error('No printer configured. Please select a default printer first.');
         setShowPrinterDialog(true);
-        setBulkPrinting(false);
         return;
       }
-      // Filter for unprinted raw items
+      
+      // Filter for unprinted raw items - use current items state
       const unprintedRawItems = items.filter(item => {
         const itemType = item.type?.toLowerCase() || 'raw';
         return itemType === 'raw' && !item.printed_at && !item.deleted_at;
@@ -991,6 +997,8 @@ const Inventory = () => {
         toast.info('No unprinted raw cards found');
         return;
       }
+
+      console.log(`[handleBulkPrintRaw] Processing ${unprintedRawItems.length} unprinted raw items`);
 
       // Helper function to truncate text for labels
       const truncateForLabel = (text: string, maxLength: number = 70): string => {
@@ -1058,18 +1066,29 @@ const Inventory = () => {
       }
 
       if (queueItems.length > 0) {
-        // Enqueue all items as a batch
-        printQueue.enqueueMany(queueItems);
-        
-        // Mark all items as printed (the queue will handle actual printing)
+        // Mark items as printed FIRST to prevent re-queuing
         const printedItemIds = unprintedRawItems.map(item => item.id);
-        await supabase
+        const { error: updateError } = await supabase
           .from('intake_items')
           .update({ printed_at: new Date().toISOString() })
           .in('id', printedItemIds);
+        
+        if (updateError) {
+          throw new Error(`Failed to update items: ${updateError.message}`);
+        }
+        
+        console.log(`[handleBulkPrintRaw] Marked ${printedItemIds.length} items as printed`);
+        
+        // Now enqueue for actual printing
+        printQueue.enqueueMany(queueItems);
+        console.log(`[handleBulkPrintRaw] Enqueued ${queueItems.length} items for printing`);
           
         toast.success(`Queued ${queueItems.length} raw card labels for printing`);
-        fetchItems(0, true); // Refresh the items list
+        
+        // Refresh after a short delay to ensure DB update is visible
+        setTimeout(() => {
+          fetchItems(0, true);
+        }, 500);
       } else {
         toast.error('Failed to generate any labels for printing');
       }
@@ -1080,7 +1099,7 @@ const Inventory = () => {
     } finally {
       setBulkPrinting(false);
     }
-  }, [items, fetchItems, cutterSettings, assignedStore, selectedLocation]);
+  }, [fetchItems, cutterSettings, assignedStore, selectedLocation, bulkPrinting]);
 
   const handleCutOnly = useCallback(async () => {
     try {
