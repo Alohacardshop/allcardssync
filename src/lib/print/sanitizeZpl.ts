@@ -25,7 +25,11 @@ export function sanitizeLabel(zpl: string) {
   out = insertAfterXA(out, "^MMT");  // Tear-off (avoid auto-advance)
   out = insertAfterXA(out, "^MNY");  // Web/gap sensing mode
   
-  // normalize top/home; keep user ^PW/^LL as-is  
+  // Set explicit label dimensions for ZD410 2x1" label at 203 DPI
+  out = insertAfterXA(out, "^PW406");  // Print width: 2" * 203 DPI
+  out = insertAfterXA(out, "^LL203");  // Label length: 1" * 203 DPI
+  
+  // normalize top/home
   out = insertAfterXA(out, "^LT0");
   out = insertAfterXA(out, "^LH0,0");
   
