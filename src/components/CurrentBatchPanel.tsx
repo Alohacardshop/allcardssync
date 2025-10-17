@@ -132,28 +132,38 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
 
   // Simplified fetch with single recovery attempt
   const fetchRecentItemsWithRetry = useCallback(async (): Promise<void> => {
-    // If context is missing, try one recovery from active lot
-    if (!selectedLocation && assignedStore) {
-      try {
-        const { data: activeLot } = await supabase
-          .from('intake_lots')
-          .select('shopify_location_gid')
-          .eq('store_key', assignedStore)
-          .eq('status', 'active')
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-          
-        if (activeLot?.shopify_location_gid) {
-          return fetchRecentItems(assignedStore, activeLot.shopify_location_gid);
+    try {
+      setLoading(true);
+      
+      // If context is missing, try one recovery from active lot
+      if (!selectedLocation && assignedStore) {
+        try {
+          const { data: activeLot } = await supabase
+            .from('intake_lots')
+            .select('shopify_location_gid')
+            .eq('store_key', assignedStore)
+            .eq('status', 'active')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+            
+          if (activeLot?.shopify_location_gid) {
+            await fetchRecentItems(assignedStore, activeLot.shopify_location_gid);
+            return;
+          }
+        } catch (error) {
+          console.error('[CurrentBatchPanel] Recovery from active lot failed:', error);
+          // Continue to normal fetch
         }
-      } catch (error) {
-        // Silent failure - user will see empty batch
-        return;
       }
+      
+      await fetchRecentItems(assignedStore, selectedLocation);
+    } catch (error) {
+      console.error('[CurrentBatchPanel] fetchRecentItemsWithRetry error:', error);
+      toast({ title: "Error", description: "Failed to load batch items" });
+    } finally {
+      setLoading(false);
     }
-    
-    return fetchRecentItems(assignedStore, selectedLocation);
   }, [assignedStore, selectedLocation]);
 
   // Fetch recent items from the current batch
@@ -170,8 +180,6 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
 
     try {
       validateCompleteStoreContext({ assignedStore: store, selectedLocation: location }, 'fetch batch items');
-      
-      setLoading(true);
       
       // First get the current lot for this user and store/location
       const { data: lot, error: lotError } = await supabase
@@ -268,8 +276,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
 
     } catch (error) {
       console.error("Error in fetchRecentItems:", error);
-    } finally {
-      setLoading(false);
+      throw error; // Re-throw to be caught by fetchRecentItemsWithRetry
     }
   };
 

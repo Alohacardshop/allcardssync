@@ -95,6 +95,11 @@ const Inventory = () => {
   const [removingFromShopify, setRemovingFromShopify] = useState(false);
   const [deletingItems, setDeletingItems] = useState(false);
   
+  // Refs to prevent concurrent operations more reliably than state
+  const bulkPrintingRef = useState(false)[0];
+  const bulkRetryingRef = useState(false)[0];
+  const bulkSyncingRef = useState(false)[0];
+  
   const { printZPL, selectedPrinter } = useZebraNetwork();
   const { assignedStore, selectedLocation } = useStore();
   const { sendChunkedBatchToShopify, isSending: isBatchSending, progress } = useBatchSendToShopify();
@@ -529,6 +534,14 @@ const Inventory = () => {
       return;
     }
 
+    if (bulkSyncingRef || bulkSyncing) {
+      console.warn('[handleSyncSelected] Already syncing, ignoring duplicate call');
+      return;
+    }
+
+    (bulkSyncingRef as any) = true;
+    setBulkSyncing(true);
+
     const selectedItemsArray = filteredItems.filter(item => selectedItems.has(item.id));
     const itemsToSync = selectedItemsArray.filter(item => 
       !item.shopify_product_id && item.store_key && item.shopify_location_gid
@@ -573,6 +586,7 @@ const Inventory = () => {
       console.error('Bulk sync error:', error);
       toast.error('Failed to start bulk sync');
     } finally {
+      (bulkSyncingRef as any) = false;
       setBulkSyncing(false);
     }
   }, [filteredItems, selectedItems, fetchItems]);
@@ -582,6 +596,14 @@ const Inventory = () => {
       toast.info('No items selected');
       return;
     }
+
+    if (bulkSyncingRef || bulkSyncing) {
+      console.warn('[handleResyncSelected] Already syncing, ignoring duplicate call');
+      return;
+    }
+
+    (bulkSyncingRef as any) = true;
+    setBulkSyncing(true);
 
     const selectedItemsArray = filteredItems.filter(item => selectedItems.has(item.id));
     const itemsToResync = selectedItemsArray.filter(item => 
@@ -627,6 +649,7 @@ const Inventory = () => {
       console.error('Bulk resync error:', error);
       toast.error('Failed to start bulk resync');
     } finally {
+      (bulkSyncingRef as any) = false;
       setBulkSyncing(false);
     }
   }, [filteredItems, selectedItems, fetchItems]);
@@ -687,6 +710,7 @@ const Inventory = () => {
       console.error('Bulk retry error:', error);
       toast.error('Failed to start bulk retry');
     } finally {
+      (bulkRetryingRef as any) = false;
       setBulkRetrying(false);
     }
   }, [filteredItems, selectedItems, fetchItems]);
@@ -1127,12 +1151,14 @@ const Inventory = () => {
   }, []);
 
   const handleBulkPrintRaw = useCallback(async () => {
-    // Guard against concurrent execution
-    if (bulkPrinting) {
+    // Guard against concurrent execution using ref for immediate check
+    if (bulkPrintingRef || bulkPrinting) {
       console.warn('[handleBulkPrintRaw] Already printing, ignoring duplicate call');
       return;
     }
     
+    // Set both ref and state
+    (bulkPrintingRef as any) = true;
     setBulkPrinting(true);
     
     try {
@@ -1267,9 +1293,10 @@ const Inventory = () => {
       console.error('Bulk print error:', error);
       toast.error(`Failed to queue bulk print: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
+      (bulkPrintingRef as any) = false;
       setBulkPrinting(false);
     }
-  }, [items, fetchItems, cutterSettings, assignedStore, selectedLocation, bulkPrinting]);
+  }, [items, fetchItems, cutterSettings, assignedStore, selectedLocation]);
 
   const handleCutOnly = useCallback(async () => {
     try {

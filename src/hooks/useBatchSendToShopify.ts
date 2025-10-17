@@ -44,6 +44,7 @@ export interface BatchSendResponse {
 export function useBatchSendToShopify() {
   const [isSending, setIsSending] = useState(false)
   const [progress, setProgress] = useState<BatchProgress | null>(null)
+  const sendTimeoutRef = useState<NodeJS.Timeout | null>(null)[0]
 
   const chunkArray = <T>(array: T[], size: number): T[][] => {
     const chunks: T[][] = []
@@ -98,7 +99,21 @@ export function useBatchSendToShopify() {
       throw new Error("No items to send")
     }
 
+    // Prevent duplicate concurrent sends
+    if (isSending) {
+      console.warn('❌ [useBatchSendToShopify] Already sending batch, ignoring duplicate call')
+      throw new Error("Batch send already in progress")
+    }
+
     setIsSending(true)
+    
+    // Safety timeout to prevent stuck loading state (10 minutes max)
+    const safetyTimeout = setTimeout(() => {
+      console.error('⚠️ [useBatchSendToShopify] Safety timeout reached - clearing loading state')
+      setIsSending(false)
+      setProgress(null)
+      toast.error('Batch processing timeout - please try again')
+    }, 10 * 60 * 1000)
     
     const chunks = chunkArray(itemIds, config.batchSize)
     const totalChunks = chunks.length
@@ -308,7 +323,15 @@ export function useBatchSendToShopify() {
         results: aggregatedResults,
         rejected_items: allRejectedItems
       }
+    } catch (error) {
+      console.error('❌ [useBatchSendToShopify] Fatal error:', error)
+      toast.error('Batch processing failed')
+      throw error
     } finally {
+      // Clear safety timeout
+      if (safetyTimeout) {
+        clearTimeout(safetyTimeout)
+      }
       setIsSending(false)
       setProgress(null)
     }
