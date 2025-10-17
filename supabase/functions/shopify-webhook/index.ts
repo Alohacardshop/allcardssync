@@ -50,16 +50,50 @@ serve(async (req) => {
     let body = '';
     let payload = {};
     
+    // Read the body first
+    body = await req.text();
+    
+    // Verify HMAC if secret is configured
     if (hmacSecret && hmacHeader) {
-      body = await req.text();
-      const encoder = new TextEncoder();
-      const data = encoder.encode(body);
-      // HMAC verification would go here if needed
-      payload = JSON.parse(body);
-    } else {
-      body = await req.text();
-      payload = JSON.parse(body);
+      const isValid = await verifyHMAC(body, hmacHeader, hmacSecret);
+      
+      if (!isValid) {
+        console.warn('[SECURITY] Invalid HMAC signature detected', {
+          webhookId,
+          topic,
+          shopifyDomain
+        });
+        
+        // Log the failed attempt
+        await supabase
+          .from('system_logs')
+          .insert({
+            level: 'warn',
+            message: 'Shopify webhook HMAC validation failed',
+            context: {
+              webhook_id: webhookId,
+              topic,
+              domain: shopifyDomain
+            }
+          });
+        
+        return new Response(JSON.stringify({ error: 'Invalid webhook signature' }), {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+      
+      console.log('[SECURITY] HMAC signature verified successfully');
+    } else if (hmacSecret) {
+      // Secret configured but no HMAC header provided
+      console.warn('[SECURITY] HMAC secret configured but no signature provided');
+      return new Response(JSON.stringify({ error: 'Missing webhook signature' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
+    
+    payload = JSON.parse(body);
 
     console.log(`shopify-webhook: Processing ${topic} from ${shopifyDomain}`);
 
@@ -482,6 +516,54 @@ async function handleProductUpdate(supabase: any, payload: any, shopifyDomain: s
     } else {
       console.log(`Updated item pricing for SKU ${sku}: $${price}`);
     }
+  }
+}
+
+/**
+ * Verify Shopify webhook HMAC signature using constant-time comparison
+ * Prevents timing attacks by using crypto.subtle.timingSafeEqual
+ */
+async function verifyHMAC(body: string, hmacHeader: string, secret: string): Promise<boolean> {
+  try {
+    const encoder = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      'raw',
+      encoder.encode(secret),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    );
+    
+    const signature = await crypto.subtle.sign(
+      'HMAC',
+      key,
+      encoder.encode(body)
+    );
+    
+    // Convert signature to base64
+    const signatureBase64 = btoa(String.fromCharCode(...new Uint8Array(signature)));
+    
+    // Use constant-time comparison to prevent timing attacks
+    const providedSignature = encoder.encode(hmacHeader);
+    const computedSignature = encoder.encode(signatureBase64);
+    
+    // Ensure both signatures are the same length
+    if (providedSignature.length !== computedSignature.length) {
+      return false;
+    }
+    
+    // Constant-time comparison
+    let matches = true;
+    for (let i = 0; i < providedSignature.length; i++) {
+      if (providedSignature[i] !== computedSignature[i]) {
+        matches = false;
+      }
+    }
+    
+    return matches;
+  } catch (error) {
+    console.error('[SECURITY] HMAC verification error:', error);
+    return false;
   }
 }
 

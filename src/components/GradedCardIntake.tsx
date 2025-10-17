@@ -18,6 +18,7 @@ import { PSACertificateDisplay } from "@/components/PSACertificateDisplay";
 import { useDebounce } from "@/hooks/useDebounce";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { PSACertificateData } from "@/types/psa";
+import { gradedCardSchema } from "@/lib/validation/intake-schemas";
 
 interface GradedCardIntakeProps {
   onBatchAdd?: () => void;
@@ -226,6 +227,15 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
       });
     } catch (error: any) {
       toast.error(error.message);
+      return;
+    }
+
+    // Validate form data with zod schema
+    const validationResult = gradedCardSchema.safeParse(formData);
+    
+    if (!validationResult.success) {
+      const firstError = validationResult.error.errors[0];
+      toast.error(`Validation Error: ${firstError.message}`);
       return;
     }
 

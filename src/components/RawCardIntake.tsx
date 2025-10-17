@@ -13,6 +13,7 @@ import { useStore } from "@/contexts/StoreContext";
 import { validateCompleteStoreContext } from "@/utils/storeValidation";
 import { generateTCGSKU } from "@/lib/sku";
 import { useRawIntakeSettings } from "@/hooks/useRawIntakeSettings";
+import { rawCardSchema } from "@/lib/validation/intake-schemas";
 
 interface RawCardIntakeProps {
   onBatchAdd?: (item: any) => void;
@@ -42,6 +43,26 @@ export const RawCardIntake = ({ onBatchAdd }: RawCardIntakeProps) => {
     }
 
     try {
+      // Validate input data before proceeding
+      const validationResult = rawCardSchema.safeParse({
+        brand,
+        subject,
+        cardNumber,
+        condition,
+        price,
+        notes,
+      });
+
+      if (!validationResult.success) {
+        const firstError = validationResult.error.errors[0];
+        toast({
+          title: "Validation Error",
+          description: firstError.message,
+          variant: "destructive",
+        });
+        return;
+      }
+
       validateCompleteStoreContext({ assignedStore, selectedLocation }, 'add raw card');
       
       setIsLoading(true);
