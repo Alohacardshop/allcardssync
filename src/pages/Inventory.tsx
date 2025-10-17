@@ -66,6 +66,9 @@ const Inventory = () => {
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [printStatusFilter, setPrintStatusFilter] = useState<'all' | 'printed' | 'not-printed'>('all');
   const [showSoldItems, setShowSoldItems] = useState(false);
+  const [batchFilter, setBatchFilter] = useState<'all' | 'in_batch' | 'removed_from_batch'>(() => {
+    return (localStorage.getItem('inventory-batch-filter') as 'all' | 'in_batch' | 'removed_from_batch') || 'all';
+  });
   
   // UI state
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
@@ -179,13 +182,21 @@ const Inventory = () => {
           year,
           category,
           cost,
+          removed_from_batch_at,
           intake_lots!inner (
             lot_number,
             status
           )
         `)
-        .not('removed_from_batch_at', 'is', null)
         .range(page * ITEMS_PER_PAGE, (page + 1) * ITEMS_PER_PAGE - 1);
+      
+      // Apply batch filter
+      if (batchFilter === 'in_batch') {
+        query = query.is('removed_from_batch_at', null);
+      } else if (batchFilter === 'removed_from_batch') {
+        query = query.not('removed_from_batch_at', 'is', null);
+      }
+      // 'all' applies no filter
 
       // Apply store/location filters
       if (assignedStore) {
@@ -270,7 +281,7 @@ const Inventory = () => {
       setLastFetchTime(Date.now());
       setLoadingMore(false);
     }
-  }, [statusFilter, typeFilter, assignedStore, selectedLocation, showSoldItems, snapshot.phases.data, loadingMore, setPhase]);
+  }, [statusFilter, typeFilter, batchFilter, assignedStore, selectedLocation, showSoldItems, snapshot.phases.data, loadingMore, setPhase]);
 
   // Memoized filtered items
   const filteredItems = useMemo(() => {
@@ -334,7 +345,12 @@ const Inventory = () => {
     }, 100); // Small delay to ensure auth state is ready
 
     return () => clearTimeout(timeoutId);
-  }, [statusFilter, typeFilter, assignedStore, selectedLocation, showSoldItems]); // Removed fetchItems to prevent infinite loop
+  }, [statusFilter, typeFilter, batchFilter, assignedStore, selectedLocation, showSoldItems]); // Removed fetchItems to prevent infinite loop
+  
+  // Persist batch filter preference
+  useEffect(() => {
+    localStorage.setItem('inventory-batch-filter', batchFilter);
+  }, [batchFilter]);
 
   // Smart auto-refresh with circuit breaker - only refresh when sync status might have changed
   const { isPolling, error: pollingError, resetCircuitBreaker } = useStablePolling(
@@ -1449,7 +1465,7 @@ const Inventory = () => {
                 <CardTitle>Filters & Search</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
@@ -1492,6 +1508,17 @@ const Inventory = () => {
                       <SelectItem value="all">All Print Status</SelectItem>
                       <SelectItem value="printed">Printed</SelectItem>
                       <SelectItem value="not-printed">Not Printed</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  <Select value={batchFilter} onValueChange={(value: any) => setBatchFilter(value)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Batch status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Items</SelectItem>
+                      <SelectItem value="in_batch">In Batch</SelectItem>
+                      <SelectItem value="removed_from_batch">Removed from Batch</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
