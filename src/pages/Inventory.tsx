@@ -472,6 +472,56 @@ const Inventory = () => {
     }
   }, [fetchItems]);
 
+  const handleResync = useCallback(async (item: any) => {
+    if (!item.store_key || !item.shopify_location_gid) {
+      toast.error('Item is missing store or location data');
+      return;
+    }
+    
+    if (!item.shopify_product_id) {
+      toast.error('Item has no Shopify product ID - use "Sync" instead');
+      return;
+    }
+    
+    setSyncingRowId(item.id);
+    
+    try {
+      console.log(`[handleResync] Force updating item ${item.sku} to Shopify product ${item.shopify_product_id}`);
+      
+      // Queue item with update action - this will update existing product
+      const { error: queueError } = await supabase.rpc('queue_shopify_sync', {
+        item_id: item.id,
+        sync_action: 'update'
+      });
+
+      if (queueError) {
+        throw new Error(`Failed to queue resync: ${queueError.message}`);
+      }
+
+      // Trigger the processor to immediately process the update
+      await supabase.functions.invoke('shopify-sync-processor', { body: {} });
+      
+      toast.success(
+        `${item.sku} queued for resync`,
+        {
+          description: 'Product will be updated in Shopify',
+          action: {
+            label: "View Queue",
+            onClick: () => window.location.href = '/admin#queue'
+          }
+        }
+      );
+      
+      // Refresh items to show updated status
+      fetchItems(0, true);
+    } catch (error) {
+      console.error('[handleResync] Failed:', error);
+      toast.error('Failed to resync: ' + (error as Error).message);
+    } finally {
+      setSyncingRowId(null);
+    }
+  }, [fetchItems]);
+
   const handleBulkRetrySync = useCallback(async () => {
     const errorItems = filteredItems.filter(item => 
       selectedItems.has(item.id) && 
@@ -1679,6 +1729,7 @@ const Inventory = () => {
                   onToggleExpanded={handleToggleExpanded}
                   onSync={handleSync}
                   onRetrySync={handleRetrySync}
+                  onResync={handleResync}
                   onPrint={handlePrint}
                   onRemove={(item) => {
                     setSelectedItemForRemoval(item);

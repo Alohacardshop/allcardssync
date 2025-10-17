@@ -23,6 +23,7 @@ interface InventoryItemCardProps {
   onToggleExpanded: (itemId: string) => void;
   onSync: (item: any) => void;
   onRetrySync: (item: any) => void;
+  onResync: (item: any) => void;
   onPrint: (item: any) => void;
   onRemove: (item: any) => void;
   onDelete?: (item: any) => void;
@@ -40,6 +41,7 @@ export const InventoryItemCard = memo(({
   onToggleExpanded,
   onSync,
   onRetrySync,
+  onResync,
   onPrint,
   onRemove,
   onDelete,
@@ -225,6 +227,23 @@ export const InventoryItemCard = memo(({
                 <RotateCcw className="h-3 w-3 mr-1" />
               )}
               Retry
+            </Button>
+          )}
+          
+          {item.shopify_sync_status === 'synced' && item.shopify_product_id && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onResync(item)}
+              disabled={syncingRowId === item.id}
+              title="Re-sync this item to update Shopify product information"
+            >
+              {syncingRowId === item.id ? (
+                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+              ) : (
+                <RotateCcw className="h-3 w-3 mr-1" />
+              )}
+              Resync
             </Button>
           )}
           
