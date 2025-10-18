@@ -1444,7 +1444,7 @@ const Inventory = () => {
       }
 
       const tpl = await getTemplate('raw_card_2x1');
-      if (!tpl || !tpl.zpl) {
+      if (!tpl) {
         setBulkPrinting(false);
         toast.error('Label template not found');
         return;
@@ -1461,7 +1461,38 @@ const Inventory = () => {
             BARCODE: item?.sku ?? item?.id?.slice(-8) ?? 'NO-SKU',
           };
 
-          const zpl = zplFromTemplateString(tpl.zpl, vars);
+          let zpl: string;
+          
+          // Handle different template formats
+          if (tpl.format === 'elements' && tpl.layout) {
+            // Map variables to element IDs and update the layout
+            const filled = {
+              ...tpl.layout,
+              elements: tpl.layout.elements.map((el: ZPLElement) => {
+                if (el.type === 'text') {
+                  if (el.id === 'cardname' || el.id === 'cardinfo') {
+                    return { ...el, text: vars.CARDNAME };
+                  } else if (el.id === 'condition') {
+                    return { ...el, text: vars.CONDITION };
+                  } else if (el.id === 'price') {
+                    return { ...el, text: vars.PRICE };
+                  } else if (el.id === 'sku') {
+                    return { ...el, text: vars.SKU };
+                  }
+                } else if (el.type === 'barcode' && el.id === 'barcode') {
+                  return { ...el, data: vars.BARCODE };
+                }
+                return el;
+              }),
+            };
+            zpl = zplFromElements(filled);
+          } else if (tpl.zpl) {
+            // For ZPL string templates, use template string substitution
+            zpl = zplFromTemplateString(tpl.zpl, vars);
+          } else {
+            throw new Error('Invalid template format');
+          }
+
           await sendZplToPrinter(zpl, `Reprint: ${item.sku}`, { copies: 1 });
         } catch (err) {
           console.error(`Failed to queue ${item.sku}:`, err);
