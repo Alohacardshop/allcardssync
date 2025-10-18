@@ -19,6 +19,7 @@ import { zplFromElements, zplFromTemplateString } from '@/lib/labels/zpl';
 import { sendZplToPrinter } from '@/lib/labels/print';
 import { printQueue } from '@/lib/print/queueInstance';
 import type { JobVars, ZPLElement } from '@/lib/labels/types';
+import { renderLabelV2 } from '@/lib/print/templates';
 import { print } from '@/lib/printService';
 import { sendGradedToShopify, sendRawToShopify } from '@/hooks/useShopifySend';
 import { useBatchSendToShopify } from '@/hooks/useBatchSendToShopify';
@@ -1443,55 +1444,20 @@ const Inventory = () => {
         return;
       }
 
-      const tpl = await getTemplate('raw_card_2x1');
-      if (!tpl) {
-        setBulkPrinting(false);
-        toast.error('Label template not found');
-        return;
-      }
-
-      // Queue each label individually - print queue handles batching
+      // Use the same label format as initial printing (labelV2)
       for (const item of selectedRawItems) {
         try {
-          const vars: JobVars = {
-            CARDNAME: item.subject || 'Raw Card',
-            CONDITION: item?.condition ?? 'NM',
-            PRICE: item?.price != null ? `$${Number(item.price).toFixed(2)}` : '$0.00',
-            SKU: item?.sku ?? '',
-            BARCODE: item?.sku ?? item?.id?.slice(-8) ?? 'NO-SKU',
-          };
+          const condition = item?.catalog_snapshot?.condition || item?.variant || 'NM';
+          const cardName = `${item?.brand_title || ''} ${item?.subject || ''} ${item?.card_number ? '#' + item?.card_number : ''}`.trim();
+          const price = item?.price ? `$${Number(item?.price).toFixed(2)}` : '$0.00';
+          const barcode = item?.sku ?? item?.id?.slice(-8) ?? 'NO-SKU';
 
-          let zpl: string;
-          
-          // Handle different template formats
-          if (tpl.format === 'elements' && tpl.layout) {
-            // Map variables to element IDs and update the layout
-            const filled = {
-              ...tpl.layout,
-              elements: tpl.layout.elements.map((el: ZPLElement) => {
-                if (el.type === 'text') {
-                  if (el.id === 'cardname' || el.id === 'cardinfo') {
-                    return { ...el, text: vars.CARDNAME };
-                  } else if (el.id === 'condition') {
-                    return { ...el, text: vars.CONDITION };
-                  } else if (el.id === 'price') {
-                    return { ...el, text: vars.PRICE };
-                  } else if (el.id === 'sku') {
-                    return { ...el, text: vars.SKU };
-                  }
-                } else if (el.type === 'barcode' && el.id === 'barcode') {
-                  return { ...el, data: vars.BARCODE };
-                }
-                return el;
-              }),
-            };
-            zpl = zplFromElements(filled);
-          } else if (tpl.zpl) {
-            // For ZPL string templates, use template string substitution
-            zpl = zplFromTemplateString(tpl.zpl, vars);
-          } else {
-            throw new Error('Invalid template format');
-          }
+          const zpl = renderLabelV2({
+            CONDITION: condition,
+            PRICE: price,
+            BARCODE: barcode,
+            CARDNAME: cardName
+          });
 
           await sendZplToPrinter(zpl, `Reprint: ${item.sku}`, { copies: 1 });
         } catch (err) {
