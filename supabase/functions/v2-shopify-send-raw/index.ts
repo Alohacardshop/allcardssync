@@ -5,6 +5,22 @@ interface SendRawArgs {
   vendor?: string
 }
 
+// Helper function to generate barcode: TCGPlayerID-Condition
+function generateBarcodeForRawCard(item: any): string {
+  const tcgplayerId = item.catalog_snapshot?.tcgplayer_id || item.sku;
+  const condition = item.variant || item.grade || 'NM';
+  
+  // Abbreviate condition for barcode
+  const conditionAbbrev = condition.toLowerCase().includes('near mint') || condition === 'NM' ? 'NM' 
+    : condition.toLowerCase().includes('lightly played') || condition === 'LP' ? 'LP'
+    : condition.toLowerCase().includes('moderately played') || condition === 'MP' ? 'MP'
+    : condition.toLowerCase().includes('heavily played') || condition === 'HP' ? 'HP'
+    : condition.toLowerCase().includes('damaged') || condition === 'DMG' ? 'DMG'
+    : 'NM';
+  
+  return `${tcgplayerId}-${conditionAbbrev}`;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
@@ -207,7 +223,7 @@ Deno.serve(async (req) => {
           inventory_management: 'shopify',
           requires_shipping: true,
           taxable: true,
-          barcode: intakeItem.sku, // SKU and barcode should be the same
+          barcode: generateBarcodeForRawCard(intakeItem), // TCGPlayerID-Condition format
           inventory_policy: 'deny'
         }],
         images: imageUrl ? [{

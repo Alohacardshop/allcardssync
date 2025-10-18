@@ -648,6 +648,19 @@ const Inventory = () => {
 
       let created = 0, updated = 0, failed = 0;
 
+      // Helper function to generate barcode for raw cards
+      const generateBarcode = (item: any) => {
+        const tcgplayerId = item.catalog_snapshot?.tcgplayer_id || item.sku;
+        const condition = item.variant || item.grade || 'NM';
+        const conditionAbbrev = condition.toLowerCase().includes('near mint') ? 'NM' 
+          : condition.toLowerCase().includes('lightly') ? 'LP'
+          : condition.toLowerCase().includes('moderately') ? 'MP'
+          : condition.toLowerCase().includes('heavily') ? 'HP'
+          : condition.toLowerCase().includes('damaged') ? 'DMG'
+          : 'NM';
+        return `${tcgplayerId}-${conditionAbbrev}`;
+      };
+
       // Process Raw cards
       for (const item of rawItems) {
         try {
@@ -665,7 +678,7 @@ const Inventory = () => {
               cost: item.cost,
               title: item.subject || 'Raw Card',
               price: item.price,
-              barcode: item.sku,
+              barcode: generateBarcode(item),
               condition: item.grade,
               quantity: item.quantity
             }
