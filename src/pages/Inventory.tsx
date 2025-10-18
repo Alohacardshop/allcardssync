@@ -1431,16 +1431,6 @@ const Inventory = () => {
 
     setBulkPrinting(true);
     try {
-      // Pre-flight check: Ensure printer is configured
-      const { getPrinterConfig } = await import('@/lib/printerConfigService');
-      const printerConfig = await getPrinterConfig(assignedStore || undefined, selectedLocation || undefined);
-      
-      if (!printerConfig || !printerConfig.usePrintNode || !printerConfig.printNodeId) {
-        toast.error('No printer configured. Please select a default printer first.');
-        setShowPrinterDialog(true);
-        setBulkPrinting(false);
-        return;
-      }
       const selectedRawItems = items.filter(item => {
         const itemType = item.type?.toLowerCase() || 'raw';
         return selectedItems.has(item.id) && itemType === 'raw' && !item.deleted_at;
@@ -1452,8 +1442,12 @@ const Inventory = () => {
       }
 
       const tpl = await getTemplate('raw_card_2x1');
-      const queueItems = [];
+      if (!tpl || !tpl.zpl) {
+        toast.error('Label template not found');
+        return;
+      }
 
+      // Queue each label individually - print queue handles batching
       for (const item of selectedRawItems) {
         try {
           const vars: JobVars = {
@@ -1464,27 +1458,15 @@ const Inventory = () => {
             BARCODE: item?.sku ?? item?.id?.slice(-8) ?? 'NO-SKU',
           };
 
-          let rawZpl = '';
-          if (tpl.format === 'zpl' && tpl.zpl) {
-            rawZpl = zplFromTemplateString(tpl.zpl, vars);
-          } else {
-            throw new Error('No valid template');
-          }
-
-          const safeZpl = rawZpl.replace(/\^XZ\s*$/, "").concat("\n^XZ");
-          queueItems.push({ zpl: safeZpl, qty: 1, usePQ: true });
-        } catch (error) {
-          console.error(`Failed to generate ZPL for ${item.sku}:`, error);
+          const zpl = zplFromTemplateString(tpl.zpl, vars);
+          await sendZplToPrinter(zpl, `Reprint: ${item.sku}`, { copies: 1 });
+        } catch (err) {
+          console.error(`Failed to queue ${item.sku}:`, err);
         }
       }
 
-      if (queueItems.length > 0) {
-        printQueue.enqueueMany(queueItems);
-        toast.success(`Queued ${queueItems.length} labels for reprinting`);
-        setSelectedItems(new Set());
-      } else {
-        toast.error('Failed to generate any labels for printing');
-      }
+      toast.success(`${selectedRawItems.length} labels queued for printing`);
+      setSelectedItems(new Set());
     } catch (error) {
       console.error('Reprint error:', error);
       toast.error('Failed to queue reprint');
