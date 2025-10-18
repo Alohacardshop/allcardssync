@@ -1675,6 +1675,13 @@ export type Database = {
         Args: { game_name: string }
         Returns: undefined
       }
+      batch_queue_shopify_sync: {
+        Args: { item_ids: string[]; sync_action?: string }
+        Returns: {
+          failed_count: number
+          queued_count: number
+        }[]
+      }
       bootstrap_user_admin: {
         Args: { _target_user_id?: string }
         Returns: Json

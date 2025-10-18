@@ -622,34 +622,34 @@ const Inventory = () => {
       toast.info('No synced items in selection to resync');
       return;
     }
+    const toastId = toast.loading(`Queueing ${itemsToResync.length} items for resync...`);
+    
     try {
-      let successCount = 0;
-      let failCount = 0;
+      // Single batch RPC call instead of loop
+      const { data, error } = await supabase.rpc('batch_queue_shopify_sync', {
+        item_ids: itemsToResync.map(item => item.id),
+        sync_action: 'update'
+      });
 
-      for (const item of itemsToResync) {
-        try {
-          const { error } = await supabase.rpc('queue_shopify_sync', {
-            item_id: item.id,
-            sync_action: 'update'
-          });
+      if (error) throw error;
+      
+      const result = data?.[0];
+      const successCount = result?.queued_count || 0;
+      const failCount = result?.failed_count || 0;
 
-          if (error) throw error;
-          successCount++;
-        } catch (error) {
-          console.error(`Failed to queue ${item.sku}:`, error);
-          failCount++;
-        }
-      }
-
+      toast.dismiss(toastId);
+      
       if (successCount > 0) {
+        // Trigger processor
         await supabase.functions.invoke('shopify-sync', { body: {} });
         toast.success(`${successCount} items queued for resync to Shopify`);
       }
 
       if (failCount > 0) {
-        toast.error(`${failCount} items failed to queue for resync`);
+        toast.error(`${failCount} items failed to queue`);
       }
 
+      // Refresh in background (non-blocking)
       fetchItems(0, true);
     } catch (error) {
       console.error('Bulk resync error:', error);
