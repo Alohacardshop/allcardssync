@@ -44,4 +44,7 @@ export interface JobVars {
   PRICE?: string; 
   SKU?: string; 
   BARCODE?: string;
+  VENDOR?: string;
+  YEAR?: string;
+  CATEGORY?: string;
 }
