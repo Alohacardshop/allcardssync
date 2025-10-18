@@ -757,9 +757,14 @@ const Inventory = () => {
         return text.substring(0, maxLength - 3) + '...';
       };
 
-      // Generate proper title for raw card - only card name (other fields handled separately)
+      // Generate proper title for raw card - strip card number if present
       const generateTitle = (item: any) => {
-        return item.subject || 'Raw Card';
+        let name = item.subject || 'Raw Card';
+        // Remove card number suffix if present (e.g., "Card Name - 123/456" -> "Card Name")
+        if (item.card_number && name.includes(` - ${item.card_number}`)) {
+          name = name.replace(` - ${item.card_number}`, '').trim();
+        }
+        return name;
       };
 
       // Load the default template (prioritize ZPL Studio templates, then fallback to raw_card_2x1)
@@ -1023,9 +1028,14 @@ const Inventory = () => {
         return text.substring(0, maxLength - 3) + '...';
       };
 
-      // Generate proper title for raw card - only card name (other fields handled separately)
+      // Generate proper title for raw card - strip card number if present
       const generateTitle = (item: any) => {
-        return item.subject || 'Raw Card';
+        let name = item.subject || 'Raw Card';
+        // Remove card number suffix if present (e.g., "Card Name - 123/456" -> "Card Name")
+        if (item.card_number && name.includes(` - ${item.card_number}`)) {
+          name = name.replace(` - ${item.card_number}`, '').trim();
+        }
+        return name;
       };
 
       // Load template and generate ZPL using unified system (prioritize ZPL Studio templates)
@@ -1198,9 +1208,14 @@ const Inventory = () => {
         return text.substring(0, maxLength - 3) + '...';
       };
 
-      // Generate proper title for raw card - only card name (other fields handled separately)
+      // Generate proper title for raw card - strip card number if present
       const generateTitle = (item: any) => {
-        return item.subject || 'Raw Card';
+        let name = item.subject || 'Raw Card';
+        // Remove card number suffix if present (e.g., "Card Name - 123/456" -> "Card Name")
+        if (item.card_number && name.includes(` - ${item.card_number}`)) {
+          name = name.replace(` - ${item.card_number}`, '').trim();
+        }
+        return name;
       };
 
       // Load template (prioritize ZPL Studio templates, then fallback to raw_card_2x1) - SAME AS SINGLE PRINT
@@ -1426,9 +1441,14 @@ const Inventory = () => {
         return;
       }
 
-      // Helper function to generate title - only card name (other fields handled separately)
+      // Helper function to generate title - strip card number if present
       const generateTitle = (item: any) => {
-        return item.subject || 'Raw Card';
+        let name = item.subject || 'Raw Card';
+        // Remove card number suffix if present (e.g., "Card Name - 123/456" -> "Card Name")
+        if (item.card_number && name.includes(` - ${item.card_number}`)) {
+          name = name.replace(` - ${item.card_number}`, '').trim();
+        }
+        return name;
       };
 
       // Load template once (same logic as single print)
