@@ -652,6 +652,7 @@ const Inventory = () => {
       // Refresh in background (non-blocking)
       fetchItems(0, true);
     } catch (error) {
+      toast.dismiss(toastId);
       console.error('Bulk resync error:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       
