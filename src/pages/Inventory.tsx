@@ -757,14 +757,9 @@ const Inventory = () => {
         return text.substring(0, maxLength - 3) + '...';
       };
 
-      // Generate proper title for raw card
+      // Generate proper title for raw card - only card name (other fields handled separately)
       const generateTitle = (item: any) => {
-        const parts = []
-        if (item.year) parts.push(item.year);
-        if (item.brand_title) parts.push(item.brand_title);
-        if (item.subject) parts.push(item.subject);
-        if (item.card_number) parts.push(`#${item.card_number}`);
-        return parts.length > 0 ? parts.join(' ') : 'Raw Card';
+        return item.subject || 'Raw Card';
       };
 
       // Load the default template (prioritize ZPL Studio templates, then fallback to raw_card_2x1)
@@ -1028,14 +1023,9 @@ const Inventory = () => {
         return text.substring(0, maxLength - 3) + '...';
       };
 
-      // Generate proper title for raw card
+      // Generate proper title for raw card - only card name (other fields handled separately)
       const generateTitle = (item: any) => {
-        const parts = []
-        if (item.year) parts.push(item.year);
-        if (item.brand_title) parts.push(item.brand_title);
-        if (item.subject) parts.push(item.subject);
-        if (item.card_number) parts.push(`#${item.card_number}`);
-        return parts.length > 0 ? truncateForLabel(parts.join(' ')) : 'Raw Card';
+        return item.subject || 'Raw Card';
       };
 
       // Load template and generate ZPL using unified system (prioritize ZPL Studio templates)
@@ -1208,16 +1198,9 @@ const Inventory = () => {
         return text.substring(0, maxLength - 3) + '...';
       };
 
-      // Generate proper title for raw card
+      // Generate proper title for raw card - only card name (other fields handled separately)
       const generateTitle = (item: any) => {
-        const parts: string[] = [];
-        if (item.subject) parts.push(item.subject);
-        if (item.brand_title) parts.push(item.brand_title);
-        if (item.card_number) parts.push(`#${item.card_number}`);
-        
-        // Join and limit to reasonable length for label
-        const title = parts.join(' • ');
-        return title.length > 50 ? title.substring(0, 47) + '...' : title;
+        return item.subject || 'Raw Card';
       };
 
       // Load template (prioritize ZPL Studio templates, then fallback to raw_card_2x1) - SAME AS SINGLE PRINT
@@ -1443,14 +1426,9 @@ const Inventory = () => {
         return;
       }
 
-      // Helper function to generate title (same as single print)
+      // Helper function to generate title - only card name (other fields handled separately)
       const generateTitle = (item: any) => {
-        const parts: string[] = [];
-        if (item.year) parts.push(item.year);
-        if (item.brand_title) parts.push(item.brand_title);
-        if (item.subject) parts.push(item.subject);
-        if (item.card_number) parts.push(`#${item.card_number}`);
-        return parts.length > 0 ? parts.join(' ') : 'Raw Card';
+        return item.subject || 'Raw Card';
       };
 
       // Load template once (same logic as single print)
