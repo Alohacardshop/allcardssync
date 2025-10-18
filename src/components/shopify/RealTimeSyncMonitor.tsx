@@ -158,7 +158,7 @@ export function RealTimeSyncMonitor() {
 
   const handleStartProcessor = async () => {
     try {
-      const { data, error } = await supabase.functions.invoke('shopify-sync-processor')
+      const { data, error } = await supabase.functions.invoke('shopify-sync')
       
       if (error) throw error
       

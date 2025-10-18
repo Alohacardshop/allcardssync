@@ -128,7 +128,7 @@ export default function ShopifyQueueTest() {
       // Step 5: Trigger processor
       addResult({ step: 'Triggering processor', status: 'pending', message: 'Starting Shopify sync processor...' })
       
-      const { error: processorError } = await supabase.functions.invoke('shopify-sync-processor', { body: {} })
+      const { error: processorError } = await supabase.functions.invoke('shopify-sync', { body: {} })
 
       if (processorError) {
         addResult({ step: 'Triggering processor', status: 'error', message: `Failed: ${processorError.message}` })

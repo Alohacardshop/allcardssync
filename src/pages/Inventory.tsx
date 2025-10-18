@@ -427,7 +427,7 @@ const Inventory = () => {
       }
 
       // Trigger the processor
-      await supabase.functions.invoke('shopify-sync-processor', { body: {} });
+      await supabase.functions.invoke('shopify-sync', { body: {} });
       
       toast.success(
         `${item.sku} queued for Shopify sync`, 
@@ -505,7 +505,7 @@ const Inventory = () => {
       }
 
       // Trigger the processor to immediately process the update
-      await supabase.functions.invoke('shopify-sync-processor', { body: {} });
+      await supabase.functions.invoke('shopify-sync', { body: {} });
       
       toast.success(
         `${item.sku} queued for resync`,
@@ -573,7 +573,7 @@ const Inventory = () => {
       }
 
       if (successCount > 0) {
-        await supabase.functions.invoke('shopify-sync-processor', { body: {} });
+        await supabase.functions.invoke('shopify-sync', { body: {} });
         toast.success(`${successCount} items queued for sync to Shopify`);
       }
 
@@ -610,6 +610,12 @@ const Inventory = () => {
       item.shopify_product_id && item.store_key && item.shopify_location_gid
     );
 
+    console.log('[handleResyncSelected] Starting resync', {
+      selectedCount: selectedItems.size,
+      itemsToResyncCount: itemsToResync.length,
+      firstItem: itemsToResync[0]?.sku
+    });
+
     if (itemsToResync.length === 0) {
       (bulkSyncingRef as any) = false;
       setBulkSyncing(false);
@@ -636,7 +642,7 @@ const Inventory = () => {
       }
 
       if (successCount > 0) {
-        await supabase.functions.invoke('shopify-sync-processor', { body: {} });
+        await supabase.functions.invoke('shopify-sync', { body: {} });
         toast.success(`${successCount} items queued for resync to Shopify`);
       }
 
@@ -647,7 +653,17 @@ const Inventory = () => {
       fetchItems(0, true);
     } catch (error) {
       console.error('Bulk resync error:', error);
-      toast.error('Failed to start bulk resync');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      
+      if (errorMessage.includes('not found') || errorMessage.includes('does not exist')) {
+        toast.error('Shopify sync service is unavailable', {
+          description: 'Please contact support if this persists'
+        });
+      } else {
+        toast.error('Failed to start bulk resync', {
+          description: errorMessage
+        });
+      }
     } finally {
       (bulkSyncingRef as any) = false;
       setBulkSyncing(false);
