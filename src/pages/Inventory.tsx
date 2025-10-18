@@ -1438,12 +1438,14 @@ const Inventory = () => {
       });
 
       if (selectedRawItems.length === 0) {
+        setBulkPrinting(false);
         toast.info('No selected raw cards to reprint');
         return;
       }
 
       const tpl = await getTemplate('raw_card_2x1');
       if (!tpl || !tpl.zpl) {
+        setBulkPrinting(false);
         toast.error('Label template not found');
         return;
       }
