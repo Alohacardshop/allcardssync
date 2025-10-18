@@ -1261,14 +1261,45 @@ const Inventory = () => {
         return;
       }
       
-      // Filter for unprinted raw items - use current items state
-      const unprintedRawItems = items.filter(item => {
+      // Query database directly for ALL unprinted raw items (ignore UI filters/pagination)
+      const query = supabase
+        .from('intake_items')
+        .select('*')
+        .is('printed_at', null)
+        .is('deleted_at', null);
+      
+      // Add store/location filtering if assigned
+      if (assignedStore) {
+        query.eq('store_key', assignedStore);
+      }
+      if (selectedLocation) {
+        query.eq('shopify_location_gid', selectedLocation);
+      }
+      
+      const { data: allItems, error: fetchError } = await query;
+      
+      if (fetchError) {
+        toast.error(`Failed to fetch items: ${fetchError.message}`);
+        return;
+      }
+      
+      // Filter for raw items only (case-insensitive)
+      const unprintedRawItems = (allItems || []).filter(item => {
         const itemType = item.type?.toLowerCase() || 'raw';
-        return itemType === 'raw' && !item.printed_at && !item.deleted_at;
+        return itemType === 'raw';
       });
 
       if (unprintedRawItems.length === 0) {
-        toast.info('No unprinted raw cards found');
+        toast.info('No unprinted raw cards found in current store/location');
+        return;
+      }
+
+      // Show confirmation dialog with count
+      const confirmed = window.confirm(
+        `Print ${unprintedRawItems.length} unprinted raw card labels?\n\nThis will print ALL unprinted raw cards, not just those visible on the current page.`
+      );
+      
+      if (!confirmed) {
         return;
       }
 
@@ -1349,7 +1380,7 @@ const Inventory = () => {
             CARDNAME: generateTitle(item),
             SETNAME: item.brand_title || '',
             CARDNUMBER: item.card_number || '',
-            CONDITION: item?.variant ?? item?.condition ?? 'NM',
+            CONDITION: item?.variant ?? 'NM',
             PRICE: item?.price != null ? `$${Number(item.price).toFixed(2)}` : '$0.00',
             SKU: item?.sku ?? '',
             BARCODE: item?.sku ?? item?.id?.slice(-8) ?? 'NO-SKU',
