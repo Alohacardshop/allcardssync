@@ -19,7 +19,6 @@ import { zplFromElements, zplFromTemplateString } from '@/lib/labels/zpl';
 import { sendZplToPrinter } from '@/lib/labels/print';
 import { printQueue } from '@/lib/print/queueInstance';
 import type { JobVars, ZPLElement } from '@/lib/labels/types';
-import { renderLabelV2 } from '@/lib/print/templates';
 import { print } from '@/lib/printService';
 import { sendGradedToShopify, sendRawToShopify } from '@/hooks/useShopifySend';
 import { useBatchSendToShopify } from '@/hooks/useBatchSendToShopify';
@@ -1444,36 +1443,141 @@ const Inventory = () => {
         return;
       }
 
-      // Use the same label format as initial printing (labelV2)
+      // Helper function to generate title (same as single print)
+      const generateTitle = (item: any) => {
+        const parts: string[] = [];
+        if (item.year) parts.push(item.year);
+        if (item.brand_title) parts.push(item.brand_title);
+        if (item.subject) parts.push(item.subject);
+        if (item.card_number) parts.push(`#${item.card_number}`);
+        return parts.length > 0 ? parts.join(' ') : 'Raw Card';
+      };
+
+      // Load template once (same logic as single print)
+      let tpl = null;
+      
+      // First try to find a default ZPL Studio template
+      try {
+        const { data: zplTemplates } = await supabase
+          .from('label_templates')
+          .select('*')
+          .eq('template_type', 'raw')
+          .eq('is_default', true)
+          .limit(1);
+          
+        if (zplTemplates && zplTemplates.length > 0) {
+          const zplTemplate = zplTemplates[0];
+          tpl = {
+            id: zplTemplate.id,
+            name: zplTemplate.name,
+            format: 'zpl_studio' as const,
+            zpl: typeof (zplTemplate.canvas as any)?.zplLabel === 'string' 
+              ? (zplTemplate.canvas as any).zplLabel 
+              : '^XA^FO50,50^A0N,30,30^FD{{CARDNAME}}^FS^FO50,100^A0N,20,20^FD{{CONDITION}}^FS^FO50,150^BY2^BCN,60,Y,N,N^FD{{BARCODE}}^FS^XZ',
+            scope: 'org'
+          };
+          console.log('🖨️ Reprint: Using ZPL Studio template:', tpl.name);
+        }
+      } catch (error) {
+        console.warn('🖨️ Reprint: Failed to load ZPL Studio template, falling back:', error);
+      }
+      
+      // Fallback to regular template system if no ZPL Studio template found
+      if (!tpl || !tpl.zpl) {
+        tpl = await getTemplate('raw_card_2x1');
+      }
+      
+      if (!tpl) {
+        toast.error('No label template available. Please contact administrator.');
+        setBulkPrinting(false);
+        return;
+      }
+
+      console.log('🖨️ Reprint: Template loaded:', { id: tpl.id, format: tpl.format });
+
+      // Process each selected item with the same template rendering logic
       for (const item of selectedRawItems) {
         try {
-          const condition = item?.catalog_snapshot?.condition || item?.variant || 'NM';
-          const cardName = `${item?.brand_title || ''} ${item?.subject || ''} ${item?.card_number ? '#' + item?.card_number : ''}`.trim();
-          const price = item?.price ? `$${Number(item?.price).toFixed(2)}` : '$0.00';
-          const barcode = item?.sku ?? item?.id?.slice(-8) ?? 'NO-SKU';
+          // Prepare variables (same as single print)
+          const vars: JobVars = {
+            CARDNAME: generateTitle(item),
+            SETNAME: item.brand_title || '',
+            CARDNUMBER: item.card_number || '',
+            CONDITION: item.condition || 'NM',
+            PRICE: item.price ? `$${item.price.toFixed(2)}` : '$0.00',
+            SKU: item.sku || '',
+            BARCODE: item.sku || item.id?.slice(-8) || 'NO-SKU',
+          };
 
-          const zpl = renderLabelV2({
-            CONDITION: condition,
-            PRICE: price,
-            BARCODE: barcode,
-            CARDNAME: cardName
+          let zpl = '';
+          
+          // Handle different template formats (same as single print)
+          if (tpl.format === 'zpl_studio' && tpl.zpl) {
+            zpl = tpl.zpl
+              .replace(/{{CARDNAME}}/g, vars.CARDNAME || 'Unknown Card')
+              .replace(/{{SETNAME}}/g, vars.SETNAME || '')
+              .replace(/{{CARDNUMBER}}/g, vars.CARDNUMBER || '')
+              .replace(/{{CONDITION}}/g, vars.CONDITION || 'NM')
+              .replace(/{{PRICE}}/g, vars.PRICE || '$0.00')
+              .replace(/{{SKU}}/g, vars.SKU || '')
+              .replace(/{{BARCODE}}/g, vars.BARCODE || '');
+          } else if (tpl.format === 'elements' && tpl.layout) {
+            const filled = {
+              ...tpl.layout,
+              elements: tpl.layout.elements.map((el: ZPLElement) => {
+                if (el.type === 'text') {
+                  let updatedElement = { ...el };
+                  if (el.id === 'cardinfo' || el.id === 'cardname') {
+                    updatedElement.text = vars.CARDNAME ?? el.text;
+                  } else if (el.id === 'condition') {
+                    updatedElement.text = vars.CONDITION ?? el.text;
+                  } else if (el.id === 'price') {
+                    updatedElement.text = vars.PRICE ?? el.text;
+                  } else if (el.id === 'sku') {
+                    updatedElement.text = vars.SKU ?? el.text;
+                  } else if (el.id === 'setname') {
+                    updatedElement.text = vars.SETNAME ?? el.text;
+                  } else if (el.id === 'cardnumber') {
+                    updatedElement.text = vars.CARDNUMBER ?? el.text;
+                  }
+                  return updatedElement;
+                } else if (el.type === 'barcode' && el.id === 'barcode') {
+                  return { ...el, data: vars.BARCODE ?? el.data };
+                }
+                return el;
+              }),
+            };
+            zpl = zplFromElements(filled);
+          } else if (tpl.format === 'zpl' && tpl.zpl) {
+            zpl = zplFromTemplateString(tpl.zpl, vars);
+          } else {
+            throw new Error('Invalid template format');
+          }
+
+          // Sanitize and enqueue (same as single print)
+          const { sanitizeLabel } = await import('@/lib/print/sanitizeZpl');
+          const safeZpl = sanitizeLabel(zpl);
+          
+          await printQueue.enqueueSafe({ 
+            zpl: safeZpl, 
+            qty: 1, 
+            usePQ: true 
           });
 
-          await sendZplToPrinter(zpl, `Reprint: ${item.sku}`, { copies: 1 });
         } catch (err) {
-          console.error(`Failed to queue ${item.sku}:`, err);
+          console.error(`🖨️ Reprint: Failed to queue ${item.sku}:`, err);
         }
       }
 
-      toast.success(`${selectedRawItems.length} labels queued for printing`);
+      toast.success(`${selectedRawItems.length} labels queued for reprinting`);
       setSelectedItems(new Set());
     } catch (error) {
-      console.error('Reprint error:', error);
+      console.error('🖨️ Reprint error:', error);
       toast.error('Failed to queue reprint');
     } finally {
       setBulkPrinting(false);
     }
-  }, [items, selectedItems, assignedStore, selectedLocation]);
+  }, [items, selectedItems]);
 
   const selectAllVisible = useCallback(() => {
     const allVisibleIds = new Set(filteredItems.map(item => item.id));
