@@ -605,48 +605,127 @@ const Inventory = () => {
     (bulkSyncingRef as any) = true;
     setBulkSyncing(true);
 
-    const selectedItemsArray = filteredItems.filter(item => selectedItems.has(item.id));
-    const itemsToResync = selectedItemsArray.filter(item => 
-      item.shopify_product_id && item.store_key && item.shopify_location_gid
-    );
-
-    console.log('[handleResyncSelected] Starting resync', {
-      selectedCount: selectedItems.size,
-      itemsToResyncCount: itemsToResync.length,
-      firstItem: itemsToResync[0]?.sku
-    });
-
-    if (itemsToResync.length === 0) {
-      (bulkSyncingRef as any) = false;
-      setBulkSyncing(false);
-      toast.info('No synced items in selection to resync');
-      return;
-    }
-    const toastId = toast.loading(`Queueing ${itemsToResync.length} items for resync...`);
+    const toastId = toast.loading(`Fetching fresh data for ${selectedItems.size} items...`);
     
     try {
-      // Single batch RPC call instead of loop
-      const { data, error } = await supabase.rpc('batch_queue_shopify_sync', {
-        item_ids: itemsToResync.map(item => item.id),
-        sync_action: 'update'
+      // Fetch fresh data from database
+      const { data: freshItems, error: fetchError } = await supabase
+        .from('intake_items')
+        .select('*')
+        .in('id', Array.from(selectedItems));
+
+      if (fetchError) throw fetchError;
+
+      // Filter to valid items (has store_key, location, sku, not deleted)
+      const itemsToResync = freshItems.filter(item => 
+        item.store_key && item.shopify_location_gid && item.sku && !item.deleted_at
+      );
+
+      console.log('[handleResyncSelected] Starting resync', {
+        selectedCount: selectedItems.size,
+        itemsToResyncCount: itemsToResync.length,
+        firstItem: itemsToResync[0]?.sku
       });
 
-      if (error) throw error;
-      
-      const result = data?.[0];
-      const successCount = result?.queued_count || 0;
-      const failCount = result?.failed_count || 0;
-
-      toast.dismiss(toastId);
-      
-      if (successCount > 0) {
-        // Trigger processor
-        await supabase.functions.invoke('shopify-sync', { body: {} });
-        toast.success(`${successCount} items queued for resync to Shopify`);
+      if (itemsToResync.length === 0) {
+        (bulkSyncingRef as any) = false;
+        setBulkSyncing(false);
+        toast.dismiss(toastId);
+        toast.info('No valid items in selection to resync');
+        return;
       }
 
-      if (failCount > 0) {
-        toast.error(`${failCount} items failed to queue`);
+      // Separate Raw vs Graded items
+      const rawItems = itemsToResync.filter(item => 
+        item.type?.toLowerCase() === 'raw' && !item.psa_cert
+      );
+      const gradedItems = itemsToResync.filter(item => 
+        item.type?.toLowerCase() === 'graded' || item.psa_cert
+      );
+
+      toast.dismiss(toastId);
+      const progressToastId = toast.loading(`Resyncing ${itemsToResync.length} items to Shopify...`);
+
+      let created = 0, updated = 0, failed = 0;
+
+      // Process Raw cards
+      for (const item of rawItems) {
+        try {
+          const result = await sendRawToShopify({
+            storeKey: item.store_key as "hawaii" | "las_vegas",
+            locationGid: item.shopify_location_gid,
+            vendor: item.vendor,
+            item: {
+              id: item.id,
+              sku: item.sku,
+              brand_title: item.brand_title,
+              subject: item.subject,
+              card_number: item.card_number,
+              image_url: item.image_urls?.[0],
+              cost: item.cost,
+              title: item.subject || 'Raw Card',
+              price: item.price,
+              barcode: item.sku,
+              condition: item.grade,
+              quantity: item.quantity
+            }
+          });
+          
+          if (result?.success) {
+            if (result.created) created++;
+            else if (result.adjusted) updated++;
+          }
+        } catch (error) {
+          console.error(`Failed to resync raw item ${item.sku}:`, error);
+          failed++;
+        }
+      }
+
+      // Process Graded cards
+      for (const item of gradedItems) {
+        try {
+          const result = await sendGradedToShopify({
+            storeKey: item.store_key as "hawaii" | "las_vegas",
+            locationGid: item.shopify_location_gid,
+            vendor: item.vendor,
+            item: {
+              id: item.id,
+              sku: item.sku,
+              psa_cert: item.psa_cert,
+              barcode: item.sku,
+              title: item.subject,
+              price: item.price,
+              grade: item.grade,
+              quantity: item.quantity,
+              year: item.year,
+              brand_title: item.brand_title,
+              subject: item.subject,
+              card_number: item.card_number,
+              variant: item.variant,
+              category_tag: item.category,
+              image_url: item.image_urls?.[0],
+              cost: item.cost
+            }
+          });
+          
+          if (result?.success) {
+            created++;
+          }
+        } catch (error) {
+          console.error(`Failed to resync graded item ${item.sku}:`, error);
+          failed++;
+        }
+      }
+
+      toast.dismiss(progressToastId);
+
+      // Show results
+      if (created > 0 || updated > 0) {
+        toast.success(
+          `Resync complete: ${created} created, ${updated} updated${failed > 0 ? `, ${failed} failed` : ''}`
+        );
+      } else if (failed > 0) {
+        toast.error(`Resync failed for ${failed} items`);
       }
 
       // Refresh in background (non-blocking)
@@ -655,21 +734,14 @@ const Inventory = () => {
       toast.dismiss(toastId);
       console.error('Bulk resync error:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      
-      if (errorMessage.includes('not found') || errorMessage.includes('does not exist')) {
-        toast.error('Shopify sync service is unavailable', {
-          description: 'Please contact support if this persists'
-        });
-      } else {
-        toast.error('Failed to start bulk resync', {
-          description: errorMessage
-        });
-      }
+      toast.error('Failed to start bulk resync', {
+        description: errorMessage
+      });
     } finally {
       (bulkSyncingRef as any) = false;
       setBulkSyncing(false);
     }
-  }, [filteredItems, selectedItems, fetchItems]);
+  }, [selectedItems, fetchItems]);
 
   const handleBulkRetrySync = useCallback(async () => {
     const errorItems = filteredItems.filter(item => 
