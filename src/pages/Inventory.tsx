@@ -39,6 +39,7 @@ import { CutterSettingsPanel } from '@/components/CutterSettingsPanel';
 import { TestLabelButton } from '@/components/TestLabelButton';
 import { RefreshControls } from '@/components/RefreshControls';
 import { AuthStatusDebug } from '@/components/AuthStatusDebug';
+import { SubCategorySelector } from '@/components/search/SubCategorySelector';
 
 const ITEMS_PER_PAGE = 50;
 
@@ -69,6 +70,10 @@ const Inventory = () => {
   const [batchFilter, setBatchFilter] = useState<'all' | 'in_batch' | 'removed_from_batch'>(() => {
     return (localStorage.getItem('inventory-batch-filter') as 'all' | 'in_batch' | 'removed_from_batch') || 'all';
   });
+  
+  // Category filters
+  const [mainCategoryFilter, setMainCategoryFilter] = useState<string>('all');
+  const [subCategoryFilter, setSubCategoryFilter] = useState<string[]>([]);
   
   // UI state
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
@@ -187,6 +192,8 @@ const Inventory = () => {
           image_urls,
           year,
           category,
+          main_category,
+          sub_category,
           cost,
           removed_from_batch_at,
           intake_lots!inner (
@@ -210,6 +217,14 @@ const Inventory = () => {
       }
       if (selectedLocation) {
         query = query.eq('shopify_location_gid', selectedLocation);
+      }
+
+      // Apply category filters
+      if (mainCategoryFilter !== 'all') {
+        query = query.eq('main_category', mainCategoryFilter);
+      }
+      if (subCategoryFilter.length > 0) {
+        query = query.in('sub_category', subCategoryFilter);
       }
 
       // Apply status filters
@@ -287,7 +302,7 @@ const Inventory = () => {
       setLastFetchTime(Date.now());
       setLoadingMore(false);
     }
-  }, [statusFilter, typeFilter, batchFilter, assignedStore, selectedLocation, showSoldItems, snapshot.phases.data, loadingMore, setPhase]);
+  }, [statusFilter, typeFilter, batchFilter, mainCategoryFilter, subCategoryFilter, assignedStore, selectedLocation, showSoldItems, snapshot.phases.data, loadingMore, setPhase]);
 
   // Memoized filtered items
   const filteredItems = useMemo(() => {
@@ -2028,6 +2043,37 @@ const Inventory = () => {
                 isRefreshing={snapshot.phases.data === 'loading'}
                 lastRefresh={lastRefresh}
               />
+              
+              {/* Category Tabs */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Category</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Tabs value={mainCategoryFilter} onValueChange={(value) => {
+                    setMainCategoryFilter(value);
+                    setSubCategoryFilter([]); // Clear sub-category filter when changing main category
+                  }}>
+                    <TabsList className="grid w-full grid-cols-4">
+                      <TabsTrigger value="all">All Items</TabsTrigger>
+                      <TabsTrigger value="tcg">🎴 TCG</TabsTrigger>
+                      <TabsTrigger value="sports">⚾ Sports</TabsTrigger>
+                      <TabsTrigger value="comics">📚 Comics</TabsTrigger>
+                    </TabsList>
+                  </Tabs>
+                  
+                  {/* Sub-category filter (only show when main category is selected) */}
+                  {mainCategoryFilter !== 'all' && (
+                    <div className="mt-4">
+                      <SubCategorySelector
+                        mainCategory={mainCategoryFilter}
+                        selected={subCategoryFilter}
+                        onChange={setSubCategoryFilter}
+                      />
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
               
               {/* Filters and Search */}
             <Card>
