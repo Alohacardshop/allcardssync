@@ -185,6 +185,7 @@ export type Database = {
           last_shopify_synced_at: string | null
           lot_id: string | null
           lot_number: string
+          main_category: string | null
           original_filename: string | null
           price: number | null
           pricing_snapshot: Json | null
@@ -219,6 +220,7 @@ export type Database = {
           source_provider: string | null
           source_row_number: number | null
           store_key: string | null
+          sub_category: string | null
           subject: string | null
           type: string | null
           unique_item_uid: string
@@ -255,6 +257,7 @@ export type Database = {
           last_shopify_synced_at?: string | null
           lot_id?: string | null
           lot_number?: string
+          main_category?: string | null
           original_filename?: string | null
           price?: number | null
           pricing_snapshot?: Json | null
@@ -289,6 +292,7 @@ export type Database = {
           source_provider?: string | null
           source_row_number?: number | null
           store_key?: string | null
+          sub_category?: string | null
           subject?: string | null
           type?: string | null
           unique_item_uid?: string
@@ -325,6 +329,7 @@ export type Database = {
           last_shopify_synced_at?: string | null
           lot_id?: string | null
           lot_number?: string
+          main_category?: string | null
           original_filename?: string | null
           price?: number | null
           pricing_snapshot?: Json | null
@@ -359,6 +364,7 @@ export type Database = {
           source_provider?: string | null
           source_row_number?: number | null
           store_key?: string | null
+          sub_category?: string | null
           subject?: string | null
           type?: string | null
           unique_item_uid?: string
@@ -779,6 +785,36 @@ export type Database = {
           store_key?: string
           successful_items?: number
           total_items?: number
+        }
+        Relationships: []
+      }
+      main_categories: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          icon: string | null
+          id: string
+          name: string
+          sort_order: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          icon?: string | null
+          id: string
+          name: string
+          sort_order?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          icon?: string | null
+          id?: string
+          name?: string
+          sort_order?: number | null
+          updated_at?: string | null
         }
         Relationships: []
       }
@@ -1286,6 +1322,47 @@ export type Database = {
             columns: ["inventory_item_id"]
             isOneToOne: false
             referencedRelation: "intake_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sub_categories: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          id: string
+          is_active: boolean | null
+          main_category_id: string
+          name: string
+          sort_order: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          main_category_id: string
+          name: string
+          sort_order?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          main_category_id?: string
+          name?: string
+          sort_order?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sub_categories_main_category_id_fkey"
+            columns: ["main_category_id"]
+            isOneToOne: false
+            referencedRelation: "main_categories"
             referencedColumns: ["id"]
           },
         ]
@@ -2129,6 +2206,7 @@ export type Database = {
           last_shopify_synced_at: string | null
           lot_id: string | null
           lot_number: string
+          main_category: string | null
           original_filename: string | null
           price: number | null
           pricing_snapshot: Json | null
@@ -2163,6 +2241,7 @@ export type Database = {
           source_provider: string | null
           source_row_number: number | null
           store_key: string | null
+          sub_category: string | null
           subject: string | null
           type: string | null
           unique_item_uid: string
