@@ -14,6 +14,7 @@ import { validateCompleteStoreContext } from "@/utils/storeValidation";
 import { generateTCGSKU } from "@/lib/sku";
 import { useRawIntakeSettings } from "@/hooks/useRawIntakeSettings";
 import { rawCardSchema } from "@/lib/validation/intake-schemas";
+import { SubCategoryCombobox } from "@/components/ui/sub-category-combobox";
 
 interface RawCardIntakeProps {
   onBatchAdd?: (item: any) => void;
@@ -29,6 +30,8 @@ export const RawCardIntake = ({ onBatchAdd }: RawCardIntakeProps) => {
   const [price, setPrice] = useState("");
   const [notes, setNotes] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [mainCategory, setMainCategory] = useState("tcg");
+  const [subCategory, setSubCategory] = useState("");
 
   const handleSubmit = async () => {
     // StoreContext is now stable - use directly
@@ -81,13 +84,15 @@ export const RawCardIntake = ({ onBatchAdd }: RawCardIntakeProps) => {
         quantity_in: 1,
         brand_title_in: brand,
         subject_in: subject,
-        category_in: "Trading Cards",
+        category_in: subCategory || "Trading Cards",
         variant_in: "Raw",
         card_number_in: cardNumber,
         grade_in: condition,
         price_in: parseFloat(price) || 0,
         sku_in: generatedSku,
         processing_notes_in: notes,
+        main_category_in: mainCategory,
+        sub_category_in: subCategory,
         catalog_snapshot_in: {
           type: "raw_card",
           brand: brand,
@@ -153,6 +158,29 @@ export const RawCardIntake = ({ onBatchAdd }: RawCardIntakeProps) => {
         <CardTitle>Raw Card Intake</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+
+        <div>
+          <Label htmlFor="mainCategory">Main Category <span className="text-destructive">*</span></Label>
+          <Select value={mainCategory} onValueChange={setMainCategory}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select category" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="tcg">🎴 TCG</SelectItem>
+              <SelectItem value="sports">⚾ Sports</SelectItem>
+              <SelectItem value="comics">📚 Comics</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div>
+          <Label htmlFor="subCategory">Sub-Category <span className="text-destructive">*</span></Label>
+          <SubCategoryCombobox
+            mainCategory={mainCategory}
+            value={subCategory}
+            onChange={setSubCategory}
+          />
+        </div>
 
         <div>
           <Label htmlFor="brand">Brand/Set</Label>
@@ -227,7 +255,7 @@ export const RawCardIntake = ({ onBatchAdd }: RawCardIntakeProps) => {
 
         <Button
           onClick={handleSubmit}
-          disabled={isLoading || !brand || !subject || !condition || !price}
+          disabled={isLoading || !mainCategory || !subCategory || !brand || !subject || !condition || !price}
           className="w-full"
         >
           {isLoading ? (
