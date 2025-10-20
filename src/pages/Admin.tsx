@@ -57,6 +57,7 @@ import { ZebraDiagnosticsPanel } from '@/components/ZebraDiagnosticsPanel';
 import { TCGHealthCheck } from '@/components/admin/TCGHealthCheck';
 import { DuplicateCleanup } from '@/components/admin/DuplicateCleanup';
 import { VendorManagement } from '@/components/admin/VendorManagement';
+import { CategoryManagement } from '@/components/admin/CategoryManagement';
 
 const Admin = () => {
   const [activeSection, setActiveSection] = useState('overview');
@@ -118,6 +119,13 @@ const Admin = () => {
       icon: Users,
       description: 'User assignments and permissions',
       url: '#users'
+    },
+    {
+      id: 'categories',
+      title: 'Category Management',
+      icon: Tag,
+      description: 'Manage inventory categories and sub-categories',
+      url: '#categories'
     },
     {
       id: 'system',
@@ -395,6 +403,19 @@ const Admin = () => {
               </p>
             </div>
             <UserAssignmentManager />
+          </div>
+        );
+
+      case 'categories':
+        return (
+          <div className="space-y-6">
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight">Category Management</h1>
+              <p className="text-muted-foreground">
+                Manage inventory categories and sub-categories for TCG, Sports, and Comics.
+              </p>
+            </div>
+            <CategoryManagement />
           </div>
         );
 
