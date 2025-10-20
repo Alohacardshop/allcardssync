@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { useStore } from '@/contexts/StoreContext';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { SubCategoryCombobox } from '@/components/ui/sub-category-combobox';
+import { detectMainCategory } from '@/utils/categoryMapping';
 
 interface OtherItemsEntryProps {
   onBatchAdd?: (item: any) => void;
@@ -26,6 +27,14 @@ export function OtherItemsEntry({ onBatchAdd }: OtherItemsEntryProps) {
   const [accessCheckLoading, setAccessCheckLoading] = useState(false);
   const [mainCategory, setMainCategory] = useState('tcg');
   const [subCategory, setSubCategory] = useState('');
+
+  // Auto-detect main category when description changes
+  React.useEffect(() => {
+    if (description) {
+      const detected = detectMainCategory(description);
+      setMainCategory(detected);
+    }
+  }, [description]);
 
   // Access check function (reused from BulkCardIntake)
   const checkAccessAndShowToast = async (): Promise<boolean> => {

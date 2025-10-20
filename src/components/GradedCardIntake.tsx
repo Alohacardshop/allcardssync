@@ -20,6 +20,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { PSACertificateData } from "@/types/psa";
 import { gradedCardSchema } from "@/lib/validation/intake-schemas";
 import { SubCategoryCombobox } from "@/components/ui/sub-category-combobox";
+import { detectMainCategory } from "@/utils/categoryMapping";
 
 interface GradedCardIntakeProps {
   onBatchAdd?: () => void;
@@ -187,6 +188,11 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
       const normalizedData = normalizePSAData(data.data);
       setCardData({ ...normalizedData, source: data.source });
       
+      // Auto-detect main category from PSA data
+      const detectedCategory = detectMainCategory(
+        normalizedData.brandTitle || normalizedData.category || ''
+      );
+      
       // Auto-populate form with fetched data
       setFormData(prev => ({
         ...prev,
@@ -197,6 +203,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         year: normalizedData.year || "",
         grade: normalizedData.grade || "",
         varietyPedigree: normalizedData.varietyPedigree || "",
+        mainCategory: detectedCategory,
       }));
 
       setFetchState('success');

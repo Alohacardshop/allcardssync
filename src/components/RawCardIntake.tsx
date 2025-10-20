@@ -15,6 +15,7 @@ import { generateTCGSKU } from "@/lib/sku";
 import { useRawIntakeSettings } from "@/hooks/useRawIntakeSettings";
 import { rawCardSchema } from "@/lib/validation/intake-schemas";
 import { SubCategoryCombobox } from "@/components/ui/sub-category-combobox";
+import { detectMainCategory } from "@/utils/categoryMapping";
 
 interface RawCardIntakeProps {
   onBatchAdd?: (item: any) => void;
@@ -32,6 +33,14 @@ export const RawCardIntake = ({ onBatchAdd }: RawCardIntakeProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const [mainCategory, setMainCategory] = useState("tcg");
   const [subCategory, setSubCategory] = useState("");
+
+  // Auto-detect main category when brand changes
+  React.useEffect(() => {
+    if (brand) {
+      const detected = detectMainCategory(brand);
+      setMainCategory(detected);
+    }
+  }, [brand]);
 
   const handleSubmit = async () => {
     // StoreContext is now stable - use directly

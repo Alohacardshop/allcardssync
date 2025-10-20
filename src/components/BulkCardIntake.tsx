@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,6 +12,7 @@ import { useStore } from '@/contexts/StoreContext';
 import { OtherItemsEntry } from '@/components/OtherItemsEntry';
 import { validateCompleteStoreContext, logStoreContext } from '@/utils/storeValidation';
 import { SubCategoryCombobox } from '@/components/ui/sub-category-combobox';
+import { detectMainCategory } from '@/utils/categoryMapping';
 
 interface BulkCardIntakeProps {
   onBatchAdd?: (item: any) => void;
@@ -33,6 +34,14 @@ export function BulkCardIntake({ onBatchAdd }: BulkCardIntakeProps) {
   const [accessCheckLoading, setAccessCheckLoading] = useState(false);
   const [mainCategory, setMainCategory] = useState('tcg');
   const [subCategory, setSubCategory] = useState('');
+
+  // Auto-detect main category when game changes
+  React.useEffect(() => {
+    if (selectedGame) {
+      const detected = detectMainCategory(selectedGame);
+      setMainCategory(detected);
+    }
+  }, [selectedGame]);
 
   // Access check function
   const checkAccessAndShowToast = async (): Promise<boolean> => {
