@@ -100,7 +100,7 @@ export const RawCardIntake = ({ onBatchAdd }: RawCardIntakeProps) => {
           card_number: cardNumber,
           condition: condition
         }
-      });
+      } as any);
 
       if (error) throw error;
 

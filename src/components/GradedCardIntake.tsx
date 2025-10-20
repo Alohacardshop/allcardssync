@@ -19,6 +19,7 @@ import { useDebounce } from "@/hooks/useDebounce";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { PSACertificateData } from "@/types/psa";
 import { gradedCardSchema } from "@/lib/validation/intake-schemas";
+import { SubCategoryCombobox } from "@/components/ui/sub-category-combobox";
 
 interface GradedCardIntakeProps {
   onBatchAdd?: () => void;
@@ -76,6 +77,8 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
     quantity: 1,
     psaEstimate: "",
     varietyPedigree: "",
+    mainCategory: "tcg",
+    subCategory: "",
   });
 
   // Helper function to sanitize certificate input (digits only)
@@ -287,6 +290,8 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         quantity: 1,
         psaEstimate: "",
         varietyPedigree: "",
+        mainCategory: "tcg",
+        subCategory: "",
       });
 
       toast.success("Card added to batch successfully!");
@@ -432,6 +437,32 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
 
           {/* Form Fields */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="mainCategory">Main Category <span className="text-destructive">*</span></Label>
+              <Select value={formData.mainCategory} onValueChange={(value) => {
+                updateFormField('mainCategory', value);
+                updateFormField('subCategory', ''); // Clear sub-category when main category changes
+              }}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="tcg">🎴 TCG</SelectItem>
+                  <SelectItem value="sports">⚾ Sports</SelectItem>
+                  <SelectItem value="comics">📚 Comics</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="subCategory">Sub-Category <span className="text-destructive">*</span></Label>
+              <SubCategoryCombobox
+                mainCategory={formData.mainCategory}
+                value={formData.subCategory}
+                onChange={(value) => updateFormField('subCategory', value)}
+              />
+            </div>
+
             <div>
               <Label htmlFor="brand">Brand <span className="text-destructive">*</span></Label>
               <Input
