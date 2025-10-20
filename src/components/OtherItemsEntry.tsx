@@ -8,6 +8,8 @@ import { Loader2, FileText } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useStore } from '@/contexts/StoreContext';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { SubCategoryCombobox } from '@/components/ui/sub-category-combobox';
 
 interface OtherItemsEntryProps {
   onBatchAdd?: (item: any) => void;
@@ -22,6 +24,8 @@ export function OtherItemsEntry({ onBatchAdd }: OtherItemsEntryProps) {
   const [totalPrice, setTotalPrice] = useState(0);
   const [addingOther, setAddingOther] = useState(false);
   const [accessCheckLoading, setAccessCheckLoading] = useState(false);
+  const [mainCategory, setMainCategory] = useState('tcg');
+  const [subCategory, setSubCategory] = useState('');
 
   // Access check function (reused from BulkCardIntake)
   const checkAccessAndShowToast = async (): Promise<boolean> => {
@@ -117,7 +121,7 @@ export function OtherItemsEntry({ onBatchAdd }: OtherItemsEntryProps) {
         quantity_in: amount,
         brand_title_in: 'Other Items',
         subject_in: description.trim(),
-        category_in: 'Other Items',
+        category_in: subCategory || 'Other Items',
         variant_in: 'Other',
         card_number_in: '',
         grade_in: '',
@@ -125,6 +129,8 @@ export function OtherItemsEntry({ onBatchAdd }: OtherItemsEntryProps) {
         cost_in: totalPrice, // Use same amount for cost
         sku_in: `OTHER-${Date.now()}`,
         source_provider_in: 'other_entry',
+        main_category_in: mainCategory,
+        sub_category_in: subCategory,
         catalog_snapshot_in: {
           name: description.trim(),
           type: 'other_item'
@@ -160,6 +166,7 @@ export function OtherItemsEntry({ onBatchAdd }: OtherItemsEntryProps) {
         setDescription('');
         setAmount(1);
         setTotalPrice(0);
+        setSubCategory('');
       }
     } catch (error: any) {
       console.error('Other item add error:', error);
@@ -181,6 +188,29 @@ export function OtherItemsEntry({ onBatchAdd }: OtherItemsEntryProps) {
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
+        <div>
+          <Label htmlFor="mainCategory">Main Category</Label>
+          <Select value={mainCategory} onValueChange={setMainCategory}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select category" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="tcg">🎴 TCG</SelectItem>
+              <SelectItem value="sports">⚾ Sports</SelectItem>
+              <SelectItem value="comics">📚 Comics</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div>
+          <Label htmlFor="subCategory">Sub-Category</Label>
+          <SubCategoryCombobox
+            mainCategory={mainCategory}
+            value={subCategory}
+            onChange={setSubCategory}
+          />
+        </div>
+
         {/* Description */}
         <div>
           <Label htmlFor="otherDescription">Description</Label>
@@ -233,7 +263,7 @@ export function OtherItemsEntry({ onBatchAdd }: OtherItemsEntryProps) {
         {/* Add to Batch Button */}
         <Button
           onClick={handleAddOtherToBatch}
-          disabled={addingOther || !description.trim() || !assignedStore || !selectedLocation || amount <= 0 || totalPrice <= 0 || accessCheckLoading}
+          disabled={addingOther || !description.trim() || !assignedStore || !selectedLocation || amount <= 0 || totalPrice <= 0 || accessCheckLoading || !subCategory}
           className="w-full"
         >
           {addingOther || accessCheckLoading ? (

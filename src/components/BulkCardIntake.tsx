@@ -11,6 +11,8 @@ import { toast } from 'sonner';
 import { useStore } from '@/contexts/StoreContext';
 import { OtherItemsEntry } from '@/components/OtherItemsEntry';
 import { validateCompleteStoreContext, logStoreContext } from '@/utils/storeValidation';
+import { SubCategoryCombobox } from '@/components/ui/sub-category-combobox';
+
 interface BulkCardIntakeProps {
   onBatchAdd?: (item: any) => void;
 }
@@ -29,6 +31,8 @@ export function BulkCardIntake({ onBatchAdd }: BulkCardIntakeProps) {
   const [totalPrice, setTotalPrice] = useState(0);
   const [addingBulk, setAddingBulk] = useState(false);
   const [accessCheckLoading, setAccessCheckLoading] = useState(false);
+  const [mainCategory, setMainCategory] = useState('tcg');
+  const [subCategory, setSubCategory] = useState('');
 
   // Access check function
   const checkAccessAndShowToast = async (): Promise<boolean> => {
@@ -143,7 +147,7 @@ export function BulkCardIntake({ onBatchAdd }: BulkCardIntakeProps) {
         quantity_in: amount,
         brand_title_in: gameTitle,
         subject_in: 'Bulk Cards',
-        category_in: 'Card Bulk',
+        category_in: subCategory || 'Card Bulk',
         variant_in: 'Bulk',
         card_number_in: '',
         grade_in: '',
@@ -151,6 +155,8 @@ export function BulkCardIntake({ onBatchAdd }: BulkCardIntakeProps) {
         cost_in: totalPrice, // Use same amount for cost
         sku_in: `${selectedGame.toUpperCase()}-BULK-${Date.now()}`,
         source_provider_in: 'bulk_entry',
+        main_category_in: mainCategory,
+        sub_category_in: subCategory,
         catalog_snapshot_in: {
           name: gameTitle,
           game: selectedGame,
@@ -187,6 +193,7 @@ export function BulkCardIntake({ onBatchAdd }: BulkCardIntakeProps) {
         setSelectedGame('');
         setAmount(1);
         setTotalPrice(0);
+        setSubCategory('');
       }
     } catch (error: any) {
       console.error('Bulk add error:', error);
@@ -218,6 +225,29 @@ export function BulkCardIntake({ onBatchAdd }: BulkCardIntakeProps) {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div>
+            <Label htmlFor="mainCategory">Main Category</Label>
+            <Select value={mainCategory} onValueChange={setMainCategory}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select category" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="tcg">🎴 TCG</SelectItem>
+                <SelectItem value="sports">⚾ Sports</SelectItem>
+                <SelectItem value="comics">📚 Comics</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <Label htmlFor="subCategory">Sub-Category</Label>
+            <SubCategoryCombobox
+              mainCategory={mainCategory}
+              value={subCategory}
+              onChange={setSubCategory}
+            />
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Game Selector */}
             <div>
@@ -274,7 +304,7 @@ export function BulkCardIntake({ onBatchAdd }: BulkCardIntakeProps) {
           {/* Add to Batch Button */}
           <Button
             onClick={handleAddBulkToBatch}
-            disabled={addingBulk || !selectedGame || !assignedStore || !selectedLocation || amount <= 0 || totalPrice <= 0 || accessCheckLoading}
+            disabled={addingBulk || !selectedGame || !assignedStore || !selectedLocation || amount <= 0 || totalPrice <= 0 || accessCheckLoading || !subCategory}
             className="w-full"
           >
             {addingBulk || accessCheckLoading ? (

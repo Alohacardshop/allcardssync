@@ -14,6 +14,8 @@ import { useStore } from "@/contexts/StoreContext";
 import { v4 as uuidv4 } from 'uuid';
 // PSA service removed - using direct API integration
 import { normalizePSAData } from "@/lib/psaNormalization";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SubCategoryCombobox } from "@/components/ui/sub-category-combobox";
 
 interface PSAImportItem {
   psaCert: string;
@@ -41,6 +43,8 @@ export const PSABulkImport = () => {
   const [manualInput, setManualInput] = useState('');
   const { assignedStore, selectedLocation, availableLocations } = useStore();
   const batchId = uuidv4(); // Generate a unique batch ID for this import session
+  const [mainCategory, setMainCategory] = useState('tcg');
+  const [subCategory, setSubCategory] = useState('');
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const uploadedFile = event.target.files?.[0];
@@ -121,7 +125,7 @@ export const PSABulkImport = () => {
         quantity_in: 1,
         brand_title_in: item.data?.brandTitle || '',
         subject_in: item.data?.subject || '',
-        category_in: item.data?.category || '',
+        category_in: subCategory || item.data?.category || '',
         variant_in: '',
         card_number_in: '',
         grade_in: item.data?.grade || '',
@@ -129,6 +133,8 @@ export const PSABulkImport = () => {
         cost_in: null,
         sku_in: item.psaCert, // Use cert number directly as SKU
         source_provider_in: 'psa_bulk',
+        main_category_in: mainCategory,
+        sub_category_in: subCategory,
         catalog_snapshot_in: item.data,
         pricing_snapshot_in: {
           price: 0,
@@ -225,6 +231,29 @@ export const PSABulkImport = () => {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div>
+            <Label htmlFor="mainCategory">Main Category</Label>
+            <Select value={mainCategory} onValueChange={setMainCategory}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select category" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="tcg">🎴 TCG</SelectItem>
+                <SelectItem value="sports">⚾ Sports</SelectItem>
+                <SelectItem value="comics">📚 Comics</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <Label htmlFor="subCategory">Sub-Category</Label>
+            <SubCategoryCombobox
+              mainCategory={mainCategory}
+              value={subCategory}
+              onChange={setSubCategory}
+            />
+          </div>
+
           <Tabs defaultValue="file" className="w-full">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="file">Upload File</TabsTrigger>
@@ -291,7 +320,7 @@ export const PSABulkImport = () => {
                 </p>
                 <Button
                   onClick={handleImport}
-                  disabled={importing}
+                  disabled={importing || !subCategory}
                   className="flex items-center gap-2"
                 >
                   {importing ? (
