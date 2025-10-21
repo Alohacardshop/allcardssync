@@ -22,6 +22,13 @@ interface UserAssignment {
   location_gid: string;
   location_name: string | null;
   is_default: boolean;
+  region_id: string | null;
+}
+
+interface Region {
+  id: string;
+  name: string;
+  description: string | null;
 }
 
 interface UserWithDetails {
@@ -43,6 +50,7 @@ interface UserWithDetails {
 interface Store {
   key: string;
   name: string;
+  region_id: string | null;
 }
 
 interface Location {
@@ -53,6 +61,7 @@ interface Location {
 
 export function UserAssignmentManager() {
   const [users, setUsers] = useState<UserWithDetails[]>([]);
+  const [regions, setRegions] = useState<Region[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,6 +78,7 @@ export function UserAssignmentManager() {
     email: "",
     password: "",
     roles: [] as string[],
+    selectedRegion: "" as string,
     selectedStores: [] as string[],
     storeLocations: {} as { [storeKey: string]: string[] },
     defaultLocations: {} as { [storeKey: string]: string }
@@ -79,6 +89,7 @@ export function UserAssignmentManager() {
       email: "",
       password: "",
       roles: [],
+      selectedRegion: "",
       selectedStores: [],
       storeLocations: {},
       defaultLocations: {}
@@ -90,7 +101,7 @@ export function UserAssignmentManager() {
     setLoading(true);
     setError(null);
     try {
-      await Promise.all([loadUsers(), loadStores()]);
+      await Promise.all([loadUsers(), loadRegions(), loadStores()]);
     } catch (error) {
       console.error("Failed to load data:", error);
       const errorMessage = error instanceof Error ? error.message : "Failed to load data";
@@ -98,6 +109,22 @@ export function UserAssignmentManager() {
       toast.error(`Failed to load data: ${errorMessage}`);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadRegions = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("regions")
+        .select("id, name, description")
+        .eq("is_active", true)
+        .order("name");
+      
+      if (error) throw error;
+      setRegions(data || []);
+    } catch (error) {
+      console.error("Failed to load regions:", error);
+      throw error;
     }
   };
 
@@ -138,11 +165,11 @@ export function UserAssignmentManager() {
 
       console.log("Successfully loaded users:", authData.users?.length || 0, "users");
 
-      // Load assignments
+      // Load assignments including region_id
       const { data: assignments, error: assignError } = await supabase
         .from("user_shopify_assignments")
         .select(`
-          id, user_id, store_key, location_gid, location_name, is_default
+          id, user_id, store_key, location_gid, location_name, is_default, region_id
         `);
 
       if (assignError) {
@@ -194,7 +221,7 @@ export function UserAssignmentManager() {
     try {
       const { data, error } = await supabase
         .from("shopify_stores")
-        .select("key, name")
+        .select("key, name, region_id")
         .order("name");
       
       if (error) throw error;
@@ -230,14 +257,27 @@ export function UserAssignmentManager() {
     }
   };
 
+  const handleRegionSelection = (regionId: string) => {
+    setFormData(prev => ({
+      ...prev,
+      selectedRegion: regionId,
+      selectedStores: [], // Clear stores when region changes
+      storeLocations: {},
+      defaultLocations: {}
+    }));
+  };
+
   const handleStoreSelection = async (storeKey: string, checked: boolean) => {
+    if (!formData.selectedRegion) {
+      toast.error("Please select a region first");
+      return;
+    }
+
     if (checked) {
-      // Single store selection - replace any existing store
+      // Add to selected stores (can select multiple in same region)
       setFormData(prev => ({
         ...prev,
-        selectedStores: [storeKey], // Only one store allowed
-        storeLocations: {}, // Clear existing locations
-        defaultLocations: {} // Clear existing defaults
+        selectedStores: [...prev.selectedStores, storeKey]
       }));
 
       // Load locations for this store
@@ -249,20 +289,30 @@ export function UserAssignmentManager() {
       setFormData(prev => ({
         ...prev,
         storeLocations: {
+          ...prev.storeLocations,
           [storeKey]: storeLocations.map(l => l.gid)
         },
         defaultLocations: {
+          ...prev.defaultLocations,
           [storeKey]: storeLocations[0]?.gid || ""
         }
       }));
     } else {
       // Remove store
-      setFormData(prev => ({
-        ...prev,
-        selectedStores: [],
-        storeLocations: {},
-        defaultLocations: {}
-      }));
+      setFormData(prev => {
+        const newStores = prev.selectedStores.filter(s => s !== storeKey);
+        const newLocations = { ...prev.storeLocations };
+        const newDefaults = { ...prev.defaultLocations };
+        delete newLocations[storeKey];
+        delete newDefaults[storeKey];
+        
+        return {
+          ...prev,
+          selectedStores: newStores,
+          storeLocations: newLocations,
+          defaultLocations: newDefaults
+        };
+      });
     }
   };
 
@@ -308,14 +358,23 @@ export function UserAssignmentManager() {
       return;
     }
 
+    if (!formData.selectedRegion) {
+      toast.error("Region is required");
+      return;
+    }
+
+    if (formData.selectedStores.length === 0) {
+      toast.error("At least one store must be selected");
+      return;
+    }
+
     try {
       if (editingUser) {
         // Update existing user
         const storeAssignments = [];
         
-                // User can only be assigned to one store now - use the first (and only) selected store
-                const storeKey = formData.selectedStores[0];
-                if (storeKey) {
+        // Build assignments for all selected stores in the region
+        for (const storeKey of formData.selectedStores) {
           const storeLocations = formData.storeLocations[storeKey] || [];
           const defaultLocation = formData.defaultLocations[storeKey];
           
@@ -328,7 +387,8 @@ export function UserAssignmentManager() {
               storeKey,
               locationGid,
               locationName: location?.name || locationGid,
-              isDefault: locationGid === defaultLocation
+              isDefault: locationGid === defaultLocation,
+              regionId: formData.selectedRegion
             });
           }
         }
@@ -351,9 +411,8 @@ export function UserAssignmentManager() {
         // Create new user
         const storeAssignments = [];
         
-                // User can only be assigned to one store now - use the first (and only) selected store  
-                const storeKey = formData.selectedStores[0];
-                if (storeKey) {
+        // Build assignments for all selected stores in the region
+        for (const storeKey of formData.selectedStores) {
           const storeLocations = formData.storeLocations[storeKey] || [];
           const defaultLocation = formData.defaultLocations[storeKey];
           
@@ -366,7 +425,8 @@ export function UserAssignmentManager() {
               storeKey,
               locationGid,
               locationName: location?.name || locationGid,
-              isDefault: locationGid === defaultLocation
+              isDefault: locationGid === defaultLocation,
+              regionId: formData.selectedRegion
             });
           }
         }
@@ -416,12 +476,31 @@ export function UserAssignmentManager() {
     }
   };
 
-  const openEditDialog = (user: UserWithDetails) => {
+  const openEditDialog = async (user: UserWithDetails) => {
     setEditingUser(user);
+    
+    // Get region from user's first assignment
+    const firstStoreKey = Object.keys(user.storeAssignments)[0];
+    let userRegion = "";
+    
+    if (firstStoreKey) {
+      const { data: assignment } = await supabase
+        .from("user_shopify_assignments")
+        .select("region_id")
+        .eq("user_id", user.id)
+        .eq("store_key", firstStoreKey)
+        .maybeSingle();
+        
+      if (assignment?.region_id) {
+        userRegion = assignment.region_id;
+      }
+    }
+    
     setFormData({
       email: user.email,
       password: "",
       roles: user.roles,
+      selectedRegion: userRegion,
       selectedStores: Object.keys(user.storeAssignments),
       storeLocations: Object.fromEntries(
         Object.entries(user.storeAssignments).map(([storeKey, data]) => [
@@ -590,18 +669,53 @@ export function UserAssignmentManager() {
 
               <Separator />
 
-              {/* Store Access */}
+              {/* Region Selection */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
-                  <Store className="h-5 w-5" />
-                  <h3 className="text-lg font-medium">Store Access</h3>
+                  <MapPin className="h-5 w-5" />
+                  <h3 className="text-lg font-medium">Region *</h3>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  Select the store this user can access. Each user can only be assigned to one store, but can have multiple locations within that store.
+                  Each user can only be assigned to one region (Las Vegas or Hawaii).
                 </p>
+                <Select
+                  value={formData.selectedRegion}
+                  onValueChange={handleRegionSelection}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a region..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {regions.map(region => (
+                      <SelectItem key={region.id} value={region.id}>
+                        <div className="flex flex-col">
+                          <span className="font-medium">{region.name}</span>
+                          {region.description && (
+                            <span className="text-xs text-muted-foreground">{region.description}</span>
+                          )}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {formData.selectedRegion && (
+                <>
+                  <Separator />
+
+                  {/* Store Access */}
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <Store className="h-5 w-5" />
+                      <h3 className="text-lg font-medium">Store Access *</h3>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Select stores within the {regions.find(r => r.id === formData.selectedRegion)?.name} region. User can access multiple stores in their assigned region.
+                    </p>
                 
-                <div className="space-y-4">
-                  {stores.map(store => (
+                    <div className="space-y-4">
+                      {stores.filter(store => store.region_id === formData.selectedRegion).map(store => (
                     <Card key={store.key} className="border">
                       <CardContent className="p-4">
                         <div className="flex items-center space-x-2 mb-3">
@@ -645,10 +759,12 @@ export function UserAssignmentManager() {
                           </div>
                         )}
                       </CardContent>
-                    </Card>
-                  ))}
+                      </Card>
+                    ))}
+                  </div>
                 </div>
-              </div>
+                </>
+              )}
 
               <div className="flex gap-2 pt-4">
                 <Button onClick={handleSaveUser} className="flex-1">

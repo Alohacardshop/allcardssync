@@ -21,6 +21,11 @@ interface StoreContextType {
   assignedStore: string | null;
   assignedStoreName: string | null;
   
+  // Region management
+  assignedRegion: string | null;
+  assignedRegionName: string | null;
+  availableStoresInRegion: Store[];
+  
   // Location management
   selectedLocation: string | null;
   setSelectedLocation: (locationGid: string | null) => void;
@@ -36,6 +41,7 @@ interface StoreContextType {
     location_gid: string;
     location_name: string;
     is_default: boolean;
+    region_id: string | null;
   }>;
   
   // Actions
@@ -60,6 +66,9 @@ interface StoreProviderProps {
 export function StoreProvider({ children }: StoreProviderProps) {
   const [assignedStore, setAssignedStore] = useState<string | null>(null);
   const [assignedStoreName, setAssignedStoreName] = useState<string | null>(null);
+  const [assignedRegion, setAssignedRegion] = useState<string | null>(null);
+  const [assignedRegionName, setAssignedRegionName] = useState<string | null>(null);
+  const [availableStoresInRegion, setAvailableStoresInRegion] = useState<Store[]>([]);
   const [selectedLocationState, setSelectedLocationState] = useLocalStorageString('selected_shopify_location', '');
   const [availableLocations, setAvailableLocations] = useState<Location[]>([]);
   const [loadingLocations, setLoadingLocations] = useState(false);
@@ -177,10 +186,10 @@ export function StoreProvider({ children }: StoreProviderProps) {
       });
       setIsStaff(staffCheck || false);
 
-      // Load user assignments with fresh data
+      // Load user assignments with fresh data including region
       const { data: assignments, error: assignmentsError } = await supabase
         .from("user_shopify_assignments")
-        .select("store_key, location_gid, location_name, is_default")
+        .select("store_key, location_gid, location_name, is_default, region_id")
         .eq("user_id", user.id)
         .order("is_default", { ascending: false }); // Put defaults first
       
@@ -192,10 +201,36 @@ export function StoreProvider({ children }: StoreProviderProps) {
       console.log("StoreContext: Loaded assignments:", assignments);
       setUserAssignments(assignments || []);
 
-      // Auto-assign to user's single store (with new constraint, users can only have one store)
+      // Auto-assign to user's region and store
       if (assignments && assignments.length > 0) {
-        const userAssignment = assignments[0]; // Should only be one store now
+        const userAssignment = assignments[0];
         console.log("StoreContext: Auto-assigning to user's store:", userAssignment);
+        
+        // Set region from assignment
+        if (userAssignment.region_id) {
+          setAssignedRegion(userAssignment.region_id);
+          
+          // Load region details
+          const { data: regionData } = await supabase
+            .from("regions")
+            .select("name")
+            .eq("id", userAssignment.region_id)
+            .maybeSingle();
+            
+          if (regionData) {
+            setAssignedRegionName(regionData.name);
+          }
+          
+          // Load all stores in this region
+          const { data: storesInRegion } = await supabase
+            .from("shopify_stores")
+            .select("key, name, vendor")
+            .eq("region_id", userAssignment.region_id);
+            
+          if (storesInRegion) {
+            setAvailableStoresInRegion(storesInRegion);
+          }
+        }
         
         // Get store name from database
         const { data: storeData, error: storeError } = await supabase
@@ -258,6 +293,9 @@ export function StoreProvider({ children }: StoreProviderProps) {
       if (event === "SIGNED_OUT") {
         setAssignedStore(null);
         setAssignedStoreName(null);
+        setAssignedRegion(null);
+        setAssignedRegionName(null);
+        setAvailableStoresInRegion([]);
         setSelectedLocation(null);
         setAvailableLocations([]);
         setUserAssignments([]);
@@ -398,6 +436,9 @@ export function StoreProvider({ children }: StoreProviderProps) {
   const contextValue: StoreContextType = {
     assignedStore,
     assignedStoreName,
+    assignedRegion,
+    assignedRegionName,
+    availableStoresInRegion,
     selectedLocation,
     setSelectedLocation,
     // Show locations filtered by assignments for non-admins/non-staff

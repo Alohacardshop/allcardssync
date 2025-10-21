@@ -108,7 +108,8 @@ Deno.serve(async (req) => {
         store_key: assignment.storeKey,
         location_gid: assignment.locationGid,
         location_name: assignment.locationName,
-        is_default: assignment.isDefault || false
+        is_default: assignment.isDefault || false,
+        region_id: assignment.regionId || null
       }));
 
       const { error: assignmentError } = await supabase

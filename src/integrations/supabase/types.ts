@@ -1128,6 +1128,33 @@ export type Database = {
         }
         Relationships: []
       }
+      regions: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          id: string
+          is_active?: boolean | null
+          name: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       sets: {
         Row: {
           cards_count: number | null
@@ -1238,6 +1265,7 @@ export type Database = {
           domain: string | null
           key: string
           name: string
+          region_id: string | null
           updated_at: string
           vendor: string | null
         }
@@ -1247,6 +1275,7 @@ export type Database = {
           domain?: string | null
           key: string
           name: string
+          region_id?: string | null
           updated_at?: string
           vendor?: string | null
         }
@@ -1256,10 +1285,19 @@ export type Database = {
           domain?: string | null
           key?: string
           name?: string
+          region_id?: string | null
           updated_at?: string
           vendor?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "shopify_stores_region_id_fkey"
+            columns: ["region_id"]
+            isOneToOne: false
+            referencedRelation: "regions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       shopify_sync_queue: {
         Row: {
@@ -1605,6 +1643,7 @@ export type Database = {
           is_default: boolean | null
           location_gid: string
           location_name: string | null
+          region_id: string | null
           store_key: string
           updated_at: string
           user_id: string
@@ -1615,6 +1654,7 @@ export type Database = {
           is_default?: boolean | null
           location_gid: string
           location_name?: string | null
+          region_id?: string | null
           store_key: string
           updated_at?: string
           user_id: string
@@ -1625,11 +1665,19 @@ export type Database = {
           is_default?: boolean | null
           location_gid?: string
           location_name?: string | null
+          region_id?: string | null
           store_key?: string
           updated_at?: string
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "user_shopify_assignments_region_id_fkey"
+            columns: ["region_id"]
+            isOneToOne: false
+            referencedRelation: "regions"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "user_shopify_assignments_store_key_fkey"
             columns: ["store_key"]
@@ -2308,6 +2356,10 @@ export type Database = {
       soft_delete_intake_items: {
         Args: { ids: string[]; reason?: string }
         Returns: Json
+      }
+      user_can_access_region: {
+        Args: { _region_id: string; _user_id: string }
+        Returns: boolean
       }
       user_can_access_store_location: {
         Args: { _location_gid?: string; _store_key: string; _user_id: string }

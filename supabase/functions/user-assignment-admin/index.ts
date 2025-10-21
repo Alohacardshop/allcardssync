@@ -129,7 +129,8 @@ Deno.serve(async (req) => {
               store_key: assignment.storeKey,
               location_gid: assignment.locationGid,
               location_name: assignment.locationName,
-              is_default: assignment.isDefault
+              is_default: assignment.isDefault,
+              region_id: assignment.regionId || null
             });
 
           if (assignError) {
