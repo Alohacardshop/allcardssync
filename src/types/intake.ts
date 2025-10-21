@@ -41,6 +41,8 @@ export interface IntakeItem {
   store_key?: string;
   shopify_location_gid?: string;
   image_urls?: string[];
+  main_category?: string;
+  sub_category?: string;
 }
 
 export interface BatchProcessingConfig {

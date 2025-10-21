@@ -625,6 +625,23 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
                           <span className="font-medium">Condition:</span> {getCondition(item)}
                         </div>
                       )}
+                      {/* Show category badges */}
+                      {(item.main_category || item.sub_category) && (
+                        <div className="flex flex-wrap gap-1 items-center mt-1">
+                          {item.main_category && (
+                            <Badge variant="secondary" className="text-xs h-5">
+                              {item.main_category === 'tcg' && '🎴 TCG'}
+                              {item.main_category === 'sports' && '⚾ Sports'}
+                              {item.main_category === 'comics' && '📚 Comics'}
+                            </Badge>
+                          )}
+                          {item.sub_category && (
+                            <Badge variant="outline" className="text-xs h-5">
+                              {item.sub_category}
+                            </Badge>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className={`flex gap-1 ${compact ? 'opacity-0 group-hover:opacity-100 transition-opacity' : 'gap-2'}`}>

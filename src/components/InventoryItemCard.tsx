@@ -197,6 +197,24 @@ export const InventoryItemCard = memo(({
           </div>
         </div>
 
+        {/* Category badges */}
+        {(item.main_category || item.sub_category) && (
+          <div className="flex flex-wrap gap-1 items-center">
+            {item.main_category && (
+              <Badge variant="secondary" className="text-xs">
+                {item.main_category === 'tcg' && '🎴 TCG'}
+                {item.main_category === 'sports' && '⚾ Sports'}
+                {item.main_category === 'comics' && '📚 Comics'}
+              </Badge>
+            )}
+            {item.sub_category && (
+              <Badge variant="outline" className="text-xs">
+                {item.sub_category}
+              </Badge>
+            )}
+          </div>
+        )}
+
         <div className="flex flex-wrap gap-1">
           {item.shopify_sync_status === 'pending' && (
             <Button
