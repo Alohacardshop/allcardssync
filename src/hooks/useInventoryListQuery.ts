@@ -132,7 +132,15 @@ export function useInventoryListQuery(filters: InventoryFilters) {
     initialPageParam: 0,
     staleTime: 5 * 60 * 1000, // 5 minutes - aggressive caching
     gcTime: 10 * 60 * 1000, // 10 minutes
-    placeholderData: (previousData) => previousData, // Show old data instantly while fetching
+    placeholderData: (previousData, previousQuery) => {
+      // Only use previous data if we're on the SAME tab to prevent cache bleed
+      const previousTab = previousQuery?.queryKey?.[3];
+      if (previousTab === filters.activeTab) {
+        return previousData;
+      }
+      // Force fresh fetch when switching tabs
+      return undefined;
+    },
     refetchInterval: filters.autoRefreshEnabled ? 120000 : false,
     enabled: Boolean(filters.storeKey && filters.locationGid),
   });
