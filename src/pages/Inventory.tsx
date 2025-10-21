@@ -88,11 +88,6 @@ const Inventory = () => {
   const [removingFromShopify, setRemovingFromShopify] = useState(false);
   const [deletingItems, setDeletingItems] = useState(false);
   
-  // Refs to prevent concurrent operations more reliably than state
-  const bulkPrintingRef = useState(false)[0];
-  const bulkRetryingRef = useState(false)[0];
-  const bulkSyncingRef = useState(false)[0];
-  
   const { printZPL, selectedPrinter } = useZebraNetwork();
   const { assignedStore, selectedLocation } = useStore();
   const { sendChunkedBatchToShopify, isSending: isBatchSending, progress } = useBatchSendToShopify();
@@ -105,10 +100,11 @@ const Inventory = () => {
     activeTab,
     statusFilter,
     batchFilter,
+    printStatusFilter,
     comicsSubCategory: activeTab === 'comics' ? comicsSubCategory : null,
     searchTerm: debouncedSearchTerm,
-    offset: 0,
     limit: 50,
+    autoRefreshEnabled,
   });
 
   const items = inventoryData?.items || [];
@@ -132,13 +128,24 @@ const Inventory = () => {
           setPhase('auth', 'error', { message: 'Please sign in to continue' });
         }
       } catch (error) {
-        console.error('Error checking admin role:', error);
         setIsAdmin(false);
         setPhase('auth', 'error', { message: 'Authentication check failed' });
       }
     };
     checkAdminRole();
   }, [setPhase]);
+
+  // Display query errors
+  useEffect(() => {
+    if (queryError) {
+      toast.error('Failed to load inventory: ' + (queryError as Error).message, {
+        action: {
+          label: 'Retry',
+          onClick: () => refetch()
+        }
+      });
+    }
+  }, [queryError, refetch]);
 
   // Manual refresh handler
   const handleManualRefresh = useCallback(async () => {
@@ -147,27 +154,8 @@ const Inventory = () => {
     toast.success('Inventory refreshed');
   }, [refetch]);
 
-  // Client-side filtering (print status only, search now handled by DB)
-  const filteredItems = useMemo(() => {
-    let filtered = items;
-
-    // Apply print status filter (only for Raw items)
-    if (printStatusFilter !== 'all') {
-      filtered = filtered.filter(item => {
-        const itemType = item.type?.toLowerCase() || 'raw';
-        if (itemType !== 'raw') return true; // Non-raw items are always included
-        
-        if (printStatusFilter === 'printed') {
-          return item.printed_at !== null;
-        } else if (printStatusFilter === 'not-printed') {
-          return item.printed_at === null;
-        }
-        return true;
-      });
-    }
-
-    return filtered;
-  }, [items, printStatusFilter]);
+  // All filtering now handled by database query
+  const filteredItems = items;
 
   // Persist batch filter preference
   useEffect(() => {
@@ -180,19 +168,6 @@ const Inventory = () => {
       setLastRefresh(new Date());
     }
   }, [inventoryData]);
-
-  // Auto-refresh with React Query's refetch
-  useEffect(() => {
-    if (!autoRefreshEnabled || !assignedStore || !selectedLocation) return;
-
-    const interval = setInterval(() => {
-      refetch();
-    }, 120000); // 2 minutes
-
-    return () => clearInterval(interval);
-  }, [autoRefreshEnabled, assignedStore, selectedLocation, refetch]);
-
-  // Removed: pagination is now handled by React Query limit/offset in future enhancement
 
   // Memoized event handlers
   const handleToggleSelection = useCallback((itemId: string) => {
@@ -303,20 +278,6 @@ const Inventory = () => {
     setSyncingRowId(item.id);
     
     try {
-      console.log(`[handleResync] Force updating item ${item.sku} to Shopify product ${item.shopify_product_id}`);
-      
-      // Queue item with update action - this will update existing product
-      const { error: queueError } = await supabase.rpc('queue_shopify_sync', {
-        item_id: item.id,
-        sync_action: 'update'
-      });
-
-      if (queueError) {
-        throw new Error(`Failed to queue resync: ${queueError.message}`);
-      }
-
-      // Trigger the processor to immediately process the update
-      await supabase.functions.invoke('shopify-sync', { body: {} });
       
       toast.success(
         `${item.sku} queued for resync`,
@@ -345,12 +306,10 @@ const Inventory = () => {
       return;
     }
 
-    if (bulkSyncingRef || bulkSyncing) {
-      console.warn('[handleSyncSelected] Already syncing, ignoring duplicate call');
+    if (bulkSyncing) {
       return;
     }
 
-    (bulkSyncingRef as any) = true;
     setBulkSyncing(true);
 
     const selectedItemsArray = filteredItems.filter(item => selectedItems.has(item.id));
@@ -394,10 +353,8 @@ const Inventory = () => {
 
       refetch();
     } catch (error) {
-      console.error('Bulk sync error:', error);
       toast.error('Failed to start bulk sync');
     } finally {
-      (bulkSyncingRef as any) = false;
       setBulkSyncing(false);
     }
   }, [filteredItems, selectedItems, refetch]);
@@ -408,12 +365,10 @@ const Inventory = () => {
       return;
     }
 
-    if (bulkSyncingRef || bulkSyncing) {
-      console.warn('[handleResyncSelected] Already syncing, ignoring duplicate call');
+    if (bulkSyncing) {
       return;
     }
 
-    (bulkSyncingRef as any) = true;
     setBulkSyncing(true);
 
     const toastId = toast.loading(`Fetching fresh data for ${selectedItems.size} items...`);
@@ -439,7 +394,6 @@ const Inventory = () => {
       });
 
       if (itemsToResync.length === 0) {
-        (bulkSyncingRef as any) = false;
         setBulkSyncing(false);
         toast.dismiss(toastId);
         toast.info('No valid items in selection to resync');
@@ -556,13 +510,11 @@ const Inventory = () => {
       refetch();
     } catch (error) {
       toast.dismiss(toastId);
-      console.error('Bulk resync error:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       toast.error('Failed to start bulk resync', {
         description: errorMessage
       });
     } finally {
-      (bulkSyncingRef as any) = false;
       setBulkSyncing(false);
     }
   }, [selectedItems, refetch]);
@@ -620,17 +572,13 @@ const Inventory = () => {
 
       refetch();
     } catch (error) {
-      console.error('Bulk retry error:', error);
       toast.error('Failed to start bulk retry');
     } finally {
-      (bulkRetryingRef as any) = false;
       setBulkRetrying(false);
     }
   }, [filteredItems, selectedItems, refetch]);
 
   const handlePrint = useCallback(async (item: any) => {
-    console.log('handlePrint called for item:', item.id);
-    
     const itemType = item.type?.toLowerCase() || 'raw';
     
     // Only allow printing for Raw items
@@ -1064,14 +1012,10 @@ const Inventory = () => {
   }, []);
 
   const handleBulkPrintRaw = useCallback(async () => {
-    // Guard against concurrent execution using ref for immediate check
-    if (bulkPrintingRef || bulkPrinting) {
-      console.warn('[handleBulkPrintRaw] Already printing, ignoring duplicate call');
+    if (bulkPrinting) {
       return;
     }
     
-    // Set both ref and state
-    (bulkPrintingRef as any) = true;
     setBulkPrinting(true);
     
     try {
@@ -1181,7 +1125,6 @@ const Inventory = () => {
       
       if (!tpl) {
         toast.error('No label template available. Please contact administrator.');
-        (bulkPrintingRef as any) = false;
         setBulkPrinting(false);
         return;
       }
@@ -1330,10 +1273,8 @@ const Inventory = () => {
       }
       
     } catch (error) {
-      console.error('Bulk print error:', error);
       toast.error(`Failed to queue bulk print: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
-      (bulkPrintingRef as any) = false;
       setBulkPrinting(false);
     }
   }, [items, refetch, cutterSettings, assignedStore, selectedLocation]);
@@ -1730,26 +1671,6 @@ const Inventory = () => {
     }
   }, [isAdmin, refetch, clearSelection]);
 
-  // Debug logging with better context
-  console.log('Inventory Debug:', {
-    snapshot,
-    itemsLength: items.length,
-    filteredItemsLength: filteredItems.length,
-    statusFilter,
-    activeTab,
-    comicsSubCategory,
-    printStatusFilter,
-    searchTerm,
-    assignedStore,
-    selectedLocation,
-    storeContextReady: assignedStore && selectedLocation,
-    filterDetails: {
-      statusFilterApplied: statusFilter !== 'all',
-      filteredByStatus: statusFilter === 'errors' ? items.filter(item => item.shopify_sync_status === 'error').length : 'N/A',
-      allStatuses: items.map(item => item.shopify_sync_status).filter((v, i, a) => a.indexOf(v) === i)
-    }
-  });
-
   // Show loading states based on unified loading manager
   const needsLoadingState = snapshot.dominantPhase || 
     !assignedStore || !selectedLocation ||
@@ -1798,6 +1719,13 @@ const Inventory = () => {
   return (
     <div className="min-h-screen bg-background">
       <Navigation />
+      
+      {/* Loading indicator for background refetches */}
+      {isFetching && !isLoading && (
+        <div className="fixed top-0 left-0 right-0 z-50">
+          <Progress className="h-1 rounded-none" />
+        </div>
+      )}
       
       <div className="container mx-auto p-6 space-y-6">
         <div className="flex items-center justify-between">

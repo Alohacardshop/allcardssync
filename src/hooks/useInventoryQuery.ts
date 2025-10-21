@@ -7,10 +7,11 @@ export interface InventoryFilters {
   activeTab: 'raw' | 'graded' | 'comics';
   statusFilter: 'all' | 'active' | 'sold' | 'deleted' | 'errors';
   batchFilter: 'all' | 'in_batch' | 'removed_from_batch';
+  printStatusFilter?: 'all' | 'printed' | 'not-printed';
   comicsSubCategory?: string | null;
   searchTerm?: string;
-  offset?: number;
   limit?: number;
+  autoRefreshEnabled?: boolean;
 }
 
 export function useInventoryQuery(filters: InventoryFilters) {
@@ -22,9 +23,9 @@ export function useInventoryQuery(filters: InventoryFilters) {
       filters.activeTab,
       filters.statusFilter,
       filters.batchFilter,
+      filters.printStatusFilter,
       filters.comicsSubCategory,
       filters.searchTerm,
-      filters.offset,
     ],
     queryFn: async () => {
       const {
@@ -33,9 +34,9 @@ export function useInventoryQuery(filters: InventoryFilters) {
         activeTab,
         statusFilter,
         batchFilter,
+        printStatusFilter = 'all',
         comicsSubCategory,
         searchTerm,
-        offset = 0,
         limit = 50,
       } = filters;
 
@@ -80,7 +81,7 @@ export function useInventoryQuery(filters: InventoryFilters) {
         `,
           { count: 'exact' }
         )
-        .range(offset, offset + limit - 1)
+        .range(0, limit - 1)
         .eq('store_key', storeKey)
         .eq('shopify_location_gid', locationGid);
 
@@ -114,6 +115,13 @@ export function useInventoryQuery(filters: InventoryFilters) {
         query = query.not('removed_from_batch_at', 'is', null);
       }
 
+      // Apply print status filter (Raw cards only)
+      if (printStatusFilter === 'printed') {
+        query = query.not('printed_at', 'is', null);
+      } else if (printStatusFilter === 'not-printed') {
+        query = query.is('printed_at', null);
+      }
+
       // Apply search filter at database level if provided
       if (searchTerm && searchTerm.trim()) {
         const searchLower = searchTerm.toLowerCase().trim();
@@ -131,8 +139,9 @@ export function useInventoryQuery(filters: InventoryFilters) {
 
       return { items: data || [], count: count || 0 };
     },
-    staleTime: 2 * 60 * 1000, // Data is fresh for 2 minutes
+    staleTime: 60 * 1000, // Data is fresh for 1 minute
     gcTime: 10 * 60 * 1000, // Keep cached data for 10 minutes
+    refetchInterval: filters.autoRefreshEnabled ? 120000 : false, // Auto-refetch every 2 minutes if enabled
     placeholderData: (previousData) => previousData, // Show previous data while fetching
     enabled: Boolean(filters.storeKey && filters.locationGid), // Only fetch when store/location are set
   });
