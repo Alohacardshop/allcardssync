@@ -251,7 +251,12 @@ export const PSABulkImport = () => {
             <SubCategoryCombobox
               mainCategory={mainCategory}
               value={subCategory}
-              onChange={setSubCategory}
+              onChange={(value, mainCategoryId) => {
+                setSubCategory(value);
+                if (mainCategoryId) {
+                  setMainCategory(mainCategoryId);
+                }
+              }}
             />
           </div>
 

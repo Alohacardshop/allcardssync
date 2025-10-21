@@ -629,7 +629,12 @@ Prices from Market Price on 8/24/2025 and are subject to change.`;
                   <SubCategoryCombobox
                     mainCategory={mainCategory}
                     value={subCategory}
-                    onChange={setSubCategory}
+                    onChange={(value, mainCategoryId) => {
+                      setSubCategory(value);
+                      if (mainCategoryId) {
+                        setMainCategory(mainCategoryId);
+                      }
+                    }}
                   />
                 </div>
               </div>

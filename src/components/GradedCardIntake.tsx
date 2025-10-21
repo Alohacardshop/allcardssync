@@ -466,7 +466,12 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
               <SubCategoryCombobox
                 mainCategory={formData.mainCategory}
                 value={formData.subCategory}
-                onChange={(value) => updateFormField('subCategory', value)}
+                onChange={(value, mainCategoryId) => {
+                  updateFormField('subCategory', value);
+                  if (mainCategoryId) {
+                    updateFormField('mainCategory', mainCategoryId);
+                  }
+                }}
               />
             </div>
 

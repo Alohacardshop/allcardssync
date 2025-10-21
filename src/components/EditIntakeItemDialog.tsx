@@ -112,7 +112,12 @@ function EditIntakeItemDialog({ open, item, onOpenChange, onSave, isAdmin = fals
             <SubCategoryCombobox
               mainCategory={form.mainCategory || "tcg"}
               value={form.subCategory || ""}
-              onChange={(value) => handleChange("subCategory", value)}
+              onChange={(value, mainCategoryId) => {
+                handleChange("subCategory", value);
+                if (mainCategoryId) {
+                  handleChange("mainCategory", mainCategoryId);
+                }
+              }}
             />
           </div>
           <div>

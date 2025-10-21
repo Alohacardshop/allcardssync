@@ -20,7 +20,7 @@ import {
 interface SubCategoryComboboxProps {
   mainCategory: string;
   value: string;
-  onChange: (value: string) => void;
+  onChange: (value: string, mainCategoryId?: string) => void;
   disabled?: boolean;
 }
 
@@ -74,7 +74,8 @@ export function SubCategoryCombobox({ mainCategory, value, onChange, disabled }:
                 key={category.id}
                 value={category.name}
                 onSelect={(currentValue) => {
-                  onChange(currentValue === value ? "" : currentValue);
+                  const newValue = currentValue === value ? "" : currentValue;
+                  onChange(newValue, category.main_category_id);
                   setOpen(false);
                 }}
               >
