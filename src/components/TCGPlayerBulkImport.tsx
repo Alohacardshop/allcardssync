@@ -519,11 +519,26 @@ export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) =>
           }));
         }
       } catch (error) {
-        console.error(`Error processing item ${i}:`, error);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        console.error(`Error processing item ${i} (${item.name}):`, {
+          error: errorMessage,
+          item: item,
+          store: assignedStore,
+          location: selectedLocation,
+          subCategory: subCategory
+        });
+        
+        // Show detailed error toast for first failure to help diagnose
+        if (processed === 0) {
+          toast.error(`First item failed: ${errorMessage}`, {
+            description: `Item: ${item.name} | Store: ${assignedStore || 'none'} | Location: ${selectedLocation || 'none'}`
+          });
+        }
+        
         updatedItems[i] = {
           ...item,
           status: 'error',
-          error: error instanceof Error ? error.message : 'Unknown error'
+          error: errorMessage
         };
       }
 

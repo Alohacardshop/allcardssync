@@ -539,17 +539,72 @@ const Inventory = () => {
     setSyncingRowId(item.id);
     
     try {
-      
-      toast.success(
-        `${item.sku} queued for resync`,
-        {
-          description: 'Product will be updated in Shopify',
-          action: {
-            label: "View Queue",
-            onClick: () => window.location.href = '/admin#queue'
+      // Helper to generate barcode for raw cards (matches bulk resync logic)
+      const generateBarcode = (item: any) => {
+        if (!item.catalog_snapshot?.tcgplayer_product_id) return item.sku;
+        const tcgplayerId = item.catalog_snapshot.tcgplayer_product_id;
+        const condition = item.variant || item.grade || 'NM';
+        const conditionAbbrev = condition.toLowerCase().includes('near mint') ? 'NM' 
+          : condition.toLowerCase().includes('lightly') ? 'LP'
+          : condition.toLowerCase().includes('moderately') ? 'MP'
+          : condition.toLowerCase().includes('heavily') ? 'HP'
+          : condition.toLowerCase().includes('damaged') ? 'DMG'
+          : 'NM';
+        return `${tcgplayerId}-${conditionAbbrev}`;
+      };
+
+      // Use direct send functions with barcode (same as bulk resync)
+      if (item.type?.toLowerCase() === 'graded' || item.psa_cert) {
+        // Graded card
+        const result = await sendGradedToShopify({
+          storeKey: item.store_key as "hawaii" | "las_vegas",
+          locationGid: item.shopify_location_gid,
+          vendor: item.vendor,
+          item: {
+            id: item.id,
+            sku: item.sku,
+            psa_cert: item.psa_cert,
+            barcode: item.sku, // Use SKU as barcode for graded
+            title: item.subject,
+            price: item.price,
+            grade: item.grade,
+            quantity: item.quantity,
+            year: item.year,
+            brand_title: item.brand_title,
+            subject: item.subject,
+            card_number: item.card_number
           }
+        });
+
+        if (result?.success) {
+          toast.success(`${item.sku} resynced to Shopify with barcode`);
         }
-      );
+      } else {
+        // Raw card
+        const result = await sendRawToShopify({
+          storeKey: item.store_key as "hawaii" | "las_vegas",
+          locationGid: item.shopify_location_gid,
+          vendor: item.vendor,
+          item: {
+            id: item.id,
+            sku: item.sku,
+            brand_title: item.brand_title,
+            subject: item.subject,
+            card_number: item.card_number,
+            image_url: item.image_urls?.[0],
+            cost: item.cost,
+            title: item.subject || 'Raw Card',
+            price: item.price,
+            barcode: generateBarcode(item), // Generate barcode from TCGPlayer ID
+            condition: item.grade,
+            quantity: item.quantity
+          }
+        });
+
+        if (result?.success) {
+          toast.success(`${item.sku} resynced to Shopify with barcode`);
+        }
+      }
       
       // Refresh items to show updated status
       refetch();
