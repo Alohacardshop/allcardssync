@@ -101,6 +101,10 @@ verify_jwt = true
 [functions.cgc-lookup]
 verify_jwt = true
 
+# GCD comics search (requires authentication)
+[functions.gcd-search]
+verify_jwt = true
+
 # Bulk location transfer (requires staff/admin role)
 [functions.bulk-location-transfer]
 verify_jwt = true

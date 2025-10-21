@@ -5,12 +5,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Loader2, Book } from "lucide-react";
+import { Loader2, Book, Search } from "lucide-react";
 import { useStore } from "@/contexts/StoreContext";
 import { validateCompleteStoreContext, logStoreContext } from "@/utils/storeValidation";
 import { SubCategoryCombobox } from "@/components/ui/sub-category-combobox";
+import { ComicsAPI, GcdSeries } from "@/lib/comics";
+import { useDebounce } from "@/hooks/useDebounce";
 
 interface RawComicIntakeProps {
   onBatchAdd?: () => void;
@@ -19,6 +22,12 @@ interface RawComicIntakeProps {
 export const RawComicIntake = ({ onBatchAdd }: RawComicIntakeProps = {}) => {
   const { assignedStore, selectedLocation } = useStore();
   const [submitting, setSubmitting] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<GcdSeries[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showSearchDialog, setShowSearchDialog] = useState(false);
+  
+  const debouncedSearch = useDebounce(searchQuery, 500);
 
   const [formData, setFormData] = useState({
     title: "",
@@ -34,6 +43,31 @@ export const RawComicIntake = ({ onBatchAdd }: RawComicIntakeProps = {}) => {
     processingNotes: "",
   });
 
+  // Search GCD when query changes
+  useEffect(() => {
+    const performSearch = async () => {
+      if (!debouncedSearch || debouncedSearch.length < 2) {
+        setSearchResults([]);
+        return;
+      }
+
+      setIsSearching(true);
+      try {
+        const result = await ComicsAPI.searchSeries(debouncedSearch, 1);
+        setSearchResults(result.items);
+      } catch (error: any) {
+        console.error('GCD search error:', error);
+        toast.error('Failed to search comics database');
+        setSearchResults([]);
+      } finally {
+        setIsSearching(false);
+      }
+    };
+
+    performSearch();
+  }, [debouncedSearch]);
+
+  // Auto-calculate cost from price
   useEffect(() => {
     if (formData.price && !isNaN(parseFloat(formData.price))) {
       const price = parseFloat(formData.price);
@@ -44,6 +78,19 @@ export const RawComicIntake = ({ onBatchAdd }: RawComicIntakeProps = {}) => {
 
   const updateFormField = (field: string, value: string | number) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleSelectSeries = (series: GcdSeries) => {
+    setFormData(prev => ({
+      ...prev,
+      title: series.name,
+      publisher: series.publisher || "",
+      year: series.year_began ? String(series.year_began) : "",
+    }));
+    setShowSearchDialog(false);
+    setSearchQuery("");
+    setSearchResults([]);
+    toast.success(`Selected: ${series.name}`);
   };
 
   const handleSubmit = async () => {
@@ -147,6 +194,67 @@ export const RawComicIntake = ({ onBatchAdd }: RawComicIntakeProps = {}) => {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
+          {/* GCD Search Section */}
+          <div className="p-4 bg-muted/50 rounded-lg space-y-3">
+            <div className="flex items-center gap-2 mb-2">
+              <Search className="h-4 w-4 text-muted-foreground" />
+              <Label className="text-sm font-medium">Search Comics Database (GCD)</Label>
+            </div>
+            <Dialog open={showSearchDialog} onOpenChange={setShowSearchDialog}>
+              <DialogTrigger asChild>
+                <Button variant="outline" className="w-full" type="button">
+                  <Search className="h-4 w-4 mr-2" />
+                  Search for Comic Series
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl max-h-[80vh]">
+                <DialogHeader>
+                  <DialogTitle>Search Grand Comics Database</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <Input
+                    placeholder="Search series name..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    autoFocus
+                  />
+                  {isSearching && (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                    </div>
+                  )}
+                  {!isSearching && searchResults.length > 0 && (
+                    <div className="space-y-2 max-h-96 overflow-y-auto">
+                      {searchResults.map((series) => (
+                        <button
+                          key={series.id}
+                          type="button"
+                          onClick={() => handleSelectSeries(series)}
+                          className="w-full p-3 text-left rounded-lg border hover:bg-accent transition-colors"
+                        >
+                          <div className="font-medium">{series.name}</div>
+                          <div className="text-sm text-muted-foreground">
+                            {series.publisher || 'Unknown Publisher'}
+                            {series.year_began && ` • ${series.year_began}`}
+                            {series.issue_count && ` • ${series.issue_count} issues`}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {!isSearching && searchQuery && searchResults.length === 0 && (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No results found. Try a different search term.
+                    </div>
+                  )}
+                  <div className="text-xs text-muted-foreground text-center pt-2 border-t">
+                    Data: Grand Comics Database (CC BY-SA 4.0)
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <Label htmlFor="subCategory">Sub-Category <span className="text-destructive">*</span></Label>
