@@ -11,6 +11,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 
 // Helper function outside component to prevent re-creation on every render
 const generateTitle = (item: any) => {
@@ -82,6 +84,43 @@ export const InventoryItemCard = memo(({
   onDelete,
   onSyncDetails
 }: InventoryItemCardProps) => {
+  const queryClient = useQueryClient();
+
+  // Prefetch item details on hover for instant expansion
+  const handleMouseEnter = () => {
+    queryClient.prefetchQuery({
+      queryKey: ['inventory-item-detail', item.id],
+      queryFn: async () => {
+        const { data, error } = await supabase
+          .from('intake_items')
+          .select(`
+            id,
+            catalog_snapshot,
+            psa_snapshot,
+            image_urls,
+            shopify_snapshot,
+            pricing_snapshot,
+            label_snapshot,
+            grading_data,
+            source_payload,
+            processing_notes,
+            shopify_sync_snapshot,
+            last_shopify_sync_error,
+            last_shopify_synced_at,
+            pushed_at,
+            cost,
+            vendor,
+            intake_lots(lot_number, status)
+          `)
+          .eq('id', item.id)
+          .single();
+        
+        if (error) throw error;
+        return data;
+      },
+      staleTime: 5 * 60 * 1000,
+    });
+  };
 
   const getStatusBadge = (item: any) => {
     if (item.deleted_at) {
@@ -123,11 +162,14 @@ export const InventoryItemCard = memo(({
   };
 
   return (
-    <Card className={cn(
-      "transition-all duration-200",
-      isSelected && "ring-2 ring-primary",
-      item.deleted_at && "opacity-50"
-    )}>
+    <Card 
+      className={cn(
+        "transition-all duration-200",
+        isSelected && "ring-2 ring-primary",
+        item.deleted_at && "opacity-50"
+      )}
+      onMouseEnter={handleMouseEnter}
+    >
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between">
           <div className="flex items-start space-x-3 flex-1 min-w-0">

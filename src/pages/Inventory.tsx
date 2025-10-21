@@ -267,6 +267,42 @@ const Inventory = () => {
   const { settings: cutterSettings } = useCutterSettings();
   const queryClient = useQueryClient();
 
+  // Optimistic update helper for instant UI feedback
+  const createOptimisticUpdate = useCallback((
+    itemIds: string[],
+    updateFn: (item: any) => any
+  ) => {
+    // Cancel any outgoing refetches
+    queryClient.cancelQueries({ queryKey: ['inventory-list'] });
+    
+    // Snapshot the previous value
+    const previousData = queryClient.getQueryData(['inventory-list']);
+    
+    // Optimistically update the cache
+    queryClient.setQueryData(['inventory-list'], (old: any) => {
+      if (!old) return old;
+      
+      return {
+        ...old,
+        pages: old.pages.map((page: any) => ({
+          ...page,
+          items: page.items.map((item: any) => 
+            itemIds.includes(item.id) ? { ...item, ...updateFn(item) } : item
+          )
+        }))
+      };
+    });
+    
+    return { previousData };
+  }, [queryClient]);
+
+  // Rollback helper for failed mutations
+  const rollbackOptimisticUpdate = useCallback((previousData: any) => {
+    if (previousData) {
+      queryClient.setQueryData(['inventory-list'], previousData);
+    }
+  }, [queryClient]);
+
   // Infinite query for inventory list with minimal columns
   const { 
     data: inventoryData, 
@@ -815,6 +851,12 @@ const Inventory = () => {
       return;
     }
 
+    // Optimistically update printed_at timestamp
+    const { previousData } = createOptimisticUpdate(
+      [item.id],
+      () => ({ printed_at: new Date().toISOString() })
+    );
+
     try {
       setPrintingItem(item.id);
       
@@ -1044,11 +1086,12 @@ const Inventory = () => {
       refetch();
     } catch (error) {
       console.error('Print error:', error);
+      rollbackOptimisticUpdate(previousData);
       toast.error('Failed to print label: ' + (error as Error).message);
     } finally {
       setPrintingItem(null);
     }
-  }, [refetch]);
+  }, [refetch, createOptimisticUpdate, rollbackOptimisticUpdate]);
 
   // Helper function to fill template elements with data
   const fillElements = (layout: any, vars: JobVars) => {
@@ -1805,6 +1848,16 @@ const Inventory = () => {
       return;
     }
 
+    // Optimistically mark items as deleted
+    const itemIds = items.map(item => item.id);
+    const { previousData } = createOptimisticUpdate(
+      itemIds,
+      () => ({ 
+        deleted_at: new Date().toISOString(),
+        deleted_reason: 'Admin deleted'
+      })
+    );
+
     setDeletingItems(true);
     
     try {
@@ -1886,13 +1939,14 @@ const Inventory = () => {
       
     } catch (error: any) {
       console.error('Error deleting items:', error);
+      rollbackOptimisticUpdate(previousData);
       toast.error(`Failed to delete items: ${error.message}`);
     } finally {
       setDeletingItems(false);
       setShowDeleteDialog(false);
       setSelectedItemsForDeletion([]);
     }
-  }, [isAdmin, refetch, clearSelection]);
+  }, [isAdmin, refetch, clearSelection, createOptimisticUpdate, rollbackOptimisticUpdate]);
 
   // Show loading states based on unified loading manager
   const needsLoadingState = snapshot.dominantPhase || 
