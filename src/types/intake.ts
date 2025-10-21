@@ -33,6 +33,7 @@ export interface IntakeItem {
   removed_from_batch_at?: string;
   created_at: string;
   psa_cert?: string;
+  cgc_cert?: string;
   grade?: string;
   variant?: string;
   category?: string;
@@ -43,6 +44,26 @@ export interface IntakeItem {
   image_urls?: string[];
   main_category?: string;
   sub_category?: string;
+}
+
+export interface ComicIntakeData {
+  title: string;
+  issueNumber?: string;
+  publisher?: string;
+  year?: string;
+  condition?: string;
+  price: number;
+  cost: number;
+  quantity: number;
+  mainCategory: 'comics';
+  subCategory: string;
+  processingNotes?: string;
+}
+
+export interface GradedComicIntakeData extends Omit<ComicIntakeData, 'condition'> {
+  certNumber: string;
+  grade: string;
+  cgcData?: any;
 }
 
 export interface BatchProcessingConfig {

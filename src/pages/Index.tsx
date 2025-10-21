@@ -4,12 +4,16 @@ import { Badge } from '@/components/ui/badge';
 import { Lock, Package, Layers } from 'lucide-react';
 import { GradedCardIntake } from '@/components/GradedCardIntake';
 import { TCGPlayerBulkImport } from '@/components/TCGPlayerBulkImport';
+import { GradedComicIntake } from '@/components/GradedComicIntake';
+import { RawComicIntake } from '@/components/RawComicIntake';
 import { CurrentBatchPanel } from '@/components/CurrentBatchPanel';
 import PrintTestLabel from '@/components/PrintTestLabel';
 import { toast } from "@/hooks/use-toast";
 
 export default function Index() {
-  const [activeTab, setActiveTab] = useState('graded');
+  const [collectibleType, setCollectibleType] = useState<'cards' | 'comics'>('cards');
+  const [cardCondition, setCardCondition] = useState<'raw' | 'graded'>('raw');
+  const [comicCondition, setComicCondition] = useState<'raw' | 'graded'>('raw');
   const [batchCount, setBatchCount] = useState(0);
 
   // Listen for batch updates
@@ -48,25 +52,65 @@ export default function Index() {
           <PrintTestLabel />
         </div>
         
-        {/* TAB NAVIGATION */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        {/* TAB NAVIGATION - Collectible Type (Cards/Comics) */}
+        <Tabs value={collectibleType} onValueChange={(value) => setCollectibleType(value as 'cards' | 'comics')} className="w-full">
           <TabsList className="grid w-full grid-cols-2 mb-6">
-            <TabsTrigger value="graded" className="flex items-center gap-2">
-              <Lock className="h-4 w-4" />
-              Graded
-            </TabsTrigger>
-            <TabsTrigger value="raw" className="flex items-center gap-2">
+            <TabsTrigger value="cards" className="flex items-center gap-2">
               <Package className="h-4 w-4" />
-              Raw
+              🎴 Cards
+            </TabsTrigger>
+            <TabsTrigger value="comics" className="flex items-center gap-2">
+              <Layers className="h-4 w-4" />
+              📚 Comics
             </TabsTrigger>
           </TabsList>
-          
-          <TabsContent value="graded">
-            <GradedCardIntake onBatchAdd={handleBatchAdd} />
+
+          {/* CARDS TAB CONTENT */}
+          <TabsContent value="cards">
+            <Tabs value={cardCondition} onValueChange={(value) => setCardCondition(value as 'raw' | 'graded')} className="w-full">
+              <TabsList className="grid w-full grid-cols-2 mb-4">
+                <TabsTrigger value="raw" className="flex items-center gap-2">
+                  <Package className="h-4 w-4" />
+                  📦 Raw Cards
+                </TabsTrigger>
+                <TabsTrigger value="graded" className="flex items-center gap-2">
+                  <Lock className="h-4 w-4" />
+                  ⭐ Graded Cards
+                </TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value="raw">
+                <TCGPlayerBulkImport onBatchAdd={handleBatchAdd} />
+              </TabsContent>
+              
+              <TabsContent value="graded">
+                <GradedCardIntake onBatchAdd={handleBatchAdd} />
+              </TabsContent>
+            </Tabs>
           </TabsContent>
-          
-          <TabsContent value="raw">
-            <TCGPlayerBulkImport onBatchAdd={handleBatchAdd} />
+
+          {/* COMICS TAB CONTENT */}
+          <TabsContent value="comics">
+            <Tabs value={comicCondition} onValueChange={(value) => setComicCondition(value as 'raw' | 'graded')} className="w-full">
+              <TabsList className="grid w-full grid-cols-2 mb-4">
+                <TabsTrigger value="raw" className="flex items-center gap-2">
+                  <Package className="h-4 w-4" />
+                  📦 Raw Comics
+                </TabsTrigger>
+                <TabsTrigger value="graded" className="flex items-center gap-2">
+                  <Lock className="h-4 w-4" />
+                  ⭐ Graded Comics
+                </TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value="raw">
+                <RawComicIntake onBatchAdd={handleBatchAdd} />
+              </TabsContent>
+              
+              <TabsContent value="graded">
+                <GradedComicIntake onBatchAdd={handleBatchAdd} />
+              </TabsContent>
+            </Tabs>
           </TabsContent>
         </Tabs>
 
