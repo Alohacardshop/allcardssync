@@ -220,13 +220,18 @@ const Inventory = () => {
 
       // Apply category tab filters
       if (activeTab === 'raw') {
-        // Raw tab: show Raw type items, treat NULL as Raw, but exclude Graded
-        query = query.or('type.eq.Raw,type.is.null').not('type', 'eq', 'Graded');
+        // Raw tab: show TCG and Sports items that are Raw or NULL type (but exclude Graded and Comics)
+        query = query
+          .in('main_category', ['tcg', 'sports'])
+          .or('type.eq.Raw,type.is.null')
+          .not('type', 'eq', 'Graded');
       } else if (activeTab === 'graded') {
-        // Graded tab: only show explicitly Graded items
-        query = query.eq('type', 'Graded');
+        // Graded tab: show TCG and Sports items that are Graded (but exclude Comics)
+        query = query
+          .in('main_category', ['tcg', 'sports'])
+          .eq('type', 'Graded');
       } else if (activeTab === 'comics') {
-        // Comics tab: filter by main_category='comics'
+        // Comics tab: show only comics
         query = query.eq('main_category', 'comics');
         // For comics, also filter by sub-category (graded/raw)
         if (comicsSubCategory === 'graded') {
