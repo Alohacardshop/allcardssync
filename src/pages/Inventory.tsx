@@ -2109,10 +2109,11 @@ const Inventory = () => {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <Tabs value={activeTab} onValueChange={(value: any) => setActiveTab(value)}>
-                    <TabsList className="grid w-full grid-cols-3">
-                      <TabsTrigger value="raw">🃏 Raw</TabsTrigger>
-                      <TabsTrigger value="graded">⭐ Graded</TabsTrigger>
-                      <TabsTrigger value="comics">📚 Comics</TabsTrigger>
+                    <TabsList className="grid w-full grid-cols-4">
+                      <TabsTrigger value="raw">🃏 Raw Cards</TabsTrigger>
+                      <TabsTrigger value="graded">⭐ Graded Cards</TabsTrigger>
+                      <TabsTrigger value="raw_comics">📚 Raw Comics</TabsTrigger>
+                      <TabsTrigger value="graded_comics">📖 Graded Comics</TabsTrigger>
                     </TabsList>
                   </Tabs>
                   
