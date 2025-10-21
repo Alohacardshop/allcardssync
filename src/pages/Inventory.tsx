@@ -23,12 +23,8 @@ import { print } from '@/lib/printService';
 import { sendGradedToShopify, sendRawToShopify } from '@/hooks/useShopifySend';
 import { useBatchSendToShopify } from '@/hooks/useBatchSendToShopify';
 import { useDebounce } from '@/hooks/useDebounce';
-import { useStablePolling } from '@/hooks/useStablePolling';
 import { useLoadingStateManager } from '@/lib/loading/LoadingStateManager';
 import { InventorySkeleton } from '@/components/SmartLoadingSkeleton';
-import { classifyError } from '@/lib/loading/errorClassifier';
-import { shouldRefetch } from '@/lib/loading/refreshPolicy';
-import { useLoadingMetrics, incrementRefresh, incrementDismissedRefresh } from '@/lib/loading/metrics';
 import { InventoryItemCard } from '@/components/InventoryItemCard';
 import { ShopifyRemovalDialog } from '@/components/ShopifyRemovalDialog';
 import { ShopifySyncDetailsDialog } from '@/components/ShopifySyncDetailsDialog';
@@ -39,6 +35,8 @@ import { CutterSettingsPanel } from '@/components/CutterSettingsPanel';
 import { TestLabelButton } from '@/components/TestLabelButton';
 import { RefreshControls } from '@/components/RefreshControls';
 import { AuthStatusDebug } from '@/components/AuthStatusDebug';
+import { useInventoryQuery } from '@/hooks/useInventoryQuery';
+import { Progress } from '@/components/ui/progress';
 
 const ITEMS_PER_PAGE = 50;
 
@@ -46,19 +44,7 @@ const Inventory = () => {
   // Unified loading state management
   const loadingManager = useLoadingStateManager({ pageType: 'inventory' });
   const { snapshot, setPhase, setMessage, setProgress, setA11yAnnouncement, setNextRefreshAt } = loadingManager;
-  const metrics = useLoadingMetrics('inventory');
 
-  // Core state
-  const [items, setItems] = useState<any[]>([]);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
-  const [currentPage, setCurrentPage] = useState(0);
-  const [lastFetchTime, setLastFetchTime] = useState<number>(0);
-  
-  // Auto-refresh state
-  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
-  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
-  
   // Search and filters
   const [searchTerm, setSearchTerm] = useState('');
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
@@ -72,6 +58,10 @@ const Inventory = () => {
   // Category tab state
   const [activeTab, setActiveTab] = useState<'raw' | 'graded' | 'comics'>('raw');
   const [comicsSubCategory, setComicsSubCategory] = useState<'graded' | 'raw'>('graded');
+  
+  // Auto-refresh state
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   
   // UI state
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
@@ -108,6 +98,22 @@ const Inventory = () => {
   const { sendChunkedBatchToShopify, isSending: isBatchSending, progress } = useBatchSendToShopify();
   const { settings: cutterSettings } = useCutterSettings();
 
+  // React Query for inventory data with caching
+  const { data: inventoryData, isLoading, isFetching, error: queryError, refetch } = useInventoryQuery({
+    storeKey: assignedStore || '',
+    locationGid: selectedLocation || '',
+    activeTab,
+    statusFilter,
+    batchFilter,
+    comicsSubCategory: activeTab === 'comics' ? comicsSubCategory : null,
+    searchTerm: debouncedSearchTerm,
+    offset: 0,
+    limit: 50,
+  });
+
+  const items = inventoryData?.items || [];
+  const totalCount = inventoryData?.count || 0;
+
   // Check admin role on mount and set auth phase
   useEffect(() => {
     const checkAdminRole = async () => {
@@ -134,204 +140,16 @@ const Inventory = () => {
     checkAdminRole();
   }, [setPhase]);
 
-  const fetchItems = useCallback(async (page = 0, reset = false) => {
-    // Check authentication first
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
-    if (authError || !user) {
-      console.error('Authentication error in fetchItems:', authError);
-      toast.error('Authentication required. Please sign in again.');
-      setPhase('auth', 'error', { message: 'Authentication required. Please sign in again.' });
-      setLoadingMore(false);
-      return;
-    }
+  // Manual refresh handler
+  const handleManualRefresh = useCallback(async () => {
+    setLastRefresh(new Date());
+    await refetch();
+    toast.success('Inventory refreshed');
+  }, [refetch]);
 
-    console.log('Fetching items for authenticated user:', user.email);
-    
-    // Prevent multiple simultaneous fetches
-    if (snapshot.phases.data === 'loading' && reset) return;
-    if (loadingMore && !reset) return;
-    
-    if (reset) {
-      setPhase('data', 'loading', { message: 'Loading inventory...' });
-      setCurrentPage(0);
-      setHasMore(true);
-      setItems([]);
-    } else {
-      setLoadingMore(true);
-    }
-
-    try {
-      let query = supabase
-        .from('intake_items')
-        .select(`
-          id,
-          sku,
-          brand_title,
-          subject,
-          card_number,
-          variant,
-          grade,
-          price,
-          quantity,
-          type,
-          created_at,
-          printed_at,
-          pushed_at,
-          deleted_at,
-          sold_at,
-          shopify_sync_status,
-          shopify_product_id,
-          store_key,
-          shopify_location_gid,
-          psa_cert,
-          catalog_snapshot,
-          psa_snapshot,
-          image_urls,
-          year,
-          category,
-          main_category,
-          sub_category,
-          cost,
-          removed_from_batch_at,
-          intake_lots!inner (
-            lot_number,
-            status
-          )
-        `)
-        .range(page * ITEMS_PER_PAGE, (page + 1) * ITEMS_PER_PAGE - 1);
-      
-      // Apply batch filter
-      if (batchFilter === 'in_batch') {
-        query = query.is('removed_from_batch_at', null);
-      } else if (batchFilter === 'removed_from_batch') {
-        query = query.not('removed_from_batch_at', 'is', null);
-      }
-      // 'all' applies no filter
-
-      // Apply store/location filters
-      if (assignedStore) {
-        query = query.eq('store_key', assignedStore);
-      }
-      if (selectedLocation) {
-        query = query.eq('shopify_location_gid', selectedLocation);
-      }
-
-      // Apply category tab filters
-      if (activeTab === 'raw') {
-        // Raw tab: show TCG and Sports items that are Raw or NULL type (but exclude Graded and Comics)
-        query = query
-          .in('main_category', ['tcg', 'sports'])
-          .or('type.eq.Raw,type.is.null')
-          .not('type', 'eq', 'Graded');
-      } else if (activeTab === 'graded') {
-        // Graded tab: show TCG and Sports items that are Graded (but exclude Comics)
-        query = query
-          .in('main_category', ['tcg', 'sports'])
-          .eq('type', 'Graded');
-      } else if (activeTab === 'comics') {
-        // Comics tab: show only comics
-        query = query.eq('main_category', 'comics');
-        // For comics, also filter by sub-category (graded/raw)
-        if (comicsSubCategory === 'graded') {
-          query = query.eq('type', 'Graded');
-        } else {
-          // Raw comics: show Raw or NULL types, but exclude Graded
-          query = query.or('type.eq.Raw,type.is.null').not('type', 'eq', 'Graded');
-        }
-      }
-
-      // Apply status filters
-      if (statusFilter === 'active') {
-        query = query.is('deleted_at', null).gt('quantity', 0);
-      } else if (statusFilter === 'sold') {
-        query = query.is('deleted_at', null).eq('quantity', 0).not('sold_at', 'is', null);
-      } else if (statusFilter === 'deleted') {
-        query = query.not('deleted_at', 'is', null);
-      } else if (statusFilter === 'errors') {
-        query = query.is('deleted_at', null).eq('shopify_sync_status', 'error');
-      }
-      
-      if (statusFilter === 'all' && !showSoldItems) {
-        query = query.gt('quantity', 0);
-      }
-
-      console.log('Executing inventory query with filters:', {
-        assignedStore,
-        selectedLocation,
-        statusFilter,
-        page,
-        userId: user.id
-      });
-
-      const { data, error } = await query.order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('Database query error:', error);
-        
-        // Check for common RLS/auth issues
-        if (error.code === 'PGRST116' || error.message?.includes('JWT') || error.message?.includes('row-level security')) {
-          console.error('RLS/Authentication issue detected');
-          toast.error('Authentication session expired. Please refresh the page.');
-        } else {
-          toast.error(`Database error: ${error.message}`);
-        }
-        throw error;
-      }
-
-      console.log(`Successfully fetched ${data?.length || 0} items for page ${page}`);
-
-      const newItems = data || [];
-      setHasMore(newItems.length === ITEMS_PER_PAGE);
-      
-      if (reset) {
-        setItems(newItems);
-      } else {
-        setItems(prev => [...prev, ...newItems]);
-      }
-      setCurrentPage(page);
-      setLastRefresh(new Date());
-    } catch (error) {
-      console.error('Error fetching inventory items:', error);
-      
-      // More specific error messages
-      if (error && typeof error === 'object' && 'code' in error) {
-        const dbError = error as any;
-        if (dbError.code === 'PGRST116') {
-          toast.error('Access denied. Please check your permissions.');
-        } else if (dbError.message?.includes('JWT')) {
-          toast.error('Session expired. Please refresh the page.');
-        } else {
-          toast.error(`Database error: ${dbError.message || 'Unknown error'}`);
-        }
-      } else {
-        toast.error('Failed to load inventory items');
-      }
-      
-      // Disable auto-refresh on repeated failures
-      setAutoRefreshEnabled(false);
-      setTimeout(() => setAutoRefreshEnabled(true), 60000); // Re-enable after 1 minute
-    } finally {
-      setPhase('data', 'success');
-      setLastFetchTime(Date.now());
-      setLoadingMore(false);
-    }
-  }, [statusFilter, batchFilter, activeTab, comicsSubCategory, assignedStore, selectedLocation, showSoldItems, snapshot.phases.data, loadingMore, setPhase]);
-
-  // Memoized filtered items
+  // Client-side filtering (print status only, search now handled by DB)
   const filteredItems = useMemo(() => {
     let filtered = items;
-
-    // Apply search filter
-    if (debouncedSearchTerm) {
-      const searchLower = debouncedSearchTerm.toLowerCase();
-      filtered = filtered.filter(item => (
-        item.sku?.toLowerCase().includes(searchLower) ||
-        item.brand_title?.toLowerCase().includes(searchLower) ||
-        item.subject?.toLowerCase().includes(searchLower) ||
-        item.card_number?.toLowerCase().includes(searchLower)
-      ));
-    }
 
     // Apply print status filter (only for Raw items)
     if (printStatusFilter !== 'all') {
@@ -349,61 +167,32 @@ const Inventory = () => {
     }
 
     return filtered;
-  }, [items, debouncedSearchTerm, printStatusFilter]);
+  }, [items, printStatusFilter]);
 
-  // Reset pagination when filters change (only after store context is ready)
-  useEffect(() => {
-    // Add delay to ensure authentication is fully ready
-    const timeoutId = setTimeout(() => {
-      // Only fetch if store context is properly initialized
-      if (assignedStore && selectedLocation) {
-        console.log('Triggering fetchItems due to filter change:', {
-          statusFilter,
-          activeTab,
-          comicsSubCategory,
-          assignedStore,
-          selectedLocation,
-          showSoldItems
-        });
-        fetchItems(0, true);
-      } else {
-        console.log('Store context not ready for fetch:', { assignedStore, selectedLocation });
-        setPhase('store', 'error', { message: 'Store context not ready' }); // Stop loading if store context isn't ready
-      }
-    }, 100); // Small delay to ensure auth state is ready
-
-    return () => clearTimeout(timeoutId);
-  }, [statusFilter, batchFilter, activeTab, comicsSubCategory, assignedStore, selectedLocation, showSoldItems]); // Removed fetchItems to prevent infinite loop
-  
   // Persist batch filter preference
   useEffect(() => {
     localStorage.setItem('inventory-batch-filter', batchFilter);
   }, [batchFilter]);
 
-  // Smart auto-refresh with circuit breaker - only refresh when sync status might have changed
-  const { isPolling, error: pollingError, resetCircuitBreaker } = useStablePolling(
-    () => fetchItems(0, true),
-    {
-      interval: 120000, // 2 minutes
-      enabled: autoRefreshEnabled && !!assignedStore && !!selectedLocation,
-      maxRetries: 3,
-      backoffMultiplier: 2,
-      maxInterval: 300000 // 5 minutes max
-    }
-  );
-
-  // Show polling error if circuit breaker is triggered
+  // Update last refresh when data changes
   useEffect(() => {
-    if (pollingError) {
-      toast.error(`Auto-refresh paused due to errors. Click refresh controls to resume.`);
+    if (inventoryData) {
+      setLastRefresh(new Date());
     }
-  }, [pollingError]);
+  }, [inventoryData]);
 
-  const loadMore = useCallback(() => {
-    if (!loadingMore && hasMore) {
-      fetchItems(currentPage + 1, false);
-    }
-  }, [fetchItems, currentPage, loadingMore, hasMore]);
+  // Auto-refresh with React Query's refetch
+  useEffect(() => {
+    if (!autoRefreshEnabled || !assignedStore || !selectedLocation) return;
+
+    const interval = setInterval(() => {
+      refetch();
+    }, 120000); // 2 minutes
+
+    return () => clearInterval(interval);
+  }, [autoRefreshEnabled, assignedStore, selectedLocation, refetch]);
+
+  // Removed: pagination is now handled by React Query limit/offset in future enhancement
 
   // Memoized event handlers
   const handleToggleSelection = useCallback((itemId: string) => {
@@ -461,13 +250,13 @@ const Inventory = () => {
         }
       );
       
-      fetchItems(0, true);
+      refetch();
     } catch (e: any) {
       toast.error(e?.message || "Failed to queue sync");
     } finally {
       setSyncingRowId(null);
     }
-  }, [assignedStore, selectedLocation, fetchItems]);
+  }, [assignedStore, selectedLocation, refetch]);
 
   const handleRetrySync = useCallback(async (item: any) => {
     try {
@@ -492,13 +281,13 @@ const Inventory = () => {
       await supabase.functions.invoke('shopify-sync', { body: {} });
       
       toast.success(`${item.sku} queued for retry`);
-      fetchItems(0, true);
+      refetch();
     } catch (error) {
       toast.error('Failed to retry sync: ' + (error as Error).message);
     } finally {
       setSyncingRowId(null);
     }
-  }, [fetchItems]);
+  }, [refetch]);
 
   const handleResync = useCallback(async (item: any) => {
     if (!item.store_key || !item.shopify_location_gid) {
@@ -541,14 +330,14 @@ const Inventory = () => {
       );
       
       // Refresh items to show updated status
-      fetchItems(0, true);
+      refetch();
     } catch (error) {
       console.error('[handleResync] Failed:', error);
       toast.error('Failed to resync: ' + (error as Error).message);
     } finally {
       setSyncingRowId(null);
     }
-  }, [fetchItems]);
+  }, [refetch]);
 
   const handleSyncSelected = useCallback(async () => {
     if (selectedItems.size === 0) {
@@ -603,7 +392,7 @@ const Inventory = () => {
         toast.error(`${failCount} items failed to queue for sync`);
       }
 
-      fetchItems(0, true);
+      refetch();
     } catch (error) {
       console.error('Bulk sync error:', error);
       toast.error('Failed to start bulk sync');
@@ -611,7 +400,7 @@ const Inventory = () => {
       (bulkSyncingRef as any) = false;
       setBulkSyncing(false);
     }
-  }, [filteredItems, selectedItems, fetchItems]);
+  }, [filteredItems, selectedItems, refetch]);
 
   const handleResyncSelected = useCallback(async () => {
     if (selectedItems.size === 0) {
@@ -764,7 +553,7 @@ const Inventory = () => {
       }
 
       // Refresh in background (non-blocking)
-      fetchItems(0, true);
+      refetch();
     } catch (error) {
       toast.dismiss(toastId);
       console.error('Bulk resync error:', error);
@@ -776,7 +565,7 @@ const Inventory = () => {
       (bulkSyncingRef as any) = false;
       setBulkSyncing(false);
     }
-  }, [selectedItems, fetchItems]);
+  }, [selectedItems, refetch]);
 
   const handleBulkRetrySync = useCallback(async () => {
     const errorItems = filteredItems.filter(item => 
@@ -829,7 +618,7 @@ const Inventory = () => {
         toast.error(`${failCount} items failed to queue for retry`);
       }
 
-      fetchItems(0, true);
+      refetch();
     } catch (error) {
       console.error('Bulk retry error:', error);
       toast.error('Failed to start bulk retry');
@@ -837,7 +626,7 @@ const Inventory = () => {
       (bulkRetryingRef as any) = false;
       setBulkRetrying(false);
     }
-  }, [filteredItems, selectedItems, fetchItems]);
+  }, [filteredItems, selectedItems, refetch]);
 
   const handlePrint = useCallback(async (item: any) => {
     console.log('handlePrint called for item:', item.id);
@@ -1081,14 +870,14 @@ const Inventory = () => {
         .update({ printed_at: new Date().toISOString() })
         .eq('id', item.id);
         
-      fetchItems(0, true);
+      refetch();
     } catch (error) {
       console.error('Print error:', error);
       toast.error('Failed to print label: ' + (error as Error).message);
     } finally {
       setPrintingItem(null);
     }
-  }, [fetchItems]);
+  }, [refetch]);
 
   // Helper function to fill template elements with data
   const fillElements = (layout: any, vars: JobVars) => {
@@ -1230,7 +1019,7 @@ const Inventory = () => {
         .eq('id', item.id);
 
       toast.success('Raw card label printed successfully');
-      fetchItems(0, true);
+      refetch();
     } catch (error) {
       console.error('Print error:', error);
       toast.error('Failed to print label');
@@ -1238,7 +1027,7 @@ const Inventory = () => {
       setPrintingItem(null);
       setPrintData(null);
     }
-  }, [printData, selectedPrinter, fetchItems, fillElements]);
+  }, [printData, selectedPrinter, refetch, fillElements]);
 
   const handleSendCutCommand = useCallback(async () => {
     try {
@@ -1528,7 +1317,7 @@ const Inventory = () => {
         
         // Refresh after a short delay to ensure DB update is visible
         setTimeout(() => {
-          fetchItems(0, true);
+          refetch();
         }, 500);
       } else {
         console.error('[handleBulkPrintRaw] Failed to generate labels. Errors:', errors);
@@ -1547,7 +1336,7 @@ const Inventory = () => {
       (bulkPrintingRef as any) = false;
       setBulkPrinting(false);
     }
-  }, [items, fetchItems, cutterSettings, assignedStore, selectedLocation]);
+  }, [items, refetch, cutterSettings, assignedStore, selectedLocation]);
 
   const handleCutOnly = useCallback(async () => {
     try {
@@ -1833,7 +1622,7 @@ const Inventory = () => {
       }
 
       // Refresh inventory
-      fetchItems(0, true);
+      refetch();
       
     } catch (error: any) {
       console.error('Error removing from Shopify:', error);
@@ -1843,7 +1632,7 @@ const Inventory = () => {
       setShowRemovalDialog(false);
       setSelectedItemForRemoval(null);
     }
-  }, [selectedItemForRemoval, fetchItems]);
+  }, [selectedItemForRemoval, refetch]);
 
   // New comprehensive delete handler for admins
   const handleDeleteItems = useCallback(async (items: any[]) => {
@@ -1928,7 +1717,7 @@ const Inventory = () => {
       }
 
       // Refresh inventory
-      fetchItems(0, true);
+      refetch();
       clearSelection();
       
     } catch (error: any) {
@@ -1939,7 +1728,7 @@ const Inventory = () => {
       setShowDeleteDialog(false);
       setSelectedItemsForDeletion([]);
     }
-  }, [isAdmin, fetchItems, clearSelection]);
+  }, [isAdmin, refetch, clearSelection]);
 
   // Debug logging with better context
   console.log('Inventory Debug:', {
@@ -1990,17 +1779,14 @@ const Inventory = () => {
           <InventorySkeleton
             snapshot={snapshot}
             onRetry={() => {
-              resetCircuitBreaker();
-              fetchItems(0, true);
+              refetch();
             }}
             onSignIn={() => window.location.href = '/auth'}
             onApproveRefresh={() => {
-              incrementRefresh('inventory');
               setNextRefreshAt(null);
-              fetchItems(0, true);
+              refetch();
             }}
             onDismissRefresh={() => {
-              incrementDismissedRefresh('inventory');
               setNextRefreshAt(Date.now() + 300000); // Snooze for 5 minutes
             }}
           />
@@ -2047,8 +1833,8 @@ const Inventory = () => {
               <RefreshControls
                 autoRefreshEnabled={autoRefreshEnabled}
                 onAutoRefreshToggle={setAutoRefreshEnabled}
-                onManualRefresh={() => fetchItems(0, true)}
-                isRefreshing={snapshot.phases.data === 'loading'}
+                onManualRefresh={handleManualRefresh}
+                isRefreshing={isFetching}
                 lastRefresh={lastRefresh}
               />
               
@@ -2313,25 +2099,7 @@ const Inventory = () => {
                 />
               ))}
 
-              {/* Load More */}
-              {hasMore && (
-                <div className="flex justify-center pt-6">
-                  <Button
-                    variant="outline"
-                    onClick={loadMore}
-                    disabled={loadingMore}
-                  >
-                    {loadingMore ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Loading...
-                      </>
-                    ) : (
-                      'Load More'
-                    )}
-                  </Button>
-                </div>
-              )}
+              {/* Pagination removed - will be added back with infinite scroll in future enhancement */}
 
               {filteredItems.length === 0 && snapshot.phases.data !== 'loading' && (
                 <Card>
@@ -2403,7 +2171,7 @@ const Inventory = () => {
             row={syncDetailsRow}
             selectedStoreKey={assignedStore}
             selectedLocationGid={selectedLocation}
-            onRefresh={() => fetchItems(0, true)}
+            onRefresh={refetch}
           />
         )}
 
