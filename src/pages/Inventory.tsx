@@ -220,16 +220,20 @@ const Inventory = () => {
 
       // Apply category tab filters
       if (activeTab === 'raw') {
-        query = query.eq('type', 'Raw');
+        // Raw tab: show Raw type items, treat NULL as Raw, but exclude Graded
+        query = query.or('type.eq.Raw,type.is.null').not('type', 'eq', 'Graded');
       } else if (activeTab === 'graded') {
+        // Graded tab: only show explicitly Graded items
         query = query.eq('type', 'Graded');
       } else if (activeTab === 'comics') {
+        // Comics tab: filter by main_category='comics'
         query = query.eq('main_category', 'comics');
         // For comics, also filter by sub-category (graded/raw)
         if (comicsSubCategory === 'graded') {
           query = query.eq('type', 'Graded');
         } else {
-          query = query.eq('type', 'Raw');
+          // Raw comics: show Raw or NULL types, but exclude Graded
+          query = query.or('type.eq.Raw,type.is.null').not('type', 'eq', 'Graded');
         }
       }
 
