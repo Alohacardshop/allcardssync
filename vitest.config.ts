@@ -9,7 +9,7 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     setupFiles: ['./tests/setup.ts'],
-    include: ['tests/integration/**/*.test.ts', 'tests/unit/**/*.test.ts'],
+    include: ['tests/integration/**/*.test.ts', 'tests/unit/**/*.test.ts', 'src/**/*.test.ts'],
     exclude: ['tests/*.spec.ts'], // Exclude Playwright tests
     coverage: {
       reporter: ['text', 'json', 'html'],

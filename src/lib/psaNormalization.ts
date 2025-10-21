@@ -1,11 +1,58 @@
 import { PSACertificateData } from "@/types/psa";
+import { z } from "zod";
+
+// Validation schema for PSA data
+const psaFieldSchema = z.string()
+  .trim()
+  .max(200, "Field too long")
+  .transform(val => val.slice(0, 200));
+
+const psaDataSchema = z.object({
+  certNumber: z.string().trim().max(50),
+  grade: z.string().trim().max(20).optional(),
+  year: z.string().trim().max(4).optional(),
+  brandTitle: z.string().trim().max(100).optional(),
+  subject: z.string().trim().max(100).optional(),
+  cardNumber: z.string().trim().max(50).optional(),
+  varietyPedigree: z.string().trim().max(100).optional(),
+  category: z.string().trim().max(100).optional(),
+  gameSport: z.string().trim().max(100).optional(),
+  imageUrl: z.string().url().optional().or(z.literal('')),
+  imageUrls: z.array(z.string().url()).optional(),
+  psaUrl: z.string().url().optional(),
+});
+
+/**
+ * Sanitizes and validates text input from PSA API
+ * Prevents injection attacks and malformed data
+ */
+function sanitizeText(text: string): string {
+  if (!text || typeof text !== 'string') return '';
+  
+  return text
+    // Remove any script tags or HTML
+    .replace(/<script[^>]*>.*?<\/script>/gi, '')
+    .replace(/<iframe[^>]*>.*?<\/iframe>/gi, '')
+    .replace(/<object[^>]*>.*?<\/object>/gi, '')
+    .replace(/<embed[^>]*>/gi, '')
+    // Remove event handlers
+    .replace(/on\w+\s*=\s*["'][^"']*["']/gi, '')
+    // Remove javascript: protocol
+    .replace(/javascript:/gi, '')
+    // Limit to safe characters
+    .replace(/[^\w\s\-.,!?&()[\]'/:#]/g, '')
+    .trim();
+}
 
 export function normalizePSAData(rawData: any): PSACertificateData {
   // Robust text cleaner to remove PSA webpage artifacts
   const cleanText = (text: string): string => {
     if (!text) return '';
     
-    return text
+    // First sanitize for security
+    const sanitized = sanitizeText(text);
+    
+    return sanitized
       // Remove markdown links [text](url)
       .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
       // Remove standalone URLs
@@ -110,7 +157,7 @@ export function normalizePSAData(rawData: any): PSACertificateData {
     gameSport: extractCleanField(rawData.gameSport || rawData.game_sport, 100),
     imageUrl: rawData.imageUrl || rawData.image_url || (imageUrls.length > 0 ? imageUrls[0] : undefined),
     imageUrls,
-    psaUrl: rawData.psaUrl || `https://www.psacard.com/cert/${rawData.certNumber || rawData.cert}/psa`,
+    psaUrl: rawData.psaUrl || `https://www.psacard.com/cert/${encodeURIComponent(rawData.certNumber || rawData.cert || '')}/psa`,
     source: rawData.source,
     diagnostics: rawData.diagnostics
   };
