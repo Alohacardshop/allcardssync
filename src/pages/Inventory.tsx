@@ -39,7 +39,6 @@ import { CutterSettingsPanel } from '@/components/CutterSettingsPanel';
 import { TestLabelButton } from '@/components/TestLabelButton';
 import { RefreshControls } from '@/components/RefreshControls';
 import { AuthStatusDebug } from '@/components/AuthStatusDebug';
-import { SubCategorySelector } from '@/components/search/SubCategorySelector';
 
 const ITEMS_PER_PAGE = 50;
 
@@ -71,9 +70,9 @@ const Inventory = () => {
     return (localStorage.getItem('inventory-batch-filter') as 'all' | 'in_batch' | 'removed_from_batch') || 'all';
   });
   
-  // Category filters
-  const [mainCategoryFilter, setMainCategoryFilter] = useState<string>('all');
-  const [subCategoryFilter, setSubCategoryFilter] = useState<string[]>([]);
+  // Category tab state
+  const [activeTab, setActiveTab] = useState<'raw' | 'graded' | 'comics'>('raw');
+  const [comicsSubCategory, setComicsSubCategory] = useState<'graded' | 'raw'>('graded');
   
   // UI state
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
@@ -219,12 +218,19 @@ const Inventory = () => {
         query = query.eq('shopify_location_gid', selectedLocation);
       }
 
-      // Apply category filters
-      if (mainCategoryFilter !== 'all') {
-        query = query.eq('main_category', mainCategoryFilter);
-      }
-      if (subCategoryFilter.length > 0) {
-        query = query.in('sub_category', subCategoryFilter);
+      // Apply category tab filters
+      if (activeTab === 'raw') {
+        query = query.eq('type', 'Raw');
+      } else if (activeTab === 'graded') {
+        query = query.eq('type', 'Graded');
+      } else if (activeTab === 'comics') {
+        query = query.eq('main_category', 'comics');
+        // For comics, also filter by sub-category (graded/raw)
+        if (comicsSubCategory === 'graded') {
+          query = query.eq('type', 'Graded');
+        } else {
+          query = query.eq('type', 'Raw');
+        }
       }
 
       // Apply status filters
@@ -302,7 +308,7 @@ const Inventory = () => {
       setLastFetchTime(Date.now());
       setLoadingMore(false);
     }
-  }, [statusFilter, typeFilter, batchFilter, mainCategoryFilter, subCategoryFilter, assignedStore, selectedLocation, showSoldItems, snapshot.phases.data, loadingMore, setPhase]);
+  }, [statusFilter, typeFilter, batchFilter, activeTab, comicsSubCategory, assignedStore, selectedLocation, showSoldItems, snapshot.phases.data, loadingMore, setPhase]);
 
   // Memoized filtered items
   const filteredItems = useMemo(() => {
@@ -2049,27 +2055,32 @@ const Inventory = () => {
                 <CardHeader>
                   <CardTitle>Category</CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <Tabs value={mainCategoryFilter} onValueChange={(value) => {
-                    setMainCategoryFilter(value);
-                    setSubCategoryFilter([]); // Clear sub-category filter when changing main category
-                  }}>
-                    <TabsList className="grid w-full grid-cols-4">
-                      <TabsTrigger value="all">All Items</TabsTrigger>
-                      <TabsTrigger value="tcg">🎴 TCG</TabsTrigger>
-                      <TabsTrigger value="sports">⚾ Sports</TabsTrigger>
+                <CardContent className="space-y-4">
+                  <Tabs value={activeTab} onValueChange={(value: any) => setActiveTab(value)}>
+                    <TabsList className="grid w-full grid-cols-3">
+                      <TabsTrigger value="raw">🃏 Raw</TabsTrigger>
+                      <TabsTrigger value="graded">⭐ Graded</TabsTrigger>
                       <TabsTrigger value="comics">📚 Comics</TabsTrigger>
                     </TabsList>
                   </Tabs>
                   
-                  {/* Sub-category filter (only show when main category is selected) */}
-                  {mainCategoryFilter !== 'all' && (
-                    <div className="mt-4">
-                      <SubCategorySelector
-                        mainCategory={mainCategoryFilter}
-                        selected={subCategoryFilter}
-                        onChange={setSubCategoryFilter}
-                      />
+                  {/* Comics sub-category selector */}
+                  {activeTab === 'comics' && (
+                    <div className="flex gap-2">
+                      <Button
+                        variant={comicsSubCategory === 'graded' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setComicsSubCategory('graded')}
+                      >
+                        ⭐ Graded Comics
+                      </Button>
+                      <Button
+                        variant={comicsSubCategory === 'raw' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setComicsSubCategory('raw')}
+                      >
+                        🃏 Raw Comics
+                      </Button>
                     </div>
                   )}
                 </CardContent>
