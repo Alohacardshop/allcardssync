@@ -15,12 +15,15 @@ import { parseFunctionError } from "@/lib/fns";
 import { useLogger } from "@/hooks/useLogger";
 import { validateCompleteStoreContext, logStoreContext } from "@/utils/storeValidation";
 import { PSACertificateDisplay } from "@/components/PSACertificateDisplay";
+import { CGCCertificateDisplay } from "@/components/CGCCertificateDisplay";
 import { useDebounce } from "@/hooks/useDebounce";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { PSACertificateData } from "@/types/psa";
+import type { CGCCertificateData } from "@/types/cgc";
 import { gradedCardSchema } from "@/lib/validation/intake-schemas";
 import { SubCategoryCombobox } from "@/components/ui/sub-category-combobox";
 import { detectMainCategory } from "@/utils/categoryMapping";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 interface GradedCardIntakeProps {
   onBatchAdd?: () => void;
@@ -49,12 +52,15 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
   const logger = useLogger('GradedCardIntake');
   const { assignedStore, selectedLocation } = useStore();
 
+  // Grading service selection
+  const [gradingService, setGradingService] = useState<'psa' | 'cgc'>('psa');
+
   // Form state
   const [certInput, setCertInput] = useState("");
   const [barcodeInput, setBarcodeInput] = useState("");
   const [fetchState, setFetchState] = useState<'idle' | 'loading' | 'success' | 'empty' | 'error'>('idle');
   const [submitting, setSubmitting] = useState(false);
-  const [cardData, setCardData] = useState<PSACertificateData | null>(null);
+  const [cardData, setCardData] = useState<PSACertificateData | CGCCertificateData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [abortController, setAbortController] = useState<AbortController | null>(null);
   const [showRawData, setShowRawData] = useState(false);
@@ -122,12 +128,20 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
     setAbortController(null);
   }, []);
 
+  // Reset data when grading service changes
+  useEffect(() => {
+    setCardData(null);
+    setFetchState('idle');
+    setError(null);
+    setCertInput("");
+  }, [gradingService]);
+
   const updateFormField = (field: string, value: string | number) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
   const handleFetchData = async () => {
-    logger.logDebug('Fetch button clicked', { certInput });
+    logger.logDebug('Fetch button clicked', { certInput, gradingService });
     const certNumber = sanitizeCertNumber(certInput.trim());
     
     // Always call the edge function, even if empty - server will handle validation
@@ -146,8 +160,14 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
     try {
       updateFormField('certNumber', certNumber);
 
-      const { data, error: invokeError } = await supabase.functions.invoke('psa-lookup', {
-        body: { cert_number: certNumber }
+      // Call different edge functions based on grading service
+      const functionName = gradingService === 'psa' ? 'psa-lookup' : 'cgc-lookup';
+      const requestBody = gradingService === 'psa' 
+        ? { cert_number: certNumber }
+        : { certNumber, collectibleType: 'cards' };
+
+      const { data, error: invokeError } = await supabase.functions.invoke(functionName, {
+        body: requestBody
       });
 
       if (newAbortController.signal.aborted) {
@@ -184,31 +204,59 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         return;
       }
 
-      // Success path
-      const normalizedData = normalizePSAData(data.data);
-      setCardData({ ...normalizedData, source: data.source });
-      
-      // Auto-detect main category from PSA data
-      const detectedCategory = detectMainCategory(
-        normalizedData.brandTitle || normalizedData.category || ''
-      );
-      
-      // Auto-populate form with fetched data
-      setFormData(prev => ({
-        ...prev,
-        brandTitle: normalizedData.brandTitle || "",
-        subject: normalizedData.subject || "",
-        category: normalizedData.category || "",
-        cardNumber: normalizedData.cardNumber || "",
-        year: normalizedData.year || "",
-        grade: normalizedData.grade || "",
-        varietyPedigree: normalizedData.varietyPedigree || "",
-        mainCategory: detectedCategory,
-      }));
+      // Success path - handle both PSA and CGC data
+      if (gradingService === 'psa') {
+        const normalizedData = normalizePSAData(data.data);
+        setCardData({ ...normalizedData, source: data.source });
+        
+        // Auto-detect main category from PSA data
+        const detectedCategory = detectMainCategory(
+          normalizedData.brandTitle || normalizedData.category || ''
+        );
+        
+        // Auto-populate form with fetched data
+        setFormData(prev => ({
+          ...prev,
+          brandTitle: normalizedData.brandTitle || "",
+          subject: normalizedData.subject || "",
+          category: normalizedData.category || "",
+          cardNumber: normalizedData.cardNumber || "",
+          year: normalizedData.year || "",
+          grade: normalizedData.grade || "",
+          varietyPedigree: normalizedData.varietyPedigree || "",
+          mainCategory: detectedCategory,
+        }));
+      } else {
+        // CGC data handling
+        const cgcData = data.data as CGCCertificateData;
+        setCardData(cgcData);
+        
+        // Auto-detect main category from CGC data
+        const detectedCategory = detectMainCategory(
+          cgcData.seriesName || cgcData.setName || ''
+        );
+        
+        // Auto-populate form with CGC data
+        setFormData(prev => ({
+          ...prev,
+          brandTitle: cgcData.seriesName || "",
+          subject: cgcData.cardName || "",
+          category: cgcData.setName || "",
+          cardNumber: cgcData.cardNumber || "",
+          year: "", // CGC doesn't provide year consistently
+          grade: cgcData.grade || "",
+          varietyPedigree: cgcData.autographGrade || "",
+          mainCategory: detectedCategory,
+        }));
+      }
 
       setFetchState('success');
       toast.success("Card data fetched successfully!");
-      logger.logInfo('PSA data fetched successfully', { certNumber, source: data.source });
+      logger.logInfo(`${gradingService.toUpperCase()} data fetched successfully`, { 
+        certNumber, 
+        service: gradingService,
+        source: (data as any).source 
+      });
     } catch (error: any) {
       if (error.name === 'AbortError') {
         return;
@@ -269,10 +317,11 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         card_number_in: formData.cardNumber,
         price_in: parseFloat(formData.price),
         cost_in: parseFloat(formData.cost),
-        sku_in: formData.certNumber, // Use PSA cert number as SKU
+        sku_in: formData.certNumber, // Use cert number as SKU
         catalog_snapshot_in: {
           ...cardData,
-          psa_cert: formData.certNumber,
+          [gradingService === 'psa' ? 'psa_cert' : 'cgc_cert']: formData.certNumber,
+          grading_service: gradingService,
           year: formData.year
         }
       });
@@ -331,7 +380,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
       abortController.abort();
       setAbortController(null);
       setFetchState('idle');
-      toast.info("PSA fetch cancelled");
+      toast.info(`${gradingService.toUpperCase()} fetch cancelled`);
     }
   };
 
@@ -345,6 +394,21 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
+          {/* Grading Service Toggle */}
+          <div className="space-y-2">
+            <Label>Grading Service</Label>
+            <RadioGroup value={gradingService} onValueChange={(value: 'psa' | 'cgc') => setGradingService(value)} className="flex gap-4">
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="psa" id="psa" />
+                <Label htmlFor="psa" className="font-normal cursor-pointer">PSA</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="cgc" id="cgc" />
+                <Label htmlFor="cgc" className="font-normal cursor-pointer">CGC</Label>
+              </div>
+            </RadioGroup>
+          </div>
+
           {/* Certificate Input Section */}
           <div className="space-y-2">
             <Label htmlFor="cert-input">Certificate Number</Label>
@@ -352,7 +416,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
               <div className="flex-1">
                 <Input
                   id="cert-input"
-                  placeholder="Enter PSA certificate number (digits only)"
+                  placeholder={`Enter ${gradingService.toUpperCase()} certificate number (digits only)`}
                   value={certInput}
                   onChange={(e) => {
                     const sanitized = sanitizeCertNumber(e.target.value);
@@ -432,13 +496,20 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
             </p>
           </div>
 
-          {/* PSA Certificate Display */}
+          {/* Certificate Display - Conditional based on service */}
           {fetchState === 'success' && cardData && (
             <div className="space-y-3">
-              <PSACertificateDisplay 
-                psaData={cardData} 
-                className="border-2 border-primary/20 bg-primary/5"
-              />
+              {gradingService === 'psa' ? (
+                <PSACertificateDisplay 
+                  psaData={cardData as PSACertificateData} 
+                  className="border-2 border-primary/20 bg-primary/5"
+                />
+              ) : (
+                <CGCCertificateDisplay 
+                  cgcData={cardData as CGCCertificateData} 
+                  className="border-2 border-primary/20 bg-primary/5"
+                />
+              )}
             </div>
           )}
 
@@ -521,7 +592,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
               <Label htmlFor="grade">Grade <span className="text-destructive">*</span></Label>
               <Input
                 id="grade"
-                placeholder="PSA grade (e.g., 10)"
+                placeholder={`${gradingService.toUpperCase()} grade (e.g., 10)`}
                 value={formData.grade}
                 onChange={(e) => updateFormField('grade', e.target.value)}
                 className={!formData.grade ? "border-destructive/50" : ""}
