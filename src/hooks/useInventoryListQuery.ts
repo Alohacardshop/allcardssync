@@ -40,7 +40,7 @@ export function useInventoryListQuery(filters: InventoryFilters) {
         searchTerm,
       } = filters;
 
-      // Build query with minimal columns for list view
+      // Build query with minimal columns for list view (reduced payload)
       let query = supabase
         .from('intake_items')
         .select(
@@ -49,8 +49,6 @@ export function useInventoryListQuery(filters: InventoryFilters) {
           sku,
           brand_title,
           subject,
-          card_number,
-          variant,
           grade,
           price,
           quantity,
@@ -61,11 +59,7 @@ export function useInventoryListQuery(filters: InventoryFilters) {
           shopify_product_id,
           store_key,
           shopify_location_gid,
-          psa_cert,
-          year,
-          category,
           main_category,
-          sub_category,
           removed_from_batch_at,
           deleted_at,
           sold_at
@@ -136,8 +130,9 @@ export function useInventoryListQuery(filters: InventoryFilters) {
     },
     getNextPageParam: (lastPage) => lastPage.nextCursor,
     initialPageParam: 0,
-    staleTime: 60 * 1000, // 1 minute
+    staleTime: 5 * 60 * 1000, // 5 minutes - aggressive caching
     gcTime: 10 * 60 * 1000, // 10 minutes
+    placeholderData: (previousData) => previousData, // Show old data instantly while fetching
     refetchInterval: filters.autoRefreshEnabled ? 120000 : false,
     enabled: Boolean(filters.storeKey && filters.locationGid),
   });

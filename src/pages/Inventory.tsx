@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef, lazy, Suspense } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -8,8 +8,6 @@ import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { InventoryAnalytics } from '@/components/InventoryAnalytics';
-import { ItemTimeline } from '@/components/ItemTimeline';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useStore } from '@/contexts/StoreContext';
 import { Navigation } from '@/components/Navigation';
@@ -29,7 +27,6 @@ import { InventorySkeleton } from '@/components/SmartLoadingSkeleton';
 import { InventoryItemCard } from '@/components/InventoryItemCard';
 import { ShopifyRemovalDialog } from '@/components/ShopifyRemovalDialog';
 import { ShopifySyncDetailsDialog } from '@/components/ShopifySyncDetailsDialog';
-import { QueueStatusIndicator } from '@/components/QueueStatusIndicator';
 import { InventoryDeleteDialog } from '@/components/InventoryDeleteDialog';
 import { useCutterSettings } from '@/hooks/useCutterSettings';
 import { CutterSettingsPanel } from '@/components/CutterSettingsPanel';
@@ -40,6 +37,11 @@ import { useInventoryListQuery } from '@/hooks/useInventoryListQuery';
 import { useInventoryItemDetail } from '@/hooks/useInventoryItemDetail';
 import { Progress } from '@/components/ui/progress';
 import { useQueryClient } from '@tanstack/react-query';
+
+// Lazy load heavy components for faster initial render
+const InventoryAnalytics = lazy(() => import('@/components/InventoryAnalytics').then(m => ({ default: m.InventoryAnalytics })));
+const ItemTimeline = lazy(() => import('@/components/ItemTimeline').then(m => ({ default: m.ItemTimeline })));
+const QueueStatusIndicator = lazy(() => import('@/components/QueueStatusIndicator').then(m => ({ default: m.QueueStatusIndicator })));
 
 // Virtual list component with infinite scroll support
 const VirtualInventoryList = React.memo(({ 
@@ -2019,7 +2021,9 @@ const Inventory = () => {
                 {showDebug ? 'Hide' : 'Show'} Debug
               </Button>
             )}
-            <QueueStatusIndicator />
+            <Suspense fallback={<div className="h-8" />}>
+              <QueueStatusIndicator />
+            </Suspense>
           </div>
         </div>
 
@@ -2307,7 +2311,9 @@ const Inventory = () => {
           </TabsContent>
 
           <TabsContent value="analytics">
-            <InventoryAnalytics />
+            <Suspense fallback={<div className="flex items-center justify-center p-8"><Loader2 className="h-6 w-6 animate-spin" /></div>}>
+              <InventoryAnalytics />
+            </Suspense>
           </TabsContent>
           
           <TabsContent value="settings">
@@ -2384,7 +2390,9 @@ const Inventory = () => {
             {Array.from(expandedItems).map(itemId => {
               const item = items.find(i => i.id === itemId);
               return item ? (
-                <ItemTimeline key={itemId} item={item} />
+                <Suspense key={itemId} fallback={<div className="h-32 flex items-center justify-center"><Loader2 className="h-5 w-5 animate-spin" /></div>}>
+                  <ItemTimeline key={itemId} item={item} />
+                </Suspense>
               ) : null;
             })}
           </div>
