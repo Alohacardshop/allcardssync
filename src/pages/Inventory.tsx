@@ -63,7 +63,6 @@ const Inventory = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'sold' | 'deleted' | 'errors'>('active');
-  const [typeFilter, setTypeFilter] = useState<string>('all');
   const [printStatusFilter, setPrintStatusFilter] = useState<'all' | 'printed' | 'not-printed'>('all');
   const [showSoldItems, setShowSoldItems] = useState(false);
   const [batchFilter, setBatchFilter] = useState<'all' | 'in_batch' | 'removed_from_batch'>(() => {
@@ -317,7 +316,7 @@ const Inventory = () => {
       setLastFetchTime(Date.now());
       setLoadingMore(false);
     }
-  }, [statusFilter, typeFilter, batchFilter, activeTab, comicsSubCategory, assignedStore, selectedLocation, showSoldItems, snapshot.phases.data, loadingMore, setPhase]);
+  }, [statusFilter, batchFilter, activeTab, comicsSubCategory, assignedStore, selectedLocation, showSoldItems, snapshot.phases.data, loadingMore, setPhase]);
 
   // Memoized filtered items
   const filteredItems = useMemo(() => {
@@ -332,14 +331,6 @@ const Inventory = () => {
         item.subject?.toLowerCase().includes(searchLower) ||
         item.card_number?.toLowerCase().includes(searchLower)
       ));
-    }
-
-    // Apply type filter
-    if (typeFilter !== 'all') {
-      filtered = filtered.filter(item => {
-        const itemType = item.type?.toLowerCase() || 'raw';
-        return itemType === typeFilter.toLowerCase();
-      });
     }
 
     // Apply print status filter (only for Raw items)
@@ -358,7 +349,7 @@ const Inventory = () => {
     }
 
     return filtered;
-  }, [items, debouncedSearchTerm, typeFilter, printStatusFilter]);
+  }, [items, debouncedSearchTerm, printStatusFilter]);
 
   // Reset pagination when filters change (only after store context is ready)
   useEffect(() => {
@@ -368,7 +359,8 @@ const Inventory = () => {
       if (assignedStore && selectedLocation) {
         console.log('Triggering fetchItems due to filter change:', {
           statusFilter,
-          typeFilter,
+          activeTab,
+          comicsSubCategory,
           assignedStore,
           selectedLocation,
           showSoldItems
@@ -381,7 +373,7 @@ const Inventory = () => {
     }, 100); // Small delay to ensure auth state is ready
 
     return () => clearTimeout(timeoutId);
-  }, [statusFilter, typeFilter, batchFilter, assignedStore, selectedLocation, showSoldItems]); // Removed fetchItems to prevent infinite loop
+  }, [statusFilter, batchFilter, activeTab, comicsSubCategory, assignedStore, selectedLocation, showSoldItems]); // Removed fetchItems to prevent infinite loop
   
   // Persist batch filter preference
   useEffect(() => {
@@ -1955,7 +1947,8 @@ const Inventory = () => {
     itemsLength: items.length,
     filteredItemsLength: filteredItems.length,
     statusFilter,
-    typeFilter,
+    activeTab,
+    comicsSubCategory,
     printStatusFilter,
     searchTerm,
     assignedStore,
@@ -1971,7 +1964,7 @@ const Inventory = () => {
   // Show loading states based on unified loading manager
   const needsLoadingState = snapshot.dominantPhase || 
     !assignedStore || !selectedLocation ||
-    (filteredItems.length === 0 && (statusFilter !== 'all' || typeFilter !== 'all' || printStatusFilter !== 'all' || searchTerm.trim()));
+    (filteredItems.length === 0 && (statusFilter !== 'all' || printStatusFilter !== 'all' || searchTerm.trim()));
 
   if (needsLoadingState) {
     return (
@@ -2122,17 +2115,6 @@ const Inventory = () => {
                       <SelectItem value="errors">Errors</SelectItem>
                       <SelectItem value="deleted">Deleted</SelectItem>
                       <SelectItem value="all">All</SelectItem>
-                    </SelectContent>
-                  </Select>
-
-                  <Select value={typeFilter} onValueChange={setTypeFilter}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Filter by type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Types</SelectItem>
-                      <SelectItem value="graded">Graded</SelectItem>
-                      <SelectItem value="raw">Raw</SelectItem>
                     </SelectContent>
                   </Select>
 
