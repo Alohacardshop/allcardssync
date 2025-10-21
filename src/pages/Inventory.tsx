@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Loader2, Upload, Search, CheckSquare, Square, Trash2, Printer, Scissors, RotateCcw } from 'lucide-react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
@@ -38,7 +39,129 @@ import { AuthStatusDebug } from '@/components/AuthStatusDebug';
 import { useInventoryQuery } from '@/hooks/useInventoryQuery';
 import { Progress } from '@/components/ui/progress';
 
-const ITEMS_PER_PAGE = 50;
+const ITEMS_PER_PAGE = 25; // Reduced for faster loading
+
+// Virtual list component for better performance
+const VirtualInventoryList = React.memo(({ 
+  items, 
+  selectedItems,
+  expandedItems,
+  isAdmin,
+  syncingRowId,
+  printingItem,
+  onToggleSelection,
+  onToggleExpanded,
+  onSync,
+  onRetrySync,
+  onResync,
+  onPrint,
+  onRemove,
+  onDelete,
+  onSyncDetails,
+  isLoading
+}: {
+  items: any[];
+  selectedItems: Set<string>;
+  expandedItems: Set<string>;
+  isAdmin: boolean;
+  syncingRowId: string | null;
+  printingItem: string | null;
+  onToggleSelection: (id: string) => void;
+  onToggleExpanded: (id: string) => void;
+  onSync: (item: any) => void;
+  onRetrySync: (item: any) => void;
+  onResync: (item: any) => void;
+  onPrint: (item: any) => void;
+  onRemove: (item: any) => void;
+  onDelete?: (item: any) => void;
+  onSyncDetails: (item: any) => void;
+  isLoading: boolean;
+}) => {
+  const parentRef = useRef<HTMLDivElement>(null);
+
+  const rowVirtualizer = useVirtualizer({
+    count: items.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 180, // Estimated height of each card
+    overscan: 5, // Render 5 items above and below viewport
+  });
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="text-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
+          <p className="text-muted-foreground">Loading inventory...</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (items.length === 0) {
+    return (
+      <Card>
+        <CardContent className="text-center py-12">
+          <p className="text-muted-foreground">No items found matching your criteria.</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div
+      ref={parentRef}
+      style={{
+        height: '70vh',
+        overflow: 'auto',
+      }}
+    >
+      <div
+        style={{
+          height: `${rowVirtualizer.getTotalSize()}px`,
+          width: '100%',
+          position: 'relative',
+        }}
+      >
+        {rowVirtualizer.getVirtualItems().map((virtualItem) => {
+          const item = items[virtualItem.index];
+          return (
+            <div
+              key={virtualItem.key}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                transform: `translateY(${virtualItem.start}px)`,
+                paddingBottom: '1rem',
+              }}
+            >
+              <InventoryItemCard
+                item={item}
+                isSelected={selectedItems.has(item.id)}
+                isExpanded={expandedItems.has(item.id)}
+                isAdmin={isAdmin}
+                syncingRowId={syncingRowId}
+                printingItem={printingItem}
+                onToggleSelection={onToggleSelection}
+                onToggleExpanded={onToggleExpanded}
+                onSync={onSync}
+                onRetrySync={onRetrySync}
+                onResync={onResync}
+                onPrint={onPrint}
+                onRemove={onRemove}
+                onDelete={onDelete}
+                onSyncDetails={onSyncDetails}
+              />
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+});
+
+VirtualInventoryList.displayName = 'VirtualInventoryList';
 
 const Inventory = () => {
   // Unified loading state management
@@ -1998,45 +2121,31 @@ const Inventory = () => {
               </CardContent>
             </Card>
 
-            {/* Items List */}
-            <div className="space-y-4">
-              {filteredItems.map((item) => (
-                <InventoryItemCard
-                  key={item.id}
-                  item={item}
-                  isSelected={selectedItems.has(item.id)}
-                  isExpanded={expandedItems.has(item.id)}
-                  isAdmin={isAdmin}
-                  syncingRowId={syncingRowId}
-                  printingItem={printingItem}
-                  onToggleSelection={handleToggleSelection}
-                  onToggleExpanded={handleToggleExpanded}
-                  onSync={handleSync}
-                  onRetrySync={handleRetrySync}
-                  onResync={handleResync}
-                  onPrint={handlePrint}
-                  onRemove={(item) => {
-                    setSelectedItemForRemoval(item);
-                    setShowRemovalDialog(true);
-                  }}
-                  onDelete={isAdmin ? (item) => {
-                    setSelectedItemsForDeletion([item]);
-                    setShowDeleteDialog(true);
-                  } : undefined}
-                  onSyncDetails={(item) => setSyncDetailsRow(item)}
-                />
-              ))}
-
-              {/* Pagination removed - will be added back with infinite scroll in future enhancement */}
-
-              {filteredItems.length === 0 && snapshot.phases.data !== 'loading' && (
-                <Card>
-                  <CardContent className="text-center py-12">
-                    <p className="text-muted-foreground">No items found matching your criteria.</p>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
+            {/* Virtual Scrolling Items List */}
+            <VirtualInventoryList
+              items={filteredItems}
+              selectedItems={selectedItems}
+              expandedItems={expandedItems}
+              isAdmin={isAdmin}
+              syncingRowId={syncingRowId}
+              printingItem={printingItem}
+              onToggleSelection={handleToggleSelection}
+              onToggleExpanded={handleToggleExpanded}
+              onSync={handleSync}
+              onRetrySync={handleRetrySync}
+              onResync={handleResync}
+              onPrint={handlePrint}
+              onRemove={(item) => {
+                setSelectedItemForRemoval(item);
+                setShowRemovalDialog(true);
+              }}
+              onDelete={isAdmin ? (item) => {
+                setSelectedItemsForDeletion([item]);
+                setShowDeleteDialog(true);
+              } : undefined}
+              onSyncDetails={(item) => setSyncDetailsRow(item)}
+              isLoading={snapshot.phases.data === 'loading'}
+            />
           </TabsContent>
 
           <TabsContent value="analytics">

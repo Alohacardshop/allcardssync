@@ -37,7 +37,7 @@ export function useInventoryQuery(filters: InventoryFilters) {
         printStatusFilter = 'all',
         comicsSubCategory,
         searchTerm,
-        limit = 50,
+        limit = 25, // Reduced from 50 for faster initial load
       } = filters;
 
       // Build the query
@@ -74,7 +74,7 @@ export function useInventoryQuery(filters: InventoryFilters) {
           sub_category,
           cost,
           removed_from_batch_at,
-          intake_lots!inner(
+          intake_lots(
             lot_number,
             status
           )
