@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef, lazy, Suspens
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, Upload, Search, CheckSquare, Square, Trash2, Printer, Scissors, RotateCcw } from 'lucide-react';
+import { Loader2, Upload, Search, CheckSquare, Square, Trash2, Printer, Scissors, RotateCcw, AlertCircle, RefreshCw } from 'lucide-react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
@@ -2008,7 +2008,7 @@ const Inventory = () => {
   // Show loading states based on unified loading manager
   const needsLoadingState = snapshot.dominantPhase || 
     !assignedStore || !selectedLocation ||
-    (filteredItems.length === 0 && (statusFilter !== 'all' || printStatusFilter !== 'all' || searchTerm.trim()));
+    (isLoading && !inventoryData);
 
   if (needsLoadingState) {
     return (
@@ -2335,8 +2335,37 @@ const Inventory = () => {
               </CardContent>
             </Card>
 
+            {/* Empty state when no items match filters */}
+            {!isLoading && filteredItems.length === 0 && (
+              <Card>
+                <CardContent className="flex items-center justify-center p-12 text-center">
+                  <div className="space-y-4">
+                    <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto" />
+                    <div>
+                      <h3 className="text-lg font-semibold mb-2">No Items Found</h3>
+                      <p className="text-muted-foreground mb-4">
+                        {activeTab === 'graded' 
+                          ? 'No graded cards found for this location.'
+                          : activeTab === 'raw'
+                          ? 'No raw cards found for this location.'
+                          : 'No comics found for this location.'}
+                      </p>
+                      <p className="text-sm text-muted-foreground mb-4">
+                        Store: <strong>{assignedStore}</strong> | Location: <strong>{selectedLocation?.split('/').pop()}</strong>
+                      </p>
+                      <Button variant="outline" onClick={handleManualRefresh}>
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                        Refresh
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Virtual Scrolling Items List */}
-            <VirtualInventoryList
+            {filteredItems.length > 0 && (
+              <VirtualInventoryList
               items={filteredItems}
               selectedItems={selectedItems}
               expandedItems={expandedItems}
@@ -2363,6 +2392,7 @@ const Inventory = () => {
               isFetchingNextPage={isFetchingNextPage}
               onLoadMore={() => fetchNextPage()}
             />
+            )}
           </TabsContent>
 
           <TabsContent value="analytics">
