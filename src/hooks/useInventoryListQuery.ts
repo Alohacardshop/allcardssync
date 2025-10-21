@@ -1,0 +1,144 @@
+import { useInfiniteQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+
+export interface InventoryFilters {
+  storeKey: string;
+  locationGid: string;
+  activeTab: 'raw' | 'graded' | 'comics';
+  statusFilter: 'all' | 'active' | 'sold' | 'deleted' | 'errors';
+  batchFilter: 'all' | 'in_batch' | 'removed_from_batch';
+  printStatusFilter?: 'all' | 'printed' | 'not-printed';
+  comicsSubCategory?: string | null;
+  searchTerm?: string;
+  autoRefreshEnabled?: boolean;
+}
+
+const PAGE_SIZE = 25;
+
+export function useInventoryListQuery(filters: InventoryFilters) {
+  return useInfiniteQuery({
+    queryKey: [
+      'inventory-list',
+      filters.storeKey,
+      filters.locationGid,
+      filters.activeTab,
+      filters.statusFilter,
+      filters.batchFilter,
+      filters.printStatusFilter,
+      filters.comicsSubCategory,
+      filters.searchTerm,
+    ],
+    queryFn: async ({ pageParam = 0 }) => {
+      const {
+        storeKey,
+        locationGid,
+        activeTab,
+        statusFilter,
+        batchFilter,
+        printStatusFilter = 'all',
+        comicsSubCategory,
+        searchTerm,
+      } = filters;
+
+      // Build query with minimal columns for list view
+      let query = supabase
+        .from('intake_items')
+        .select(
+          `
+          id,
+          sku,
+          brand_title,
+          subject,
+          card_number,
+          variant,
+          grade,
+          price,
+          quantity,
+          type,
+          created_at,
+          printed_at,
+          shopify_sync_status,
+          shopify_product_id,
+          store_key,
+          shopify_location_gid,
+          psa_cert,
+          year,
+          category,
+          main_category,
+          sub_category,
+          removed_from_batch_at,
+          deleted_at,
+          sold_at
+        `,
+          { count: 'exact' }
+        )
+        .range(pageParam, pageParam + PAGE_SIZE - 1)
+        .eq('store_key', storeKey)
+        .eq('shopify_location_gid', locationGid);
+
+      // Apply tab-based filtering
+      if (activeTab === 'raw') {
+        query = query.in('main_category', ['tcg', 'sports']).eq('type', 'Raw');
+      } else if (activeTab === 'graded') {
+        query = query.in('main_category', ['tcg', 'sports']).eq('type', 'Graded');
+      } else if (activeTab === 'comics') {
+        query = query.eq('main_category', 'comics');
+        if (comicsSubCategory) {
+          query = query.eq('sub_category', comicsSubCategory);
+        }
+      }
+
+      // Apply status filter
+      if (statusFilter === 'active') {
+        query = query.is('deleted_at', null).gt('quantity', 0);
+      } else if (statusFilter === 'sold') {
+        query = query.not('sold_at', 'is', null);
+      } else if (statusFilter === 'deleted') {
+        query = query.not('deleted_at', 'is', null);
+      } else if (statusFilter === 'errors') {
+        query = query.eq('shopify_sync_status', 'error');
+      }
+
+      // Apply batch filter
+      if (batchFilter === 'in_batch') {
+        query = query.is('removed_from_batch_at', null);
+      } else if (batchFilter === 'removed_from_batch') {
+        query = query.not('removed_from_batch_at', 'is', null);
+      }
+
+      // Apply print status filter (Raw cards only)
+      if (printStatusFilter === 'printed') {
+        query = query.not('printed_at', 'is', null);
+      } else if (printStatusFilter === 'not-printed') {
+        query = query.is('printed_at', null);
+      }
+
+      // Apply search filter
+      if (searchTerm && searchTerm.trim()) {
+        const searchLower = searchTerm.toLowerCase().trim();
+        query = query.or(
+          `sku.ilike.%${searchLower}%,brand_title.ilike.%${searchLower}%,subject.ilike.%${searchLower}%,card_number.ilike.%${searchLower}%`
+        );
+      }
+
+      // Order by created_at descending
+      query = query.order('created_at', { ascending: false });
+
+      const { data, error, count } = await query;
+
+      if (error) throw error;
+
+      return { 
+        items: data || [], 
+        count: count || 0,
+        nextCursor: data && data.length === PAGE_SIZE ? pageParam + PAGE_SIZE : undefined
+      };
+    },
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+    initialPageParam: 0,
+    staleTime: 60 * 1000, // 1 minute
+    gcTime: 10 * 60 * 1000, // 10 minutes
+    refetchInterval: filters.autoRefreshEnabled ? 120000 : false,
+    enabled: Boolean(filters.storeKey && filters.locationGid),
+  });
+}

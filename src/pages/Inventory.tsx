@@ -36,12 +36,12 @@ import { CutterSettingsPanel } from '@/components/CutterSettingsPanel';
 import { TestLabelButton } from '@/components/TestLabelButton';
 import { RefreshControls } from '@/components/RefreshControls';
 import { AuthStatusDebug } from '@/components/AuthStatusDebug';
-import { useInventoryQuery } from '@/hooks/useInventoryQuery';
+import { useInventoryListQuery } from '@/hooks/useInventoryListQuery';
+import { useInventoryItemDetail } from '@/hooks/useInventoryItemDetail';
 import { Progress } from '@/components/ui/progress';
+import { useQueryClient } from '@tanstack/react-query';
 
-const ITEMS_PER_PAGE = 25; // Reduced for faster loading
-
-// Virtual list component for better performance
+// Virtual list component with infinite scroll support
 const VirtualInventoryList = React.memo(({ 
   items, 
   selectedItems,
@@ -58,7 +58,10 @@ const VirtualInventoryList = React.memo(({
   onRemove,
   onDelete,
   onSyncDetails,
-  isLoading
+  isLoading,
+  hasNextPage,
+  isFetchingNextPage,
+  onLoadMore
 }: {
   items: any[];
   selectedItems: Set<string>;
@@ -76,15 +79,36 @@ const VirtualInventoryList = React.memo(({
   onDelete?: (item: any) => void;
   onSyncDetails: (item: any) => void;
   isLoading: boolean;
+  hasNextPage?: boolean;
+  isFetchingNextPage?: boolean;
+  onLoadMore?: () => void;
 }) => {
   const parentRef = useRef<HTMLDivElement>(null);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
 
   const rowVirtualizer = useVirtualizer({
     count: items.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 180, // Estimated height of each card
-    overscan: 5, // Render 5 items above and below viewport
+    estimateSize: () => 180,
+    overscan: 5,
   });
+
+  // Intersection observer for infinite scroll
+  useEffect(() => {
+    if (!loadMoreRef.current || !hasNextPage || isFetchingNextPage) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && onLoadMore) {
+          onLoadMore();
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    observer.observe(loadMoreRef.current);
+    return () => observer.disconnect();
+  }, [hasNextPage, isFetchingNextPage, onLoadMore]);
 
   if (isLoading) {
     return (
@@ -156,6 +180,32 @@ const VirtualInventoryList = React.memo(({
             </div>
           );
         })}
+        
+        {/* Infinite scroll trigger */}
+        {hasNextPage && (
+          <div
+            ref={loadMoreRef}
+            style={{
+              position: 'absolute',
+              top: `${rowVirtualizer.getTotalSize()}px`,
+              width: '100%',
+              padding: '1rem',
+              textAlign: 'center',
+            }}
+          >
+            {isFetchingNextPage ? (
+              <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
+            ) : (
+              <Button 
+                variant="outline" 
+                onClick={onLoadMore}
+                disabled={!hasNextPage}
+              >
+                Load More
+              </Button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -215,9 +265,19 @@ const Inventory = () => {
   const { assignedStore, selectedLocation } = useStore();
   const { sendChunkedBatchToShopify, isSending: isBatchSending, progress } = useBatchSendToShopify();
   const { settings: cutterSettings } = useCutterSettings();
+  const queryClient = useQueryClient();
 
-  // React Query for inventory data with caching
-  const { data: inventoryData, isLoading, isFetching, error: queryError, refetch } = useInventoryQuery({
+  // Infinite query for inventory list with minimal columns
+  const { 
+    data: inventoryData, 
+    isLoading, 
+    isFetching, 
+    error: queryError, 
+    refetch,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage
+  } = useInventoryListQuery({
     storeKey: assignedStore || '',
     locationGid: selectedLocation || '',
     activeTab,
@@ -226,12 +286,12 @@ const Inventory = () => {
     printStatusFilter,
     comicsSubCategory: activeTab === 'comics' ? comicsSubCategory : null,
     searchTerm: debouncedSearchTerm,
-    limit: 50,
     autoRefreshEnabled,
   });
 
-  const items = inventoryData?.items || [];
-  const totalCount = inventoryData?.count || 0;
+  // Flatten paginated data
+  const items = inventoryData?.pages.flatMap(page => page.items) || [];
+  const totalCount = inventoryData?.pages[0]?.count || 0;
 
   // Check admin role on mount and set auth phase
   useEffect(() => {
@@ -291,6 +351,46 @@ const Inventory = () => {
       setLastRefresh(new Date());
     }
   }, [inventoryData]);
+
+  // Tab prefetching - prefetch adjacent tabs after 2 seconds
+  useEffect(() => {
+    if (!assignedStore || !selectedLocation) return;
+
+    const timer = setTimeout(() => {
+      const prefetchTab = (tab: 'raw' | 'graded' | 'comics', comicsSub?: string) => {
+        queryClient.prefetchInfiniteQuery({
+          queryKey: [
+            'inventory-list',
+            assignedStore,
+            selectedLocation,
+            tab,
+            statusFilter,
+            batchFilter,
+            printStatusFilter,
+            comicsSub || null,
+            debouncedSearchTerm,
+          ],
+          queryFn: async () => {
+            // Query function will be handled by the hook
+            return { items: [], count: 0, nextCursor: undefined };
+          },
+          initialPageParam: 0,
+        });
+      };
+
+      // Prefetch adjacent tabs based on current tab
+      if (activeTab === 'raw') {
+        prefetchTab('graded');
+      } else if (activeTab === 'graded') {
+        prefetchTab('raw');
+        prefetchTab('comics', 'graded');
+      } else if (activeTab === 'comics') {
+        prefetchTab('graded');
+      }
+    }, 2000);
+
+    return () => clearTimeout(timer);
+  }, [activeTab, assignedStore, selectedLocation, statusFilter, batchFilter, printStatusFilter, debouncedSearchTerm, queryClient]);
 
   // Memoized event handlers
   const handleToggleSelection = useCallback((itemId: string) => {
@@ -2116,7 +2216,8 @@ const Inventory = () => {
                 </div>
 
                 <div className="text-sm text-muted-foreground">
-                  Showing {filteredItems.length} of {items.length} items
+                  Showing {filteredItems.length} items {totalCount > filteredItems.length && `(${totalCount} total)`}
+                  {hasNextPage && ' • Scroll to load more'}
                 </div>
               </CardContent>
             </Card>
@@ -2145,6 +2246,9 @@ const Inventory = () => {
               } : undefined}
               onSyncDetails={(item) => setSyncDetailsRow(item)}
               isLoading={snapshot.phases.data === 'loading'}
+              hasNextPage={hasNextPage}
+              isFetchingNextPage={isFetchingNextPage}
+              onLoadMore={() => fetchNextPage()}
             />
           </TabsContent>
 

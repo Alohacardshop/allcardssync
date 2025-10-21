@@ -18,6 +18,17 @@ export const queryClient = new QueryClient({
   },
 });
 
+// Query deduplication logging (development only)
+if (process.env.NODE_ENV === 'development') {
+  queryClient.getQueryCache().subscribe((event) => {
+    if (event.type === 'added') {
+      console.log('🔄 Query cache added:', event.query.queryKey);
+    } else if (event.type === 'removed') {
+      console.log('🗑️ Query cache removed:', event.query.queryKey);
+    }
+  });
+}
+
 // Helper to invalidate queries with toast notification
 export const invalidateWithToast = async (
   queryClient: QueryClient,
