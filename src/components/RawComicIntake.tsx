@@ -109,8 +109,8 @@ export const RawComicIntake = ({ onBatchAdd }: RawComicIntakeProps = {}) => {
       return;
     }
 
-    if (!formData.title || !formData.price || !formData.cost || !formData.subCategory) {
-      toast.error("Please fill in all required fields (Title, Price, Sub-Category)");
+    if (!formData.title || !formData.issueNumber || !formData.price || !formData.cost || !formData.subCategory) {
+      toast.error("Please fill in all required fields (Title, Issue Number, Price, Cost, Sub-Category)");
       return;
     }
 
@@ -194,66 +194,57 @@ export const RawComicIntake = ({ onBatchAdd }: RawComicIntakeProps = {}) => {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* GCD Search Section */}
-          <div className="p-4 bg-muted/50 rounded-lg space-y-3">
-            <div className="flex items-center gap-2 mb-2">
-              <Search className="h-4 w-4 text-muted-foreground" />
-              <Label className="text-sm font-medium">Search Comics Database (GCD)</Label>
-            </div>
-            <Dialog open={showSearchDialog} onOpenChange={setShowSearchDialog}>
-              <DialogTrigger asChild>
-                <Button variant="outline" className="w-full" type="button">
-                  <Search className="h-4 w-4 mr-2" />
-                  Search for Comic Series
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-2xl max-h-[80vh]">
-                <DialogHeader>
-                  <DialogTitle>Search Grand Comics Database</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <Input
-                    placeholder="Search series name..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    autoFocus
-                  />
-                  {isSearching && (
-                    <div className="flex items-center justify-center py-8">
-                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                    </div>
-                  )}
-                  {!isSearching && searchResults.length > 0 && (
-                    <div className="space-y-2 max-h-96 overflow-y-auto">
-                      {searchResults.map((series) => (
-                        <button
-                          key={series.id}
-                          type="button"
-                          onClick={() => handleSelectSeries(series)}
-                          className="w-full p-3 text-left rounded-lg border hover:bg-accent transition-colors"
-                        >
-                          <div className="font-medium">{series.name}</div>
-                          <div className="text-sm text-muted-foreground">
-                            {series.publisher || 'Unknown Publisher'}
-                            {series.year_began && ` • ${series.year_began}`}
-                            {series.issue_count && ` • ${series.issue_count} issues`}
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  {!isSearching && searchQuery && searchResults.length === 0 && (
-                    <div className="text-center py-8 text-muted-foreground">
-                      No results found. Try a different search term.
-                    </div>
-                  )}
-                  <div className="text-xs text-muted-foreground text-center pt-2 border-t">
-                    Data: Grand Comics Database (CC BY-SA 4.0)
+          {/* GCD Search Dialog */}
+          <Dialog open={showSearchDialog} onOpenChange={setShowSearchDialog}>
+            <DialogContent className="max-w-2xl max-h-[80vh]">
+              <DialogHeader>
+                <DialogTitle>Search for Comic Series</DialogTitle>
+                <p className="text-sm text-muted-foreground">
+                  Find the series to auto-fill title, publisher, and year. You'll still need to enter the issue number manually.
+                </p>
+              </DialogHeader>
+              <div className="space-y-4">
+                <Input
+                  placeholder="Search series name..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  autoFocus
+                />
+                {isSearching && (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                   </div>
+                )}
+                {!isSearching && searchResults.length > 0 && (
+                  <div className="space-y-2 max-h-96 overflow-y-auto">
+                    {searchResults.map((series) => (
+                      <button
+                        key={series.id}
+                        type="button"
+                        onClick={() => handleSelectSeries(series)}
+                        className="w-full p-3 text-left rounded-lg border hover:bg-accent transition-colors"
+                      >
+                        <div className="font-medium">{series.name}</div>
+                        <div className="text-sm text-muted-foreground">
+                          {series.publisher || 'Unknown Publisher'}
+                          {series.year_began && ` • ${series.year_began}`}
+                          {series.issue_count && ` • ${series.issue_count} issues`}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {!isSearching && searchQuery && searchResults.length === 0 && (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No results found. Try a different search term.
+                  </div>
+                )}
+                <div className="text-xs text-muted-foreground text-center pt-2 border-t">
+                  Data: Grand Comics Database (CC BY-SA 4.0)
                 </div>
-              </DialogContent>
-            </Dialog>
-          </div>
+              </div>
+            </DialogContent>
+          </Dialog>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -265,21 +256,33 @@ export const RawComicIntake = ({ onBatchAdd }: RawComicIntakeProps = {}) => {
               />
             </div>
 
-            <div>
-              <Label htmlFor="title">Title <span className="text-destructive">*</span></Label>
-              <Input
-                id="title"
-                placeholder="Comic title"
-                value={formData.title}
-                onChange={(e) => updateFormField('title', e.target.value)}
-              />
+            <div className="md:col-span-2">
+              <Label htmlFor="title">Series/Title <span className="text-destructive">*</span></Label>
+              <div className="flex gap-2">
+                <Input
+                  id="title"
+                  placeholder="e.g., The Amazing Spider-Man"
+                  value={formData.title}
+                  onChange={(e) => updateFormField('title', e.target.value)}
+                  className="flex-1"
+                />
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={() => setShowSearchDialog(true)}
+                  className="shrink-0"
+                >
+                  <Search className="h-4 w-4 mr-2" />
+                  Search GCD
+                </Button>
+              </div>
             </div>
 
             <div>
-              <Label htmlFor="issueNumber">Issue Number</Label>
+              <Label htmlFor="issueNumber">Issue Number <span className="text-destructive">*</span></Label>
               <Input
                 id="issueNumber"
-                placeholder="Issue #"
+                placeholder="e.g., 13"
                 value={formData.issueNumber}
                 onChange={(e) => updateFormField('issueNumber', e.target.value)}
               />
@@ -289,7 +292,7 @@ export const RawComicIntake = ({ onBatchAdd }: RawComicIntakeProps = {}) => {
               <Label htmlFor="publisher">Publisher</Label>
               <Input
                 id="publisher"
-                placeholder="Publisher name"
+                placeholder="e.g., Marvel Comics"
                 value={formData.publisher}
                 onChange={(e) => updateFormField('publisher', e.target.value)}
               />
@@ -299,7 +302,7 @@ export const RawComicIntake = ({ onBatchAdd }: RawComicIntakeProps = {}) => {
               <Label htmlFor="year">Year</Label>
               <Input
                 id="year"
-                placeholder="YYYY"
+                placeholder="e.g., 1964"
                 maxLength={4}
                 value={formData.year}
                 onChange={(e) => {
