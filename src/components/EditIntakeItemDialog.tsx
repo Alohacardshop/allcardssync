@@ -4,6 +4,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SubCategoryCombobox } from "@/components/ui/sub-category-combobox";
+import { detectMainCategory } from "@/utils/categoryMapping";
 
 export type IntakeItemDetails = {
   id: string;
@@ -27,6 +29,8 @@ export type IntakeItemDetails = {
   shopifyInventoryItemId?: string;
   shopifyLocationGid?: string;
   storeKey?: string;
+  mainCategory?: string;
+  subCategory?: string;
 };
 
 interface Props {
@@ -69,6 +73,12 @@ function EditIntakeItemDialog({ open, item, onOpenChange, onSave, isAdmin = fals
         }
       }
       
+      // Auto-detect main category when brand changes
+      if (key === 'brandTitle' && value) {
+        const detected = detectMainCategory(value);
+        updated.mainCategory = detected;
+      }
+      
       return updated;
     });
   };
@@ -85,6 +95,27 @@ function EditIntakeItemDialog({ open, item, onOpenChange, onSave, isAdmin = fals
         </DialogHeader>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-2">
           <div>
+            <Label htmlFor="mainCategory">Main Category</Label>
+            <Select value={form.mainCategory || "tcg"} onValueChange={(value) => handleChange("mainCategory", value)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select category" />
+              </SelectTrigger>
+              <SelectContent className="bg-background border shadow-md z-50">
+                <SelectItem value="tcg">🎴 TCG</SelectItem>
+                <SelectItem value="sports">⚾ Sports</SelectItem>
+                <SelectItem value="comics">📚 Comics</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label htmlFor="subCategory">Sub-Category</Label>
+            <SubCategoryCombobox
+              mainCategory={form.mainCategory || "tcg"}
+              value={form.subCategory || ""}
+              onChange={(value) => handleChange("subCategory", value)}
+            />
+          </div>
+          <div>
             <Label htmlFor="year">Year</Label>
             <Input id="year" value={form.year || ""} onChange={(e) => handleChange("year", e.target.value)} />
           </div>
@@ -97,7 +128,7 @@ function EditIntakeItemDialog({ open, item, onOpenChange, onSave, isAdmin = fals
             <Input id="subject" value={form.subject || ""} onChange={(e) => handleChange("subject", e.target.value)} />
           </div>
           <div>
-            <Label htmlFor="category">Category</Label>
+            <Label htmlFor="category">Category (Legacy)</Label>
             <Input id="category" value={form.category || ""} onChange={(e) => handleChange("category", e.target.value)} />
           </div>
           <div>

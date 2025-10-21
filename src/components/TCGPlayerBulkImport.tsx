@@ -17,6 +17,8 @@ import { fetchCardPricing } from '@/hooks/useTCGData';
 import { tcgSupabase } from '@/integrations/supabase/client';
 import { CsvPasteArea } from '@/components/csv/CsvPasteArea';
 import { NormalizedCard } from '@/lib/csv/normalize';
+import { SubCategoryCombobox } from '@/components/ui/sub-category-combobox';
+import { detectMainCategory } from '@/utils/categoryMapping';
 
 interface TCGPlayerItem {
   tcgplayerId?: string; // TCGPlayer ID for SKU generation (readonly)
@@ -117,6 +119,8 @@ export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) =>
   const [editingIndex, setEditingIndex] = useState<number>(-1);
   const { assignedStore, selectedLocation } = useStore();
   const batchId = uuidv4(); // Generate a unique batch ID for this import session
+  const [mainCategory, setMainCategory] = useState('tcg');
+  const [subCategory, setSubCategory] = useState('');
 
   // Handle CSV parsing results
   const handleCsvParsed = (cards: NormalizedCard[]) => {
@@ -366,6 +370,8 @@ export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) =>
         cost_in: item.cost,
         sku_in: sku,
         source_provider_in: 'tcgplayer',
+        main_category_in: mainCategory,
+        sub_category_in: subCategory,
         // Enhanced catalog snapshot with all TCGPlayer data
         catalog_snapshot_in: {
           name: item.name,
@@ -445,6 +451,11 @@ export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) =>
 
     if (!assignedStore || !selectedLocation) {
       toast.error("Please select a store and location before adding to batch");
+      return;
+    }
+
+    if (!subCategory) {
+      toast.error("Please select a sub-category before adding to batch");
       return;
     }
 
@@ -593,7 +604,39 @@ Prices from Market Price on 8/24/2025 and are subject to change.`;
       </Card>
 
       {items.length > 0 && (
-        <Card>
+        <>
+          <Card>
+            <CardHeader>
+              <CardTitle>Import Settings</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="mainCategory">Main Category</Label>
+                  <Select value={mainCategory} onValueChange={setMainCategory}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="tcg">🎴 TCG</SelectItem>
+                      <SelectItem value="sports">⚾ Sports</SelectItem>
+                      <SelectItem value="comics">📚 Comics</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="subCategory">Sub-Category <span className="text-destructive">*</span></Label>
+                  <SubCategoryCombobox
+                    mainCategory={mainCategory}
+                    value={subCategory}
+                    onChange={setSubCategory}
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
           <CardHeader>
             <CardTitle>Import Preview</CardTitle>
           </CardHeader>
@@ -753,7 +796,7 @@ Prices from Market Price on 8/24/2025 and are subject to change.`;
             
             {!importing && items.length > 0 && (
               <div className="mt-4 flex gap-2">
-                <Button onClick={handleAddToBatch}>
+                <Button onClick={handleAddToBatch} disabled={!subCategory}>
                   <Upload className="h-4 w-4 mr-2" />
                   Add {items.length} Items to Batch
                 </Button>
@@ -774,6 +817,7 @@ Prices from Market Price on 8/24/2025 and are subject to change.`;
             )}
           </CardContent>
         </Card>
+        </>
       )}
 
       {/* Edit Item Dialog */}
