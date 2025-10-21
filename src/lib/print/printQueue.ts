@@ -23,6 +23,7 @@ export class PrintQueue {
   private running = false;
   private timer: any = null;
   private recent = new Map<string, number>();
+  private readonly MAX_RECENT = 1000; // Limit deduplication map size
 
   constructor(
     private send: Transport,
@@ -60,6 +61,16 @@ export class PrintQueue {
     // Clean up expired entries
     for (const [k, exp] of [...this.recent.entries()]) {
       if (exp <= now) this.recent.delete(k);
+    }
+    
+    // Prevent unbounded growth - remove oldest entries when limit reached
+    if (this.recent.size > this.MAX_RECENT) {
+      const oldestKeys = Array.from(this.recent.entries())
+        .sort((a, b) => a[1] - b[1])
+        .slice(0, 100)
+        .map(([k]) => k);
+      oldestKeys.forEach(k => this.recent.delete(k));
+      console.debug('[print_queue_cleanup]', { removed: oldestKeys.length, remaining: this.recent.size });
     }
     
     const exp = this.recent.get(key);

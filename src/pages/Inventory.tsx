@@ -448,13 +448,13 @@ const Inventory = () => {
         }
       );
       
-      refetch();
+      queryClient.invalidateQueries({ queryKey: ['inventory-list'] });
     } catch (e: any) {
       toast.error(e?.message || "Failed to queue sync");
     } finally {
       setSyncingRowId(null);
     }
-  }, [assignedStore, selectedLocation, refetch]);
+  }, [selectedLocation, queryClient]);
 
   const handleRetrySync = useCallback(async (item: any) => {
     try {
@@ -479,13 +479,13 @@ const Inventory = () => {
       await supabase.functions.invoke('shopify-sync', { body: {} });
       
       toast.success(`${item.sku} queued for retry`);
-      refetch();
+      queryClient.invalidateQueries({ queryKey: ['inventory-list'] });
     } catch (error) {
       toast.error('Failed to retry sync: ' + (error as Error).message);
     } finally {
       setSyncingRowId(null);
     }
-  }, [refetch]);
+  }, [queryClient]);
 
   const handleResync = useCallback(async (item: any) => {
     if (!item.store_key || !item.shopify_location_gid) {

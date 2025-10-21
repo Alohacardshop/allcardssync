@@ -12,6 +12,41 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
+// Helper function outside component to prevent re-creation on every render
+const generateTitle = (item: any) => {
+  const parts = []
+  
+  // Add year at the start if available (check both direct field and catalog_snapshot)
+  const year = item.year || (item.catalog_snapshot && typeof item.catalog_snapshot === 'object' && item.catalog_snapshot !== null && 'year' in item.catalog_snapshot ? item.catalog_snapshot.year : null);
+  if (year) parts.push(year)
+  
+  // Add brand
+  if (item.brand_title) parts.push(item.brand_title)
+  
+  // Add subject (like FA/MewTwo VSTAR)
+  if (item.subject) parts.push(item.subject)
+  
+  // Add card number
+  if (item.card_number) parts.push(`#${item.card_number}`)
+  
+  // Add variant after vstar (check both direct field and catalog_snapshot)
+  const variant = item.variant || (item.catalog_snapshot && typeof item.catalog_snapshot === 'object' && item.catalog_snapshot !== null && 'varietyPedigree' in item.catalog_snapshot ? item.catalog_snapshot.varietyPedigree : null);
+  if (variant && variant.toLowerCase() !== 'vstar' && variant.toLowerCase() !== 'normal') {
+    parts.push(variant.toLowerCase())
+  }
+  
+  // Handle grading - use PSA for PSA certs
+  if (item.grade && item.psa_cert) {
+    parts.push(`PSA ${item.grade}`)
+  } else if (item.grade) {
+    parts.push(`Grade ${item.grade}`)
+  } else if (item.psa_cert) {
+    parts.push(`PSA ${item.psa_cert}`)
+  }
+  
+  return parts.length > 0 ? parts.join(' ') : 'Unknown Item';
+};
+
 interface InventoryItemCardProps {
   item: any;
   isSelected: boolean;
@@ -47,39 +82,6 @@ export const InventoryItemCard = memo(({
   onDelete,
   onSyncDetails
 }: InventoryItemCardProps) => {
-  const generateTitle = (item: any) => {
-    const parts = []
-    
-    // Add year at the start if available (check both direct field and catalog_snapshot)
-    const year = item.year || (item.catalog_snapshot && typeof item.catalog_snapshot === 'object' && item.catalog_snapshot !== null && 'year' in item.catalog_snapshot ? item.catalog_snapshot.year : null);
-    if (year) parts.push(year)
-    
-    // Add brand
-    if (item.brand_title) parts.push(item.brand_title)
-    
-    // Add subject (like FA/MewTwo VSTAR)
-    if (item.subject) parts.push(item.subject)
-    
-    // Add card number
-    if (item.card_number) parts.push(`#${item.card_number}`)
-    
-    // Add variant after vstar (check both direct field and catalog_snapshot)
-    const variant = item.variant || (item.catalog_snapshot && typeof item.catalog_snapshot === 'object' && item.catalog_snapshot !== null && 'varietyPedigree' in item.catalog_snapshot ? item.catalog_snapshot.varietyPedigree : null);
-    if (variant && variant.toLowerCase() !== 'vstar' && variant.toLowerCase() !== 'normal') {
-      parts.push(variant.toLowerCase())
-    }
-    
-    // Handle grading - use PSA for PSA certs
-    if (item.grade && item.psa_cert) {
-      parts.push(`PSA ${item.grade}`)
-    } else if (item.grade) {
-      parts.push(`Grade ${item.grade}`)
-    } else if (item.psa_cert) {
-      parts.push(`PSA ${item.psa_cert}`)
-    }
-    
-    return parts.length > 0 ? parts.join(' ') : 'Unknown Item';
-  };
 
   const getStatusBadge = (item: any) => {
     if (item.deleted_at) {
@@ -315,6 +317,19 @@ export const InventoryItemCard = memo(({
         </div>
       </CardContent>
     </Card>
+  );
+}, (prevProps, nextProps) => {
+  // Custom comparison: only re-render if these specific props change
+  return (
+    prevProps.item.id === nextProps.item.id &&
+    prevProps.item.sku === nextProps.item.sku &&
+    prevProps.item.price === nextProps.item.price &&
+    prevProps.item.shopify_sync_status === nextProps.item.shopify_sync_status &&
+    prevProps.item.printed_at === nextProps.item.printed_at &&
+    prevProps.isSelected === nextProps.isSelected &&
+    prevProps.isExpanded === nextProps.isExpanded &&
+    prevProps.syncingRowId === nextProps.syncingRowId &&
+    prevProps.printingItem === nextProps.printingItem
   );
 });
 
