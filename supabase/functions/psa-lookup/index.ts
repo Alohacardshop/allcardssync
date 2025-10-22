@@ -94,11 +94,12 @@ Deno.serve(async (req) => {
       )
     }
 
-    // Fetch from PSA API
+    // Fetch from PSA API - Use GetCertificateDetail for full information
     log.info('[psa-lookup] Fetching from PSA API', { requestId, cert_number });
     
     try {
-      const certUrl = `https://api.psacard.com/publicapi/cert/GetByCertNumber/${cert_number}`;
+      // Use GetCertificateDetail endpoint to get full certificate information (not submission status)
+      const certUrl = `https://api.psacard.com/publicapi/cert/GetCertificateDetail/${cert_number}`;
       const imagesUrl = `https://api.psacard.com/publicapi/cert/GetImagesByCertNumber/${cert_number}`;
 
       const [certData, imagesData] = await Promise.all([
