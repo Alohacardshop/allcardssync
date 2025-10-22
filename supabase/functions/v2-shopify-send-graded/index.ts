@@ -134,14 +134,33 @@ Deno.serve(async (req) => {
     if (grade) description += `, PSA Grade ${grade}`
     if (psaUrl) description += `\n\nPSA Certificate: ${psaUrl}`
 
+    // Check if this is a comic
+    const isComic = intakeItem.main_category === 'comics' || 
+                    intakeItem.catalog_snapshot?.type === 'graded_comic'
+
     // Create Shopify product
     const productData = {
       product: {
         title: title,
         body_html: description,
-        vendor: vendor || brandTitle || 'Trading Cards',
-        product_type: 'Graded Card',
-        tags: ['PSA', grade, brandTitle, year, intakeItem.game || intakeItem.catalog_snapshot?.game, vendor].filter(Boolean).join(', '),
+        vendor: vendor || brandTitle || (isComic ? 'Comics' : 'Trading Cards'),
+        product_type: isComic ? 'Graded Comic' : 'Graded Card',
+        tags: isComic ? [
+          'comics',
+          'graded',
+          brandTitle, // Publisher (DC, Marvel, etc.)
+          grade ? `Grade ${grade}` : null,
+          year,
+          intakeItem.sub_category || 'american',
+          vendor
+        ].filter(Boolean).join(', ') : [
+          'PSA', 
+          grade, 
+          brandTitle, 
+          year, 
+          intakeItem.game || intakeItem.catalog_snapshot?.game, 
+          vendor
+        ].filter(Boolean).join(', '),
         variants: [{
           sku: item.sku,
           price: item.price?.toString() || '0.00',

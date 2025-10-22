@@ -198,14 +198,28 @@ Deno.serve(async (req) => {
       })
     }
 
+    // Check if this is a comic
+    const isComic = intakeItem.main_category === 'comics' || 
+                    intakeItem.catalog_snapshot?.type === 'raw_comic'
+
     // Create Shopify product (new SKU)
     const productData = {
       product: {
         title: title,
         body_html: description,
-        vendor: vendor || brandTitle || 'Trading Cards',
-        product_type: 'Raw Card',
-        tags: [
+        vendor: vendor || brandTitle || (isComic ? 'Comics' : 'Trading Cards'),
+        product_type: isComic ? 'Raw Comic' : 'Raw Card',
+        tags: isComic ? [
+          'comics',
+          'raw',
+          brandTitle, // Publisher (DC, Marvel, etc.)
+          condition,
+          intakeItem.sub_category || 'american', // Comic sub-category
+          intakeItem.lot_number || 'Unknown Lot',
+          subject ? `Title: ${subject}` : null,
+          cardNumber ? `Issue: ${cardNumber}` : null,
+          vendor
+        ].filter(Boolean) : [
           'Raw Card',
           'single', 
           brandTitle, 
