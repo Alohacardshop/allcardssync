@@ -86,6 +86,7 @@ Deno.serve(async (req) => {
     const cardNumber = item.card_number || intakeItem.card_number || ''
     const variant = item.variant || intakeItem.variant || ''
     const category = item.category_tag || intakeItem.category || ''
+    const gradingCompany = intakeItem.grading_company || 'PSA'
 
     // Debug logging
     console.log('DEBUG: Title construction data:', {
@@ -114,7 +115,7 @@ Deno.serve(async (req) => {
       if (cardNumber) parts.push(`#${cardNumber}`)
       if (variant && variant !== 'Normal') parts.push(variant.toLowerCase())
       if (category && category !== 'Normal') parts.push(category.toLowerCase())
-      if (grade) parts.push(`PSA ${grade}`)
+      if (grade) parts.push(`${gradingCompany} ${grade}`)
       
       title = parts.filter(Boolean).join(' ')
       console.log('DEBUG: Constructed title parts:', parts)
@@ -131,8 +132,8 @@ Deno.serve(async (req) => {
     // Add detailed description
     description += `\n\nGraded ${brandTitle} ${subject}`
     if (year) description += ` from ${year}`
-    if (grade) description += `, PSA Grade ${grade}`
-    if (psaUrl) description += `\n\nPSA Certificate: ${psaUrl}`
+    if (grade) description += `, ${gradingCompany} Grade ${grade}`
+    if (psaUrl) description += `\n\n${gradingCompany} Certificate: ${psaUrl}`
 
     // Check if this is a comic
     const isComic = intakeItem.main_category === 'comics' || 
@@ -148,14 +149,15 @@ Deno.serve(async (req) => {
         tags: isComic ? [
           'comics',
           'graded',
-          brandTitle, // Publisher (DC, Marvel, etc.)
+          gradingCompany,
           grade ? `Grade ${grade}` : null,
+          brandTitle, // Publisher (DC, Marvel, etc.)
           year,
           intakeItem.sub_category || 'american',
           vendor
         ].filter(Boolean).join(', ') : [
-          'PSA', 
-          grade, 
+          gradingCompany,
+          grade ? `Grade ${grade}` : null,
           brandTitle, 
           year, 
           intakeItem.game || intakeItem.catalog_snapshot?.game, 
