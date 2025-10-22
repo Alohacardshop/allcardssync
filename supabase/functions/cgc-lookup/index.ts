@@ -1,8 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { CFG } from "../_lib/config.ts";
+import { DOMParser } from "https://deno.land/x/deno_dom@v0.1.43/deno-dom-wasm.ts";
 import { getCorsHeaders } from "../_lib/cors.ts";
 
-const CGC_BASE_URL = "https://apiserv.cgccomics.com";
+const CGC_CERT_LOOKUP_URL = "https://www.cgccomics.com/certlookup";
 
 interface CGCLoginResponse {
   authToken: string;
@@ -35,95 +35,111 @@ interface CGCCertificationResponse {
   };
 }
 
-async function getCGCAuthToken(): Promise<string> {
-  const username = Deno.env.get("CGC_USERNAME");
-  const password = Deno.env.get("CGC_PASSWORD");
-
-  if (!username || !password) {
-    throw new Error("CGC credentials not configured");
+function extractTextContent(element: any, selector: string): string | null {
+  try {
+    const el = element.querySelector(selector);
+    return el?.textContent?.trim() || null;
+  } catch {
+    return null;
   }
+}
 
-  console.log("[cgc-lookup] Logging into CGC API");
-
-  const response = await fetch(`${CGC_BASE_URL}/users/login/v1`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ username, password }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error(`[cgc-lookup] Login failed: ${response.status} - ${errorText}`);
-    throw new Error(`CGC login failed: ${response.status}`);
+function extractImageUrl(element: any, selector: string): string | null {
+  try {
+    const el = element.querySelector(selector);
+    const src = el?.getAttribute('src');
+    if (src && src.startsWith('/')) {
+      return `https://www.cgccomics.com${src}`;
+    }
+    return src || null;
+  } catch {
+    return null;
   }
-
-  const data: CGCLoginResponse = await response.json();
-  console.log("[cgc-lookup] Successfully authenticated with CGC API");
-  
-  return data.authToken;
 }
 
 async function lookupCGCCertification(
-  certNumber: string,
-  collectibleType: "comics" | "cards",
-  authToken: string
+  certNumber: string
 ): Promise<CGCCertificationResponse> {
-  const endpoint = `/${collectibleType}/certifications/v3/lookup/${certNumber}?include=pop,images`;
-  const url = `${CGC_BASE_URL}${endpoint}`;
+  const url = `${CGC_CERT_LOOKUP_URL}/${certNumber}/`;
 
-  console.log(`[cgc-lookup] Looking up ${collectibleType} cert ${certNumber}`);
+  console.log(`[cgc-lookup] Looking up CGC cert ${certNumber} from public page`);
 
   const response = await fetch(url, {
     method: "GET",
     headers: {
-      "Authorization": `Bearer ${authToken}`,
-      "Content-Type": "application/json",
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
     },
   });
 
   if (!response.ok) {
-    if (response.status === 404) {
-      return {
-        certNumber,
-        isValid: false,
-      };
-    }
-    const errorText = await response.text();
-    console.error(`[cgc-lookup] Lookup failed: ${response.status} - ${errorText}`);
-    throw new Error(`CGC lookup failed: ${response.status}`);
+    console.error(`[cgc-lookup] Lookup failed: ${response.status}`);
+    return {
+      certNumber,
+      isValid: false,
+    };
   }
 
-  const data = await response.json();
+  const html = await response.text();
+  
+  // Check if certificate was not found
+  if (html.includes("Certificate Not Found") || html.includes("not found")) {
+    console.log(`[cgc-lookup] Certificate ${certNumber} not found`);
+    return {
+      certNumber,
+      isValid: false,
+    };
+  }
+
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  
+  if (!doc) {
+    throw new Error("Failed to parse CGC page");
+  }
+
   console.log(`[cgc-lookup] Successfully retrieved cert ${certNumber}`);
 
-  // Transform the response to match our interface
+  // Extract data from the page
+  const grade = extractTextContent(doc, ".grade-value") || 
+                extractTextContent(doc, ".cert-grade") ||
+                extractTextContent(doc, "[class*='grade']");
+  
+  const title = extractTextContent(doc, ".cert-title") ||
+                extractTextContent(doc, ".series-name") ||
+                extractTextContent(doc, "h1");
+  
+  const issueNumber = extractTextContent(doc, ".issue-number") ||
+                      extractTextContent(doc, "[class*='issue']");
+  
+  const label = extractTextContent(doc, ".label-type") ||
+                extractTextContent(doc, "[class*='label']");
+  
+  const keyComments = extractTextContent(doc, ".key-comments") ||
+                     extractTextContent(doc, ".pedigree-name") ||
+                     extractTextContent(doc, "[class*='comments']");
+
+  // Extract images
+  const frontImage = extractImageUrl(doc, ".cert-image-front") ||
+                     extractImageUrl(doc, ".front-image") ||
+                     extractImageUrl(doc, "img[alt*='front']") ||
+                     extractImageUrl(doc, ".cert-image img");
+  
+  const rearImage = extractImageUrl(doc, ".cert-image-back") ||
+                    extractImageUrl(doc, ".back-image") ||
+                    extractImageUrl(doc, "img[alt*='back']");
+
   return {
     certNumber,
     isValid: true,
-    grade: data.grade || data.numericGrade?.toString(),
-    title: data.title || data.seriesName,
-    issueNumber: data.issueNumber,
-    cardNumber: data.cardNumber,
-    cardName: data.cardName,
-    setName: data.setName,
-    seriesName: data.seriesName,
-    autographGrade: data.autographGrade,
-    label: data.label,
-    barcode: data.barcode,
-    certVerificationUrl: data.certVerificationUrl || `https://www.cgccomics.com/certlookup/${certNumber}`,
-    keyComments: data.keyComments,
-    graderSignatures: data.graderSignatures,
+    grade,
+    title,
+    issueNumber,
+    label,
+    certVerificationUrl: url,
+    keyComments,
     images: {
-      front: data.images?.front || data.frontImage,
-      rear: data.images?.rear || data.rearImage,
+      front: frontImage,
+      rear: rearImage,
     },
-    populationReport: data.populationReport ? {
-      higherGrades: data.populationReport.higherGrades,
-      sameGrade: data.populationReport.sameGrade,
-      totalGraded: data.populationReport.totalGraded,
-    } : undefined,
   };
 }
 
@@ -137,7 +153,7 @@ serve(async (req) => {
   }
 
   try {
-    const { certNumber, collectibleType = "comics" } = await req.json();
+    const { certNumber } = await req.json();
 
     if (!certNumber) {
       return new Response(
@@ -146,18 +162,8 @@ serve(async (req) => {
       );
     }
 
-    if (!["comics", "cards"].includes(collectibleType)) {
-      return new Response(
-        JSON.stringify({ ok: false, error: "Invalid collectible type. Must be 'comics' or 'cards'" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Get auth token
-    const authToken = await getCGCAuthToken();
-
-    // Lookup certification
-    const data = await lookupCGCCertification(certNumber, collectibleType, authToken);
+    // Lookup certification from public page
+    const data = await lookupCGCCertification(certNumber);
 
     return new Response(
       JSON.stringify({ ok: true, data }),
