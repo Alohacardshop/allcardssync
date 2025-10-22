@@ -59,23 +59,4 @@ export const ComicsAPI = {
     return data;
   },
 
-  async searchMarvelComics(title: string, limit = 20, offset = 0): Promise<any> {
-    const { data, error } = await supabase.functions.invoke('marvel-comics-search', {
-      body: { action: 'search', title, limit, offset }
-    });
-
-    if (error) throw new Error(error.message);
-    if (data?.error) throw new Error(data.error);
-    return data;
-  },
-
-  async getMarvelComic(comicId: number): Promise<any> {
-    const { data, error } = await supabase.functions.invoke('marvel-comics-search', {
-      body: { action: 'getComic', comicId }
-    });
-
-    if (error) throw new Error(error.message);
-    if (data?.error) throw new Error(data.error);
-    return data;
-  },
 };

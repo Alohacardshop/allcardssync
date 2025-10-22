@@ -30,37 +30,3 @@ export interface PagedResult<T> {
   license: "CC BY-SA 4.0";
 }
 
-export interface MarvelComic {
-  id: number;
-  title: string;
-  issueNumber: number;
-  description: string;
-  thumbnail: {
-    path: string;
-    extension: string;
-  };
-  dates: Array<{
-    type: string;
-    date: string;
-  }>;
-  creators: {
-    available: number;
-    items: Array<{
-      name: string;
-      role: string;
-    }>;
-  };
-  format: string;
-  pageCount: number;
-  series: {
-    name: string;
-  };
-}
-
-export interface MarvelSearchResult {
-  comics: MarvelComic[];
-  total: number;
-  count: number;
-  attribution: string;
-  cached?: boolean;
-}
