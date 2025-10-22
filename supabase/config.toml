@@ -105,6 +105,10 @@ verify_jwt = true
 [functions.gcd-search]
 verify_jwt = true
 
+# Marvel Comics API search (public - Marvel API has its own rate limiting)
+[functions.marvel-comics-search]
+verify_jwt = false
+
 # Bulk location transfer (requires staff/admin role)
 [functions.bulk-location-transfer]
 verify_jwt = true

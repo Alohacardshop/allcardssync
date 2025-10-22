@@ -12,12 +12,18 @@ import { Loader2, Book, Search } from "lucide-react";
 import { useStore } from "@/contexts/StoreContext";
 import { validateCompleteStoreContext, logStoreContext } from "@/utils/storeValidation";
 import { SubCategoryCombobox } from "@/components/ui/sub-category-combobox";
-import { ComicsAPI, GcdSeries, GcdIssue } from "@/lib/comics";
+import { ComicsAPI, GcdSeries, GcdIssue, MarvelComic } from "@/lib/comics";
 
 interface IssueSearchResult {
   series: GcdSeries;
   issue: GcdIssue;
 }
+
+interface MarvelSearchResult {
+  comic: MarvelComic;
+}
+
+type SearchResult = IssueSearchResult | MarvelSearchResult;
 
 interface RawComicIntakeProps {
   onBatchAdd?: () => void;
@@ -26,9 +32,11 @@ interface RawComicIntakeProps {
 export const RawComicIntake = ({ onBatchAdd }: RawComicIntakeProps = {}) => {
   const { assignedStore, selectedLocation } = useStore();
   const [submitting, setSubmitting] = useState(false);
-  const [searchResults, setSearchResults] = useState<IssueSearchResult[]>([]);
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [showSearchDialog, setShowSearchDialog] = useState(false);
+  const [useMarvelAPI, setUseMarvelAPI] = useState(false);
+  const [marvelAttribution, setMarvelAttribution] = useState("");
 
   const [formData, setFormData] = useState({
     title: "",
@@ -53,31 +61,49 @@ export const RawComicIntake = ({ onBatchAdd }: RawComicIntakeProps = {}) => {
     setIsSearching(true);
     setShowSearchDialog(true);
     setSearchResults([]);
+    setMarvelAttribution("");
 
     try {
-      // Search for series matching the title
-      const seriesResult = await ComicsAPI.searchSeries(formData.title, 1);
-      
-      if (seriesResult.items.length === 0) {
-        toast.error("No series found matching that title");
-        return;
-      }
-
-      // Convert series to fake "issue results" so we can reuse the UI
-      const fakeIssueResults: IssueSearchResult[] = seriesResult.items.slice(0, 10).map(series => ({
-        series,
-        issue: {
-          id: 0,
-          number: formData.issueNumber || '',
-          title: '',
-          url: ''
+      if (useMarvelAPI) {
+        // Use Marvel Comics API
+        const marvelResult = await ComicsAPI.searchMarvelComics(formData.title, 20, 0);
+        
+        if (marvelResult.comics.length === 0) {
+          toast.error("No Marvel comics found matching that title");
+          return;
         }
-      }));
 
-      setSearchResults(fakeIssueResults);
-      toast.success(`Found ${seriesResult.items.length} matching series`);
+        const marvelSearchResults: MarvelSearchResult[] = marvelResult.comics.map((comic: MarvelComic) => ({
+          comic
+        }));
+
+        setSearchResults(marvelSearchResults);
+        setMarvelAttribution(marvelResult.attribution);
+        toast.success(`Found ${marvelResult.count} Marvel comics`);
+      } else {
+        // Use GCD for other publishers
+        const seriesResult = await ComicsAPI.searchSeries(formData.title, 1);
+        
+        if (seriesResult.items.length === 0) {
+          toast.error("No series found matching that title");
+          return;
+        }
+
+        const fakeIssueResults: IssueSearchResult[] = seriesResult.items.slice(0, 10).map(series => ({
+          series,
+          issue: {
+            id: 0,
+            number: formData.issueNumber || '',
+            title: '',
+            url: ''
+          }
+        }));
+
+        setSearchResults(fakeIssueResults);
+        toast.success(`Found ${seriesResult.items.length} matching series`);
+      }
     } catch (error: any) {
-      console.error('GCD search error:', error);
+      console.error('Comics search error:', error);
       toast.error('Failed to search comics database: ' + error.message);
     } finally {
       setIsSearching(false);
@@ -97,17 +123,35 @@ export const RawComicIntake = ({ onBatchAdd }: RawComicIntakeProps = {}) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleSelectIssue = (result: IssueSearchResult) => {
-    setFormData(prev => ({
-      ...prev,
-      title: result.series.name,
-      issueNumber: result.issue.number,
-      publisher: result.series.publisher || "",
-      year: result.series.year_began ? String(result.series.year_began) : "",
-    }));
+  const handleSelectIssue = (result: SearchResult) => {
+    if ('comic' in result) {
+      // Marvel comic
+      const comic = result.comic;
+      const onSaleDate = comic.dates.find(d => d.type === 'onsaleDate');
+      const year = onSaleDate ? new Date(onSaleDate.date).getFullYear().toString() : "";
+      
+      setFormData(prev => ({
+        ...prev,
+        title: comic.series.name,
+        issueNumber: comic.issueNumber.toString(),
+        publisher: "Marvel Comics",
+        year: year,
+        processingNotes: comic.description || prev.processingNotes,
+      }));
+      toast.success(`Selected: ${comic.title}`);
+    } else {
+      // GCD series
+      setFormData(prev => ({
+        ...prev,
+        title: result.series.name,
+        issueNumber: result.issue.number,
+        publisher: result.series.publisher || "",
+        year: result.series.year_began ? String(result.series.year_began) : "",
+      }));
+      toast.success(`Selected: ${result.series.name} #${result.issue.number}`);
+    }
     setShowSearchDialog(false);
     setSearchResults([]);
-    toast.success(`Selected: ${result.series.name} #${result.issue.number}`);
   };
 
   const handleSubmit = async () => {
@@ -211,13 +255,13 @@ export const RawComicIntake = ({ onBatchAdd }: RawComicIntakeProps = {}) => {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* GCD Search Results Dialog */}
+          {/* Search Results Dialog */}
           <Dialog open={showSearchDialog} onOpenChange={setShowSearchDialog}>
             <DialogContent className="max-w-3xl max-h-[80vh]">
               <DialogHeader>
                 <DialogTitle>Search Results</DialogTitle>
                 <p className="text-sm text-muted-foreground">
-                  Found {searchResults.length} matching series for "{formData.title}". Select one to auto-fill details.
+                  Found {searchResults.length} matching {useMarvelAPI ? 'Marvel comics' : 'series'} for "{formData.title}". Select one to auto-fill details.
                 </p>
               </DialogHeader>
               <div className="space-y-4">
@@ -229,26 +273,76 @@ export const RawComicIntake = ({ onBatchAdd }: RawComicIntakeProps = {}) => {
                 )}
                 {!isSearching && searchResults.length > 0 && (
                   <div className="space-y-2 max-h-96 overflow-y-auto">
-                    {searchResults.map((result, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => handleSelectIssue(result)}
-                        className="w-full p-4 text-left rounded-lg border hover:bg-accent transition-colors"
-                      >
-                        <div className="flex gap-3">
-                          <div className="flex-1">
-                            <div className="font-medium text-lg">
-                              {result.series.name}
+                    {searchResults.map((result, idx) => {
+                      if ('comic' in result) {
+                        // Marvel comic result
+                        const comic = result.comic;
+                        const thumbnailUrl = `${comic.thumbnail.path}/portrait_medium.${comic.thumbnail.extension}`;
+                        const writers = comic.creators.items.filter(c => c.role === 'writer').map(c => c.name).join(', ');
+                        const onSaleDate = comic.dates.find(d => d.type === 'onsaleDate');
+                        
+                        return (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => handleSelectIssue(result)}
+                            className="w-full p-4 text-left rounded-lg border hover:bg-accent transition-colors"
+                          >
+                            <div className="flex gap-3">
+                              {comic.thumbnail.path !== 'http://i.annihil.us/u/prod/marvel/i/mg/b/40/image_not_available' && (
+                                <img 
+                                  src={thumbnailUrl} 
+                                  alt={comic.title}
+                                  className="w-16 h-24 object-cover rounded"
+                                />
+                              )}
+                              <div className="flex-1">
+                                <div className="font-medium text-lg">
+                                  {comic.title}
+                                </div>
+                                <div className="text-sm text-muted-foreground mt-1">
+                                  Issue #{comic.issueNumber}
+                                  {onSaleDate && ` • ${new Date(onSaleDate.date).getFullYear()}`}
+                                  {comic.format && ` • ${comic.format}`}
+                                </div>
+                                {writers && (
+                                  <div className="text-xs text-muted-foreground mt-1">
+                                    Writer(s): {writers}
+                                  </div>
+                                )}
+                                {comic.description && (
+                                  <div className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                                    {comic.description}
+                                  </div>
+                                )}
+                              </div>
                             </div>
-                            <div className="text-sm text-muted-foreground mt-1">
-                              {result.series.publisher || 'Unknown Publisher'}
-                              {result.series.year_began && ` • ${result.series.year_began}`}
+                          </button>
+                        );
+                      } else {
+                        // GCD series result
+                        return (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => handleSelectIssue(result)}
+                            className="w-full p-4 text-left rounded-lg border hover:bg-accent transition-colors"
+                          >
+                            <div className="flex gap-3">
+                              <div className="flex-1">
+                                <div className="font-medium text-lg">
+                                  {result.series.name}
+                                </div>
+                                <div className="text-sm text-muted-foreground mt-1">
+                                  {result.series.publisher || 'Unknown Publisher'}
+                                  {result.series.year_began && ` • ${result.series.year_began}`}
+                                </div>
+                              </div>
                             </div>
-                          </div>
-                        </div>
-                      </button>
-                    ))}
+                          </button>
+                        );
+                      }
+                    })}
                   </div>
                 )}
                 {!isSearching && searchResults.length === 0 && (
@@ -257,13 +351,40 @@ export const RawComicIntake = ({ onBatchAdd }: RawComicIntakeProps = {}) => {
                   </div>
                 )}
                 <div className="text-xs text-muted-foreground text-center pt-2 border-t">
-                  Data: Grand Comics Database (CC BY-SA 4.0)
+                  {marvelAttribution || "Data: Grand Comics Database (CC BY-SA 4.0)"}
                 </div>
               </div>
             </DialogContent>
           </Dialog>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="publisher">Publisher</Label>
+              <div className="space-y-2">
+                <Input
+                  id="publisher"
+                  placeholder="e.g., Marvel Comics"
+                  value={formData.publisher}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    updateFormField('publisher', value);
+                    // Auto-switch to Marvel API if publisher contains "Marvel"
+                    setUseMarvelAPI(value.toLowerCase().includes('marvel'));
+                  }}
+                />
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    id="useMarvelAPI"
+                    checked={useMarvelAPI}
+                    onChange={(e) => setUseMarvelAPI(e.target.checked)}
+                    className="rounded"
+                  />
+                  <label htmlFor="useMarvelAPI">Use Marvel Comics API (for Marvel comics only)</label>
+                </div>
+              </div>
+            </div>
+
             <div>
               <Label htmlFor="subCategory">Sub-Category <span className="text-destructive">*</span></Label>
               <SubCategoryCombobox
@@ -304,16 +425,6 @@ export const RawComicIntake = ({ onBatchAdd }: RawComicIntakeProps = {}) => {
                   Search
                 </Button>
               </div>
-            </div>
-
-            <div>
-              <Label htmlFor="publisher">Publisher</Label>
-              <Input
-                id="publisher"
-                placeholder="e.g., Marvel Comics"
-                value={formData.publisher}
-                onChange={(e) => updateFormField('publisher', e.target.value)}
-              />
             </div>
 
             <div>
