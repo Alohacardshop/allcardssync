@@ -55,8 +55,11 @@ export const RawComicIntake = ({ onBatchAdd }: RawComicIntakeProps = {}) => {
     setSearchResults([]);
 
     try {
+      console.log('Searching for:', formData.title);
+      
       // Search for series matching the title
       const seriesResult = await ComicsAPI.searchSeries(formData.title, 1);
+      console.log('Series results:', seriesResult.items.length, seriesResult.items);
       
       if (seriesResult.items.length === 0) {
         toast.error("No series found matching that title");
@@ -66,14 +69,27 @@ export const RawComicIntake = ({ onBatchAdd }: RawComicIntakeProps = {}) => {
       // For each series, fetch issues and find matching issue number
       const matchingIssues: IssueSearchResult[] = [];
       
-      for (const series of seriesResult.items.slice(0, 5)) { // Limit to first 5 series to avoid rate limits
+      for (const series of seriesResult.items.slice(0, 5)) {
         try {
+          console.log('Fetching issues for series:', series.id, series.name);
           const issuesResult = await ComicsAPI.getSeriesIssues(series.id, 1);
+          console.log('Issues for series', series.id, ':', issuesResult.items.length, 'issues');
           
-          // Find issues matching the number
-          const matchingIssue = issuesResult.items.find(
-            issue => issue.number.toLowerCase() === formData.issueNumber.toLowerCase()
-          );
+          if (issuesResult.items.length > 0) {
+            console.log('First issue:', issuesResult.items[0]);
+          }
+          
+          // Find issues matching the number (flexible matching)
+          const searchNumber = formData.issueNumber.trim();
+          const matchingIssue = issuesResult.items.find(issue => {
+            const issueNum = String(issue.number).trim();
+            return issueNum === searchNumber || 
+                   issueNum.toLowerCase() === searchNumber.toLowerCase() ||
+                   issueNum === `#${searchNumber}` ||
+                   issueNum.replace(/^#/, '') === searchNumber;
+          });
+          
+          console.log('Looking for issue number:', searchNumber, 'Found:', matchingIssue);
           
           if (matchingIssue) {
             matchingIssues.push({ series, issue: matchingIssue });
@@ -83,16 +99,17 @@ export const RawComicIntake = ({ onBatchAdd }: RawComicIntakeProps = {}) => {
         }
       }
 
+      console.log('Total matching issues found:', matchingIssues.length);
       setSearchResults(matchingIssues);
       
       if (matchingIssues.length === 0) {
-        toast.error("No matching issues found");
+        toast.error("No matching issues found. Check browser console for details.");
       } else {
         toast.success(`Found ${matchingIssues.length} matching issue(s)`);
       }
     } catch (error: any) {
       console.error('GCD search error:', error);
-      toast.error('Failed to search comics database');
+      toast.error('Failed to search comics database: ' + error.message);
     } finally {
       setIsSearching(false);
     }

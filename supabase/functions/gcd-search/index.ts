@@ -157,17 +157,37 @@ serve(async (req) => {
       }
 
       const gcdUrl = `https://www.comics.org/series/${seriesId}/?_export=json&page=${page}`;
+      console.log('Fetching issues from:', gcdUrl);
       const cached = getCached(gcdUrl);
       const json = cached ?? await throttledFetch(gcdUrl);
       if (!cached) setCached(gcdUrl, json);
 
-      const items = (json.results ?? json.issues ?? json ?? []).map((r: any) => ({
+      console.log('GCD response keys:', Object.keys(json));
+      console.log('GCD response sample:', JSON.stringify(json).substring(0, 500));
+
+      // GCD returns issues directly in the response, not nested
+      let issuesList = [];
+      if (Array.isArray(json)) {
+        issuesList = json;
+      } else if (json.issues && Array.isArray(json.issues)) {
+        issuesList = json.issues;
+      } else if (json.results && Array.isArray(json.results)) {
+        issuesList = json.results;
+      }
+
+      console.log('Found', issuesList.length, 'issues');
+
+      const items = issuesList.map((r: any) => ({
         id: Number(r.id ?? r.issue_id ?? r.pk ?? 0),
         number: String(r.number ?? r.issue_number ?? ""),
         title: r.title ?? r.name ?? "",
         cover_date: r.cover_date ?? r.key_date ?? undefined,
+        cover_id: r.cover?.id ?? r.cover_id ?? null,
+        has_cover: !!(r.cover?.id ?? r.cover_id),
         url: r.url ?? r.resource_url ?? ""
       }));
+
+      console.log('Processed items:', items.length, 'first item:', items[0]);
 
       return new Response(
         JSON.stringify({
