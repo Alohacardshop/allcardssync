@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { getCorsHeaders } from "../_lib/cors.ts";
 
-const CGC_BASE_URL = "https://www.cgccomics.com/api";
+const CGC_API_BASE = "https://dealer-api.collectiblesgroup.com";
 
 interface CGCLoginResponse {
   authToken: string;
@@ -33,52 +33,37 @@ async function getCGCAuthToken(): Promise<string> {
     throw new Error("CGC credentials not configured");
   }
 
-  console.log("[cgc-lookup] Logging into CGC API");
+  console.log("[cgc-lookup] Logging into CGC Dealer API");
 
-  // Try multiple possible endpoints
-  const endpoints = [
-    `${CGC_BASE_URL}/users/login/v1`,
-    `https://api.cgccomics.com/users/login/v1`,
-    `https://www.cgccomics.com/users/login/v1`,
-  ];
+  const response = await fetch(`${CGC_API_BASE}/auth/login/CGC`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ 
+      Username: username, 
+      Password: password 
+    }),
+  });
 
-  let lastError;
-  for (const endpoint of endpoints) {
-    try {
-      console.log(`[cgc-lookup] Trying endpoint: ${endpoint}`);
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ username, password }),
-      });
-
-      if (response.ok) {
-        const data: CGCLoginResponse = await response.json();
-        console.log(`[cgc-lookup] Successfully authenticated with ${endpoint}`);
-        return data.authToken;
-      }
-      
-      const errorText = await response.text();
-      console.error(`[cgc-lookup] Endpoint ${endpoint} failed: ${response.status} - ${errorText}`);
-      lastError = `CGC login failed: ${response.status}`;
-    } catch (error) {
-      console.error(`[cgc-lookup] Endpoint ${endpoint} error:`, error);
-      lastError = error.message;
-    }
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error(`[cgc-lookup] Login failed: ${response.status} - ${errorText}`);
+    throw new Error(`CGC login failed: ${response.status}`);
   }
+
+  // Response is JWT token as plain string
+  const token = await response.text();
+  console.log("[cgc-lookup] Successfully authenticated with CGC Dealer API");
   
-  throw new Error(lastError || "All CGC API endpoints failed");
+  return token.replace(/^"|"$/g, ''); // Remove quotes if present
 }
 
 async function lookupCGCCertification(
   certNumber: string,
   authToken: string
 ): Promise<CGCCertificationResponse> {
-  // Try comics endpoint
-  const endpoint = `/comics/certifications/v3/lookup/${certNumber}?include=pop,images`;
-  const url = `${CGC_BASE_URL}${endpoint}`;
+  const url = `${CGC_API_BASE}/comics/certifications/v3/lookup/${certNumber}?include=pop,images`;
 
   console.log(`[cgc-lookup] Looking up comics cert ${certNumber}`);
 
