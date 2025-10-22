@@ -4,7 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 export interface InventoryFilters {
   storeKey: string;
   locationGid: string;
-  activeTab: 'raw' | 'graded' | 'comics';
+  activeTab: 'raw' | 'graded' | 'raw_comics' | 'graded_comics';
   statusFilter: 'all' | 'active' | 'sold' | 'deleted' | 'errors';
   batchFilter: 'all' | 'in_batch' | 'removed_from_batch';
   printStatusFilter?: 'all' | 'printed' | 'not-printed';
@@ -75,13 +75,10 @@ export function useInventoryListQuery(filters: InventoryFilters) {
         query = query.in('main_category', ['tcg', 'sports']).eq('type', 'Raw');
       } else if (activeTab === 'graded') {
         query = query.eq('type', 'Graded').or('main_category.is.null,main_category.in.(tcg,sports)');
-      } else if (activeTab === 'comics') {
-        query = query.eq('main_category', 'comics');
-        if (comicsSubCategory === 'graded') {
-          query = query.eq('type', 'Graded');
-        } else if (comicsSubCategory === 'raw') {
-          query = query.eq('type', 'Raw');
-        }
+      } else if (activeTab === 'raw_comics') {
+        query = query.eq('main_category', 'comics').eq('type', 'Raw');
+      } else if (activeTab === 'graded_comics') {
+        query = query.eq('main_category', 'comics').eq('type', 'Graded');
       }
 
       // Apply status filter

@@ -231,7 +231,7 @@ const Inventory = () => {
   });
   
   // Category tab state
-  const [activeTab, setActiveTab] = useState<'raw' | 'graded' | 'comics'>('raw');
+  const [activeTab, setActiveTab] = useState<'raw' | 'graded' | 'raw_comics' | 'graded_comics'>('raw');
   const [comicsSubCategory, setComicsSubCategory] = useState<'graded' | 'raw'>('graded');
   
   // Auto-refresh state
@@ -322,7 +322,7 @@ const Inventory = () => {
     statusFilter,
     batchFilter,
     printStatusFilter,
-    comicsSubCategory: activeTab === 'comics' ? comicsSubCategory : null,
+    comicsSubCategory: null,
     searchTerm: debouncedSearchTerm,
     autoRefreshEnabled,
   });
@@ -395,7 +395,7 @@ const Inventory = () => {
     if (!assignedStore || !selectedLocation) return;
 
     const timer = setTimeout(() => {
-      const prefetchTab = (tab: 'raw' | 'graded' | 'comics', comicsSub?: string) => {
+      const prefetchTab = (tab: 'raw' | 'graded' | 'raw_comics' | 'graded_comics') => {
         queryClient.prefetchInfiniteQuery({
           queryKey: [
             'inventory-list',
@@ -405,7 +405,7 @@ const Inventory = () => {
             statusFilter,
             batchFilter,
             printStatusFilter,
-            comicsSub || null,
+            null,
             debouncedSearchTerm,
           ],
           queryFn: async () => {
@@ -421,8 +421,8 @@ const Inventory = () => {
         prefetchTab('graded');
       } else if (activeTab === 'graded') {
         prefetchTab('raw');
-        prefetchTab('comics', 'graded');
-      } else if (activeTab === 'comics') {
+        prefetchTab('graded_comics');
+      } else if (activeTab === 'raw_comics' || activeTab === 'graded_comics') {
         prefetchTab('graded');
       }
     }, 2000);
@@ -2116,26 +2116,6 @@ const Inventory = () => {
                       <TabsTrigger value="graded_comics">📖 Graded Comics</TabsTrigger>
                     </TabsList>
                   </Tabs>
-                  
-                  {/* Comics sub-category selector */}
-                  {activeTab === 'comics' && (
-                    <div className="flex gap-2">
-                      <Button
-                        variant={comicsSubCategory === 'graded' ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => setComicsSubCategory('graded')}
-                      >
-                        ⭐ Graded Comics
-                      </Button>
-                      <Button
-                        variant={comicsSubCategory === 'raw' ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => setComicsSubCategory('raw')}
-                      >
-                        🃏 Raw Comics
-                      </Button>
-                    </div>
-                  )}
                 </CardContent>
               </Card>
               
