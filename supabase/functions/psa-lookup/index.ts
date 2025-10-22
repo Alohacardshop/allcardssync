@@ -94,12 +94,11 @@ Deno.serve(async (req) => {
       )
     }
 
-    // Fetch from PSA API - Use GetCertificateDetail for full information
+    // Fetch from PSA API
     log.info('[psa-lookup] Fetching from PSA API', { requestId, cert_number });
     
     try {
-      // Use GetCertificateDetail endpoint to get full certificate information (not submission status)
-      const certUrl = `https://api.psacard.com/publicapi/cert/GetCertificateDetail/${cert_number}`;
+      const certUrl = `https://api.psacard.com/publicapi/cert/GetByCertNumber/${cert_number}`;
       const imagesUrl = `https://api.psacard.com/publicapi/cert/GetImagesByCertNumber/${cert_number}`;
 
       const [certData, imagesData] = await Promise.all([
@@ -118,6 +117,14 @@ Deno.serve(async (req) => {
       ]);
 
       report("psa", true);
+      
+      // Log response structure for debugging
+      log.info('[psa-lookup] PSA API response structure', { 
+        requestId, 
+        certDataKeys: Object.keys(certData || {}),
+        hasPSACert: !!certData?.PSACert,
+        certDataSample: JSON.stringify(certData).slice(0, 500)
+      });
 
       // Validate certificate data
       if (!certData?.PSACert?.CertNumber) {
@@ -161,35 +168,41 @@ Deno.serve(async (req) => {
       };
 
       // Cache in new image cache table
-      await supabase
-        .from('catalog_v2.psa_image_cache')
-        .upsert({
-          cert: cert_number,
-          primary_url: primaryImageUrl,
-          all_urls: imageUrls,
-          updated_at: new Date().toISOString()
-        })
-        .catch(err => log.error('[psa-lookup] Failed to cache images', { requestId, error: err.message }));
+      try {
+        await supabase
+          .from('catalog_v2.psa_image_cache')
+          .upsert({
+            cert: cert_number,
+            primary_url: primaryImageUrl,
+            all_urls: imageUrls,
+            updated_at: new Date().toISOString()
+          });
+      } catch (err) {
+        log.error('[psa-lookup] Failed to cache images', { requestId, error: String(err) });
+      }
 
       // Also cache in old table for backwards compatibility
-      await supabase
-        .from('psa_certificates')
-        .upsert({
-          cert_number,
-          is_valid: true,
-          grade: responseData.grade,
-          year: responseData.year,
-          brand: responseData.brandTitle,
-          subject: responseData.subject,
-          card_number: responseData.cardNumber,
-          category: responseData.category,
-          variety_pedigree: responseData.varietyPedigree,
-          image_url: responseData.imageUrl,
-          image_urls: responseData.imageUrls,
-          psa_url: responseData.psaUrl,
-          scraped_at: new Date().toISOString()
-        })
-        .catch(err => log.error('[psa-lookup] Failed to cache cert', { requestId, error: err.message }));
+      try {
+        await supabase
+          .from('psa_certificates')
+          .upsert({
+            cert_number,
+            is_valid: true,
+            grade: responseData.grade,
+            year: responseData.year,
+            brand: responseData.brandTitle,
+            subject: responseData.subject,
+            card_number: responseData.cardNumber,
+            category: responseData.category,
+            variety_pedigree: responseData.varietyPedigree,
+            image_url: responseData.imageUrl,
+            image_urls: responseData.imageUrls,
+            psa_url: responseData.psaUrl,
+            scraped_at: new Date().toISOString()
+          });
+      } catch (err) {
+        log.error('[psa-lookup] Failed to cache cert', { requestId, error: String(err) });
+      }
 
       log.info('[psa-lookup] Successfully processed and cached', { requestId, cert_number });
 
