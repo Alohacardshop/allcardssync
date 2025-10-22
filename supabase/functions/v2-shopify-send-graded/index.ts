@@ -139,7 +139,15 @@ Deno.serve(async (req) => {
     const isComic = intakeItem.main_category === 'comics' || 
                     intakeItem.catalog_snapshot?.type === 'graded_comic'
 
-    // Create Shopify product
+    // Check if product already exists in Shopify
+    const existingProductId = intakeItem.shopify_product_id
+    const existingVariantId = intakeItem.shopify_variant_id
+    const isUpdate = !!(existingProductId && existingVariantId)
+
+    console.log('DEBUG: Sync operation type:', isUpdate ? 'UPDATE' : 'CREATE')
+    console.log('DEBUG: Existing Shopify IDs:', { existingProductId, existingVariantId })
+
+    // Prepare Shopify product data
     const productData = {
       product: {
         title: title,
@@ -182,23 +190,74 @@ Deno.serve(async (req) => {
 
     console.log('DEBUG: Sending to Shopify:', JSON.stringify(productData, null, 2))
 
-    const createResponse = await fetch(`https://${domain}/admin/api/2024-07/products.json`, {
-      method: 'POST',
-      headers: {
-        'X-Shopify-Access-Token': token,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(productData)
-    })
+    let product, variant
 
-    if (!createResponse.ok) {
-      const errorText = await createResponse.text()
-      throw new Error(`Failed to create Shopify product: ${errorText}`)
+    if (isUpdate) {
+      // UPDATE existing product
+      console.log('DEBUG: Updating existing Shopify product:', existingProductId)
+      
+      const updateResponse = await fetch(`https://${domain}/admin/api/2024-07/products/${existingProductId}.json`, {
+        method: 'PUT',
+        headers: {
+          'X-Shopify-Access-Token': token,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(productData)
+      })
+
+      if (!updateResponse.ok) {
+        const errorText = await updateResponse.text()
+        throw new Error(`Failed to update Shopify product: ${errorText}`)
+      }
+
+      const updateResult = await updateResponse.json()
+      product = updateResult.product
+      variant = product.variants.find((v: any) => v.id.toString() === existingVariantId) || product.variants[0]
+      
+      // Update the variant with new price and SKU
+      const variantUpdateResponse = await fetch(`https://${domain}/admin/api/2024-07/variants/${variant.id}.json`, {
+        method: 'PUT',
+        headers: {
+          'X-Shopify-Access-Token': token,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          variant: {
+            id: variant.id,
+            price: item.price?.toString() || '0.00',
+            sku: item.sku,
+            barcode: item.sku
+          }
+        })
+      })
+
+      if (!variantUpdateResponse.ok) {
+        const errorText = await variantUpdateResponse.text()
+        console.warn(`Failed to update variant: ${errorText}`)
+      }
+
+    } else {
+      // CREATE new product
+      console.log('DEBUG: Creating new Shopify product')
+      
+      const createResponse = await fetch(`https://${domain}/admin/api/2024-07/products.json`, {
+        method: 'POST',
+        headers: {
+          'X-Shopify-Access-Token': token,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(productData)
+      })
+
+      if (!createResponse.ok) {
+        const errorText = await createResponse.text()
+        throw new Error(`Failed to create Shopify product: ${errorText}`)
+      }
+
+      const result = await createResponse.json()
+      product = result.product
+      variant = product.variants[0]
     }
-
-    const result = await createResponse.json()
-    const product = result.product
-    const intakeVariant = product.variants[0];
 
     // Set inventory level at location
     const locationId = locationGid.replace('gid://shopify/Location/', '')
