@@ -92,21 +92,31 @@ async function lookupCGCCertification(
   console.log(`[cgc-lookup] Successfully retrieved cert ${certNumber}:`, JSON.stringify(data, null, 2));
 
   // Transform the response to match our interface
+  // The API returns grade as an object with displayGrade, we need just the string
+  const gradeValue = typeof data.grade === 'object' 
+    ? (data.grade?.displayGrade || data.grade?.grade) 
+    : data.grade;
+
+  // Extract key comments from additionalInfo if it's an array
+  const keyComments = Array.isArray(data.additionalInfo?.keyComments)
+    ? data.additionalInfo.keyComments.join('. ')
+    : data.keyComments;
+
   return {
     certNumber,
     isValid: true,
-    grade: data.grade || data.numericGrade?.toString(),
-    title: data.title || data.seriesName,
-    issueNumber: data.issueNumber,
-    publisher: data.publisher,
+    grade: gradeValue?.toString(),
+    title: data.collectible?.title || data.title,
+    issueNumber: data.collectible?.issue || data.issueNumber,
+    publisher: data.collectible?.publisher || data.publisher,
     seriesName: data.seriesName,
-    label: data.label,
-    barcode: data.barcode,
+    label: data.additionalInfo?.labelCategory || data.label,
+    barcode: data.metadata?.barcode || data.barcode,
     certVerificationUrl: data.certVerificationUrl || `https://www.cgccomics.com/certlookup/${certNumber}`,
-    keyComments: data.keyComments,
+    keyComments,
     images: {
-      front: data.images?.front || data.frontImage,
-      rear: data.images?.rear || data.rearImage,
+      front: data.images?.frontUrl || data.images?.front || data.frontImage,
+      rear: data.images?.rearUrl || data.images?.rear || data.rearImage,
     },
   };
 }
