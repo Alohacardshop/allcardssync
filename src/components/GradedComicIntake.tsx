@@ -85,12 +85,15 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
     try {
       updateFormField('certNumber', certNumber);
 
+      console.log('[GradedComicIntake] Looking up CGC cert:', certNumber);
+
       const { data, error: invokeError } = await supabase.functions.invoke('cgc-lookup', {
         body: { 
-          certNumber,
-          collectibleType: 'comics'
+          certNumber
         }
       });
+
+      console.log('[GradedComicIntake] CGC lookup response:', { data, error: invokeError });
 
       if (invokeError) {
         throw new Error(invokeError.message || 'Failed to invoke CGC lookup function');
@@ -115,6 +118,7 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
       }
 
       const cgcData = data.data;
+      console.log('[GradedComicIntake] CGC data found:', cgcData);
       setComicData(cgcData);
       
       setFormData(prev => ({
@@ -177,8 +181,7 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
         catalog_snapshot_in: {
           ...comicData,
           cgc_cert: formData.certNumber,
-          type: 'cgc_comic',
-          collectibleType: 'comics'
+          type: 'cgc_comic'
         }
       });
 
