@@ -125,7 +125,8 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
         ...prev,
         title: cgcData.title || "",
         issueNumber: cgcData.issueNumber || "",
-        publisher: cgcData.seriesName || "",
+        publisher: cgcData.publisher || cgcData.seriesName || "",
+        year: cgcData.year?.toString() || "",
         grade: cgcData.grade || "",
       }));
 

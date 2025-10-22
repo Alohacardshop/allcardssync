@@ -101,6 +101,27 @@ export const CGCCertificateDisplay = ({ cgcData, className }: CGCCertificateDisp
             </div>
           )}
 
+          {cgcData.issueDate && (
+            <div>
+              <p className="text-sm text-muted-foreground">Issue Date</p>
+              <p className="font-medium">{cgcData.issueDate}</p>
+            </div>
+          )}
+
+          {cgcData.year && (
+            <div>
+              <p className="text-sm text-muted-foreground">Year</p>
+              <p className="font-medium">{cgcData.year}</p>
+            </div>
+          )}
+
+          {cgcData.publisher && (
+            <div>
+              <p className="text-sm text-muted-foreground">Publisher</p>
+              <p className="font-medium">{cgcData.publisher}</p>
+            </div>
+          )}
+
           {cgcData.cardName && (
             <div>
               <p className="text-sm text-muted-foreground">Card Name</p>
@@ -149,15 +170,63 @@ export const CGCCertificateDisplay = ({ cgcData, className }: CGCCertificateDisp
               <p className="font-mono text-sm">{cgcData.barcode}</p>
             </div>
           )}
+
+          {cgcData.pageQuality && (
+            <div>
+              <p className="text-sm text-muted-foreground">Page Quality</p>
+              <p className="font-medium">{cgcData.pageQuality}</p>
+            </div>
+          )}
+
+          {cgcData.gradeDate && (
+            <div>
+              <p className="text-sm text-muted-foreground">Grade Date</p>
+              <p className="font-medium">{new Date(cgcData.gradeDate).toLocaleDateString()}</p>
+            </div>
+          )}
         </div>
 
-        {/* Key Comments */}
-        {cgcData.keyComments && (
+        {/* Art Comments */}
+        {cgcData.artComments && cgcData.artComments.length > 0 && (
           <>
             <Separator />
             <div>
-              <p className="text-sm text-muted-foreground mb-1">Key Comments</p>
-              <p className="text-sm">{cgcData.keyComments}</p>
+              <p className="text-sm text-muted-foreground mb-2">Art & Creator Comments</p>
+              <ul className="list-disc list-inside space-y-1">
+                {cgcData.artComments.map((comment, index) => (
+                  <li key={index} className="text-sm">{comment}</li>
+                ))}
+              </ul>
+            </div>
+          </>
+        )}
+
+        {/* Key Comments */}
+        {cgcData.keyComments && cgcData.keyComments.length > 0 && (
+          <>
+            <Separator />
+            <div>
+              <p className="text-sm text-muted-foreground mb-2">Key Comments</p>
+              <ul className="list-disc list-inside space-y-1">
+                {cgcData.keyComments.map((comment, index) => (
+                  <li key={index} className="text-sm font-medium">{comment}</li>
+                ))}
+              </ul>
+            </div>
+          </>
+        )}
+
+        {/* Grader Notes */}
+        {cgcData.graderNotes && cgcData.graderNotes.length > 0 && (
+          <>
+            <Separator />
+            <div>
+              <p className="text-sm text-muted-foreground mb-2">Grader Notes (Defects)</p>
+              <ul className="list-disc list-inside space-y-1">
+                {cgcData.graderNotes.map((note, index) => (
+                  <li key={index} className="text-sm text-destructive">{note}</li>
+                ))}
+              </ul>
             </div>
           </>
         )}

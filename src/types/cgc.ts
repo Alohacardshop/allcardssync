@@ -4,6 +4,9 @@ export interface CGCCertificateData {
   grade?: string;
   title?: string;
   issueNumber?: string;
+  issueDate?: string;
+  year?: number;
+  publisher?: string;
   cardNumber?: string;
   cardName?: string;
   setName?: string;
@@ -12,7 +15,11 @@ export interface CGCCertificateData {
   label?: string;
   barcode?: string;
   certVerificationUrl?: string;
-  keyComments?: string;
+  pageQuality?: string;
+  artComments?: string[];
+  keyComments?: string[];
+  graderNotes?: string[];
+  gradeDate?: string;
   graderSignatures?: string[];
   images?: {
     front?: string;
