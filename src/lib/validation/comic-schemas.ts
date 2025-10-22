@@ -32,6 +32,5 @@ export const gradedComicSchema = z.object({
     message: "Cost must be a non-negative number"
   }),
   quantity: z.number().int().positive().default(1),
-  mainCategory: z.literal('comics'),
-  subCategory: z.string().min(1, "Sub-category is required")
+  mainCategory: z.literal('comics')
 });

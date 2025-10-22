@@ -12,7 +12,6 @@ import { CGCCertificateDisplay } from "@/components/CGCCertificateDisplay";
 import { useDebounce } from "@/hooks/useDebounce";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { CGCCertificateData } from "@/types/cgc";
-import { SubCategoryCombobox } from "@/components/ui/sub-category-combobox";
 
 interface GradedComicIntakeProps {
   onBatchAdd?: () => void;
@@ -41,7 +40,6 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
     cost: "",
     quantity: 1,
     mainCategory: "comics",
-    subCategory: "",
   });
 
   const sanitizeCertNumber = (input: string): string => {
@@ -156,7 +154,7 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
       return;
     }
 
-    if (!formData.certNumber || !formData.grade || !formData.price || !formData.cost || !formData.subCategory) {
+    if (!formData.certNumber || !formData.grade || !formData.price || !formData.cost) {
       toast.error("Please fill in all required fields");
       return;
     }
@@ -178,7 +176,6 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
         cost_in: parseFloat(formData.cost),
         sku_in: formData.certNumber,
         main_category_in: formData.mainCategory,
-        sub_category_in: formData.subCategory,
         catalog_snapshot_in: {
           ...comicData,
           cgc_cert: formData.certNumber,
@@ -202,7 +199,6 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
         cost: "",
         quantity: 1,
         mainCategory: "comics",
-        subCategory: "",
       });
 
       toast.success("Comic added to batch successfully!");
@@ -313,15 +309,6 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
           )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="subCategory">Sub-Category <span className="text-destructive">*</span></Label>
-              <SubCategoryCombobox
-                mainCategory="comics"
-                value={formData.subCategory}
-                onChange={(value) => updateFormField('subCategory', value)}
-              />
-            </div>
-
             <div>
               <Label htmlFor="title">Title <span className="text-destructive">*</span></Label>
               <Input
