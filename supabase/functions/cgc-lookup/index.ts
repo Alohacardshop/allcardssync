@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { getCorsHeaders } from "../_lib/cors.ts";
 
-const CGC_BASE_URL = "https://apiserv.cgccomics.com";
+const CGC_BASE_URL = "https://www.cgccomics.com/api";
 
 interface CGCLoginResponse {
   authToken: string;
@@ -35,24 +35,41 @@ async function getCGCAuthToken(): Promise<string> {
 
   console.log("[cgc-lookup] Logging into CGC API");
 
-  const response = await fetch(`${CGC_BASE_URL}/users/login/v1`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ username, password }),
-  });
+  // Try multiple possible endpoints
+  const endpoints = [
+    `${CGC_BASE_URL}/users/login/v1`,
+    `https://api.cgccomics.com/users/login/v1`,
+    `https://www.cgccomics.com/users/login/v1`,
+  ];
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error(`[cgc-lookup] Login failed: ${response.status} - ${errorText}`);
-    throw new Error(`CGC login failed: ${response.status}`);
+  let lastError;
+  for (const endpoint of endpoints) {
+    try {
+      console.log(`[cgc-lookup] Trying endpoint: ${endpoint}`);
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ username, password }),
+      });
+
+      if (response.ok) {
+        const data: CGCLoginResponse = await response.json();
+        console.log(`[cgc-lookup] Successfully authenticated with ${endpoint}`);
+        return data.authToken;
+      }
+      
+      const errorText = await response.text();
+      console.error(`[cgc-lookup] Endpoint ${endpoint} failed: ${response.status} - ${errorText}`);
+      lastError = `CGC login failed: ${response.status}`;
+    } catch (error) {
+      console.error(`[cgc-lookup] Endpoint ${endpoint} error:`, error);
+      lastError = error.message;
+    }
   }
-
-  const data: CGCLoginResponse = await response.json();
-  console.log("[cgc-lookup] Successfully authenticated with CGC API");
   
-  return data.authToken;
+  throw new Error(lastError || "All CGC API endpoints failed");
 }
 
 async function lookupCGCCertification(
