@@ -45,8 +45,8 @@ export const RawComicIntake = ({ onBatchAdd }: RawComicIntakeProps = {}) => {
   });
 
   const handleSearch = async () => {
-    if (!formData.title || !formData.issueNumber) {
-      toast.error("Enter both title and issue number to search");
+    if (!formData.title) {
+      toast.error("Enter a title to search");
       return;
     }
 
@@ -55,58 +55,27 @@ export const RawComicIntake = ({ onBatchAdd }: RawComicIntakeProps = {}) => {
     setSearchResults([]);
 
     try {
-      console.log('Searching for:', formData.title);
-      
       // Search for series matching the title
       const seriesResult = await ComicsAPI.searchSeries(formData.title, 1);
-      console.log('Series results:', seriesResult.items.length, seriesResult.items);
       
       if (seriesResult.items.length === 0) {
         toast.error("No series found matching that title");
         return;
       }
 
-      // For each series, fetch issues and find matching issue number
-      const matchingIssues: IssueSearchResult[] = [];
-      
-      for (const series of seriesResult.items.slice(0, 5)) {
-        try {
-          console.log('Fetching issues for series:', series.id, series.name);
-          const issuesResult = await ComicsAPI.getSeriesIssues(series.id, 1);
-          console.log('Issues for series', series.id, ':', issuesResult.items.length, 'issues');
-          
-          if (issuesResult.items.length > 0) {
-            console.log('First issue:', issuesResult.items[0]);
-          }
-          
-          // Find issues matching the number (flexible matching)
-          const searchNumber = formData.issueNumber.trim();
-          const matchingIssue = issuesResult.items.find(issue => {
-            const issueNum = String(issue.number).trim();
-            return issueNum === searchNumber || 
-                   issueNum.toLowerCase() === searchNumber.toLowerCase() ||
-                   issueNum === `#${searchNumber}` ||
-                   issueNum.replace(/^#/, '') === searchNumber;
-          });
-          
-          console.log('Looking for issue number:', searchNumber, 'Found:', matchingIssue);
-          
-          if (matchingIssue) {
-            matchingIssues.push({ series, issue: matchingIssue });
-          }
-        } catch (error) {
-          console.error(`Failed to fetch issues for series ${series.id}:`, error);
+      // Convert series to fake "issue results" so we can reuse the UI
+      const fakeIssueResults: IssueSearchResult[] = seriesResult.items.slice(0, 10).map(series => ({
+        series,
+        issue: {
+          id: 0,
+          number: formData.issueNumber || '',
+          title: '',
+          url: ''
         }
-      }
+      }));
 
-      console.log('Total matching issues found:', matchingIssues.length);
-      setSearchResults(matchingIssues);
-      
-      if (matchingIssues.length === 0) {
-        toast.error("No matching issues found. Check browser console for details.");
-      } else {
-        toast.success(`Found ${matchingIssues.length} matching issue(s)`);
-      }
+      setSearchResults(fakeIssueResults);
+      toast.success(`Found ${seriesResult.items.length} matching series`);
     } catch (error: any) {
       console.error('GCD search error:', error);
       toast.error('Failed to search comics database: ' + error.message);
@@ -248,7 +217,7 @@ export const RawComicIntake = ({ onBatchAdd }: RawComicIntakeProps = {}) => {
               <DialogHeader>
                 <DialogTitle>Search Results</DialogTitle>
                 <p className="text-sm text-muted-foreground">
-                  Found {searchResults.length} matching issue(s) for "{formData.title}" #{formData.issueNumber}
+                  Found {searchResults.length} matching series for "{formData.title}". Select one to auto-fill details.
                 </p>
               </DialogHeader>
               <div className="space-y-4">
@@ -260,9 +229,9 @@ export const RawComicIntake = ({ onBatchAdd }: RawComicIntakeProps = {}) => {
                 )}
                 {!isSearching && searchResults.length > 0 && (
                   <div className="space-y-2 max-h-96 overflow-y-auto">
-                    {searchResults.map((result) => (
+                    {searchResults.map((result, idx) => (
                       <button
-                        key={`${result.series.id}-${result.issue.id}`}
+                        key={idx}
                         type="button"
                         onClick={() => handleSelectIssue(result)}
                         className="w-full p-4 text-left rounded-lg border hover:bg-accent transition-colors"
@@ -270,17 +239,11 @@ export const RawComicIntake = ({ onBatchAdd }: RawComicIntakeProps = {}) => {
                         <div className="flex gap-3">
                           <div className="flex-1">
                             <div className="font-medium text-lg">
-                              {result.series.name} #{result.issue.number}
+                              {result.series.name}
                             </div>
-                            {result.issue.title && (
-                              <div className="text-sm text-muted-foreground italic">
-                                "{result.issue.title}"
-                              </div>
-                            )}
                             <div className="text-sm text-muted-foreground mt-1">
                               {result.series.publisher || 'Unknown Publisher'}
                               {result.series.year_began && ` • ${result.series.year_began}`}
-                              {result.issue.cover_date && ` • ${result.issue.cover_date}`}
                             </div>
                           </div>
                         </div>
@@ -310,31 +273,31 @@ export const RawComicIntake = ({ onBatchAdd }: RawComicIntakeProps = {}) => {
               />
             </div>
 
-            <div className="md:col-span-2">
-              <Label htmlFor="title">Series/Title <span className="text-destructive">*</span></Label>
+            <div>
+              <Label htmlFor="issueNumber">Issue Number <span className="text-destructive">*</span></Label>
               <Input
-                id="title"
-                placeholder="e.g., X-Men"
-                value={formData.title}
-                onChange={(e) => updateFormField('title', e.target.value)}
+                id="issueNumber"
+                placeholder="e.g., 13"
+                value={formData.issueNumber}
+                onChange={(e) => updateFormField('issueNumber', e.target.value)}
               />
             </div>
 
-            <div>
-              <Label htmlFor="issueNumber">Issue Number <span className="text-destructive">*</span></Label>
+            <div className="md:col-span-2">
+              <Label htmlFor="title">Series/Title <span className="text-destructive">*</span></Label>
               <div className="flex gap-2">
                 <Input
-                  id="issueNumber"
-                  placeholder="e.g., 13"
-                  value={formData.issueNumber}
-                  onChange={(e) => updateFormField('issueNumber', e.target.value)}
+                  id="title"
+                  placeholder="e.g., X-Men"
+                  value={formData.title}
+                  onChange={(e) => updateFormField('title', e.target.value)}
                   className="flex-1"
                 />
                 <Button 
                   type="button" 
                   variant="outline" 
                   onClick={handleSearch}
-                  disabled={!formData.title || !formData.issueNumber}
+                  disabled={!formData.title}
                   className="shrink-0"
                 >
                   <Search className="h-4 w-4 mr-2" />

@@ -91,41 +91,36 @@ serve(async (req) => {
       console.log('GCD series response is array:', Array.isArray(json));
       if (json && typeof json === 'object') {
         console.log('GCD series response keys:', Object.keys(json).slice(0, 20));
-        console.log('GCD series sample (first 500 chars):', JSON.stringify(json).substring(0, 500));
       }
 
-      // GCD HTML export with _export=json returns HTML table data as JSON objects
-      // Format: Array of objects with keys matching HTML table columns
+      // GCD HTML export with _export=json returns HTML table data as JSON
       let seriesList = [];
       if (Array.isArray(json)) {
         seriesList = json;
       } else if (json.results) {
         seriesList = json.results;
-      } else if (json.objects) {
-        seriesList = json.objects;
       }
       
       console.log('Series list length:', seriesList.length);
       if (seriesList.length > 0) {
         console.log('First series keys:', Object.keys(seriesList[0]));
-        console.log('First series:', JSON.stringify(seriesList[0]));
+        console.log('First series full:', JSON.stringify(seriesList[0]));
       }
       
-      const items = seriesList.map((r: any) => {
-        // Try all possible field names
-        const id = r.id || r.series_id || r.seriesid || r['Series ID'] || r.pk || 0;
-        const name = r.name || r.series_name || r['Series Name'] || r.title || r['Title'] || "";
-        
-        console.log('Mapping item - raw:', JSON.stringify(r).substring(0, 200));
-        console.log('Extracted - id:', id, 'name:', name);
+      const items = seriesList.map((r: any, index: number) => {
+        // GCD JSON export uses capitalized field names and has no ID
+        // We'll use index as temporary ID since we can't get real IDs from this endpoint
+        const name = r.Series || r.series || r.name || "";
+        const year = r.Year || r.year_began || r.year || "";
+        const publisher = r.Publisher || r.publisher || "";
         
         return {
-          id: Number(id),
+          id: index + 1, // Temporary ID based on array position
           name: String(name),
-          year_began: Number(r.year_began || r['Year Began'] || r.start_year || r.year || 0) || undefined,
-          publisher: r.publisher || r['Publisher'] || r.publisher_name || r.publisher?.name || "",
-          url: r.url || r.resource_url || r.site_url || "",
-          issue_count: r.issue_count || r['Issue Count'] || r.count_of_issues
+          year_began: year ? Number(String(year).match(/\d{4}/)?.[0] || 0) : undefined,
+          publisher: String(publisher),
+          url: r.url || "",
+          issue_count: undefined // Not available in this format
         };
       });
 
