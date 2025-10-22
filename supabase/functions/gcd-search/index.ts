@@ -82,11 +82,20 @@ serve(async (req) => {
       }
 
       const gcdUrl = `https://www.comics.org/series/name/${encodeURIComponent(q)}/sort/alpha/?_export=json&page=${page}`;
+      console.log('Fetching series from:', gcdUrl);
       const cached = getCached(gcdUrl);
       const json = cached ?? await throttledFetch(gcdUrl);
       if (!cached) setCached(gcdUrl, json);
 
-      const items = (json.results ?? json ?? []).map((r: any) => ({
+      console.log('GCD series response type:', typeof json);
+      console.log('GCD series response is array:', Array.isArray(json));
+      console.log('GCD series response keys:', Object.keys(json || {}));
+      console.log('First item sample:', JSON.stringify(Array.isArray(json) ? json[0] : (json.results?.[0] ?? null)));
+
+      // GCD returns array directly, NOT wrapped in results
+      const seriesList = Array.isArray(json) ? json : (json.results ?? []);
+      
+      const items = seriesList.map((r: any) => ({
         id: Number(r.id ?? r.series_id ?? r.pk ?? 0),
         name: r.name ?? r.series_name ?? r.title ?? "",
         year_began: Number(r.year_began ?? r.start_year ?? r.year ?? 0) || undefined,
@@ -94,6 +103,8 @@ serve(async (req) => {
         url: r.url ?? r.resource_url ?? r.site_url ?? "",
         issue_count: r.issue_count ?? r.count_of_issues
       }));
+
+      console.log('Mapped items count:', items.length, 'First item:', items[0]);
 
       return new Response(
         JSON.stringify({
