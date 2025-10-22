@@ -77,8 +77,10 @@ export function useInventoryListQuery(filters: InventoryFilters) {
         query = query.eq('type', 'Graded').or('main_category.is.null,main_category.in.(tcg,sports)');
       } else if (activeTab === 'comics') {
         query = query.eq('main_category', 'comics');
-        if (comicsSubCategory) {
-          query = query.eq('sub_category', comicsSubCategory);
+        if (comicsSubCategory === 'graded') {
+          query = query.eq('type', 'Graded');
+        } else if (comicsSubCategory === 'raw') {
+          query = query.eq('type', 'Raw');
         }
       }
 
