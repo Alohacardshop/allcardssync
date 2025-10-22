@@ -89,20 +89,45 @@ serve(async (req) => {
 
       console.log('GCD series response type:', typeof json);
       console.log('GCD series response is array:', Array.isArray(json));
-      console.log('GCD series response keys:', Object.keys(json || {}));
-      console.log('First item sample:', JSON.stringify(Array.isArray(json) ? json[0] : (json.results?.[0] ?? null)));
+      if (json && typeof json === 'object') {
+        console.log('GCD series response keys:', Object.keys(json).slice(0, 20));
+        console.log('GCD series sample (first 500 chars):', JSON.stringify(json).substring(0, 500));
+      }
 
-      // GCD returns array directly, NOT wrapped in results
-      const seriesList = Array.isArray(json) ? json : (json.results ?? []);
+      // GCD HTML export with _export=json returns HTML table data as JSON objects
+      // Format: Array of objects with keys matching HTML table columns
+      let seriesList = [];
+      if (Array.isArray(json)) {
+        seriesList = json;
+      } else if (json.results) {
+        seriesList = json.results;
+      } else if (json.objects) {
+        seriesList = json.objects;
+      }
       
-      const items = seriesList.map((r: any) => ({
-        id: Number(r.id ?? r.series_id ?? r.pk ?? 0),
-        name: r.name ?? r.series_name ?? r.title ?? "",
-        year_began: Number(r.year_began ?? r.start_year ?? r.year ?? 0) || undefined,
-        publisher: r.publisher ?? r.publisher_name ?? r.publisher?.name,
-        url: r.url ?? r.resource_url ?? r.site_url ?? "",
-        issue_count: r.issue_count ?? r.count_of_issues
-      }));
+      console.log('Series list length:', seriesList.length);
+      if (seriesList.length > 0) {
+        console.log('First series keys:', Object.keys(seriesList[0]));
+        console.log('First series:', JSON.stringify(seriesList[0]));
+      }
+      
+      const items = seriesList.map((r: any) => {
+        // Try all possible field names
+        const id = r.id || r.series_id || r.seriesid || r['Series ID'] || r.pk || 0;
+        const name = r.name || r.series_name || r['Series Name'] || r.title || r['Title'] || "";
+        
+        console.log('Mapping item - raw:', JSON.stringify(r).substring(0, 200));
+        console.log('Extracted - id:', id, 'name:', name);
+        
+        return {
+          id: Number(id),
+          name: String(name),
+          year_began: Number(r.year_began || r['Year Began'] || r.start_year || r.year || 0) || undefined,
+          publisher: r.publisher || r['Publisher'] || r.publisher_name || r.publisher?.name || "",
+          url: r.url || r.resource_url || r.site_url || "",
+          issue_count: r.issue_count || r['Issue Count'] || r.count_of_issues
+        };
+      });
 
       console.log('Mapped items count:', items.length, 'First item:', items[0]);
 
