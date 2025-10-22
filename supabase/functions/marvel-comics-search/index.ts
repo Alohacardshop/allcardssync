@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createHash } from "https://deno.land/std@0.190.0/hash/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -13,16 +12,24 @@ const MARVEL_BASE_URL = "https://gateway.marvel.com/v1/public";
 const cache = new Map<string, { data: any; timestamp: number }>();
 const CACHE_TTL = 12 * 60 * 60 * 1000; // 12 hours
 
-function generateAuthParams(): { ts: string; apikey: string; hash: string } {
+// Generate MD5 hash using Web Crypto API
+async function md5(message: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(message);
+  const hashBuffer = await crypto.subtle.digest("MD5", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  return hashHex;
+}
+
+async function generateAuthParams(): Promise<{ ts: string; apikey: string; hash: string }> {
   const privateKey = Deno.env.get("MARVEL_PRIVATE_KEY");
   if (!privateKey) {
     throw new Error("MARVEL_PRIVATE_KEY not configured");
   }
 
   const ts = Date.now().toString();
-  const hash = createHash("md5")
-    .update(ts + privateKey + MARVEL_PUBLIC_KEY)
-    .toString("hex");
+  const hash = await md5(ts + privateKey + MARVEL_PUBLIC_KEY);
 
   return { ts, apikey: MARVEL_PUBLIC_KEY, hash };
 }
