@@ -812,6 +812,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
                        editingItem.variant?.includes('Damaged') ? 'Damaged' : ''),
             cardNumber: editingItem.card_number || (editingItem.catalog_snapshot?.number) || '',
             grade: editingItem.grade,
+            gradingCompany: editingItem.grading_company || 'PSA',
             psaCert: editingItem.psa_cert || (editingItem.catalog_snapshot?.psaCert) || '',
             price: editingItem.price?.toString() || (editingItem.catalog_snapshot?.entered_price?.toString()) || '',
             cost: editingItem.cost?.toString() || (editingItem.catalog_snapshot?.calculated_cost?.toString()) || '',
@@ -821,7 +822,9 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
                      (editingItem.catalog_snapshot?.photo_url) ||
                      (editingItem.catalog_snapshot?.image_url) || 
                      (editingItem.catalog_snapshot?.imageUrl) || 
-                     (editingItem.catalog_snapshot?.image_urls?.[0]) || ''
+                     (editingItem.catalog_snapshot?.image_urls?.[0]) || '',
+            mainCategory: editingItem.main_category,
+            subCategory: editingItem.sub_category
           }}
           open={!!editingItem}
           onOpenChange={(open) => {
@@ -842,12 +845,15 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
                   variant: values.variant,
                   card_number: values.cardNumber,
                   grade: values.grade,
+                  grading_company: values.gradingCompany,
                   psa_cert: values.psaCert,
                   price: values.price ? parseFloat(values.price) : null,
                   cost: values.cost ? parseFloat(values.cost) : null,
                   sku: values.sku,
                   quantity: values.quantity,
                   image_urls: values.imageUrl ? [values.imageUrl] : null,
+                  main_category: values.mainCategory,
+                  sub_category: values.subCategory,
                   // Update catalog_snapshot with new values to preserve TCGPlayer data
                   catalog_snapshot: editingItem.catalog_snapshot ? {
                     ...editingItem.catalog_snapshot,

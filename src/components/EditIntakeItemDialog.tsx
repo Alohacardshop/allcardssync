@@ -18,6 +18,7 @@ export type IntakeItemDetails = {
   cardNumber?: string;
   grade?: string;
   psaCert?: string;
+  gradingCompany?: string;
   price?: string;
   cost?: string;
   sku?: string;
@@ -166,11 +167,25 @@ function EditIntakeItemDialog({ open, item, onOpenChange, onSave, isAdmin = fals
             <Input id="grade" value={form.grade || ""} onChange={(e) => handleChange("grade", e.target.value)} />
           </div>
           <div>
-            <Label htmlFor="psaCert">PSA Cert</Label>
-            <Input id="psaCert" value={form.psaCert || ""} onChange={(e) => handleChange("psaCert", e.target.value)} />
+            <Label htmlFor="gradingCompany">Grading Company</Label>
+            <Select value={form.gradingCompany || "PSA"} onValueChange={(value) => handleChange("gradingCompany", value)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select grading company" />
+              </SelectTrigger>
+              <SelectContent className="bg-background border shadow-md z-50">
+                <SelectItem value="PSA">PSA</SelectItem>
+                <SelectItem value="CGC">CGC</SelectItem>
+                <SelectItem value="BGS">BGS</SelectItem>
+                <SelectItem value="Other">Other</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label htmlFor="psaCert">{form.gradingCompany || 'PSA'} Certificate</Label>
+            <Input id="psaCert" value={form.psaCert || ""} onChange={(e) => handleChange("psaCert", e.target.value)} placeholder="Certificate number" />
             {form.psaCert && form.grade && form.grade !== 'Raw' && form.grade !== 'Ungraded' && (
               <p className="text-xs text-muted-foreground mt-1">
-                Shopify SKU & barcode will be the PSA cert.
+                Shopify SKU & barcode will be the certificate number.
               </p>
             )}
           </div>

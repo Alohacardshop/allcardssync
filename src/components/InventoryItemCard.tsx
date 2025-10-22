@@ -37,13 +37,16 @@ const generateTitle = (item: any) => {
     parts.push(variant.toLowerCase())
   }
   
-  // Handle grading - use PSA for PSA certs
-  if (item.grade && item.psa_cert) {
-    parts.push(`PSA ${item.grade}`)
+  // Handle grading - use grading company for graded certs
+  if (item.grade && (item.psa_cert || item.cgc_cert)) {
+    const company = item.grading_company || 'PSA';
+    parts.push(`${company} ${item.grade}`);
   } else if (item.grade) {
-    parts.push(`Grade ${item.grade}`)
+    parts.push(`Grade ${item.grade}`);
   } else if (item.psa_cert) {
-    parts.push(`PSA ${item.psa_cert}`)
+    parts.push(`PSA ${item.psa_cert}`);
+  } else if (item.cgc_cert) {
+    parts.push(`CGC ${item.cgc_cert}`);
   }
   
   return parts.length > 0 ? parts.join(' ') : 'Unknown Item';

@@ -21,6 +21,7 @@ export function ShopifySyncDetailsDialog({ open, onOpenChange, row, selectedStor
   const [locationName, setLocationName] = useState<string>('');
   const [expandedJson, setExpandedJson] = useState(false);
   const [relinkingGraded, setRelinkingGraded] = useState(false);
+  const [resyncing, setResyncing] = useState(false);
 
   useEffect(() => {
     if (open && row?.last_shopify_store_key && row?.last_shopify_location_gid) {
@@ -110,15 +111,106 @@ export function ShopifySyncDetailsDialog({ open, onOpenChange, row, selectedStor
     }
   };
 
+  const handleResync = async () => {
+    if (!selectedStoreKey || !selectedLocationGid) {
+      toast({ title: 'Error', description: 'Missing store or location selection', variant: 'destructive' });
+      return;
+    }
+
+    setResyncing(true);
+    try {
+      const isGraded = row.type === 'Graded' || (row.grade && row.grade !== 'Raw' && row.grade !== 'Ungraded');
+      const endpoint = isGraded ? 'v2-shopify-send-graded' : 'v2-shopify-send-raw';
+
+      const payload: any = {
+        storeKey: selectedStoreKey,
+        locationGid: selectedLocationGid,
+        item: {
+          id: row.id,
+          sku: row.sku,
+          title: row.subject || row.brand_title,
+          price: row.price,
+          quantity: row.quantity,
+          barcode: row.psa_cert || row.sku,
+          cost: row.cost,
+        }
+      };
+
+      // Add graded-specific fields
+      if (isGraded) {
+        payload.item.psa_cert = row.psa_cert;
+        payload.item.grade = row.grade;
+        payload.item.year = row.year;
+        payload.item.brand_title = row.brand_title;
+        payload.item.subject = row.subject;
+        payload.item.card_number = row.card_number;
+        payload.item.variant = row.variant;
+        payload.item.category_tag = row.category;
+        payload.item.image_url = row.image_urls?.[0] || row.catalog_snapshot?.image_url;
+      } else {
+        payload.item.brand_title = row.brand_title;
+        payload.item.subject = row.subject;
+        payload.item.card_number = row.card_number;
+        payload.item.condition = row.condition;
+        payload.item.image_url = row.image_urls?.[0] || row.catalog_snapshot?.image_url;
+      }
+
+      const { error, data } = await supabase.functions.invoke(endpoint, { body: payload });
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      toast({ 
+        title: 'Success', 
+        description: `Item resynced to Shopify successfully`
+      });
+      
+      if (onRefresh) onRefresh();
+    } catch (e: any) {
+      console.error('Resync failed:', e);
+      toast({ 
+        title: 'Resync Failed', 
+        description: e?.message || 'Failed to resync item to Shopify',
+        variant: 'destructive'
+      });
+    } finally {
+      setResyncing(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            Shopify Sync Details
-            <Badge variant={isSuccess ? 'default' : 'destructive'}>
-              {row.shopify_sync_status?.toUpperCase() || 'UNKNOWN'}
-            </Badge>
+          <DialogTitle className="flex items-center gap-2 justify-between w-full">
+            <div className="flex items-center gap-2">
+              Shopify Sync Details
+              <Badge variant={isSuccess ? 'default' : 'destructive'}>
+                {row.shopify_sync_status?.toUpperCase() || 'UNKNOWN'}
+              </Badge>
+            </div>
+            {row.shopify_product_id && selectedStoreKey && selectedLocationGid && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleResync}
+                disabled={resyncing}
+                className="flex items-center gap-2"
+              >
+                {resyncing ? (
+                  <>
+                    <RefreshCw className="w-3 h-3 animate-spin" />
+                    Resyncing...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="w-3 h-3" />
+                    Resync to Shopify
+                  </>
+                )}
+              </Button>
+            )}
           </DialogTitle>
         </DialogHeader>
 
@@ -161,7 +253,11 @@ export function ShopifySyncDetailsDialog({ open, onOpenChange, row, selectedStor
                 <div className="text-sm">{row.grade || 'N/A'}</div>
               </div>
               <div>
-                <div className="text-xs font-medium text-muted-foreground">PSA Cert</div>
+                <div className="text-xs font-medium text-muted-foreground">Grading Company</div>
+                <div className="text-sm">{row.grading_company || 'PSA'}</div>
+              </div>
+              <div>
+                <div className="text-xs font-medium text-muted-foreground">{row.grading_company || 'PSA'} Certificate</div>
                 <div className="text-sm font-mono">{row.psa_cert || row.sku || 'N/A'}</div>
               </div>
               <div>
@@ -261,7 +357,7 @@ export function ShopifySyncDetailsDialog({ open, onOpenChange, row, selectedStor
                     ) : (
                       <Link className="w-3 h-3" />
                     )}
-                    {relinkingGraded ? 'Relinking...' : 'Relink to PSA Barcode'}
+                    {relinkingGraded ? 'Relinking...' : `Relink to ${row.grading_company || 'PSA'} Barcode`}
                   </Button>
                 )}
               </div>

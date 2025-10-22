@@ -44,6 +44,7 @@ export interface IntakeItem {
   image_urls?: string[];
   main_category?: string;
   sub_category?: string;
+  grading_company?: string;
 }
 
 export interface ComicIntakeData {
