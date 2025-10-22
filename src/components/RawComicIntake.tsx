@@ -5,15 +5,19 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2, Book, Search } from "lucide-react";
 import { useStore } from "@/contexts/StoreContext";
 import { validateCompleteStoreContext, logStoreContext } from "@/utils/storeValidation";
 import { SubCategoryCombobox } from "@/components/ui/sub-category-combobox";
-import { ComicsAPI, GcdSeries } from "@/lib/comics";
-import { useDebounce } from "@/hooks/useDebounce";
+import { ComicsAPI, GcdSeries, GcdIssue } from "@/lib/comics";
+
+interface IssueSearchResult {
+  series: GcdSeries;
+  issue: GcdIssue;
+}
 
 interface RawComicIntakeProps {
   onBatchAdd?: () => void;
@@ -22,12 +26,9 @@ interface RawComicIntakeProps {
 export const RawComicIntake = ({ onBatchAdd }: RawComicIntakeProps = {}) => {
   const { assignedStore, selectedLocation } = useStore();
   const [submitting, setSubmitting] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<GcdSeries[]>([]);
+  const [searchResults, setSearchResults] = useState<IssueSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [showSearchDialog, setShowSearchDialog] = useState(false);
-  
-  const debouncedSearch = useDebounce(searchQuery, 500);
 
   const [formData, setFormData] = useState({
     title: "",
@@ -43,29 +44,59 @@ export const RawComicIntake = ({ onBatchAdd }: RawComicIntakeProps = {}) => {
     processingNotes: "",
   });
 
-  // Search GCD when query changes
-  useEffect(() => {
-    const performSearch = async () => {
-      if (!debouncedSearch || debouncedSearch.length < 2) {
-        setSearchResults([]);
+  const handleSearch = async () => {
+    if (!formData.title || !formData.issueNumber) {
+      toast.error("Enter both title and issue number to search");
+      return;
+    }
+
+    setIsSearching(true);
+    setShowSearchDialog(true);
+    setSearchResults([]);
+
+    try {
+      // Search for series matching the title
+      const seriesResult = await ComicsAPI.searchSeries(formData.title, 1);
+      
+      if (seriesResult.items.length === 0) {
+        toast.error("No series found matching that title");
         return;
       }
 
-      setIsSearching(true);
-      try {
-        const result = await ComicsAPI.searchSeries(debouncedSearch, 1);
-        setSearchResults(result.items);
-      } catch (error: any) {
-        console.error('GCD search error:', error);
-        toast.error('Failed to search comics database');
-        setSearchResults([]);
-      } finally {
-        setIsSearching(false);
+      // For each series, fetch issues and find matching issue number
+      const matchingIssues: IssueSearchResult[] = [];
+      
+      for (const series of seriesResult.items.slice(0, 5)) { // Limit to first 5 series to avoid rate limits
+        try {
+          const issuesResult = await ComicsAPI.getSeriesIssues(series.id, 1);
+          
+          // Find issues matching the number
+          const matchingIssue = issuesResult.items.find(
+            issue => issue.number.toLowerCase() === formData.issueNumber.toLowerCase()
+          );
+          
+          if (matchingIssue) {
+            matchingIssues.push({ series, issue: matchingIssue });
+          }
+        } catch (error) {
+          console.error(`Failed to fetch issues for series ${series.id}:`, error);
+        }
       }
-    };
 
-    performSearch();
-  }, [debouncedSearch]);
+      setSearchResults(matchingIssues);
+      
+      if (matchingIssues.length === 0) {
+        toast.error("No matching issues found");
+      } else {
+        toast.success(`Found ${matchingIssues.length} matching issue(s)`);
+      }
+    } catch (error: any) {
+      console.error('GCD search error:', error);
+      toast.error('Failed to search comics database');
+    } finally {
+      setIsSearching(false);
+    }
+  };
 
   // Auto-calculate cost from price
   useEffect(() => {
@@ -80,17 +111,17 @@ export const RawComicIntake = ({ onBatchAdd }: RawComicIntakeProps = {}) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleSelectSeries = (series: GcdSeries) => {
+  const handleSelectIssue = (result: IssueSearchResult) => {
     setFormData(prev => ({
       ...prev,
-      title: series.name,
-      publisher: series.publisher || "",
-      year: series.year_began ? String(series.year_began) : "",
+      title: result.series.name,
+      issueNumber: result.issue.number,
+      publisher: result.series.publisher || "",
+      year: result.series.year_began ? String(result.series.year_began) : "",
     }));
     setShowSearchDialog(false);
-    setSearchQuery("");
     setSearchResults([]);
-    toast.success(`Selected: ${series.name}`);
+    toast.success(`Selected: ${result.series.name} #${result.issue.number}`);
   };
 
   const handleSubmit = async () => {
@@ -194,49 +225,55 @@ export const RawComicIntake = ({ onBatchAdd }: RawComicIntakeProps = {}) => {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* GCD Search Dialog */}
+          {/* GCD Search Results Dialog */}
           <Dialog open={showSearchDialog} onOpenChange={setShowSearchDialog}>
-            <DialogContent className="max-w-2xl max-h-[80vh]">
+            <DialogContent className="max-w-3xl max-h-[80vh]">
               <DialogHeader>
-                <DialogTitle>Search for Comic Series</DialogTitle>
+                <DialogTitle>Search Results</DialogTitle>
                 <p className="text-sm text-muted-foreground">
-                  Find the series to auto-fill title, publisher, and year. You'll still need to enter the issue number manually.
+                  Found {searchResults.length} matching issue(s) for "{formData.title}" #{formData.issueNumber}
                 </p>
               </DialogHeader>
               <div className="space-y-4">
-                <Input
-                  placeholder="Search series name..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  autoFocus
-                />
                 {isSearching && (
                   <div className="flex items-center justify-center py-8">
                     <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                    <span className="ml-2 text-muted-foreground">Searching comics database...</span>
                   </div>
                 )}
                 {!isSearching && searchResults.length > 0 && (
                   <div className="space-y-2 max-h-96 overflow-y-auto">
-                    {searchResults.map((series) => (
+                    {searchResults.map((result) => (
                       <button
-                        key={series.id}
+                        key={`${result.series.id}-${result.issue.id}`}
                         type="button"
-                        onClick={() => handleSelectSeries(series)}
-                        className="w-full p-3 text-left rounded-lg border hover:bg-accent transition-colors"
+                        onClick={() => handleSelectIssue(result)}
+                        className="w-full p-4 text-left rounded-lg border hover:bg-accent transition-colors"
                       >
-                        <div className="font-medium">{series.name}</div>
-                        <div className="text-sm text-muted-foreground">
-                          {series.publisher || 'Unknown Publisher'}
-                          {series.year_began && ` • ${series.year_began}`}
-                          {series.issue_count && ` • ${series.issue_count} issues`}
+                        <div className="flex gap-3">
+                          <div className="flex-1">
+                            <div className="font-medium text-lg">
+                              {result.series.name} #{result.issue.number}
+                            </div>
+                            {result.issue.title && (
+                              <div className="text-sm text-muted-foreground italic">
+                                "{result.issue.title}"
+                              </div>
+                            )}
+                            <div className="text-sm text-muted-foreground mt-1">
+                              {result.series.publisher || 'Unknown Publisher'}
+                              {result.series.year_began && ` • ${result.series.year_began}`}
+                              {result.issue.cover_date && ` • ${result.issue.cover_date}`}
+                            </div>
+                          </div>
                         </div>
                       </button>
                     ))}
                   </div>
                 )}
-                {!isSearching && searchQuery && searchResults.length === 0 && (
+                {!isSearching && searchResults.length === 0 && (
                   <div className="text-center py-8 text-muted-foreground">
-                    No results found. Try a different search term.
+                    No matching issues found. Try adjusting your search terms.
                   </div>
                 )}
                 <div className="text-xs text-muted-foreground text-center pt-2 border-t">
@@ -258,34 +295,35 @@ export const RawComicIntake = ({ onBatchAdd }: RawComicIntakeProps = {}) => {
 
             <div className="md:col-span-2">
               <Label htmlFor="title">Series/Title <span className="text-destructive">*</span></Label>
+              <Input
+                id="title"
+                placeholder="e.g., X-Men"
+                value={formData.title}
+                onChange={(e) => updateFormField('title', e.target.value)}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="issueNumber">Issue Number <span className="text-destructive">*</span></Label>
               <div className="flex gap-2">
                 <Input
-                  id="title"
-                  placeholder="e.g., The Amazing Spider-Man"
-                  value={formData.title}
-                  onChange={(e) => updateFormField('title', e.target.value)}
+                  id="issueNumber"
+                  placeholder="e.g., 13"
+                  value={formData.issueNumber}
+                  onChange={(e) => updateFormField('issueNumber', e.target.value)}
                   className="flex-1"
                 />
                 <Button 
                   type="button" 
                   variant="outline" 
-                  onClick={() => setShowSearchDialog(true)}
+                  onClick={handleSearch}
+                  disabled={!formData.title || !formData.issueNumber}
                   className="shrink-0"
                 >
                   <Search className="h-4 w-4 mr-2" />
-                  Search GCD
+                  Search
                 </Button>
               </div>
-            </div>
-
-            <div>
-              <Label htmlFor="issueNumber">Issue Number <span className="text-destructive">*</span></Label>
-              <Input
-                id="issueNumber"
-                placeholder="e.g., 13"
-                value={formData.issueNumber}
-                onChange={(e) => updateFormField('issueNumber', e.target.value)}
-              />
             </div>
 
             <div>
