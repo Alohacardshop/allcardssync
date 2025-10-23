@@ -1,10 +1,10 @@
 import { log } from "../_lib/log.ts";
+import { getCorsHeaders } from "../_lib/cors.ts";
 
 // Response building utilities
 export function buildResponseHeaders(origin: string | null, requestId: string): HeadersInit {
   return {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    ...getCorsHeaders(origin),
     'Content-Type': 'application/json',
     'X-Request-Id': requestId
   };
