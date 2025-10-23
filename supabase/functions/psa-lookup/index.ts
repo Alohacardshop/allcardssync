@@ -65,11 +65,12 @@ Deno.serve(async (req) => {
       )
     }
 
-    // Check old PSA certificates cache
+    // Check old PSA certificates cache (with freshness check)
     const { data: oldCache } = await supabase
       .from('psa_certificates')
       .select('*')
       .eq('cert_number', cert_number)
+      .gt('scraped_at', freshCutoff)
       .maybeSingle()
 
     if (oldCache) {
