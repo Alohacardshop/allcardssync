@@ -12,15 +12,11 @@ function getAllowedOrigins(): Set<string> {
   return new Set(origins);
 }
 
-const allowedOrigins = getAllowedOrigins();
-
 /**
- * CORS headers for responses
+ * Base CORS headers for responses
  */
 export const corsHeaders = {
-  "Access-Control-Allow-Origin": allowedOrigins.size > 0 
-    ? Array.from(allowedOrigins)[0] // Use first origin for simplicity
-    : "*",
+  "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
@@ -30,7 +26,10 @@ export const corsHeaders = {
  */
 export function isOriginAllowed(origin: string | null): boolean {
   if (!origin) return true; // Allow requests without origin (e.g., curl)
+  
+  const allowedOrigins = getAllowedOrigins();
   if (allowedOrigins.size === 0) return true; // If no restrictions, allow all
+  
   return allowedOrigins.has(origin);
 }
 
@@ -38,6 +37,8 @@ export function isOriginAllowed(origin: string | null): boolean {
  * Get CORS headers for specific origin
  */
 export function getCorsHeaders(origin: string | null): Record<string, string> {
+  const allowedOrigins = getAllowedOrigins();
+  
   if (allowedOrigins.size === 0) {
     return corsHeaders;
   }
