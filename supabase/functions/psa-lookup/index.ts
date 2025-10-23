@@ -1,11 +1,17 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { CFG } from "../_lib/config.ts";
-import { corsHeaders, getCorsHeaders } from "../_lib/cors.ts";
+import { corsHeaders } from "../_lib/cors.ts";
 import { log, genRequestId } from "../_lib/log.ts";
 import { canCall, report } from "../_lib/circuit.ts";
 import { fetchJson } from "../_lib/http.ts";
-import { queueBackgroundRefresh } from "./helpers.ts";
+import { 
+  buildResponseHeaders, 
+  buildJsonResponse,
+  normalizePsaCertData,
+  transformPsaApiResponse,
+  cacheCertificateData
+} from "./helpers.ts";
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -15,24 +21,26 @@ Deno.serve(async (req) => {
   const requestId = genRequestId();
   const origin = req.headers.get("origin");
 
+  const headers = buildResponseHeaders(origin, requestId);
+
   try {
     const { cert_number } = await req.json().catch(() => ({}))
     log.info('[psa-lookup] Request received', { requestId, cert_number })
     
     if (!cert_number || String(cert_number).trim() === '') {
-      return new Response(
-        JSON.stringify({ ok: false, error: 'Missing certificate number' }),
-        { headers: { ...getCorsHeaders(origin), 'Content-Type': 'application/json', 'X-Request-Id': requestId } }
-      )
+      return buildJsonResponse(
+        { ok: false, error: 'Missing certificate number' },
+        { headers }
+      );
     }
 
     // Check circuit breaker
     if (!canCall("psa")) {
       log.warn('[psa-lookup] Circuit breaker open for PSA API', { requestId });
-      return new Response(
-        JSON.stringify({ ok: false, error: 'PSA API temporarily unavailable' }),
-        { status: 503, headers: { ...getCorsHeaders(origin), 'Content-Type': 'application/json', 'X-Request-Id': requestId } }
-      )
+      return buildJsonResponse(
+        { ok: false, error: 'PSA API temporarily unavailable' },
+        { status: 503, headers }
+      );
     }
 
     const supabase = createClient(CFG.SUPABASE_URL, CFG.SUPABASE_SERVICE_ROLE_KEY, {
@@ -51,18 +59,15 @@ Deno.serve(async (req) => {
     if (imageCache) {
       log.info('[psa-lookup] Cache hit (fresh)', { requestId, cert_number });
       
-      // Queue background refresh (fire-and-forget)
-      queueBackgroundRefresh(supabase, cert_number).catch(() => {});
-      
-      return new Response(
-        JSON.stringify({
+      return buildJsonResponse(
+        {
           ok: true,
           imageUrl: imageCache.primary_url,
           imageUrls: imageCache.all_urls,
           source: 'cache'
-        }),
-        { headers: { ...getCorsHeaders(origin), 'Content-Type': 'application/json', 'X-Request-Id': requestId } }
-      )
+        },
+        { headers }
+      );
     }
 
     // Check old PSA certificates cache (with freshness check)
@@ -76,40 +81,24 @@ Deno.serve(async (req) => {
     if (oldCache) {
       log.info('[psa-lookup] Old cache hit', { requestId, cert_number });
       
-      // Transform old cache format to match API response format
-      const normalizedData = {
-        certNumber: oldCache.cert_number,
-        isValid: oldCache.is_valid,
-        grade: oldCache.grade,
-        year: oldCache.year,
-        brandTitle: oldCache.brand,
-        subject: oldCache.subject,
-        cardNumber: oldCache.card_number,
-        category: oldCache.category,
-        varietyPedigree: oldCache.variety_pedigree,
-        imageUrl: oldCache.image_url,
-        imageUrls: oldCache.image_urls,
-        psaUrl: oldCache.psa_url
-      };
-      
-      return new Response(
-        JSON.stringify({
+      return buildJsonResponse(
+        {
           ok: true,
-          data: normalizedData,
+          data: normalizePsaCertData(oldCache),
           source: 'cache'
-        }),
-        { headers: { ...getCorsHeaders(origin), 'Content-Type': 'application/json', 'X-Request-Id': requestId } }
-      )
+        },
+        { headers }
+      );
     }
 
     // Get PSA API token
     const psaToken = CFG.PSA_PUBLIC_API_TOKEN;
     if (!psaToken) {
       log.error('[psa-lookup] PSA API token not configured', { requestId });
-      return new Response(
-        JSON.stringify({ ok: false, error: 'PSA API token not configured' }),
-        { status: 500, headers: { ...getCorsHeaders(origin), 'Content-Type': 'application/json', 'X-Request-Id': requestId } }
-      )
+      return buildJsonResponse(
+        { ok: false, error: 'PSA API token not configured' },
+        { status: 500, headers }
+      );
     }
 
     // Fetch from PSA API
@@ -147,115 +136,53 @@ Deno.serve(async (req) => {
       // Validate certificate data
       if (!certData?.PSACert?.CertNumber) {
         log.warn('[psa-lookup] No valid certificate data', { requestId, cert_number });
-        return new Response(
-          JSON.stringify({ ok: false, error: 'NO_DATA' }),
-          { headers: { ...getCorsHeaders(origin), 'Content-Type': 'application/json', 'X-Request-Id': requestId } }
-        )
+        return buildJsonResponse(
+          { ok: false, error: 'NO_DATA' },
+          { headers }
+        );
       }
 
       const psaCert = certData.PSACert;
-      const extractNumericGrade = (gradeStr: string): string | undefined => {
-        if (!gradeStr) return undefined;
-        const match = gradeStr.match(/\d+/);
-        return match ? match[0] : undefined;
-      };
+      const responseData = transformPsaApiResponse(cert_number, psaCert, imagesData);
 
-      // Extract image URLs
-      let imageUrls: string[] = [];
-      let primaryImageUrl: string | undefined = undefined;
-
-      if (imagesData && Array.isArray(imagesData)) {
-        imageUrls = imagesData.map(img => img.ImageURL).filter(url => url);
-        const frontImage = imagesData.find(img => img.IsFrontImage === true);
-        primaryImageUrl = frontImage?.ImageURL || imageUrls[0];
-      }
-
-      const responseData = {
-        certNumber: cert_number,
-        isValid: true,
-        grade: extractNumericGrade(psaCert?.CardGrade),
-        year: psaCert?.Year || undefined,
-        brandTitle: psaCert?.Brand || undefined,
-        subject: psaCert?.Subject || undefined,
-        cardNumber: psaCert?.CardNumber || undefined,
-        category: psaCert?.Category || undefined,
-        varietyPedigree: psaCert?.Variety || undefined,
-        imageUrl: primaryImageUrl,
-        imageUrls: imageUrls,
-        psaUrl: `https://www.psacard.com/cert/${cert_number}`
-      };
-
-      // Cache in new image cache table
-      try {
-        await supabase
-          .from('catalog_v2.psa_image_cache')
-          .upsert({
-            cert: cert_number,
-            primary_url: primaryImageUrl,
-            all_urls: imageUrls,
-            updated_at: new Date().toISOString()
-          });
-      } catch (err) {
-        log.error('[psa-lookup] Failed to cache images', { requestId, error: String(err) });
-      }
-
-      // Also cache in old table for backwards compatibility
-      try {
-        await supabase
-          .from('psa_certificates')
-          .upsert({
-            cert_number,
-            is_valid: true,
-            grade: responseData.grade,
-            year: responseData.year,
-            brand: responseData.brandTitle,
-            subject: responseData.subject,
-            card_number: responseData.cardNumber,
-            category: responseData.category,
-            variety_pedigree: responseData.varietyPedigree,
-            image_url: responseData.imageUrl,
-            image_urls: responseData.imageUrls,
-            psa_url: responseData.psaUrl,
-            scraped_at: new Date().toISOString()
-          });
-      } catch (err) {
-        log.error('[psa-lookup] Failed to cache cert', { requestId, error: String(err) });
-      }
+      // Cache the certificate data
+      await cacheCertificateData(supabase, cert_number, responseData, requestId);
 
       log.info('[psa-lookup] Successfully processed and cached', { requestId, cert_number });
 
-      return new Response(
-        JSON.stringify({
+      return buildJsonResponse(
+        {
           ok: true,
           data: responseData,
           source: 'psa_api'
-        }),
-        { headers: { ...getCorsHeaders(origin), 'Content-Type': 'application/json', 'X-Request-Id': requestId } }
+        },
+        { headers }
       );
 
     } catch (apiError) {
       report("psa", false);
       log.error('[psa-lookup] PSA API error', { requestId, error: String(apiError) });
       
-      return new Response(
-        JSON.stringify({
+      return buildJsonResponse(
+        {
           ok: false,
           error: 'Failed to fetch from PSA API',
           message: String(apiError)
-        }),
-        { status: 500, headers: { ...getCorsHeaders(origin), 'Content-Type': 'application/json', 'X-Request-Id': requestId } }
+        },
+        { status: 500, headers }
       );
     }
 
   } catch (error) {
     log.error('[psa-lookup] Unexpected error', { requestId, error: String(error) });
     
-    return new Response(
-      JSON.stringify({
+    const headers = buildResponseHeaders(origin, requestId);
+    return buildJsonResponse(
+      {
         ok: false,
         error: 'Unhandled server error'
-      }),
-      { headers: { ...getCorsHeaders(origin), 'Content-Type': 'application/json', 'X-Request-Id': requestId } }
-    )
+      },
+      { headers }
+    );
   }
 })
