@@ -75,10 +75,27 @@ Deno.serve(async (req) => {
 
     if (oldCache) {
       log.info('[psa-lookup] Old cache hit', { requestId, cert_number });
+      
+      // Transform old cache format to match API response format
+      const normalizedData = {
+        certNumber: oldCache.cert_number,
+        isValid: oldCache.is_valid,
+        grade: oldCache.grade,
+        year: oldCache.year,
+        brandTitle: oldCache.brand,
+        subject: oldCache.subject,
+        cardNumber: oldCache.card_number,
+        category: oldCache.category,
+        varietyPedigree: oldCache.variety_pedigree,
+        imageUrl: oldCache.image_url,
+        imageUrls: oldCache.image_urls,
+        psaUrl: oldCache.psa_url
+      };
+      
       return new Response(
         JSON.stringify({
           ok: true,
-          data: oldCache,
+          data: normalizedData,
           source: 'cache'
         }),
         { headers: { ...getCorsHeaders(origin), 'Content-Type': 'application/json', 'X-Request-Id': requestId } }
