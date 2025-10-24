@@ -1764,10 +1764,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      _norm_gid: {
-        Args: { t: string }
-        Returns: string
-      }
+      _norm_gid: { Args: { t: string }; Returns: string }
       acquire_shopify_processor_lock: {
         Args: { processor_instance_id: string }
         Returns: boolean
@@ -1796,10 +1793,7 @@ export type Database = {
         Args: { lot_id_in: string; reason_in?: string }
         Returns: number
       }
-      atomic_catalog_swap: {
-        Args: { game_name: string }
-        Returns: undefined
-      }
+      atomic_catalog_swap: { Args: { game_name: string }; Returns: undefined }
       batch_queue_shopify_sync: {
         Args: { item_ids: string[]; sync_action?: string }
         Returns: {
@@ -1811,10 +1805,7 @@ export type Database = {
         Args: { _target_user_id?: string }
         Returns: Json
       }
-      can_delete_batch_item: {
-        Args: { _item_id: string }
-        Returns: boolean
-      }
+      can_delete_batch_item: { Args: { _item_id: string }; Returns: boolean }
       catalog_v2_browse_cards: {
         Args: {
           filter_japanese?: boolean
@@ -1932,10 +1923,7 @@ export type Database = {
           rolled_back: number
         }[]
       }
-      catalog_v2_log_error: {
-        Args: { payload: Json }
-        Returns: undefined
-      }
+      catalog_v2_log_error: { Args: { payload: Json }; Returns: undefined }
       catalog_v2_mark_queue_item_done: {
         Args: { item_id: string }
         Returns: undefined
@@ -1997,34 +1985,16 @@ export type Database = {
           sets_count: number
         }[]
       }
-      catalog_v2_upsert_cards: {
-        Args: { rows: Json }
-        Returns: undefined
-      }
-      catalog_v2_upsert_cards_new: {
-        Args: { rows: Json }
-        Returns: undefined
-      }
-      catalog_v2_upsert_sets: {
-        Args: { rows: Json }
-        Returns: undefined
-      }
-      catalog_v2_upsert_sets_new: {
-        Args: { rows: Json }
-        Returns: undefined
-      }
-      catalog_v2_upsert_variants: {
-        Args: { rows: Json }
-        Returns: undefined
-      }
+      catalog_v2_upsert_cards: { Args: { rows: Json }; Returns: undefined }
+      catalog_v2_upsert_cards_new: { Args: { rows: Json }; Returns: undefined }
+      catalog_v2_upsert_sets: { Args: { rows: Json }; Returns: undefined }
+      catalog_v2_upsert_sets_new: { Args: { rows: Json }; Returns: undefined }
+      catalog_v2_upsert_variants: { Args: { rows: Json }; Returns: undefined }
       catalog_v2_upsert_variants_new: {
         Args: { rows: Json }
         Returns: undefined
       }
-      check_shopify_queue_health: {
-        Args: Record<PropertyKey, never>
-        Returns: Json
-      }
+      check_shopify_queue_health: { Args: never; Returns: Json }
       claim_next_print_job: {
         Args: { ws: string }
         Returns: {
@@ -2042,15 +2012,15 @@ export type Database = {
           tspl_body: string | null
           workstation_id: string
         }
+        SetofOptions: {
+          from: "*"
+          to: "print_jobs"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
-      cleanup_shopify_sync_queue: {
-        Args: Record<PropertyKey, never>
-        Returns: undefined
-      }
-      cleanup_user_session: {
-        Args: Record<PropertyKey, never>
-        Returns: undefined
-      }
+      cleanup_shopify_sync_queue: { Args: never; Returns: undefined }
+      cleanup_user_session: { Args: never; Returns: undefined }
       close_empty_lot_and_create_new: {
         Args: { _location_gid: string; _store_key: string }
         Returns: {
@@ -2061,45 +2031,26 @@ export type Database = {
         }[]
       }
       create_raw_intake_item: {
-        Args:
-          | {
-              brand_title_in?: string
-              card_number_in?: string
-              catalog_snapshot_in?: Json
-              category_in?: string
-              cost_in?: number
-              grade_in?: string
-              main_category_in?: string
-              price_in?: number
-              pricing_snapshot_in?: Json
-              processing_notes_in?: string
-              quantity_in?: number
-              shopify_location_gid_in: string
-              sku_in?: string
-              source_provider_in?: string
-              store_key_in: string
-              sub_category_in?: string
-              subject_in?: string
-              variant_in?: string
-            }
-          | {
-              brand_title_in?: string
-              card_number_in?: string
-              catalog_snapshot_in?: Json
-              category_in?: string
-              cost_in?: number
-              grade_in?: string
-              price_in?: number
-              pricing_snapshot_in?: Json
-              processing_notes_in?: string
-              quantity_in?: number
-              shopify_location_gid_in: string
-              sku_in?: string
-              source_provider_in?: string
-              store_key_in: string
-              subject_in?: string
-              variant_in?: string
-            }
+        Args: {
+          brand_title_in?: string
+          card_number_in?: string
+          catalog_snapshot_in?: Json
+          category_in?: string
+          cost_in?: number
+          grade_in?: string
+          main_category_in?: string
+          price_in?: number
+          pricing_snapshot_in?: Json
+          processing_notes_in?: string
+          quantity_in?: number
+          shopify_location_gid_in: string
+          sku_in?: string
+          source_provider_in?: string
+          store_key_in: string
+          sub_category_in?: string
+          subject_in?: string
+          variant_in?: string
+        }
         Returns: {
           created_at: string
           id: string
@@ -2110,10 +2061,7 @@ export type Database = {
         Args: { _location_gid: string; _store_key: string; _user_id: string }
         Returns: Json
       }
-      debug_user_auth: {
-        Args: { _user_id?: string }
-        Returns: Json
-      }
+      debug_user_auth: { Args: { _user_id?: string }; Returns: Json }
       force_new_lot: {
         Args: { _location_gid: string; _reason?: string; _store_key: string }
         Returns: {
@@ -2123,16 +2071,10 @@ export type Database = {
           old_lot_number: string
         }[]
       }
-      generate_lot_number: {
-        Args: Record<PropertyKey, never>
-        Returns: string
-      }
-      get_decrypted_secret: {
-        Args: { secret_name: string }
-        Returns: string
-      }
+      generate_lot_number: { Args: never; Returns: string }
+      get_decrypted_secret: { Args: { secret_name: string }; Returns: string }
       get_game_catalog_stats: {
-        Args: Record<PropertyKey, never>
+        Args: never
         Returns: {
           cards_count: number
           game_id: string
@@ -2141,7 +2083,7 @@ export type Database = {
         }[]
       }
       get_group_sync_status: {
-        Args: Record<PropertyKey, never>
+        Args: never
         Returns: {
           category_id: number
           id: number
@@ -2175,26 +2117,12 @@ export type Database = {
           total_value: number | null
           updated_at: string
         }
-      }
-      gtrgm_compress: {
-        Args: { "": unknown }
-        Returns: unknown
-      }
-      gtrgm_decompress: {
-        Args: { "": unknown }
-        Returns: unknown
-      }
-      gtrgm_in: {
-        Args: { "": unknown }
-        Returns: unknown
-      }
-      gtrgm_options: {
-        Args: { "": unknown }
-        Returns: undefined
-      }
-      gtrgm_out: {
-        Args: { "": unknown }
-        Returns: unknown
+        SetofOptions: {
+          from: "*"
+          to: "intake_lots"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       has_role: {
         Args: {
@@ -2207,22 +2135,13 @@ export type Database = {
         Args: { body: Json; headers: Json; url: string }
         Returns: number
       }
-      is_inventory_sync_enabled: {
-        Args: Record<PropertyKey, never>
-        Returns: boolean
-      }
-      normalize_game_slug: {
-        Args: { slug_in: string }
-        Returns: string
-      }
+      is_inventory_sync_enabled: { Args: never; Returns: boolean }
+      normalize_game_slug: { Args: { slug_in: string }; Returns: string }
       queue_shopify_sync: {
         Args: { item_id: string; sync_action?: string }
         Returns: string
       }
-      release_shopify_processor_lock: {
-        Args: Record<PropertyKey, never>
-        Returns: boolean
-      }
+      release_shopify_processor_lock: { Args: never; Returns: boolean }
       restore_intake_item: {
         Args: { item_id: string; reason_in?: string }
         Returns: {
@@ -2242,10 +2161,7 @@ export type Database = {
           set_name: string
         }[]
       }
-      secure_get_secret: {
-        Args: { secret_name: string }
-        Returns: string
-      }
+      secure_get_secret: { Args: { secret_name: string }; Returns: string }
       send_intake_item_to_inventory: {
         Args: { item_id: string }
         Returns: {
@@ -2320,33 +2236,36 @@ export type Database = {
           vendor: string | null
           year: string | null
         }
+        SetofOptions: {
+          from: "*"
+          to: "intake_items"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       send_intake_items_to_inventory: {
         Args: { item_ids: string[] }
         Returns: Json
       }
-      set_limit: {
-        Args: { "": number }
-        Returns: number
-      }
       set_template_default: {
         Args: { template_id: string; template_type_param?: string }
         Returns: undefined
       }
-      set_user_default_location: {
-        Args:
-          | { _location_gid: string; _store_key: string }
-          | { _location_gid: string; _store_key: string; _user_id: string }
-        Returns: undefined
-      }
-      show_limit: {
-        Args: Record<PropertyKey, never>
-        Returns: number
-      }
-      show_trgm: {
-        Args: { "": string }
-        Returns: string[]
-      }
+      set_user_default_location:
+        | {
+            Args: {
+              _location_gid: string
+              _store_key: string
+              _user_id: string
+            }
+            Returns: undefined
+          }
+        | {
+            Args: { _location_gid: string; _store_key: string }
+            Returns: undefined
+          }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
       soft_delete_intake_item: {
         Args: { item_id: string; reason_in?: string }
         Returns: {
@@ -2365,10 +2284,7 @@ export type Database = {
         Args: { _location_gid?: string; _store_key: string; _user_id: string }
         Returns: boolean
       }
-      verify_user_access: {
-        Args: { _user_id?: string }
-        Returns: Json
-      }
+      verify_user_access: { Args: { _user_id?: string }; Returns: Json }
     }
     Enums: {
       app_role: "admin" | "staff"
