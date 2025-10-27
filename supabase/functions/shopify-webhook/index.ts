@@ -226,24 +226,50 @@ async function handleOrderUpdate(supabase: any, payload: any, shopifyDomain: str
   const storeKey = await getStoreKeyFromDomain(supabase, shopifyDomain);
   if (!storeKey) return;
 
+  // Get Shopify credentials for inventory sync back
+  const storeUpper = storeKey.toUpperCase();
+  const { data: domainSetting } = await supabase
+    .from('system_settings')
+    .select('key_value')
+    .eq('key_name', `SHOPIFY_${storeUpper}_STORE_DOMAIN`)
+    .single();
+  
+  const { data: tokenSetting } = await supabase
+    .from('system_settings')
+    .select('key_value')
+    .eq('key_name', `SHOPIFY_${storeUpper}_ACCESS_TOKEN`)
+    .single();
+  
+  const domain = domainSetting?.key_value;
+  const token = tokenSetting?.key_value;
+
   for (const lineItem of lineItems) {
     const sku = lineItem.sku;
     const variantId = lineItem.variant_id?.toString();
     const quantity = lineItem.quantity || 0;
     const price = lineItem.price;
+    
+    // Extract location from line item
+    const locationId = lineItem.location_id?.toString();
+    const locationGid = locationId ? `gid://shopify/Location/${locationId}` : null;
 
     if (!sku && !variantId) continue;
 
-    // Find matching items by SKU or variant ID
+    // Find matching items by SKU or variant ID with location validation
     let query = supabase
       .from('intake_items')
-      .select('id, quantity, type')
+      .select('id, quantity, type, shopify_inventory_item_id, shopify_location_gid')
       .eq('store_key', storeKey);
 
     if (sku) {
       query = query.eq('sku', sku);
     } else if (variantId) {
       query = query.eq('shopify_variant_id', variantId);
+    }
+    
+    // Add location validation if available
+    if (locationGid) {
+      query = query.eq('shopify_location_gid', locationGid);
     }
 
     const { data: items, error } = await query;
@@ -297,6 +323,33 @@ async function handleOrderUpdate(supabase: any, payload: any, shopifyDomain: str
           console.error('Failed to update raw item quantity:', updateError);
         } else {
           console.log(`Updated raw item ${item.id} quantity to ${newQuantity}`);
+          
+          // Sync updated quantity back to Shopify (Phase 3: Inventory Sync Back)
+          if (item.type === 'Raw' && newQuantity > 0 && domain && token && item.shopify_inventory_item_id && item.shopify_location_gid) {
+            const shopifyLocationId = item.shopify_location_gid.replace('gid://shopify/Location/', '');
+            
+            const syncResponse = await fetch(
+              `https://${domain}/admin/api/2024-07/inventory_levels/set.json`,
+              {
+                method: 'POST',
+                headers: {
+                  'X-Shopify-Access-Token': token,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                  location_id: shopifyLocationId,
+                  inventory_item_id: item.shopify_inventory_item_id,
+                  available: newQuantity
+                })
+              }
+            );
+            
+            if (!syncResponse.ok) {
+              console.error('Failed to sync inventory back to Shopify:', await syncResponse.text());
+            } else {
+              console.log(`✓ Synced inventory back to Shopify: ${sku} → ${newQuantity}`);
+            }
+          }
         }
       }
     }
@@ -306,42 +359,64 @@ async function handleOrderUpdate(supabase: any, payload: any, shopifyDomain: str
 async function handleInventoryLevelUpdate(supabase: any, payload: any, shopifyDomain: string | null) {
   const inventoryItemId = payload.inventory_item_id?.toString();
   const available = payload.available;
+  const locationId = payload.location_id?.toString();
+  const locationGid = locationId ? `gid://shopify/Location/${locationId}` : null;
   
   if (!inventoryItemId || available === undefined) return;
 
-  console.log(`Handling inventory level update: item ${inventoryItemId}, new quantity: ${available}`);
+  console.log(`Handling inventory level update: item ${inventoryItemId}, new quantity: ${available}, location: ${locationGid}`);
 
   // Find store key from domain
   const storeKey = await getStoreKeyFromDomain(supabase, shopifyDomain);
   if (!storeKey) return;
 
-  // Find matching items by Shopify inventory item ID or product ID
-  const { data: items, error } = await supabase
+  // Phase 2: Add location validation to query
+  // Find matching items by Shopify inventory item ID with location context
+  let query = supabase
     .from('intake_items')
-    .select('id, quantity, sku, type, shopify_product_id')
+    .select('id, quantity, sku, type, shopify_product_id, shopify_variant_id')
     .eq('store_key', storeKey)
     .or(`shopify_inventory_item_id.eq.${inventoryItemId},shopify_variant_id.eq.${inventoryItemId}`);
+  
+  // Add location validation if available
+  if (locationGid) {
+    query = query.eq('shopify_location_gid', locationGid);
+  }
+
+  const { data: items, error } = await query;
 
   if (error || !items?.length) {
-    // Try finding by product ID if no direct match
-    const { data: productItems } = await supabase
-      .from('intake_items')  
-      .select('id, quantity, sku, type, shopify_product_id')
+    // Phase 4: Improved fallback matching - only with location context
+    if (!locationGid) {
+      console.error('Cannot fallback without location context');
+      return;
+    }
+    
+    console.warn(`No direct match for inventory item ${inventoryItemId} at location ${locationGid}`);
+    
+    // Try matching by variant ID as last resort (with location)
+    const { data: variantItems } = await supabase
+      .from('intake_items')
+      .select('id, quantity, sku, type, shopify_product_id, shopify_variant_id')
       .eq('store_key', storeKey)
-      .not('shopify_product_id', 'is', null);
+      .eq('shopify_location_gid', locationGid)
+      .not('shopify_variant_id', 'is', null);
       
-    console.warn(`No direct match for inventory item ${inventoryItemId}, found ${productItems?.length || 0} potential items`);
+    if (!variantItems?.length) {
+      console.warn('No variants found for fallback matching');
+      return;
+    }
     
-    if (!productItems?.length) return;
-    
-    // For now, we'll update all items with the same product - this is imperfect but handles most cases
-    for (const item of productItems) {
+    // Only update items at this specific location
+    console.log(`Fallback: updating ${variantItems.length} items at location ${locationGid}`);
+    for (const item of variantItems) {
       await updateItemQuantity(supabase, item, available);
     }
     return;
   }
 
   // Update matching items
+  console.log(`Found ${items.length} exact matches for inventory item ${inventoryItemId}`);
   for (const item of items) {
     await updateItemQuantity(supabase, item, available);
   }
