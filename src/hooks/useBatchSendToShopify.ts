@@ -2,6 +2,7 @@ import { useState } from "react"
 import { supabase } from "@/integrations/supabase/client"
 import { toast } from "sonner"
 import { ShopifyError, RateLimitError } from "@/types/errors"
+import { logger } from "@/lib/logger"
 
 export interface BatchConfig {
   batchSize: number
@@ -81,17 +82,17 @@ export function useBatchSendToShopify() {
     onProgress?: (progress: BatchProgress) => void,
     autoProcess: boolean = false
   ): Promise<BatchSendResponse> => {
-    console.log(`🔵 [useBatchSendToShopify] Starting chunked batch send:`, { 
+    logger.info('Starting chunked batch send', { 
       itemCount: itemIds.length, 
       storeKey, 
       locationGid: locationGid?.substring(0, 20) + '...',
       config,
       autoProcess
-    })
+    }, 'useBatchSendToShopify')
     
     if (!storeKey || !locationGid) {
       const error = "Store and location must be selected"
-      console.error(`❌ [useBatchSendToShopify] Validation failed:`, error)
+      logger.error('Validation failed', new Error(error), { storeKey, locationGid }, 'useBatchSendToShopify')
       throw new Error(error)
     }
 
@@ -101,7 +102,7 @@ export function useBatchSendToShopify() {
 
     // Prevent duplicate concurrent sends
     if (isSending) {
-      console.warn('❌ [useBatchSendToShopify] Already sending batch, ignoring duplicate call')
+      logger.warn('Already sending batch, ignoring duplicate call', {}, 'useBatchSendToShopify')
       throw new Error("Batch send already in progress")
     }
 
@@ -109,7 +110,7 @@ export function useBatchSendToShopify() {
     
     // Safety timeout to prevent stuck loading state (10 minutes max)
     const safetyTimeout = setTimeout(() => {
-      console.error('⚠️ [useBatchSendToShopify] Safety timeout reached - clearing loading state')
+      logger.error('Safety timeout reached - clearing loading state', new Error('Safety timeout'), {}, 'useBatchSendToShopify')
       setIsSending(false)
       setProgress(null)
       toast.error('Batch processing timeout - please try again')
@@ -157,19 +158,19 @@ export function useBatchSendToShopify() {
         setProgress(currentProgress)
         onProgress?.(currentProgress)
 
-        console.log(`🔄 [useBatchSendToShopify] Processing chunk ${chunkIndex + 1}/${totalChunks} with ${chunk.length} items`)
+        logger.info(`Processing chunk ${chunkIndex + 1}/${totalChunks}`, { chunkSize: chunk.length }, 'useBatchSendToShopify')
         
         try {
           // Step 1: Update vendor on items if provided
           if (config.vendor) {
-            console.log(`🏷️ [useBatchSendToShopify] Setting vendor "${config.vendor}" for ${chunk.length} items`)
+            logger.info(`Setting vendor for ${chunk.length} items`, { vendor: config.vendor }, 'useBatchSendToShopify')
             const { error: vendorError } = await supabase
               .from('intake_items')
               .update({ vendor: config.vendor } as any) // Cast until types regenerate
               .in('id', chunk)
             
             if (vendorError) {
-              console.error(`⚠️ [useBatchSendToShopify] Failed to set vendor:`, vendorError)
+              logger.warn('Failed to set vendor', { error: vendorError }, 'useBatchSendToShopify')
             }
           }
 
@@ -179,7 +180,7 @@ export function useBatchSendToShopify() {
           })
 
           if (inventoryError) {
-            console.error(`❌ [useBatchSendToShopify] Chunk ${chunkIndex + 1} inventory error:`, inventoryError)
+            logger.error(`Chunk ${chunkIndex + 1} inventory error`, new Error(inventoryError.message), { chunk: chunkIndex + 1 }, 'useBatchSendToShopify')
             
             if (config.failFast) {
               throw new Error(`Chunk ${chunkIndex + 1} failed: ${inventoryError.message}`)
@@ -195,12 +196,12 @@ export function useBatchSendToShopify() {
           // Step 3: Queue successful items for Shopify sync
           const inventoryResult = inventoryData as any
           if (inventoryResult?.processed_ids && inventoryResult.processed_ids.length > 0) {
-            console.log(`📋 [useBatchSendToShopify] Queueing ${inventoryResult.processed_ids.length} items for Shopify sync`)
+            logger.info(`Queueing ${inventoryResult.processed_ids.length} items for Shopify sync`, {}, 'useBatchSendToShopify')
             
             // Queue each item individually for Shopify sync with small delay to prevent position conflicts
             for (let i = 0; i < inventoryResult.processed_ids.length; i++) {
               const itemId = inventoryResult.processed_ids[i]
-              console.log(`📤 Queuing item ${itemId} for Shopify sync (${i + 1}/${inventoryResult.processed_ids.length})`)
+              logger.debug(`Queuing item for Shopify sync`, { itemId, progress: `${i + 1}/${inventoryResult.processed_ids.length}` }, 'useBatchSendToShopify')
               
               try {
                 const { error: queueError } = await supabase.rpc('queue_shopify_sync', {
@@ -209,7 +210,7 @@ export function useBatchSendToShopify() {
                 })
 
                 if (queueError) {
-                  console.error(`❌ [useBatchSendToShopify] Failed to queue item ${itemId}:`, queueError)
+                  logger.error(`Failed to queue item`, new Error(queueError.message), { itemId }, 'useBatchSendToShopify')
                   allRejectedItems.push({ id: itemId, reason: `Queue failed: ${queueError.message}` })
                   totalRejected++
                 } else {
@@ -222,7 +223,7 @@ export function useBatchSendToShopify() {
                   }
                 }
               } catch (queueError: unknown) {
-                console.error(`❌ [useBatchSendToShopify] Failed to queue item ${itemId}:`, queueError)
+                logger.error(`Failed to queue item`, queueError instanceof Error ? queueError : new Error(String(queueError)), { itemId }, 'useBatchSendToShopify')
                 const errorMessage = queueError && typeof queueError === 'object' && 'message' in queueError 
                   ? (queueError as { message: string }).message 
                   : String(queueError)
@@ -244,7 +245,7 @@ export function useBatchSendToShopify() {
           toast.success(`Chunk ${chunkIndex + 1}/${totalChunks} completed: ${inventoryResult?.processed_ids?.length || 0} items moved to inventory`)
           
         } catch (chunkError: unknown) {
-          console.error(`❌ [useBatchSendToShopify] Chunk ${chunkIndex + 1} failed:`, chunkError)
+          logger.error(`Chunk ${chunkIndex + 1} failed`, chunkError instanceof Error ? chunkError : new Error(String(chunkError)), { chunk: chunkIndex + 1 }, 'useBatchSendToShopify')
           if (config.failFast) {
             throw chunkError
           }
@@ -264,27 +265,27 @@ export function useBatchSendToShopify() {
 
         // Add delay between chunks (except for the last one)
         if (chunkIndex < chunks.length - 1 && config.delayBetweenChunks > 0) {
-          console.log(`⏳ [useBatchSendToShopify] Waiting ${config.delayBetweenChunks}ms before next chunk`)
+          logger.debug(`Waiting ${config.delayBetweenChunks}ms before next chunk`, {}, 'useBatchSendToShopify')
           await delay(config.delayBetweenChunks)
         }
       }
 
       // Step 4: Trigger the new Shopify sync processor if we have queued items
       if (totalQueued > 0) {
-        console.log(`🚀 [useBatchSendToShopify] Triggering Shopify sync processor for ${totalQueued} queued items`)
+        logger.info(`Triggering Shopify sync processor`, { queuedItems: totalQueued }, 'useBatchSendToShopify')
         try {
           const { data, error: processorError } = await supabase.functions.invoke('shopify-sync', {
             body: {}
           })
           
           if (processorError) {
-            console.error(`⚠️ [useBatchSendToShopify] Failed to trigger sync processor:`, processorError)
+            logger.warn('Failed to trigger sync processor', { error: processorError }, 'useBatchSendToShopify')
             toast.warning('Items queued for sync but processor failed to start - sync may be delayed')
           } else {
             toast.info(`Started Shopify sync for ${totalQueued} items - processing in background`)
           }
         } catch (processorError) {
-          console.error(`⚠️ [useBatchSendToShopify] Failed to trigger sync processor:`, processorError)
+          logger.warn('Failed to trigger sync processor', { error: processorError }, 'useBatchSendToShopify')
           toast.warning('Items queued for sync but processor failed to start - sync may be delayed')
         }
       }
@@ -301,11 +302,11 @@ export function useBatchSendToShopify() {
       onProgress?.(finalProgress)
 
       // Show final summary
-      console.log(`🏁 [useBatchSendToShopify] Final summary:`, { 
+      logger.info('Batch send complete', { 
         totalProcessed, 
         totalRejected, 
         totalQueued 
-      })
+      }, 'useBatchSendToShopify')
       
       if (totalQueued > 0) {
         toast.success(`Batch complete! ${totalQueued} items queued for Shopify sync`)
@@ -324,7 +325,7 @@ export function useBatchSendToShopify() {
         rejected_items: allRejectedItems
       }
     } catch (error) {
-      console.error('❌ [useBatchSendToShopify] Fatal error:', error)
+      logger.error('Fatal batch send error', error instanceof Error ? error : new Error(String(error)), {}, 'useBatchSendToShopify')
       toast.error('Batch processing failed')
       throw error
     } finally {

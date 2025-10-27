@@ -13,6 +13,7 @@ import { rawComicSchema } from "@/lib/validation/comic-schemas";
 import { z } from "zod";
 import { parseClzComicsCsv, ClzComic } from "@/lib/csv/parseClzComics";
 import { SubCategoryCombobox } from "@/components/ui/sub-category-combobox";
+import { useLogger } from "@/hooks/useLogger";
 
 interface RawComicIntakeProps {
   onBatchAdd?: (item: any) => void;
@@ -20,6 +21,7 @@ interface RawComicIntakeProps {
 
 export const RawComicIntake = ({ onBatchAdd }: RawComicIntakeProps) => {
   const { assignedStore, selectedLocation } = useStore();
+  const logger = useLogger('RawComicIntake');
   
   const [formData, setFormData] = useState({
     title: "",
@@ -62,7 +64,6 @@ export const RawComicIntake = ({ onBatchAdd }: RawComicIntakeProps) => {
 
       if (parsed.errors.length > 0) {
         toast.error(`CSV parsing errors: ${parsed.errors.length} rows failed`);
-        console.error("Parse errors:", parsed.errors);
       }
 
       if (parsed.comics.length === 0) {
@@ -226,7 +227,9 @@ export const RawComicIntake = ({ onBatchAdd }: RawComicIntakeProps) => {
       }));
 
     } catch (error: any) {
-      console.error("Submit error:", error);
+      logger.logError('Failed to add comic to batch', error instanceof Error ? error : undefined, {
+        title: formData.title,
+      })
       toast.error(`Failed to add to batch: ${error.message}`);
     } finally {
       setSubmitting(false);

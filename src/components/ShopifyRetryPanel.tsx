@@ -13,6 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useShopifyUpsert } from '@/hooks/useShopifyUpsert';
 import { buildHandle, buildSku } from '@/lib/shopify/ids';
 import { UpsertCard } from '@/lib/shopify/upsert';
+import { useLogger } from '@/hooks/useLogger';
 
 interface FailedItem {
   id: string;
@@ -28,6 +29,7 @@ interface FailedItem {
 }
 
 export function ShopifyRetryPanel() {
+  const logger = useLogger('ShopifyRetryPanel');
   const [failedItems, setFailedItems] = useState<FailedItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
@@ -70,7 +72,7 @@ export function ShopifyRetryPanel() {
       setFailedItems(data || []);
       setSelectedItems(new Set());
     } catch (error) {
-      console.error('Failed to load failed items:', error);
+      logger.logError('Failed to load failed items', error instanceof Error ? error : undefined)
     } finally {
       setLoading(false);
     }

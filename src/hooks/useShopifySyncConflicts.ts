@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { logger } from '@/lib/logger';
 
 export interface SyncConflict {
   itemId: string;
@@ -47,7 +48,7 @@ export function useShopifySyncConflicts() {
       setConflicts(data.conflicts || []);
       return data.conflicts || [];
     } catch (error: any) {
-      console.error('Error detecting conflicts:', error);
+      logger.error('Error detecting conflicts', error instanceof Error ? error : new Error(String(error)), { storeKey }, 'useShopifySyncConflicts')
       toast.error(`Failed to detect conflicts: ${error.message}`);
       return [];
     } finally {
@@ -78,7 +79,7 @@ export function useShopifySyncConflicts() {
       
       toast.success('Conflict resolved successfully');
     } catch (error: any) {
-      console.error('Error resolving conflict:', error);
+      logger.error('Error resolving conflict', error instanceof Error ? error : new Error(String(error)), { itemId, resolution }, 'useShopifySyncConflicts')
       toast.error(`Failed to resolve conflict: ${error.message}`);
     } finally {
       setResolving(prev => prev.filter(id => id !== itemId));
@@ -115,7 +116,7 @@ export function useShopifySyncConflicts() {
         toast.error(`Failed to resolve ${failed} conflicts`);
       }
     } catch (error: any) {
-      console.error('Error resolving all conflicts:', error);
+      logger.error('Error resolving all conflicts', error instanceof Error ? error : new Error(String(error)), { resolution, totalConflicts: conflicts.length }, 'useShopifySyncConflicts')
       toast.error('Failed to resolve conflicts');
     } finally {
       setResolving([]);

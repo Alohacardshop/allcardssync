@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { logger } from "@/lib/logger";
 
 export interface SellItemArgs {
   id: string;
@@ -32,7 +33,7 @@ export function useInventorySelling() {
       // Determine if item is raw or graded
       const itemType = type || (psa_cert || grade ? 'Graded' : 'Raw');
       
-      console.log(`Selling ${itemType} item: ${sku} (quantity: ${quantity})`);
+      logger.info(`Selling item`, { itemType, sku, quantity }, 'useInventorySelling')
       
       if (itemType === 'Raw') {
         // For raw cards, use the removal function which handles quantity reduction
@@ -64,7 +65,7 @@ export function useInventorySelling() {
           .eq('id', id);
         
         if (updateError) {
-          console.warn('Failed to update sale details:', updateError);
+          logger.warn('Failed to update sale details', { error: updateError, itemId: id }, 'useInventorySelling')
         }
         
         const action = data.action === 'quantity_reduced' ? 'reduced quantity' : 'completely sold';
@@ -103,7 +104,7 @@ export function useInventorySelling() {
           .eq('id', id);
         
         if (updateError) {
-          console.warn('Failed to update sale details:', updateError);
+          logger.warn('Failed to update sale details', { error: updateError, itemId: id }, 'useInventorySelling')
         }
         
         toast.success(`Graded card ${sku} sold successfully`);
@@ -112,7 +113,7 @@ export function useInventorySelling() {
       return { success: true };
       
     } catch (error) {
-      console.error('Error selling item:', error);
+      logger.error('Error selling item', error instanceof Error ? error : new Error(String(error)), { sku, id }, 'useInventorySelling')
       toast.error(`Failed to sell item: ${error.message}`);
       return { success: false, error: error.message };
     } finally {

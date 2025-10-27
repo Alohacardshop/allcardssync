@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useEffect } from 'react'
 import { supabase } from '@/integrations/supabase/client'
 import { toast } from 'sonner'
+import { logger } from '@/lib/logger'
 
 interface QueueItem {
   id: string
@@ -121,7 +122,7 @@ export function useShopifySync() {
       queryClient.invalidateQueries({ queryKey: ['shopify-sync-queue'] })
     },
     onError: (error) => {
-      console.error('Sync processor error:', error)
+      logger.error('Sync processor error', error instanceof Error ? error : new Error(String(error)), {}, 'useShopifySync')
       toast.error(`Failed to start sync processor: ${error.message}`)
     }
   })
@@ -155,7 +156,7 @@ export function useShopifySync() {
       }, 1000)
     },
     onError: (error) => {
-      console.error('Add to queue error:', error)
+      logger.error('Add to queue error', error instanceof Error ? error : new Error(String(error)), {}, 'useShopifySync')
       toast.error(`Failed to add items to queue: ${error.message}`)
     }
   })
@@ -187,7 +188,7 @@ export function useShopifySync() {
       }, 1000)
     },
     onError: (error) => {
-      console.error('Retry failed error:', error)
+      logger.error('Retry failed error', error instanceof Error ? error : new Error(String(error)), {}, 'useShopifySync')
       toast.error(`Failed to retry items: ${error.message}`)
     }
   })
@@ -209,7 +210,7 @@ export function useShopifySync() {
       queryClient.invalidateQueries({ queryKey: ['shopify-sync-queue'] })
     },
     onError: (error) => {
-      console.error('Clear completed error:', error)
+      logger.error('Clear completed error', error instanceof Error ? error : new Error(String(error)), {}, 'useShopifySync')
       toast.error(`Failed to clear completed items: ${error.message}`)
     }
   })
@@ -231,7 +232,7 @@ export function useShopifySync() {
       queryClient.invalidateQueries({ queryKey: ['shopify-sync-queue'] })
     },
     onError: (error) => {
-      console.error('Clear all error:', error)
+      logger.error('Clear all error', error instanceof Error ? error : new Error(String(error)), {}, 'useShopifySync')
       toast.error(`Failed to clear queue: ${error.message}`)
     }
   })
@@ -253,7 +254,7 @@ export function useShopifySync() {
       queryClient.invalidateQueries({ queryKey: ['shopify-sync-queue'] })
     },
     onError: (error) => {
-      console.error('Delete item error:', error)
+      logger.error('Delete item error', error instanceof Error ? error : new Error(String(error)), {}, 'useShopifySync')
       toast.error(`Failed to delete item: ${error.message}`)
     }
   })

@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { logger } from '@/lib/logger';
 
 export interface ForceSyncItem {
   id: string;
@@ -52,7 +53,7 @@ export function useShopifyForceSync() {
         summary: data.summary
       };
     } catch (error: any) {
-      console.error('Dry run failed:', error);
+      logger.error('Dry run failed', error instanceof Error ? error : new Error(String(error)), { storeKey: options.storeKey }, 'useShopifyForceSync')
       toast.error(`Dry run failed: ${error.message}`);
       throw error;
     } finally {
@@ -116,7 +117,7 @@ export function useShopifyForceSync() {
             }
           }
         } catch (error) {
-          console.error('Error monitoring progress:', error);
+          logger.error('Error monitoring progress', error instanceof Error ? error : new Error(String(error)), {}, 'useShopifyForceSync')
         }
       }, 1000);
 
@@ -129,7 +130,7 @@ export function useShopifyForceSync() {
 
       return { success: true };
     } catch (error: any) {
-      console.error('Force sync failed:', error);
+      logger.error('Force sync failed', error instanceof Error ? error : new Error(String(error)), { itemCount: options.itemIds.length }, 'useShopifyForceSync')
       toast.error(`Force sync failed: ${error.message}`);
       throw error;
     }
@@ -167,7 +168,7 @@ export function useShopifyForceSync() {
 
       return validationResults;
     } catch (error: any) {
-      console.error('Validation failed:', error);
+      logger.error('Validation failed', error instanceof Error ? error : new Error(String(error)), {}, 'useShopifyForceSync')
       throw error;
     }
   }, []);

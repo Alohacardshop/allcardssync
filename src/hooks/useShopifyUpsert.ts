@@ -7,6 +7,7 @@ import { toast } from '@/hooks/use-toast';
 import { pushProductUpsert, markItemAsPushed, markItemPushFailed, UpsertCard } from '@/lib/shopify/upsert';
 import { checkShopifyPushStatus } from '@/lib/shopify/lookup';
 import { useStore } from '@/contexts/StoreContext';
+import { logger } from '@/lib/logger';
 
 interface UpsertState {
   processing: boolean;
@@ -35,7 +36,7 @@ export function useShopifyUpsert() {
       // Check if already pushed to avoid duplicates
       const pushStatus = await checkShopifyPushStatus(intakeItemId);
       if (pushStatus.isPushed && pushStatus.shopifyProductId) {
-        console.log(`Item ${intakeItemId} already pushed, skipping`);
+        logger.debug('Item already pushed, skipping', { intakeItemId, productId: pushStatus.shopifyProductId }, 'useShopifyUpsert')
         return {
           success: true,
           alreadyPushed: true,
