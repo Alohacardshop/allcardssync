@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { tcgLjyClient, ExternalGame, ExternalSet, ExternalCard, ExternalPrice, SearchFilters } from '@/integrations/supabase/client';
+import { logger } from '@/lib/logger';
 
 // Games hook
 export const useExternalGames = () => {
@@ -13,7 +14,7 @@ export const useExternalGames = () => {
         .order('name');
       
       if (error) {
-        console.error('Error fetching external games:', error);
+        logger.error('Failed to fetch external games', new Error(error.message), {}, 'external-tcg');
         throw error;
       }
       
@@ -41,7 +42,7 @@ export const useExternalSets = (gameId?: string) => {
         .order('name');
       
       if (error) {
-        console.error('Error fetching external sets:', error);
+        logger.error('Failed to fetch external sets', new Error(error.message), { gameId }, 'external-tcg');
         throw error;
       }
       
@@ -123,7 +124,12 @@ export const useExternalCardSearch = (nameQuery: string, numberQuery?: string, f
       const { data, error, count } = await dbQuery;
       
       if (error) {
-        console.error('Error searching external cards:', error);
+        logger.error('Failed to search external cards', new Error(error.message), { 
+          nameQuery, 
+          numberQuery, 
+          gameId, 
+          setId 
+        }, 'external-tcg');
         throw error;
       }
       
@@ -161,7 +167,9 @@ export const useExternalCardPrices = (cardIds: string[]) => {
         .order('created_at', { ascending: false });
       
       if (error) {
-        console.error('Error fetching external card prices:', error);
+        logger.error('Failed to fetch external card prices', new Error(error.message), { 
+          cardIds: cardIds.length 
+        }, 'external-tcg');
         return {};
       }
       
@@ -198,7 +206,9 @@ export const useExternalRealtime = (cardIds: string[], enabled: boolean = true) 
           table: 'cards',
         },
         (payload) => {
-          console.log('External card change:', payload);
+          logger.debug('External card change detected', { 
+            event: payload.eventType 
+          }, 'external-tcg');
           // Invalidate card search queries
           queryClient.invalidateQueries({ queryKey: ['external-card-search'] });
         }
@@ -217,7 +227,9 @@ export const useExternalRealtime = (cardIds: string[], enabled: boolean = true) 
           filter: `card_id=in.(${cardIds.join(',')})`,
         },
         (payload) => {
-          console.log('External price change:', payload);
+          logger.debug('External price change detected', { 
+            event: payload.eventType 
+          }, 'external-tcg');
           // Invalidate price queries
           queryClient.invalidateQueries({ queryKey: ['external-card-prices'] });
         }
@@ -247,7 +259,7 @@ export const useExternalRarities = (gameId?: string) => {
       const { data, error } = await query.not('rarity', 'is', null);
       
       if (error) {
-        console.error('Error fetching rarities:', error);
+        logger.error('Failed to fetch rarities', new Error(error.message), { gameId }, 'external-tcg');
         return [];
       }
       
@@ -269,7 +281,7 @@ export const getExternalCardById = async (cardId: string) => {
     .maybeSingle();
     
   if (error) {
-    console.error('Error fetching card by ID:', error);
+    logger.error('Failed to fetch card by ID', new Error(error.message), { cardId }, 'external-tcg');
     throw error;
   }
   
@@ -294,7 +306,7 @@ export const getExternalLatestPrice = async (cardId: string) => {
     if (error.code === 'PGRST116') {
       return null;
     }
-    console.error('Error fetching latest price:', error);
+    logger.error('Failed to fetch latest price', new Error(error.message), { cardId }, 'external-tcg');
     throw error;
   }
   

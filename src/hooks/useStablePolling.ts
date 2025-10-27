@@ -1,4 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
+import { logger } from '@/lib/logger';
 
 interface PollingOptions {
   interval?: number;
@@ -35,14 +36,16 @@ export function useStablePolling<T>(
   const executeQuery = useCallback(async () => {
     // Prevent concurrent executions
     if (isExecutingRef.current) {
-      console.log('[useStablePolling] Skipping concurrent execution');
+      logger.debug('Skipping concurrent execution', {}, 'stable-polling');
       return;
     }
 
     // Prevent too frequent executions (minimum 5 seconds between calls)
     const now = Date.now();
     if (now - lastExecutionRef.current < 5000) {
-      console.log('[useStablePolling] Skipping too frequent execution');
+      logger.debug('Skipping too frequent execution', { 
+        timeSinceLastExecution: now - lastExecutionRef.current 
+      }, 'stable-polling');
       return;
     }
 
@@ -68,7 +71,11 @@ export function useStablePolling<T>(
         // Circuit breaker - increase interval significantly
         const newInterval = Math.min(currentInterval * backoffMultiplier, maxInterval);
         setCurrentInterval(newInterval);
-        console.log(`[useStablePolling] Circuit breaker: increasing interval to ${newInterval}ms`);
+        logger.warn('Circuit breaker activated', { 
+          retryCount: newRetryCount, 
+          newInterval, 
+          maxRetries 
+        }, 'stable-polling');
       }
     } finally {
       isExecutingRef.current = false;

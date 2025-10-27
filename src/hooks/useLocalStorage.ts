@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { logger } from '@/lib/logger';
 
 export function useLocalStorage<T>(key: string, initialValue: T) {
   const [storedValue, setStoredValue] = useState<T>(() => {
@@ -6,7 +7,7 @@ export function useLocalStorage<T>(key: string, initialValue: T) {
       const item = window.localStorage.getItem(key);
       return item ? JSON.parse(item) : initialValue;
     } catch (error) {
-      console.error(`Error reading localStorage key "${key}":`, error);
+      logger.error('Error reading localStorage', error instanceof Error ? error : new Error(String(error)), { key }, 'local-storage');
       return initialValue;
     }
   });
@@ -17,7 +18,7 @@ export function useLocalStorage<T>(key: string, initialValue: T) {
       setStoredValue(valueToStore);
       window.localStorage.setItem(key, JSON.stringify(valueToStore));
     } catch (error) {
-      console.error(`Error setting localStorage key "${key}":`, error);
+      logger.error('Error setting localStorage', error instanceof Error ? error : new Error(String(error)), { key }, 'local-storage');
     }
   };
 
@@ -30,7 +31,7 @@ export function useLocalStorageString(key: string, initialValue: string) {
       const item = window.localStorage.getItem(key);
       return item !== null ? item : initialValue;
     } catch (error) {
-      console.error(`Error reading localStorage key "${key}":`, error);
+      logger.error('Error reading localStorage string', error instanceof Error ? error : new Error(String(error)), { key }, 'local-storage');
       return initialValue;
     }
   });
@@ -41,7 +42,7 @@ export function useLocalStorageString(key: string, initialValue: string) {
       setStoredValue(valueToStore);
       window.localStorage.setItem(key, valueToStore);
     } catch (error) {
-      console.error(`Error setting localStorage key "${key}":`, error);
+      logger.error('Error setting localStorage string', error instanceof Error ? error : new Error(String(error)), { key }, 'local-storage');
     }
   };
 

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { logger } from '@/lib/logger';
 
 export type CutMode = 'per_label' | 'batch';
 
@@ -29,7 +30,9 @@ export function useCutterSettings() {
         setSettings({ ...DEFAULT_SETTINGS, ...parsed });
       }
     } catch (error) {
-      console.warn('Failed to load cutter settings:', error);
+      logger.warn('Failed to load cutter settings', { 
+        error: error instanceof Error ? error.message : String(error) 
+      }, 'cutter-settings');
     }
   }, []);
 
@@ -40,7 +43,7 @@ export function useCutterSettings() {
       setSettings(updated);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
     } catch (error) {
-      console.error('Failed to save cutter settings:', error);
+      logger.error('Failed to save cutter settings', error instanceof Error ? error : new Error(String(error)), {}, 'cutter-settings');
     }
   }, [settings]);
 

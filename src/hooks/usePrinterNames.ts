@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { logger } from '@/lib/logger';
 
 interface PrinterNameMapping {
   [printerId: number]: string;
@@ -15,7 +16,7 @@ export function usePrinterNames() {
         setCustomNames(JSON.parse(saved));
       }
     } catch (error) {
-      console.error('Error loading custom printer names:', error);
+      logger.error('Failed to load custom printer names', error instanceof Error ? error : new Error(String(error)), {}, 'printer-names');
     }
   }, []);
 
@@ -24,7 +25,7 @@ export function usePrinterNames() {
     try {
       localStorage.setItem('printer-custom-names', JSON.stringify(customNames));
     } catch (error) {
-      console.error('Error saving custom printer names:', error);
+      logger.error('Failed to save custom printer names', error instanceof Error ? error : new Error(String(error)), {}, 'printer-names');
     }
   }, [customNames]);
 

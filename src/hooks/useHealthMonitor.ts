@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import React from 'react';
+import { logger } from '@/lib/logger';
 
 export interface HealthStatus {
   database: 'healthy' | 'degraded' | 'down';
@@ -82,7 +83,7 @@ export function useHealthMonitor(liveMode: boolean = false) {
       return status;
 
     } catch (error) {
-      console.error('Health check failed:', error);
+      logger.error('Health check failed', error instanceof Error ? error : new Error(String(error)), {}, 'health-monitor');
       
       const failedStatus: HealthStatus = {
         database: 'down',

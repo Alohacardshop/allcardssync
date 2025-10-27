@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { supabase } from "@/integrations/supabase/client"
+import { logger } from '@/lib/logger';
 
 export interface ValidationResult {
   itemId: string
@@ -111,7 +112,7 @@ export function useShopifyValidation() {
           })
 
         } catch (error) {
-          console.error(`Error validating item ${itemId}:`, error)
+          logger.error('Failed to validate item', error instanceof Error ? error : new Error(String(error)), { itemId }, 'shopify-validation');
           validationResults.push({
             itemId,
             status: 'error',
@@ -124,7 +125,7 @@ export function useShopifyValidation() {
       return validationResults
 
     } catch (error) {
-      console.error('Error during validation:', error)
+      logger.error('Error during validation', error instanceof Error ? error : new Error(String(error)), {}, 'shopify-validation');
       throw error
     } finally {
       setValidating(false)
@@ -146,7 +147,7 @@ export function useShopifyValidation() {
 
       return true
     } catch (error) {
-      console.error('Error resyncing item:', error)
+      logger.error('Failed to resync item', error instanceof Error ? error : new Error(String(error)), { itemId }, 'shopify-validation');
       throw error
     }
   }

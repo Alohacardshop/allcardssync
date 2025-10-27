@@ -7,6 +7,7 @@ import { useState, useCallback } from 'react';
 import { toast } from 'sonner';
 import { DEFAULT_ZD410_PRINTER, type PrinterConnection, type PrintResult } from '@/lib/directLocalPrint';
 import { printNodeService } from '@/lib/printNodeService';
+import { logger } from '@/lib/logger';
 
 export interface PrintState {
   isLoading: boolean;
@@ -34,7 +35,9 @@ export function useSimplePrinting() {
         };
       }
     } catch (error) {
-      console.warn('Failed to load saved printer config:', error);
+      logger.warn('Failed to load saved printer config', { 
+        error: error instanceof Error ? error.message : String(error) 
+      }, 'simple-printing');
     }
     return DEFAULT_ZD410_PRINTER;
   }, []);
@@ -44,17 +47,22 @@ export function useSimplePrinting() {
     try {
       localStorage.setItem('zebra-printer-config', JSON.stringify(printer));
     } catch (error) {
-      console.warn('Failed to save printer config:', error);
+      logger.warn('Failed to save printer config', { 
+        error: error instanceof Error ? error.message : String(error) 
+      }, 'simple-printing');
     }
   }, []);
 
   // Print ZPL with PrintNode only
   const print = useCallback(async (zpl: string, copies: number = 1): Promise<PrintResult> => {
-    console.log('🖨️ Starting PrintNode print process...', { copies, zplLength: zpl.length });
+    logger.debug('Starting PrintNode print', { copies, zplLength: zpl.length }, 'simple-printing');
     setPrintState(prev => ({ ...prev, isLoading: true }));
     
     const printer = getSavedPrinter();
-    console.log('🖨️ Using printer:', printer);
+    logger.debug('Using printer configuration', { 
+      name: printer.name, 
+      usePrintNode: printer.usePrintNode 
+    }, 'simple-printing');
     
     try {
       // Check if PrintNode is configured
@@ -100,9 +108,9 @@ export function useSimplePrinting() {
       
       toast.info(`Sending ${copies} label(s) to PrintNode...`);
       
-      console.log('🖨️ Attempting PrintNode print...');
+      logger.debug('Attempting PrintNode print', { printNodeId: printer.printNodeId, copies }, 'simple-printing');
       const printNodeResult = await printNodeService.printZPL(zpl, printer.printNodeId, copies);
-      console.log('🖨️ PrintNode result:', printNodeResult);
+      logger.debug('PrintNode result received', { success: printNodeResult.success }, 'simple-printing');
       
       const result: PrintResult = {
         success: printNodeResult.success,

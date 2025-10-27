@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { BatchConfig } from "@/hooks/useBatchSendToShopify";
+import { logger } from '@/lib/logger';
 
 export interface AutoProcessSettings {
   enabled: boolean;
@@ -48,7 +49,7 @@ export function useBatchAutoProcessSettings() {
         maxItems: parseInt(settingsMap.BATCH_AUTO_MAX_ITEMS) || 100
       });
     } catch (error) {
-      console.error('Error loading auto-process settings:', error);
+      logger.error('Failed to load auto-process settings', error instanceof Error ? error : new Error(String(error)), {}, 'batch-auto-process');
     } finally {
       setLoading(false);
     }

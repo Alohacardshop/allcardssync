@@ -4,6 +4,7 @@ import { print } from '@/lib/printService';
 import { LABEL_TEMPLATES } from '@/lib/templates';
 import { toast } from 'sonner';
 import { PrintJobData, PrintJobTarget } from "@/types/api"
+import { logger } from '@/lib/logger';
 
 interface PrintJob {
   id: string;
@@ -65,7 +66,7 @@ export function usePrintQueue() {
       
       setQueueStatus(prev => ({ ...prev, queueLength: count || 0 }));
     } catch (error) {
-      console.error('Error fetching queue length:', error);
+      logger.error('Failed to fetch queue length', error instanceof Error ? error : new Error(String(error)), {}, 'print-queue');
     }
   }, []);
 
@@ -165,7 +166,7 @@ export function usePrintQueue() {
         .eq('status', 'queued'); // Only claim if still queued
 
       if (claimError) {
-        console.log('Job already claimed by another process');
+        logger.debug('Job already claimed by another process', { jobId: job.id }, 'print-queue');
         return false;
       }
 
@@ -207,7 +208,10 @@ export function usePrintQueue() {
 
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-      console.error('Print job failed:', errorMsg);
+      logger.error('Print job failed', error instanceof Error ? error : new Error(errorMsg), { 
+        jobId: job.id,
+        templateId: job.template_id 
+      }, 'print-queue');
 
       // Mark as error
       await supabase
@@ -265,7 +269,7 @@ export function usePrintQueue() {
       await processJob(typedJob);
 
     } catch (error) {
-      console.error('Error processing print queue:', error);
+      logger.error('Error processing print queue', error instanceof Error ? error : new Error(String(error)), {}, 'print-queue');
     } finally {
       setQueueStatus(prev => ({ 
         ...prev, 
@@ -291,7 +295,7 @@ export function usePrintQueue() {
       toast.success('Print queue cleared');
       await updateQueueLength();
     } catch (error) {
-      console.error('Error clearing queue:', error);
+      logger.error('Failed to clear queue', error instanceof Error ? error : new Error(String(error)), {}, 'print-queue');
       toast.error('Failed to clear queue');
     }
   }, [updateQueueLength]);

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { logger } from '@/lib/logger';
 
 interface CircuitBreakerState {
   isOpen: boolean;
@@ -56,18 +57,20 @@ export function usePollingWithCircuitBreaker<T>(
     // Check if circuit is open and if we should attempt to close it
     if (circuitBreaker.isOpen) {
       if (now < circuitBreaker.nextAttemptTime) {
-        console.log('[Circuit Breaker] Circuit is open, skipping query');
+        logger.debug('Circuit is open, skipping query', { 
+          nextAttemptTime: circuitBreaker.nextAttemptTime 
+        }, 'circuit-breaker');
         return;
       }
       // Half-open state - try one request
-      console.log('[Circuit Breaker] Attempting to close circuit (half-open state)');
+      logger.info('Attempting to close circuit (half-open state)', {}, 'circuit-breaker');
     }
 
     setIsLoading(true);
     setError(null);
 
     try {
-      console.log('[Polling] Executing query...');
+      logger.debug('Executing polling query', { interval: intervalRef.current }, 'polling');
       const result = await queryFn();
       
       // Success - reset circuit breaker and interval
@@ -83,13 +86,15 @@ export function usePollingWithCircuitBreaker<T>(
       onSuccess?.();
       
       if (circuitBreaker.isOpen) {
-        console.log('[Circuit Breaker] Circuit closed after successful request');
+        logger.info('Circuit closed after successful request', {}, 'circuit-breaker');
         onCircuitClose?.();
       }
       
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Unknown error');
-      console.error('[Polling] Query failed:', error.message);
+      logger.error('Polling query failed', error, { 
+        failureCount: circuitBreaker.failureCount + 1 
+      }, 'polling');
       
       setError(error);
       onError?.(error);
@@ -98,7 +103,10 @@ export function usePollingWithCircuitBreaker<T>(
       const shouldOpenCircuit = newFailureCount >= maxFailures;
       
       if (shouldOpenCircuit && !circuitBreaker.isOpen) {
-        console.log(`[Circuit Breaker] Opening circuit after ${newFailureCount} failures`);
+        logger.warn('Opening circuit breaker', { 
+          failureCount: newFailureCount, 
+          maxFailures 
+        }, 'circuit-breaker');
         setCircuitBreaker({
           isOpen: true,
           failureCount: newFailureCount,
@@ -118,7 +126,10 @@ export function usePollingWithCircuitBreaker<T>(
       if (exponentialBackoff && !shouldOpenCircuit) {
         const backoffMultiplier = Math.pow(2, Math.min(newFailureCount - 1, 5)); // Cap at 2^5 = 32x
         intervalRef.current = Math.min(baseInterval * backoffMultiplier, maxInterval);
-        console.log(`[Polling] Applying exponential backoff: ${intervalRef.current}ms`);
+        logger.debug('Applying exponential backoff', { 
+          interval: intervalRef.current, 
+          failureCount: newFailureCount 
+        }, 'polling');
       }
     } finally {
       setIsLoading(false);
@@ -136,7 +147,7 @@ export function usePollingWithCircuitBreaker<T>(
       Math.max(circuitBreaker.nextAttemptTime - Date.now(), 0) : 
       intervalRef.current;
     
-    console.log(`[Polling] Scheduling next poll in ${delay}ms`);
+    logger.debug('Scheduling next poll', { delay, isCircuitOpen: circuitBreaker.isOpen }, 'polling');
     
     timeoutRef.current = setTimeout(() => {
       executeQuery().then(() => {
@@ -148,7 +159,10 @@ export function usePollingWithCircuitBreaker<T>(
   // Start polling
   useEffect(() => {
     if (enabled) {
-      console.log('[Polling] Starting polling with circuit breaker');
+      logger.info('Starting polling with circuit breaker', { 
+        baseInterval, 
+        maxFailures 
+      }, 'polling');
       executeQuery().then(() => {
         scheduleNextPoll();
       });
@@ -172,7 +186,7 @@ export function usePollingWithCircuitBreaker<T>(
 
   const retry = useCallback(() => {
     if (circuitBreaker.isOpen) {
-      console.log('[Circuit Breaker] Manual retry - resetting circuit');
+      logger.info('Manual retry - resetting circuit breaker', {}, 'circuit-breaker');
       setCircuitBreaker({
         isOpen: false,
         failureCount: 0,

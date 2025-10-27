@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { tcgSupabase, Game, Set, Card, SearchResult, PopularCard, PricingData } from '@/integrations/supabase/client';
+import { logger } from '@/lib/logger';
 
 // Get all games
 export function useGames() {
@@ -129,7 +130,12 @@ export async function fetchCardPricing(cardId: string, condition?: string, print
       ? await updateVariantPricing(cardId, condition, printing)
       : await getCachedPricingViaDB(cardId, condition, printing);
   } catch (error) {
-    console.error('fetchCardPricing error:', error);
+    logger.error('Failed to fetch card pricing', error instanceof Error ? error : new Error(String(error)), { 
+      cardId, 
+      condition, 
+      printing, 
+      refresh 
+    }, 'tcg-data');
     throw error;
   }
 }
