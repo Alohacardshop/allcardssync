@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, AlertTriangle } from "lucide-react";
+import type { InventoryItem } from "@/types/inventory";
 
 interface InventoryDeleteDialogProps {
   isOpen: boolean;

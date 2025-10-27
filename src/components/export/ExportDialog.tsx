@@ -229,16 +229,16 @@ export function ExportDialog({
           </style>
         </head>
         <body>
-          <h1>${title}</h1>
+          <h1>${escapeHtml(title)}</h1>
           <p>Generated on ${new Date().toLocaleDateString()}</p>
           <table>
             <thead>
-              <tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr>
+              <tr>${headers.map(h => `<th>${escapeHtml(h)}</th>`).join('')}</tr>
             </thead>
             <tbody>
               ${data.map(row => 
                 `<tr>${Array.from(selectedColumns).map(key => 
-                  `<td>${row[key] || ''}</td>`
+                  `<td>${escapeHtml(String(row[key] || ''))}</td>`
                 ).join('')}</tr>`
               ).join('')}
             </tbody>
@@ -253,6 +253,13 @@ export function ExportDialog({
       printWindow.document.close();
       printWindow.print();
     }
+  };
+
+  // Helper function to escape HTML to prevent XSS
+  const escapeHtml = (text: string): string => {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
   };
 
   return (

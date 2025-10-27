@@ -6,7 +6,8 @@ import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2, BookOpen, AlertCircle } from "lucide-react";
-import { useStore } from "@/contexts/StoreContext";
+import { useIntakeValidation } from "@/hooks/useIntakeValidation";
+import { useLogger } from "@/hooks/useLogger";
 import { validateCompleteStoreContext, logStoreContext } from "@/utils/storeValidation";
 import { CGCCertificateDisplay } from "@/components/CGCCertificateDisplay";
 import { useDebounce } from "@/hooks/useDebounce";
@@ -18,7 +19,8 @@ interface GradedComicIntakeProps {
 }
 
 export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) => {
-  const { assignedStore, selectedLocation } = useStore();
+  const { validateAccess, assignedStore, selectedLocation } = useIntakeValidation();
+  const logger = useLogger('GradedComicIntake');
 
   const [certInput, setCertInput] = useState("");
   const [barcodeInput, setBarcodeInput] = useState("");

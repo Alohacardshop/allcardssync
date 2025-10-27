@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2, Award, ChevronDown, ChevronUp, AlertCircle, CheckCircle, XCircle, Package, Plus } from "lucide-react";
-import { useStore } from "@/contexts/StoreContext";
+import { useIntakeValidation } from "@/hooks/useIntakeValidation";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { normalizePSAData } from "@/lib/psaNormalization";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -50,7 +50,7 @@ const parsePSAGrade = (gradeStr: string): { numeric: string; original: string; h
 
 export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => {
   const logger = useLogger('GradedCardIntake');
-  const { assignedStore, selectedLocation } = useStore();
+  const { validateAccess, assignedStore, selectedLocation } = useIntakeValidation();
 
   // Grading service selection
   const [gradingService, setGradingService] = useState<'psa' | 'cgc'>('psa');

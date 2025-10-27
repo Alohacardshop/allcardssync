@@ -2019,6 +2019,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      cleanup_old_webhook_events: {
+        Args: { retention_days?: number }
+        Returns: number
+      }
       cleanup_shopify_sync_queue: { Args: never; Returns: undefined }
       cleanup_user_session: { Args: never; Returns: undefined }
       close_empty_lot_and_create_new: {

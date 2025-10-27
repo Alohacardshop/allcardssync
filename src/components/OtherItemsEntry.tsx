@@ -7,8 +7,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Loader2, FileText } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { useStore } from '@/contexts/StoreContext';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useIntakeValidation } from '@/hooks/useIntakeValidation';
+import { useLogger } from '@/hooks/useLogger';
 import { SubCategoryCombobox } from '@/components/ui/sub-category-combobox';
 import { detectMainCategory } from '@/utils/categoryMapping';
 
@@ -17,14 +18,14 @@ interface OtherItemsEntryProps {
 }
 
 export function OtherItemsEntry({ onBatchAdd }: OtherItemsEntryProps) {
-  const { assignedStore, selectedLocation } = useStore();
+  const { validateAccess, assignedStore, selectedLocation } = useIntakeValidation();
+  const logger = useLogger('OtherItemsEntry');
   
   // Form state
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState(1);
   const [totalPrice, setTotalPrice] = useState(0);
   const [addingOther, setAddingOther] = useState(false);
-  const [accessCheckLoading, setAccessCheckLoading] = useState(false);
   const [mainCategory, setMainCategory] = useState('tcg');
   const [subCategory, setSubCategory] = useState('');
 
@@ -36,70 +37,17 @@ export function OtherItemsEntry({ onBatchAdd }: OtherItemsEntryProps) {
     }
   }, [description]);
 
-  // Access check function (reused from BulkCardIntake)
-  const checkAccessAndShowToast = async (): Promise<boolean> => {
-    setAccessCheckLoading(true);
-    
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user) {
-        toast.error("No user session found");
-        return false;
-      }
-
-      if (!assignedStore || !selectedLocation) {
-        toast.error("Store and location must be selected");
-        return false;
-      }
-
-      const userId = session.user.id;
-      const userIdLast6 = userId.slice(-6);
-      const storeKeyTrimmed = assignedStore.trim();
-      const locationGidTrimmed = selectedLocation.trim();
-
-      // Use the diagnostic RPC for access check
-      const { data: debugResult, error: debugError } = await supabase.rpc('debug_eval_intake_access', {
-        _user_id: userId,
-        _store_key: storeKeyTrimmed,
-        _location_gid: locationGidTrimmed
-      });
-
-      if (debugError) {
-        console.error('Access check error:', debugError);
-        toast.error(`Access check failed: ${debugError.message}`);
-        return false;
-      }
-
-      const result = debugResult as {
-        user_id: string;
-        store_key: string;
-        location_gid: string;
-        has_staff: boolean;
-        can_access_location: boolean;
-      };
-
-      // Show diagnostic toast
-      toast.info(`Access Check: User ${userIdLast6} | Store: ${result.store_key} | Location: ${result.location_gid} | hasStaff: ${result.has_staff} | canAccessLocation: ${result.can_access_location}`, {
-        duration: 5000
-      });
-
-      if (!result.can_access_location) {
-        toast.error(`Access denied — you're not assigned to this store/location (${result.store_key}, ${result.location_gid}).`);
-        return false;
-      }
-
-      return true;
-    } catch (error: any) {
-      console.error('Preflight check error:', error);
-      toast.error(`Preflight check failed: ${error.message}`);
-      return false;
-    } finally {
-      setAccessCheckLoading(false);
-    }
-  };
-
   // Add other item to batch
   const handleAddOtherToBatch = async () => {
+    // Validate access first
+    try {
+      await validateAccess('add other item');
+    } catch (error) {
+      return;
+    }
+
+    logger.logInfo('Adding other item', { description, amount, totalPrice, mainCategory, subCategory });
+
     if (!description.trim()) {
       toast.error('Please enter a description');
       return;
@@ -112,12 +60,6 @@ export function OtherItemsEntry({ onBatchAdd }: OtherItemsEntryProps) {
     
     if (totalPrice <= 0) {
       toast.error('Please enter a valid total price');
-      return;
-    }
-
-    // Check access
-    const hasAccess = await checkAccessAndShowToast();
-    if (!hasAccess) {
       return;
     }
 
@@ -277,13 +219,13 @@ export function OtherItemsEntry({ onBatchAdd }: OtherItemsEntryProps) {
         {/* Add to Batch Button */}
         <Button
           onClick={handleAddOtherToBatch}
-          disabled={addingOther || !description.trim() || !assignedStore || !selectedLocation || amount <= 0 || totalPrice <= 0 || accessCheckLoading || !subCategory}
+          disabled={addingOther || !description.trim() || !assignedStore || !selectedLocation || amount <= 0 || totalPrice <= 0 || !subCategory}
           className="w-full"
         >
-          {addingOther || accessCheckLoading ? (
+          {addingOther ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              {accessCheckLoading ? 'Checking Access...' : 'Adding to Batch...'}
+              Adding to Batch...
             </>
           ) : (
             <>
