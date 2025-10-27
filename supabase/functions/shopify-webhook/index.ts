@@ -46,7 +46,24 @@ serve(async (req) => {
     }
 
     // HMAC verification for webhook security
-    const hmacSecret = Deno.env.get('SHOPIFY_WEBHOOK_SECRET');
+    // Fetch webhook secret from database based on store
+    const storeKey = await getStoreKeyFromDomain(supabase, shopifyDomain);
+    let hmacSecret: string | null = null;
+    
+    if (storeKey) {
+      const secretKey = `SHOPIFY_${storeKey.toUpperCase()}_WEBHOOK_SECRET`;
+      const { data: secretData } = await supabase
+        .from('system_settings')
+        .select('key_value')
+        .eq('key_name', secretKey)
+        .single();
+      
+      hmacSecret = secretData?.key_value || null;
+      console.log(`[SECURITY] Looking up webhook secret for store: ${storeKey}, found: ${!!hmacSecret}`);
+    } else {
+      console.warn('[SECURITY] Could not determine store key from domain:', shopifyDomain);
+    }
+    
     let body = '';
     let payload = {};
     
@@ -61,7 +78,8 @@ serve(async (req) => {
         console.warn('[SECURITY] Invalid HMAC signature detected', {
           webhookId,
           topic,
-          shopifyDomain
+          shopifyDomain,
+          storeKey
         });
         
         // Log the failed attempt
@@ -73,7 +91,8 @@ serve(async (req) => {
             context: {
               webhook_id: webhookId,
               topic,
-              domain: shopifyDomain
+              domain: shopifyDomain,
+              store_key: storeKey
             }
           });
         
@@ -83,7 +102,7 @@ serve(async (req) => {
         });
       }
       
-      console.log('[SECURITY] HMAC signature verified successfully');
+      console.log('[SECURITY] HMAC signature verified successfully for store:', storeKey);
     } else if (hmacSecret) {
       // Secret configured but no HMAC header provided
       console.warn('[SECURITY] HMAC secret configured but no signature provided');
@@ -91,6 +110,9 @@ serve(async (req) => {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
+    } else if (hmacHeader) {
+      // HMAC header provided but no secret configured for this store
+      console.warn('[SECURITY] Webhook signature provided but no secret configured for store:', storeKey);
     }
     
     payload = JSON.parse(body);
