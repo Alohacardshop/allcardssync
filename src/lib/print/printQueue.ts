@@ -1,4 +1,5 @@
 import { sha1Hex } from "./hash";
+import { logger } from "@/lib/logger";
 
 export type QueueItem = { 
   zpl: string; 
@@ -70,12 +71,12 @@ export class PrintQueue {
         .slice(0, 100)
         .map(([k]) => k);
       oldestKeys.forEach(k => this.recent.delete(k));
-      console.debug('[print_queue_cleanup]', { removed: oldestKeys.length, remaining: this.recent.size });
+      logger.debug('[print_queue_cleanup]', { removed: oldestKeys.length, remaining: this.recent.size }, 'print-queue');
     }
     
     const exp = this.recent.get(key);
     if (exp && exp > now) { 
-      console.warn("[print_suppressed_duplicate]", { key }); 
+      logger.warn("[print_suppressed_duplicate]", { key }, 'print-queue'); 
       return; 
     }
     
@@ -136,9 +137,9 @@ export class PrintQueue {
         const shouldSkipCutTail = batch.some(item => item._skipCutTail);
         if (cutMode === "end-of-batch" && this.opts.endCutTail && batch.length > 1 && !shouldSkipCutTail) {
           payload = `${payload}\n${this.opts.endCutTail}`;
-          console.debug("[cut_tail_added]", { batchSize: batch.length });
+          logger.debug("[cut_tail_added]", { batchSize: batch.length }, 'print-queue');
         } else if (shouldSkipCutTail) {
-          console.debug("[cut_tail_skipped]", { reason: "single_label_mode" });
+          logger.debug("[cut_tail_skipped]", { reason: "single_label_mode" }, 'print-queue');
         }
 
         // Split big payloads at ^XA boundaries
@@ -150,7 +151,7 @@ export class PrintQueue {
             const next = chunk ? chunk + "\n" + b : b;
             if (byteLen(next) > MAX_PAYLOAD_BYTES) {
               if (chunk) { 
-                console.info("[print_batch_send]", { bytes: byteLen(chunk) }); 
+                logger.info("[print_batch_send]", { bytes: byteLen(chunk) }, 'print-queue'); 
                 await this.send(chunk); 
               }
               chunk = b;
@@ -160,11 +161,11 @@ export class PrintQueue {
           }
           
           if (chunk) { 
-            console.info("[print_batch_send]", { bytes: byteLen(chunk) }); 
+            logger.info("[print_batch_send]", { bytes: byteLen(chunk) }, 'print-queue'); 
             await this.send(chunk); 
           }
         } else {
-          console.info("[print_batch_send]", { bytes: byteLen(payload) });
+          logger.info("[print_batch_send]", { bytes: byteLen(payload) }, 'print-queue');
           await this.send(payload);
         }
       }

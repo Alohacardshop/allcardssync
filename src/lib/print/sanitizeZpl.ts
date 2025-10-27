@@ -1,4 +1,6 @@
 // Guarantees a valid single-label block with ^XA…^XZ and ^PQ1
+import { logger } from "@/lib/logger";
+
 function insertAfterXA(z: string, cmd: string) {
   return z.includes(cmd) ? z : z.replace(/\^XA(\s*)/, (m, sp) => `^XA${sp}${cmd}\n`);
 }
@@ -37,11 +39,11 @@ export function sanitizeLabel(zpl: string) {
   
   // Preflight log (debug)
   const lastChars = result.slice(-20);
-  console.debug("[zpl_preflight]", { 
+  logger.debug("[zpl_preflight]", { 
     length: result.length, 
     lastChars: lastChars.replace(/\n/g, "\\n"),
     endsWithXZ: /\^XZ$/.test(result.trim())
-  });
+  }, 'print-sanitize');
   
   return result;
 }

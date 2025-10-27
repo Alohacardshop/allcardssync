@@ -6,6 +6,7 @@
 import { printNodeService } from '@/lib/printNodeService';
 import { injectQuantityIntoZPL } from '@/lib/labels/zpl';
 import { toast } from 'sonner';
+import { logger } from '@/lib/logger';
 
 export interface PrintResult {
   success: boolean;
@@ -28,7 +29,7 @@ function getStockModeConfig(): StockModeConfig {
       return JSON.parse(saved);
     }
   } catch (error) {
-    console.warn('Failed to load stock config:', error);
+    logger.warn('Failed to load stock config', { error: String(error) }, 'print-service');
   }
   
   // Default configuration
@@ -44,7 +45,7 @@ export function saveStockModeConfig(config: StockModeConfig): void {
   try {
     localStorage.setItem('zebra-stock-config', JSON.stringify(config));
   } catch (error) {
-    console.warn('Failed to save stock config:', error);
+    logger.warn('Failed to save stock config', { error: String(error) }, 'print-service');
   }
 }
 
@@ -58,21 +59,19 @@ export async function print(zpl: string, copies: number = 1): Promise<PrintResul
     const zplWithQuantity = injectQuantityIntoZPL(zpl, copies);
     
     // Log the ZPL transformation
-    console.log('🖨️ Print Service: ZPL Quantity Injection');
-    console.log(`📋 Original ZPL Length: ${zpl.length} characters`);
-    console.log(`📋 Modified ZPL Length: ${zplWithQuantity.length} characters`);
-    console.log(`🔢 Requested Copies: ${copies}`);
-    console.log('🖨️ ZPL Analysis:', {
+    logger.info('Print Service: ZPL Quantity Injection', {
+      originalLength: zpl.length,
+      modifiedLength: zplWithQuantity.length,
+      requestedCopies: copies,
       originalPQ: zpl.match(/\^PQ[^\^]*/g),
       modifiedPQ: zplWithQuantity.match(/\^PQ[^\^]*/g),
       injected: zpl !== zplWithQuantity
-    });
+    }, 'print-service');
     
     if (zpl !== zplWithQuantity) {
-      console.log('🔄 ZPL modified to include quantity:');
-      console.log('='.repeat(50));
-      console.log(zplWithQuantity);
-      console.log('='.repeat(50));
+      logger.debug('ZPL modified to include quantity', { 
+        modifiedZpl: zplWithQuantity.slice(0, 500) 
+      }, 'print-service');
     }
     
     // Get saved PrintNode configuration
@@ -116,7 +115,7 @@ export async function testPrintConnection(): Promise<boolean> {
   try {
     return await printNodeService.testConnection();
   } catch (error) {
-    console.error('Print connection test failed:', error);
+    logger.error('Print connection test failed', error instanceof Error ? error : new Error(String(error)), {}, 'print-service');
     return false;
   }
 }
