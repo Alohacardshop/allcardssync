@@ -58,6 +58,7 @@ import { TCGHealthCheck } from '@/components/admin/TCGHealthCheck';
 import { DuplicateCleanup } from '@/components/admin/DuplicateCleanup';
 import { VendorManagement } from '@/components/admin/VendorManagement';
 import { CategoryManagement } from '@/components/admin/CategoryManagement';
+import { SyncMonitor } from '@/components/catalog/SyncMonitor';
 
 const Admin = () => {
   const [activeSection, setActiveSection] = useState('overview');
@@ -385,6 +386,17 @@ const Admin = () => {
                 Manage TCG database connections, card catalogs, and intake settings.
               </p>
             </div>
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Database className="w-5 h-5" />
+                  Catalog Sync Monitor
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <SyncMonitor game="pokemon" />
+              </CardContent>
+            </Card>
             <TCGDatabaseSettings />
             <RawIntakeSettings />
             <BatchProcessingSettings />
