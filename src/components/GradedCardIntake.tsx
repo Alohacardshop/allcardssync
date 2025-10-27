@@ -500,7 +500,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
                 onClick={(e) => { 
                   e.preventDefault();
                   e.stopPropagation();
-                  console.log('Fetch Data button clicked');
+                  logger.logDebug('Fetch Data button clicked', { gradingService });
                   handleFetchData(); 
                 }}
                 disabled={fetchState === 'loading'}
@@ -745,7 +745,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                console.log('Add to Batch button clicked');
+                logger.logDebug('Add to Batch button clicked', { certNumber: formData.certNumber, grade: formData.grade });
                 handleSubmit();
               }}
               disabled={submitting || !formData.certNumber || !formData.grade || !formData.price || !formData.cost}

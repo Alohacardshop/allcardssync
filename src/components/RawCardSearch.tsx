@@ -12,6 +12,7 @@ import { useExternalGames, useExternalCardSearch, useExternalCardPrices, useExte
 import { ExternalCard } from '@/integrations/supabase/client';
 import { useRawIntakeSettings } from '@/hooks/useRawIntakeSettings';
 import { toast } from 'sonner';
+import { logger } from '@/lib/logger';
 
 interface RawCardSearchProps {
   onCardSelect: (card: ExternalCard & { price_display?: string }) => void;
@@ -83,11 +84,11 @@ export function RawCardSearch({ onCardSelect, onGameChange, className = '' }: Ra
   // Debug logging when enabled
   useEffect(() => {
     if (debugMode && suggestionsData) {
-      console.log('🔍 Raw Card Search Response:', {
+      logger.debug('Raw Card Search Response', {
         query: { cardName: debouncedCardName, cardNumber },
         filters: { gameId: selectedGameId, rarity: selectedRarity },
-        results: suggestionsData
-      });
+        resultsCount: suggestionsData?.cards?.length || 0
+      }, 'raw-card-search');
     }
   }, [debugMode, suggestionsData, debouncedCardName, cardNumber, selectedGameId, selectedRarity]);
   
@@ -140,9 +141,9 @@ export function RawCardSearch({ onCardSelect, onGameChange, className = '' }: Ra
       setDebugData({ card: rawCard, price: rawPrice });
       setDebugDialogOpen(true);
       
-      console.log('🔍 Raw card data for:', card.name, { rawCard, rawPrice });
+      logger.debug('Raw card data fetched', { cardName: card.name, hasCard: !!rawCard, hasPrice: !!rawPrice }, 'raw-card-search');
     } catch (error) {
-      console.error('Error fetching raw data:', error);
+      logger.error('Error fetching raw data', error instanceof Error ? error : new Error(String(error)), { cardName: card.name }, 'raw-card-search');
       toast.error('Failed to fetch raw data');
     } finally {
       setDebugLoading(false);

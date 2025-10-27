@@ -85,7 +85,7 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
     try {
       updateFormField('certNumber', certNumber);
 
-      console.log('[GradedComicIntake] Looking up CGC cert:', certNumber);
+      logger.logInfo('Looking up CGC cert', { certNumber });
 
       const { data, error: invokeError } = await supabase.functions.invoke('cgc-lookup', {
         body: { 
@@ -93,7 +93,7 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
         }
       });
 
-      console.log('[GradedComicIntake] CGC lookup response:', { data, error: invokeError });
+      logger.logDebug('CGC lookup response', { hasData: !!data, hasError: !!invokeError });
 
       if (invokeError) {
         throw new Error(invokeError.message || 'Failed to invoke CGC lookup function');
@@ -118,7 +118,7 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
       }
 
       const cgcData = data.data;
-      console.log('[GradedComicIntake] CGC data found:', cgcData);
+      logger.logInfo('CGC data found', { title: cgcData.title, grade: cgcData.grade });
       setComicData(cgcData);
       
       setFormData(prev => ({
@@ -220,7 +220,7 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
       }));
 
     } catch (error: any) {
-      console.error("Submit error:", error);
+      logger.logError("Submit error", error instanceof Error ? error : new Error(String(error)), { certNumber: formData.certNumber });
       toast.error(`Failed to add to batch: ${error.message}`);
     } finally {
       setSubmitting(false);

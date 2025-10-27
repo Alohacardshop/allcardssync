@@ -834,7 +834,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
           }}
           onSave={async (values) => {
             try {
-              console.log('Saving item with values:', values);
+              logger.logDebug('Saving item with values', { itemId: values.id, brandTitle: values.brandTitle });
               
               // Update the intake item in the database
               const { error } = await supabase
@@ -874,7 +874,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
                 .eq('id', values.id);
 
               if (error) {
-                console.error('Error updating item:', error);
+                logger.logError('Error updating item', error instanceof Error ? error : new Error(String(error)), { itemId: values.id });
                 toast({
                   title: "Error",
                   description: "Failed to update item. Please try again.",
@@ -891,7 +891,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
               setEditingItem(null);
               fetchRecentItemsWithRetry();
             } catch (error) {
-              console.error('Error updating item:', error);
+              logger.logError('Error updating item', error instanceof Error ? error : new Error(String(error)), { itemId: values?.id });
               toast({
                 title: "Error", 
                 description: "Failed to update item. Please try again.",

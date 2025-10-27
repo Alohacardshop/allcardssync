@@ -98,7 +98,7 @@ export function OtherItemsEntry({ onBatchAdd }: OtherItemsEntryProps) {
       const response = await supabase.rpc('create_raw_intake_item', rpcParams);
 
       if (response.error) {
-        console.error('Other item add error:', response.error);
+        logger.logError('Other item add error', response.error instanceof Error ? response.error : new Error(String(response.error)), { description, amount, totalPrice });
         toast.error(`Failed to add other item: ${response.error.message}`);
       } else {
         toast.success(`Successfully added ${amount} ${description.trim()} to batch ($${totalPrice.toFixed(2)} total)`);
@@ -120,7 +120,7 @@ export function OtherItemsEntry({ onBatchAdd }: OtherItemsEntryProps) {
         setSubCategory('');
       }
     } catch (error: any) {
-      console.error('Other item add error:', error);
+      logger.logError('Other item add error', error instanceof Error ? error : new Error(String(error)), { description, amount, totalPrice });
       toast.error(`Failed to add other item: ${error.message}`);
     } finally {
       setAddingOther(false);

@@ -17,6 +17,7 @@ import { normalizePSAData } from "@/lib/psaNormalization";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SubCategoryCombobox } from "@/components/ui/sub-category-combobox";
 import { detectMainCategory } from "@/utils/categoryMapping";
+import { logger } from "@/lib/logger";
 
 interface PSAImportItem {
   psaCert: string;
@@ -71,7 +72,7 @@ export const PSABulkImport = () => {
         if (!item.psaCert || item.psaCert.length === 0) return false;
         // Validate 8-9 digit certificate numbers
         if (!/^\d{8,9}$/.test(item.psaCert)) {
-          console.warn(`Invalid PSA cert format: ${item.psaCert} (must be 8-9 digits)`);
+          logger.warn(`Invalid PSA cert format: ${item.psaCert} (must be 8-9 digits)`, { cert: item.psaCert }, 'psa-bulk-import');
           return false;
         }
         return true;
@@ -100,7 +101,7 @@ export const PSABulkImport = () => {
       if (!item.psaCert || item.psaCert.length === 0) return false;
       // Validate 8-9 digit certificate numbers
       if (!/^\d{8,9}$/.test(item.psaCert)) {
-        console.warn(`Invalid PSA cert format: ${item.psaCert} (must be 8-9 digits)`);
+        logger.warn(`Invalid PSA cert format: ${item.psaCert} (must be 8-9 digits)`, { cert: item.psaCert }, 'psa-bulk-import');
         return false;
       }
       return true;
@@ -147,7 +148,7 @@ export const PSABulkImport = () => {
       const response: any = await supabase.rpc('create_raw_intake_item', rpcParams);
       if (response.error) throw response.error;
     } catch (error: any) {
-      console.error('PSA bulk import error:', error);
+      logger.error('PSA bulk import error', error instanceof Error ? error : new Error(String(error)), { cert: item.psaCert }, 'psa-bulk-import');
       throw error;
     }
   };
@@ -187,7 +188,7 @@ export const PSABulkImport = () => {
         // PSA functionality has been removed - skip processing
         throw new Error("PSA lookup functionality removed - please implement direct API integration");
       } catch (error) {
-        console.error(`Error processing ${item.psaCert}:`, error);
+        logger.error(`Error processing PSA cert`, error instanceof Error ? error : new Error(String(error)), { cert: item.psaCert }, 'psa-bulk-import');
         updatedItems[i] = {
           ...item,
           status: 'error',
