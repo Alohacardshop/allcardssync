@@ -124,6 +124,7 @@ serve(async (req) => {
         break;
       
       case 'inventory_levels/update':
+      case 'inventory_items/update':  // Shopify also sends this topic
         await handleInventoryLevelUpdate(supabase, payload, shopifyDomain);
         break;
       
