@@ -17,7 +17,8 @@ function loadEnv() {
   const result = EnvSchema.safeParse(raw);
 
   if (!result.success) {
-    console.error("❌ Invalid environment configuration:", result.error.flatten().fieldErrors);
+    const errorDetails = result.error.flatten().fieldErrors;
+    console.error("❌ Invalid environment configuration:", errorDetails);
     throw new Error("Invalid environment configuration. Check .env file.");
   }
 

@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf';
 import JsBarcode from 'jsbarcode';
 import { ZPLElement, ZPLOptions, buildZPLWithCut, getLabelSizeInDots } from './zpl';
+import { logger } from './logger';
 
 export interface LabelData {
   title: string;
@@ -80,7 +81,7 @@ const drawBarcode = (ctx: CanvasRenderingContext2D, x: number, y: number, width:
       // Draw the barcode on the main canvas
       ctx.drawImage(barcodeCanvas, x, y, width, height);
     } catch (error) {
-      console.error('Barcode generation failed:', error);
+      logger.error('Barcode generation failed', error instanceof Error ? error : new Error(String(error)), undefined, 'label-renderer');
       // Fallback to text if barcode fails
       ctx.fillStyle = '#000000';
       ctx.font = '12px monospace';

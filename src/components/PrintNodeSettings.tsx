@@ -12,6 +12,7 @@ import { codeDefaultRawCard2x1 } from '@/lib/labels/templateStore';
 import { zplFromElements } from '@/lib/labels/zpl';
 import { printQueue } from '@/lib/print/queueInstance';
 import { toast } from 'sonner';
+import { logger } from '@/lib/logger';
 
 export function PrintNodeSettings() {
   const [localApiKey, setLocalApiKey] = useState('');
@@ -153,7 +154,7 @@ export function PrintNodeSettings() {
                         media: 'gap'
                       });
                       
-                      console.log('🖨️ Using new label system test template');
+                      logger.info('Using new label system test template', undefined, 'printnode-settings');
                       
                       const result = await printNodeService.printZPL(testZPL, parseInt(selectedPrinterId), 1);
                       
@@ -184,7 +185,7 @@ export function PrintNodeSettings() {
                         media: 'blackmark'
                       });
                       
-                      console.log('🖨️ Testing with blackmark media setting');
+                      logger.info('Testing with blackmark media setting', undefined, 'printnode-settings');
                       
                       const result = await printNodeService.printZPL(gapZPL, parseInt(selectedPrinterId), 1);
                       

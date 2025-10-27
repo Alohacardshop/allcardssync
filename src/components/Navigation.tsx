@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { cleanupAuthState } from "@/lib/auth";
 import { useEffect, useState } from "react";
 import { useStore } from "@/contexts/StoreContext";
+import { logger } from '@/lib/logger';
 
 interface NavigationProps {
   showMobileMenu?: boolean;
@@ -38,7 +39,7 @@ export function Navigation({ showMobileMenu = true }: NavigationProps) {
         }
       } catch (error) {
         if (process.env.NODE_ENV === 'development') {
-          console.error("Role check failed", error);
+          logger.error('Role check failed', error instanceof Error ? error : new Error(String(error)), undefined, 'navigation');
         }
         setIsAdmin(false);
       }
@@ -59,7 +60,7 @@ export function Navigation({ showMobileMenu = true }: NavigationProps) {
         }
       } catch (error) {
         if (process.env.NODE_ENV === 'development') {
-          console.error("Role check failed in auth state change", error);
+          logger.error('Role check failed in auth state change', error instanceof Error ? error : new Error(String(error)), undefined, 'navigation');
         }
         setIsAdmin(false);
       }

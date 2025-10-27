@@ -6,6 +6,7 @@ import { useEffect } from "react";
 import { useLocalStorageString } from "@/hooks/useLocalStorage";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { logger } from '@/lib/logger';
 
 interface LocationSelectorProps {
   className?: string;
@@ -51,7 +52,7 @@ export function LocationSelector({ className }: LocationSelectorProps) {
       // Refresh user assignments to reflect the new default
       await refreshUserAssignments();
     } catch (error) {
-      console.error("Failed to set default:", error);
+      logger.error('Failed to set default', error instanceof Error ? error : new Error(String(error)), undefined, 'location-selector');
       toast.error("Failed to set default location");
     }
   };

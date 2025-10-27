@@ -8,6 +8,7 @@ import {
   type LabelData,
   type LabelFieldConfig 
 } from '@/lib/labelRenderer';
+import { logger } from '@/lib/logger';
 
 interface LabelPreviewCanvasProps {
   fieldConfig: LabelFieldConfig & { templateStyle?: string };
@@ -28,7 +29,7 @@ export const LabelPreviewCanvas = React.forwardRef<any, LabelPreviewCanvasProps>
         const imageUrl = URL.createObjectURL(pngBlob);
         setPreviewImageUrl(imageUrl);
       } catch (error) {
-        console.error('Error generating PNG preview:', error);
+        logger.error('Error generating PNG preview', error instanceof Error ? error : new Error(String(error)), undefined, 'label-preview-canvas');
       } finally {
         setIsLoading(false);
       }

@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { User, Session } from '@supabase/supabase-js';
 import { useStore } from '@/contexts/StoreContext';
+import { logger } from '@/lib/logger';
 
 interface AuthStatusDebugProps {
   visible?: boolean;
@@ -35,7 +36,7 @@ export const AuthStatusDebug: React.FC<AuthStatusDebugProps> = ({ visible = fals
         });
         
         if (roleError) {
-          console.error('Role check error:', roleError);
+          logger.error('Role check error', roleError instanceof Error ? roleError : new Error(String(roleError)), undefined, 'auth-status-debug');
           setHasRole(null);
         } else {
           setHasRole(Boolean(roleData));
@@ -46,7 +47,7 @@ export const AuthStatusDebug: React.FC<AuthStatusDebugProps> = ({ visible = fals
       
       setLastCheck(new Date());
     } catch (error) {
-      console.error('Auth status check failed:', error);
+      logger.error('Auth status check failed', error instanceof Error ? error : new Error(String(error)), undefined, 'auth-status-debug');
     } finally {
       setLoading(false);
     }

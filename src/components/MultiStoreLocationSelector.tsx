@@ -14,6 +14,7 @@ import {
   X,
   CheckSquare
 } from "lucide-react";
+import { logger } from '@/lib/logger';
 
 interface SelectedLocation {
   storeKey: string;
@@ -142,7 +143,7 @@ export function MultiStoreLocationSelector({
         throw new Error(data?.error || "Failed to load locations");
       }
     } catch (error) {
-      console.error("Error loading locations:", error);
+      logger.error('Error loading locations', error instanceof Error ? error : new Error(String(error)), undefined, 'multi-store-location-selector');
       setLocations([]);
     } finally {
       setLoadingLocations(false);

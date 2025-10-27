@@ -1,6 +1,7 @@
 // src/lib/templateStore.ts
 export type TemplateType = 'raw_card_2x1';
 export type TemplateFormat = 'elements' | 'zpl';
+import { logger } from './logger';
 
 // Simple ZPL element interface for backwards compatibility
 export interface SimpleZPLElement {
@@ -104,7 +105,7 @@ export async function loadFromSupabase(id: string): Promise<LabelTemplate | null
     
     if (error || !data) return null;
     
-    console.log('📄 Loading template from DB:', id, data.canvas);
+    logger.info('Loading template from DB', { id, canvas: data.canvas }, 'template-store');
     
     // Convert from existing schema to our format
     const canvas = data.canvas as any;
@@ -113,7 +114,7 @@ export async function loadFromSupabase(id: string): Promise<LabelTemplate | null
     if (canvas?.zplLabel) {
       // Case 1: zplLabel is a string (raw ZPL)
       if (typeof canvas.zplLabel === 'string') {
-        console.log('📄 Loading as raw ZPL template');
+        logger.info('Loading as raw ZPL template', undefined, 'template-store');
         return {
           id: data.id,
           type: 'raw_card_2x1',
@@ -128,9 +129,9 @@ export async function loadFromSupabase(id: string): Promise<LabelTemplate | null
       }
       // Case 2: zplLabel is an object with elements (visual editor format)
       else if (canvas.zplLabel.elements && Array.isArray(canvas.zplLabel.elements)) {
-        console.log('📄 Loading as visual editor template with elements:', canvas.zplLabel.elements.length);
+        logger.info('Loading as visual editor template with elements', { count: canvas.zplLabel.elements.length }, 'template-store');
         const convertedElements = canvas.zplLabel.elements.map(convertDatabaseElementToSimple);
-        console.log('📄 Converted elements:', convertedElements);
+        logger.debug('Converted elements', { elements: convertedElements }, 'template-store');
         return {
           id: data.id,
           type: 'raw_card_2x1',
@@ -147,7 +148,7 @@ export async function loadFromSupabase(id: string): Promise<LabelTemplate | null
     
     // Case 3: Legacy format with elements directly in canvas
     if (canvas?.elements && Array.isArray(canvas.elements)) {
-      console.log('📄 Loading as legacy elements template');
+      logger.info('Loading as legacy elements template', undefined, 'template-store');
       return {
         id: data.id,
         type: 'raw_card_2x1',
@@ -162,7 +163,7 @@ export async function loadFromSupabase(id: string): Promise<LabelTemplate | null
     }
     
     // Case 4: No recognizable format, return default
-    console.log('📄 No recognizable format, returning default template structure');
+    logger.info('No recognizable format, returning default template structure', undefined, 'template-store');
     return {
       id: data.id,
       type: 'raw_card_2x1',
@@ -175,7 +176,7 @@ export async function loadFromSupabase(id: string): Promise<LabelTemplate | null
       is_default: data.is_default || false
     };
   } catch (error) {
-    console.error('Failed to load template from Supabase:', error);
+    logger.error('Failed to load template from Supabase', error instanceof Error ? error : new Error(String(error)), undefined, 'template-store');
     return null;
   }
 }

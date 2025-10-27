@@ -10,6 +10,7 @@ import { ChevronDown, ChevronRight, Loader2, Download } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { getLocationNameFromGid } from "@/lib/locationUtils";
 import Papa from "papaparse";
+import { logger } from '@/lib/logger';
 
 interface Transfer {
   id: string;
@@ -64,7 +65,7 @@ export function TransferHistoryLog() {
       if (error) throw error;
       setTransfers(data || []);
     } catch (error) {
-      console.error('Load transfers error:', error);
+      logger.error('Load transfers error', error instanceof Error ? error : new Error(String(error)), undefined, 'transfer-history-log');
       toast({
         title: "Failed to load transfers",
         description: error instanceof Error ? error.message : "Unknown error",
@@ -95,7 +96,7 @@ export function TransferHistoryLog() {
         [transferId]: data || [],
       }));
     } catch (error) {
-      console.error('Load transfer items error:', error);
+      logger.error('Load transfer items error', error instanceof Error ? error : new Error(String(error)), undefined, 'transfer-history-log');
       toast({
         title: "Failed to load items",
         description: error instanceof Error ? error.message : "Unknown error",
@@ -175,7 +176,7 @@ export function TransferHistoryLog() {
         description: "Transfer history has been exported to CSV",
       });
     } catch (error) {
-      console.error('Export error:', error);
+      logger.error('Export error', error instanceof Error ? error : new Error(String(error)), undefined, 'transfer-history-log');
       toast({
         title: "Export failed",
         description: error instanceof Error ? error.message : "Unknown error",

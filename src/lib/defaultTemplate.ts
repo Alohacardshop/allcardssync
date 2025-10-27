@@ -1,5 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import { useTemplateDefault } from '@/hooks/useTemplateDefault';
+import { logger } from '@/lib/logger';
 
 export interface DefaultTemplate {
   id: string;
@@ -74,7 +75,7 @@ export async function getDefaultTemplate(): Promise<DefaultTemplate> {
       };
     }
   } catch (error) {
-    console.error('Failed to load default template from database:', error);
+    logger.error('Failed to load default template from database', error instanceof Error ? error : new Error(String(error)), undefined, 'default-template');
   }
   
   // Fallback to code default

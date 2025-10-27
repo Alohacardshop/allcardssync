@@ -5,6 +5,7 @@ import { print } from '@/lib/printService';
 import { ZPLLabel, generateZPLFromElements, LABEL_2x1_203, LABEL_2x1_300 } from '@/lib/zplElements';
 import { zplPriceBarcodeThirds2x1 } from '@/lib/templates/priceBarcodeThirds2x1';
 import { toast } from 'sonner';
+import { logger } from '@/lib/logger';
 
 interface BarcodeLabelProps {
   value: string;
@@ -150,7 +151,7 @@ const BarcodeLabel = ({ value, label, className, showPrintButton = true, quantit
         throw new Error(res?.error || 'Failed to print');
       }
     } catch (error) {
-      console.error('Print thirds label error:', error);
+      logger.error('Print thirds label error', error instanceof Error ? error : new Error(String(error)), undefined, 'barcode-label');
       toast.error('Print failed', {
         description: error instanceof Error ? error.message : 'Unknown error'
       });
@@ -159,7 +160,7 @@ const BarcodeLabel = ({ value, label, className, showPrintButton = true, quantit
 
   const printLabel = async (labelData: any, copies: number = quantity) => {
     try {
-      console.log('🖨️ BarcodeLabel: Printing with unified ZPL builder');
+      logger.info('BarcodeLabel: Printing with unified ZPL builder', undefined, 'barcode-label');
       
       await printBarcodeLabelUnified({
         sku: labelData.sku || '1234567890',
@@ -170,7 +171,7 @@ const BarcodeLabel = ({ value, label, className, showPrintButton = true, quantit
         copies
       });
     } catch (error) {
-      console.error('Print error:', error);
+      logger.error('Print error', error instanceof Error ? error : new Error(String(error)), undefined, 'barcode-label');
       toast.error('Print failed', {
         description: error instanceof Error ? error.message : 'Unknown error'
       });

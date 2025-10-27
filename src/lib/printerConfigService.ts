@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { logger } from '@/lib/logger';
 
 interface PrinterConfig {
   usePrintNode: boolean;
@@ -25,7 +26,7 @@ export async function getPrinterConfig(
     // Get current user
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      console.warn('[printer_config] No authenticated user');
+      logger.warn('No authenticated user', undefined, 'printer-config');
       return getLocalStorageConfig();
     }
 
@@ -57,12 +58,12 @@ export async function getPrinterConfig(
     const { data, error } = await query.maybeSingle();
 
     if (error) {
-      console.error('[printer_config] Error fetching preferences:', error);
+      logger.error('Error fetching preferences', error instanceof Error ? error : new Error(String(error)), undefined, 'printer-config');
       return getLocalStorageConfig();
     }
 
     if (!data) {
-      console.warn('[printer_config] No preferences found, falling back to localStorage');
+      logger.warn('No preferences found, falling back to localStorage', undefined, 'printer-config');
       return getLocalStorageConfig();
     }
 
@@ -84,7 +85,7 @@ export async function getPrinterConfig(
 
     return config;
   } catch (error) {
-    console.error('[printer_config] Unexpected error:', error);
+    logger.error('Unexpected error', error instanceof Error ? error : new Error(String(error)), undefined, 'printer-config');
     return getLocalStorageConfig();
   }
 }
@@ -102,7 +103,7 @@ function getLocalStorageConfig(): PrinterConfig | null {
       printerName: config.printerName,
     };
   } catch (error) {
-    console.error('[printer_config] Error reading localStorage:', error);
+    logger.error('Error reading localStorage', error instanceof Error ? error : new Error(String(error)), undefined, 'printer-config');
     return null;
   }
 }

@@ -4,6 +4,7 @@ import { generateLabelPDF } from "@/lib/labelRenderer";
 import { generatePDFFromZPL } from "@/lib/zplToPdf";
 import { buildLabelDataFromItem, CardItem } from "@/lib/labelData";
 import { getDefaultTemplate } from "@/lib/defaultTemplate";
+import { logger } from '@/lib/logger';
 
 function base64ToUint8Array(base64: string): Uint8Array {
   if (base64.startsWith("data:")) base64 = base64.split(",")[1] || "";
@@ -99,7 +100,7 @@ const PDFLabelPreview: React.FC<{ item: CardItem }> = ({ item }) => {
       
       URL.revokeObjectURL(url);
     } catch (e) {
-      console.error('Download failed:', e);
+      logger.error('Download failed', e instanceof Error ? e : new Error(String(e)), undefined, 'pdf-label-preview');
     }
   };
 
