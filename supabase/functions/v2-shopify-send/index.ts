@@ -1,4 +1,5 @@
 import { corsHeaders } from '../_shared/cors.ts'
+import { requireAuth, requireRole, requireStoreAccess } from '../_shared/auth.ts'
 
 interface SendArgs {
   storeKey: "hawaii" | "las_vegas"
@@ -17,7 +18,19 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // 1. Authenticate user and validate JWT
+    const user = await requireAuth(req)
+    
+    // 2. Verify user has staff/admin role
+    await requireRole(user.id, ['admin', 'staff'])
+    // 3. Parse and validate input
     const { storeKey, sku, title, price, barcode, locationGid, quantity, intakeItemId }: SendArgs = await req.json()
+
+    // 4. Verify user has access to this store/location
+    await requireStoreAccess(user.id, storeKey, locationGid)
+    
+    // 5. Log audit trail
+    console.log(`[AUDIT] User ${user.id} (${user.email}) triggered shopify-send for store ${storeKey}, SKU ${sku}`)
 
     // Get environment variables for Supabase
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!

@@ -15,12 +15,12 @@ Comprehensive codebase review completed. Identified 3 priority levels of improve
 **Affected Functions**:
 - ✅ `v2-shopify-send-graded` - Has JWT auth via `requireAuth()`
 - ✅ `v2-shopify-send-raw` - Has JWT auth via `requireAuth()`
+- ✅ `v2-shopify-send` - **FIXED** - Now has full JWT + role + store access checks
 - ✅ `bulk-location-transfer` - Has basic JWT validation
-- ❌ `v2-shopify-send` - **NO AUTHENTICATION** (accepts any requests)
-- ⚠️ `shopify-sync` - Needs verification
-- ⚠️ `shopify-sync-cleanup` - Needs verification
-- ⚠️ `shopify-resolve-conflict` - Needs verification
-- ⚠️ `shopify-delete-duplicates` - Needs verification
+- ✅ `shopify-sync` - Has JWT validation
+- ✅ `shopify-resolve-conflict` - Has JWT validation
+- ✅ `shopify-delete-duplicates` - Has JWT + role checks
+- ⚠️ `shopify-sync-cleanup` - No auth (maintenance job - may be intentional)
 
 **Risk**: Unauthenticated users could trigger Shopify operations, manipulate inventory, or cause data corruption.
 
@@ -115,11 +115,11 @@ const handleChange = <K extends keyof IntakeItemDetails>(
 
 ## Implementation Priority
 
-### Phase 1: Security Hardening (4-6 hours)
-1. ✅ Add JWT auth to `v2-shopify-send`
-2. ⚠️ Audit remaining edge functions for auth requirements
-3. ⚠️ Add role-based access control to admin functions
-4. ⚠️ Test all authenticated endpoints
+### Phase 1: Security Hardening (COMPLETE ✅)
+1. ✅ Add JWT auth to `v2-shopify-send` - **COMPLETE**
+2. ✅ Audit remaining edge functions for auth requirements - **COMPLETE**
+3. ✅ Verified role-based access control on admin functions - **COMPLETE**
+4. ⚠️ Test all authenticated endpoints - Pending user testing
 
 ### Phase 2: Type Safety (2-3 days, can be gradual)
 1. Create strict types for database models
