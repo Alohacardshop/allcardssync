@@ -8,6 +8,7 @@ import { toast } from "sonner"
 import { Navigation } from "@/components/Navigation"
 import { MobileBottomNav } from "@/components/navigation/MobileBottomNav"
 import { MobileSearchFilters } from "@/components/mobile/MobileSearchFilters"
+import { logger } from '@/lib/logger';
 import { ResponsiveInventoryTable } from "@/components/enhanced/ResponsiveInventoryTable"
 import { useStore } from "@/contexts/StoreContext"
 
@@ -115,7 +116,7 @@ const MobileInventory = () => {
 
       setInventoryItems(data || [])
     } catch (error) {
-      console.error('Error fetching inventory:', error)
+      logger.error('Error fetching inventory', error instanceof Error ? error : new Error(String(error)), undefined, 'mobile-inventory');
       toast.error('Error loading inventory items')
     } finally {
       setLoading(false)

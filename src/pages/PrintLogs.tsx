@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Navigation } from "@/components/Navigation";
 import { zebraNetworkService } from "@/lib/zebraNetworkService";
+import { logger } from '@/lib/logger';
 
 interface PrintJob {
   id: string;
@@ -51,13 +52,13 @@ export default function PrintLogs() {
           .select('role')
           .eq('user_id', user.id);
         if (error) {
-          console.error('Role fetch error:', error);
+          logger.error('Role fetch error', error instanceof Error ? error : new Error(String(error)), undefined, 'print-logs');
           return;
         }
         const roles = (data || []).map((r: any) => r.role);
         setCanDelete(roles.includes('admin'));
       } catch (err) {
-        console.error('Role check failed:', err);
+        logger.error('Role check failed', err instanceof Error ? err : new Error(String(err)), undefined, 'print-logs');
       }
     })();
   }, []);
@@ -78,7 +79,7 @@ export default function PrintLogs() {
       if (error) throw error;
       setJobs(data || []);
     } catch (err) {
-      console.error('Failed to load print jobs:', err);
+      logger.error('Failed to load print jobs', err instanceof Error ? err : new Error(String(err)), undefined, 'print-logs');
       const msg = (err as any)?.message || (err as any)?.error_description || 'Failed to load print jobs';
       toast.error(msg);
     } finally {
@@ -197,7 +198,7 @@ export default function PrintLogs() {
       toast.success('Print job deleted successfully');
       loadPrintJobs(); // Refresh the list
     } catch (err) {
-      console.error('Delete error:', err);
+      logger.error('Delete error', err instanceof Error ? err : new Error(String(err)), undefined, 'print-logs');
       const msg = (err as any)?.message || (err as any)?.error_description || 'Failed to delete print job';
       toast.error(msg);
     }
@@ -219,7 +220,7 @@ export default function PrintLogs() {
       toast.success('All print jobs cleared');
       loadPrintJobs(); // Refresh the list
     } catch (err) {
-      console.error('Clear all error:', err);
+      logger.error('Clear all error', err instanceof Error ? err : new Error(String(err)), undefined, 'print-logs');
       const msg = (err as any)?.message || (err as any)?.error_description || 'Failed to clear print jobs';
       toast.error(msg);
     }

@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { printNodeService, PrintNodePrinter } from '@/lib/printNodeService';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { logger } from '@/lib/logger';
 
 interface PrintNodeContextType {
   isConnected: boolean;
@@ -50,11 +51,11 @@ export function PrintNodeProvider({ children }: { children: ReactNode }) {
             setSelectedPrinterId(config.printNodeId.toString());
           }
         } catch (error) {
-          console.error('Failed to parse saved printer config:', error);
+          logger.error('Failed to parse saved printer config', error instanceof Error ? error : new Error(String(error)), undefined, 'printnode-context');
         }
       }
     } catch (error) {
-      console.error('Failed to load PrintNode settings:', error);
+      logger.error('Failed to load PrintNode settings', error instanceof Error ? error : new Error(String(error)), undefined, 'printnode-context');
     } finally {
       setIsLoading(false);
     }
@@ -69,7 +70,7 @@ export function PrintNodeProvider({ children }: { children: ReactNode }) {
         await loadPrinters();
       }
     } catch (error) {
-      console.error('PrintNode connection test failed:', error);
+      logger.error('PrintNode connection test failed', error instanceof Error ? error : new Error(String(error)), undefined, 'printnode-context');
       setIsConnected(false);
     }
   };
@@ -85,7 +86,7 @@ export function PrintNodeProvider({ children }: { children: ReactNode }) {
         updateSelectedPrinter(onlinePrinter.id.toString());
       }
     } catch (error) {
-      console.error('Failed to load printers:', error);
+      logger.error('Failed to load printers', error instanceof Error ? error : new Error(String(error)), undefined, 'printnode-context');
     }
   };
 
@@ -112,7 +113,7 @@ export function PrintNodeProvider({ children }: { children: ReactNode }) {
       toast.success('PrintNode API key saved');
       await testConnection();
     } catch (error) {
-      console.error('Failed to save API key:', error);
+      logger.error('Failed to save API key', error instanceof Error ? error : new Error(String(error)), undefined, 'printnode-context');
       toast.error('Failed to save API key');
       throw error;
     } finally {

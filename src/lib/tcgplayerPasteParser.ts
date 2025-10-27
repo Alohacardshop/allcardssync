@@ -15,6 +15,8 @@ export interface ParsedTcgplayerRow {
   photoUrl?: string;
 }
 
+import { logger } from './logger';
+
 export interface ParsedTcgplayerData {
   rows: ParsedTcgplayerRow[];
   marketAsOf?: string;
@@ -71,7 +73,7 @@ export function parseTcgplayerPaste(text: string): ParsedTcgplayerData {
     // Parse card lines
     const cardMatch = line.match(/^(\d+)\s+(.+?)\s*-\s*\$([0-9,]+\.?\d*)$/);
     if (!cardMatch) {
-      console.warn('Failed to parse line:', line);
+      logger.warn('Failed to parse line', { line }, 'tcgplayer-paste-parser');
       continue;
     }
 
