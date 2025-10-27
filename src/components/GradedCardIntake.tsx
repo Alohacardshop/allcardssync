@@ -117,7 +117,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
           setFormData(prev => ({ ...prev, vendor: defaultVendor.vendor_name }));
         }
       } catch (error) {
-        console.error('Failed to load vendors:', error);
+        logger.logError('Failed to load vendors', error instanceof Error ? error : new Error(String(error)));
       } finally {
         setLoadingVendors(false);
       }
@@ -144,7 +144,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
 
   // Auto-populate cert number from input field
   useEffect(() => {
-    console.log('[GradedCardIntake] certInput changed:', certInput);
+    logger.logDebug('certInput changed', { certInput });
     if (certInput) {
       setFormData(prev => ({ ...prev, certNumber: certInput }));
     }
@@ -161,7 +161,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
 
   // Reset fetch state on mount to recover from stuck states
   useEffect(() => {
-    console.log('[GradedCardIntake] Component mounted, resetting state');
+    logger.logDebug('Component mounted, resetting state');
     setFetchState('idle');
     setAbortController(null);
   }, []);
@@ -429,7 +429,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
       }));
 
     } catch (error: any) {
-      console.error("Submit error:", error);
+      logger.logError('Submit error', error);
       toast.error(`Failed to add to batch: ${error.message}`);
     } finally {
       setSubmitting(false);

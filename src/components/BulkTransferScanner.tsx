@@ -14,6 +14,7 @@ import { getLocationNameFromGid } from "@/lib/locationUtils";
 import { playSuccessSound, playErrorSound, playCompletionSound, areSoundsEnabled, toggleSounds } from "@/lib/soundEffects";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useLogger } from "@/hooks/useLogger";
 
 interface ScannedItem {
   id: string;
@@ -38,6 +39,7 @@ const WARNING_THRESHOLD = 50;
 const DEBOUNCE_MS = 300;
 
 export function BulkTransferScanner({ onTransferComplete }: BulkTransferScannerProps) {
+  const logger = useLogger('BulkTransferScanner');
   const { toast } = useToast();
   const { assignedStore: storeKey, selectedLocation: locationGid, availableLocations: locations } = useStore();
   const [barcode, setBarcode] = useState("");
@@ -214,7 +216,7 @@ export function BulkTransferScanner({ onTransferComplete }: BulkTransferScannerP
       inputRef.current?.focus();
 
     } catch (error) {
-      console.error('Scan error:', error);
+      logger.logError('Scan error', error instanceof Error ? error : new Error(String(error)));
       toast({
         title: "Scan failed",
         description: error instanceof Error ? error.message : "Unknown error",
@@ -337,7 +339,7 @@ export function BulkTransferScanner({ onTransferComplete }: BulkTransferScannerP
       onTransferComplete?.();
 
     } catch (error) {
-      console.error('Transfer error:', error);
+      logger.logError('Transfer error', error instanceof Error ? error : new Error(String(error)));
       toast({
         title: "Transfer failed",
         description: error instanceof Error ? error.message : "Unknown error",

@@ -13,6 +13,7 @@ import { OtherItemsEntry } from '@/components/OtherItemsEntry';
 import { validateCompleteStoreContext, logStoreContext } from '@/utils/storeValidation';
 import { SubCategoryCombobox } from '@/components/ui/sub-category-combobox';
 import { detectMainCategory } from '@/utils/categoryMapping';
+import { useLogger } from '@/hooks/useLogger';
 
 interface BulkCardIntakeProps {
   onBatchAdd?: (item: any) => void;
@@ -24,6 +25,7 @@ const GAME_OPTIONS = [
 ];
 
 export function BulkCardIntake({ onBatchAdd }: BulkCardIntakeProps) {
+  const logger = useLogger('BulkCardIntake');
   const { assignedStore, selectedLocation } = useStore();
   
   // Form state
@@ -72,7 +74,7 @@ export function BulkCardIntake({ onBatchAdd }: BulkCardIntakeProps) {
       });
 
       if (debugError) {
-        console.error('Access check error:', debugError);
+        logger.logError('Access check error', new Error(debugError.message));
         toast.error(`Access check failed: ${debugError.message}`);
         return false;
       }
@@ -97,7 +99,7 @@ export function BulkCardIntake({ onBatchAdd }: BulkCardIntakeProps) {
 
       return true;
     } catch (error: any) {
-      console.error('Preflight check error:', error);
+      logger.logError('Preflight check error', error);
       toast.error(`Preflight check failed: ${error.message}`);
       return false;
     } finally {
@@ -183,7 +185,7 @@ export function BulkCardIntake({ onBatchAdd }: BulkCardIntakeProps) {
       const response = await supabase.rpc('create_raw_intake_item', rpcParams);
 
       if (response.error) {
-        console.error('Bulk add error:', response.error);
+        logger.logError('Bulk add error', new Error(response.error.message));
         toast.error(`Failed to add bulk item: ${response.error.message}`);
       } else {
         toast.success(`Successfully added ${amount} ${selectedGame} bulk cards to batch ($${totalPrice.toFixed(2)} total)`);
@@ -205,7 +207,7 @@ export function BulkCardIntake({ onBatchAdd }: BulkCardIntakeProps) {
         setSubCategory('');
       }
     } catch (error: any) {
-      console.error('Bulk add error:', error);
+      logger.logError('Bulk add error', error);
       toast.error(`Failed to add bulk item: ${error.message}`);
     } finally {
       setAddingBulk(false);

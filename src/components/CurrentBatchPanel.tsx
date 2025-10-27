@@ -15,6 +15,7 @@ import { useBatchSendToShopify } from '@/hooks/useBatchSendToShopify';
 import { useBatchAutoProcessSettings } from '@/hooks/useBatchAutoProcessSettings';
 import { BatchConfigDialog } from '@/components/BatchConfigDialog';
 import { BatchProgressDialog } from '@/components/BatchProgressDialog';
+import { useLogger } from '@/hooks/useLogger';
 
 import type { IntakeItem } from "@/types/intake";
 
@@ -25,6 +26,7 @@ interface CurrentBatchPanelProps {
 }
 
 export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact = false }: CurrentBatchPanelProps) => {
+  const logger = useLogger('CurrentBatchPanel');
   const { assignedStore, selectedLocation, availableLocations } = useStore();
   const [recentItems, setRecentItems] = useState<IntakeItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -152,14 +154,14 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
             return;
           }
         } catch (error) {
-          console.error('[CurrentBatchPanel] Recovery from active lot failed:', error);
+          logger.logError('Recovery from active lot failed', error instanceof Error ? error : new Error(String(error)));
           // Continue to normal fetch
         }
       }
       
       await fetchRecentItems(assignedStore, selectedLocation);
     } catch (error) {
-      console.error('[CurrentBatchPanel] fetchRecentItemsWithRetry error:', error);
+      logger.logError('fetchRecentItemsWithRetry error', error instanceof Error ? error : new Error(String(error)));
       toast({ title: "Error", description: "Failed to load batch items" });
     } finally {
       setLoading(false);
@@ -172,7 +174,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
     const location = locationGid || selectedLocation;
     
     if (!store || !location) {
-      console.error('[CurrentBatchPanel] Store context missing:', { store, location });
+      logger.logError('Store context missing', undefined, { store, location });
       return;
     }
 
@@ -194,12 +196,12 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
         .maybeSingle();
 
       if (lotError) {
-        console.error("Error fetching lot:", lotError);
+        logger.logError('Error fetching lot', new Error(lotError.message));
         return;
       }
 
       if (!lot) {
-        console.log(`[CurrentBatchPanel] No active lot found for store: ${store}, location: ${location}`);
+        logger.logDebug('No active lot found', { store, location });
         setRecentItems([]);
         setCounts({ activeItems: 0, totalItems: 0 });
         if (onBatchCountUpdate) {
@@ -209,7 +211,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
       }
 
       const currentUserId = (await supabase.auth.getUser()).data.user?.id;
-      console.log(`[CurrentBatchPanel] Querying items for lot:`, {
+      logger.logDebug('Querying items for lot', {
         lot_id: lot.id,
         lot_number: lot.lot_number,
         lot_created_by: lot.created_by,
@@ -231,11 +233,11 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
         .limit(20);
 
       if (itemsError) {
-        console.error("[CurrentBatchPanel] Error fetching items:", itemsError);
+        logger.logError('Error fetching items', new Error(itemsError.message));
         return;
       }
 
-      console.log(`[CurrentBatchPanel] Loaded ${items?.length || 0} items from lot ${lot.lot_number}`, {
+      logger.logDebug(`Loaded ${items?.length || 0} items from lot ${lot.lot_number}`, {
         items: items?.map(i => ({
           id: i.id,
           created_by: i.created_by,
@@ -275,7 +277,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
       }
 
     } catch (error) {
-      console.error("Error in fetchRecentItems:", error);
+      logger.logError('Error in fetchRecentItems', error instanceof Error ? error : new Error(String(error)));
       throw error; // Re-throw to be caught by fetchRecentItemsWithRetry
     }
   };
@@ -300,7 +302,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
       toast({ title: "Success", description: "Item sent to inventory" });
       fetchRecentItemsWithRetry();
     } catch (error: any) {
-      console.error("Error sending to inventory:", error);
+      logger.logError('Error sending to inventory', error);
       toast({ title: "Error", description: error.message });
     }
   };
@@ -317,7 +319,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
       toast({ title: "Success", description: "Item removed from batch" });
       fetchRecentItemsWithRetry();
     } catch (error: any) {
-      console.error("Error deleting item:", error);
+      logger.logError('Error deleting item', error);
       toast({ title: "Error", description: error.message });
     }
   };
@@ -341,7 +343,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
       toast({ title: "Success", description: "Batch cleared" });
       fetchRecentItemsWithRetry();
     } catch (error: any) {
-      console.error("Error clearing batch:", error);
+      logger.logError('Error clearing batch', error);
       toast({ title: "Error", description: error.message });
     }
   };
@@ -364,7 +366,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
       toast({ title: "Success", description: "New lot started" });
       fetchRecentItemsWithRetry();
     } catch (error: any) {
-      console.error("Error starting new lot:", error);
+      logger.logError('Error starting new lot', error);
       toast({ title: "Error", description: error.message });
     }
   };
@@ -381,7 +383,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
       return;
     }
 
-    console.log('🛍️ [CurrentBatchPanel] Starting batch send to Shopify:', {
+    logger.logInfo('Starting batch send to Shopify', {
       itemCount: itemIds.length,
       storeKey: assignedStore,
       locationGid: selectedLocation
@@ -416,7 +418,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
         toast({ title: "Success", description: `Processed ${result.processed} items successfully` });
       }
     } catch (error) {
-      console.error('Manual batch processing failed:', error);
+      logger.logError('Manual batch processing failed', error instanceof Error ? error : new Error(String(error)));
       toast({ title: "Error", description: `Processing failed: ${error instanceof Error ? error.message : 'Unknown error'}` });
     } finally {
       setBatchProgressOpen(false);
@@ -480,7 +482,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
   // Event-based refresh listener
   useEffect(() => {
     const handleBatchItemAdded = (event: CustomEvent) => {
-      console.log('[CurrentBatchPanel] Item added event received:', event.detail);
+      logger.logDebug('Item added event received', { detail: event.detail });
       
       // Only refresh if it's for our current store
       if (event.detail.store === assignedStore) {

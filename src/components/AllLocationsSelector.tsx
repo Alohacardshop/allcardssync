@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useStore } from "@/contexts/StoreContext";
 import { MapPin, Star, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
+import { useLogger } from "@/hooks/useLogger";
 
 interface LocationOption {
   gid: string;
@@ -28,6 +29,7 @@ export function AllLocationsSelector({
   onValueChange, 
   placeholder = "Select location" 
 }: AllLocationsSelectorProps) {
+  const logger = useLogger('AllLocationsSelector');
   const { assignedStore } = useStore();
   const [locations, setLocations] = useState<LocationOption[]>([]);
   const [loading, setLoading] = useState(false);
@@ -48,7 +50,7 @@ export function AllLocationsSelector({
       
       setUserAssignments(assignments || []);
     } catch (error) {
-      console.error("Error loading user assignments:", error);
+      logger.logError('Error loading user assignments', error instanceof Error ? error : new Error(String(error)));
     }
   };
 
@@ -131,7 +133,7 @@ export function AllLocationsSelector({
               return storeLocations;
             }
           } catch (error) {
-            console.error(`Error loading locations for store ${store.key}:`, error);
+            logger.logError(`Error loading locations for store ${store.key}`, error instanceof Error ? error : new Error(String(error)));
             // Don't let one store failure block others
           }
           return [];
@@ -195,7 +197,7 @@ export function AllLocationsSelector({
       setHasInitialLoad(true);
       clearTimeout(loadingTimeout);
     } catch (error) {
-      console.error("Error loading accessible locations:", error);
+      logger.logError('Error loading accessible locations', error instanceof Error ? error : new Error(String(error)));
       toast.error("Failed to load locations. Please try again.");
       clearTimeout(loadingTimeout);
     } finally {
@@ -226,7 +228,7 @@ export function AllLocationsSelector({
         isDefault: loc.gid === locationGid && loc.storeKey === location.storeKey
       })));
     } catch (error) {
-      console.error("Failed to set default:", error);
+      logger.logError('Failed to set default', error instanceof Error ? error : new Error(String(error)));
       toast.error("Failed to set default location");
     }
   };
