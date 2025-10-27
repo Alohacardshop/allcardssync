@@ -44,6 +44,7 @@ import { InventorySyncSettings } from '@/components/admin/InventorySyncSettings'
 import { ShopifyTagImport } from '@/components/admin/ShopifyTagImport';
 import { PSAApiSettings } from '@/components/admin/PSAApiSettings';
 import { ShopifySyncPanel } from '@/components/admin/ShopifySyncPanel';
+import { ShopifyMetafieldSetup } from '@/components/admin/ShopifyMetafieldSetup';
 import ShopifyQueueTest from '@/components/admin/ShopifyQueueTest';
 import ShopifyQueueSettings from '@/components/admin/ShopifyQueueSettings';
 import ShopifyQueueHealth from '@/components/admin/ShopifyQueueHealth';
@@ -331,6 +332,7 @@ const Admin = () => {
             <DuplicateCleanup />
             <ShopifyEnvironmentSetup />
             <ShopifyConfig />
+            <ShopifyMetafieldSetup />
             <InventorySyncSettings />
             <WebhookTestPanel />
             <ShopifyTagImport />
