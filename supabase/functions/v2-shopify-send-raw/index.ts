@@ -217,7 +217,7 @@ Deno.serve(async (req) => {
         body_html: description,
         vendor: vendor || brandTitle || (isComic ? 'Comics' : 'Trading Cards'),
         product_type: isComic ? 'Raw Comic' : 'Raw Card',
-        tags: isComic ? [
+        tags: [...new Set(isComic ? [
           'comics',
           'raw',
           brandTitle, // Publisher (DC, Marvel, etc.)
@@ -232,12 +232,12 @@ Deno.serve(async (req) => {
           'single', 
           brandTitle, 
           condition, // Condition as separate tag
-          intakeItem.category || 'Pokemon', // Game from intake item
+          intakeItem.sub_category || (intakeItem.main_category === 'comics' ? 'american' : intakeItem.main_category === 'sports' ? 'baseball' : 'pokemon'), // Use sub_category or default by main_category
           intakeItem.lot_number || 'Unknown Lot', // Lot number
           subject ? `Card: ${subject}` : null, // Card name
           cardNumber ? `Number: ${cardNumber}` : null, // Card number
           vendor // Add vendor to tags
-        ].filter(Boolean),
+        ].filter(Boolean))].join(', '),
         variants: [{
           sku: intakeItem.sku,
           price: intakeItem.price?.toString() || '0.00',

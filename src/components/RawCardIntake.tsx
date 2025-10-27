@@ -33,6 +33,44 @@ export const RawCardIntake = ({ onBatchAdd }: RawCardIntakeProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const [mainCategory, setMainCategory] = useState("tcg");
   const [subCategory, setSubCategory] = useState("");
+  const [vendor, setVendor] = useState("");
+
+  // Load vendors for the store
+  const [vendors, setVendors] = useState<Array<{ vendor_name: string; is_default: boolean }>>([]);
+  const [loadingVendors, setLoadingVendors] = useState(false);
+
+  useEffect(() => {
+    const loadVendors = async () => {
+      if (!assignedStore) return;
+      
+      setLoadingVendors(true);
+      try {
+        const { data, error } = await supabase
+          .from('shopify_location_vendors')
+          .select('vendor_name, is_default')
+          .eq('store_key', assignedStore)
+          .is('location_gid', null)
+          .order('is_default', { ascending: false })
+          .order('vendor_name', { ascending: true });
+
+        if (error) throw error;
+
+        setVendors(data || []);
+        
+        // Auto-select default vendor
+        const defaultVendor = data?.find(v => v.is_default);
+        if (defaultVendor && !vendor) {
+          setVendor(defaultVendor.vendor_name);
+        }
+      } catch (error) {
+        console.error('Failed to load vendors:', error);
+      } finally {
+        setLoadingVendors(false);
+      }
+    };
+
+    loadVendors();
+  }, [assignedStore]);
 
   // Auto-detect main category when brand changes
   React.useEffect(() => {
@@ -87,7 +125,7 @@ export const RawCardIntake = ({ onBatchAdd }: RawCardIntakeProps) => {
         `${brand}-${subject}-${cardNumber || 'unknown'}`.replace(/\s+/g, '-').toLowerCase()
       );
 
-      const { data, error } = await supabase.rpc("create_raw_intake_item", {
+      const itemPayload: any = {
         store_key_in: assignedStore,
         shopify_location_gid_in: selectedLocation,
         quantity_in: 1,
@@ -109,9 +147,20 @@ export const RawCardIntake = ({ onBatchAdd }: RawCardIntakeProps) => {
           card_number: cardNumber,
           condition: condition
         }
-      } as any);
+      };
+
+      const { data, error } = await supabase.rpc("create_raw_intake_item", itemPayload);
 
       if (error) throw error;
+
+      // Update vendor immediately after insert
+      const insertedItem = Array.isArray(data) ? data[0] : data;
+      if (vendor && insertedItem?.id) {
+        await supabase
+          .from('intake_items')
+          .update({ vendor })
+          .eq('id', insertedItem.id);
+      }
 
       toast({
         title: "Card Added",
@@ -119,13 +168,15 @@ export const RawCardIntake = ({ onBatchAdd }: RawCardIntakeProps) => {
         variant: "default",
       });
 
-      // Reset form
+      // Reset form but keep vendor
+      const currentVendor = vendor;
       setBrand("");
       setSubject("");
       setCardNumber("");
       setCondition("");
       setPrice("");
       setNotes("");
+      setVendor(currentVendor);
 
       // Trigger refresh
       onBatchAdd?.(Array.isArray(data) ? data[0] : data);
@@ -265,6 +316,26 @@ export const RawCardIntake = ({ onBatchAdd }: RawCardIntakeProps) => {
             onChange={(e) => setNotes(e.target.value)}
             placeholder="Additional notes..."
           />
+        </div>
+
+        <div>
+          <Label htmlFor="vendor">Vendor (Optional)</Label>
+          <Select 
+            value={vendor} 
+            onValueChange={setVendor}
+            disabled={loadingVendors}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder={loadingVendors ? "Loading vendors..." : "Select vendor"} />
+            </SelectTrigger>
+            <SelectContent>
+              {vendors.map((v) => (
+                <SelectItem key={v.vendor_name} value={v.vendor_name}>
+                  {v.vendor_name} {v.is_default ? '(Default)' : ''}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         <Button

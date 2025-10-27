@@ -154,7 +154,7 @@ Deno.serve(async (req) => {
         body_html: description,
         vendor: vendor || brandTitle || (isComic ? 'Comics' : 'Trading Cards'),
         product_type: isComic ? 'Graded Comic' : 'Graded Card',
-        tags: isComic ? [
+        tags: [...new Set(isComic ? [
           'comics',
           'graded',
           gradingCompany,
@@ -163,14 +163,14 @@ Deno.serve(async (req) => {
           year,
           intakeItem.sub_category || 'american',
           vendor
-        ].filter(Boolean).join(', ') : [
+        ].filter(Boolean) : [
           gradingCompany,
           grade ? `Grade ${grade}` : null,
           brandTitle, 
           year, 
           intakeItem.game || intakeItem.catalog_snapshot?.game, 
           vendor
-        ].filter(Boolean).join(', '),
+        ].filter(Boolean))].join(', '),
         variants: [{
           sku: item.sku,
           price: item.price?.toString() || '0.00',

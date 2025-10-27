@@ -86,7 +86,45 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
     varietyPedigree: "",
     mainCategory: "tcg",
     subCategory: "",
+    vendor: "",
   });
+
+  // Load vendors for the store
+  const [vendors, setVendors] = useState<Array<{ vendor_name: string; is_default: boolean }>>([]);
+  const [loadingVendors, setLoadingVendors] = useState(false);
+
+  useEffect(() => {
+    const loadVendors = async () => {
+      if (!assignedStore) return;
+      
+      setLoadingVendors(true);
+      try {
+        const { data, error } = await supabase
+          .from('shopify_location_vendors')
+          .select('vendor_name, is_default')
+          .eq('store_key', assignedStore)
+          .is('location_gid', null)
+          .order('is_default', { ascending: false })
+          .order('vendor_name', { ascending: true });
+
+        if (error) throw error;
+
+        setVendors(data || []);
+        
+        // Auto-select default vendor
+        const defaultVendor = data?.find(v => v.is_default);
+        if (defaultVendor && !formData.vendor) {
+          setFormData(prev => ({ ...prev, vendor: defaultVendor.vendor_name }));
+        }
+      } catch (error) {
+        console.error('Failed to load vendors:', error);
+      } finally {
+        setLoadingVendors(false);
+      }
+    };
+
+    loadVendors();
+  }, [assignedStore]);
 
   // Helper function to sanitize certificate input (digits only)
   const sanitizeCertNumber = (input: string): string => {
@@ -305,7 +343,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
     try {
       setSubmitting(true);
 
-      const { data, error } = await supabase.rpc("create_raw_intake_item", {
+      const itemPayload: any = {
         store_key_in: assignedStore,
         shopify_location_gid_in: selectedLocation,
         quantity_in: formData.quantity,
@@ -318,17 +356,39 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         price_in: parseFloat(formData.price),
         cost_in: parseFloat(formData.cost),
         sku_in: formData.certNumber, // Use cert number as SKU
+        main_category_in: formData.mainCategory,
+        sub_category_in: formData.subCategory,
         catalog_snapshot_in: {
           ...cardData,
           [gradingService === 'psa' ? 'psa_cert' : 'cgc_cert']: formData.certNumber,
           grading_service: gradingService,
           year: formData.year
         }
-      });
+      };
+
+      // Add vendor if set
+      if (formData.vendor) {
+        const { error: vendorError } = await supabase
+          .from('intake_items')
+          .update({ vendor: formData.vendor })
+          .eq('id', 'temp'); // Will be updated after insert
+      }
+
+      const { data, error } = await supabase.rpc("create_raw_intake_item", itemPayload);
 
       if (error) throw error;
 
-      // Reset form
+      // Update vendor immediately after insert
+      const insertedItem = Array.isArray(data) ? data[0] : data;
+      if (formData.vendor && insertedItem?.id) {
+        await supabase
+          .from('intake_items')
+          .update({ vendor: formData.vendor })
+          .eq('id', insertedItem.id);
+      }
+
+      // Reset form but keep vendor
+      const currentVendor = formData.vendor;
       setCertInput("");
       setBarcodeInput("");
       setCardData(null);
@@ -348,6 +408,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         varietyPedigree: "",
         mainCategory: "tcg",
         subCategory: "",
+        vendor: currentVendor,
       });
 
       toast.success("Card added to batch successfully!");
@@ -586,6 +647,26 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
                 value={formData.varietyPedigree}
                 onChange={(e) => updateFormField('varietyPedigree', e.target.value)}
               />
+            </div>
+
+            <div>
+              <Label htmlFor="vendor">Vendor (Optional)</Label>
+              <Select 
+                value={formData.vendor} 
+                onValueChange={(value) => updateFormField('vendor', value)}
+                disabled={loadingVendors}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={loadingVendors ? "Loading vendors..." : "Select vendor"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {vendors.map((v) => (
+                    <SelectItem key={v.vendor_name} value={v.vendor_name}>
+                      {v.vendor_name} {v.is_default ? '(Default)' : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div>
