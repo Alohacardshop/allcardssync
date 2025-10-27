@@ -31,7 +31,6 @@ import { ShopifySyncDetailsDialog } from '@/components/ShopifySyncDetailsDialog'
 import { InventoryDeleteDialog } from '@/components/InventoryDeleteDialog';
 import { useCutterSettings } from '@/hooks/useCutterSettings';
 import { CutterSettingsPanel } from '@/components/CutterSettingsPanel';
-import { TestLabelButton } from '@/components/TestLabelButton';
 import { RefreshControls } from '@/components/RefreshControls';
 import { AuthStatusDebug } from '@/components/AuthStatusDebug';
 import { useInventoryListQuery } from '@/hooks/useInventoryListQuery';
@@ -2153,8 +2152,6 @@ const Inventory = () => {
                   </div>
 
                   <div className="flex items-center space-x-2">
-                    <TestLabelButton />
-                    
                     <Button
                       variant="outline"
                       size="sm"

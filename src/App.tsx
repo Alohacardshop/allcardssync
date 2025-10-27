@@ -94,7 +94,7 @@ const App = () => (
             {/* Global Components */}
             <GlobalKeyboardHandler />
             <FloatingActionButton />
-            <PerformanceMonitor />
+            {import.meta.env.DEV && <PerformanceMonitor />}
             <SessionTimeoutWarning />
             <RecoveryMode />
             <PrintQueueStatus />

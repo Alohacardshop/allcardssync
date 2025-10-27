@@ -6,10 +6,6 @@ import { logger } from "@/lib/logger";
 const duplicateCache = new Map<string, number>(); // hash -> expiry (ms)
 const SUPPRESS_MS = 3000;
 
-function getSafeMode(): boolean {
-  return localStorage.getItem("safePrintMode") === "true";
-}
-
 function now() { return Date.now(); }
 
 function pruneCache() {
@@ -26,7 +22,7 @@ export async function printRawZpl(zpl: string) {
   // Validations and transforms
   assertSingleFormat(zpl);
   zpl = ensurePQ1(zpl);
-  zpl = applySafeProfile(zpl, getSafeMode());
+  zpl = applySafeProfile(zpl, false);
 
   const hash = await sha1Hex(zpl);
   const exp = duplicateCache.get(hash);
