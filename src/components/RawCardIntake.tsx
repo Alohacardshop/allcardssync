@@ -9,21 +9,22 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { useStore } from "@/contexts/StoreContext";
-import { validateCompleteStoreContext } from "@/utils/storeValidation";
+import { useIntakeValidation } from "@/hooks/useIntakeValidation";
 import { generateTCGSKU } from "@/lib/sku";
 import { useRawIntakeSettings } from "@/hooks/useRawIntakeSettings";
 import { rawCardSchema } from "@/lib/validation/intake-schemas";
 import { SubCategoryCombobox } from "@/components/ui/sub-category-combobox";
 import { detectMainCategory } from "@/utils/categoryMapping";
+import { useLogger } from "@/hooks/useLogger";
 
 interface RawCardIntakeProps {
   onBatchAdd?: (item: any) => void;
 }
 
 export const RawCardIntake = ({ onBatchAdd }: RawCardIntakeProps) => {
-  const { assignedStore, selectedLocation } = useStore();
+  const { assignedStore, selectedLocation, validateAccess } = useIntakeValidation();
   const { settings } = useRawIntakeSettings();
+  const logger = useLogger('RawCardIntake');
   const [brand, setBrand] = useState("");
   const [subject, setSubject] = useState("");
   const [cardNumber, setCardNumber] = useState("");
@@ -63,7 +64,9 @@ export const RawCardIntake = ({ onBatchAdd }: RawCardIntakeProps) => {
           setVendor(defaultVendor.vendor_name);
         }
       } catch (error) {
-        console.error('Failed to load vendors:', error);
+        logger.logError('Failed to load vendors', error instanceof Error ? error : undefined, {
+          store: assignedStore,
+        });
       } finally {
         setLoadingVendors(false);
       }
@@ -81,18 +84,10 @@ export const RawCardIntake = ({ onBatchAdd }: RawCardIntakeProps) => {
   }, [brand]);
 
   const handleSubmit = async () => {
-    // StoreContext is now stable - use directly
-    if (!assignedStore || !selectedLocation) {
-      console.error('[RawCardIntake] Cannot add item - store context missing');
-      toast({
-        title: "Store/Location Required",
-        description: "Store location not set. Please refresh the page.",
-        variant: "destructive",
-      });
-      return;
-    }
-
     try {
+      // Validate store context and access
+      await validateAccess('add raw card');
+
       // Validate input data before proceeding
       const validationResult = rawCardSchema.safeParse({
         brand,
@@ -112,8 +107,6 @@ export const RawCardIntake = ({ onBatchAdd }: RawCardIntakeProps) => {
         });
         return;
       }
-
-      validateCompleteStoreContext({ assignedStore, selectedLocation }, 'add raw card');
       
       setIsLoading(true);
 
@@ -201,7 +194,11 @@ export const RawCardIntake = ({ onBatchAdd }: RawCardIntakeProps) => {
       }));
 
     } catch (error) {
-      console.error("Error adding raw card:", error);
+      logger.logError('Error adding raw card', error instanceof Error ? error : undefined, {
+        brand,
+        subject,
+      });
+      
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to add raw card",
