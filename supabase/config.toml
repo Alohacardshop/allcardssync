@@ -45,6 +45,9 @@ verify_jwt = true
 [functions.shopify-config-check]
 verify_jwt = true
 
+[functions.shopify-webhook-check]
+verify_jwt = true
+
 [functions.shopify-pull-products-by-tags]
 verify_jwt = true
 

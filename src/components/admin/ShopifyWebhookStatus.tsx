@@ -14,54 +14,40 @@ export function ShopifyWebhookStatus() {
     setChecking(true);
     try {
       // Check webhook configuration for both stores
-      const stores = ['hawaii', 'lasvegas'];
+      const stores = ['hawaii', 'las_vegas'];
       const allWebhooks: any[] = [];
 
       for (const storeKey of stores) {
-        const storeUpper = storeKey.toUpperCase();
-        
-        // Get store credentials
-        const { data: domainSetting } = await supabase
-          .from('system_settings')
-          .select('key_value')
-          .eq('key_name', `SHOPIFY_${storeUpper}_STORE_DOMAIN`)
-          .single();
-        
-        const { data: tokenSetting } = await supabase
-          .from('system_settings')
-          .select('key_value')
-          .eq('key_name', `SHOPIFY_${storeUpper}_ACCESS_TOKEN`)
-          .single();
-        
-        const domain = domainSetting?.key_value;
-        const token = tokenSetting?.key_value;
+        try {
+          // Use edge function to check webhooks (avoids CORS issues)
+          const { data, error } = await supabase.functions.invoke('shopify-webhook-check', {
+            body: { storeKey }
+          });
 
-        if (!domain || !token) {
-          console.warn(`Missing credentials for ${storeKey}`);
-          continue;
-        }
-
-        // Fetch webhooks from Shopify
-        const response = await fetch(`https://${domain}/admin/api/2024-07/webhooks.json`, {
-          headers: {
-            'X-Shopify-Access-Token': token,
-            'Content-Type': 'application/json'
+          if (error) {
+            console.error(`Error fetching webhooks for ${storeKey}:`, error);
+            toast.error(`Failed to check webhook status for ${storeKey}`);
+            continue;
           }
-        });
 
-        if (!response.ok) {
-          throw new Error(`Failed to fetch webhooks for ${storeKey}`);
+          if (data?.webhooks) {
+            allWebhooks.push({
+              store: storeKey,
+              webhooks: data.webhooks
+            });
+          }
+        } catch (err) {
+          console.error(`Exception checking ${storeKey}:`, err);
+          toast.error(`Failed to check webhook status for ${storeKey}`);
         }
-
-        const data = await response.json();
-        allWebhooks.push({
-          store: storeKey,
-          webhooks: data.webhooks || []
-        });
       }
 
-      setWebhooks(allWebhooks);
-      toast.success('Webhook status loaded');
+      if (allWebhooks.length > 0) {
+        setWebhooks(allWebhooks);
+        toast.success('Webhook status loaded');
+      } else {
+        toast.error('No webhook data could be retrieved');
+      }
     } catch (error) {
       console.error('Error checking webhook status:', error);
       toast.error('Failed to check webhook status');
@@ -75,6 +61,7 @@ export function ShopifyWebhookStatus() {
     'orders/cancelled',
     'orders/fulfilled',
     'inventory_levels/update',
+    'inventory_items/update',
     'products/delete',
     'refunds/create'
   ];
