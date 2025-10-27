@@ -10,6 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { CheckCircle2, AlertCircle, Save, TestTube, Key, Globe, Webhook } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { logger } from '@/lib/logger';
 
 interface StoreConfig {
   domain: string;
@@ -91,7 +92,7 @@ export function ShopifyConfig() {
       setConfigs(newConfigs);
       setFormData(newFormData);
     } catch (error) {
-      console.error('Error loading configurations:', error);
+      logger.error('Error loading configurations', error instanceof Error ? error : new Error(String(error)), {}, 'shopify-config');
       toast({
         title: "Error",
         description: "Failed to load Shopify configurations.",
@@ -205,7 +206,7 @@ export function ShopifyConfig() {
         description: `${store.name} configuration saved successfully.`
       });
     } catch (error) {
-      console.error('Error saving configuration:', error);
+      logger.error('Error saving configuration', error instanceof Error ? error : new Error(String(error)), { storeKey }, 'shopify-config');
       toast({
         title: "Error",
         description: "Failed to save configuration.",
@@ -241,7 +242,7 @@ export function ShopifyConfig() {
         }
       } catch (err) {
         locationError = err;
-        console.warn('Error fetching locations during test:', err);
+        logger.warn('Error fetching locations during test', { error: err }, 'shopify-config');
       }
 
       if (configData?.shop) {
@@ -269,7 +270,7 @@ export function ShopifyConfig() {
         });
       }
     } catch (error) {
-      console.error('Error testing connection:', error);
+      logger.error('Error testing connection', error instanceof Error ? error : new Error(String(error)), { storeKey }, 'shopify-config');
       toast({
         title: "Error",
         description: `Failed to test connection: ${error.message || 'Unknown error'}`,

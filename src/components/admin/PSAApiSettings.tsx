@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Copy, Eye, EyeOff } from "lucide-react";
+import { logger } from '@/lib/logger';
 
 export function PSAApiSettings() {
   const [token, setToken] = useState('');
@@ -25,12 +26,12 @@ export function PSAApiSettings() {
   const { toast } = useToast();
 
   useEffect(() => {
-    console.log('PSAApiSettings: Component mounted, checking token status...');
+    logger.info('Component mounted, checking token status', {}, 'psa-api-settings');
     checkCurrentTokenStatus();
   }, []);
 
   const checkCurrentTokenStatus = async () => {
-    console.log('PSAApiSettings: Starting token status check...');
+    logger.info('Starting token status check', {}, 'psa-api-settings');
     try {
       // Add timeout to prevent hanging
       const timeoutPromise = new Promise((_, reject) => {
@@ -38,7 +39,7 @@ export function PSAApiSettings() {
       });
 
       // Use the get-system-setting edge function to check token status
-      console.log('PSAApiSettings: Invoking get-system-setting function...');
+      logger.debug('Invoking get-system-setting function', {}, 'psa-api-settings');
       const functionPromise = supabase.functions.invoke('get-system-setting', {
         body: { 
           keyName: 'PSA_API_TOKEN',
@@ -48,10 +49,10 @@ export function PSAApiSettings() {
 
       const { data, error } = await Promise.race([functionPromise, timeoutPromise]) as any;
 
-      console.log('PSAApiSettings: Function response:', { data, error });
+      logger.debug('Function response received', { hasData: !!data, hasError: !!error }, 'psa-api-settings');
 
       if (error) {
-        console.error('Error checking token status:', error);
+        logger.error('Error checking token status', error instanceof Error ? error : new Error(String(error)), {}, 'psa-api-settings');
         setCurrentStatus({ hasToken: false, source: 'none' });
         return;
       }
@@ -59,24 +60,24 @@ export function PSAApiSettings() {
       if (data?.value) {
         // Determine source based on response
         const source = data.source || 'database';
-        console.log('PSAApiSettings: Token found, source:', source);
+        logger.info('Token found', { source }, 'psa-api-settings');
         setCurrentStatus({
           hasToken: true,
           source: source as 'database' | 'environment',
           lastTested: data.lastUpdated ? new Date(data.lastUpdated) : undefined
         });
       } else {
-        console.log('PSAApiSettings: No token found');
+        logger.info('No token found', {}, 'psa-api-settings');
         setCurrentStatus({
           hasToken: false,
           source: 'none'
         });
       }
     } catch (error) {
-      console.error('Error checking token status:', error);
+      logger.error('Error checking token status', error instanceof Error ? error : new Error(String(error)), {}, 'psa-api-settings');
       setCurrentStatus({ hasToken: false, source: 'none' });
     }
-    console.log('PSAApiSettings: Token status check completed');
+    logger.debug('Token status check completed', {}, 'psa-api-settings');
   };
 
   const handleSaveToken = async () => {
@@ -178,7 +179,7 @@ export function PSAApiSettings() {
         });
       }
     } catch (error: any) {
-      console.error('Error retrieving current token:', error);
+      logger.error('Error retrieving current token', error instanceof Error ? error : new Error(String(error)), {}, 'psa-api-settings');
       
       let errorMessage = "Failed to retrieve current token";
       if (error.message?.includes('Admin role required')) {
@@ -236,7 +237,7 @@ export function PSAApiSettings() {
         error: "PSA scraper functionality removed - please implement direct API integration"
       });
     } catch (error: any) {
-      console.error('Error testing PSA API token:', error);
+      logger.error('Error testing PSA API token', error instanceof Error ? error : new Error(String(error)), {}, 'psa-api-settings');
       setTestResult({ 
         ok: false, 
         error: error.message || "Failed to test PSA API token" 

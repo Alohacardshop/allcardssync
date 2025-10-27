@@ -7,6 +7,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle, CheckCircle, Database, Globe } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { logger } from '@/lib/logger';
 
 const TCGDatabaseSettings = () => {
   const [externalApiUrl, setExternalApiUrl] = useState('');
@@ -25,7 +26,7 @@ const TCGDatabaseSettings = () => {
         .maybeSingle();
 
       if (error) {
-        console.error('Error fetching TCG API URL:', error);
+        logger.error('Error fetching TCG API URL', error instanceof Error ? error : new Error(String(error)), {}, 'tcg-database-settings');
       } else {
         setExternalApiUrl(data?.key_value || '');
       }
@@ -83,7 +84,7 @@ const TCGDatabaseSettings = () => {
       toast.success('TCG Database settings saved successfully!');
       loadConfiguration();
     } catch (error: any) {
-      console.error('Error saving TCG Database settings:', error);
+      logger.error('Error saving TCG Database settings', error instanceof Error ? error : new Error(String(error)), {}, 'tcg-database-settings');
       toast.error('Failed to save TCG Database settings', {
         description: error.message
       });
@@ -103,7 +104,7 @@ const TCGDatabaseSettings = () => {
       // Basic connection test - this will be implemented when the external API is ready
       toast.info('Connection test feature will be implemented when external API is ready');
     } catch (error: any) {
-      console.error('Connection test failed:', error);
+      logger.error('Connection test failed', error instanceof Error ? error : new Error(String(error)), {}, 'tcg-database-settings');
       toast.error('Connection test failed', {
         description: error.message
       });
@@ -127,7 +128,7 @@ const TCGDatabaseSettings = () => {
           setIsAdmin(false);
         }
       } catch (error) {
-        console.error('Error checking admin role:', error);
+        logger.error('Error checking admin role', error instanceof Error ? error : new Error(String(error)), {}, 'tcg-database-settings');
         setIsAdmin(false);
       }
     };

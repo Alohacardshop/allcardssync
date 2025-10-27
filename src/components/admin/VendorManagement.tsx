@@ -9,6 +9,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Plus, Trash2, Star } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { logger } from '@/lib/logger';
 
 interface Vendor {
   id: string;
@@ -57,7 +58,7 @@ export function VendorManagement() {
       if (error) throw error;
       setStores(data || []);
     } catch (error) {
-      console.error('Failed to load stores:', error);
+      logger.error('Failed to load stores', error instanceof Error ? error : new Error(String(error)), {}, 'vendor-management');
       toast.error('Failed to load stores');
     }
   };
@@ -74,7 +75,7 @@ export function VendorManagement() {
       if (error) throw error;
       setVendors(data || []);
     } catch (error) {
-      console.error('Failed to load vendors:', error);
+      logger.error('Failed to load vendors', error instanceof Error ? error : new Error(String(error)), { selectedStore }, 'vendor-management');
       toast.error('Failed to load vendors');
     }
   };
@@ -107,7 +108,7 @@ export function VendorManagement() {
       setNewVendorName('');
       loadVendors();
     } catch (error) {
-      console.error('Failed to add vendor:', error);
+      logger.error('Failed to add vendor', error instanceof Error ? error : new Error(String(error)), { vendorName: newVendorName }, 'vendor-management');
       toast.error('Failed to add vendor');
     } finally {
       setLoading(false);
@@ -135,7 +136,7 @@ export function VendorManagement() {
       toast.success('Default vendor updated');
       loadVendors();
     } catch (error) {
-      console.error('Failed to set default vendor:', error);
+      logger.error('Failed to set default vendor', error instanceof Error ? error : new Error(String(error)), { vendorId }, 'vendor-management');
       toast.error('Failed to set default vendor');
     } finally {
       setLoading(false);
@@ -157,7 +158,7 @@ export function VendorManagement() {
       toast.success('Vendor deleted successfully');
       loadVendors();
     } catch (error) {
-      console.error('Failed to delete vendor:', error);
+      logger.error('Failed to delete vendor', error instanceof Error ? error : new Error(String(error)), { vendorId }, 'vendor-management');
       toast.error('Failed to delete vendor');
     } finally {
       setLoading(false);

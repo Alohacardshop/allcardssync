@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Clock, TrendingUp, Database, Activity } from "lucide-react";
 import { tcgSupabase } from "@/integrations/supabase/client";
 import { usePollingWithCircuitBreaker } from "@/hooks/usePollingWithCircuitBreaker";
+import { logger } from '@/lib/logger';
 
 interface PricingJobRun {
   id: string;
@@ -29,7 +30,7 @@ export function PricingJobsMonitor() {
       .limit(20);
 
     if (error) {
-      console.error('Failed to fetch pricing job runs from TCG DB:', error);
+      logger.error('Failed to fetch pricing job runs from TCG DB', error instanceof Error ? error : new Error(String(error)), {}, 'pricing-jobs-monitor');
       throw new Error(`Failed to fetch pricing jobs: ${error.message}`);
     }
 
@@ -51,9 +52,9 @@ export function PricingJobsMonitor() {
       maxInterval: 30 * 60 * 1000, // 30 minutes max
       maxFailures: 2,
       circuitOpenTime: 2 * 60 * 1000, // 2 minutes
-      onError: (error) => console.error('[PricingJobs] Polling error:', error.message),
-      onCircuitOpen: () => console.log('[PricingJobs] Circuit breaker opened'),
-      onCircuitClose: () => console.log('[PricingJobs] Circuit breaker closed'),
+      onError: (error) => logger.error('Polling error', error, {}, 'pricing-jobs-monitor'),
+      onCircuitOpen: () => logger.warn('Circuit breaker opened', {}, 'pricing-jobs-monitor'),
+      onCircuitClose: () => logger.info('Circuit breaker closed', {}, 'pricing-jobs-monitor'),
     }
   );
 

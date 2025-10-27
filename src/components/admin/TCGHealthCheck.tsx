@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle, XCircle, Loader2 } from "lucide-react";
 import { tcgSupabase, getCachedPricingViaDB, updateVariantPricing, PricingResponse } from "@/integrations/supabase/client";
+import { logger } from '@/lib/logger';
 
 export function TCGHealthCheck() {
   const [cardId, setCardId] = useState("");
@@ -25,14 +26,14 @@ export function TCGHealthCheck() {
 
       if (error) {
         setConnectivity('error');
-        console.error('TCG DB connectivity test failed:', error);
+        logger.error('TCG DB connectivity test failed', error instanceof Error ? error : new Error(String(error)), {}, 'tcg-health-check');
       } else {
         setConnectivity('success');
-        console.log('TCG DB connectivity test passed:', data);
+        logger.info('TCG DB connectivity test passed', { dataCount: data?.length || 0 }, 'tcg-health-check');
       }
     } catch (error) {
       setConnectivity('error');
-      console.error('TCG DB connectivity error:', error);
+      logger.error('TCG DB connectivity error', error instanceof Error ? error : new Error(String(error)), {}, 'tcg-health-check');
     } finally {
       setLoading(false);
     }
@@ -52,15 +53,15 @@ export function TCGHealthCheck() {
       setDbResult(result);
       
       // Log telemetry
-      console.log('[TELEMETRY]', JSON.stringify({
+      logger.info('DB pricing read', {
         event: 'db_pricing_read',
         cardId: cardId.trim(),
         variantId: variantId.trim() || undefined,
         outcome: result.success ? 'success' : 'error',
         variants_found: result.variants?.length || 0
-      }));
+      }, 'tcg-health-check');
     } catch (error) {
-      console.error('DB read error:', error);
+      logger.error('DB read error', error instanceof Error ? error : new Error(String(error)), { cardId }, 'tcg-health-check');
       setDbResult({
         success: false,
         cardId: cardId.trim(),
@@ -87,7 +88,7 @@ export function TCGHealthCheck() {
       setRefreshResult(result);
       
       // Log telemetry
-      console.log('[TELEMETRY]', JSON.stringify({
+      logger.info('Manual pricing refresh', {
         event: 'manual_pricing_refresh',
         cardId: cardId.trim(),
         variantId: variantId.trim() || undefined,
@@ -95,9 +96,9 @@ export function TCGHealthCheck() {
         printing: 'normal',
         outcome: result.success ? 'success' : 'error',
         variants_updated: result.variants?.length || 0
-      }));
+      }, 'tcg-health-check');
     } catch (error) {
-      console.error('Pricing refresh error:', error);
+      logger.error('Pricing refresh error', error instanceof Error ? error : new Error(String(error)), { cardId }, 'tcg-health-check');
       setRefreshResult({
         success: false,
         cardId: cardId.trim(),
