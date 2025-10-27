@@ -57,7 +57,8 @@ export function ShopifyWebhookStatus() {
   };
 
   const requiredTopics = [
-    'orders/paid',
+    'orders/create',
+    'orders/updated',
     'orders/cancelled',
     'orders/fulfilled',
     'inventory_levels/update',

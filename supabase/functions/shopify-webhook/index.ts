@@ -140,7 +140,8 @@ serve(async (req) => {
         await handleProductListingRemove(supabase, payload, shopifyDomain);
         break;
       
-      case 'orders/paid':
+      case 'orders/create':
+      case 'orders/updated':
       case 'orders/fulfilled':
         await handleOrderUpdate(supabase, payload, shopifyDomain);
         break;
@@ -240,8 +241,15 @@ async function handleProductListingRemove(supabase: any, payload: any, shopifyDo
 async function handleOrderUpdate(supabase: any, payload: any, shopifyDomain: string | null) {
   const orderId = payload.id?.toString();
   const lineItems = payload.line_items || [];
+  const financialStatus = payload.financial_status;
 
   if (!orderId || lineItems.length === 0) return;
+
+  // Only process paid orders to prevent premature inventory deduction
+  if (financialStatus !== 'paid' && financialStatus !== 'partially_paid') {
+    console.log(`Skipping order ${orderId} - not paid yet (status: ${financialStatus})`);
+    return;
+  }
 
   console.log(`Handling order update: ${orderId} with ${lineItems.length} line items`);
 
