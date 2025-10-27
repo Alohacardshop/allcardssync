@@ -23,6 +23,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useStore } from "@/contexts/StoreContext";
 import { Search, Package, DollarSign, Calendar, Eye, History, Trash2 } from "lucide-react";
 import { format } from "date-fns";
+import { logger } from "@/lib/logger";
 
 interface IntakeLot {
   id: string;
@@ -100,7 +101,7 @@ export default function Batches() {
           setIsAdmin(!!data && !error);
         }
       } catch (error) {
-        console.error('Error checking admin status:', error);
+        logger.error('Error checking admin status', error as Error);
       }
     };
 
@@ -127,7 +128,7 @@ export default function Batches() {
       if (error) throw error;
       setLots(data || []);
     } catch (error) {
-      console.error('Error fetching lots:', error);
+      logger.error('Error fetching lots', error as Error, { assignedStore, selectedLocation });
       toast({
         title: "Error",
         description: "Failed to load batches",
@@ -150,7 +151,7 @@ export default function Batches() {
       if (error) throw error;
       setLotItems(data || []);
     } catch (error) {
-      console.error('Error fetching lot items:', error);
+      logger.error('Error fetching lot items', error as Error, { lotId });
       toast({
         title: "Error",
         description: "Failed to load batch items",
@@ -198,7 +199,7 @@ export default function Batches() {
       }
 
     } catch (error) {
-      console.error('Error deleting batch:', error);
+      logger.error('Error deleting batch', error as Error, { lotId, lotNumber });
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to delete batch",

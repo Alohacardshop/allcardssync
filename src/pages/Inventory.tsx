@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Loader2, Upload, Search, CheckSquare, Square, Trash2, Printer, Scissors, RotateCcw, AlertCircle, RefreshCw } from 'lucide-react';
+import { logger } from '@/lib/logger';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
@@ -653,7 +654,7 @@ const Inventory = () => {
           if (error) throw error;
           successCount++;
         } catch (error) {
-          console.error(`Failed to queue ${item.sku}:`, error);
+          logger.error(`Failed to queue ${item.sku}`, error as Error);
           failCount++;
         }
       }
@@ -703,7 +704,7 @@ const Inventory = () => {
         item.store_key && item.shopify_location_gid && item.sku && !item.deleted_at
       );
 
-      console.log('[handleResyncSelected] Starting resync', {
+      logger.info('[handleResyncSelected] Starting resync', {
         selectedCount: selectedItems.size,
         itemsToResyncCount: itemsToResync.length,
         firstItem: itemsToResync[0]?.sku
@@ -770,7 +771,7 @@ const Inventory = () => {
             else if (result.adjusted) updated++;
           }
         } catch (error) {
-          console.error(`Failed to resync raw item ${item.sku}:`, error);
+          logger.error(`Failed to resync raw item ${item.sku}`, error as Error);
           failed++;
         }
       }
@@ -806,7 +807,7 @@ const Inventory = () => {
             created++;
           }
         } catch (error) {
-          console.error(`Failed to resync graded item ${item.sku}:`, error);
+          logger.error(`Failed to resync graded item ${item.sku}`, error as Error);
           failed++;
         }
       }
@@ -862,7 +863,7 @@ const Inventory = () => {
           });
 
           if (queueError) {
-            console.error(`Failed to queue ${item.sku}:`, queueError);
+            logger.error(`Failed to queue ${item.sku}`, queueError as Error);
             failCount++;
           } else {
             successCount++;
@@ -871,7 +872,7 @@ const Inventory = () => {
           // Small delay between queue operations
           await new Promise(resolve => setTimeout(resolve, 100));
         } catch (error) {
-          console.error(`Error queuing ${item.sku}:`, error);
+          logger.error(`Error queuing ${item.sku}`, error as Error);
           failCount++;
         }
       }
@@ -945,7 +946,7 @@ const Inventory = () => {
           .eq('is_default', true)
           .limit(1);
           
-        if (zplTemplates && zplTemplates.length > 0) {
+          if (zplTemplates && zplTemplates.length > 0) {
           const zplTemplate = zplTemplates[0];
           tpl = {
             id: zplTemplate.id,
@@ -956,10 +957,10 @@ const Inventory = () => {
               : '^XA^FO50,50^A0N,30,30^FD{{CARDNAME}}^FS^FO50,100^A0N,20,20^FD{{CONDITION}}^FS^FO50,150^BY2^BCN,60,Y,N,N^FD{{BARCODE}}^FS^XZ',
             scope: 'org'
           };
-          console.log('🖨️ Using ZPL Studio template:', tpl.name);
+          logger.info('🖨️ Using ZPL Studio template', { templateName: tpl.name });
         }
       } catch (error) {
-        console.warn('🖨️ Failed to load ZPL Studio template, falling back:', error);
+        logger.warn('🖨️ Failed to load ZPL Studio template, falling back', error as Error);
       }
       
       // Fallback to regular template system if no ZPL Studio template found

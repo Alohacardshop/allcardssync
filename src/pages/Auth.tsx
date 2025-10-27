@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Link, useNavigate } from "react-router-dom";
+import { logger } from "@/lib/logger";
 
 const ROLE_TIMEOUT_MS = 5000; // Reduced from 8s to 5s
 const AUTH_CHANGE_GUARD_MS = 4000; // Reduced from 6s to 4s
@@ -69,13 +70,13 @@ export default function Auth() {
 
   useEffect(() => {
     mountedRef.current = true;
-    console.log('Auth page mount');
+    logger.info('Auth page mounted');
     setMounted(true);
 
     // Single subscription, StrictMode-safe
     if (!subRef.current) {
       subRef.current = supabase.auth.onAuthStateChange(async (event, session) => {
-        console.log('Auth state change:', event, session?.user?.email);
+        logger.info('Auth state change', { event, email: session?.user?.email });
         if (!mountedRef.current) return;
         if (event === "SIGNED_IN" && session?.user) {
           clearGuardTimer();
@@ -96,7 +97,7 @@ export default function Auth() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
-          console.log('Existing session found for:', session.user.email);
+          logger.info('Existing session found', { email: session.user.email });
           const attempt = crypto.randomUUID();
           currentAttemptId.current = attempt;
           await verifyAccessThenNavigate(session.user.id, attempt);
@@ -131,10 +132,10 @@ export default function Auth() {
     setLoading(true);
     setRoleError(null);
     try {
-      console.log('Starting sign in process');
+      logger.info('Starting sign in process', { email });
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
-      console.log('Sign in successful');
+      logger.info('Sign in successful', { email });
       toast.success("Signed in successfully!");
 
       // If auth event doesn't arrive, unlock UI
@@ -144,7 +145,7 @@ export default function Auth() {
         toast.error("Login is taking too long. Please try again.");
       }, AUTH_CHANGE_GUARD_MS);
     } catch (err: any) {
-      console.error('Sign in error:', err);
+      logger.error('Sign in error', err, { email });
       setLoading(false);
       toast.error(err?.message || "Sign-in failed");
     }
@@ -163,7 +164,7 @@ export default function Auth() {
     cancelRoleCheckRef.current = () => { canceled = true; };
 
     const roleCheckPromise = (async () => {
-      console.log('Processing auth for user:', userId);
+      logger.info('Processing auth verification', { userId });
       const { data, error } = await supabase.rpc("verify_user_access", { _user_id: userId });
       if (error) throw error;
       return data as { access_granted?: boolean } | null;
@@ -179,10 +180,10 @@ export default function Auth() {
     try {
       const result = await Promise.race([roleCheckPromise, timeoutPromise]);
       if (canceled || currentAttemptId.current !== attemptId) return; // new attempt started
-      console.log('Access verification result:', result);
+      logger.info('Access verification result', { result, userId });
       const granted = !!(result && typeof result === "object" && "access_granted" in result && (result as any).access_granted);
       if (granted) {
-        console.log('Access granted, navigating to dashboard');
+        logger.info('Access granted, navigating to dashboard', { userId });
         navigate("/", { replace: true });
       } else {
         toast.warning("Signed in, but access not fully verified yet. Some features may be limited.");
@@ -190,7 +191,7 @@ export default function Auth() {
       }
     } catch (err: any) {
       if (canceled || currentAttemptId.current !== attemptId) return;
-      console.error('Role check failed:', err?.message || err);
+      logger.error('Role check failed', err, { userId });
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
         toast.success("Signed in successfully! Proceeding to dashboard...");
@@ -220,7 +221,7 @@ export default function Auth() {
       if (error) throw error;
       toast.success("Check your email to confirm your account");
     } catch (err: any) {
-      console.error(err);
+      logger.error('Sign up failed', err, { email });
       toast.error(err?.message || "Sign up failed");
     } finally {
       setLoading(false);
