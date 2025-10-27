@@ -15,7 +15,7 @@ import { Navigation } from "@/components/Navigation";
 import { useStore } from "@/contexts/StoreContext";
 import { buildTitleFromParts } from "@/lib/labelData";
 import { AlertTriangle, CheckCircle, Clock, ExternalLink, RefreshCw, Edit3, MapPin, Settings } from "lucide-react";
-import { FLAGS } from '@/lib/flags';
+
 
 function useSEO(opts: { title: string; description?: string; canonical?: string }) {
   useEffect(() => {
@@ -196,19 +196,11 @@ export default function ShopifyMapping() {
   };
 
   const handleBulkPush = async (itemIds: string[]) => {
-    // Feature disabled for v2 rebuild
-    if (!FLAGS.SHOPIFY_IMPORT_V2_ENABLED) {
-      toast.error("Import functionality is being rebuilt. Coming soon!");
-      return;
-    }
+    toast.error("Import functionality is being rebuilt. Coming soon!");
   };
 
   const handleGroupPush = async (group: ProductGroup) => {
-    // Feature disabled for v2 rebuild
-    if (!FLAGS.SHOPIFY_IMPORT_V2_ENABLED) {
-      toast.error("Import functionality is being rebuilt. Coming soon!");
-      return;
-    }
+    toast.error("Import functionality is being rebuilt. Coming soon!");
   };
 
   const clearMapping = async (itemId: string) => {

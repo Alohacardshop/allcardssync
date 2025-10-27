@@ -1,11 +1,17 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertTriangle, ExternalLink } from "lucide-react";
-import { catalogMovedDetails } from "@/sentinel/catalogMoved";
 
 interface CatalogMigrationPlaceholderProps {
   title?: string;
   description?: string;
 }
+
+const catalogMovedDetails = {
+  message: "Catalog syncing moved to Alohacardshop/alohacardshopcarddatabase",
+  newRepository: "Alohacardshop/alohacardshopcarddatabase", 
+  migrationDate: "2025-08-29",
+  reason: "Catalog operations moved to dedicated external service"
+};
 
 export const CatalogMigrationPlaceholder = ({ 
   title = "Catalog Functionality Moved",
