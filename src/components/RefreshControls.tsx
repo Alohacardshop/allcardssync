@@ -20,10 +20,9 @@ export function RefreshControls({
   isRefreshing,
   lastRefresh
 }: RefreshControlsProps) {
-  const formatLastRefresh = () => {
+  const formatLastRefresh = React.useMemo(() => {
     if (!lastRefresh) return 'Never';
-    const now = new Date();
-    const diff = now.getTime() - lastRefresh.getTime();
+    const diff = Date.now() - lastRefresh.getTime();
     const minutes = Math.floor(diff / 60000);
     const seconds = Math.floor((diff % 60000) / 1000);
     
@@ -31,7 +30,7 @@ export function RefreshControls({
       return `${minutes}m ${seconds}s ago`;
     }
     return `${seconds}s ago`;
-  };
+  }, [lastRefresh]);
 
   return (
     <div className="flex items-center gap-4 p-3 bg-muted/50 rounded-lg">
@@ -63,7 +62,7 @@ export function RefreshControls({
       </Button>
       
       <Badge variant="secondary" className="text-xs">
-        Last: {formatLastRefresh()}
+        Last: {formatLastRefresh}
       </Badge>
     </div>
   );

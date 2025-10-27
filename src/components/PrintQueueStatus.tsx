@@ -1,9 +1,30 @@
 import React from 'react';
-import { usePrintQueueStatus } from '@/lib/print/usePrintQueueStatus';
+import { printQueue } from '@/lib/print/queueInstance';
 import { Button } from '@/components/ui/button';
 
 export function PrintQueueStatus() {
-  const { size, flushNow, clear } = usePrintQueueStatus();
+  const [size, setSize] = React.useState(printQueue.size());
+  
+  // Poll queue size only when queue has items (reduced from 500ms to 2000ms)
+  React.useEffect(() => {
+    const pollInterval = size > 0 ? 2000 : 5000; // Poll faster when queue active
+    const interval = setInterval(() => {
+      const currentSize = printQueue.size();
+      setSize(currentSize);
+    }, pollInterval);
+    
+    return () => clearInterval(interval);
+  }, [size]);
+  
+  const handleFlush = () => {
+    printQueue.flushNow();
+    setSize(0);
+  };
+  
+  const handleClear = () => {
+    printQueue.clear();
+    setSize(0);
+  };
 
   if (size === 0) return null;
 
@@ -13,7 +34,7 @@ export function PrintQueueStatus() {
       <Button 
         variant="ghost" 
         size="sm" 
-        onClick={flushNow}
+        onClick={handleFlush}
         className="h-6 px-2 text-xs underline"
       >
         Flush
@@ -21,7 +42,7 @@ export function PrintQueueStatus() {
       <Button 
         variant="ghost" 
         size="sm" 
-        onClick={clear}
+        onClick={handleClear}
         className="h-6 px-2 text-xs underline text-destructive"
       >
         Clear

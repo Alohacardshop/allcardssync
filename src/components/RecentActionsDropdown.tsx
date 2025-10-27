@@ -42,11 +42,12 @@ export function RecentActionsDropdown() {
     }
   }, []);
 
-  const addAction = (action: Omit<RecentAction, 'id' | 'timestamp'>) => {
+  const addAction = React.useCallback((action: Omit<RecentAction, 'id' | 'timestamp'>) => {
+    const now = Date.now();
     const newAction: RecentAction = {
       ...action,
-      id: Date.now().toString(),
-      timestamp: new Date()
+      id: now.toString(),
+      timestamp: new Date(now)
     };
 
     const updatedActions = [newAction, ...recentActions.slice(0, 4)];
@@ -54,7 +55,7 @@ export function RecentActionsDropdown() {
     
     // Save to localStorage
     localStorage.setItem('recentActions', JSON.stringify(updatedActions));
-  };
+  }, [recentActions]);
 
   const handleUndo = async (action: RecentAction) => {
     try {
@@ -110,16 +111,15 @@ export function RecentActionsDropdown() {
     }
   };
 
-  const formatTime = (timestamp: Date) => {
-    const now = new Date();
-    const diff = now.getTime() - timestamp.getTime();
+  const formatTime = React.useCallback((timestamp: Date) => {
+    const diff = Date.now() - timestamp.getTime();
     const minutes = Math.floor(diff / 60000);
     
     if (minutes < 1) return 'Just now';
     if (minutes < 60) return `${minutes}m ago`;
     if (minutes < 1440) return `${Math.floor(minutes / 60)}h ago`;
     return timestamp.toLocaleDateString();
-  };
+  }, []);
 
   // Expose addAction for other components to use
   React.useEffect(() => {

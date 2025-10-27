@@ -304,12 +304,12 @@ export function usePrintQueue() {
   useEffect(() => {
     if (!selectedPrinter) return;
 
-    // Only poll when there are items in the queue
+    // Only poll when there are items in the queue (reduced frequency)
     const pollInterval = setInterval(() => {
       if (queueStatus.queueLength > 0) {
         processQueue();
       }
-    }, 3000); // Check every 3 seconds only when queue has items
+    }, 5000); // Check every 5 seconds to reduce overhead
 
     // Initial queue length check
     updateQueueLength();

@@ -32,6 +32,7 @@ import { InventoryDeleteDialog } from '@/components/InventoryDeleteDialog';
 import { useCutterSettings } from '@/hooks/useCutterSettings';
 import { CutterSettingsPanel } from '@/components/CutterSettingsPanel';
 import { RefreshControls } from '@/components/RefreshControls';
+import { BulkActionsToolbar } from '@/components/inventory/BulkActionsToolbar';
 import { AuthStatusDebug } from '@/components/AuthStatusDebug';
 import { useInventoryListQuery } from '@/hooks/useInventoryListQuery';
 import { useInventoryItemDetail } from '@/hooks/useInventoryItemDetail';
@@ -2123,139 +2124,28 @@ const Inventory = () => {
                 </div>
 
                 {/* Bulk Actions */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={selectAllVisible}
-                      disabled={filteredItems.length === 0}
-                    >
-                      <CheckSquare className="h-4 w-4 mr-2" />
-                      Select All ({filteredItems.length})
-                    </Button>
-                    
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={clearSelection}
-                      disabled={selectedItems.size === 0}
-                    >
-                      Clear Selection
-                    </Button>
-
-                    {selectedItems.size > 0 && (
-                      <span className="text-sm text-muted-foreground">
-                        {selectedItems.size} selected
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="flex items-center space-x-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleBulkPrintRaw}
-                      disabled={bulkPrinting}
-                    >
-                      {bulkPrinting ? (
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      ) : (
-                        <Printer className="h-4 w-4 mr-2" />
-                      )}
-                      {bulkPrinting ? 'Printing...' : 'Print All Unprinted Raw'}
-                    </Button>
-
-                    {selectedItems.size > 0 && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleReprintSelected}
-                        disabled={bulkPrinting}
-                      >
-                        {bulkPrinting ? (
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        ) : (
-                          <Printer className="h-4 w-4 mr-2" />
-                        )}
-                        {bulkPrinting ? 'Reprinting...' : `Reprint Selected (${selectedItems.size})`}
-                      </Button>
-                    )}
-
-                    {statusFilter === 'errors' && selectedItems.size > 0 && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleBulkRetrySync}
-                        disabled={bulkRetrying}
-                      >
-                        {bulkRetrying ? (
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        ) : (
-                          <RotateCcw className="h-4 w-4 mr-2" />
-                        )}
-                        {bulkRetrying ? 'Retrying...' : 'Retry Selected'}
-                      </Button>
-                    )}
-
-                    {selectedItems.size > 0 && (
-                      <>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={handleSyncSelected}
-                          disabled={bulkSyncing}
-                        >
-                          {bulkSyncing ? (
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          ) : (
-                            <Upload className="h-4 w-4 mr-2" />
-                          )}
-                          {bulkSyncing ? 'Syncing...' : 'Sync Selected'}
-                        </Button>
-
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={handleResyncSelected}
-                          disabled={bulkSyncing}
-                        >
-                          {bulkSyncing ? (
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          ) : (
-                            <RotateCcw className="h-4 w-4 mr-2" />
-                          )}
-                          {bulkSyncing ? 'Resyncing...' : 'Resync Selected'}
-                        </Button>
-                      </>
-                    )}
-
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleSendCutCommand}
-                      title="Send cut command to printer"
-                    >
-                      <Scissors className="h-4 w-4 mr-2" />
-                      Cut
-                    </Button>
-
-                    {isAdmin && selectedItems.size > 0 && (
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => {
-                          const selectedItemsArray = filteredItems.filter(item => selectedItems.has(item.id));
-                          setSelectedItemsForDeletion(selectedItemsArray);
-                          setShowDeleteDialog(true);
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Delete Selected
-                      </Button>
-                    )}
-                  </div>
-                </div>
+                <BulkActionsToolbar
+                  selectedCount={selectedItems.size}
+                  totalCount={filteredItems.length}
+                  isAdmin={isAdmin}
+                  statusFilter={statusFilter}
+                  bulkPrinting={bulkPrinting}
+                  bulkRetrying={bulkRetrying}
+                  bulkSyncing={bulkSyncing}
+                  onSelectAll={selectAllVisible}
+                  onClearSelection={clearSelection}
+                  onBulkPrintRaw={handleBulkPrintRaw}
+                  onReprintSelected={handleReprintSelected}
+                  onBulkRetrySync={handleBulkRetrySync}
+                  onSyncSelected={handleSyncSelected}
+                  onResyncSelected={handleResyncSelected}
+                  onSendCutCommand={handleSendCutCommand}
+                  onDeleteSelected={() => {
+                    const selectedItemsArray = filteredItems.filter(item => selectedItems.has(item.id));
+                    setSelectedItemsForDeletion(selectedItemsArray);
+                    setShowDeleteDialog(true);
+                  }}
+                />
 
                 <div className="text-sm text-muted-foreground">
                   Showing {filteredItems.length} items {totalCount > filteredItems.length && `(${totalCount} total)`}
