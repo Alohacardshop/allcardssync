@@ -13,9 +13,10 @@ import {
 } from "@/components/ui/tooltip";
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import type { InventoryItem } from '@/types/inventory';
 
 // Helper function outside component to prevent re-creation on every render
-const generateTitle = (item: any) => {
+const generateTitle = (item: InventoryItem) => {
   const parts = []
   
   // Add year at the start if available (check both direct field and catalog_snapshot)
@@ -53,7 +54,7 @@ const generateTitle = (item: any) => {
 };
 
 interface InventoryItemCardProps {
-  item: any;
+  item: InventoryItem;
   isSelected: boolean;
   isExpanded: boolean;
   isAdmin: boolean;
@@ -61,13 +62,13 @@ interface InventoryItemCardProps {
   printingItem: string | null;
   onToggleSelection: (itemId: string) => void;
   onToggleExpanded: (itemId: string) => void;
-  onSync: (item: any) => void;
-  onRetrySync: (item: any) => void;
-  onResync: (item: any) => void;
-  onPrint: (item: any) => void;
-  onRemove: (item: any) => void;
-  onDelete?: (item: any) => void;
-  onSyncDetails: (item: any) => void;
+  onSync: (item: InventoryItem) => void;
+  onRetrySync: (item: InventoryItem) => void;
+  onResync: (item: InventoryItem) => void;
+  onPrint: (item: InventoryItem) => void;
+  onRemove: (item: InventoryItem) => void;
+  onDelete?: (item: InventoryItem) => void;
+  onSyncDetails: (item: InventoryItem) => void;
 }
 
 export const InventoryItemCard = memo(({
@@ -228,7 +229,7 @@ export const InventoryItemCard = memo(({
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
           <div className="flex items-center space-x-1">
             <DollarSign className="h-3 w-3 text-muted-foreground" />
-            <span>${parseFloat(item.price || '0').toFixed(2)}</span>
+            <span>${parseFloat(String(item.price || 0)).toFixed(2)}</span>
           </div>
           <div className="flex items-center space-x-1">
             <Package className="h-3 w-3 text-muted-foreground" />

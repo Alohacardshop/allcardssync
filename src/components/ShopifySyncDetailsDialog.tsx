@@ -7,11 +7,12 @@ import { ExternalLink, ChevronDown, ChevronRight, CheckCircle, XCircle, AlertCir
 import { supabase } from '@/integrations/supabase/client';
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
+import type { InventoryItem, ShopifySyncStep, ShopifyLocation } from '@/types/inventory';
 
 interface ShopifySyncDetailsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  row: any;
+  row: InventoryItem;
   selectedStoreKey?: string;
   selectedLocationGid?: string;
   onRefresh?: () => void;
@@ -54,13 +55,13 @@ export function ShopifySyncDetailsDialog({ open, onOpenChange, row, selectedStor
   const snapshot = row.shopify_sync_snapshot || {};
   const isSuccess = row.shopify_sync_status === 'success';
   
-  const getStepIcon = (step: any) => {
+  const getStepIcon = (step: ShopifySyncStep) => {
     if (step.ok) return <CheckCircle className="w-4 h-4 text-green-500" />;
     if (step.ok === false) return <XCircle className="w-4 h-4 text-red-500" />;
     return <AlertCircle className="w-4 h-4 text-yellow-500" />;
   };
 
-  const getStepStatus = (step: any) => {
+  const getStepStatus = (step: ShopifySyncStep) => {
     if (step.status) return step.status;
     return step.ok ? 'OK' : 'FAIL';
   };
@@ -262,11 +263,11 @@ export function ShopifySyncDetailsDialog({ open, onOpenChange, row, selectedStor
               </div>
               <div>
                 <div className="text-xs font-medium text-muted-foreground">Price</div>
-                <div className="text-sm">${parseFloat(row.price || '0').toFixed(2)}</div>
+                <div className="text-sm">${parseFloat(String(row.price || 0)).toFixed(2)}</div>
               </div>
               <div>
                 <div className="text-xs font-medium text-muted-foreground">Cost</div>
-                <div className="text-sm">{row.cost ? `$${parseFloat(row.cost).toFixed(2)}` : 'N/A'}</div>
+                <div className="text-sm">{row.cost ? `$${parseFloat(String(row.cost)).toFixed(2)}` : 'N/A'}</div>
               </div>
               <div>
                 <div className="text-xs font-medium text-muted-foreground">Quantity</div>
@@ -364,22 +365,22 @@ export function ShopifySyncDetailsDialog({ open, onOpenChange, row, selectedStor
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <p className="text-muted-foreground">Enforced Barcode</p>
-                  <p className="font-mono text-sm">{snapshot.graded.enforcedBarcode}</p>
+                  <p className="font-mono text-sm">{typeof snapshot.graded === 'object' && snapshot.graded.enforcedBarcode}</p>
                 </div>
                 <div>
                   <p className="text-muted-foreground">Decision</p>
-                  <p className="font-medium capitalize">{snapshot.graded.decision?.replace('-', ' ')}</p>
+                  <p className="font-medium capitalize">{typeof snapshot.graded === 'object' && snapshot.graded.decision?.replace('-', ' ')}</p>
                 </div>
               </div>
               
-              {snapshot.graded.relinked && (
+              {typeof snapshot.graded === 'object' && snapshot.graded.relinked && (
                 <div className="mt-3 p-2 bg-green-50 border border-green-200 rounded">
                   <p className="text-sm text-green-800 font-medium">✓ Relinked via Admin Tool</p>
                 </div>
               )}
               
               {/* Show collisions if any */}
-              {snapshot.graded.collisions && (
+              {typeof snapshot.graded === 'object' && snapshot.graded.collisions && (
                 <div className="mt-3 p-3 bg-destructive/10 border border-destructive/20 rounded">
                   <p className="text-sm font-medium text-destructive-foreground mb-2">SKU Collisions Detected</p>
                   <p className="text-xs text-muted-foreground mb-2">
@@ -389,7 +390,7 @@ export function ShopifySyncDetailsDialog({ open, onOpenChange, row, selectedStor
                     {snapshot.graded.collisions.candidates?.map((candidate: any, idx: number) => (
                       <div key={idx} className="text-xs font-mono bg-background p-2 rounded">
                         Product {candidate.productId}, Variant {candidate.variantId} - Barcode: {candidate.barcode || 'none'}
-                        {snapshot.store?.slug && (
+                        {typeof snapshot.store === 'object' && snapshot.store?.slug && (
                           <div className="mt-1 flex gap-2">
                             <a
                               href={`https://admin.shopify.com/store/${snapshot.store.slug}/products/${candidate.productId}`}
@@ -435,8 +436,10 @@ export function ShopifySyncDetailsDialog({ open, onOpenChange, row, selectedStor
             <div>
               <div className="text-sm font-medium text-muted-foreground">Store</div>
               <div className="flex items-center gap-2">
-                <span>{snapshot?.store?.domain}</span>
-                <span className="text-xs text-muted-foreground">({snapshot?.store?.slug})</span>
+                <span>{typeof snapshot.store === 'object' ? snapshot.store.domain : snapshot.store}</span>
+                {typeof snapshot.store === 'object' && snapshot.store.slug && (
+                  <span className="text-xs text-muted-foreground">({snapshot.store.slug})</span>
+                )}
               </div>
             </div>
           )}
@@ -449,10 +452,10 @@ export function ShopifySyncDetailsDialog({ open, onOpenChange, row, selectedStor
                 {snapshot?.result?.productId && (
                   <div className="flex items-center justify-between">
                     <span className="text-sm">Product ID: <code>{snapshot?.result?.productId}</code></span>
-                    {snapshot?.store?.slug && (
+                    {typeof snapshot.store === 'object' && snapshot.store?.slug && (
                        <Button variant="outline" size="sm" asChild>
                            <a 
-                            href={`https://admin.shopify.com/store/${snapshot?.store?.slug}/products/${snapshot?.result?.productId}`}
+                            href={`https://admin.shopify.com/store/${snapshot.store.slug}/products/${snapshot?.result?.productId}`}
                            target="_blank"
                            rel="noopener noreferrer"
                          >
@@ -466,10 +469,10 @@ export function ShopifySyncDetailsDialog({ open, onOpenChange, row, selectedStor
                 {snapshot?.result?.variantId && (
                   <div className="flex items-center justify-between">
                     <span className="text-sm">Variant ID: <code>{snapshot?.result?.variantId}</code></span>
-                     {snapshot?.store?.slug && snapshot?.result?.productId && (
+                     {typeof snapshot.store === 'object' && snapshot.store?.slug && snapshot?.result?.productId && (
                        <Button variant="outline" size="sm" asChild>
                            <a 
-                            href={`https://admin.shopify.com/store/${snapshot?.store?.slug}/products/${snapshot?.result?.productId}/variants/${snapshot?.result?.variantId}`}
+                            href={`https://admin.shopify.com/store/${snapshot.store.slug}/products/${snapshot?.result?.productId}/variants/${snapshot?.result?.variantId}`}
                            target="_blank"
                            rel="noopener noreferrer"
                          >

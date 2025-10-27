@@ -810,7 +810,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
                        editingItem.variant?.includes('Moderately Played') ? 'Moderately Played' :
                        editingItem.variant?.includes('Heavily Played') ? 'Heavily Played' :
                        editingItem.variant?.includes('Damaged') ? 'Damaged' : ''),
-            cardNumber: editingItem.card_number || (editingItem.catalog_snapshot?.number) || '',
+            cardNumber: String(editingItem.card_number || editingItem.catalog_snapshot?.number || ''),
             grade: editingItem.grade,
             gradingCompany: editingItem.grading_company || 'PSA',
             psaCert: editingItem.psa_cert || (editingItem.catalog_snapshot?.psaCert) || '',

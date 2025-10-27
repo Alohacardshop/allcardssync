@@ -15,12 +15,42 @@ export interface StoreContext {
   selectedLocation: string;
 }
 
+/**
+ * Catalog Snapshot - TCG/Comic data from external catalogs
+ */
+export interface CatalogSnapshot {
+  cardId?: string;
+  tcgplayerId?: string;
+  name?: string;
+  set?: string;
+  number?: string | number;
+  year?: string;
+  varietyPedigree?: string;
+  type?: string;
+  rarity?: string;
+  artist?: string;
+  images?: {
+    small?: string;
+    large?: string;
+  };
+  prices?: {
+    market?: number;
+    low?: number;
+    mid?: number;
+    high?: number;
+  };
+  [key: string]: any;
+}
+
+/**
+ * Intake Item - Core item during intake process
+ */
 export interface IntakeItem {
   id: string;
   subject?: string;
   brand_title?: string;
   sku?: string;
-  card_number?: string;
+  card_number?: string | number;
   quantity: number;
   price: number;
   cost?: number;
@@ -38,7 +68,7 @@ export interface IntakeItem {
   variant?: string;
   category?: string;
   year?: string;
-  catalog_snapshot?: Record<string, any> | null;
+  catalog_snapshot?: CatalogSnapshot | null;
   store_key?: string;
   shopify_location_gid?: string;
   image_urls?: string[];
@@ -64,7 +94,7 @@ export interface ComicIntakeData {
 export interface GradedComicIntakeData extends Omit<ComicIntakeData, 'condition'> {
   certNumber: string;
   grade: string;
-  cgcData?: any;
+  cgcData?: Record<string, any>;
 }
 
 export interface BatchProcessingConfig {
