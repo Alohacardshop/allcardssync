@@ -1,9 +1,6 @@
 import { corsHeaders } from '../_shared/cors.ts'
-
-interface SendRawArgs {
-  item_id: string
-  vendor?: string
-}
+import { requireAuth, requireRole, requireStoreAccess } from '../_shared/auth.ts'
+import { SendRawSchema, SendRawInput } from '../_shared/validation.ts'
 
 // Helper function to generate barcode: TCGPlayerID-Condition
 function generateBarcodeForRawCard(item: any): string {
@@ -27,7 +24,16 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { item_id, vendor }: SendRawArgs = await req.json()
+    // 1. Authenticate user and validate JWT
+    const user = await requireAuth(req)
+    
+    // 2. Verify user has staff/admin role
+    await requireRole(user.id, ['admin', 'staff'])
+
+    // 3. Validate input with Zod schema
+    const body = await req.json()
+    const input: SendRawInput = SendRawSchema.parse(body)
+    const { item_id, vendor } = input
 
     // Get environment variables for Supabase
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
@@ -55,8 +61,14 @@ Deno.serve(async (req) => {
                      (intakeItem.image_urls && Array.isArray(intakeItem.image_urls) ? intakeItem.image_urls[0] : null) ||
                      (intakeItem.catalog_snapshot?.image_urls && Array.isArray(intakeItem.catalog_snapshot.image_urls) ? intakeItem.catalog_snapshot.image_urls[0] : null)
 
-    // Get Shopify credentials
+    // 4. Verify user has access to this store/location
     const storeKey = intakeItem.store_key
+    await requireStoreAccess(user.id, storeKey, intakeItem.shopify_location_gid)
+
+    // 5. Log audit trail
+    console.log(`[AUDIT] User ${user.id} (${user.email}) triggered shopify-send-raw for store ${storeKey}, item ${item_id}`)
+
+    // Get Shopify credentials
     const storeUpper = storeKey.toUpperCase()
     const domainKey = `SHOPIFY_${storeUpper}_STORE_DOMAIN`
     const tokenKey = `SHOPIFY_${storeUpper}_ACCESS_TOKEN`
@@ -386,11 +398,22 @@ Deno.serve(async (req) => {
 
   } catch (error) {
     console.error('Error in v2-shopify-send-raw:', error)
+    
+    // Determine appropriate status code
+    let status = 500
+    if (error.message?.includes('Authorization') || error.message?.includes('authentication')) {
+      status = 401
+    } else if (error.message?.includes('permissions') || error.message?.includes('Access denied')) {
+      status = 403
+    } else if (error.message?.includes('Invalid') || error.message?.includes('validation')) {
+      status = 400
+    }
+
     return new Response(JSON.stringify({
       success: false,
       error: error.message
     }), {
-      status: 500,
+      status,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })
   }

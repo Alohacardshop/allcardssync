@@ -1,28 +1,6 @@
 import { corsHeaders } from '../_shared/cors.ts'
-
-interface SendGradedArgs {
-  storeKey: "hawaii" | "las_vegas"
-  locationGid: string
-  vendor?: string
-  item: {
-    id?: string
-    sku?: string
-    psa_cert?: string
-    barcode?: string
-    title?: string
-    price?: number
-    grade?: string
-    quantity?: number
-    year?: string
-    brand_title?: string
-    subject?: string
-    card_number?: string
-    variant?: string
-    category_tag?: string
-    image_url?: string
-    cost?: number
-  }
-}
+import { requireAuth, requireRole, requireStoreAccess } from '../_shared/auth.ts'
+import { SendGradedSchema, SendGradedInput } from '../_shared/validation.ts'
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -30,7 +8,22 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { storeKey, locationGid, vendor, item }: SendGradedArgs = await req.json()
+    // 1. Authenticate user and validate JWT
+    const user = await requireAuth(req)
+    
+    // 2. Verify user has staff/admin role
+    await requireRole(user.id, ['admin', 'staff'])
+
+    // 3. Validate input with Zod schema
+    const body = await req.json()
+    const input: SendGradedInput = SendGradedSchema.parse(body)
+    const { storeKey, locationGid, vendor, item } = input
+
+    // 4. Verify user has access to this store/location
+    await requireStoreAccess(user.id, storeKey, locationGid)
+
+    // 5. Log audit trail
+    console.log(`[AUDIT] User ${user.id} (${user.email}) triggered shopify-send-graded for store ${storeKey}, item ${item.id}`)
 
     // Get environment variables for Supabase
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
@@ -321,11 +314,22 @@ Deno.serve(async (req) => {
 
   } catch (error) {
     console.error('Error in v2-shopify-send-graded:', error)
+    
+    // Determine appropriate status code
+    let status = 500
+    if (error.message?.includes('Authorization') || error.message?.includes('authentication')) {
+      status = 401
+    } else if (error.message?.includes('permissions') || error.message?.includes('Access denied')) {
+      status = 403
+    } else if (error.message?.includes('Invalid') || error.message?.includes('validation')) {
+      status = 400
+    }
+
     return new Response(JSON.stringify({
       success: false,
       error: error.message
     }), {
-      status: 500,
+      status,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })
   }
