@@ -16,7 +16,7 @@ interface InventoryDeleteDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirm: () => void;
-  items: any[];
+  items: InventoryItem[];
   loading?: boolean;
 }
 
