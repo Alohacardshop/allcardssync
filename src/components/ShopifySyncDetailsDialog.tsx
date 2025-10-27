@@ -8,6 +8,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
 import type { InventoryItem, ShopifySyncStep, ShopifyLocation } from '@/types/inventory';
+import { logger } from '@/lib/logger';
 
 interface ShopifySyncDetailsDialogProps {
   open: boolean;
@@ -42,7 +43,7 @@ export function ShopifySyncDetailsDialog({ open, onOpenChange, row, selectedStor
             }
           }
         } catch (error) {
-          console.error('Failed to fetch location name:', error);
+          logger.error('Failed to fetch location name', error instanceof Error ? error : new Error(String(error)), { locationGid: row.last_shopify_location_gid }, 'shopify-sync-details');
         }
       };
       
@@ -101,7 +102,7 @@ export function ShopifySyncDetailsDialog({ open, onOpenChange, row, selectedStor
       
       if (onRefresh) onRefresh();
     } catch (e: any) {
-      console.error('Relink failed:', e);
+      logger.error('Relink failed', e instanceof Error ? e : new Error(String(e)), { itemId: row.id }, 'shopify-sync-details');
       toast({ 
         title: 'Relink Failed', 
         description: e?.message || 'Failed to relink graded item',
@@ -169,7 +170,7 @@ export function ShopifySyncDetailsDialog({ open, onOpenChange, row, selectedStor
       
       if (onRefresh) onRefresh();
     } catch (e: any) {
-      console.error('Resync failed:', e);
+      logger.error('Resync failed', e instanceof Error ? e : new Error(String(e)), { itemId: row.id, shopifyProductId: row.shopify_product_id }, 'shopify-sync-details');
       toast({ 
         title: 'Resync Failed', 
         description: e?.message || 'Failed to resync item to Shopify',

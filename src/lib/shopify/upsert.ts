@@ -14,6 +14,7 @@ import {
 } from "./lookup";
 import { supabase } from "@/integrations/supabase/client";
 import { shopifyGraphQL } from "./client";
+import { logger } from "@/lib/logger";
 
 export interface UpsertCard extends CardIdentifiers {
   externalId: string;
@@ -43,7 +44,7 @@ export async function pushProductUpsert(storeKey: string, card: UpsertCard): Pro
   const handle = buildHandle(card);
   const sku = buildSku(card);
   
-  console.log(`Upserting product: handle=${handle}, sku=${sku}, externalId=${card.externalId}`);
+  logger.info(`Upserting product: handle=${handle}, sku=${sku}, externalId=${card.externalId}`, { handle, sku, externalId: card.externalId, storeKey }, 'shopify-upsert');
   
   try {
     // Comprehensive existence checks (makes retries idempotent)
@@ -54,7 +55,7 @@ export async function pushProductUpsert(storeKey: string, card: UpsertCard): Pro
     if (card.intakeId) {
       existing = await findProductByIntakeId(storeKey, card.intakeId);
       if (existing) {
-        console.log(`Found existing product by intake ID: ${existing.id}`);
+        logger.info(`Found existing product by intake ID: ${existing.id}`, { intakeId: card.intakeId, productId: existing.id, storeKey }, 'shopify-upsert');
         wasUpdate = true;
       }
     }
@@ -63,7 +64,7 @@ export async function pushProductUpsert(storeKey: string, card: UpsertCard): Pro
     if (!existing) {
       existing = await findProductByExternalId(storeKey, card.externalId);
       if (existing) {
-        console.log(`Found existing product by external ID: ${existing.id}`);
+        logger.info(`Found existing product by external ID: ${existing.id}`, { externalId: card.externalId, productId: existing.id, storeKey }, 'shopify-upsert');
         wasUpdate = true;
       }
     }
@@ -72,7 +73,7 @@ export async function pushProductUpsert(storeKey: string, card: UpsertCard): Pro
     if (!existing) {
       existing = await findProductByHandle(storeKey, handle);
       if (existing) {
-        console.log(`Found existing product by handle: ${existing.id}`);
+        logger.info(`Found existing product by handle: ${existing.id}`, { handle, productId: existing.id, storeKey }, 'shopify-upsert');
         wasUpdate = true;
       }
     }
@@ -87,7 +88,7 @@ export async function pushProductUpsert(storeKey: string, card: UpsertCard): Pro
           title: '',
           variants: { nodes: [{ id: variantResult.id, sku: variantResult.sku }] }
         } as ShopifyProduct;
-        console.log(`Found existing product by variant SKU: ${existing.id}`);
+        logger.info(`Found existing product by variant SKU: ${existing.id}`, { sku, productId: existing.id, storeKey }, 'shopify-upsert');
         wasUpdate = true;
       }
     }
@@ -138,13 +139,13 @@ export async function pushProductUpsert(storeKey: string, card: UpsertCard): Pro
     
     // Execute with backoff retry
     const result = await withBackoff(async () => {
-      console.log(`${wasUpdate ? 'Updating' : 'Creating'} product with productSet`);
+      logger.info(`${wasUpdate ? 'Updating' : 'Creating'} product with productSet`, { wasUpdate, handle, sku, storeKey }, 'shopify-upsert');
       const response = await shopifyGraphQL(storeKey, mutation, variables);
       
       const userErrors = response?.data?.productSet?.userErrors;
       if (userErrors?.length) {
         const errorMsg = `Shopify userErrors: ${JSON.stringify(userErrors)}`;
-        console.error(errorMsg);
+        logger.error(errorMsg, new Error(errorMsg), { userErrors, handle, sku, storeKey }, 'shopify-upsert');
         throw new Error(errorMsg);
       }
       
@@ -184,7 +185,7 @@ export async function pushProductUpsert(storeKey: string, card: UpsertCard): Pro
     };
     
   } catch (error) {
-    console.error('Product upsert failed:', error);
+    logger.error('Product upsert failed', error instanceof Error ? error : new Error(String(error)), { handle, sku, externalId: card.externalId, storeKey }, 'shopify-upsert');
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error occurred'
@@ -216,13 +217,13 @@ export async function markItemAsPushed(
       .eq('id', intakeItemId);
       
     if (error) {
-      console.error('Failed to mark item as pushed:', error);
+      logger.error('Failed to mark item as pushed', error instanceof Error ? error : new Error(String(error)), { intakeItemId, shopifyProductId, shopifyVariantId }, 'shopify-upsert');
       throw error;
     }
     
-    console.log(`Marked item ${intakeItemId} as successfully pushed to Shopify`);
+    logger.info(`Marked item ${intakeItemId} as successfully pushed to Shopify`, { intakeItemId, shopifyProductId, shopifyVariantId }, 'shopify-upsert');
   } catch (error) {
-    console.error('Error marking item as pushed:', error);
+    logger.error('Error marking item as pushed', error instanceof Error ? error : new Error(String(error)), { intakeItemId, shopifyProductId, shopifyVariantId }, 'shopify-upsert');
     throw error;
   }
 }
@@ -242,10 +243,10 @@ export async function markItemPushFailed(
       .eq('id', intakeItemId);
       
     if (error) {
-      console.error('Failed to mark item push as failed:', error);
+      logger.error('Failed to mark item push as failed', error instanceof Error ? error : new Error(String(error)), { intakeItemId, errorMessage }, 'shopify-upsert');
       throw error;
     }
   } catch (error) {
-    console.error('Error marking item push as failed:', error);
+    logger.error('Error marking item push as failed', error instanceof Error ? error : new Error(String(error)), { intakeItemId, errorMessage }, 'shopify-upsert');
   }
 }

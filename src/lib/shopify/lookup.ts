@@ -5,6 +5,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { META_KEY_EXTERNAL_ID, META_KEY_INTAKE_ID, META_NS } from "./ids";
 import { shopifyGraphQL } from "./client";
+import { logger } from "@/lib/logger";
 
 export interface ShopifyProduct {
   id: string;
@@ -48,7 +49,7 @@ export async function findProductByHandle(storeKey: string, handle: string): Pro
     const response = await shopifyGraphQL(storeKey, query, { handle });
     return response?.data?.productByHandle ?? null;
   } catch (error) {
-    console.error("Error finding product by handle:", error);
+    logger.error("Error finding product by handle", error instanceof Error ? error : new Error(String(error)), { handle, storeKey }, 'shopify-lookup');
     return null;
   }
 }
@@ -73,7 +74,7 @@ export async function findVariantBySku(storeKey: string, sku: string): Promise<S
     const response = await shopifyGraphQL(storeKey, query, { q: `sku:${JSON.stringify(sku)}` });
     return response?.data?.productVariants?.nodes?.[0] ?? null;
   } catch (error) {
-    console.error("Error finding variant by SKU:", error);
+    logger.error("Error finding variant by SKU", error instanceof Error ? error : new Error(String(error)), { sku, storeKey }, 'shopify-lookup');
     return null;
   }
 }
@@ -102,7 +103,7 @@ export async function findProductByExternalId(storeKey: string, externalId: stri
     const response = await shopifyGraphQL(storeKey, query, { q: filter });
     return response?.data?.products?.nodes?.[0] ?? null;
   } catch (error) {
-    console.error("Error finding product by external ID:", error);
+    logger.error("Error finding product by external ID", error instanceof Error ? error : new Error(String(error)), { externalId, storeKey }, 'shopify-lookup');
     return null;
   }
 }
@@ -131,7 +132,7 @@ export async function findProductByIntakeId(storeKey: string, intakeId: string):
     const response = await shopifyGraphQL(storeKey, query, { q: filter });
     return response?.data?.products?.nodes?.[0] ?? null;
   } catch (error) {
-    console.error("Error finding product by intake ID:", error);
+    logger.error("Error finding product by intake ID", error instanceof Error ? error : new Error(String(error)), { intakeId, storeKey }, 'shopify-lookup');
     return null;
   }
 }
@@ -163,7 +164,7 @@ export async function checkShopifyPushStatus(intakeItemId: string): Promise<{
       lastError: item.last_shopify_sync_error
     };
   } catch (error) {
-    console.error("Error checking push status:", error);
+    logger.error("Error checking push status", error instanceof Error ? error : new Error(String(error)), { intakeItemId }, 'shopify-lookup');
     return { isPushed: false };
   }
 }
