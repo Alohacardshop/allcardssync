@@ -5,9 +5,38 @@ import { CORS, json, loadStore, onlyDigits, parseIdFromGid, fetchRetry, newRun, 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
   
+  // JWT validation for mutating endpoint
+  const authHeader = req.headers.get('Authorization');
+  if (!authHeader?.startsWith('Bearer ')) {
+    console.error('❌ Missing or invalid Authorization header');
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { ...CORS, 'Content-Type': 'application/json' }
+    });
+  }
+  
   const { createClient } = await import('jsr:@supabase/supabase-js')
+  const token = authHeader.replace('Bearer ', '');
+  
+  // Verify JWT token
+  const authClient = createClient(
+    Deno.env.get('SUPABASE_URL')!, 
+    Deno.env.get('SUPABASE_ANON_KEY')!
+  );
+  const { data: { user }, error: authError } = await authClient.auth.getUser(token);
+  
+  if (authError || !user) {
+    console.error('❌ Invalid JWT token:', authError);
+    return new Response(JSON.stringify({ error: 'Invalid token' }), {
+      status: 401,
+      headers: { ...CORS, 'Content-Type': 'application/json' }
+    });
+  }
+  
+  console.log('✅ Authenticated user:', user.id);
+  
   const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {
-    global: { headers: { Authorization: req.headers.get('Authorization') || '' } }
+    global: { headers: { Authorization: authHeader } }
   })
   
   const run = newRun()

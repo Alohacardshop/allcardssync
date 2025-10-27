@@ -1,9 +1,12 @@
 // JustTCG Pricing Refresh - Nightly pricing updates for catalog_v2.variants
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
+import { createClient } from 'jsr:@supabase/supabase-js@2'
 
-// Import shared utilities
-import { fetchWithRetry } from "../_shared/http.ts";
-import { logStructured } from "../_shared/log.ts";
+// Import resilience utilities
+import { fetchJson } from "../_lib/http.ts";
+import { log, genRequestId } from "../_lib/log.ts";
+import { canCall, report } from "../_lib/circuit.ts";
+import { CFG } from "../_lib/config.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -29,12 +32,12 @@ function normalizeGameSlug(game: string): string {
   return 'pokemon';
 }
 
-// Get API key from environment (secret was just added)
-async function getApiKey(): Promise<string> {
-  const envKey = Deno.env.get("JUSTTCG_API_KEY");
-  if (envKey) return envKey;
-  
-  throw new Error("JUSTTCG_API_KEY not found in environment");
+// Get API key from config
+function getApiKey(): string {
+  if (!CFG.JUSTTCG_API_KEY) {
+    throw new Error("JUSTTCG_API_KEY not configured");
+  }
+  return CFG.JUSTTCG_API_KEY;
 }
 
 // For initial testing, use mock data since catalog_v2 might not have real data yet
@@ -60,9 +63,15 @@ async function getMockCardIds(game: string): Promise<string[]> {
   return [];
 }
 
-// Call JustTCG API with batch of card IDs
-async function fetchJustTcgPricing(cardIds: string[], apiKey: string): Promise<any> {
+// Call JustTCG API with batch of card IDs (with circuit breaker)
+async function fetchJustTcgPricing(cardIds: string[], apiKey: string, requestId: string): Promise<any> {
   if (!cardIds.length) return { data: [] };
+  
+  // Check circuit breaker
+  if (!canCall("justtcg")) {
+    log.warn('Circuit breaker open for JustTCG API', { requestId });
+    throw new Error('JustTCG API temporarily unavailable (circuit breaker open)');
+  }
   
   const url = `${JUSTTCG_BASE}/cards/bulk`;
   const body = {
@@ -73,7 +82,7 @@ async function fetchJustTcgPricing(cardIds: string[], apiKey: string): Promise<a
   };
   
   try {
-    const response = await fetchWithRetry(url, {
+    const result = await fetchJson<any>(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -81,17 +90,15 @@ async function fetchJustTcgPricing(cardIds: string[], apiKey: string): Promise<a
         'User-Agent': 'Supabase-Edge-Function'
       },
       body: JSON.stringify(body)
-    });
+    }, { tries: 3, timeoutMs: 15000 });
     
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`JustTCG API error: ${response.status} ${errorText}`);
-    }
-    
-    return await response.json();
+    report("justtcg", true);
+    return result;
     
   } catch (error) {
-    logStructured('ERROR', 'JustTCG API call failed', {
+    report("justtcg", false);
+    log.error('JustTCG API call failed', {
+      requestId,
       error: error instanceof Error ? error.message : String(error),
       cardIds: cardIds.length
     });
@@ -149,7 +156,7 @@ function mapToVariantUpserts(apiResponse: any, game: string): any[] {
 }
 
 // Log job run summary to pricing_job_runs table
-async function logJobRun(supabase: any, summary: any): Promise<void> {
+async function logJobRun(supabase: any, summary: any, requestId: string): Promise<void> {
   try {
     const { error } = await supabase
       .from('pricing_job_runs')
@@ -166,55 +173,40 @@ async function logJobRun(supabase: any, summary: any): Promise<void> {
       });
       
     if (error) {
-      logStructured('ERROR', `Failed to log job run`, { error: error.message });
+      log.error('Failed to log job run', { requestId, error: error.message });
     } else {
-      logStructured('INFO', `Job run logged successfully`, { game: summary.game });
+      log.info('Job run logged successfully', { requestId, game: summary.game });
     }
   } catch (error) {
-    logStructured('ERROR', `Exception logging job run`, { error: String(error) });
+    log.error('Exception logging job run', { requestId, error: String(error) });
   }
 }
 
-// Store pricing history (working with actual table)
-async function storePricingHistory(supabase: any, upserts: any[]): Promise<void> {
+// Store pricing history using batch RPC (more efficient)
+async function storePricingHistory(supabase: any, upserts: any[], requestId: string): Promise<void> {
   if (!upserts.length) return;
   
-  const historyRows = upserts.map(u => ({
-    provider: u.provider,
-    game: u.game,
-    variant_key: u.variant_key,
-    price_cents: u.price ? Math.round(u.price * 100) : null,
-    market_price_cents: u.market_price ? Math.round(u.market_price * 100) : null,
-    low_price_cents: u.low_price ? Math.round(u.low_price * 100) : null,
-    high_price_cents: u.high_price ? Math.round(u.high_price * 100) : null,
-    currency: u.currency,
-    scraped_at: new Date().toISOString()
-  }));
-  
-  // Insert in chunks
-  const chunkSize = 50;
-  for (let i = 0; i < historyRows.length; i += chunkSize) {
-    const chunk = historyRows.slice(i, i + chunkSize);
+  try {
+    // Use batch RPC for efficient upsert
+    const { data, error } = await supabase.rpc('catalog_v2.batch_upsert_cards_variants', {
+      payload: upserts
+    });
     
-    try {
-      const { error } = await supabase
-        .from('variant_price_history')
-        .insert(chunk);
-        
-      if (error) {
-        logStructured('ERROR', `Price history insert failed`, { 
-          error: error.message, 
-          chunkSize: chunk.length 
-        });
-      } else {
-        logStructured('INFO', `Price history chunk inserted`, { count: chunk.length });
-      }
-    } catch (error) {
-      logStructured('ERROR', `Exception inserting price history`, { 
-        error: String(error),
-        chunkSize: chunk.length 
+    if (error) {
+      log.error('Batch pricing upsert failed', { requestId, error: error.message });
+    } else {
+      log.info('Batch pricing upsert succeeded', { 
+        requestId, 
+        count: upserts.length,
+        result: data 
       });
     }
+  } catch (error) {
+    log.error('Exception during batch upsert', { 
+      requestId,
+      error: String(error),
+      count: upserts.length 
+    });
   }
 }
 
@@ -224,26 +216,29 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const requestId = genRequestId();
+
   try {
     const startTime = Date.now();
     const url = new URL(req.url);
     const game = url.searchParams.get('game') || 'pokemon';
     
-    logStructured('INFO', 'Starting pricing refresh', { game });
+    log.info('Starting pricing refresh', { requestId, game });
     
     // Initialize Supabase client (service role for direct catalog_v2 access)
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const supabase = createClient(CFG.SUPABASE_URL, CFG.SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { persistSession: false }
+    });
     
     // Get API key
-    const apiKey = await getApiKey();
+    const apiKey = getApiKey();
     
     // For initial testing, use small mock dataset
     const cardIds = await getMockCardIds(game);
     const expectedBatches = Math.ceil(cardIds.length / PAGE_SIZE);
     
-    logStructured('INFO', 'Using mock card data for testing', {
+    log.info('Using mock card data for testing', {
+      requestId,
       game,
       totalCards: cardIds.length,
       expectedBatches
@@ -259,11 +254,11 @@ Deno.serve(async (req) => {
         ceiling: PREFLIGHT_CEILING
       };
       
-      logStructured('WARN', 'Preflight ceiling exceeded', result);
+      log.warn('Preflight ceiling exceeded', { requestId, ...result });
       
       return new Response(JSON.stringify(result), {
         status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        headers: { ...corsHeaders, 'Content-Type': 'application/json', 'X-Request-Id': requestId }
       });
     }
     
@@ -275,26 +270,28 @@ Deno.serve(async (req) => {
     if (cardIds.length > 0) {
       try {
         // Fetch pricing from JustTCG API
-        const apiResponse = await fetchJustTcgPricing(cardIds, apiKey);
+        const apiResponse = await fetchJustTcgPricing(cardIds, apiKey, requestId);
         
         // Map to variant upserts
         const upserts = mapToVariantUpserts(apiResponse, game);
         
-        // Store pricing history
-        await storePricingHistory(supabase, upserts);
+        // Store pricing history using batch RPC
+        await storePricingHistory(supabase, upserts, requestId);
         
         actualBatches = 1;
         cardsProcessed = cardIds.length;
         variantsUpdated = upserts.length;
         
-        logStructured('INFO', 'Batch processed successfully', {
+        log.info('Batch processed successfully', {
+          requestId,
           game,
           cardsProcessed,
           variantsUpdated
         });
         
       } catch (error) {
-        logStructured('ERROR', 'Batch processing failed', {
+        log.error('Batch processing failed', {
+          requestId,
           game,
           error: error instanceof Error ? error.message : String(error)
         });
@@ -323,19 +320,20 @@ Deno.serve(async (req) => {
       }
     };
     
-    logStructured('INFO', 'Pricing refresh completed', summary);
+    log.info('Pricing refresh completed', { requestId, ...summary });
     
     // Log to pricing_job_runs table
-    await logJobRun(supabase, summary);
+    await logJobRun(supabase, summary, requestId);
     
     return new Response(JSON.stringify(summary), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      headers: { ...corsHeaders, 'Content-Type': 'application/json', 'X-Request-Id': requestId }
     });
     
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     
-    logStructured('ERROR', 'Pricing refresh failed', { 
+    log.error('Pricing refresh failed', { 
+      requestId,
       error: errorMessage,
       game: new URL(req.url).searchParams.get('game') || 'unknown'
     });
@@ -345,7 +343,7 @@ Deno.serve(async (req) => {
       error: errorMessage 
     }), {
       status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      headers: { ...corsHeaders, 'Content-Type': 'application/json', 'X-Request-Id': requestId }
     });
   }
 });

@@ -578,6 +578,44 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders })
   }
 
+  console.log('🔄 Shopify sync processor started')
+
+  // JWT validation for mutating endpoint
+  const authHeader = req.headers.get('Authorization');
+  if (!authHeader?.startsWith('Bearer ')) {
+    console.error('❌ Missing or invalid Authorization header');
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+  }
+
+  try {
+    // Verify JWT token
+    const token = authHeader.replace('Bearer ', '');
+    const authClient = createClient(
+      'https://dmpoandoydaqxhzdjnmk.supabase.co',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+    );
+    const { data: { user }, error: authError } = await authClient.auth.getUser(token);
+    
+    if (authError || !user) {
+      console.error('❌ Invalid JWT token:', authError);
+      return new Response(JSON.stringify({ error: 'Invalid token' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+    
+    console.log('✅ Authenticated user:', user.id);
+  } catch (authErr) {
+    console.error('❌ Authentication error:', authErr);
+    return new Response(JSON.stringify({ error: 'Authentication failed' }), {
+      status: 401,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+  }
+
   try {
     const supabase = createClient(
       'https://dmpoandoydaqxhzdjnmk.supabase.co',

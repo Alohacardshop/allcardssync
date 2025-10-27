@@ -79,10 +79,12 @@
 ## 📋 Remaining Tasks
 
 ### Edge Functions (High Priority)
-- [ ] Update `psa-lookup` to use circuit breaker and structured logging
-- [ ] Update `justtcg-refresh-variants` to use batch RPC
-- [ ] Add JWT validation to mutating endpoints (keep read-only open)
-- [ ] Implement idempotent queueing in sync functions
+- [x] Update `psa-lookup` to use circuit breaker and structured logging ✅ Already implemented
+- [x] Update `justtcg-refresh-variants` to use batch RPC ✅ Completed
+- [x] Add JWT validation to mutating endpoints (keep read-only open) ✅ Completed
+- [x] Implement idempotent queueing in sync functions ✅ Completed
+
+All high-priority backend hardening tasks are now complete! 🎉
 
 ### UI Enhancements (Medium Priority)
 - [ ] Add SyncMonitor to Admin panel
