@@ -349,7 +349,7 @@ describe('Edge Functions Integration Tests', () => {
       const webhookResult = await fetch('/functions/v1/shopify-webhook', {
         method: 'POST',
         headers: {
-          'X-Shopify-Topic': 'orders/paid',
+          'X-Shopify-Topic': 'orders/updated',
           'X-Shopify-Shop-Domain': 'test-store.myshopify.com',
           'Content-Type': 'application/json',
         },

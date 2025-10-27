@@ -21,7 +21,7 @@ serve(async (req) => {
         available: 5,
         updated_at: new Date().toISOString()
       },
-      'orders/paid': {
+      'orders/updated': {
         id: 555666777,
         line_items: [
           {
