@@ -1,13 +1,11 @@
 import { supabase } from "@/integrations/supabase/client";
-
+import { logger } from '@/lib/logger';
 import { APIError } from "@/types/errors"
 
 export const handleApiError = (error: APIError | Error | unknown, operation: string) => {
   if (error) {
     // Log error for debugging but avoid exposing sensitive information
-    if (process.env.NODE_ENV === 'development') {
-      console.error(`API Error - ${operation}:`, error);
-    }
+    logger.error(`API Error - ${operation}`, error as Error, undefined, 'api');
     
     // Type guard for objects with message property
     if (error && typeof error === 'object' && 'message' in error) {
@@ -153,9 +151,7 @@ export async function checkSystemHealth() {
       timestamp: new Date().toISOString()
     };
   } catch (error) {
-    if (process.env.NODE_ENV === 'development') {
-      console.error('System health check failed:', error);
-    }
+    logger.error('System health check failed', error as Error, undefined, 'api');
     return {
       database: false,
       timestamp: new Date().toISOString(),

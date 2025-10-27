@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { logger } from '@/lib/logger';
 
 export interface PrintNodePrinter {
   id: number;
@@ -25,20 +26,20 @@ class PrintNodeService {
 
   private async getApiKey(): Promise<string | null> {
     try {
-      console.log('🖨️ PrintNode Service: Getting API key from Supabase...');
+      logger.debug('Getting PrintNode API key from Supabase', undefined, 'printnode');
       const { data, error } = await supabase.functions.invoke('get-system-setting', {
         body: { keyName: 'PRINTNODE_API_KEY' }
       });
 
       if (error) {
-        console.error('🖨️ PrintNode Service: Failed to get API key:', error);
+        logger.error('Failed to get PrintNode API key', error as Error, undefined, 'printnode');
         return null;
       }
 
-      console.log('🖨️ PrintNode Service: API key retrieved:', data?.value ? 'Yes' : 'No');
+      logger.debug('PrintNode API key retrieved', { hasValue: !!data?.value }, 'printnode');
       return data?.value || null;
     } catch (error) {
-      console.error('🖨️ PrintNode Service: Error getting API key:', error);
+      logger.error('Error getting PrintNode API key', error as Error, undefined, 'printnode');
       return null;
     }
   }
@@ -49,7 +50,7 @@ class PrintNodeService {
       throw new Error('PrintNode API key not configured');
     }
 
-    console.log('🖨️ PrintNode Service: Making request to:', `${this.baseUrl}${endpoint}`);
+    logger.debug('Making PrintNode API request', { endpoint }, 'printnode');
     
     const response = await fetch(`${this.baseUrl}${endpoint}`, {
       ...options,
@@ -60,16 +61,15 @@ class PrintNodeService {
       },
     });
 
-    console.log('🖨️ PrintNode Service: Response status:', response.status);
+    logger.debug('PrintNode API response', { endpoint, status: response.status }, 'printnode');
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('🖨️ PrintNode Service: API error:', errorText);
+      logger.error('PrintNode API error', new Error(errorText), { endpoint, status: response.status }, 'printnode');
       throw new Error(`PrintNode API error: ${response.status} - ${errorText}`);
     }
 
     const result = await response.json();
-    console.log('🖨️ PrintNode Service: Response data:', result);
     return result;
   }
 
@@ -78,22 +78,22 @@ class PrintNodeService {
       const printers = await this.makeRequest('/printers');
       return printers || [];
     } catch (error) {
-      console.error('Failed to get PrintNode printers:', error);
+      logger.error('Failed to get PrintNode printers', error as Error, undefined, 'printnode');
       throw error;
     }
   }
 
   async testConnection(): Promise<boolean> {
     try {
-      console.log('🖨️ PrintNode Service: Testing connection...');
+      logger.info('Testing PrintNode connection', undefined, 'printnode');
       const result = await Promise.race([
         this.makeRequest('/whoami'),
         new Promise((_, reject) => setTimeout(() => reject(new Error('Connection test timeout')), 10000))
       ]);
-      console.log('🖨️ PrintNode Service: Connection test successful:', result);
+      logger.info('PrintNode connection test successful', { result }, 'printnode');
       return true;
     } catch (error) {
-      console.error('🖨️ PrintNode Service: Connection test failed:', error);
+      logger.error('PrintNode connection test failed', error as Error, undefined, 'printnode');
       return false;
     }
   }
@@ -105,35 +105,22 @@ class PrintNodeService {
 
   async printZPL(zpl: string, printerId: number, copies: number = 1): Promise<PrintNodeResult> {
     try {
-      console.log('🖨️ PrintNode: Starting print job...');
-      console.log('🖨️ PrintNode: Printer ID:', printerId);
-      console.log('🖨️ PrintNode: Copies:', copies);
-      console.log('🖨️ PrintNode: ZPL length:', zpl.length);
-      
-      // Log payload byte length + first/last 20 chars to catch empties/truncation
-      console.log('🖨️ ZPL payload analysis:');
-      console.log('- Byte length:', new TextEncoder().encode(zpl).length);
-      console.log('- First 20 chars:', JSON.stringify(zpl.substring(0, 20)));
-      console.log('- Last 20 chars:', JSON.stringify(zpl.substring(zpl.length - 20)));
-      
-      // Count labels in batch ZPL
       const labelCount = (zpl.match(/\^XA/g) || []).length;
-      console.log('🖨️ Detected labels in ZPL:', labelCount);
+      const byteLength = new TextEncoder().encode(zpl).length;
       
-      // Show actual ZPL content (truncated for large batches)
-      if (zpl.length > 1000) {
-        console.log('🖨️ ZPL Content (first 500 chars):');
-        console.log(zpl.substring(0, 500) + '...');
-        console.log('🖨️ ZPL Content (last 500 chars):');  
-        console.log('...' + zpl.substring(zpl.length - 500));
-      } else {
-        console.log('🖨️ ZPL Content:');
-        console.log(zpl);
-      }
+      logger.info('Starting PrintNode print job', {
+        printerId,
+        copies,
+        zplLength: zpl.length,
+        byteLength,
+        labelCount,
+        firstChars: zpl.substring(0, 20),
+        lastChars: zpl.substring(zpl.length - 20)
+      }, 'printnode');
       
       // Validate ZPL for ZD410 compatibility
       if (!this.validateZD410ZPL(zpl)) {
-        console.warn('⚠️ PrintNode: ZPL may not be ZD410 compatible');
+        logger.warn('ZPL may not be ZD410 compatible', undefined, 'printnode');
       }
 
       // Create print job with UTF-8 safe encoding
@@ -145,21 +132,19 @@ class PrintNodeService {
         copies: copies
       };
       
-      console.log('🖨️ PrintNode: Print job payload:', {
+      logger.debug('Submitting print job to PrintNode', {
         printer: printJob.printer,
         title: printJob.title,
         contentType: printJob.contentType,
         contentLength: printJob.content.length,
         copies: printJob.copies,
         estimatedLabels: labelCount
-      });
+      }, 'printnode');
 
       const response = await this.makeRequest('/printjobs', {
         method: 'POST',
         body: JSON.stringify(printJob),
       });
-
-      console.log('🖨️ PrintNode: Raw API response:', JSON.stringify(response, null, 2));
 
       // Extract job ID with better error handling
       let jobId = null;
@@ -173,15 +158,14 @@ class PrintNodeService {
         jobId = response;
       }
 
-      console.log('🖨️ PrintNode: Extracted job ID:', jobId);
-      console.log('🖨️ PrintNode: Job submitted successfully for', labelCount, 'labels');
+      logger.info('PrintNode job submitted successfully', { jobId, labelCount }, 'printnode');
 
       return {
         success: true,
         jobId: jobId || 'Unknown',
       };
     } catch (error) {
-      console.error('🖨️ PrintNode print failed:', error);
+      logger.error('PrintNode print failed', error as Error, undefined, 'printnode');
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown PrintNode error',
@@ -200,14 +184,14 @@ class PrintNodeService {
     const hasMediaTracking = zpl.includes('^MNN') || zpl.includes('^MNY'); // Continuous or gap media
     const hasPrintQuantity = zpl.includes('^PQ');
     
-    console.log('🖨️ ZPL Validation:', {
+    logger.debug('ZPL validation check', {
       hasStart,
       hasEnd,
       hasCutterMode,
       hasMediaType,
       hasMediaTracking,
       hasPrintQuantity
-    });
+    }, 'printnode');
     
     // Cutter mode is optional - ZD410 will work without it
     return hasStart && hasEnd && hasMediaType && hasMediaTracking && hasPrintQuantity;
@@ -217,7 +201,7 @@ class PrintNodeService {
     try {
       return await this.makeRequest(`/printjobs/${jobId}`);
     } catch (error) {
-      console.error('Failed to get PrintNode job status:', error);
+      logger.error('Failed to get PrintNode job status', error as Error, { jobId }, 'printnode');
       throw error;
     }
   }

@@ -1,6 +1,6 @@
-
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { logger } from '@/lib/logger';
 
 export const cleanupAuthState = () => {
   // Remove standard auth tokens
@@ -25,7 +25,7 @@ export const resetLogin = async () => {
     await supabase.auth.signOut({ scope: 'global' });
     window.location.href = '/auth';
   } catch (error) {
-    console.error('Error during reset login:', error);
+    logger.error('Error during reset login', error as Error, undefined, 'auth');
     window.location.href = '/auth';
   }
 };
@@ -38,7 +38,7 @@ export const invokeWithRetry = async (functionName: string, options: any = {}) =
   } catch (error: any) {
     // Check if it's an auth/JWT error
     if (error?.message?.includes('JWT') || error?.message?.includes('401') || error?.status === 401) {
-      console.log('JWT expired, attempting to refresh session and retry...');
+      logger.info('JWT expired, attempting to refresh session', { functionName }, 'auth');
       
       try {
         // Try to refresh the session
@@ -51,7 +51,7 @@ export const invokeWithRetry = async (functionName: string, options: any = {}) =
         
         return { data, error: null };
       } catch (retryError) {
-        console.error('Retry after refresh failed:', retryError);
+        logger.error('Retry after refresh failed', retryError as Error, { functionName }, 'auth');
         
         // Show toast with reset option
         toast.error('Session expired. Please sign in again.', {

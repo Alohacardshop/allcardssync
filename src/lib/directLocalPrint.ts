@@ -3,6 +3,8 @@
  * Simple HTTP-based printing directly to Zebra printers
  */
 
+import { logger } from '@/lib/logger';
+
 export interface PrinterConnection {
   ip: string;
   port?: number;
@@ -31,7 +33,7 @@ export async function printZPLDirect(
     
     // Prepare ZPL with copies
     const finalZPL = copies > 1 ? zpl.repeat(copies) : zpl;
-    console.log('🖨️ Attempting HTTP POST to:', printUrl);
+    logger.debug('Attempting direct HTTP print', { printUrl, copies }, 'print');
     
     const response = await fetch(printUrl, {
       method: 'POST',
@@ -56,7 +58,7 @@ export async function printZPLDirect(
     }
 
   } catch (error) {
-    console.log('🖨️ Direct print error:', error);
+    logger.error('Direct print error', error as Error, { printerIp: printer.ip }, 'print');
     if (error instanceof Error && error.message.includes('Failed to fetch')) {
       return {
         success: false,
