@@ -583,23 +583,10 @@ const Inventory = () => {
       } else {
         // Raw card
         const result = await sendRawToShopify({
+          item_id: item.id,
           storeKey: item.store_key as "hawaii" | "las_vegas",
           locationGid: item.shopify_location_gid,
-          vendor: item.vendor,
-          item: {
-            id: item.id,
-            sku: item.sku,
-            brand_title: item.brand_title,
-            subject: item.subject,
-            card_number: item.card_number,
-            image_url: item.image_urls?.[0],
-            cost: item.cost,
-            title: item.subject || 'Raw Card',
-            price: item.price,
-            barcode: generateBarcode(item), // Generate barcode from TCGPlayer ID
-            condition: item.grade,
-            quantity: item.quantity
-          }
+          vendor: item.vendor
         });
 
         if (result?.success) {
@@ -747,23 +734,10 @@ const Inventory = () => {
       for (const item of rawItems) {
         try {
           const result = await sendRawToShopify({
+            item_id: item.id,
             storeKey: item.store_key as "hawaii" | "las_vegas",
             locationGid: item.shopify_location_gid,
-            vendor: item.vendor,
-            item: {
-              id: item.id,
-              sku: item.sku,
-              brand_title: item.brand_title,
-              subject: item.subject,
-              card_number: item.card_number,
-              image_url: item.image_urls?.[0],
-              cost: item.cost,
-              title: item.subject || 'Raw Card',
-              price: item.price,
-              barcode: generateBarcode(item),
-              condition: item.grade,
-              quantity: item.quantity
-            }
+            vendor: item.vendor
           });
           
           if (result?.success) {

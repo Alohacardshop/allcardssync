@@ -35,6 +35,11 @@ export const SendGradedSchema = z.object({
  */
 export const SendRawSchema = z.object({
   item_id: z.string().uuid('Invalid item ID format'),
+  storeKey: z.enum(['hawaii', 'las_vegas'], {
+    errorMap: () => ({ message: 'storeKey must be either "hawaii" or "las_vegas"' })
+  }),
+  locationGid: z.string()
+    .regex(/^gid:\/\/shopify\/Location\/\d+$/, 'Invalid Shopify location GID format'),
   vendor: z.string().max(100).optional()
 })
 

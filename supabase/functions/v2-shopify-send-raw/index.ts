@@ -33,9 +33,12 @@ Deno.serve(async (req) => {
     // 3. Validate input with Zod schema
     const body = await req.json()
     const input: SendRawInput = SendRawSchema.parse(body)
-    const { item_id, vendor } = input
+    const { item_id, storeKey, locationGid, vendor } = input
 
-    // Get environment variables for Supabase
+    // 4. Verify user has access to this store/location BEFORE fetching item (SECURITY)
+    await requireStoreAccess(user.id, storeKey, locationGid)
+
+    // 5. Get environment variables for Supabase
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
@@ -43,7 +46,7 @@ Deno.serve(async (req) => {
     const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2')
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-    // Get intake item data
+    // 6. Get intake item data
     const { data: intakeItem, error: fetchError } = await supabase
       .from('intake_items')
       .select('*')
@@ -54,6 +57,14 @@ Deno.serve(async (req) => {
       throw new Error(`Failed to fetch intake item: ${fetchError?.message || 'Item not found'}`)
     }
 
+    // 7. Cross-check that item belongs to the claimed store/location (SECURITY)
+    if (intakeItem.store_key !== storeKey) {
+      throw new Error(`Access denied: Item belongs to store "${intakeItem.store_key}", not "${storeKey}"`)
+    }
+    if (intakeItem.shopify_location_gid !== locationGid) {
+      throw new Error(`Access denied: Item belongs to different location`)
+    }
+
     // Extract image URL from various sources
     const imageUrl = intakeItem.catalog_snapshot?.photo_url || 
                      intakeItem.catalog_snapshot?.image_url || 
@@ -61,11 +72,7 @@ Deno.serve(async (req) => {
                      (intakeItem.image_urls && Array.isArray(intakeItem.image_urls) ? intakeItem.image_urls[0] : null) ||
                      (intakeItem.catalog_snapshot?.image_urls && Array.isArray(intakeItem.catalog_snapshot.image_urls) ? intakeItem.catalog_snapshot.image_urls[0] : null)
 
-    // 4. Verify user has access to this store/location
-    const storeKey = intakeItem.store_key
-    await requireStoreAccess(user.id, storeKey, intakeItem.shopify_location_gid)
-
-    // 5. Log audit trail
+    // 8. Log audit trail
     console.log(`[AUDIT] User ${user.id} (${user.email}) triggered shopify-send-raw for store ${storeKey}, item ${item_id}`)
 
     // Get Shopify credentials

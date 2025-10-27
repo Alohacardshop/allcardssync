@@ -1,16 +1,6 @@
 import { corsHeaders } from '../_shared/cors.ts'
 import { requireAuth, requireRole, requireStoreAccess } from '../_shared/auth.ts'
-
-interface SendArgs {
-  storeKey: "hawaii" | "las_vegas"
-  sku: string
-  title?: string | null
-  price?: number | null
-  barcode?: string | null
-  locationGid: string
-  quantity: number
-  intakeItemId?: string
-}
+import { SendLegacySchema, SendLegacyInput } from './validation.ts'
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -23,8 +13,11 @@ Deno.serve(async (req) => {
     
     // 2. Verify user has staff/admin role
     await requireRole(user.id, ['admin', 'staff'])
-    // 3. Parse and validate input
-    const { storeKey, sku, title, price, barcode, locationGid, quantity, intakeItemId }: SendArgs = await req.json()
+    
+    // 3. Parse and validate input with Zod schema
+    const body = await req.json()
+    const input: SendLegacyInput = SendLegacySchema.parse(body)
+    const { storeKey, sku, title, price, barcode, locationGid, quantity, intakeItemId } = input
 
     // 4. Verify user has access to this store/location
     await requireStoreAccess(user.id, storeKey, locationGid)

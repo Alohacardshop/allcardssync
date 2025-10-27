@@ -26,23 +26,10 @@ export type SendGradedArgs = {
 }
 
 export type SendRawArgs = {
+  item_id: string
   storeKey: "hawaii" | "las_vegas"
   locationGid: string
   vendor?: string
-  item: {
-    id?: string
-    sku: string
-    brand_title?: string
-    subject?: string
-    card_number?: string
-    image_url?: string
-    cost?: number
-    title?: string
-    price?: number
-    barcode?: string
-    condition?: string
-    quantity?: number
-  }
 }
 
 export async function sendGradedToShopify(args: SendGradedArgs) {
