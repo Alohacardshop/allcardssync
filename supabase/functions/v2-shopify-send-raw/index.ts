@@ -222,6 +222,104 @@ Deno.serve(async (req) => {
     console.log('DEBUG: Sync operation type:', isUpdate ? 'UPDATE' : 'CREATE')
     console.log('DEBUG: Existing Shopify IDs:', { existingProductId, existingVariantId })
 
+    // Build comprehensive metafields array
+    const metafields = [
+      {
+        namespace: 'acs.sync',
+        key: 'external_id',
+        type: 'single_line_text_field',
+        value: intakeItem.id
+      },
+      {
+        namespace: 'acs.sync',
+        key: 'intake_id',
+        type: 'single_line_text_field',
+        value: item_id
+      }
+    ];
+
+    // Core classification
+    if (intakeItem.main_category) {
+      metafields.push({
+        namespace: 'acs.sync',
+        key: 'main_category',
+        type: 'single_line_text_field',
+        value: intakeItem.main_category
+      });
+    }
+
+    if (intakeItem.sub_category) {
+      metafields.push({
+        namespace: 'acs.sync',
+        key: 'sub_category',
+        type: 'single_line_text_field',
+        value: intakeItem.sub_category
+      });
+    }
+
+    metafields.push({
+      namespace: 'acs.sync',
+      key: 'item_type',
+      type: 'single_line_text_field',
+      value: 'raw'
+    });
+
+    // Card details
+    if (brandTitle) {
+      metafields.push({
+        namespace: 'acs.sync',
+        key: 'brand_title',
+        type: 'single_line_text_field',
+        value: brandTitle
+      });
+    }
+
+    if (cardNumber) {
+      metafields.push({
+        namespace: 'acs.sync',
+        key: 'card_number',
+        type: 'single_line_text_field',
+        value: cardNumber
+      });
+    }
+
+    if (intakeItem.year) {
+      metafields.push({
+        namespace: 'acs.sync',
+        key: 'year',
+        type: 'single_line_text_field',
+        value: intakeItem.year
+      });
+    }
+
+    if (condition) {
+      metafields.push({
+        namespace: 'acs.sync',
+        key: 'variant',
+        type: 'single_line_text_field',
+        value: condition
+      });
+    }
+
+    if (subject) {
+      metafields.push({
+        namespace: 'acs.sync',
+        key: 'subject',
+        type: 'single_line_text_field',
+        value: subject
+      });
+    }
+
+    // Rich JSON data
+    if (intakeItem.catalog_snapshot) {
+      metafields.push({
+        namespace: 'acs.sync',
+        key: 'catalog_snapshot',
+        type: 'json',
+        value: JSON.stringify(intakeItem.catalog_snapshot)
+      });
+    }
+
     // Prepare Shopify product data
     const productData = {
       product: {
@@ -263,7 +361,8 @@ Deno.serve(async (req) => {
         images: imageUrl ? [{
           src: imageUrl,
           alt: title
-        }] : []
+        }] : [],
+        metafields: metafields
       }
     }
 

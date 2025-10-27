@@ -140,6 +140,159 @@ Deno.serve(async (req) => {
     console.log('DEBUG: Sync operation type:', isUpdate ? 'UPDATE' : 'CREATE')
     console.log('DEBUG: Existing Shopify IDs:', { existingProductId, existingVariantId })
 
+    // Build comprehensive metafields array
+    const metafields = [
+      {
+        namespace: 'acs.sync',
+        key: 'external_id',
+        type: 'single_line_text_field',
+        value: intakeItem.id
+      },
+      {
+        namespace: 'acs.sync',
+        key: 'intake_id',
+        type: 'single_line_text_field',
+        value: item.id
+      }
+    ];
+
+    // Core classification
+    if (intakeItem.main_category) {
+      metafields.push({
+        namespace: 'acs.sync',
+        key: 'main_category',
+        type: 'single_line_text_field',
+        value: intakeItem.main_category
+      });
+    }
+
+    if (intakeItem.sub_category) {
+      metafields.push({
+        namespace: 'acs.sync',
+        key: 'sub_category',
+        type: 'single_line_text_field',
+        value: intakeItem.sub_category
+      });
+    }
+
+    metafields.push({
+      namespace: 'acs.sync',
+      key: 'item_type',
+      type: 'single_line_text_field',
+      value: 'graded'
+    });
+
+    // Grading information
+    if (gradingCompany) {
+      metafields.push({
+        namespace: 'acs.sync',
+        key: 'grading_company',
+        type: 'single_line_text_field',
+        value: gradingCompany
+      });
+    }
+
+    if (grade) {
+      metafields.push({
+        namespace: 'acs.sync',
+        key: 'grade',
+        type: 'single_line_text_field',
+        value: grade
+      });
+    }
+
+    if (psaCert) {
+      metafields.push({
+        namespace: 'acs.sync',
+        key: 'cert_number',
+        type: 'single_line_text_field',
+        value: psaCert
+      });
+    }
+
+    if (psaUrl) {
+      metafields.push({
+        namespace: 'acs.sync',
+        key: 'cert_url',
+        type: 'url',
+        value: psaUrl
+      });
+    }
+
+    // Card details
+    if (brandTitle) {
+      metafields.push({
+        namespace: 'acs.sync',
+        key: 'brand_title',
+        type: 'single_line_text_field',
+        value: brandTitle
+      });
+    }
+
+    if (cardNumber) {
+      metafields.push({
+        namespace: 'acs.sync',
+        key: 'card_number',
+        type: 'single_line_text_field',
+        value: cardNumber
+      });
+    }
+
+    if (year) {
+      metafields.push({
+        namespace: 'acs.sync',
+        key: 'year',
+        type: 'single_line_text_field',
+        value: year
+      });
+    }
+
+    if (variant) {
+      metafields.push({
+        namespace: 'acs.sync',
+        key: 'variant',
+        type: 'single_line_text_field',
+        value: variant
+      });
+    }
+
+    if (subject) {
+      metafields.push({
+        namespace: 'acs.sync',
+        key: 'subject',
+        type: 'single_line_text_field',
+        value: subject
+      });
+    }
+
+    // Rich JSON data
+    if (intakeItem.catalog_snapshot) {
+      metafields.push({
+        namespace: 'acs.sync',
+        key: 'catalog_snapshot',
+        type: 'json',
+        value: JSON.stringify(intakeItem.catalog_snapshot)
+      });
+    }
+
+    if (intakeItem.psa_snapshot) {
+      metafields.push({
+        namespace: 'acs.sync',
+        key: 'psa_snapshot',
+        type: 'json',
+        value: JSON.stringify(intakeItem.psa_snapshot)
+      });
+    }
+
+    if (intakeItem.grading_data) {
+      metafields.push({
+        namespace: 'acs.sync',
+        key: 'grading_data',
+        type: 'json',
+        value: JSON.stringify(intakeItem.grading_data)
+      });
+    }
+
     // Prepare Shopify product data
     const productData = {
       product: {
@@ -177,7 +330,8 @@ Deno.serve(async (req) => {
         images: imageUrl ? [{
           src: imageUrl,
           alt: title
-        }] : []
+        }] : [],
+        metafields: metafields
       }
     }
 

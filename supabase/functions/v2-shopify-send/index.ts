@@ -101,6 +101,180 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Build comprehensive metafields array
+    const metafields = [
+      {
+        namespace: 'acs.sync',
+        key: 'external_id',
+        type: 'single_line_text_field',
+        value: intakeItem?.id || sku
+      }
+    ];
+
+    if (intakeItemId) {
+      metafields.push({
+        namespace: 'acs.sync',
+        key: 'intake_id',
+        type: 'single_line_text_field',
+        value: intakeItemId
+      });
+    }
+
+    // Core classification
+    if (intakeItem?.main_category) {
+      metafields.push({
+        namespace: 'acs.sync',
+        key: 'main_category',
+        type: 'single_line_text_field',
+        value: intakeItem.main_category
+      });
+    }
+
+    if (intakeItem?.sub_category) {
+      metafields.push({
+        namespace: 'acs.sync',
+        key: 'sub_category',
+        type: 'single_line_text_field',
+        value: intakeItem.sub_category
+      });
+    }
+
+    if (isGraded) {
+      metafields.push({
+        namespace: 'acs.sync',
+        key: 'item_type',
+        type: 'single_line_text_field',
+        value: 'graded'
+      });
+    } else {
+      metafields.push({
+        namespace: 'acs.sync',
+        key: 'item_type',
+        type: 'single_line_text_field',
+        value: 'raw'
+      });
+    }
+
+    // Grading information
+    if (intakeItem?.grading_company) {
+      metafields.push({
+        namespace: 'acs.sync',
+        key: 'grading_company',
+        type: 'single_line_text_field',
+        value: intakeItem.grading_company
+      });
+    }
+
+    if (intakeItem?.grade) {
+      metafields.push({
+        namespace: 'acs.sync',
+        key: 'grade',
+        type: 'single_line_text_field',
+        value: intakeItem.grade
+      });
+    }
+
+    if (intakeItem?.psa_cert) {
+      metafields.push({
+        namespace: 'acs.sync',
+        key: 'cert_number',
+        type: 'single_line_text_field',
+        value: intakeItem.psa_cert
+      });
+    }
+
+    if (intakeItem?.cgc_cert) {
+      metafields.push({
+        namespace: 'acs.sync',
+        key: 'cert_number',
+        type: 'single_line_text_field',
+        value: intakeItem.cgc_cert
+      });
+    }
+
+    if (psaUrl) {
+      metafields.push({
+        namespace: 'acs.sync',
+        key: 'cert_url',
+        type: 'url',
+        value: psaUrl
+      });
+    }
+
+    // Card details
+    if (intakeItem?.brand_title) {
+      metafields.push({
+        namespace: 'acs.sync',
+        key: 'brand_title',
+        type: 'single_line_text_field',
+        value: intakeItem.brand_title
+      });
+    }
+
+    if (intakeItem?.card_number) {
+      metafields.push({
+        namespace: 'acs.sync',
+        key: 'card_number',
+        type: 'single_line_text_field',
+        value: intakeItem.card_number.toString()
+      });
+    }
+
+    if (intakeItem?.year) {
+      metafields.push({
+        namespace: 'acs.sync',
+        key: 'year',
+        type: 'single_line_text_field',
+        value: intakeItem.year
+      });
+    }
+
+    if (intakeItem?.variant) {
+      metafields.push({
+        namespace: 'acs.sync',
+        key: 'variant',
+        type: 'single_line_text_field',
+        value: intakeItem.variant
+      });
+    }
+
+    if (intakeItem?.subject) {
+      metafields.push({
+        namespace: 'acs.sync',
+        key: 'subject',
+        type: 'single_line_text_field',
+        value: intakeItem.subject
+      });
+    }
+
+    // Rich JSON data
+    if (intakeItem?.catalog_snapshot) {
+      metafields.push({
+        namespace: 'acs.sync',
+        key: 'catalog_snapshot',
+        type: 'json',
+        value: JSON.stringify(intakeItem.catalog_snapshot)
+      });
+    }
+
+    if (intakeItem?.psa_snapshot) {
+      metafields.push({
+        namespace: 'acs.sync',
+        key: 'psa_snapshot',
+        type: 'json',
+        value: JSON.stringify(intakeItem.psa_snapshot)
+      });
+    }
+
+    if (intakeItem?.grading_data) {
+      metafields.push({
+        namespace: 'acs.sync',
+        key: 'grading_data',
+        type: 'json',
+        value: JSON.stringify(intakeItem.grading_data)
+      });
+    }
+
     // Create Shopify product
     const productData = {
       product: {
@@ -124,7 +298,8 @@ Deno.serve(async (req) => {
         images: intakeItem?.catalog_snapshot?.imageUrl ? [{
           src: intakeItem.catalog_snapshot.imageUrl,
           alt: finalTitle
-        }] : []
+        }] : [],
+        metafields: metafields
       }
     }
 
