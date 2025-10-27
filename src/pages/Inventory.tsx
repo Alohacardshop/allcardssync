@@ -610,7 +610,7 @@ const Inventory = () => {
       // Refresh items to show updated status
       refetch();
     } catch (error) {
-      console.error('[handleResync] Failed:', error);
+      logger.error('Resync failed', error as Error, { itemId: item.id, sku: item.sku });
       toast.error('Failed to resync: ' + (error as Error).message);
     } finally {
       setSyncingRowId(null);
@@ -704,7 +704,7 @@ const Inventory = () => {
         item.store_key && item.shopify_location_gid && item.sku && !item.deleted_at
       );
 
-      logger.info('[handleResyncSelected] Starting resync', {
+      logger.info('Starting resync for selected items', {
         selectedCount: selectedItems.size,
         itemsToResyncCount: itemsToResync.length,
         firstItem: itemsToResync[0]?.sku
@@ -957,10 +957,10 @@ const Inventory = () => {
               : '^XA^FO50,50^A0N,30,30^FD{{CARDNAME}}^FS^FO50,100^A0N,20,20^FD{{CONDITION}}^FS^FO50,150^BY2^BCN,60,Y,N,N^FD{{BARCODE}}^FS^XZ',
             scope: 'org'
           };
-          logger.info('🖨️ Using ZPL Studio template', { templateName: tpl.name });
-        }
+            logger.info('ZPL Studio template selected', { templateName: tpl.name });
+          }
       } catch (error) {
-        logger.warn('🖨️ Failed to load ZPL Studio template, falling back', error as Error);
+        logger.warn('Failed to load ZPL Studio template, falling back', error as Error);
       }
       
       // Fallback to regular template system if no ZPL Studio template found
@@ -975,31 +975,10 @@ const Inventory = () => {
       }
 
       // Debug: Log the item data being processed
-      console.log('🖨️ Item data:', {
-        id: item.id,
-        subject: item.subject,
-        brand_title: item.brand_title,
-        card_number: item.card_number,
-        condition: item.condition,
-        price: item.price,
+      logger.info('Printing item data', {
+        itemId: item.id,
         sku: item.sku,
-        year: item.year
-      });
-
-      // Debug: Log the template structure
-      console.log('🖨️ Template loaded:', {
-        id: tpl.id,
-        name: tpl.name,
-        format: tpl.format,
-        hasLayout: !!tpl.layout,
-        hasZpl: !!tpl.zpl,
-        elements: tpl.layout?.elements?.map(el => ({ 
-          id: el.id, 
-          type: el.type, 
-          content: el.type === 'text' ? (el as any).text : 
-                   el.type === 'barcode' ? (el as any).data : 
-                   'N/A'
-        }))
+        subject: item.subject
       });
 
       // Prepare variables for template substitution
@@ -1013,13 +992,13 @@ const Inventory = () => {
         BARCODE: item.sku || item.id?.slice(-8) || 'NO-SKU',
       };
 
-      console.log('🖨️ Template variables:', vars);
+      logger.info('Template variables generated', { templateFormat: tpl.format });
 
       let zpl = '';
       
       // Handle different template formats
       if (tpl.format === 'zpl_studio' && tpl.zpl) {
-        console.log('🖨️ Processing ZPL Studio template...');
+        logger.info('Processing ZPL Studio template');
         zpl = tpl.zpl;
         
         // Replace ZPL Studio variables with item data
@@ -1032,13 +1011,12 @@ const Inventory = () => {
           .replace(/{{SKU}}/g, vars.SKU || '')
           .replace(/{{BARCODE}}/g, vars.BARCODE || '');
           
-        console.log('🖨️ Generated ZPL from ZPL Studio template');
+        logger.info('Generated ZPL from ZPL Studio template');
       } else if (tpl.format === 'elements' && tpl.layout) {
-        console.log('🖨️ Processing elements template...');
+        logger.info('Processing elements template');
         const filled = {
           ...tpl.layout,
           elements: tpl.layout.elements.map((el: ZPLElement) => {
-            console.debug('[template_element]', { id: el.id, type: el.type });
             
             if (el.type === 'text') {
               let updatedElement = { ...el };
@@ -1048,81 +1026,56 @@ const Inventory = () => {
               if (el.id === 'cardinfo') {
                 updatedElement.text = vars.CARDNAME ?? el.text;
                 wasUpdated = true;
-                console.log(`🖨️ Updated cardinfo: "${el.text}" → "${updatedElement.text}"`);
               } else if (el.id === 'condition') {
                 updatedElement.text = vars.CONDITION ?? el.text;
                 wasUpdated = true;
-                console.log(`🖨️ Updated condition: "${el.text}" → "${updatedElement.text}"`);
               } else if (el.id === 'price') {
                 updatedElement.text = vars.PRICE ?? el.text;
                 wasUpdated = true;
-                console.log(`🖨️ Updated price: "${el.text}" → "${updatedElement.text}"`);
               } else if (el.id === 'sku') {
                 updatedElement.text = vars.SKU ?? el.text;
                 wasUpdated = true;
-                console.log(`🖨️ Updated sku: "${el.text}" → "${updatedElement.text}"`);
               } 
               // Legacy fallbacks for older templates
               else if (el.id === 'cardname') {
                 updatedElement.text = vars.CARDNAME ?? el.text;
                 wasUpdated = true;
-                console.log(`🖨️ Updated cardname (legacy): "${el.text}" → "${updatedElement.text}"`);
               } else if (el.id === 'setname') {
                 updatedElement.text = vars.SETNAME ?? el.text;
                 wasUpdated = true;
-                console.log(`🖨️ Updated setname: "${el.text}" → "${updatedElement.text}"`);
               } else if (el.id === 'cardnumber') {
                 updatedElement.text = vars.CARDNUMBER ?? el.text;
                 wasUpdated = true;
-                console.log(`🖨️ Updated cardnumber: "${el.text}" → "${updatedElement.text}"`);
-              }
-              
-              if (!wasUpdated) {
-                console.log(`🖨️ No mapping for text element with id: "${el.id}", text: "${el.text}"`);
               }
               
               return updatedElement;
             } else if (el.type === 'barcode' && el.id === 'barcode') {
               const updatedElement = { ...el, data: vars.BARCODE ?? el.data };
-              console.log(`🖨️ Updated barcode: "${el.data}" → "${updatedElement.data}"`);
               return updatedElement;
             }
             
-            console.log(`🖨️ No mapping for element type: ${el.type}, id: ${el.id}`);
             return el;
           }),
         };
         zpl = zplFromElements(filled);
-        console.log('🖨️ Generated ZPL from elements');
+        logger.info('Generated ZPL from elements');
       } else if (tpl.format === 'zpl' && tpl.zpl) {
-        console.log('🖨️ Processing ZPL string template...');
+        logger.info('Processing ZPL string template');
         zpl = zplFromTemplateString(tpl.zpl, vars);
-        console.log('🖨️ Generated ZPL from string template');
+        logger.info('Generated ZPL from string template');
       } else {
-        console.error('🖨️ Invalid template format:', { format: tpl.format, hasLayout: !!tpl.layout, hasZpl: !!tpl.zpl });
+        logger.error('Invalid template format', new Error('Invalid template format'), { format: tpl.format, hasLayout: !!tpl.layout, hasZpl: !!tpl.zpl });
         throw new Error('Invalid template format');
       }
-
-      console.log('🖨️ Generated ZPL for printing (FULL):', zpl);
-      console.log('🖨️ Generated ZPL contains vars:', {
-        hasCardname: zpl.includes(vars.CARDNAME || ''),
-        hasCondition: zpl.includes(vars.CONDITION || ''), 
-        hasPrice: zpl.includes(vars.PRICE || ''),
-        hasSku: zpl.includes(vars.SKU || ''),
-        cardnameInZpl: vars.CARDNAME,
-        conditionInZpl: vars.CONDITION,
-        priceInZpl: vars.PRICE,
-        skuInZpl: vars.SKU
-      });
 
       // Use the new print queue system with ensurePQ1
       const { sanitizeLabel } = await import('@/lib/print/sanitizeZpl');
       const safeZpl = sanitizeLabel(zpl);
       
-      console.debug("[print_prepare]", {
+      logger.info('Queueing label for printing', {
         template: 'inventory_item',
         qty: item.quantity || 1,
-        preview: safeZpl.slice(0, 120).replace(/\n/g, "\\n")
+        itemId: item.id
       });
       
       await printQueue.enqueueSafe({ 
@@ -1130,8 +1083,6 @@ const Inventory = () => {
         qty: item.quantity || 1, 
         usePQ: true 
       });
-
-      console.log('🖨️ Label queued for printing');
       
       toast.success('Label queued for printing!');
       
@@ -1143,7 +1094,7 @@ const Inventory = () => {
         
       refetch();
     } catch (error) {
-      console.error('Print error:', error);
+      logger.error('Print error', error as Error, { itemId: item.id });
       rollbackOptimisticUpdate(previousData);
       toast.error('Failed to print label: ' + (error as Error).message);
     } finally {
@@ -1231,28 +1182,28 @@ const Inventory = () => {
           };
         }
       } catch (error) {
-        console.warn('🖨️ Failed to load ZPL Studio template, falling back:', error);
-      }
-      
-      // Fallback to regular template system
-      if (!template || !template.zpl) {
-        template = await getTemplate('raw_card_2x1');
-      }
-      
-      const vars: JobVars = {
-        CARDNAME: generateTitle(item),
-        CONDITION: item.condition || 'NM',
-        PRICE: item.price ? `$${item.price.toFixed(2)}` : '$0.00',
-        SKU: item.sku || '',
-        BARCODE: item.sku || item.id?.slice(-8) || 'NO-SKU',
-      };
+          console.warn('🖨️ Failed to load ZPL Studio template, falling back:', error);
+        }
+        
+        // Fallback to regular template system
+        if (!template || !template.zpl) {
+          template = await getTemplate('raw_card_2x1');
+        }
+        
+        const vars: JobVars = {
+          CARDNAME: generateTitle(item),
+          CONDITION: item.condition || 'NM',
+          PRICE: item.price ? `$${item.price.toFixed(2)}` : '$0.00',
+          SKU: item.sku || '',
+          BARCODE: item.sku || item.id?.slice(-8) || 'NO-SKU',
+        };
 
-      const prefs = JSON.parse(localStorage.getItem('zebra-printer-config') || '{}');
+        const prefs = JSON.parse(localStorage.getItem('zebra-printer-config') || '{}');
 
-      let zpl: string;
-      
-      if (template.format === 'zpl_studio' && template.zpl) {
-        console.log('🖨️ Processing ZPL Studio template for printer...');
+        let zpl: string;
+        
+        if (template.format === 'zpl_studio' && template.zpl) {
+          logger.info('Processing ZPL Studio template for printer');
         zpl = template.zpl;
         
         // Replace ZPL Studio variables with item data
@@ -1273,11 +1224,10 @@ const Inventory = () => {
         throw new Error('No valid template found');
       }
 
-      console.log('🖨️ handlePrintWithPrinter - Item details:', {
+      logger.info('Print with printer: Item details', {
         itemId: item.id,
         quantity: item.quantity,
-        sku: item.sku,
-        type: itemType
+        sku: item.sku
       });
 
       // Convert to queue-compatible format - let print queue handle quantity
@@ -1293,7 +1243,7 @@ const Inventory = () => {
       toast.success('Raw card label printed successfully');
       refetch();
     } catch (error) {
-      console.error('Print error:', error);
+      logger.error('Print error', error as Error, { itemId: item.id });
       toast.error('Failed to print label');
     } finally {
       setPrintingItem(null);
@@ -1319,7 +1269,7 @@ const Inventory = () => {
       // Use the specified immediate cut command
       const cutZpl = '^XA^MMC^CN1^MCY^XZ';
       
-      console.log('🔪 Sending cut command to printer:', cutZpl);
+      logger.info('Sending cut command to printer', { cutZpl });
       
       const result = await print(cutZpl, 1);
       
@@ -1330,7 +1280,7 @@ const Inventory = () => {
       }
       
     } catch (error) {
-      console.error('Cut command error:', error);
+      logger.error('Cut command error', error as Error);
       toast.error(`Failed to send cut command: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }, []);
@@ -1395,7 +1345,7 @@ const Inventory = () => {
         return;
       }
 
-      console.log(`[handleBulkPrintRaw] Processing ${unprintedRawItems.length} unprinted raw items`);
+      logger.info('Bulk print: Processing unprinted raw items', { count: unprintedRawItems.length });
 
       // Helper function to truncate text for labels
       const truncateForLabel = (text: string, maxLength: number = 70): string => {
@@ -1436,10 +1386,10 @@ const Inventory = () => {
               : '^XA^FO50,50^A0N,30,30^FD{{CARDNAME}}^FS^FO50,100^A0N,20,20^FD{{CONDITION}}^FS^FO50,150^BY2^BCN,60,Y,N,N^FD{{BARCODE}}^FS^XZ',
             scope: 'org'
           };
-          console.log('[handleBulkPrintRaw] Using ZPL Studio template:', tpl.name);
+          logger.info('Bulk print: Using ZPL Studio template', { templateName: tpl.name });
         }
       } catch (error) {
-        console.warn('[handleBulkPrintRaw] Failed to load ZPL Studio template, falling back:', error);
+        logger.warn('Bulk print: Failed to load ZPL Studio template, falling back', error as Error);
       }
       
       // Fallback to regular template system if no ZPL Studio template found
