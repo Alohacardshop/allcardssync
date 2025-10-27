@@ -12,6 +12,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ChevronDown, ChevronRight, RefreshCw, Trash2, Search, Filter, Copy, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { logger } from '@/lib/logger';
 
 interface SystemLog {
   id: string;
@@ -103,7 +104,7 @@ export function SystemLogsViewer() {
       if (error) throw error;
       setLogs((data || []) as SystemLog[]);
     } catch (error: any) {
-      console.error("Error loading logs:", error);
+      logger.error('Error loading logs', error instanceof Error ? error : new Error(String(error)), { errorCode: error?.code }, 'system-logs-viewer');
       const errorCode = error?.code;
       toast.error(`Failed to load logs: ${error.message}`, {
         description: errorCode ? `Error code: ${errorCode}` : undefined,
@@ -132,7 +133,7 @@ export function SystemLogsViewer() {
       toast.success(`Deleted logs older than ${daysOld} days`);
       loadLogs();
     } catch (error) {
-      console.error("Error deleting logs:", error);
+      logger.error('Error deleting logs', error instanceof Error ? error : new Error(String(error)), undefined, 'system-logs-viewer');
       toast.error("Failed to delete old logs");
     }
   };

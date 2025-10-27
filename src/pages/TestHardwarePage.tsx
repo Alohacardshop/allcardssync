@@ -23,6 +23,7 @@ import { PrintNodeSettings } from "@/components/PrintNodeSettings";
 import { CutterSettings, CutterConfig } from "@/components/CutterSettings";
 import { DefaultPrinterSelector } from "@/components/DefaultPrinterSelector";
 import { PrintNodeProvider } from "@/contexts/PrintNodeContext";
+import { logger } from '@/lib/logger';
 import TemplateEditor from "@/components/admin/TemplateEditor";
 
 interface TestResult {
@@ -53,7 +54,7 @@ export default function TestHardwarePage() {
         setCutterConfig(config);
       }
     } catch (error) {
-      console.warn('Failed to load cutter config:', error);
+      logger.warn('Failed to load cutter config', { error }, 'test-hardware');
     }
   }, []);
 
@@ -62,7 +63,7 @@ export default function TestHardwarePage() {
     try {
       localStorage.setItem('zebra-cutter-config', JSON.stringify(cutterConfig));
     } catch (error) {
-      console.warn('Failed to save cutter config:', error);
+      logger.warn('Failed to save cutter config', { error }, 'test-hardware');
     }
   }, [cutterConfig]);
   

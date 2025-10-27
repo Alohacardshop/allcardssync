@@ -15,6 +15,7 @@ import { Navigation } from "@/components/Navigation";
 import { useStore } from "@/contexts/StoreContext";
 import { buildTitleFromParts } from "@/lib/labelData";
 import { AlertTriangle, CheckCircle, Clock, ExternalLink, RefreshCw, Edit3, MapPin, Settings } from "lucide-react";
+import { logger } from '@/lib/logger';
 
 
 function useSEO(opts: { title: string; description?: string; canonical?: string }) {
@@ -134,7 +135,7 @@ export default function ShopifyMapping() {
       setProductGroups(groups);
       
     } catch (e) {
-      console.error(e);
+      logger.error('Failed to load mapping data', e instanceof Error ? e : new Error(String(e)), undefined, 'shopify-mapping');
       toast.error("Failed to load mapping data");
     } finally {
       setLoading(false);
@@ -219,7 +220,7 @@ export default function ShopifyMapping() {
       toast.success("Mapping cleared");
       loadMappingData();
     } catch (e) {
-      console.error(e);
+      logger.error('Failed to clear mapping', e instanceof Error ? e : new Error(String(e)), undefined, 'shopify-mapping');
       toast.error("Failed to clear mapping");
     }
   };
@@ -240,7 +241,7 @@ export default function ShopifyMapping() {
       setEditingProductId(null);
       setNewProductId("");
     } catch (e) {
-      console.error(e);
+      logger.error('Failed to update product ID', e instanceof Error ? e : new Error(String(e)), undefined, 'shopify-mapping');
       toast.error("Failed to update product ID");
     }
   };
@@ -259,7 +260,7 @@ export default function ShopifyMapping() {
       toast.success("Conflict resolved");
       loadMappingData();
     } catch (e) {
-      console.error(e);
+      logger.error('Failed to resolve conflict', e instanceof Error ? e : new Error(String(e)), undefined, 'shopify-mapping');
       toast.error("Failed to resolve conflict");
     }
   };

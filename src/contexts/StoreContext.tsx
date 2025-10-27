@@ -3,6 +3,7 @@ import { createContext, useContext, useState, useEffect, useRef, ReactNode } fro
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useLocalStorageString } from "@/hooks/useLocalStorage";
+import { logger } from '@/lib/logger';
 
 interface Store {
   key: string;
@@ -120,11 +121,11 @@ export function StoreProvider({ children }: StoreProviderProps) {
         .maybeSingle();
         
       if (activeLot?.shopify_location_gid) {
-        console.log('[StoreContext] Recovered from active lot:', activeLot.shopify_location_gid);
+        logger.info('Recovered from active lot', { location: activeLot.shopify_location_gid }, 'store-context');
         setSelectedLocation(activeLot.shopify_location_gid);
       }
     } catch (error) {
-      console.error('[StoreContext] Failed to recover location from active lot:', error);
+      logger.error('Failed to recover location from active lot', error instanceof Error ? error : new Error(String(error)), undefined, 'store-context');
     }
   };
 
@@ -157,7 +158,7 @@ export function StoreProvider({ children }: StoreProviderProps) {
       }
       return null;
     } catch (error) {
-      console.error("Error auto-loading locations:", error);
+      logger.error('Error auto-loading locations', error instanceof Error ? error : new Error(String(error)), undefined, 'store-context');
       // Silent failure - user can manually refresh if needed
       return null;
     }
@@ -167,11 +168,11 @@ export function StoreProvider({ children }: StoreProviderProps) {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        console.log("StoreContext: No user found");
+        logger.info('No user found', undefined, 'store-context');
         return;
       }
 
-      console.log("StoreContext: Loading user data for user:", user.id);
+      logger.info('Loading user data for user', { userId: user.id }, 'store-context');
 
       // Check if user is admin or staff
       const { data: adminCheck } = await supabase.rpc("has_role", { 
@@ -194,17 +195,17 @@ export function StoreProvider({ children }: StoreProviderProps) {
         .order("is_default", { ascending: false }); // Put defaults first
       
       if (assignmentsError) {
-        console.error("StoreContext: Error loading assignments:", assignmentsError);
+        logger.error('Error loading assignments', assignmentsError instanceof Error ? assignmentsError : new Error(String(assignmentsError)), undefined, 'store-context');
         return;
       }
 
-      console.log("StoreContext: Loaded assignments:", assignments);
+      logger.info('Loaded assignments', { count: assignments?.length || 0 }, 'store-context');
       setUserAssignments(assignments || []);
 
       // Auto-assign to user's region and store
       if (assignments && assignments.length > 0) {
         const userAssignment = assignments[0];
-        console.log("StoreContext: Auto-assigning to user's store:", userAssignment);
+        logger.info('Auto-assigning to user store', { store: userAssignment.store_key }, 'store-context');
         
         // Set region from assignment
         if (userAssignment.region_id) {
@@ -240,7 +241,7 @@ export function StoreProvider({ children }: StoreProviderProps) {
           .maybeSingle();
           
         if (storeError) {
-          console.error("Error fetching store data:", storeError);
+          logger.error('Error fetching store data', storeError instanceof Error ? storeError : new Error(String(storeError)), undefined, 'store-context');
           // Don't show toast error here as it might be called too early
         }
         
@@ -261,7 +262,7 @@ export function StoreProvider({ children }: StoreProviderProps) {
           variant: "default",
         });
       } else {
-        console.log("StoreContext: No assignments found");
+        logger.info('No assignments found', undefined, 'store-context');
         toast({
           title: "No store access",
           description: "Please contact an administrator to assign you to a store",
@@ -269,7 +270,7 @@ export function StoreProvider({ children }: StoreProviderProps) {
         });
       }
     } catch (error) {
-      console.error("Error loading user data:", error);
+      logger.error('Error loading user data', error instanceof Error ? error : new Error(String(error)), undefined, 'store-context');
       toast({
         title: "Failed to load user data",
         description: "Please try refreshing the page",
@@ -417,7 +418,7 @@ export function StoreProvider({ children }: StoreProviderProps) {
         throw new Error(data?.error || "Failed to load locations");
       }
     } catch (error) {
-      console.error("Error loading locations:", error);
+      logger.error('Error loading locations', error instanceof Error ? error : new Error(String(error)), undefined, 'store-context');
       
       // Don't clear existing locations on error, just show error message
       const errorMessage = error instanceof Error ? error.message : "Failed to load locations";

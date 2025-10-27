@@ -8,6 +8,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { RefreshCw, AlertCircle, CheckCircle } from "lucide-react";
+import { logger } from '@/lib/logger';
 
 export function InventorySyncSettings() {
   const [syncMode, setSyncMode] = useState<'auto' | 'manual'>('manual');
@@ -26,7 +27,7 @@ export function InventorySyncSettings() {
       
       setSyncMode((data?.key_value as 'auto' | 'manual') || 'auto'); // A) fallback to auto
     } catch (error) {
-      console.error('Failed to load sync mode:', error);
+      logger.error('Failed to load sync mode', error instanceof Error ? error : new Error(String(error)), undefined, 'inventory-sync-settings');
       toast.error('Failed to load inventory sync settings');
     } finally {
       setLoading(false);

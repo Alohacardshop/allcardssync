@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2, AlertTriangle, Trash2, RefreshCw, CheckCircle } from 'lucide-react';
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { logger } from '@/lib/logger';
 
 interface DuplicateGroup {
   psa_cert: string;
@@ -100,7 +101,7 @@ export const DuplicateCleanup = () => {
             });
 
             if (shopifyError) {
-              console.error('Shopify deletion error:', shopifyError);
+              logger.error('Shopify deletion error', shopifyError instanceof Error ? shopifyError : new Error(String(shopifyError)), undefined, 'duplicate-cleanup');
               toast.warning(`Failed to delete from Shopify: ${shopifyError.message}`);
             }
           }

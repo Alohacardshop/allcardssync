@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { StoreSelector } from "@/components/StoreSelector";
 import { useStore } from "@/contexts/StoreContext";
 import { RefreshCw, Download, Eye, Clock, Info } from "lucide-react";
+import { logger } from '@/lib/logger';
 
 export function ShopifyTagImport() {
   const { assignedStore } = useStore();
@@ -68,7 +69,7 @@ export function ShopifyTagImport() {
       );
     } catch (error) {
       clearTimeout(timeoutId);
-      console.error('Preview error:', error);
+      logger.error('Preview error', error instanceof Error ? error : new Error(String(error)), undefined, 'shopify-tag-import');
       toast.error("Preview failed: " + (error.message || "Unknown error"));
     } finally {
       setPreviewing(false);
@@ -104,7 +105,7 @@ export function ShopifyTagImport() {
         `Import complete: ${stats.upsertedRows} items imported from ${stats.totalProducts} products`
       );
     } catch (error) {
-      console.error('Import error:', error);
+      logger.error('Import error', error instanceof Error ? error : new Error(String(error)), undefined, 'shopify-tag-import');
       toast.error("Import failed: " + (error.message || "Unknown error"));
     } finally {
       setLoading(false);

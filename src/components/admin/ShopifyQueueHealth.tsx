@@ -17,6 +17,7 @@ import {
 import { formatDistanceToNow } from "date-fns"
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { RefreshButton } from '@/components/RefreshButton'
+import { logger } from '@/lib/logger';
 
 interface HealthMetrics {
   lastProcessorRun?: string
@@ -139,7 +140,7 @@ export default function ShopifyQueueHealth() {
       toast.success('Queue cleanup completed')
       queryClient.invalidateQueries({ queryKey: ['shopify-queue-health'] })
     } catch (error) {
-      console.error('Error running cleanup:', error)
+      logger.error('Error running cleanup', error instanceof Error ? error : new Error(String(error)), undefined, 'shopify-queue-health');
       toast.error('Failed to run cleanup')
     }
   }

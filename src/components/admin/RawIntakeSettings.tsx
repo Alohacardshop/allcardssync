@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useExternalGames } from "@/hooks/useExternalTCG";
 import { toast } from "sonner";
 import { Loader2, Settings, Save } from "lucide-react";
+import { logger } from '@/lib/logger';
 
 export function RawIntakeSettings() {
   const [loading, setLoading] = useState(true);
@@ -55,7 +56,7 @@ export function RawIntakeSettings() {
         setEnabledGames(['pokemon']);
       }
     } catch (error) {
-      console.error('Error loading raw intake settings:', error);
+      logger.error('Error loading raw intake settings', error instanceof Error ? error : new Error(String(error)), undefined, 'raw-intake-settings');
       toast.error('Failed to load settings');
     } finally {
       setLoading(false);
@@ -95,7 +96,7 @@ export function RawIntakeSettings() {
 
       toast.success('Raw intake settings saved successfully');
     } catch (error) {
-      console.error('Error saving settings:', error);
+      logger.error('Error saving settings', error instanceof Error ? error : new Error(String(error)), undefined, 'raw-intake-settings');
       toast.error('Failed to save settings');
     } finally {
       setSaving(false);

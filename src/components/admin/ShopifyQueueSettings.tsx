@@ -9,6 +9,7 @@ import { Separator } from "@/components/ui/separator"
 import { supabase } from "@/integrations/supabase/client"
 import { toast } from "sonner"
 import { Settings, Save, RotateCcw, AlertTriangle } from "lucide-react"
+import { logger } from '@/lib/logger';
 
 interface QueueSettings {
   batchSize: number
@@ -74,7 +75,7 @@ export default function ShopifyQueueSettings() {
         failureThreshold: parseInt(settingsMap.SHOPIFY_FAILURE_THRESHOLD || '10')
       })
     } catch (error) {
-      console.error('Error loading settings:', error)
+      logger.error('Error loading settings', error instanceof Error ? error : new Error(String(error)), undefined, 'shopify-queue-settings');
       toast.error('Failed to load settings')
     } finally {
       setLoading(false)
@@ -105,7 +106,7 @@ export default function ShopifyQueueSettings() {
 
       toast.success('Settings saved successfully')
     } catch (error) {
-      console.error('Error saving settings:', error)
+      logger.error('Error saving settings', error instanceof Error ? error : new Error(String(error)), undefined, 'shopify-queue-settings');
       toast.error('Failed to save settings')
     } finally {
       setSaving(false)

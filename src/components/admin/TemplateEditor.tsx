@@ -16,6 +16,7 @@ import {
   type TemplateType 
 } from '@/lib/templateStore';
 import { Trash2, Download, Upload, RefreshCw } from 'lucide-react';
+import { logger } from '@/lib/logger';
 
 export default function TemplateEditor() {
   const [selectedId, setSelectedId] = useState<TemplateType>('raw_card_2x1');
@@ -43,7 +44,7 @@ export default function TemplateEditor() {
       const templates = await loadAllFromSupabase();
       setAllTemplates(templates);
     } catch (e: any) {
-      console.error('Failed to load templates:', e);
+      logger.error('Failed to load templates', e instanceof Error ? e : new Error(String(e)), undefined, 'template-editor');
     }
   }
 

@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Loader2, CheckCircle, XCircle, PlayCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { logger } from '@/lib/logger';
 
 interface TestResult {
   topic: string;
@@ -32,12 +33,12 @@ export function WebhookTestPanel() {
     setTestResults(null);
 
     try {
-      console.log('Starting webhook tests...');
+      logger.info('Starting webhook tests', undefined, 'webhook-test-panel');
       
       const { data, error } = await supabase.functions.invoke('shopify-webhook-test');
       
       if (error) {
-        console.error('Test function error:', error);
+        logger.error('Test function error', error instanceof Error ? error : new Error(String(error)), undefined, 'webhook-test-panel');
         toast.error('Failed to run webhook tests: ' + error.message);
         return;
       }
@@ -54,7 +55,7 @@ export function WebhookTestPanel() {
         }
       }
     } catch (error) {
-      console.error('Unexpected error:', error);
+      logger.error('Unexpected error', error instanceof Error ? error : new Error(String(error)), undefined, 'webhook-test-panel');
       toast.error('Unexpected error running tests');
     } finally {
       setIsRunning(false);

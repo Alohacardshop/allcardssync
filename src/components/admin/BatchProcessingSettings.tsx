@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2, Settings, Save, Zap } from "lucide-react";
+import { logger } from '@/lib/logger';
 
 export function BatchProcessingSettings() {
   const [loading, setLoading] = useState(true);
@@ -49,7 +50,7 @@ export function BatchProcessingSettings() {
       setAutoDelay(parseInt(settings.BATCH_AUTO_DELAY) || 1000);
       setMaxAutoItems(parseInt(settings.BATCH_AUTO_MAX_ITEMS) || 100);
     } catch (error) {
-      console.error('Error loading batch processing settings:', error);
+      logger.error('Error loading batch processing settings', error instanceof Error ? error : new Error(String(error)), undefined, 'batch-processing-settings');
       toast.error('Failed to load settings');
     } finally {
       setLoading(false);
