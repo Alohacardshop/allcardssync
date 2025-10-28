@@ -70,63 +70,18 @@ export const DuplicateCleanup = () => {
     setIsDeleting(duplicate.psa_cert);
     
     try {
-      // Keep the oldest item (first in array), delete the rest
-      const [keepId, ...deleteIds] = duplicate.item_ids;
+      // Use admin edge function to bypass RLS policies
+      const { data, error } = await supabase.functions.invoke('admin-cleanup-psa-dupes', {
+        body: {}
+      });
+
+      if (error) throw error;
       
-      let shopifySuccessCount = 0;
-      let shopifyFailCount = 0;
-
-      // Remove each duplicate from Shopify using the proven Edge function
-      for (let i = 0; i < deleteIds.length; i++) {
-        const itemId = deleteIds[i];
-        const sku = duplicate.skus[i + 1]; // +1 because we skipped the first (keep) item
-        
-        try {
-          const { data, error } = await supabase.functions.invoke('v2-shopify-remove-graded', {
-            body: {
-              item_id: itemId,
-              sku: sku,
-              certNumber: duplicate.psa_cert,
-              quantity: 1,
-              force_db_cleanup: true
-            }
-          });
-
-          if (error || !data?.ok) {
-            console.warn(`Shopify removal failed for ${itemId}:`, error || data?.error);
-            shopifyFailCount++;
-          } else {
-            shopifySuccessCount++;
-          }
-        } catch (shopifyErr) {
-          console.warn(`Shopify removal error for ${itemId}:`, shopifyErr);
-          shopifyFailCount++;
-        }
+      if (!data?.success) {
+        throw new Error(data?.error || 'Cleanup failed');
       }
 
-      // Soft delete from database
-      const { error: dbError } = await supabase
-        .from('intake_items')
-        .update({
-          deleted_at: new Date().toISOString(),
-          deleted_reason: `Duplicate PSA cert ${duplicate.psa_cert} - kept item ${keepId}`,
-          updated_by: 'admin_duplicate_cleanup',
-          updated_at: new Date().toISOString()
-        })
-        .in('id', deleteIds);
-
-      if (dbError) throw dbError;
-
-      // Show detailed results
-      const messages = [`Deleted ${deleteIds.length} duplicate(s) for PSA cert ${duplicate.psa_cert}`];
-      if (shopifySuccessCount > 0) {
-        messages.push(`${shopifySuccessCount} removed from Shopify`);
-      }
-      if (shopifyFailCount > 0) {
-        messages.push(`${shopifyFailCount} Shopify removals failed`);
-      }
-
-      toast.success(messages.join(', '));
+      toast.success(`Deleted ${data.deletedCount} duplicate(s), kept ${data.keptCount} unique PSA cert(s)`);
       
       // Refresh the list
       await scanForDuplicates();
@@ -146,80 +101,27 @@ export const DuplicateCleanup = () => {
     setIsDeletingAll(true);
 
     try {
-      const results = await Promise.allSettled(
-        duplicates.map(async (duplicate) => {
-          const [keepId, ...deleteIds] = duplicate.item_ids;
-          let shopifySuccessCount = 0;
-          let shopifyFailCount = 0;
-
-          // Remove each duplicate from Shopify
-          for (let i = 0; i < deleteIds.length; i++) {
-            const itemId = deleteIds[i];
-            const sku = duplicate.skus[i + 1];
-            
-            try {
-              const { data, error } = await supabase.functions.invoke('v2-shopify-remove-graded', {
-                body: {
-                  item_id: itemId,
-                  sku: sku,
-                  certNumber: duplicate.psa_cert,
-                  quantity: 1,
-                  force_db_cleanup: true
-                }
-              });
-
-              if (error || !data?.ok) {
-                shopifyFailCount++;
-              } else {
-                shopifySuccessCount++;
-              }
-            } catch {
-              shopifyFailCount++;
-            }
-          }
-
-          // Soft delete from database
-          const { error: dbError } = await supabase
-            .from('intake_items')
-            .update({
-              deleted_at: new Date().toISOString(),
-              deleted_reason: `Duplicate PSA cert ${duplicate.psa_cert} - kept item ${keepId}`,
-              updated_by: 'admin_duplicate_cleanup',
-              updated_at: new Date().toISOString()
-            })
-            .in('id', deleteIds);
-
-          if (dbError) throw dbError;
-
-          return {
-            psa_cert: duplicate.psa_cert,
-            deletedCount: deleteIds.length,
-            shopifySuccessCount,
-            shopifyFailCount
-          };
-        })
-      );
-
-      // Count results using the categorizer
-      const categorized = categorizeCleanupResults(results);
-      
-      let totalDeleted = 0;
-      const successful = results.filter(r => r.status === 'fulfilled');
-      
-      successful.forEach(result => {
-        if (result.status === 'fulfilled') {
-          totalDeleted += result.value.deletedCount;
-        }
+      // Use admin edge function to bypass RLS policies
+      const { data, error } = await supabase.functions.invoke('admin-cleanup-psa-dupes', {
+        body: {}
       });
 
-      // Show comprehensive results with categorization
+      if (error) throw error;
+      
+      if (!data?.success) {
+        throw new Error(data?.error || 'Cleanup failed');
+      }
+
       toast.success(
-        `Deleted: ${categorized.deleted} | Already gone: ${categorized.alreadyGone} | Failed: ${categorized.failed}\n` +
-        `${totalDeleted} total items cleaned from ${successful.length} PSA cert groups`
+        `Successfully cleaned up PSA cert duplicates!\n` +
+        `Deleted: ${data.deletedCount} duplicate(s) | Kept: ${data.keptCount} unique PSA cert(s)`
       );
 
       // Refresh the list
       await scanForDuplicates();
+    } catch (error: any) {
+      console.error('Error deleting all duplicates:', error);
+      toast.error('Failed to delete duplicates: ' + error.message);
     } finally {
       setIsDeletingAll(false);
     }
