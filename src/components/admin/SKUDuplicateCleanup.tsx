@@ -135,6 +135,7 @@ export function SKUDuplicateCleanup() {
                 item_id: item.id,
                 sku: item.sku,
                 quantity: 1,
+                force_db_cleanup: true,
                 ...(isGraded && certNumber ? { certNumber } : {})
               }
             }
@@ -261,6 +262,7 @@ export function SKUDuplicateCleanup() {
                       item_id: item.id, 
                       sku: item.sku,
                       quantity: 1,
+                      force_db_cleanup: true,
                       ...(isGraded && certNumber ? { certNumber } : {})
                     } 
                   }

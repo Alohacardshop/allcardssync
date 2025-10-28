@@ -6,6 +6,7 @@ interface RemoveRawArgs {
   sku?: string
   certNumber?: string
   quantity?: number
+  force_db_cleanup?: boolean
 }
 
 Deno.serve(async (req) => {
@@ -15,7 +16,7 @@ Deno.serve(async (req) => {
 
   try {
     const args: RemoveRawArgs = await req.json()
-    const { item_id, itemId, sku, certNumber, quantity = 1 } = args
+    const { item_id, itemId, sku, certNumber, quantity = 1, force_db_cleanup = false } = args
     
     // Use item_id or itemId (frontend sends itemId)
     const actualItemId = item_id || itemId
@@ -163,6 +164,9 @@ Deno.serve(async (req) => {
     // Delete the product entirely from Shopify
     console.log(`Deleting Shopify product ${intakeItem.shopify_product_id}`)
     
+    let shopifyAttempted = true
+    let shopifyOkOrGone = false
+    
     const deleteResponse = await fetch(`https://${domain}/admin/api/2024-07/products/${intakeItem.shopify_product_id}.json`, {
       method: 'DELETE',
       headers: {
@@ -172,15 +176,19 @@ Deno.serve(async (req) => {
     })
 
     // Treat 404 as success (product already deleted)
-    if (!deleteResponse.ok && deleteResponse.status !== 404) {
+    if (deleteResponse.ok || deleteResponse.status === 404) {
+      shopifyOkOrGone = true
+      if (deleteResponse.status === 404) {
+        console.log(`Shopify product ${intakeItem.shopify_product_id} not found – treating as already deleted`)
+      }
+    } else if (!force_db_cleanup) {
+      // Only throw if not forcing DB cleanup
       const errorText = await deleteResponse.text().catch(() => 'Unknown error')
       throw new Error(
         `Failed to delete Shopify product: ${deleteResponse.status} ${deleteResponse.statusText} - ${errorText}`
       )
-    }
-
-    if (deleteResponse.status === 404) {
-      console.log(`Shopify product ${intakeItem.shopify_product_id} not found – treating as already deleted`)
+    } else {
+      console.warn(`Shopify deletion failed but force_db_cleanup=true, proceeding with DB update: ${deleteResponse.status} ${deleteResponse.statusText}`)
     }
 
     // Update intake item to mark as sold and removed from Shopify
@@ -205,6 +213,8 @@ Deno.serve(async (req) => {
 
     return new Response(JSON.stringify({
       ok: true,
+      shopifyAttempted,
+      shopifyOkOrGone,
       action: 'deleted_and_sold',
       message: 'Product deleted from Shopify and marked as sold'
     }), {

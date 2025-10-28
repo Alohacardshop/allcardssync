@@ -3,6 +3,7 @@ import { corsHeaders } from '../_shared/cors.ts'
 interface ReduceRawArgs {
   item_id: string
   reduce_quantity?: number // How many to reduce (defaults to 1)
+  force_db_cleanup?: boolean
 }
 
 Deno.serve(async (req) => {
@@ -11,7 +12,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { item_id, reduce_quantity = 1 }: ReduceRawArgs = await req.json()
+    const { item_id, reduce_quantity = 1, force_db_cleanup = false }: ReduceRawArgs = await req.json()
 
     // Get environment variables for Supabase
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
@@ -72,6 +73,9 @@ Deno.serve(async (req) => {
       // Delete the product entirely from Shopify
       console.log(`Deleting Shopify product ${intakeItem.shopify_product_id}`)
       
+      let shopifyAttempted = true
+      let shopifyOkOrGone = false
+      
       const deleteResponse = await fetch(`https://${domain}/admin/api/2024-07/products/${intakeItem.shopify_product_id}.json`, {
         method: 'DELETE',
         headers: {
@@ -81,15 +85,19 @@ Deno.serve(async (req) => {
       })
 
       // Treat 404 as success (product already deleted)
-      if (!deleteResponse.ok && deleteResponse.status !== 404) {
+      if (deleteResponse.ok || deleteResponse.status === 404) {
+        shopifyOkOrGone = true
+        if (deleteResponse.status === 404) {
+          console.log(`Shopify product ${intakeItem.shopify_product_id} not found – treating as already deleted (reduce-raw)`)
+        }
+      } else if (!force_db_cleanup) {
+        // Only throw if not forcing DB cleanup
         const errorText = await deleteResponse.text().catch(() => 'Unknown error')
         throw new Error(
           `Failed to delete Shopify product: ${deleteResponse.status} ${deleteResponse.statusText} - ${errorText}`
         )
-      }
-
-      if (deleteResponse.status === 404) {
-        console.log(`Shopify product ${intakeItem.shopify_product_id} not found – treating as already deleted (reduce-raw)`)
+      } else {
+        console.warn(`Shopify deletion failed but force_db_cleanup=true, proceeding with DB update: ${deleteResponse.status} ${deleteResponse.statusText}`)
       }
 
       // Update intake item to mark as removed from Shopify
@@ -112,6 +120,8 @@ Deno.serve(async (req) => {
 
       return new Response(JSON.stringify({
         success: true,
+        shopifyAttempted,
+        shopifyOkOrGone,
         action: 'deleted',
         message: 'Product deleted from Shopify'
       }), {

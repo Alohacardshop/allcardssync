@@ -86,7 +86,8 @@ export const DuplicateCleanup = () => {
               item_id: itemId,
               sku: sku,
               certNumber: duplicate.psa_cert,
-              quantity: 1
+              quantity: 1,
+              force_db_cleanup: true
             }
           });
 
@@ -161,7 +162,8 @@ export const DuplicateCleanup = () => {
                   item_id: itemId,
                   sku: sku,
                   certNumber: duplicate.psa_cert,
-                  quantity: 1
+                  quantity: 1,
+                  force_db_cleanup: true
                 }
               });
 
