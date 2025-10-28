@@ -1,12 +1,13 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, AlertTriangle, CheckCircle, XCircle, Clock, Activity } from "lucide-react";
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { RefreshCw, AlertTriangle, CheckCircle, XCircle, Clock, Activity, Webhook } from "lucide-react";
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { supabase } from "@/integrations/supabase/client";
 import { formatDistanceToNow } from "date-fns";
 import { HealthGauge } from './HealthGauge';
 import { ErrorAccordion } from './ErrorAccordion';
+import { toast } from "sonner";
 
 const REQUIRED_WEBHOOKS = [
   'inventory_levels/update',
@@ -163,6 +164,24 @@ export function SystemHealthDashboard() {
     staleTime: 20000
   });
 
+  const registerWebhooks = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke('shopify-webhook-register', {
+        body: { storeKey: 'hawaii', dryRun: false }
+      });
+      
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      toast.success(`Webhooks registered: ${data?.created?.length || 0} created, ${data?.skipped?.length || 0} already exist`);
+      queryClient.invalidateQueries({ queryKey: ['system-health-dashboard'] });
+    },
+    onError: (error) => {
+      toast.error(`Failed to register webhooks: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  });
+
   const getStatusBadge = (status: 'healthy' | 'warning' | 'critical') => {
     if (status === 'healthy') return <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"><CheckCircle className="w-3 h-3 mr-1" />Healthy</Badge>;
     if (status === 'warning') return <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200"><AlertTriangle className="w-3 h-3 mr-1" />Warning</Badge>;
@@ -204,13 +223,24 @@ export function SystemHealthDashboard() {
             <Activity className="w-5 h-5" />
             System Health Dashboard
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => queryClient.invalidateQueries({ queryKey: ['system-health-dashboard'] })}
-          >
-            <RefreshCw className="w-4 h-4" />
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => registerWebhooks.mutate()}
+              disabled={registerWebhooks.isPending}
+            >
+              <Webhook className="w-4 h-4 mr-2" />
+              Register Webhooks
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => queryClient.invalidateQueries({ queryKey: ['system-health-dashboard'] })}
+            >
+              <RefreshCw className="w-4 h-4" />
+            </Button>
+          </div>
         </CardTitle>
       </CardHeader>
       <CardContent>
