@@ -8,6 +8,7 @@ import { Webhook, CheckCircle2, XCircle, RefreshCw } from 'lucide-react';
 
 export function ShopifyWebhookStatus() {
   const [checking, setChecking] = useState(false);
+  const [registering, setRegistering] = useState(false);
   const [webhooks, setWebhooks] = useState<any[]>([]);
 
   const checkWebhookStatus = async () => {
@@ -53,6 +54,43 @@ export function ShopifyWebhookStatus() {
       toast.error('Failed to check webhook status');
     } finally {
       setChecking(false);
+    }
+  };
+
+  const registerWebhooks = async (storeKey: string) => {
+    setRegistering(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('shopify-webhook-register', {
+        body: { storeKey, dryRun: false }
+      });
+
+      if (error) {
+        console.error(`Error registering webhooks for ${storeKey}:`, error);
+        toast.error(`Failed to register webhooks for ${storeKey}`);
+        return;
+      }
+
+      const created = data?.created?.length || 0;
+      const skipped = data?.skipped?.length || 0;
+      const errors = data?.errors?.length || 0;
+
+      if (created > 0) {
+        toast.success(`Registered ${created} webhook(s) for ${storeKey}`);
+      }
+      if (errors > 0) {
+        toast.error(`Failed to register ${errors} webhook(s) for ${storeKey}`);
+      }
+      if (created === 0 && errors === 0 && skipped > 0) {
+        toast.info(`All webhooks already registered for ${storeKey}`);
+      }
+
+      // Refresh status after registration
+      await checkWebhookStatus();
+    } catch (error) {
+      console.error('Error registering webhooks:', error);
+      toast.error('Failed to register webhooks');
+    } finally {
+      setRegistering(false);
     }
   };
 
@@ -120,6 +158,20 @@ export function ShopifyWebhookStatus() {
                   );
                 })}
               </div>
+              
+              {/* Register button for missing webhooks */}
+              {storeWebhooks.length > 0 && requiredTopics.some(topic => !storeWebhooks.some((w: any) => w.topic === topic)) && (
+                <div className="pl-4 pt-2">
+                  <Button 
+                    onClick={() => registerWebhooks(store)} 
+                    disabled={registering}
+                    size="sm"
+                    variant="outline"
+                  >
+                    {registering ? 'Registering...' : 'Register Missing Webhooks'}
+                  </Button>
+                </div>
+              )}
               
               {storeWebhooks.length > 0 && (
                 <div className="text-xs text-muted-foreground pl-4">
