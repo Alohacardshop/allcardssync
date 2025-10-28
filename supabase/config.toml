@@ -123,3 +123,61 @@ verify_jwt = true
 # Shopify inventory import (requires staff/admin role)
 [functions.shopify-import-inventory]
 verify_jwt = true
+
+# Admin and role management functions
+[functions.bootstrap-admin]
+verify_jwt = true
+
+[functions.create-user-admin]
+verify_jwt = true
+
+[functions.reset-user-password]
+verify_jwt = true
+
+[functions.roles-admin]
+verify_jwt = true
+
+[functions.user-assignment-admin]
+verify_jwt = true
+
+[functions.get-decrypted-system-setting]
+verify_jwt = true
+
+# Catalog management functions
+[functions.catalog-snapshots]
+verify_jwt = true
+
+[functions.catalog-sync-justtcg]
+verify_jwt = true
+
+[functions.daily-set-discovery]
+verify_jwt = true
+
+# PSA lookups
+[functions.psa-lookup]
+verify_jwt = true
+
+# Shopify sync operations
+[functions.shopify-sync]
+verify_jwt = true
+
+[functions.shopify-sync-dry-run]
+verify_jwt = true
+
+[functions.shopify-sync-cleanup]
+verify_jwt = true
+
+[functions.shopify-detect-conflicts]
+verify_jwt = true
+
+[functions.shopify-resolve-conflict]
+verify_jwt = true
+
+[functions.shopify-validate-sync]
+verify_jwt = true
+
+[functions.shopify-create-metafield-definitions]
+verify_jwt = true
+
+[functions.v2-shopify-reduce-raw]
+verify_jwt = true
