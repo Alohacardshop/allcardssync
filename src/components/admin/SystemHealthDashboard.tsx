@@ -8,6 +8,18 @@ import { formatDistanceToNow } from "date-fns";
 import { HealthGauge } from './HealthGauge';
 import { ErrorAccordion } from './ErrorAccordion';
 
+const REQUIRED_WEBHOOKS = [
+  'inventory_levels/update',
+  'inventory_items/update',
+  'orders/create',
+  'orders/updated',
+  'orders/fulfilled',
+  'orders/cancelled',
+  'refunds/create',
+  'products/update',
+  'products/delete'
+];
+
 interface HealthData {
   queueHealth: {
     score: number;
@@ -57,13 +69,23 @@ async function fetchSystemHealth(): Promise<HealthData> {
 
   const queueStatus = queueScore >= 80 ? 'healthy' : queueScore >= 60 ? 'warning' : 'critical';
 
-  // Fetch webhook status (simplified check)
-  const requiredWebhooks = 2; // Simplified for dashboard
+  // Fetch webhook status with proper topic verification
   const { data: webhookCheck } = await supabase.functions.invoke('shopify-webhook-check', {
     body: { storeKey: 'hawaii' }
   });
-  const registeredWebhooks = webhookCheck?.webhooks?.length || 0;
-  const webhookStatus = registeredWebhooks >= requiredWebhooks ? 'healthy' : 'warning';
+  
+  const registeredTopics = new Set(
+    webhookCheck?.webhooks?.map((w: any) => w.topic) || []
+  );
+  const matchingTopics = REQUIRED_WEBHOOKS.filter(topic => registeredTopics.has(topic));
+  const registeredCount = matchingTopics.length;
+  const requiredCount = REQUIRED_WEBHOOKS.length;
+  
+  const webhookStatus = registeredCount === requiredCount 
+    ? 'healthy' 
+    : registeredCount >= requiredCount / 2 
+    ? 'warning' 
+    : 'critical';
 
   // Check database connectivity (simple ping)
   let tcgConnected = true;
@@ -95,8 +117,8 @@ async function fetchSystemHealth(): Promise<HealthData> {
       total
     },
     webhookHealth: {
-      registered: registeredWebhooks,
-      required: requiredWebhooks,
+      registered: registeredCount,
+      required: requiredCount,
       status: webhookStatus
     },
     tcgHealth: {
