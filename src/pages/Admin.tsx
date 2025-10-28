@@ -65,6 +65,7 @@ import { VendorManagement } from '@/components/admin/VendorManagement';
 import { CategoryManagement } from '@/components/admin/CategoryManagement';
 import { SyncMonitor } from '@/components/catalog/SyncMonitor';
 import { ShopifyIntegrationTest } from '@/components/admin/ShopifyIntegrationTest';
+import { ShopifySyncReconciliation } from '@/components/admin/ShopifySyncReconciliation';
 
 const Admin = () => {
   const [activeSection, setActiveSection] = useState('overview');
@@ -333,7 +334,8 @@ const Admin = () => {
                 Configure Shopify integration, inventory sync, and product management.
               </p>
             </div>
-            <ShopifyIntegrationTest />
+              <ShopifyIntegrationTest />
+              <ShopifySyncReconciliation />
             <VendorManagement />
             <DuplicateCleanup />
             <ShopifyEnvironmentSetup />
