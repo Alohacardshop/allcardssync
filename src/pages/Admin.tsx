@@ -1,559 +1,268 @@
-import React, { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import { 
-  Settings, 
-  Database, 
-  ShoppingCart, 
-  Users, 
-  FileText, 
-  Home,
-  Server,
-  Shield,
-  Wrench,
-  BarChart3,
+import { useState, useEffect } from "react";
+import {
+  Settings,
+  Store,
+  Database,
+  Users,
+  Printer,
+  LayoutDashboard,
   Package,
-  Tag,
-  Download,
-  Command as CommandIcon
-} from 'lucide-react';
-import { Link, useLocation } from 'react-router-dom';
+  Building2,
+  Command,
+  Menu
+} from "lucide-react";
+import { Link } from "react-router-dom";
 import {
   Sidebar,
   SidebarContent,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
+  SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarProvider,
-  SidebarTrigger,
-  SidebarInset
+  SidebarProvider
 } from "@/components/ui/sidebar";
-import { Navigation } from '@/components/Navigation';
-import { ShopifyConfig } from '@/components/admin/ShopifyConfig';
-import TCGDatabaseSettings from '@/components/admin/TCGDatabaseSettings';
-import { SystemLogsViewer } from '@/components/admin/SystemLogsViewer';
-import { UserAssignmentManager } from '@/components/UserAssignmentManager';
-import { RawIntakeSettings } from '@/components/admin/RawIntakeSettings';
-import { BatchProcessingSettings } from '@/components/admin/BatchProcessingSettings';
-import CatalogTab from '@/components/admin/CatalogTab';
-import { InventorySyncSettings } from '@/components/admin/InventorySyncSettings';
-import { ShopifyTagImport } from '@/components/admin/ShopifyTagImport';
-import { PSAApiSettings } from '@/components/admin/PSAApiSettings';
-import { SystemHealthDashboard } from '@/components/admin/SystemHealthDashboard';
-import { StoreManagementTabs } from '@/components/admin/StoreManagementTabs';
-import { QueueManagementTabs } from '@/components/admin/QueueManagementTabs';
-import ShopifyEnvironmentSetup from '@/components/admin/ShopifyEnvironmentSetup';
-import { WebhookTestPanel } from '@/components/admin/WebhookTestPanel';
-import { WebhookMonitor } from '@/components/admin/WebhookMonitor';
-import { ShopifyReconciliation } from '@/components/admin/ShopifyReconciliation';
-import { ShopifyInventoryImport } from '@/components/admin/ShopifyInventoryImport';
-import { DefaultPrinterSelector } from '@/components/DefaultPrinterSelector';
-import { PrintNodeSettings } from '@/components/PrintNodeSettings';
-import { CutterSettingsPanel } from '@/components/CutterSettingsPanel';
-import { ZebraPrinterPanel } from '@/components/ZebraPrinterPanel';
-import { ZebraDiagnosticsPanel } from '@/components/ZebraDiagnosticsPanel';
-import { TCGHealthCheck } from '@/components/admin/TCGHealthCheck';
-import { DuplicateCleanup } from '@/components/admin/DuplicateCleanup';
-import { VendorManagement } from '@/components/admin/VendorManagement';
-import { CategoryManagement } from '@/components/admin/CategoryManagement';
-import { SyncMonitor } from '@/components/catalog/SyncMonitor';
-import { ShopifyIntegrationTest } from '@/components/admin/ShopifyIntegrationTest';
-import { ShopifySyncReconciliation } from '@/components/admin/ShopifySyncReconciliation';
-import { ActivityFeed } from '@/components/admin/ActivityFeed';
-import { AdminCommandPalette } from '@/components/admin/AdminCommandPalette';
+import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { SystemHealthDashboard } from "@/components/admin/SystemHealthDashboard";
+import { StoreManagementTabs } from "@/components/admin/StoreManagementTabs";
+import { QueueManagementTabs } from "@/components/admin/QueueManagementTabs";
+import { UserAssignmentManager } from "@/components/UserAssignmentManager";
+import { VendorManagement } from "@/components/admin/VendorManagement";
+import { ActivityFeed } from "@/components/admin/ActivityFeed";
+import { AdminCommandPalette } from "@/components/admin/AdminCommandPalette";
+import { MetricsBar } from "@/components/admin/MetricsBar";
+import { EnhancedBreadcrumb } from "@/components/admin/EnhancedBreadcrumb";
+import { CatalogTabsSection } from "@/components/admin/CatalogTabsSection";
+import { HardwareTabsSection } from "@/components/admin/HardwareTabsSection";
+import { SystemTabsSection } from "@/components/admin/SystemTabsSection";
 
-const Admin = () => {
+const adminSections = [
+  {
+    id: 'overview',
+    title: 'Overview',
+    icon: LayoutDashboard,
+  },
+  {
+    id: 'store',
+    title: 'Store',
+    icon: Store,
+  },
+  {
+    id: 'catalog',
+    title: 'Catalog',
+    icon: Database,
+  },
+  {
+    id: 'queue',
+    title: 'Queue',
+    icon: Package,
+  },
+  {
+    id: 'users',
+    title: 'Users',
+    icon: Users,
+  },
+  {
+    id: 'hardware',
+    title: 'Hardware',
+    icon: Printer,
+  },
+  {
+    id: 'system',
+    title: 'System',
+    icon: Settings,
+  },
+  {
+    id: 'vendors',
+    title: 'Vendors',
+    icon: Building2,
+  },
+];
+
+export default function Admin() {
   const [activeSection, setActiveSection] = useState('overview');
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
-  const location = useLocation();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
-  const adminSections = [
-    {
-      id: 'overview',
-      title: 'Overview',
-      icon: BarChart3,
-      description: 'System overview and quick actions',
-      url: '#overview',
-      hasStatus: true
-    },
-    {
-      id: 'stores',
-      title: 'Store Management',
-      icon: ShoppingCart,
-      description: 'Shopify integration and inventory sync',
-      url: '#stores',
-      hasStatus: false
-    },
-    {
-      id: 'queue',
-      title: 'Queue Management',
-      icon: Package,
-      description: 'Monitor queue health, stats, and settings',
-      url: '#queue',
-      hasStatus: true
-    },
-    {
-      id: 'hardware',
-      title: 'Hardware Test',
-      icon: Wrench,
-      description: 'Test printers, scanners, and network connectivity',
-      url: '#hardware',
-      hasStatus: false
-    },
-    {
-      id: 'catalog',
-      title: 'Catalog & Data',
-      icon: Database,
-      description: 'TCG database and card catalog settings',
-      url: '#catalog',
-      hasStatus: true
-    },
-    {
-      id: 'users',
-      title: 'User Management',
-      icon: Users,
-      description: 'User assignments and permissions',
-      url: '#users',
-      hasStatus: false
-    },
-    {
-      id: 'categories',
-      title: 'Category Management',
-      icon: Tag,
-      description: 'Manage inventory categories and sub-categories',
-      url: '#categories',
-      hasStatus: false
-    },
-    {
-      id: 'system',
-      title: 'System & Logs',
-      icon: Server,
-      description: 'System logs and debugging tools',
-      url: '#system',
-      hasStatus: true
-    }
-  ];
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // ⌘K or Ctrl+K for command palette
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setCommandPaletteOpen(true);
+      }
+      // ⌘1-8 for quick section switching
+      if ((e.metaKey || e.ctrlKey) && e.key >= '1' && e.key <= '8') {
+        e.preventDefault();
+        const index = parseInt(e.key) - 1;
+        if (adminSections[index]) {
+          setActiveSection(adminSections[index].id);
+        }
+      }
+      // ⌘B for sidebar toggle
+      if ((e.metaKey || e.ctrlKey) && e.key === 'b') {
+        e.preventDefault();
+        setSidebarCollapsed(prev => !prev);
+      }
+    };
 
-  const AdminSidebar = () => (
-    <Sidebar className="min-w-[22rem] border-r border-border bg-card">
-      <SidebarContent className="p-6">
-        <SidebarGroup>
-          <SidebarGroupLabel className="text-xl font-bold mb-6 px-3 text-foreground">
-            Admin Dashboard
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu className="space-y-4">
-              {adminSections.map((section) => (
-                <SidebarMenuItem key={section.id}>
-                  <SidebarMenuButton
-                    isActive={activeSection === section.id}
-                    onClick={() => setActiveSection(section.id)}
-                    className={`
-                      flex items-start gap-4 px-4 py-4 rounded-lg transition-all duration-200 
-                      hover:bg-muted/50 w-full min-h-[80px] cursor-pointer
-                      ${activeSection === section.id 
-                        ? 'bg-primary/10 text-primary border-l-4 border-primary shadow-sm' 
-                        : 'hover:bg-muted/80 border-l-4 border-transparent hover:shadow-sm'
-                      }
-                    `}
-                  >
-                    <div className="flex-shrink-0 pt-1">
-                      <section.icon className="w-5 h-5" />
-                    </div>
-                    <div className="flex flex-col items-start min-w-0 flex-1 space-y-1">
-                      <span className="font-semibold text-base leading-tight tracking-tight">
-                        {section.title}
-                      </span>
-                      <p className="text-sm text-muted-foreground leading-relaxed max-w-full break-words">
-                        {section.description}
-                      </p>
-                    </div>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-        
-        {/* Navigation Footer */}
-        <div className="mt-8 pt-6 border-t border-border">
-          <div className="px-3">
-            <Link to="/">
-              <Button 
-                variant="ghost" 
-                size="lg" 
-                className="w-full justify-start gap-3 h-12 text-base"
-              >
-                <Home className="w-5 h-5" />
-                <span>Back to Dashboard</span>
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </SidebarContent>
-    </Sidebar>
-  );
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const renderSectionContent = () => {
     switch (activeSection) {
       case 'overview':
         return (
           <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-3xl font-bold tracking-tight">Admin Dashboard</h1>
-                <p className="text-muted-foreground">
-                  Manage your TCG inventory system, Shopify integration, and user access.
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCommandPaletteOpen(true)}
-                className="flex items-center gap-2"
-              >
-                <CommandIcon className="w-4 h-4" />
-                <span>Command Palette</span>
-                <kbd className="px-1.5 py-0.5 bg-muted rounded text-xs">⌘K</kbd>
-              </Button>
-            </div>
-
+            <MetricsBar />
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <div className="lg:col-span-2">
-                {/* System Health Dashboard */}
                 <SystemHealthDashboard />
               </div>
-              
               <div>
-                {/* Activity Feed */}
                 <ActivityFeed />
               </div>
             </div>
-
-            <Separator />
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              {adminSections.slice(1).map((section) => (
-                <Card 
-                  key={section.id} 
-                  className="cursor-pointer hover:shadow-md transition-all duration-200 hover:scale-105"
-                  onClick={() => setActiveSection(section.id)}
-                >
-                  <CardHeader className="pb-3">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-primary/10 rounded-lg">
-                        <section.icon className="w-5 h-5 text-primary" />
-                      </div>
-                      <CardTitle className="text-lg">{section.title}</CardTitle>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-muted-foreground">{section.description}</p>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-
-            <Separator />
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Shield className="w-5 h-5" />
-                    Quick Actions
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <Button 
-                    variant="outline" 
-                    className="w-full justify-start"
-                    onClick={() => setActiveSection('users')}
-                  >
-                    <Users className="w-4 h-4 mr-2" />
-                    Manage Users
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    className="w-full justify-start"
-                    onClick={() => setActiveSection('system')}
-                  >
-                    <FileText className="w-4 h-4 mr-2" />
-                    View Logs
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    className="w-full justify-start"
-                    onClick={() => setActiveSection('stores')}
-                  >
-                    <Settings className="w-4 h-4 mr-2" />
-                    Sync Settings
-                  </Button>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Database className="w-5 h-5" />
-                    Database Status
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm">Connection</span>
-                    <Badge variant="secondary">Connected</Badge>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm">TCG Catalog</span>
-                    <Badge variant="secondary">Active</Badge>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm">Sync Status</span>
-                    <Badge variant="secondary">Running</Badge>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <ShoppingCart className="w-5 h-5" />
-                    Shopify Integration
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm">API Connection</span>
-                    <Badge variant="secondary">Active</Badge>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm">Auto Sync</span>
-                    <Badge variant="secondary">Enabled</Badge>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm">Products Synced</span>
-                    <Badge variant="secondary">2,456</Badge>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
           </div>
         );
-
-      case 'stores':
-        return (
-          <div className="space-y-6">
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight">Store Management</h1>
-              <p className="text-muted-foreground">
-                Configure Shopify integration, inventory sync, and product management organized by category.
-              </p>
-            </div>
-            <StoreManagementTabs />
-          </div>
-        );
-
-      case 'queue':
-        return (
-          <div className="space-y-6">
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight">Queue Management</h1>
-              <p className="text-muted-foreground">
-                Unified interface for monitoring queue status, health metrics, and configuration settings.
-              </p>
-            </div>
-            <QueueManagementTabs />
-          </div>
-        );
-
+      case 'store':
+        return <StoreManagementTabs />;
       case 'catalog':
-        return (
-          <div className="space-y-6">
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight">Catalog & Data Management</h1>
-              <p className="text-muted-foreground">
-                Manage TCG database connections, card catalogs, and intake settings.
-              </p>
-            </div>
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Database className="w-5 h-5" />
-                  Catalog Sync Monitor
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <SyncMonitor game="pokemon" />
-              </CardContent>
-            </Card>
-            <TCGDatabaseSettings />
-            <RawIntakeSettings />
-            <BatchProcessingSettings />
-            <CatalogTab />
-            <PSAApiSettings />
-          </div>
-        );
-
+        return <CatalogTabsSection />;
+      case 'queue':
+        return <QueueManagementTabs />;
       case 'users':
-        return (
-          <div className="space-y-6">
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight">User Management</h1>
-              <p className="text-muted-foreground">
-                Manage user assignments, store access, and permissions.
-              </p>
-            </div>
-            <UserAssignmentManager />
-          </div>
-        );
-
-      case 'categories':
-        return (
-          <div className="space-y-6">
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight">Category Management</h1>
-              <p className="text-muted-foreground">
-                Manage inventory categories and sub-categories for TCG, Sports, and Comics.
-              </p>
-            </div>
-            <CategoryManagement />
-          </div>
-        );
-
+        return <UserAssignmentManager />;
       case 'hardware':
-        return (
-          <div className="space-y-6">
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight">Hardware Test & Diagnostics</h1>
-              <p className="text-muted-foreground">
-                Test printers, scanners, network connectivity, and hardware diagnostics.
-              </p>
-            </div>
-            
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Printer Configuration */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Settings className="w-5 h-5" />
-                    Printer Setup
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <DefaultPrinterSelector />
-                  <PrintNodeSettings />
-                  <CutterSettingsPanel />
-                </CardContent>
-              </Card>
-
-              {/* Network Printers */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Wrench className="w-5 h-5" />
-                    Network Printers
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ZebraPrinterPanel />
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Zebra Diagnostics */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Wrench className="w-5 h-5" />
-                  Zebra Printer Diagnostics
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ZebraDiagnosticsPanel />
-              </CardContent>
-            </Card>
-
-            {/* TCG Health Check */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Database className="w-5 h-5" />
-                  TCG Database Health
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <TCGHealthCheck />
-              </CardContent>
-            </Card>
-          </div>
-        );
-
+        return <HardwareTabsSection />;
       case 'system':
-        return (
-          <div className="space-y-6">
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight">System & Logs</h1>
-              <p className="text-muted-foreground">
-                View system logs, debug information, and monitor system health.
-              </p>
-            </div>
-            <SystemLogsViewer />
-          </div>
-        );
-
+        return <SystemTabsSection />;
+      case 'vendors':
+        return <VendorManagement />;
       default:
-        return null;
+        return <div>Section not found</div>;
     }
   };
 
   return (
-    <SidebarProvider>
-      <div className="min-h-screen flex w-full bg-background">
-        <AdminSidebar />
-        <SidebarInset className="flex-1 flex flex-col">
-          {/* Header */}
-          <header className="flex h-16 shrink-0 items-center gap-4 border-b bg-card px-6 shadow-sm">
-            <SidebarTrigger className="lg:hidden" />
-            <Separator orientation="vertical" className="h-6" />
-            
-            {/* Breadcrumb */}
-            <div className="flex items-center gap-2 text-sm">
-              <Link to="/" className="text-muted-foreground hover:text-foreground transition-colors">
-                Dashboard
-              </Link>
-              <span className="text-muted-foreground">/</span>
-              <span className="font-medium">Admin</span>
-              {activeSection !== 'overview' && (
-                <>
-                  <span className="text-muted-foreground">/</span>
-                  <span className="font-medium">
-                    {adminSections.find(s => s.id === activeSection)?.title}
-                  </span>
-                </>
-              )}
-            </div>
-            
-            <div className="ml-auto">
-              <Navigation showMobileMenu={false} />
-            </div>
-          </header>
+    <TooltipProvider>
+      <SidebarProvider>
+        <div className="min-h-screen flex w-full bg-background">
+          {/* Compact Sidebar */}
+          <Sidebar 
+            className={sidebarCollapsed ? "w-16" : "w-72"} 
+            collapsible="icon"
+          >
+            <SidebarHeader className="border-b p-4">
+              <div className="flex items-center justify-between">
+                {!sidebarCollapsed && (
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-primary text-primary-foreground">
+                      <Settings className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h1 className="text-lg font-bold">Admin</h1>
+                      <p className="text-xs text-muted-foreground">Portal</p>
+                    </div>
+                  </div>
+                )}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                  className="ml-auto"
+                >
+                  <Menu className="w-4 h-4" />
+                </Button>
+              </div>
+            </SidebarHeader>
+
+            <SidebarContent className="p-2">
+              <SidebarMenu>
+                {adminSections.map((section) => (
+                  <SidebarMenuItem key={section.id}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <SidebarMenuButton
+                          onClick={() => setActiveSection(section.id)}
+                          isActive={activeSection === section.id}
+                          className="w-full justify-start gap-3 px-3 py-2 hover:bg-accent transition-colors"
+                        >
+                          <section.icon className="w-5 h-5" />
+                          {!sidebarCollapsed && (
+                            <span className="font-medium">{section.title}</span>
+                          )}
+                        </SidebarMenuButton>
+                      </TooltipTrigger>
+                      {sidebarCollapsed && (
+                        <TooltipContent side="right">
+                          <p>{section.title}</p>
+                        </TooltipContent>
+                      )}
+                    </Tooltip>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarContent>
+
+            {/* Back to Dashboard Link */}
+            {!sidebarCollapsed && (
+              <div className="mt-auto border-t p-4">
+                <Link to="/">
+                  <Button variant="ghost" className="w-full justify-start">
+                    ← Back to Dashboard
+                  </Button>
+                </Link>
+              </div>
+            )}
+          </Sidebar>
 
           {/* Main Content */}
-          <main className="flex-1 p-6 bg-muted/30 overflow-auto">
-            <div className="max-w-7xl mx-auto">
+          <main className="flex-1 overflow-auto">
+            <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
+              <div className="p-4">
+                <div className="flex items-center justify-between">
+                  <EnhancedBreadcrumb currentSection={activeSection} />
+                  
+                  <div className="flex items-center gap-2">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() => setCommandPaletteOpen(true)}
+                        >
+                          <Command className="w-4 h-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Command Palette (⌘K)</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6">
               {renderSectionContent()}
             </div>
           </main>
-        </SidebarInset>
-      </div>
-    </SidebarProvider>
-  );
-};
 
-export default Admin;
+          <AdminCommandPalette
+            open={commandPaletteOpen}
+            onOpenChange={setCommandPaletteOpen}
+            onNavigate={setActiveSection}
+          />
+        </div>
+      </SidebarProvider>
+    </TooltipProvider>
+  );
+}
