@@ -31,10 +31,6 @@ port = 54326
 [functions]
 verify_jwt = true
 
-# Shopify sync processor (requires service role access)
-[functions.shopify-sync-processor]
-verify_jwt = false
-
 # SHOPIFY FUNCTIONS: All require JWT + admin/staff role verification
 [functions.shopify-delete-duplicates]
 verify_jwt = true
@@ -45,22 +41,11 @@ verify_jwt = true
 [functions.shopify-config-check]
 verify_jwt = true
 
-[functions.shopify-webhook-check]
-verify_jwt = true
-
 [functions.shopify-pull-products-by-tags]
 verify_jwt = true
 
 # Shopify webhook handler (public - validates HMAC signature)
 [functions.shopify-webhook]
-verify_jwt = false
-
-# Shopify webhook test function (public - for development)
-[functions.shopify-webhook-test]
-verify_jwt = false
-
-# Shopify webhook registration (public - verifies admin role internally)
-[functions.shopify-webhook-register]
 verify_jwt = false
 
 [functions.v2-shopify-send]
@@ -70,9 +55,6 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.v2-shopify-send-raw]
-verify_jwt = true
-
-[functions.v2-batch-send-to-inventory]
 verify_jwt = true
 
 [functions.admin-relink-graded-by-cert]
@@ -88,29 +70,6 @@ verify_jwt = false
 
 [functions.v2-shopify-remove-raw]
 verify_jwt = false
-
-# Zebra TCP communication (requires authentication)
-[functions.zebra-tcp]
-verify_jwt = true
-
-# System settings functions (require admin role)
-[functions.set-system-setting]
-verify_jwt = true
-
-[functions.get-system-setting]
-verify_jwt = true
-
-# Health monitoring (requires authentication)
-[functions.health-monitor]
-verify_jwt = true
-
-# CGC certificate lookup (requires authentication)
-[functions.cgc-lookup]
-verify_jwt = true
-
-# GCD comics search (requires authentication)
-[functions.gcd-search]
-verify_jwt = true
 
 # Bulk location transfer (requires staff/admin role)
 [functions.bulk-location-transfer]
@@ -131,26 +90,14 @@ verify_jwt = true
 [functions.create-user-admin]
 verify_jwt = true
 
-[functions.reset-user-password]
-verify_jwt = true
-
 [functions.roles-admin]
 verify_jwt = true
 
 [functions.user-assignment-admin]
 verify_jwt = true
 
-[functions.get-decrypted-system-setting]
-verify_jwt = true
-
 # Catalog management functions
-[functions.catalog-snapshots]
-verify_jwt = true
-
 [functions.catalog-sync-justtcg]
-verify_jwt = true
-
-[functions.daily-set-discovery]
 verify_jwt = true
 
 # PSA lookups
@@ -159,12 +106,6 @@ verify_jwt = true
 
 # Shopify sync operations
 [functions.shopify-sync]
-verify_jwt = true
-
-[functions.shopify-sync-dry-run]
-verify_jwt = true
-
-[functions.shopify-sync-cleanup]
 verify_jwt = true
 
 [functions.shopify-detect-conflicts]
