@@ -16,7 +16,8 @@ import {
   BarChart3,
   Package,
   Tag,
-  Download
+  Download,
+  Command as CommandIcon
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import {
@@ -63,9 +64,12 @@ import { CategoryManagement } from '@/components/admin/CategoryManagement';
 import { SyncMonitor } from '@/components/catalog/SyncMonitor';
 import { ShopifyIntegrationTest } from '@/components/admin/ShopifyIntegrationTest';
 import { ShopifySyncReconciliation } from '@/components/admin/ShopifySyncReconciliation';
+import { ActivityFeed } from '@/components/admin/ActivityFeed';
+import { AdminCommandPalette } from '@/components/admin/AdminCommandPalette';
 
 const Admin = () => {
   const [activeSection, setActiveSection] = useState('overview');
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const location = useLocation();
 
   const adminSections = [
@@ -200,15 +204,36 @@ const Admin = () => {
       case 'overview':
         return (
           <div className="space-y-6">
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight">Admin Dashboard</h1>
-              <p className="text-muted-foreground">
-                Manage your TCG inventory system, Shopify integration, and user access.
-              </p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-3xl font-bold tracking-tight">Admin Dashboard</h1>
+                <p className="text-muted-foreground">
+                  Manage your TCG inventory system, Shopify integration, and user access.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCommandPaletteOpen(true)}
+                className="flex items-center gap-2"
+              >
+                <CommandIcon className="w-4 h-4" />
+                <span>Command Palette</span>
+                <kbd className="px-1.5 py-0.5 bg-muted rounded text-xs">⌘K</kbd>
+              </Button>
             </div>
 
-            {/* System Health Dashboard */}
-            <SystemHealthDashboard />
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-2">
+                {/* System Health Dashboard */}
+                <SystemHealthDashboard />
+              </div>
+              
+              <div>
+                {/* Activity Feed */}
+                <ActivityFeed />
+              </div>
+            </div>
 
             <Separator />
 

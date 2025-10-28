@@ -5,6 +5,8 @@ import { RefreshCw, AlertTriangle, CheckCircle, XCircle, Clock, Activity } from 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from "@/integrations/supabase/client";
 import { formatDistanceToNow } from "date-fns";
+import { HealthGauge } from './HealthGauge';
+import { ErrorAccordion } from './ErrorAccordion';
 
 interface HealthData {
   queueHealth: {
@@ -171,83 +173,54 @@ export function SystemHealthDashboard() {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {/* Shopify Sync Status */}
-          <Card className={health.queueHealth.status === 'critical' ? 'border-red-200 bg-red-50 dark:bg-red-950' : health.queueHealth.status === 'warning' ? 'border-yellow-200 bg-yellow-50 dark:bg-yellow-950' : 'border-green-200 bg-green-50 dark:bg-green-950'}>
-            <CardContent className="p-4 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Shopify Sync</span>
-                {getStatusDot(health.queueHealth.status)}
-              </div>
-              {getStatusBadge(health.queueHealth.status)}
-              <div className="text-xs text-muted-foreground space-y-1">
-                <div>Score: {health.queueHealth.score}/100</div>
-                <div>Queued: {health.queueHealth.queued}</div>
-                <div>Failed: {health.queueHealth.failed}</div>
-              </div>
-            </CardContent>
-          </Card>
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-6">
+          {/* Shopify Sync Gauge */}
+          <HealthGauge
+            title="Shopify Sync"
+            score={health.queueHealth.score}
+            maxScore={100}
+            subtitle={`${health.queueHealth.queued} queued, ${health.queueHealth.failed} failed`}
+            trend={health.queueHealth.status === 'healthy' ? 'up' : health.queueHealth.status === 'critical' ? 'down' : 'stable'}
+          />
 
-          {/* Queue Health */}
-          <Card>
-            <CardContent className="p-4 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Queue Status</span>
-                <Clock className="w-4 h-4 text-muted-foreground" />
-              </div>
-              <div className="text-2xl font-bold">{health.queueHealth.total}</div>
-              <div className="text-xs text-muted-foreground">
-                {health.queueHealth.processing} processing
-              </div>
-            </CardContent>
-          </Card>
+          {/* Queue Health Gauge */}
+          <HealthGauge
+            title="Queue Status"
+            score={health.queueHealth.total - health.queueHealth.failed}
+            maxScore={health.queueHealth.total || 100}
+            subtitle={`${health.queueHealth.processing} processing`}
+          />
 
-          {/* Webhooks */}
-          <Card className={health.webhookHealth.status === 'warning' ? 'border-yellow-200 bg-yellow-50 dark:bg-yellow-950' : ''}>
-            <CardContent className="p-4 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Webhooks</span>
-                {getStatusDot(health.webhookHealth.status)}
-              </div>
-              {getStatusBadge(health.webhookHealth.status)}
-              <div className="text-xs text-muted-foreground">
-                {health.webhookHealth.registered}/{health.webhookHealth.required} registered
-              </div>
-            </CardContent>
-          </Card>
+          {/* Webhooks Gauge */}
+          <HealthGauge
+            title="Webhooks"
+            score={health.webhookHealth.registered}
+            maxScore={health.webhookHealth.required}
+            subtitle={`${health.webhookHealth.registered}/${health.webhookHealth.required} registered`}
+            trend={health.webhookHealth.status === 'healthy' ? 'up' : 'down'}
+          />
 
-          {/* TCG Database */}
-          <Card className={health.tcgHealth.status === 'critical' ? 'border-red-200 bg-red-50 dark:bg-red-950' : ''}>
-            <CardContent className="p-4 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">TCG Database</span>
-                {getStatusDot(health.tcgHealth.status)}
-              </div>
-              {getStatusBadge(health.tcgHealth.status)}
-              <div className="text-xs text-muted-foreground">
-                {health.tcgHealth.connected ? 'Connected' : 'Disconnected'}
-              </div>
-            </CardContent>
-          </Card>
+          {/* Database Gauge */}
+          <HealthGauge
+            title="TCG Database"
+            score={health.tcgHealth.connected ? 100 : 0}
+            maxScore={100}
+            subtitle={health.tcgHealth.connected ? 'Connected' : 'Disconnected'}
+            trend={health.tcgHealth.connected ? 'up' : 'down'}
+          />
         </div>
 
-        {/* Recent Errors */}
+        {/* Enhanced Error Display */}
         {health.recentErrors.length > 0 && (
-          <Card className="mt-4 border-red-200 bg-red-50 dark:bg-red-950">
-            <CardContent className="p-4 space-y-2">
-              <div className="flex items-center gap-2 text-sm font-medium text-red-800 dark:text-red-200">
-                <AlertTriangle className="w-4 h-4" />
-                Recent Errors ({health.recentErrors.length})
-              </div>
-              <div className="space-y-1">
-                {health.recentErrors.map((error) => (
-                  <div key={error.id} className="text-xs text-red-700 dark:text-red-300 truncate">
-                    • {error.message} ({formatDistanceToNow(new Date(error.created_at), { addSuffix: true })})
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+          <div className="mt-4">
+            <ErrorAccordion 
+              errors={health.recentErrors}
+              onRetry={(errorId) => {
+                console.log('Retry error:', errorId);
+                queryClient.invalidateQueries({ queryKey: ['system-health-dashboard'] });
+              }}
+            />
+          </div>
         )}
       </CardContent>
     </Card>
