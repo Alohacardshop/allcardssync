@@ -70,22 +70,41 @@ async function fetchSystemHealth(): Promise<HealthData> {
   const queueStatus = queueScore >= 80 ? 'healthy' : queueScore >= 60 ? 'warning' : 'critical';
 
   // Fetch webhook status with proper topic verification
-  const { data: webhookCheck } = await supabase.functions.invoke('shopify-webhook-check', {
-    body: { storeKey: 'hawaii' }
-  });
+  let registeredCount = 0;
+  let requiredCount = REQUIRED_WEBHOOKS.length;
+  let webhookStatus: 'healthy' | 'warning' | 'critical' = 'critical';
   
-  const registeredTopics = new Set(
-    webhookCheck?.webhooks?.map((w: any) => w.topic) || []
-  );
-  const matchingTopics = REQUIRED_WEBHOOKS.filter(topic => registeredTopics.has(topic));
-  const registeredCount = matchingTopics.length;
-  const requiredCount = REQUIRED_WEBHOOKS.length;
-  
-  const webhookStatus = registeredCount === requiredCount 
-    ? 'healthy' 
-    : registeredCount >= requiredCount / 2 
-    ? 'warning' 
-    : 'critical';
+  try {
+    const { data: webhookCheck, error: webhookError } = await supabase.functions.invoke('shopify-webhook-check', {
+      body: { storeKey: 'hawaii' }
+    });
+    
+    if (webhookError) {
+      console.error('Webhook check error:', webhookError);
+    } else if (webhookCheck?.webhooks) {
+      const registeredTopics = new Set(
+        webhookCheck.webhooks.map((w: any) => w.topic)
+      );
+      const matchingTopics = REQUIRED_WEBHOOKS.filter(topic => registeredTopics.has(topic));
+      registeredCount = matchingTopics.length;
+      
+      webhookStatus = registeredCount === requiredCount 
+        ? 'healthy' 
+        : registeredCount >= requiredCount / 2 
+        ? 'warning' 
+        : 'critical';
+      
+      console.log('Webhook check:', { 
+        registeredCount, 
+        requiredCount, 
+        registeredTopics: Array.from(registeredTopics),
+        missingTopics: REQUIRED_WEBHOOKS.filter(t => !registeredTopics.has(t))
+      });
+    }
+  } catch (error) {
+    console.error('Failed to check webhooks:', error);
+    webhookStatus = 'critical';
+  }
 
   // Check database connectivity (simple ping)
   let tcgConnected = true;
