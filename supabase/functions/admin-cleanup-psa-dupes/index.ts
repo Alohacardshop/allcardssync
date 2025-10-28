@@ -53,70 +53,17 @@ Deno.serve(async (req) => {
 
     console.log(`[admin-cleanup-psa-dupes] Admin ${user.id} initiated PSA cert duplicate cleanup`);
 
-    // Find PSA cert duplicates (keeping oldest, deleting newer)
-    const { data: items, error: fetchError } = await supabaseAdmin
-      .from('intake_items')
-      .select('id, psa_cert, created_at, sku, shopify_product_id, store_key')
-      .not('psa_cert', 'is', null)
-      .neq('psa_cert', '')
-      .is('deleted_at', null)
-      .order('psa_cert')
-      .order('created_at', { ascending: true });
+    // Call the database function to perform cleanup
+    // This function temporarily disables the soft-delete trigger to allow service role operations
+    const { data: result, error: cleanupError } = await supabaseAdmin
+      .rpc('admin_cleanup_psa_duplicates');
 
-    if (fetchError) throw fetchError;
-
-    // Group by PSA cert
-    const grouped = (items || []).reduce((acc: Record<string, typeof items>, item) => {
-      if (!acc[item.psa_cert!]) acc[item.psa_cert!] = [];
-      acc[item.psa_cert!].push(item);
-      return acc;
-    }, {});
-
-    // Find duplicates (groups with more than 1 item)
-    const duplicateGroups = Object.entries(grouped).filter(([_, group]) => group.length > 1);
-
-    if (duplicateGroups.length === 0) {
-      return new Response(
-        JSON.stringify({ 
-          success: true, 
-          message: 'No PSA cert duplicates found',
-          deletedCount: 0,
-          keptCount: 0
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    if (cleanupError) {
+      console.error(`[admin-cleanup-psa-dupes] Cleanup error:`, cleanupError);
+      throw cleanupError;
     }
 
-    let deletedCount = 0;
-    let keptCount = 0;
-    const results = [];
-
-    for (const [psaCert, group] of duplicateGroups) {
-      const [keep, ...toDelete] = group;
-      keptCount++;
-
-      console.log(`[admin-cleanup-psa-dupes] PSA cert ${psaCert}: keeping ${keep.id}, deleting ${toDelete.length} duplicate(s)`);
-
-      // Soft delete duplicates using service role (bypasses RLS)
-      const deleteIds = toDelete.map(item => item.id);
-      const { error: deleteError } = await supabaseAdmin
-        .from('intake_items')
-        .update({
-          deleted_at: new Date().toISOString(),
-          deleted_reason: `Duplicate PSA cert ${psaCert} - kept item ${keep.id}`,
-          updated_by: 'admin_duplicate_cleanup',
-          updated_at: new Date().toISOString(),
-        })
-        .in('id', deleteIds);
-
-      if (deleteError) {
-        console.error(`[admin-cleanup-psa-dupes] Error deleting duplicates for ${psaCert}:`, deleteError);
-        results.push({ psaCert, error: deleteError.message, deletedCount: 0 });
-      } else {
-        deletedCount += toDelete.length;
-        results.push({ psaCert, deletedCount: toDelete.length, kept: keep.id });
-      }
-    }
+    const { deleted_count: deletedCount, kept_count: keptCount } = result;
 
     console.log(`[admin-cleanup-psa-dupes] Cleanup complete: ${deletedCount} deleted, ${keptCount} kept`);
 
@@ -125,7 +72,7 @@ Deno.serve(async (req) => {
         success: true,
         deletedCount,
         keptCount,
-        results,
+        message: `Successfully cleaned up ${deletedCount} duplicate(s), kept ${keptCount} original(s)`,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

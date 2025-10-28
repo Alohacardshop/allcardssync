@@ -1785,6 +1785,7 @@ export type Database = {
         Args: { item_ids: string[]; sync_action?: string }
         Returns: Json
       }
+      admin_cleanup_psa_duplicates: { Args: never; Returns: Json }
       admin_clear_shopify_sync_queue: {
         Args: { clear_type?: string }
         Returns: Json
