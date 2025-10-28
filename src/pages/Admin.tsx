@@ -53,6 +53,7 @@ import ShopifyEnvironmentSetup from '@/components/admin/ShopifyEnvironmentSetup'
 import { WebhookTestPanel } from '@/components/admin/WebhookTestPanel';
 import { WebhookMonitor } from '@/components/admin/WebhookMonitor';
 import { ShopifyReconciliation } from '@/components/admin/ShopifyReconciliation';
+import { ShopifyInventoryImport } from '@/components/admin/ShopifyInventoryImport';
 import { DefaultPrinterSelector } from '@/components/DefaultPrinterSelector';
 import { PrintNodeSettings } from '@/components/PrintNodeSettings';
 import { CutterSettingsPanel } from '@/components/CutterSettingsPanel';
@@ -339,6 +340,7 @@ const Admin = () => {
             <ShopifyWebhookStatus />
             <WebhookMonitor />
             <ShopifyReconciliation />
+            <ShopifyInventoryImport />
             <InventorySyncSettings />
             <WebhookTestPanel />
             <ShopifyTagImport />
