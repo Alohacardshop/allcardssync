@@ -1,4 +1,5 @@
 import { corsHeaders } from '../_shared/cors.ts'
+import { logRemovalOutcome, type RemovalOutcome } from '../_shared/shopify-removal-logger.ts'
 
 interface ReduceRawArgs {
   item_id: string
@@ -87,17 +88,49 @@ Deno.serve(async (req) => {
       // Treat 404 as success (product already deleted)
       if (deleteResponse.ok || deleteResponse.status === 404) {
         shopifyOkOrGone = true
+        
+        const outcome: RemovalOutcome = deleteResponse.status === 404 
+          ? 'already_deleted_404' 
+          : 'deleted';
+        
+        logRemovalOutcome({
+          item_id: intakeItem.id,
+          sku: intakeItem.sku,
+          shopify_product_id: intakeItem.shopify_product_id,
+          store_key: intakeItem.store_key,
+          outcome
+        });
+        
         if (deleteResponse.status === 404) {
           console.log(`Shopify product ${intakeItem.shopify_product_id} not found – treating as already deleted (reduce-raw)`)
         }
       } else if (!force_db_cleanup) {
         // Only throw if not forcing DB cleanup
         const errorText = await deleteResponse.text().catch(() => 'Unknown error')
+        
+        logRemovalOutcome({
+          item_id: intakeItem.id,
+          sku: intakeItem.sku,
+          shopify_product_id: intakeItem.shopify_product_id,
+          store_key: intakeItem.store_key,
+          outcome: `failed_${deleteResponse.status}`,
+          error_message: errorText
+        });
+        
         throw new Error(
           `Failed to delete Shopify product: ${deleteResponse.status} ${deleteResponse.statusText} - ${errorText}`
         )
       } else {
         console.warn(`Shopify deletion failed but force_db_cleanup=true, proceeding with DB update: ${deleteResponse.status} ${deleteResponse.statusText}`)
+        
+        logRemovalOutcome({
+          item_id: intakeItem.id,
+          sku: intakeItem.sku,
+          shopify_product_id: intakeItem.shopify_product_id,
+          store_key: intakeItem.store_key,
+          outcome: `failed_${deleteResponse.status}`,
+          error_message: 'Force cleanup enabled'
+        });
       }
 
       // Update intake item to mark as removed from Shopify

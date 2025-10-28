@@ -29,7 +29,9 @@ export function PreflightIndexCheck() {
 
     try {
       // Check 1: Active dupes by shopify_product_id
-      const { data: shopifyDupes, error: shopifyError } = await supabase.rpc('check_shopify_product_id_dupes');
+      const { data: shopifyDupes, error: shopifyError } = await supabase.rpc(
+        'check_shopify_product_id_dupes' as any
+      );
       
       if (shopifyError) {
         console.error('Shopify product ID check failed:', shopifyError);
@@ -38,7 +40,9 @@ export function PreflightIndexCheck() {
       }
 
       // Check 2: Active dupes for Raw by (store_key, sku)
-      const { data: skuDupes, error: skuError } = await supabase.rpc('check_sku_dupes');
+      const { data: skuDupes, error: skuError } = await supabase.rpc(
+        'check_sku_dupes' as any
+      );
       
       if (skuError) {
         console.error('SKU check failed:', skuError);
@@ -47,8 +51,8 @@ export function PreflightIndexCheck() {
       }
 
       const checkResults: CheckResults = {
-        shopifyProductIdDupes: shopifyDupes || [],
-        skuDupes: skuDupes || []
+        shopifyProductIdDupes: (shopifyDupes as DuplicateResult[]) || [],
+        skuDupes: (skuDupes as DuplicateResult[]) || []
       };
 
       setResults(checkResults);

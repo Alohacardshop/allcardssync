@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { AlertCircle, Loader2, Trash2 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { toast } from 'sonner';
+import { categorizeCleanupResults } from '@/lib/utils/cleanup-result-categorizer';
 
 interface DuplicateSKUGroup {
   sku: string;
@@ -316,43 +317,23 @@ export function SKUDuplicateCleanup() {
         })
       );
 
-      // Count results
-      const successful = results.filter(r => r.status === 'fulfilled');
-      const failed = results.filter(r => r.status === 'rejected');
+      // Count results using the categorizer
+      const categorized = categorizeCleanupResults(results);
       
       let totalDeleted = 0;
-      let totalShopifySuccess = 0;
-      let totalShopifyFail = 0;
-
+      const successful = results.filter(r => r.status === 'fulfilled');
+      
       successful.forEach(result => {
         if (result.status === 'fulfilled') {
           totalDeleted += result.value.deletedCount;
-          totalShopifySuccess += result.value.shopifySuccessCount;
-          totalShopifyFail += result.value.shopifyFailCount;
         }
       });
 
-      // Show comprehensive results
-      const messages = [];
-      if (successful.length > 0) {
-        messages.push(`✓ Cleaned up ${successful.length} SKU groups (${totalDeleted} items)`);
-      }
-      if (totalShopifySuccess > 0) {
-        messages.push(`✓ ${totalShopifySuccess} removed from Shopify`);
-      }
-      if (totalShopifyFail > 0) {
-        messages.push(`⚠ ${totalShopifyFail} Shopify removals failed`);
-      }
-      if (failed.length > 0) {
-        messages.push(`✗ ${failed.length} groups failed to process`);
-      }
-
-      if (successful.length > 0) {
-        toast.success(messages.join('\n'));
-      }
-      if (failed.length > 0) {
-        toast.error(`Failed to cleanup ${failed.length} SKU groups`);
-      }
+      // Show comprehensive results with categorization
+      toast.success(
+        `Deleted: ${categorized.deleted} | Already gone: ${categorized.alreadyGone} | Failed: ${categorized.failed}\n` +
+        `${totalDeleted} total items cleaned from ${successful.length} SKU groups`
+      );
 
       // Clear duplicates list
       setDuplicates([]);

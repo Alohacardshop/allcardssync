@@ -2,6 +2,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollText, Gauge, FileText, Wrench } from 'lucide-react';
 import { SystemLogsViewer } from '@/components/admin/SystemLogsViewer';
 import { SKUDuplicateCleanup } from '@/components/admin/SKUDuplicateCleanup';
+import { DuplicateCleanup } from '@/components/admin/DuplicateCleanup';
+import { PreflightIndexCheck } from '@/components/admin/PreflightIndexCheck';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 export function SystemTabsSection() {
@@ -43,6 +45,8 @@ export function SystemTabsSection() {
       </TabsContent>
 
       <TabsContent value="maintenance" className="space-y-4">
+        <PreflightIndexCheck />
+        <DuplicateCleanup />
         <SKUDuplicateCleanup />
       </TabsContent>
 

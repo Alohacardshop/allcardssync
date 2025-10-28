@@ -1994,7 +1994,25 @@ export type Database = {
         Args: { rows: Json }
         Returns: undefined
       }
+      check_shopify_product_id_dupes: {
+        Args: never
+        Returns: {
+          id: string
+          shopify_product_id: string
+          sku: string
+          store_key: string
+        }[]
+      }
       check_shopify_queue_health: { Args: never; Returns: Json }
+      check_sku_dupes: {
+        Args: never
+        Returns: {
+          id: string
+          shopify_product_id: string
+          sku: string
+          store_key: string
+        }[]
+      }
       claim_next_print_job: {
         Args: { ws: string }
         Returns: {
