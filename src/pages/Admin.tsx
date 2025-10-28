@@ -43,12 +43,9 @@ import CatalogTab from '@/components/admin/CatalogTab';
 import { InventorySyncSettings } from '@/components/admin/InventorySyncSettings';
 import { ShopifyTagImport } from '@/components/admin/ShopifyTagImport';
 import { PSAApiSettings } from '@/components/admin/PSAApiSettings';
-import { ShopifySyncPanel } from '@/components/admin/ShopifySyncPanel';
-import { ShopifyMetafieldSetup } from '@/components/admin/ShopifyMetafieldSetup';
-import { ShopifyWebhookStatus } from '@/components/admin/ShopifyWebhookStatus';
-import ShopifyQueueTest from '@/components/admin/ShopifyQueueTest';
-import ShopifyQueueSettings from '@/components/admin/ShopifyQueueSettings';
-import ShopifyQueueHealth from '@/components/admin/ShopifyQueueHealth';
+import { SystemHealthDashboard } from '@/components/admin/SystemHealthDashboard';
+import { StoreManagementTabs } from '@/components/admin/StoreManagementTabs';
+import { QueueManagementTabs } from '@/components/admin/QueueManagementTabs';
 import ShopifyEnvironmentSetup from '@/components/admin/ShopifyEnvironmentSetup';
 import { WebhookTestPanel } from '@/components/admin/WebhookTestPanel';
 import { WebhookMonitor } from '@/components/admin/WebhookMonitor';
@@ -77,70 +74,64 @@ const Admin = () => {
       title: 'Overview',
       icon: BarChart3,
       description: 'System overview and quick actions',
-      url: '#overview'
+      url: '#overview',
+      hasStatus: true
     },
     {
       id: 'stores',
       title: 'Store Management',
       icon: ShoppingCart,
       description: 'Shopify integration and inventory sync',
-      url: '#stores'
+      url: '#stores',
+      hasStatus: false
     },
     {
       id: 'queue',
-      title: 'Shopify Queue',
+      title: 'Queue Management',
       icon: Package,
-      description: 'Monitor and manage sync queue',
-      url: '#queue'
-    },
-    {
-      id: 'queue-settings',
-      title: 'Queue Settings',
-      icon: Settings,
-      description: 'Configure queue performance and safety',
-      url: '#queue-settings'
-    },
-    {
-      id: 'queue-health',
-      title: 'Queue Health',
-      icon: Shield,
-      description: 'Monitor queue health and alerts',
-      url: '#queue-health'
+      description: 'Monitor queue health, stats, and settings',
+      url: '#queue',
+      hasStatus: true
     },
     {
       id: 'hardware',
       title: 'Hardware Test',
       icon: Wrench,
       description: 'Test printers, scanners, and network connectivity',
-      url: '#hardware'
+      url: '#hardware',
+      hasStatus: false
     },
     {
       id: 'catalog',
       title: 'Catalog & Data',
       icon: Database,
       description: 'TCG database and card catalog settings',
-      url: '#catalog'
+      url: '#catalog',
+      hasStatus: true
     },
     {
       id: 'users',
       title: 'User Management',
       icon: Users,
       description: 'User assignments and permissions',
-      url: '#users'
+      url: '#users',
+      hasStatus: false
     },
     {
       id: 'categories',
       title: 'Category Management',
       icon: Tag,
       description: 'Manage inventory categories and sub-categories',
-      url: '#categories'
+      url: '#categories',
+      hasStatus: false
     },
     {
       id: 'system',
       title: 'System & Logs',
       icon: Server,
       description: 'System logs and debugging tools',
-      url: '#system'
+      url: '#system',
+      hasStatus: true
     }
   ];
 
@@ -215,6 +206,11 @@ const Admin = () => {
                 Manage your TCG inventory system, Shopify integration, and user access.
               </p>
             </div>
+
+            {/* System Health Dashboard */}
+            <SystemHealthDashboard />
+
+            <Separator />
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               {adminSections.slice(1).map((section) => (
@@ -331,24 +327,10 @@ const Admin = () => {
             <div>
               <h1 className="text-3xl font-bold tracking-tight">Store Management</h1>
               <p className="text-muted-foreground">
-                Configure Shopify integration, inventory sync, and product management.
+                Configure Shopify integration, inventory sync, and product management organized by category.
               </p>
             </div>
-              <ShopifyIntegrationTest />
-              <ShopifySyncReconciliation />
-            <VendorManagement />
-            <DuplicateCleanup />
-            <ShopifyEnvironmentSetup />
-            <ShopifyConfig />
-            <ShopifyMetafieldSetup />
-            <ShopifyWebhookStatus />
-            <WebhookMonitor />
-            <ShopifyReconciliation />
-            <ShopifyInventoryImport />
-            <InventorySyncSettings />
-            <WebhookTestPanel />
-            <ShopifyTagImport />
-            <ShopifyQueueTest />
+            <StoreManagementTabs />
           </div>
         );
 
@@ -356,38 +338,12 @@ const Admin = () => {
         return (
           <div className="space-y-6">
             <div>
-              <h1 className="text-3xl font-bold tracking-tight">Shopify Sync Queue</h1>
+              <h1 className="text-3xl font-bold tracking-tight">Queue Management</h1>
               <p className="text-muted-foreground">
-                Monitor and manage inventory items being synced to Shopify.
+                Unified interface for monitoring queue status, health metrics, and configuration settings.
               </p>
             </div>
-            <ShopifySyncPanel />
-          </div>
-        );
-
-      case 'queue-settings':
-        return (
-          <div className="space-y-6">
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight">Queue Configuration</h1>
-              <p className="text-muted-foreground">
-                Configure Shopify sync performance, safety settings, and automation.
-              </p>
-            </div>
-            <ShopifyQueueSettings />
-          </div>
-        );
-
-      case 'queue-health':
-        return (
-          <div className="space-y-6">
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight">Queue Health Monitor</h1>
-              <p className="text-muted-foreground">
-                Monitor queue health, performance metrics, and receive alerts.
-              </p>
-            </div>
-            <ShopifyQueueHealth />
+            <QueueManagementTabs />
           </div>
         );
 

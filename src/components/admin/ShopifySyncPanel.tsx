@@ -8,7 +8,11 @@ import { useShopifySync } from '@/hooks/useShopifySync'
 import { Play, RotateCcw, Trash2, RefreshCw, AlertCircle, CheckCircle, Clock, XCircle, Activity } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 
-export function ShopifySyncPanel() {
+interface ShopifySyncPanelProps {
+  onRefresh?: () => void;
+}
+
+export function ShopifySyncPanel({ onRefresh }: ShopifySyncPanelProps = {}) {
   const {
     queueItems,
     stats,
