@@ -56,7 +56,7 @@ Deno.serve(async (req) => {
 
     // Query items that claim to have a Shopify product
     const { data: items, error: itemsError } = await supabase
-      .from('inventory_items')
+      .from('intake_items')
       .select('id, sku, shopify_product_id, shopify_variant_id')
       .eq('store_key', store_key)
       .not('shopify_product_id', 'is', null)
@@ -117,11 +117,13 @@ Deno.serve(async (req) => {
           if (!dry_run) {
             // Clear Shopify references from the item
             const { error: updateError } = await supabase
-              .from('inventory_items')
+              .from('intake_items')
               .update({
                 shopify_product_id: null,
                 shopify_variant_id: null,
                 shopify_inventory_item_id: null,
+                shopify_sync_status: 'pending',
+                last_shopify_sync_error: 'Product no longer exists in Shopify',
                 updated_at: new Date().toISOString(),
               })
               .eq('id', item.id);

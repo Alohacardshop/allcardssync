@@ -60,9 +60,16 @@ Deno.serve(async (req) => {
 
     const { shopDomain, accessToken } = shopifyConfig;
 
-    // Build GraphQL query
+    // Build GraphQL query with optional filters
+    let queryFilter = '';
+    
+    // Add collection filter if provided
+    if (collection_id) {
+      queryFilter = `, query: "collection_id:${collection_id.replace('gid://shopify/Collection/', '')}"`;
+    }
+    
     let query = `{
-      products(first: ${limit}) {
+      products(first: ${limit}${queryFilter}) {
         edges {
           node {
             id
@@ -79,6 +86,18 @@ Deno.serve(async (req) => {
                   inventoryItem {
                     id
                     tracked
+                    inventoryLevels(first: 5) {
+                      edges {
+                        node {
+                          id
+                          available
+                          location {
+                            id
+                            name
+                          }
+                        }
+                      }
+                    }
                   }
                   inventoryQuantity
                 }
@@ -88,6 +107,8 @@ Deno.serve(async (req) => {
         }
       }
     }`;
+
+    logInfo('shopify-import-graphql', { query: queryFilter || 'no filter' });
 
     // Fetch products from Shopify
     const response = await fetch(
@@ -132,6 +153,18 @@ Deno.serve(async (req) => {
         
         if (!variant.sku) {
           continue; // Skip variants without SKU
+        }
+
+        // Filter by location if specified
+        if (location_id) {
+          const inventoryLevels = variant.inventoryItem?.inventoryLevels?.edges || [];
+          const hasLocation = inventoryLevels.some(
+            (level: any) => level.node.location.id === location_id
+          );
+          
+          if (!hasLocation) {
+            continue; // Skip variants not at this location
+          }
         }
 
         try {
