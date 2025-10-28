@@ -209,7 +209,10 @@ export const DuplicateCleanup = () => {
           <CardContent>
             <div className="space-y-4">
               <div className="bg-muted p-4 rounded-lg font-mono text-xs overflow-x-auto">
-                <pre>{`-- Soft-delete duplicate PSA certs, keeping the oldest
+                <pre>{`-- Temporarily disable the trigger that blocks deletions
+ALTER TABLE public.intake_items DISABLE TRIGGER trg_prevent_non_admin_soft_delete;
+
+-- Soft-delete duplicate PSA certs, keeping the oldest
 WITH duplicates AS (
   SELECT 
     psa_cert,
@@ -234,7 +237,10 @@ SET
   deleted_reason = 'Duplicate PSA cert - kept item ' || td.kept_id,
   updated_at = now()
 FROM to_delete td
-WHERE intake_items.id = td.id_to_delete;`}</pre>
+WHERE intake_items.id = td.id_to_delete;
+
+-- Re-enable the trigger
+ALTER TABLE public.intake_items ENABLE TRIGGER trg_prevent_non_admin_soft_delete;`}</pre>
               </div>
               <p className="text-sm text-muted-foreground">
                 Copy this SQL and run it in your Supabase SQL Editor to manually delete duplicates.
