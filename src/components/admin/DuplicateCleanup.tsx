@@ -6,7 +6,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2, AlertTriangle, Trash2, RefreshCw, CheckCircle } from 'lucide-react';
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { logger } from '@/lib/logger';
 
 interface DuplicateGroup {
   psa_cert: string;
@@ -21,6 +20,7 @@ export const DuplicateCleanup = () => {
   const [duplicates, setDuplicates] = useState<DuplicateGroup[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
 
   const scanForDuplicates = async () => {
     setIsScanning(true);
@@ -71,57 +71,60 @@ export const DuplicateCleanup = () => {
     try {
       // Keep the oldest item (first in array), delete the rest
       const [keepId, ...deleteIds] = duplicate.item_ids;
-      const [keepShopifyId, ...deleteShopifyIds] = duplicate.shopify_product_ids;
+      
+      let shopifySuccessCount = 0;
+      let shopifyFailCount = 0;
 
-      // 1. Delete from Shopify (keep first, delete rest)
-      for (let i = 0; i < deleteShopifyIds.length; i++) {
-        const shopifyProductId = deleteShopifyIds[i];
+      // Remove each duplicate from Shopify using the proven Edge function
+      for (let i = 0; i < deleteIds.length; i++) {
         const itemId = deleteIds[i];
+        const sku = duplicate.skus[i + 1]; // +1 because we skipped the first (keep) item
         
-        if (shopifyProductId) {
-          // Get store key and location from the item
-          const { data: item } = await supabase
-            .from('intake_items')
-            .select('store_key, shopify_location_gid')
-            .eq('id', itemId)
-            .single();
-
-          if (item?.store_key) {
-            const { error: shopifyError } = await supabase.functions.invoke('shopify-delete-duplicates', {
-              body: {
-                storeKey: item.store_key,
-                sku: duplicate.psa_cert,
-                variants: [
-                  {
-                    productId: shopifyProductId.replace('gid://shopify/Product/', ''),
-                    variantId: shopifyProductId.replace('gid://shopify/Product/', '')
-                  }
-                ]
-              }
-            });
-
-            if (shopifyError) {
-              logger.error('Shopify deletion error', shopifyError instanceof Error ? shopifyError : new Error(String(shopifyError)), undefined, 'duplicate-cleanup');
-              toast.warning(`Failed to delete from Shopify: ${shopifyError.message}`);
+        try {
+          const { data, error } = await supabase.functions.invoke('v2-shopify-remove-graded', {
+            body: {
+              item_id: itemId,
+              sku: sku,
+              certNumber: duplicate.psa_cert,
+              quantity: 1
             }
+          });
+
+          if (error || !data?.ok) {
+            console.warn(`Shopify removal failed for ${itemId}:`, error || data?.error);
+            shopifyFailCount++;
+          } else {
+            shopifySuccessCount++;
           }
+        } catch (shopifyErr) {
+          console.warn(`Shopify removal error for ${itemId}:`, shopifyErr);
+          shopifyFailCount++;
         }
       }
 
-      // 2. Soft delete duplicate items from database
+      // Soft delete from database
       const { error: dbError } = await supabase
         .from('intake_items')
         .update({
           deleted_at: new Date().toISOString(),
-          deleted_reason: `Duplicate of PSA cert ${duplicate.psa_cert} - keeping oldest entry`,
-          shopify_product_id: null,
-          shopify_variant_id: null
+          deleted_reason: `Duplicate PSA cert ${duplicate.psa_cert} - kept item ${keepId}`,
+          updated_by: 'admin_duplicate_cleanup',
+          updated_at: new Date().toISOString()
         })
         .in('id', deleteIds);
 
       if (dbError) throw dbError;
 
-      toast.success(`Deleted ${deleteIds.length} duplicate(s) for PSA cert ${duplicate.psa_cert}`);
+      // Show detailed results
+      const messages = [`Deleted ${deleteIds.length} duplicate(s) for PSA cert ${duplicate.psa_cert}`];
+      if (shopifySuccessCount > 0) {
+        messages.push(`${shopifySuccessCount} removed from Shopify`);
+      }
+      if (shopifyFailCount > 0) {
+        messages.push(`${shopifyFailCount} Shopify removals failed`);
+      }
+
+      toast.success(messages.join(', '));
       
       // Refresh the list
       await scanForDuplicates();
@@ -130,6 +133,112 @@ export const DuplicateCleanup = () => {
       toast.error('Failed to delete duplicate: ' + error.message);
     } finally {
       setIsDeleting(null);
+    }
+  };
+
+  const deleteAllDuplicates = async () => {
+    if (!confirm(`Are you sure you want to delete ALL ${duplicates.length} duplicate PSA cert groups? This will keep the oldest item for each cert and delete all newer duplicates.`)) {
+      return;
+    }
+
+    setIsDeletingAll(true);
+
+    try {
+      const results = await Promise.allSettled(
+        duplicates.map(async (duplicate) => {
+          const [keepId, ...deleteIds] = duplicate.item_ids;
+          let shopifySuccessCount = 0;
+          let shopifyFailCount = 0;
+
+          // Remove each duplicate from Shopify
+          for (let i = 0; i < deleteIds.length; i++) {
+            const itemId = deleteIds[i];
+            const sku = duplicate.skus[i + 1];
+            
+            try {
+              const { data, error } = await supabase.functions.invoke('v2-shopify-remove-graded', {
+                body: {
+                  item_id: itemId,
+                  sku: sku,
+                  certNumber: duplicate.psa_cert,
+                  quantity: 1
+                }
+              });
+
+              if (error || !data?.ok) {
+                shopifyFailCount++;
+              } else {
+                shopifySuccessCount++;
+              }
+            } catch {
+              shopifyFailCount++;
+            }
+          }
+
+          // Soft delete from database
+          const { error: dbError } = await supabase
+            .from('intake_items')
+            .update({
+              deleted_at: new Date().toISOString(),
+              deleted_reason: `Duplicate PSA cert ${duplicate.psa_cert} - kept item ${keepId}`,
+              updated_by: 'admin_duplicate_cleanup',
+              updated_at: new Date().toISOString()
+            })
+            .in('id', deleteIds);
+
+          if (dbError) throw dbError;
+
+          return {
+            psa_cert: duplicate.psa_cert,
+            deletedCount: deleteIds.length,
+            shopifySuccessCount,
+            shopifyFailCount
+          };
+        })
+      );
+
+      // Count results
+      const successful = results.filter(r => r.status === 'fulfilled');
+      const failed = results.filter(r => r.status === 'rejected');
+      
+      let totalDeleted = 0;
+      let totalShopifySuccess = 0;
+      let totalShopifyFail = 0;
+
+      successful.forEach(result => {
+        if (result.status === 'fulfilled') {
+          totalDeleted += result.value.deletedCount;
+          totalShopifySuccess += result.value.shopifySuccessCount;
+          totalShopifyFail += result.value.shopifyFailCount;
+        }
+      });
+
+      // Show comprehensive results
+      const messages = [];
+      if (successful.length > 0) {
+        messages.push(`✓ Cleaned up ${successful.length} PSA cert groups (${totalDeleted} items)`);
+      }
+      if (totalShopifySuccess > 0) {
+        messages.push(`✓ ${totalShopifySuccess} removed from Shopify`);
+      }
+      if (totalShopifyFail > 0) {
+        messages.push(`⚠ ${totalShopifyFail} Shopify removals failed`);
+      }
+      if (failed.length > 0) {
+        messages.push(`✗ ${failed.length} groups failed to process`);
+      }
+
+      if (successful.length > 0) {
+        toast.success(messages.join('\n'));
+      }
+      if (failed.length > 0) {
+        toast.error(`Failed to cleanup ${failed.length} PSA cert groups`);
+      }
+
+      // Refresh the list
+      await scanForDuplicates();
+    } finally {
+      setIsDeletingAll(false);
     }
   };
 
@@ -145,11 +254,11 @@ export const DuplicateCleanup = () => {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="flex items-center gap-4">
+        <div className="flex gap-2">
           <Button 
             onClick={scanForDuplicates} 
             disabled={isScanning}
-            className="gap-2"
+            className="flex-1 gap-2"
           >
             {isScanning ? (
               <>
@@ -165,11 +274,32 @@ export const DuplicateCleanup = () => {
           </Button>
           
           {duplicates.length > 0 && (
-            <Badge variant="destructive">
-              {duplicates.length} duplicate group{duplicates.length !== 1 ? 's' : ''} found
-            </Badge>
+            <Button 
+              onClick={deleteAllDuplicates} 
+              disabled={isDeletingAll || isScanning}
+              variant="destructive"
+              className="flex-1 gap-2"
+            >
+              {isDeletingAll ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Deleting All...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="w-4 h-4" />
+                  Delete All Duplicates
+                </>
+              )}
+            </Button>
           )}
         </div>
+
+        {duplicates.length > 0 && (
+          <Badge variant="destructive" className="w-full justify-center">
+            {duplicates.length} duplicate group{duplicates.length !== 1 ? 's' : ''} found
+          </Badge>
+        )}
 
         {duplicates.length === 0 && !isScanning && (
           <Alert>

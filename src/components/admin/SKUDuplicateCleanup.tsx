@@ -141,18 +141,20 @@ export function SKUDuplicateCleanup() {
         }
       }
 
-      // Soft delete from database with proper fields
-      const { error: deleteError } = await supabase
-        .from('intake_items')
-        .update({ 
-          deleted_at: new Date().toISOString(),
-          deleted_reason: `Duplicate SKU - kept item ${keepItem.id}`,
-          updated_by: 'admin_duplicate_cleanup',
-          updated_at: new Date().toISOString()
-        })
-        .in('id', deleteIds);
+      // Soft delete from database (Edge functions mark as sold, we add soft-delete fields)
+      if (deleteIds.length > 0) {
+        const { error: deleteError } = await supabase
+          .from('intake_items')
+          .update({ 
+            deleted_at: new Date().toISOString(),
+            deleted_reason: `Duplicate SKU - kept item ${keepItem.id}`,
+            updated_by: 'admin_duplicate_cleanup',
+            updated_at: new Date().toISOString()
+          })
+          .in('id', deleteIds);
 
-      if (deleteError) throw deleteError;
+        if (deleteError) throw deleteError;
+      }
 
       // Show detailed results
       const messages = [`Deleted ${deleteItems.length} duplicates for SKU ${sku}`];
@@ -232,18 +234,20 @@ export function SKUDuplicateCleanup() {
               }
             }
 
-            // Soft delete from database
-            const { error: deleteError } = await supabase
-              .from('intake_items')
-              .update({ 
-                deleted_at: new Date().toISOString(),
-                deleted_reason: `Duplicate SKU - kept item ${keepItem.id}`,
-                updated_by: 'admin_duplicate_cleanup',
-                updated_at: new Date().toISOString()
-              })
-              .in('id', deleteIds);
+            // Soft delete from database (Edge functions mark as sold, we add soft-delete fields)
+            if (deleteIds.length > 0) {
+              const { error: deleteError } = await supabase
+                .from('intake_items')
+                .update({ 
+                  deleted_at: new Date().toISOString(),
+                  deleted_reason: `Duplicate SKU - kept item ${keepItem.id}`,
+                  updated_by: 'admin_duplicate_cleanup',
+                  updated_at: new Date().toISOString()
+                })
+                .in('id', deleteIds);
 
-            if (deleteError) throw deleteError;
+              if (deleteError) throw deleteError;
+            }
 
             return {
               sku: group.sku,
