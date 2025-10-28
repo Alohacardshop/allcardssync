@@ -19,6 +19,10 @@ interface DuplicateSKUGroup {
     shopify_product_id: string | null;
     shopify_variant_id: string | null;
     store_key: string | null;
+    grade: string | null;
+    psa_cert: string | null;
+    psa_cert_number: string | null;
+    cgc_cert: string | null;
   }>;
 }
 
@@ -33,7 +37,7 @@ export function SKUDuplicateCleanup() {
     try {
       const { data, error } = await supabase
         .from('intake_items')
-        .select('id, sku, created_at, type, subject, shopify_product_id, shopify_variant_id, store_key')
+        .select('id, sku, created_at, type, subject, shopify_product_id, shopify_variant_id, store_key, grade, psa_cert, psa_cert_number, cgc_cert')
         .is('deleted_at', null)
         .not('sku', 'is', null)
         .order('sku')
@@ -87,22 +91,79 @@ export function SKUDuplicateCleanup() {
       
       const keepItem = sorted[0];
       const deleteItems = sorted.slice(1);
-      const deleteIds = deleteItems.map(item => item.id);
 
       console.log(`Keeping oldest item ${keepItem.id}, deleting ${deleteItems.length} duplicates`);
 
-      // Batch soft delete from database - skip complex triggers and Shopify calls
+      let shopifySuccessCount = 0;
+      let shopifyFailCount = 0;
+      const deleteIds: string[] = [];
+
+      // Process each duplicate item
+      for (const item of deleteItems) {
+        deleteIds.push(item.id);
+
+        // Handle Shopify removal if item exists in Shopify
+        if (item.shopify_product_id && item.store_key) {
+          try {
+            // Determine if item is graded
+            const isGraded = item.type === 'Graded' || 
+                           item.grade || 
+                           item.psa_cert || 
+                           item.psa_cert_number ||
+                           item.cgc_cert;
+
+            const functionName = isGraded 
+              ? 'v2-shopify-remove-graded'
+              : 'v2-shopify-remove-raw';
+
+            console.log(`Removing ${item.id} from Shopify using ${functionName}`);
+
+            const { error: shopifyError } = await supabase.functions.invoke(
+              functionName,
+              {
+                body: {
+                  item_id: item.id,
+                  sku: item.sku
+                }
+              }
+            );
+
+            if (shopifyError) {
+              console.warn(`Shopify removal failed for ${item.id}:`, shopifyError);
+              shopifyFailCount++;
+            } else {
+              shopifySuccessCount++;
+            }
+          } catch (shopifyErr) {
+            console.warn(`Shopify removal error for ${item.id}:`, shopifyErr);
+            shopifyFailCount++;
+          }
+        }
+      }
+
+      // Soft delete from database with proper fields
       const { error: deleteError } = await supabase
         .from('intake_items')
         .update({ 
           deleted_at: new Date().toISOString(),
-          deleted_reason: `Duplicate SKU - kept item ${keepItem.id}`
+          deleted_reason: `Duplicate SKU - kept item ${keepItem.id}`,
+          updated_by: 'admin_duplicate_cleanup',
+          updated_at: new Date().toISOString()
         })
         .in('id', deleteIds);
 
       if (deleteError) throw deleteError;
 
-      toast.success(`Cleaned up ${deleteItems.length} duplicates for SKU ${sku}`);
+      // Show detailed results
+      const messages = [`Deleted ${deleteItems.length} duplicates for SKU ${sku}`];
+      if (shopifySuccessCount > 0) {
+        messages.push(`${shopifySuccessCount} removed from Shopify`);
+      }
+      if (shopifyFailCount > 0) {
+        messages.push(`${shopifyFailCount} Shopify removals failed`);
+      }
+
+      toast.success(messages.join(', '));
       
       // Remove from display
       setDuplicates(prev => prev.filter(d => d.sku !== sku));
@@ -120,26 +181,122 @@ export function SKUDuplicateCleanup() {
     }
 
     setIsDeletingAll(true);
-    let successCount = 0;
-    let failCount = 0;
 
     try {
-      for (const group of duplicates) {
-        try {
-          await cleanupDuplicates(group.sku);
-          successCount++;
-        } catch (error) {
-          console.error(`Failed to cleanup SKU ${group.sku}:`, error);
-          failCount++;
+      // Process all groups in parallel for efficiency
+      const results = await Promise.allSettled(
+        duplicates.map(async (group) => {
+          // Create a temporary state update for this group
+          setIsDeleting(prev => ({ ...prev, [group.sku]: true }));
+          
+          try {
+            const sorted = [...group.items].sort((a, b) => 
+              new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+            );
+            
+            const keepItem = sorted[0];
+            const deleteItems = sorted.slice(1);
+            const deleteIds: string[] = [];
+            let shopifySuccessCount = 0;
+            let shopifyFailCount = 0;
+
+            // Process Shopify removals for each duplicate
+            for (const item of deleteItems) {
+              deleteIds.push(item.id);
+
+              if (item.shopify_product_id && item.store_key) {
+                try {
+                  const isGraded = item.type === 'Graded' || 
+                                 item.grade || 
+                                 item.psa_cert || 
+                                 item.psa_cert_number ||
+                                 item.cgc_cert;
+
+                  const functionName = isGraded 
+                    ? 'v2-shopify-remove-graded'
+                    : 'v2-shopify-remove-raw';
+
+                  const { error: shopifyError } = await supabase.functions.invoke(
+                    functionName,
+                    { body: { item_id: item.id, sku: item.sku } }
+                  );
+
+                  if (shopifyError) {
+                    shopifyFailCount++;
+                  } else {
+                    shopifySuccessCount++;
+                  }
+                } catch {
+                  shopifyFailCount++;
+                }
+              }
+            }
+
+            // Soft delete from database
+            const { error: deleteError } = await supabase
+              .from('intake_items')
+              .update({ 
+                deleted_at: new Date().toISOString(),
+                deleted_reason: `Duplicate SKU - kept item ${keepItem.id}`,
+                updated_by: 'admin_duplicate_cleanup',
+                updated_at: new Date().toISOString()
+              })
+              .in('id', deleteIds);
+
+            if (deleteError) throw deleteError;
+
+            return {
+              sku: group.sku,
+              deletedCount: deleteItems.length,
+              shopifySuccessCount,
+              shopifyFailCount
+            };
+          } finally {
+            setIsDeleting(prev => ({ ...prev, [group.sku]: false }));
+          }
+        })
+      );
+
+      // Count results
+      const successful = results.filter(r => r.status === 'fulfilled');
+      const failed = results.filter(r => r.status === 'rejected');
+      
+      let totalDeleted = 0;
+      let totalShopifySuccess = 0;
+      let totalShopifyFail = 0;
+
+      successful.forEach(result => {
+        if (result.status === 'fulfilled') {
+          totalDeleted += result.value.deletedCount;
+          totalShopifySuccess += result.value.shopifySuccessCount;
+          totalShopifyFail += result.value.shopifyFailCount;
         }
+      });
+
+      // Show comprehensive results
+      const messages = [];
+      if (successful.length > 0) {
+        messages.push(`✓ Cleaned up ${successful.length} SKU groups (${totalDeleted} items)`);
+      }
+      if (totalShopifySuccess > 0) {
+        messages.push(`✓ ${totalShopifySuccess} removed from Shopify`);
+      }
+      if (totalShopifyFail > 0) {
+        messages.push(`⚠ ${totalShopifyFail} Shopify removals failed`);
+      }
+      if (failed.length > 0) {
+        messages.push(`✗ ${failed.length} groups failed to process`);
       }
 
-      if (successCount > 0) {
-        toast.success(`Cleaned up ${successCount} duplicate SKU groups`);
+      if (successful.length > 0) {
+        toast.success(messages.join('\n'));
       }
-      if (failCount > 0) {
-        toast.error(`Failed to cleanup ${failCount} SKU groups`);
+      if (failed.length > 0) {
+        toast.error(`Failed to cleanup ${failed.length} SKU groups`);
       }
+
+      // Clear duplicates list
+      setDuplicates([]);
     } finally {
       setIsDeletingAll(false);
     }
