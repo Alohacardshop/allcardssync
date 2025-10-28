@@ -143,9 +143,16 @@ Deno.serve(async (req) => {
       }
     })
 
-    if (!deleteResponse.ok) {
-      const errorText = await deleteResponse.text()
-      throw new Error(`Failed to delete Shopify graded product: ${errorText}`)
+    // Treat 404 as success (product already deleted)
+    if (!deleteResponse.ok && deleteResponse.status !== 404) {
+      const errorText = await deleteResponse.text().catch(() => 'Unknown error')
+      throw new Error(
+        `Failed to delete Shopify graded product: ${deleteResponse.status} ${deleteResponse.statusText} - ${errorText}`
+      )
+    }
+
+    if (deleteResponse.status === 404) {
+      console.log(`Shopify graded product ${intakeItem.shopify_product_id} not found – treating as already deleted`)
     }
 
     // Update intake item to mark as sold and removed from Shopify
