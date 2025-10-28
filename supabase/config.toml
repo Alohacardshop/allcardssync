@@ -59,6 +59,10 @@ verify_jwt = false
 [functions.shopify-webhook-test]
 verify_jwt = false
 
+# Shopify webhook registration (public - verifies admin role internally)
+[functions.shopify-webhook-register]
+verify_jwt = false
+
 [functions.v2-shopify-send]
 verify_jwt = true
 
