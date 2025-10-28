@@ -120,10 +120,11 @@ export function SKUDuplicateCleanup() {
         // Soft delete from database
         const { error: deleteError } = await supabase
           .from('intake_items')
-          .update({ 
-            deleted_at: new Date().toISOString(),
-            deleted_reason: `Duplicate SKU - kept item ${keepItem.id}`
-          })
+        .update({ 
+          deleted_at: new Date().toISOString(),
+          deleted_reason: `Duplicate SKU - kept item ${keepItem.id}`,
+          updated_by: 'admin_cleanup'
+        })
           .eq('id', item.id);
 
         if (deleteError) throw deleteError;
