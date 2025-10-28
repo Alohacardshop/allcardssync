@@ -115,3 +115,11 @@ verify_jwt = true
 # Bulk location transfer (requires staff/admin role)
 [functions.bulk-location-transfer]
 verify_jwt = true
+
+# Shopify inventory reconciliation (requires staff/admin role)
+[functions.shopify-reconcile-inventory]
+verify_jwt = true
+
+# Shopify inventory import (requires staff/admin role)
+[functions.shopify-import-inventory]
+verify_jwt = true
