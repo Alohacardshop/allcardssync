@@ -46,8 +46,37 @@ Deno.serve(async (req) => {
       dry_run = false 
     } = await req.json();
 
-    if (!store_key) {
-      throw new Error('store_key is required');
+    // Input validation
+    if (!store_key || typeof store_key !== 'string') {
+      throw new Error('store_key is required and must be a string');
+    }
+
+    if (store_key.length > 50 || !/^[a-z0-9_-]+$/i.test(store_key)) {
+      throw new Error('Invalid store_key format');
+    }
+
+    if (typeof limit !== 'number' || limit < 1 || limit > 250) {
+      throw new Error('limit must be between 1 and 250');
+    }
+
+    if (location_id && typeof location_id !== 'string') {
+      throw new Error('location_id must be a string');
+    }
+
+    if (location_id && !location_id.startsWith('gid://shopify/Location/')) {
+      throw new Error('location_id must start with gid://shopify/Location/');
+    }
+
+    if (collection_id && typeof collection_id !== 'string') {
+      throw new Error('collection_id must be a string');
+    }
+
+    if (collection_id && !collection_id.startsWith('gid://shopify/Collection/')) {
+      throw new Error('collection_id must start with gid://shopify/Collection/');
+    }
+
+    if (typeof dry_run !== 'boolean') {
+      throw new Error('dry_run must be a boolean');
     }
 
     logInfo('shopify-import', { store_key, location_id, collection_id, limit, dry_run });
@@ -60,16 +89,23 @@ Deno.serve(async (req) => {
 
     const { shopDomain, accessToken } = shopifyConfig;
 
-    // Build GraphQL query with optional filters
+    // Build GraphQL query with optional filters and validation
     let queryFilter = '';
     
-    // Add collection filter if provided
+    // Add collection filter if provided (sanitize input)
     if (collection_id) {
-      queryFilter = `, query: "collection_id:${collection_id.replace('gid://shopify/Collection/', '')}"`;
+      const collectionNumId = collection_id.replace('gid://shopify/Collection/', '');
+      if (!/^\d+$/.test(collectionNumId)) {
+        throw new Error('Invalid collection_id format - must be numeric after gid prefix');
+      }
+      queryFilter = `, query: "collection_id:${collectionNumId}"`;
     }
     
+    // Validate limit is within Shopify's GraphQL limits
+    const safeLimit = Math.min(Math.max(1, limit), 250);
+    
     let query = `{
-      products(first: ${limit}${queryFilter}) {
+      products(first: ${safeLimit}${queryFilter}) {
         edges {
           node {
             id
@@ -77,12 +113,14 @@ Deno.serve(async (req) => {
             vendor
             productType
             tags
+            status
             variants(first: 10) {
               edges {
                 node {
                   id
                   sku
                   price
+                  barcode
                   inventoryItem {
                     id
                     tracked
@@ -108,7 +146,11 @@ Deno.serve(async (req) => {
       }
     }`;
 
-    logInfo('shopify-import-graphql', { query: queryFilter || 'no filter' });
+    logInfo('shopify-import-graphql', { 
+      query: queryFilter || 'no filter', 
+      limit: safeLimit,
+      has_location_filter: !!location_id 
+    });
 
     // Fetch products from Shopify
     const response = await fetch(
@@ -124,16 +166,28 @@ Deno.serve(async (req) => {
     );
 
     if (!response.ok) {
+      const errorText = await response.text();
+      logError('shopify-api-error', { 
+        status: response.status, 
+        statusText: response.statusText,
+        error: errorText 
+      });
       throw new Error(`Shopify API error: ${response.status} ${response.statusText}`);
     }
 
     const data = await response.json();
     
     if (data.errors) {
+      logError('shopify-graphql-errors', { errors: data.errors });
       throw new Error(`GraphQL errors: ${JSON.stringify(data.errors)}`);
     }
 
-    const products = data.data?.products?.edges || [];
+    // Validate response structure
+    if (!data.data || !data.data.products) {
+      throw new Error('Invalid Shopify API response structure');
+    }
+
+    const products = data.data.products.edges || [];
     
     const result: ImportResult = {
       total_found: products.length,
@@ -143,23 +197,77 @@ Deno.serve(async (req) => {
       items: [],
     };
 
-    // Process each product
+    // Process each product with safety checks
     for (const edge of products) {
+      if (!edge || !edge.node) {
+        logError('invalid-product-edge', { edge });
+        continue;
+      }
+
       const product = edge.node;
+      
+      // Validate required product fields
+      if (!product.id || !product.title) {
+        logError('invalid-product-data', { product_id: product?.id });
+        result.errors++;
+        continue;
+      }
+
+      if (!product.variants || !product.variants.edges) {
+        logError('product-missing-variants', { product_id: product.id });
+        continue;
+      }
+
       const variants = product.variants.edges;
 
       for (const variantEdge of variants) {
+        if (!variantEdge || !variantEdge.node) {
+          continue;
+        }
+
         const variant = variantEdge.node;
         
-        if (!variant.sku) {
-          continue; // Skip variants without SKU
+        // Validate required variant fields
+        if (!variant.sku || !variant.id) {
+          logInfo('variant-missing-required-fields', { 
+            product_id: product.id,
+            variant_id: variant?.id,
+            has_sku: !!variant?.sku 
+          });
+          continue;
+        }
+
+        // Validate SKU format (basic sanitization)
+        if (variant.sku.length > 255 || !/^[\w\-\.]+$/.test(variant.sku)) {
+          logError('invalid-sku-format', { 
+            sku: variant.sku,
+            product_id: product.id 
+          });
+          result.errors++;
+          continue;
+        }
+
+        // Validate inventory item exists
+        if (!variant.inventoryItem || !variant.inventoryItem.id) {
+          logError('variant-missing-inventory-item', { 
+            sku: variant.sku,
+            variant_id: variant.id 
+          });
+          result.errors++;
+          continue;
         }
 
         // Filter by location if specified
         if (location_id) {
           const inventoryLevels = variant.inventoryItem?.inventoryLevels?.edges || [];
           const hasLocation = inventoryLevels.some(
-            (level: any) => level.node.location.id === location_id
+            (level: any) => {
+              try {
+                return level?.node?.location?.id === location_id;
+              } catch (e) {
+                return false;
+              }
+            }
           );
           
           if (!hasLocation) {
@@ -196,6 +304,25 @@ Deno.serve(async (req) => {
 
           if (!dry_run) {
             if (existing) {
+              // Validate IDs before updating
+              if (!product.id.startsWith('gid://shopify/Product/') ||
+                  !variant.id.startsWith('gid://shopify/ProductVariant/') ||
+                  !variant.inventoryItem.id.startsWith('gid://shopify/InventoryItem/')) {
+                logError('invalid-shopify-id-format', {
+                  product_id: product.id,
+                  variant_id: variant.id,
+                  inventory_item_id: variant.inventoryItem.id
+                });
+                result.errors++;
+                result.items.push({
+                  product_id: product.id,
+                  title: product.title,
+                  sku: variant.sku,
+                  status: 'error',
+                });
+                continue;
+              }
+
               // Update existing item with Shopify IDs
               const { error: updateError } = await supabase
                 .from('intake_items')
@@ -205,6 +332,7 @@ Deno.serve(async (req) => {
                   shopify_inventory_item_id: variant.inventoryItem.id,
                   last_shopify_synced_at: new Date().toISOString(),
                   shopify_sync_status: 'synced',
+                  updated_by: 'shopify_import'
                 })
                 .eq('id', existing.id);
 
@@ -224,6 +352,11 @@ Deno.serve(async (req) => {
                   title: product.title,
                   sku: variant.sku,
                   status: 'linked',
+                });
+                logInfo('item-linked', { 
+                  item_id: existing.id, 
+                  sku: variant.sku,
+                  product_id: product.id 
                 });
               }
             } else {
@@ -253,8 +386,18 @@ Deno.serve(async (req) => {
             }
           }
         } catch (error) {
-          logError('process-variant-error', { sku: variant.sku, error: error.message });
+          logError('process-variant-error', { 
+            sku: variant.sku, 
+            error: error instanceof Error ? error.message : String(error),
+            stack: error instanceof Error ? error.stack : undefined
+          });
           result.errors++;
+          result.items.push({
+            product_id: product.id,
+            title: product.title,
+            sku: variant.sku,
+            status: 'error',
+          });
         }
       }
     }
@@ -270,9 +413,20 @@ Deno.serve(async (req) => {
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
-    logError('shopify-import-error', { error: error.message });
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    
+    logError('shopify-import-error', { 
+      error: errorMessage,
+      stack: errorStack,
+      type: error?.constructor?.name 
+    });
+    
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ 
+        error: errorMessage,
+        details: 'Check edge function logs for more information'
+      }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

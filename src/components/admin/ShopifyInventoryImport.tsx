@@ -33,10 +33,38 @@ export function ShopifyInventoryImport() {
   const [result, setResult] = useState<ImportResult | null>(null);
 
   const runImport = async () => {
+    // Validate inputs
     if (!storeKey) {
       toast({
         title: 'Store Required',
         description: 'Please select a store first',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (limit < 1 || limit > 250) {
+      toast({
+        title: 'Invalid Limit',
+        description: 'Limit must be between 1 and 250',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (locationId && !locationId.startsWith('gid://shopify/Location/')) {
+      toast({
+        title: 'Invalid Location ID',
+        description: 'Location ID must start with gid://shopify/Location/',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (collectionId && !collectionId.startsWith('gid://shopify/Collection/')) {
+      toast({
+        title: 'Invalid Collection ID',
+        description: 'Collection ID must start with gid://shopify/Collection/',
         variant: 'destructive',
       });
       return;
@@ -49,14 +77,18 @@ export function ShopifyInventoryImport() {
       const { data, error } = await supabase.functions.invoke('shopify-import-inventory', {
         body: {
           store_key: storeKey,
-          location_id: locationId || undefined,
-          collection_id: collectionId || undefined,
-          limit,
+          location_id: locationId.trim() || undefined,
+          collection_id: collectionId.trim() || undefined,
+          limit: Math.max(1, Math.min(250, limit)),
           dry_run: dryRun,
         },
       });
 
       if (error) throw error;
+
+      if (!data || !data.result) {
+        throw new Error('Invalid response from import function');
+      }
 
       setResult(data.result);
       
@@ -68,7 +100,7 @@ export function ShopifyInventoryImport() {
       console.error('Import error:', error);
       toast({
         title: 'Import Failed',
-        description: error.message,
+        description: error.message || 'An unexpected error occurred',
         variant: 'destructive',
       });
     } finally {
