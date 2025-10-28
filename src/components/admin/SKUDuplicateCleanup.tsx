@@ -26,6 +26,7 @@ export function SKUDuplicateCleanup() {
   const [duplicates, setDuplicates] = useState<DuplicateSKUGroup[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [isDeleting, setIsDeleting] = useState<Record<string, boolean>>({});
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
 
   const scanForDuplicates = async () => {
     setIsScanning(true);
@@ -140,6 +141,37 @@ export function SKUDuplicateCleanup() {
     }
   };
 
+  const cleanupAllDuplicates = async () => {
+    if (!confirm(`Are you sure you want to delete ALL ${duplicates.length} duplicate SKU groups? This will keep the oldest item for each SKU and delete all newer duplicates.`)) {
+      return;
+    }
+
+    setIsDeletingAll(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    try {
+      for (const group of duplicates) {
+        try {
+          await cleanupDuplicates(group.sku);
+          successCount++;
+        } catch (error) {
+          console.error(`Failed to cleanup SKU ${group.sku}:`, error);
+          failCount++;
+        }
+      }
+
+      if (successCount > 0) {
+        toast.success(`Cleaned up ${successCount} duplicate SKU groups`);
+      }
+      if (failCount > 0) {
+        toast.error(`Failed to cleanup ${failCount} SKU groups`);
+      }
+    } finally {
+      setIsDeletingAll(false);
+    }
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -152,20 +184,43 @@ export function SKUDuplicateCleanup() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <Button 
-          onClick={scanForDuplicates} 
-          disabled={isScanning}
-          className="w-full"
-        >
-          {isScanning ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Scanning...
-            </>
-          ) : (
-            'Scan for Duplicate SKUs'
+        <div className="flex gap-2">
+          <Button 
+            onClick={scanForDuplicates} 
+            disabled={isScanning}
+            className="flex-1"
+          >
+            {isScanning ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Scanning...
+              </>
+            ) : (
+              'Scan for Duplicate SKUs'
+            )}
+          </Button>
+
+          {duplicates.length > 0 && (
+            <Button 
+              onClick={cleanupAllDuplicates} 
+              disabled={isDeletingAll || isScanning}
+              variant="destructive"
+              className="flex-1"
+            >
+              {isDeletingAll ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deleting All...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete All Duplicates
+                </>
+              )}
+            </Button>
           )}
-        </Button>
+        </div>
 
         {duplicates.length > 0 && (
           <Badge variant="destructive" className="w-full justify-center">
