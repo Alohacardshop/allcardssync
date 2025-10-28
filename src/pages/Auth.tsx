@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Link, useNavigate } from "react-router-dom";
 import { logger } from "@/lib/logger";
+import { useAuth } from "@/contexts/AuthContext";
 
 const ROLE_TIMEOUT_MS = 5000; // Reduced from 8s to 5s
 const AUTH_CHANGE_GUARD_MS = 4000; // Reduced from 6s to 4s
@@ -37,6 +38,7 @@ function useSEO(opts: { title: string; description?: string; canonical?: string 
 export default function Auth() {
   useSEO({ title: "Sign In | Aloha", description: "Secure sign in for Aloha Inventory staff." });
   const navigate = useNavigate();
+  const { refetchRoles } = useAuth();
 
   // ✅ never start in loading
   const [loading, setLoading] = useState(false);
@@ -163,32 +165,15 @@ export default function Auth() {
     let canceled = false;
     cancelRoleCheckRef.current = () => { canceled = true; };
 
-    const roleCheckPromise = (async () => {
-      logger.info('Processing auth verification', { userId });
-      const { data, error } = await supabase.rpc("verify_user_access", { _user_id: userId });
-      if (error) throw error;
-      return data as { access_granted?: boolean } | null;
-    })();
-
-    // Manual timeout (so we can clear it deterministically)
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      roleTimeoutRef.current = window.setTimeout(() => {
-        reject(new Error("Role check timeout"));
-      }, ROLE_TIMEOUT_MS);
-    });
-
     try {
-      const result = await Promise.race([roleCheckPromise, timeoutPromise]);
-      if (canceled || currentAttemptId.current !== attemptId) return; // new attempt started
-      logger.info('Access verification result', { result, userId });
-      const granted = !!(result && typeof result === "object" && "access_granted" in result && (result as any).access_granted);
-      if (granted) {
-        logger.info('Access granted, navigating to dashboard', { userId });
-        navigate("/", { replace: true });
-      } else {
-        toast.warning("Signed in, but access not fully verified yet. Some features may be limited.");
-        navigate("/", { replace: true });
-      }
+      // Preload roles into AuthContext cache
+      logger.info('Preloading roles into cache', { userId });
+      await refetchRoles();
+      
+      if (canceled || currentAttemptId.current !== attemptId) return;
+      
+      logger.info('Access granted, navigating to dashboard', { userId });
+      navigate("/", { replace: true });
     } catch (err: any) {
       if (canceled || currentAttemptId.current !== attemptId) return;
       logger.error('Role check failed', err, { userId });

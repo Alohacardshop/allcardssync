@@ -1,9 +1,7 @@
-import { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
-import { User, Session } from '@supabase/supabase-js';
-import { toast } from 'sonner';
-import { resetLogin } from '@/lib/authUtils';
+import { Button } from '@/components/ui/button';
+import { useAuth } from '@/contexts/AuthContext';
 import { logger } from '@/lib/logger';
 
 interface AuthGuardProps {
@@ -11,84 +9,10 @@ interface AuthGuardProps {
 }
 
 export function AuthGuard({ children }: AuthGuardProps) {
-  const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [hasRole, setHasRole] = useState(false);
+  const { user, isStaff, isAdmin, loading } = useAuth();
 
-  useEffect(() => {
-    // Set up auth state listener
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        logger.authEvent(`Auth state changed: ${event}`, { 
-          email: session?.user?.email,
-          userId: session?.user?.id 
-        });
-        setSession(session);
-        setUser(session?.user ?? null);
-        
-        if (session?.user) {
-          // Use setTimeout to defer async operations and prevent blocking
-          setTimeout(async () => {
-            const uid = session.user.id;
-            
-            try {
-              // Use the new verify_user_access function
-              const { data: access, error } = await supabase.rpc('verify_user_access', { _user_id: uid });
-              
-              if (error) {
-                logger.error('Access verification failed', error as Error, { userId: uid });
-                setHasRole(false);
-                setLoading(false);
-                return;
-              }
-              
-              if (access && typeof access === 'object' && 'access_granted' in access && access.access_granted) {
-                logger.authEvent('User access granted', { userId: uid });
-                setHasRole(true);
-              } else {
-                // Try bootstrap for admin role (for initial setup)
-                try {
-                  const { data: bootstrap } = await supabase.rpc('bootstrap_user_admin', { _target_user_id: uid });
-                  if (bootstrap && typeof bootstrap === 'object' && 'success' in bootstrap && bootstrap.success) {
-                    logger.authEvent('User bootstrapped as admin', { userId: uid });
-                    setHasRole(true);
-                  } else {
-                    logger.warn('User not authorized', { userId: uid });
-                    setHasRole(false);
-                    toast.error("Your account is not authorized. Contact an admin for access.");
-                  }
-                } catch (e) {
-                  logger.info('Bootstrap failed (expected for non-admins)', { userId: uid });
-                  setHasRole(false);
-                  toast.error("Your account is not authorized. Contact an admin for access.");
-                }
-              }
-            } catch (error) {
-              logger.error('Role check failed', error as Error, { userId: uid });
-              setHasRole(false);
-            } finally {
-              setLoading(false);
-            }
-          }, 0);
-        } else {
-          setHasRole(false);
-          setLoading(false);
-        }
-      }
-    );
-
-    // Check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (!session) {
-        setLoading(false);
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
+  // User is authorized if they have staff or admin access
+  const isAuthorized = isStaff || isAdmin;
 
   if (loading) {
     return (
@@ -101,11 +25,13 @@ export function AuthGuard({ children }: AuthGuardProps) {
     );
   }
 
-  if (!user || !session) {
+  if (!user) {
+    logger.info('AuthGuard: Redirecting to auth page - no user', {}, 'auth');
     return <Navigate to="/auth" replace />;
   }
 
-  if (!hasRole) {
+  if (!isAuthorized) {
+    logger.warn('AuthGuard: Access denied - insufficient permissions', { userId: user.id }, 'auth');
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center max-w-md mx-auto p-6">
@@ -114,12 +40,9 @@ export function AuthGuard({ children }: AuthGuardProps) {
             Your account is signed in but not authorized to access this application. 
             Please contact an administrator to grant you Staff access.
           </p>
-          <button 
-            onClick={resetLogin}
-            className="text-primary hover:underline"
-          >
+          <Button onClick={() => supabase.auth.signOut()}>
             Sign out
-          </button>
+          </Button>
         </div>
       </div>
     );

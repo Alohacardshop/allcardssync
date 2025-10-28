@@ -7,6 +7,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ErrorBoundaryWrapper } from "@/components/ErrorBoundaryWrapper";
+import { AuthProvider } from "@/contexts/AuthContext";
 import { AuthGuard } from "@/components/AuthGuard";
 import { AdminGuard } from "@/components/AdminGuard";
 import { StoreProvider } from "@/contexts/StoreContext";
@@ -48,59 +49,61 @@ const App = () => (
     <ThemeProvider defaultTheme="system" storageKey="allcardssync-theme">
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
-          <PrintNodeProvider>
-            <StoreProvider>
-            <Toaster />
-            <Sonner />
-            <GlobalLoading />
-            <FontPreloader />
-            <BrowserRouter>
-            <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><LoadingSpinner size="lg" /></div>}>
-              <Routes>
-                {/* Auth route - accessible without authentication */}
-                <Route path="/auth" element={<Auth />} />
-                
-                {/* Protected routes */}
-                <Route path="/*" element={
-                  <>
-                    <NavigationBar />
-                    <AuthGuard>
-                      <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><LoadingSpinner size="lg" /></div>}>
-                        <Routes>
-                          <Route path="/" element={<ErrorBoundaryWrapper componentName="Index"><Index /></ErrorBoundaryWrapper>} />
-                          <Route path="/dashboard" element={<ErrorBoundaryWrapper componentName="Dashboard"><DashboardPage /></ErrorBoundaryWrapper>} />
-                          <Route path="/test-hardware" element={<TestHardwarePage />} />
-                          <Route path="/inventory" element={<ErrorBoundaryWrapper componentName="Inventory"><Inventory /></ErrorBoundaryWrapper>} />
-                          <Route path="/batches" element={<ErrorBoundaryWrapper componentName="Batch Management"><Batches /></ErrorBoundaryWrapper>} />
-                          <Route path="/admin/label-studio" element={<LabelStudio />} />
-                          <Route path="/bulk-import" element={<BulkImport />} />
-                          <Route path="/admin" element={<AdminGuard><Admin /></AdminGuard>} />
-                          <Route path="/admin/catalog" element={<AdminGuard><div className="p-8"><CatalogMigrationPlaceholder /></div></AdminGuard>} />
-                          <Route path="/shopify-mapping" element={<ShopifyMapping />} />
-                          <Route path="/shopify-sync" element={<ShopifySync />} />
-                          <Route path="/bulk-transfer" element={<BulkTransfer />} />
-                          <Route path="/print-logs" element={<PrintLogs />} />
-                          
-                          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-                          <Route path="*" element={<NotFound />} />
-                        </Routes>
-                      </Suspense>
-                    </AuthGuard>
-                  </>
-                } />
-              </Routes>
-            </Suspense>
-            
-            {/* Global Components */}
-            <GlobalKeyboardHandler />
-            <FloatingActionButton />
-            {import.meta.env.DEV && <PerformanceMonitor />}
-            <SessionTimeoutWarning />
-            <RecoveryMode />
-            <PrintQueueStatus />
-          </BrowserRouter>
-        </StoreProvider>
-      </PrintNodeProvider>
+          <AuthProvider>
+            <PrintNodeProvider>
+              <StoreProvider>
+              <Toaster />
+              <Sonner />
+              <GlobalLoading />
+              <FontPreloader />
+              <BrowserRouter>
+              <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><LoadingSpinner size="lg" /></div>}>
+                <Routes>
+                  {/* Auth route - accessible without authentication */}
+                  <Route path="/auth" element={<Auth />} />
+                  
+                  {/* Protected routes */}
+                  <Route path="/*" element={
+                    <>
+                      <NavigationBar />
+                      <AuthGuard>
+                        <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><LoadingSpinner size="lg" /></div>}>
+                          <Routes>
+                            <Route path="/" element={<ErrorBoundaryWrapper componentName="Index"><Index /></ErrorBoundaryWrapper>} />
+                            <Route path="/dashboard" element={<ErrorBoundaryWrapper componentName="Dashboard"><DashboardPage /></ErrorBoundaryWrapper>} />
+                            <Route path="/test-hardware" element={<TestHardwarePage />} />
+                            <Route path="/inventory" element={<ErrorBoundaryWrapper componentName="Inventory"><Inventory /></ErrorBoundaryWrapper>} />
+                            <Route path="/batches" element={<ErrorBoundaryWrapper componentName="Batch Management"><Batches /></ErrorBoundaryWrapper>} />
+                            <Route path="/admin/label-studio" element={<LabelStudio />} />
+                            <Route path="/bulk-import" element={<BulkImport />} />
+                            <Route path="/admin" element={<AdminGuard><Admin /></AdminGuard>} />
+                            <Route path="/admin/catalog" element={<AdminGuard><div className="p-8"><CatalogMigrationPlaceholder /></div></AdminGuard>} />
+                            <Route path="/shopify-mapping" element={<ShopifyMapping />} />
+                            <Route path="/shopify-sync" element={<ShopifySync />} />
+                            <Route path="/bulk-transfer" element={<BulkTransfer />} />
+                            <Route path="/print-logs" element={<PrintLogs />} />
+                            
+                            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                            <Route path="*" element={<NotFound />} />
+                          </Routes>
+                        </Suspense>
+                      </AuthGuard>
+                    </>
+                  } />
+                </Routes>
+              </Suspense>
+              
+              {/* Global Components */}
+              <GlobalKeyboardHandler />
+              <FloatingActionButton />
+              {import.meta.env.DEV && <PerformanceMonitor />}
+              <SessionTimeoutWarning />
+              <RecoveryMode />
+              <PrintQueueStatus />
+            </BrowserRouter>
+          </StoreProvider>
+        </PrintNodeProvider>
+      </AuthProvider>
     </TooltipProvider>
   </QueryClientProvider>
   </ThemeProvider>
