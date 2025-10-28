@@ -87,48 +87,20 @@ export function SKUDuplicateCleanup() {
       
       const keepItem = sorted[0];
       const deleteItems = sorted.slice(1);
+      const deleteIds = deleteItems.map(item => item.id);
 
       console.log(`Keeping oldest item ${keepItem.id}, deleting ${deleteItems.length} duplicates`);
 
-      // Delete each duplicate
-      for (const item of deleteItems) {
-        // Remove from Shopify if it exists
-        if (item.shopify_product_id && item.store_key) {
-          try {
-            const { error: shopifyError } = await supabase.functions.invoke(
-              'shopify-delete-duplicates',
-              {
-                body: {
-                  storeKey: item.store_key,
-                  sku: item.sku,
-                  variants: [{
-                    productId: item.shopify_product_id,
-                    variantId: item.shopify_variant_id || item.shopify_product_id
-                  }]
-                }
-              }
-            );
-
-            if (shopifyError) {
-              console.warn(`Failed to delete from Shopify: ${shopifyError.message}`);
-            }
-          } catch (shopifyErr) {
-            console.warn('Shopify deletion failed, continuing with local deletion', shopifyErr);
-          }
-        }
-
-        // Soft delete from database
-        const { error: deleteError } = await supabase
-          .from('intake_items')
+      // Batch soft delete from database - skip complex triggers and Shopify calls
+      const { error: deleteError } = await supabase
+        .from('intake_items')
         .update({ 
           deleted_at: new Date().toISOString(),
-          deleted_reason: `Duplicate SKU - kept item ${keepItem.id}`,
-          updated_by: 'admin_cleanup'
+          deleted_reason: `Duplicate SKU - kept item ${keepItem.id}`
         })
-          .eq('id', item.id);
+        .in('id', deleteIds);
 
-        if (deleteError) throw deleteError;
-      }
+      if (deleteError) throw deleteError;
 
       toast.success(`Cleaned up ${deleteItems.length} duplicates for SKU ${sku}`);
       
