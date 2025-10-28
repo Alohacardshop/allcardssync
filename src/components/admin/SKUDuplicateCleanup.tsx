@@ -118,18 +118,23 @@ export function SKUDuplicateCleanup() {
 
             console.log(`Removing ${item.id} from Shopify using ${functionName}`);
 
-            const { error: shopifyError } = await supabase.functions.invoke(
+            // Extract cert number for graded items
+            const certNumber = item.psa_cert || item.psa_cert_number || item.cgc_cert;
+
+            const { data: shopifyData, error: shopifyError } = await supabase.functions.invoke(
               functionName,
               {
                 body: {
                   item_id: item.id,
-                  sku: item.sku
+                  sku: item.sku,
+                  quantity: 1,
+                  ...(isGraded && certNumber ? { certNumber } : {})
                 }
               }
             );
 
-            if (shopifyError) {
-              console.warn(`Shopify removal failed for ${item.id}:`, shopifyError);
+            if (shopifyError || !shopifyData?.ok) {
+              console.warn(`Shopify removal failed for ${item.id}:`, shopifyError || shopifyData?.error);
               shopifyFailCount++;
             } else {
               shopifySuccessCount++;
@@ -218,12 +223,22 @@ export function SKUDuplicateCleanup() {
                     ? 'v2-shopify-remove-graded'
                     : 'v2-shopify-remove-raw';
 
-                  const { error: shopifyError } = await supabase.functions.invoke(
+                  // Extract cert number for graded items
+                  const certNumber = item.psa_cert || item.psa_cert_number || item.cgc_cert;
+
+                  const { data: shopifyData, error: shopifyError } = await supabase.functions.invoke(
                     functionName,
-                    { body: { item_id: item.id, sku: item.sku } }
+                    { 
+                      body: { 
+                        item_id: item.id, 
+                        sku: item.sku,
+                        quantity: 1,
+                        ...(isGraded && certNumber ? { certNumber } : {})
+                      } 
+                    }
                   );
 
-                  if (shopifyError) {
+                  if (shopifyError || !shopifyData?.ok) {
                     shopifyFailCount++;
                   } else {
                     shopifySuccessCount++;
