@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef, lazy, Suspens
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, Upload, Search, CheckSquare, Square, Trash2, Printer, Scissors, RotateCcw, AlertCircle, RefreshCw } from 'lucide-react';
+import { Loader2, Upload, Search, CheckSquare, Square, Trash2, Printer, Scissors, RotateCcw, AlertCircle, RefreshCw, Download } from 'lucide-react';
 import { logger } from '@/lib/logger';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { toast } from 'sonner';
@@ -22,6 +22,7 @@ import type { JobVars, ZPLElement } from '@/lib/labels/types';
 import { print } from '@/lib/printService';
 import { sendGradedToShopify, sendRawToShopify } from '@/hooks/useShopifySend';
 import { useBatchSendToShopify } from '@/hooks/useBatchSendToShopify';
+import { useShopifyResync } from '@/hooks/useShopifyResync';
 import { useDebounce } from '@/hooks/useDebounce';
 import { useLoadingStateManager } from '@/lib/loading/LoadingStateManager';
 import { InventorySkeleton } from '@/components/SmartLoadingSkeleton';
@@ -29,6 +30,7 @@ import { InventoryItemCard } from '@/components/InventoryItemCard';
 import { ShopifyRemovalDialog } from '@/components/ShopifyRemovalDialog';
 import { ShopifySyncDetailsDialog } from '@/components/ShopifySyncDetailsDialog';
 import { InventoryDeleteDialog } from '@/components/InventoryDeleteDialog';
+import { ConfirmationDialog } from '@/components/ConfirmationDialog';
 import { useCutterSettings } from '@/hooks/useCutterSettings';
 import { CutterSettingsPanel } from '@/components/CutterSettingsPanel';
 import { RefreshControls } from '@/components/RefreshControls';
@@ -224,7 +226,7 @@ const Inventory = () => {
   // Search and filters
   const [searchTerm, setSearchTerm] = useState('');
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'sold' | 'deleted' | 'errors'>('active');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'out-of-stock' | 'sold' | 'deleted' | 'errors'>('active');
   const [printStatusFilter, setPrintStatusFilter] = useState<'all' | 'printed' | 'not-printed'>('all');
   const [showSoldItems, setShowSoldItems] = useState(false);
   const [batchFilter, setBatchFilter] = useState<'all' | 'in_batch' | 'removed_from_batch'>(() => {
@@ -256,6 +258,7 @@ const Inventory = () => {
   // Dialog state
   const [showRemovalDialog, setShowRemovalDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showResyncConfirm, setShowResyncConfirm] = useState(false);
   const [selectedItemForRemoval, setSelectedItemForRemoval] = useState<any>(null);
   const [selectedItemsForDeletion, setSelectedItemsForDeletion] = useState<any[]>([]);
   const [syncDetailsRow, setSyncDetailsRow] = useState<any>(null);
@@ -268,6 +271,7 @@ const Inventory = () => {
   const { assignedStore, selectedLocation } = useStore();
   const { sendChunkedBatchToShopify, isSending: isBatchSending, progress } = useBatchSendToShopify();
   const { settings: cutterSettings } = useCutterSettings();
+  const { resyncAll, resyncSelected, isResyncing } = useShopifyResync();
   const queryClient = useQueryClient();
 
   // Optimistic update helper for instant UI feedback
@@ -2019,13 +2023,43 @@ const Inventory = () => {
 
             <TabsContent value="inventory" className="space-y-6">
               {/* Refresh Controls */}
-              <RefreshControls
-                autoRefreshEnabled={autoRefreshEnabled}
-                onAutoRefreshToggle={setAutoRefreshEnabled}
-                onManualRefresh={handleManualRefresh}
-                isRefreshing={isFetching}
-                lastRefresh={lastRefresh}
-              />
+              <div className="flex items-center gap-2">
+                <RefreshControls
+                  autoRefreshEnabled={autoRefreshEnabled}
+                  onAutoRefreshToggle={setAutoRefreshEnabled}
+                  onManualRefresh={handleManualRefresh}
+                  isRefreshing={isFetching}
+                  lastRefresh={lastRefresh}
+                />
+                
+                {/* Resync from Shopify Dropdown */}
+                <div className="flex items-center gap-2 ml-auto">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      if (selectedItems.size > 0) {
+                        resyncSelected.mutate({
+                          storeKey: assignedStore || '',
+                          itemIds: Array.from(selectedItems)
+                        });
+                      } else {
+                        setShowResyncConfirm(true);
+                      }
+                    }}
+                    disabled={isResyncing || !assignedStore || !selectedLocation}
+                  >
+                    {isResyncing ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Download className="h-4 w-4 mr-2" />
+                    )}
+                    {selectedItems.size > 0 
+                      ? `Resync Selected (${selectedItems.size})` 
+                      : 'Resync All from Shopify'}
+                  </Button>
+                </div>
+              </div>
               
               {/* Category Tabs */}
               <Card>
@@ -2067,6 +2101,7 @@ const Inventory = () => {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="out-of-stock">Out of Stock</SelectItem>
                       <SelectItem value="sold">Sold</SelectItem>
                       <SelectItem value="errors">Errors</SelectItem>
                       <SelectItem value="deleted">Deleted</SelectItem>
@@ -2230,6 +2265,24 @@ const Inventory = () => {
           items={Array.isArray(selectedItemForRemoval) ? selectedItemForRemoval : selectedItemForRemoval ? [selectedItemForRemoval] : []}
           loading={removingFromShopify}
           onConfirm={handleRemoveFromShopify}
+        />
+
+        {/* Resync All Confirmation Dialog */}
+        <ConfirmationDialog
+          open={showResyncConfirm}
+          onOpenChange={setShowResyncConfirm}
+          onConfirm={() => {
+            resyncAll.mutate({
+              storeKey: assignedStore || '',
+              locationGid: selectedLocation || ''
+            });
+            setShowResyncConfirm(false);
+          }}
+          title="Resync All Items from Shopify"
+          description="This will update your database to match Shopify's current inventory levels for all items at this location. This action cannot be undone."
+          confirmText="Resync All"
+          cancelText="Cancel"
+          icon="sync"
         />
 
         <InventoryDeleteDialog

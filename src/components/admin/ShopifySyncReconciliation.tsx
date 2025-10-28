@@ -170,10 +170,10 @@ export function ShopifySyncReconciliation() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <RefreshCw className="h-5 w-5 text-primary" />
-            Shopify Inventory Reconciliation
+            Sync from Shopify
           </CardTitle>
           <CardDescription>
-            Sync actual inventory state from Shopify - fixes quantities, sold status, and sync errors
+            Pull inventory data from Shopify to update your database. This does not push changes to Shopify.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -211,7 +211,7 @@ export function ShopifySyncReconciliation() {
                         disabled={reconcileMutation.isPending}
                       >
                         <RefreshCw className="h-4 w-4 mr-2" />
-                        {dryRun ? "Preview" : "Reconcile"} {stat.bad_sync_status} Items
+                        {dryRun ? "Preview" : "Sync from Shopify"} - {stat.bad_sync_status} Items
                       </Button>
                     )}
                   </CardContent>
@@ -224,7 +224,7 @@ export function ShopifySyncReconciliation() {
             <Alert>
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
-                Found {totalIssues} items with sync issues. Reconciliation will query Shopify for actual inventory levels and update the database to match.
+                Found {totalIssues} items with sync issues. This will query Shopify for actual inventory levels and update the database to match (Shopify → Database only).
               </AlertDescription>
             </Alert>
           )}

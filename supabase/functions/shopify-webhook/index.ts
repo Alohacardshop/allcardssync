@@ -321,7 +321,8 @@ async function handleOrderUpdate(supabase: any, payload: any, shopifyDomain: str
             sold_price: price,
             sold_order_id: orderId,
             sold_channel: 'shopify',
-            sold_currency: payload.currency || 'USD'
+            sold_currency: payload.currency || 'USD',
+            updated_by: 'shopify_webhook'
           })
           .eq('id', item.id);
 
@@ -334,7 +335,10 @@ async function handleOrderUpdate(supabase: any, payload: any, shopifyDomain: str
         // For raw items, decrement quantity
         const newQuantity = Math.max(0, (item.quantity || 0) - quantity);
         
-        const updateData: any = { quantity: newQuantity };
+        const updateData: any = { 
+          quantity: newQuantity,
+          updated_by: 'shopify_webhook'
+        };
         
         // If quantity goes to 0, record sale info
         if (newQuantity === 0) {

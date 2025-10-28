@@ -5,7 +5,7 @@ export interface InventoryFilters {
   storeKey: string;
   locationGid: string;
   activeTab: 'raw' | 'graded' | 'comics';
-  statusFilter: 'all' | 'active' | 'sold' | 'deleted' | 'errors';
+  statusFilter: 'all' | 'active' | 'out-of-stock' | 'sold' | 'deleted' | 'errors';
   batchFilter: 'all' | 'in_batch' | 'removed_from_batch';
   printStatusFilter?: 'all' | 'printed' | 'not-printed';
   comicsSubCategory?: string | null;
@@ -99,7 +99,9 @@ export function useInventoryQuery(filters: InventoryFilters) {
 
       // Apply status filter
       if (statusFilter === 'active') {
-        query = query.is('deleted_at', null).gt('quantity', 0);
+        query = query.is('deleted_at', null).is('sold_at', null).gt('quantity', 0);
+      } else if (statusFilter === 'out-of-stock') {
+        query = query.is('deleted_at', null).eq('quantity', 0);
       } else if (statusFilter === 'sold') {
         query = query.not('sold_at', 'is', null);
       } else if (statusFilter === 'deleted') {

@@ -130,3 +130,6 @@ verify_jwt = true
 
 [functions.v2-shopify-reduce-raw]
 verify_jwt = true
+
+[functions.shopify-resync-inventory]
+verify_jwt = true

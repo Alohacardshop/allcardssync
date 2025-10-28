@@ -199,7 +199,19 @@ function EditIntakeItemDialog({ open, item, onOpenChange, onSave, isAdmin = fals
           </div>
           <div>
             <Label htmlFor="quantity">Quantity</Label>
-            <Input id="quantity" type="number" value={String(form.quantity ?? 1)} onChange={(e) => handleChange("quantity", Number(e.target.value) || 0)} />
+            <Input 
+              id="quantity" 
+              type="number" 
+              value={String(form.quantity ?? 1)} 
+              onChange={(e) => handleChange("quantity", Number(e.target.value) || 0)}
+              disabled={Boolean(form.shopifyProductId)}
+              className={form.shopifyProductId ? "bg-muted cursor-not-allowed" : ""}
+            />
+            {form.shopifyProductId && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Quantity managed by Shopify. Use 'Resync from Shopify' to update.
+              </p>
+            )}
           </div>
           <div>
             <Label htmlFor="sku">SKU</Label>
