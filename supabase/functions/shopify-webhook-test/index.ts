@@ -21,6 +21,21 @@ serve(async (req) => {
         available: 5,
         updated_at: new Date().toISOString()
       },
+      'orders/create': {
+        id: 555666776,
+        line_items: [
+          {
+            id: 111222332,
+            product_id: 888998999,
+            variant_id: 444555665,
+            sku: "TEST-SKU-000",
+            quantity: 1
+          }
+        ],
+        financial_status: "pending",
+        fulfillment_status: null,
+        created_at: new Date().toISOString()
+      },
       'orders/updated': {
         id: 555666777,
         line_items: [
@@ -33,9 +48,10 @@ serve(async (req) => {
           }
         ],
         financial_status: "paid",
-        fulfillment_status: null
+        fulfillment_status: null,
+        updated_at: new Date().toISOString()
       },
-      'orders/cancelled': {
+      'orders/fulfilled': {
         id: 555666778,
         line_items: [
           {
@@ -43,9 +59,25 @@ serve(async (req) => {
             product_id: 888999001,
             variant_id: 444555667,
             sku: "TEST-SKU-002",
+            quantity: 1
+          }
+        ],
+        financial_status: "paid",
+        fulfillment_status: "fulfilled",
+        updated_at: new Date().toISOString()
+      },
+      'orders/cancelled': {
+        id: 555666779,
+        line_items: [
+          {
+            id: 111222335,
+            product_id: 888999002,
+            variant_id: 444555668,
+            sku: "TEST-SKU-003",
             quantity: 2
           }
         ],
+        financial_status: "refunded",
         cancelled_at: new Date().toISOString(),
         cancel_reason: "customer"
       },
@@ -65,6 +97,12 @@ serve(async (req) => {
         ],
         created_at: new Date().toISOString()
       },
+      'inventory_items/update': {
+        id: 987654321,
+        sku: "TEST-SKU-001",
+        tracked: true,
+        updated_at: new Date().toISOString()
+      },
       'products/update': {
         id: 888999000,
         title: "Updated Test Product",
@@ -74,13 +112,14 @@ serve(async (req) => {
             id: 444555666,
             inventory_item_id: 987654321,
             sku: "TEST-SKU-001",
-            inventory_quantity: 3
+            inventory_quantity: 3,
+            price: "19.99"
           }
         ],
         updated_at: new Date().toISOString()
       },
       'products/delete': {
-        id: 888999002,
+        id: 888999003,
         title: "Deleted Test Product",
         handle: "deleted-test-product"
       }
@@ -94,12 +133,14 @@ serve(async (req) => {
       console.log(`Testing webhook: ${topic}`);
       
       try {
+        const webhookId = `test-webhook-${Date.now()}-${Math.random().toString(36).substring(7)}`;
         const response = await fetch(webhookUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'X-Shopify-Topic': topic,
-            'X-Shopify-Shop-Domain': 'aloha-card-shop-test.myshopify.com'
+            'X-Shopify-Shop-Domain': 'vqvxdi-ar.myshopify.com',
+            'X-Shopify-Webhook-Id': webhookId
           },
           body: JSON.stringify(payload)
         });
