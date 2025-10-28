@@ -492,6 +492,13 @@ export type Database = {
             referencedRelation: "intake_items"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "item_snapshots_intake_item_id_fkey"
+            columns: ["intake_item_id"]
+            isOneToOne: false
+            referencedRelation: "stale_lot_items"
+            referencedColumns: ["id"]
+          },
         ]
       }
       justtcg_analytics_snapshots: {
@@ -729,6 +736,13 @@ export type Database = {
             columns: ["intake_item_id"]
             isOneToOne: false
             referencedRelation: "intake_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "location_transfer_items_intake_item_id_fkey"
+            columns: ["intake_item_id"]
+            isOneToOne: false
+            referencedRelation: "stale_lot_items"
             referencedColumns: ["id"]
           },
           {
@@ -1362,6 +1376,13 @@ export type Database = {
             referencedRelation: "intake_items"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "shopify_sync_queue_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "stale_lot_items"
+            referencedColumns: ["id"]
+          },
         ]
       }
       sub_categories: {
@@ -1761,7 +1782,47 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      stale_lot_items: {
+        Row: {
+          age: unknown
+          created_at: string | null
+          id: string | null
+          last_modified: string | null
+          lot_id: string | null
+          psa_cert: string | null
+          sku: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          age?: never
+          created_at?: string | null
+          id?: string | null
+          last_modified?: never
+          lot_id?: string | null
+          psa_cert?: string | null
+          sku?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          age?: never
+          created_at?: string | null
+          id?: string | null
+          last_modified?: never
+          lot_id?: string | null
+          psa_cert?: string | null
+          sku?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "intake_items_lot_id_fkey"
+            columns: ["lot_id"]
+            isOneToOne: false
+            referencedRelation: "intake_lots"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       _norm_gid: { Args: { t: string }; Returns: string }
@@ -2044,6 +2105,7 @@ export type Database = {
       }
       cleanup_shopify_sync_queue: { Args: never; Returns: undefined }
       cleanup_user_session: { Args: never; Returns: undefined }
+      clear_stale_lot_items: { Args: never; Returns: undefined }
       close_empty_lot_and_create_new: {
         Args: { _location_gid: string; _store_key: string }
         Returns: {
