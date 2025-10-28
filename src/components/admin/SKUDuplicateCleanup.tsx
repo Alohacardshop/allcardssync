@@ -91,63 +91,83 @@ export function SKUDuplicateCleanup() {
       
       const keepItem = sorted[0];
       const deleteItems = sorted.slice(1);
+      const deleteIds = deleteItems.map(item => item.id);
 
       console.log(`Keeping oldest item ${keepItem.id}, deleting ${deleteItems.length} duplicates`);
 
       let shopifySuccessCount = 0;
       let shopifyFailCount = 0;
-      const deleteIds: string[] = [];
 
-      // Process each duplicate item
-      for (const item of deleteItems) {
-        deleteIds.push(item.id);
-
-        // Handle Shopify removal if item exists in Shopify
+      // Group items by shopify_product_id to avoid deleting same product multiple times
+      const shopifyGroups = new Map<string, typeof deleteItems[0]>();
+      deleteItems.forEach(item => {
         if (item.shopify_product_id && item.store_key) {
-          try {
-            // Determine if item is graded
-            const isGraded = item.type === 'Graded' || 
-                           item.grade || 
-                           item.psa_cert || 
-                           item.psa_cert_number ||
-                           item.cgc_cert;
+          // Only keep first occurrence of each shopify_product_id
+          if (!shopifyGroups.has(item.shopify_product_id)) {
+            shopifyGroups.set(item.shopify_product_id, item);
+          }
+        }
+      });
 
-            const functionName = isGraded 
-              ? 'v2-shopify-remove-graded'
-              : 'v2-shopify-remove-raw';
+      console.log(`Deleting ${shopifyGroups.size} unique Shopify products from ${deleteItems.length} duplicate items`);
 
-            console.log(`Removing ${item.id} from Shopify using ${functionName}`);
+      // Delete each unique Shopify product ONCE
+      for (const [productId, item] of shopifyGroups) {
+        try {
+          const isGraded = item.type === 'Graded' || 
+                         item.grade || 
+                         item.psa_cert || 
+                         item.psa_cert_number ||
+                         item.cgc_cert;
 
-            // Extract cert number for graded items
-            const certNumber = item.psa_cert || item.psa_cert_number || item.cgc_cert;
+          const functionName = isGraded 
+            ? 'v2-shopify-remove-graded'
+            : 'v2-shopify-remove-raw';
 
-            const { data: shopifyData, error: shopifyError } = await supabase.functions.invoke(
-              functionName,
-              {
-                body: {
-                  item_id: item.id,
-                  sku: item.sku,
-                  quantity: 1,
-                  ...(isGraded && certNumber ? { certNumber } : {})
-                }
+          const certNumber = item.psa_cert || item.psa_cert_number || item.cgc_cert;
+
+          console.log(`Removing Shopify product ${productId} using ${functionName}`);
+
+          const { data: shopifyData, error: shopifyError } = await supabase.functions.invoke(
+            functionName,
+            {
+              body: {
+                item_id: item.id,
+                sku: item.sku,
+                quantity: 1,
+                ...(isGraded && certNumber ? { certNumber } : {})
               }
-            );
-
-            if (shopifyError || !shopifyData?.ok) {
-              console.warn(`Shopify removal failed for ${item.id}:`, shopifyError || shopifyData?.error);
-              shopifyFailCount++;
-            } else {
-              shopifySuccessCount++;
             }
-          } catch (shopifyErr) {
-            console.warn(`Shopify removal error for ${item.id}:`, shopifyErr);
+          );
+
+          // Handle 404 as success (product already deleted)
+          const errorMsg = shopifyError?.message || shopifyData?.error || '';
+          const is404 = errorMsg.includes('404') || errorMsg.includes('not found');
+
+          if (is404) {
+            console.log(`Product ${productId} already deleted (404) - treating as success`);
+            shopifySuccessCount++;
+          } else if (shopifyError || !shopifyData?.ok) {
+            console.warn(`Shopify removal failed for product ${productId}:`, errorMsg);
+            shopifyFailCount++;
+          } else {
+            shopifySuccessCount++;
+          }
+        } catch (shopifyErr: any) {
+          const is404 = shopifyErr?.message?.includes('404') || shopifyErr?.message?.includes('not found');
+          if (is404) {
+            console.log(`Product ${productId} already deleted (404) - treating as success`);
+            shopifySuccessCount++;
+          } else {
+            console.warn(`Shopify removal error for product ${productId}:`, shopifyErr);
             shopifyFailCount++;
           }
         }
       }
 
-      // Soft delete from database (Edge functions mark as sold, we add soft-delete fields)
+      // ALWAYS soft-delete ALL database duplicates (even if Shopify fails)
       if (deleteIds.length > 0) {
+        console.log(`Soft-deleting ${deleteIds.length} database records`);
         const { error: deleteError } = await supabase
           .from('intake_items')
           .update({ 
@@ -158,19 +178,22 @@ export function SKUDuplicateCleanup() {
           })
           .in('id', deleteIds);
 
-        if (deleteError) throw deleteError;
+        if (deleteError) {
+          console.error('Database soft-delete failed:', deleteError);
+          throw deleteError;
+        }
       }
 
       // Show detailed results
-      const messages = [`Deleted ${deleteItems.length} duplicates for SKU ${sku}`];
+      const messages = [`✓ Deleted ${deleteItems.length} duplicates for SKU ${sku}`];
       if (shopifySuccessCount > 0) {
-        messages.push(`${shopifySuccessCount} removed from Shopify`);
+        messages.push(`✓ ${shopifySuccessCount} removed from Shopify`);
       }
       if (shopifyFailCount > 0) {
-        messages.push(`${shopifyFailCount} Shopify removals failed`);
+        messages.push(`⚠ ${shopifyFailCount} Shopify removals failed (but database cleaned)`);
       }
 
-      toast.success(messages.join(', '));
+      toast.success(messages.join('\n'));
       
       // Remove from display
       setDuplicates(prev => prev.filter(d => d.sku !== sku));
@@ -190,10 +213,9 @@ export function SKUDuplicateCleanup() {
     setIsDeletingAll(true);
 
     try {
-      // Process all groups in parallel for efficiency
+      // Process all groups sequentially to avoid overwhelming Shopify API
       const results = await Promise.allSettled(
         duplicates.map(async (group) => {
-          // Create a temporary state update for this group
           setIsDeleting(prev => ({ ...prev, [group.sku]: true }));
           
           try {
@@ -203,53 +225,69 @@ export function SKUDuplicateCleanup() {
             
             const keepItem = sorted[0];
             const deleteItems = sorted.slice(1);
-            const deleteIds: string[] = [];
+            const deleteIds = deleteItems.map(item => item.id);
             let shopifySuccessCount = 0;
             let shopifyFailCount = 0;
 
-            // Process Shopify removals for each duplicate
-            for (const item of deleteItems) {
-              deleteIds.push(item.id);
-
+            // Group by shopify_product_id to delete each unique product once
+            const shopifyGroups = new Map<string, typeof deleteItems[0]>();
+            deleteItems.forEach(item => {
               if (item.shopify_product_id && item.store_key) {
-                try {
-                  const isGraded = item.type === 'Graded' || 
-                                 item.grade || 
-                                 item.psa_cert || 
-                                 item.psa_cert_number ||
-                                 item.cgc_cert;
+                if (!shopifyGroups.has(item.shopify_product_id)) {
+                  shopifyGroups.set(item.shopify_product_id, item);
+                }
+              }
+            });
 
-                  const functionName = isGraded 
-                    ? 'v2-shopify-remove-graded'
-                    : 'v2-shopify-remove-raw';
+            // Delete each unique Shopify product ONCE
+            for (const [productId, item] of shopifyGroups) {
+              try {
+                const isGraded = item.type === 'Graded' || 
+                               item.grade || 
+                               item.psa_cert || 
+                               item.psa_cert_number ||
+                               item.cgc_cert;
 
-                  // Extract cert number for graded items
-                  const certNumber = item.psa_cert || item.psa_cert_number || item.cgc_cert;
+                const functionName = isGraded 
+                  ? 'v2-shopify-remove-graded'
+                  : 'v2-shopify-remove-raw';
 
-                  const { data: shopifyData, error: shopifyError } = await supabase.functions.invoke(
-                    functionName,
-                    { 
-                      body: { 
-                        item_id: item.id, 
-                        sku: item.sku,
-                        quantity: 1,
-                        ...(isGraded && certNumber ? { certNumber } : {})
-                      } 
-                    }
-                  );
+                const certNumber = item.psa_cert || item.psa_cert_number || item.cgc_cert;
 
-                  if (shopifyError || !shopifyData?.ok) {
-                    shopifyFailCount++;
-                  } else {
-                    shopifySuccessCount++;
+                const { data: shopifyData, error: shopifyError } = await supabase.functions.invoke(
+                  functionName,
+                  { 
+                    body: { 
+                      item_id: item.id, 
+                      sku: item.sku,
+                      quantity: 1,
+                      ...(isGraded && certNumber ? { certNumber } : {})
+                    } 
                   }
-                } catch {
+                );
+
+                // Handle 404 as success (product already deleted)
+                const errorMsg = shopifyError?.message || shopifyData?.error || '';
+                const is404 = errorMsg.includes('404') || errorMsg.includes('not found');
+
+                if (is404) {
+                  shopifySuccessCount++;
+                } else if (shopifyError || !shopifyData?.ok) {
+                  shopifyFailCount++;
+                } else {
+                  shopifySuccessCount++;
+                }
+              } catch (shopifyErr: any) {
+                const is404 = shopifyErr?.message?.includes('404') || shopifyErr?.message?.includes('not found');
+                if (is404) {
+                  shopifySuccessCount++;
+                } else {
                   shopifyFailCount++;
                 }
               }
             }
 
-            // Soft delete from database (Edge functions mark as sold, we add soft-delete fields)
+            // ALWAYS soft-delete ALL database duplicates
             if (deleteIds.length > 0) {
               const { error: deleteError } = await supabase
                 .from('intake_items')
