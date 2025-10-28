@@ -195,6 +195,54 @@ export const DuplicateCleanup = () => {
           </Alert>
         )}
 
+        {/* Manual SQL Fix Option */}
+        <Card className="border-yellow-500/50 bg-yellow-500/5">
+          <CardHeader>
+            <CardTitle className="text-sm flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4" />
+              Manual SQL Fix (Bypass All Triggers)
+            </CardTitle>
+            <CardDescription>
+              If the automated cleanup isn't working, run this SQL directly in Supabase SQL Editor
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="bg-muted p-4 rounded-lg font-mono text-xs overflow-x-auto">
+                <pre>{`-- Soft-delete duplicate PSA certs, keeping the oldest
+WITH duplicates AS (
+  SELECT 
+    psa_cert,
+    array_agg(id ORDER BY created_at ASC) as item_ids
+  FROM public.intake_items
+  WHERE psa_cert IS NOT NULL 
+    AND psa_cert != ''
+    AND deleted_at IS NULL
+  GROUP BY psa_cert
+  HAVING COUNT(*) > 1
+),
+to_delete AS (
+  SELECT 
+    psa_cert,
+    unnest(item_ids[2:array_length(item_ids, 1)]) as id_to_delete,
+    item_ids[1] as kept_id
+  FROM duplicates
+)
+UPDATE public.intake_items
+SET 
+  deleted_at = now(),
+  deleted_reason = 'Duplicate PSA cert - kept item ' || td.kept_id,
+  updated_at = now()
+FROM to_delete td
+WHERE intake_items.id = td.id_to_delete;`}</pre>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Copy this SQL and run it in your Supabase SQL Editor to manually delete duplicates.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
         {duplicates.length > 0 && (
           <div className="space-y-4">
             {duplicates.map((dup) => (
