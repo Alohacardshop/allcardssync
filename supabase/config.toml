@@ -48,6 +48,10 @@ verify_jwt = true
 [functions.shopify-webhook]
 verify_jwt = false
 
+# Shopify integration test endpoint (requires authentication)
+[functions.shopify-test-webhook]
+verify_jwt = true
+
 [functions.v2-shopify-send]
 verify_jwt = true
 
