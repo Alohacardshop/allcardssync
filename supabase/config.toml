@@ -83,6 +83,10 @@ verify_jwt = true
 [functions.shopify-reconcile-inventory]
 verify_jwt = true
 
+# Shopify sold items reconciliation - syncs actual inventory from Shopify (requires staff/admin role)
+[functions.shopify-reconcile-sold-items]
+verify_jwt = true
+
 # Shopify inventory import (requires staff/admin role)
 [functions.shopify-import-inventory]
 verify_jwt = true
