@@ -42,109 +42,279 @@ chmod +x scripts/check-intake-no-shopify.sh
 
 ## Database Maintenance Scripts
 
+> **Last Updated**: 2025-10-29  
+> **Author**: Dorian Takahashi  
+> **Context**: Fixes for PostgreSQL trigger cache issues after adding `updated_by` column to `intake_items`
+
+### Overview
+
+These scripts resolve common PostgreSQL/PostgREST caching issues that occur after schema changes, particularly when adding columns to tables with trigger functions.
+
+**The Problem**: When you add a column (like `updated_by`) to a table that has trigger functions referencing `NEW` or `OLD` records, PostgreSQL may cache the old row type definition. This causes errors like:
+```
+record "new" has no field "updated_by"
+```
+
+**The Solution**: Recompile trigger functions, recreate RPCs, and clear prepared statement cache.
+
+---
+
 ### `db-fix-intake-items.sh`
 
-Applies all database fixes for the `updated_by` column issue in the `intake_items` table.
+**Purpose**: Comprehensive fix script that applies all necessary database changes to resolve the `updated_by` column issue.
 
-**Purpose**: 
-- Recompiles triggers to recognize new columns
-- Recreates the `send_intake_items_to_inventory` RPC function
-- Clears PostgreSQL prepared statement cache (resolves PostgREST stale plan issues)
+**What it does**:
+1. Recompiles all 10 trigger functions attached to `intake_items` with current schema
+2. Recreates the `send_intake_items_to_inventory` RPC function with updated signature
+3. Clears PostgreSQL prepared statement cache (resolves PostgREST stale plan issues)
+4. Ensures the `updated_by` audit trigger is properly configured
 
-**Usage**:
+**Usage for Supabase**:
+```bash
+# Run the script (it will detect Supabase automatically)
+./scripts/db-fix-intake-items.sh
+
+# Then follow the instructions to run these files in SQL Editor:
+# 1. db/fixes/recompile_intake_items_triggers.sql
+# 2. db/fixes/recreate_send_intake_items_to_inventory.sql
+# 3. db/fixes/discard_all.sql
+# 4. db/fixes/ensure_updated_by_trigger.sql
+```
+
+**Usage for Local PostgreSQL**:
 ```bash
 # Make executable (first time only)
 chmod +x scripts/db-fix-intake-items.sh
 
-# Run the fixes
+# Run all fixes automatically
 ./scripts/db-fix-intake-items.sh
 ```
 
-**For Supabase Projects**: The script detects Supabase and provides SQL Editor instructions instead of attempting direct psql connection.
-
-**What it runs**:
-1. `db/fixes/recompile_intake_items_triggers.sql` - Recompiles all triggers on intake_items
-2. `db/fixes/recreate_send_intake_items_to_inventory.sql` - Recreates the RPC with updated signature
-3. `db/fixes/discard_all.sql` - Clears prepared statement cache
+**SQL Files Included**:
+- `db/fixes/recompile_intake_items_triggers.sql` - Recompiles all 10 trigger functions on intake_items
+- `db/fixes/recreate_send_intake_items_to_inventory.sql` - Recreates the RPC with `updated_by` field
+- `db/fixes/discard_all.sql` - Clears prepared statement cache
+- `db/fixes/ensure_updated_by_trigger.sql` - Idempotently creates/updates the audit trigger
 
 **When to use**:
-- After adding/removing columns to tables with triggers
-- When seeing "has no field" errors in RPC calls
-- After any schema changes affecting trigger `NEW`/`OLD` records
+- ⚠️ After adding/removing columns to tables with triggers
+- ⚠️ When seeing `"has no field"` errors in RPC calls or triggers
+- ⚠️ After schema changes affecting trigger `NEW`/`OLD` records
+- ⚠️ When "Send to Inventory" operation fails with database errors
+- ✅ After running `db/migrations/2025-10-29_add_updated_by_to_intake_items.sql`
 
 ---
 
 ### `db-test-updated-by.sh`
 
-Verifies that the `updated_by` audit column is properly populated by the trigger.
-
 **Purpose**: End-to-end test to confirm the `intake_items_audit_updated_by` trigger is working correctly.
 
-**Usage**:
+**What it does**:
+1. Selects a test item from `intake_items` table (random or specified by UUID)
+2. Updates the item to trigger the `updated_by` column
+3. Verifies `updated_by` was automatically populated
+4. Displays the 5 most recent items with their `updated_by` values
+5. Reports success or failure with clear diagnostics
+
+**Usage for Supabase**:
+```bash
+# Run the script (it will provide SQL Editor instructions)
+./scripts/db-test-updated-by.sh
+
+# Or with a specific item ID
+./scripts/db-test-updated-by.sh 12345678-1234-1234-1234-123456789abc
+
+# Then copy/paste the appropriate SQL file:
+# - db/tests/test_updated_by_fix.sql (random item)
+# - db/tests/test_updated_by_with_id.sql (specific item)
+```
+
+**Usage for Local PostgreSQL**:
 ```bash
 # Make executable (first time only)
 chmod +x scripts/db-test-updated-by.sh
 
-# Test with a specific item
-./scripts/db-test-updated-by.sh <item_uuid>
-
-# Test with a random item (auto-selects from DB)
+# Test with random item
 ./scripts/db-test-updated-by.sh
+
+# Test with specific item
+./scripts/db-test-updated-by.sh <item_uuid>
 ```
 
-**What it does**:
-1. Selects an item from `intake_items` table (random if no ID provided)
-2. Updates the item's `processing_notes` field
-3. Verifies `updated_by` was automatically set by the trigger
-4. Reports success or failure with troubleshooting steps
-
-**For Supabase Projects**: Outputs SQL you can run directly in the SQL Editor.
+**SQL Files Included**:
+- `db/tests/test_updated_by_fix.sql` - Tests with a random item from the database
+- `db/tests/test_updated_by_with_id.sql` - Tests with a specific item (replace placeholder ID)
 
 **Success criteria**:
 - ✅ `updated_by` is populated with the current user's UUID
 - ✅ `updated_at` is set to current timestamp
 - ✅ No errors thrown during update
+- ✅ Test exits cleanly even if no rows exist
 
-**Troubleshooting on failure**:
-1. Ensure migration has been applied: `db/migrations/2025-10-29_add_updated_by_to_intake_items.sql`
-2. Run fix script: `./scripts/db-fix-intake-items.sh`
-3. Verify trigger: `SELECT * FROM pg_trigger WHERE tgname = 'intake_items_audit_updated_by';`
+**On failure, the test provides**:
+- Clear error messages indicating what went wrong
+- List of required fix scripts to run
+- Verification queries to check trigger status
 
 ---
 
 ### `db-discard-all.sql`
 
-Minimal SQL script to clear PostgREST prepared statement cache.
+**Purpose**: Minimal SQL script to clear PostgREST prepared statement cache and force schema reparse.
 
-**Purpose**: Forces PostgreSQL to reparse queries with the current schema after schema modifications.
+**What it does**:
+- Executes `DISCARD ALL` to clear all prepared statements in the current connection
+- Resets temporary tables and session-level variables
+- Forces PostgreSQL to recompile queries with the current schema on next execution
+- Includes success message for verification
 
-**Usage**:
+**Usage for Supabase**:
 ```bash
-# In Supabase SQL Editor
-# Copy and paste: scripts/db-discard-all.sql
+# Open SQL Editor
+# https://supabase.com/dashboard/project/dmpoandoydaqxhzdjnmk/sql/new
 
-# Or for local PostgreSQL
+# Copy and paste: scripts/db-discard-all.sql
+# Click "Run" button
+```
+
+**Usage for Local PostgreSQL**:
+```bash
 psql -f scripts/db-discard-all.sql
 ```
 
 **When to use**:
 - ⚠️ After adding or removing columns from tables
-- ⚠️ After modifying trigger functions
-- ⚠️ After schema migrations that affect row types (NEW/OLD records)
-- ⚠️ When seeing "record has no field" errors
-- ✅ After running `db/migrations/2025-10-29_add_updated_by_to_intake_items.sql`
-
-**What it does**:
-- Clears all prepared statements in the current connection
-- Resets temporary tables and session-level variables
-- Forces recompilation of queries on next execution
+- ⚠️ After modifying trigger functions (especially those using NEW/OLD)
+- ⚠️ After schema migrations that affect row types
+- ⚠️ When seeing `"record has no field"` errors
+- ⚠️ When RPC calls fail with schema-related errors
+- ✅ After running any of the `db/fixes/` SQL files
 
 **Limitations**:
-- Only affects the CURRENT database connection
+- **Only affects the CURRENT database connection**
 - Other connections in PostgREST pool still have stale cache
-- For production, may need to restart PostgREST or wait for connection recycling
+- For production Supabase, may need to wait for connection pool recycling
+- Cannot restart PostgREST directly (managed by Supabase)
 
 **Safe**: No data is modified - this only clears query cache.
+
+---
+
+## Supabase SQL Editor Instructions
+
+All SQL scripts in this project are designed to work in the Supabase SQL Editor without modification.
+
+**How to run SQL in Supabase**:
+
+1. **Open SQL Editor**:
+   ```
+   https://supabase.com/dashboard/project/dmpoandoydaqxhzdjnmk/sql/new
+   ```
+
+2. **Copy the SQL file contents**:
+   - Open the `.sql` file in this repository
+   - Copy all contents (Ctrl+A, Ctrl+C)
+
+3. **Paste into SQL Editor**:
+   - Paste into the SQL Editor panel
+   - Review the SQL (all scripts include comments)
+
+4. **Run the query**:
+   - Click the green "Run" button
+   - Watch for NOTICE messages in the results panel
+   - Check for success messages (✅) or errors (❌)
+
+5. **Run multiple files in order**:
+   - For `db-fix-intake-items.sh`, run files 1-4 in sequence
+   - Wait for each to complete before running the next
+   - Each file includes verification checks
+
+**Tips**:
+- Scripts include `DO $$ BEGIN ... END $$` blocks with RAISE NOTICE for progress tracking
+- Look for ✅ success or ❌ failure indicators in the output
+- If a script fails, read the error message - it usually includes next steps
+- After running all fixes, hard refresh your browser (Ctrl+Shift+R)
+
+---
+
+## Troubleshooting
+
+### "record 'new' has no field 'updated_by'" Error
+
+**Symptom**: RPC calls or triggers fail with:
+```
+record "new" has no field "updated_by"
+ERROR: record "old" has no field "updated_by"
+```
+
+**Root Cause**: PostgreSQL has cached the old row type definition before the `updated_by` column was added. Trigger functions still reference the old schema.
+
+**Solution**:
+
+1. **Run the comprehensive fix**:
+   ```bash
+   ./scripts/db-fix-intake-items.sh
+   ```
+   Follow the instructions to run all 4 SQL files in Supabase SQL Editor.
+
+2. **If still seeing errors after fix**:
+   - **Recreate trigger functions again**: Run `db/fixes/recompile_intake_items_triggers.sql` a second time
+   - **Clear cache again**: Run `db/fixes/discard_all.sql` in a new SQL Editor tab
+   - **Wait for connection pool recycling**: Supabase PostgREST connections may need 5-10 minutes to recycle
+   - **Hard refresh browser**: Clear client-side cache with Ctrl+Shift+R
+
+3. **Verify the fix worked**:
+   ```bash
+   ./scripts/db-test-updated-by.sh
+   ```
+   This will confirm the `updated_by` column is accessible and working.
+
+4. **Nuclear option - Restart PostgREST** (if you have access):
+   - In Supabase dashboard: Project Settings → Database → Connection Pooler → Restart
+   - This forces all connections to reconnect with fresh schema cache
+   - **Note**: Only available for project owners/admins
+
+### Other Common Issues
+
+**"Item not found or already processed"**:
+- The item has already been sent to inventory (`removed_from_batch_at` is set)
+- This is not an error - the item was already processed
+- Check the item's status in the database
+
+**"No items found in intake_items table"**:
+- The test script couldn't find any eligible items
+- Create some test intake items first
+- Or specify a known item UUID as argument
+
+**"Trigger does not exist"**:
+- The migration hasn't been run yet
+- Run: `db/migrations/2025-10-29_add_updated_by_to_intake_items.sql`
+- Then run the fix script
+
+**SQL Editor shows "permission denied"**:
+- Ensure you're logged in as admin/owner
+- These functions use SECURITY DEFINER which requires elevated privileges
+- Check your role assignments in Supabase dashboard
+
+### Prevention
+
+To avoid these issues in the future:
+
+1. **After ANY column addition to trigger-enabled tables**:
+   - Run `DISCARD ALL` immediately
+   - Recreate all trigger functions with `CREATE OR REPLACE`
+   - Test with a sample update before deploying to users
+
+2. **Document schema changes**:
+   - Update `docs/schema-changelog.md`
+   - Note which triggers are affected
+   - Include fix instructions
+
+3. **Use the migration pattern**:
+   - Add column with migration
+   - Recreate triggers in same migration
+   - Include `DISCARD ALL` at the end
+   - Test before committing
 
 ---
 
