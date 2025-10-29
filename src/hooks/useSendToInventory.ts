@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import type { DatabaseFunctionsExtended } from '@/integrations/supabase/types-augmentation';
 import { queryKeys } from '@/lib/queryKeys';
 import { toast } from 'sonner';
 
@@ -28,12 +29,12 @@ export function useSendToInventory() {
 
   return useMutation({
     mutationFn: async ({ itemIds }: SendToInventoryVars): Promise<RpcResult> => {
-      const { data, error } = await supabase.rpc('send_and_queue_inventory' as any, { 
+      const { data, error } = await (supabase.rpc as any)('send_and_queue_inventory', { 
         item_ids: itemIds 
-      });
+      }) as { data: DatabaseFunctionsExtended['public']['Functions']['send_and_queue_inventory']['Returns'] | null, error: any };
       
       if (error) throw error;
-      return data as unknown as RpcResult;
+      return data as RpcResult;
     },
     
     onMutate: async ({ storeKey, locationGid, itemIds }) => {
