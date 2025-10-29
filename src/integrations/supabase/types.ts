@@ -1331,6 +1331,7 @@ export type Database = {
           shopify_product_id: string | null
           started_at: string | null
           status: string
+          updated_at: string
         }
         Insert: {
           action: string
@@ -1349,6 +1350,7 @@ export type Database = {
           shopify_product_id?: string | null
           started_at?: string | null
           status?: string
+          updated_at?: string
         }
         Update: {
           action?: string
@@ -1367,6 +1369,7 @@ export type Database = {
           shopify_product_id?: string | null
           started_at?: string | null
           status?: string
+          updated_at?: string
         }
         Relationships: [
           {
@@ -2247,91 +2250,7 @@ export type Database = {
         }[]
       }
       secure_get_secret: { Args: { secret_name: string }; Returns: string }
-      send_intake_item_to_inventory: {
-        Args: { item_id: string }
-        Returns: {
-          brand_title: string | null
-          card_number: string | null
-          catalog_snapshot: Json | null
-          category: string | null
-          cgc_cert: string | null
-          cgc_snapshot: Json | null
-          cost: number | null
-          created_at: string
-          created_by: string | null
-          deleted_at: string | null
-          deleted_reason: string | null
-          grade: string | null
-          grading_company: string
-          grading_data: Json | null
-          id: string
-          image_urls: Json | null
-          intake_batch_id: string | null
-          label_snapshot: Json | null
-          last_shopify_correlation_id: string | null
-          last_shopify_location_gid: string | null
-          last_shopify_removal_error: string | null
-          last_shopify_store_key: string | null
-          last_shopify_sync_error: string | null
-          last_shopify_synced_at: string | null
-          lot_id: string | null
-          lot_number: string
-          main_category: string | null
-          original_filename: string | null
-          price: number | null
-          pricing_snapshot: Json | null
-          printed_at: string | null
-          processing_notes: string | null
-          product_weight: number | null
-          psa_cert: string | null
-          psa_cert_number: string | null
-          psa_last_check: string | null
-          psa_snapshot: Json | null
-          psa_verified: boolean | null
-          pushed_at: string | null
-          quantity: number
-          removed_from_batch_at: string | null
-          shopify_inventory_item_id: string | null
-          shopify_location_gid: string | null
-          shopify_order_id: string | null
-          shopify_product_id: string | null
-          shopify_removal_mode: string | null
-          shopify_removed_at: string | null
-          shopify_snapshot: Json | null
-          shopify_sync_snapshot: Json | null
-          shopify_sync_status: string | null
-          shopify_variant_id: string | null
-          sku: string | null
-          sold_at: string | null
-          sold_channel: string | null
-          sold_currency: string | null
-          sold_order_id: string | null
-          sold_price: number | null
-          source_payload: Json | null
-          source_provider: string | null
-          source_row_number: number | null
-          store_key: string | null
-          sub_category: string | null
-          subject: string | null
-          type: string | null
-          unique_item_uid: string
-          updated_at: string
-          updated_by: string | null
-          variant: string | null
-          vendor: string | null
-          year: string | null
-        }
-        SetofOptions: {
-          from: "*"
-          to: "intake_items"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
-      send_intake_items_to_inventory: {
-        Args: { item_ids: string[] }
-        Returns: Json
-      }
+      send_and_queue_inventory: { Args: { item_ids: string[] }; Returns: Json }
       set_template_default: {
         Args: { template_id: string; template_type_param?: string }
         Returns: undefined
