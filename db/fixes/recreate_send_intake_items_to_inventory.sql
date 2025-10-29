@@ -1,5 +1,5 @@
 -- Recreate send_intake_items_to_inventory RPC function
--- This clears any cached row-type assumptions about intake_items
+-- Now returns processed_ids array and rejected array for accurate frontend tracking
 
 CREATE OR REPLACE FUNCTION public.send_intake_items_to_inventory(item_ids uuid[])
 RETURNS jsonb
@@ -8,9 +8,8 @@ SECURITY DEFINER
 SET search_path TO 'public'
 AS $function$
 DECLARE
-  processed_count INTEGER := 0;
-  failed_count INTEGER := 0;
-  failed_items jsonb := '[]'::jsonb;
+  processed_ids uuid[] := ARRAY[]::uuid[];
+  rejected jsonb := '[]'::jsonb;
   item_id uuid;
   error_msg text;
 BEGIN
@@ -26,31 +25,31 @@ BEGIN
       WHERE id = item_id
         AND deleted_at IS NULL
         AND removed_from_batch_at IS NULL;
-      
+
+      -- Track success or failure
       IF FOUND THEN
-        processed_count := processed_count + 1;
+        processed_ids := array_append(processed_ids, item_id);
       ELSE
-        failed_count := failed_count + 1;
-        failed_items := failed_items || jsonb_build_object(
+        rejected := rejected || jsonb_build_object(
           'id', item_id,
-          'error', 'Item not found or already processed'
+          'reason', 'Item not found or already processed'
         );
       END IF;
+
     EXCEPTION WHEN OTHERS THEN
-      failed_count := failed_count + 1;
       GET STACKED DIAGNOSTICS error_msg = MESSAGE_TEXT;
-      failed_items := failed_items || jsonb_build_object(
+      rejected := rejected || jsonb_build_object(
         'id', item_id,
-        'error', error_msg
+        'reason', error_msg
       );
     END;
   END LOOP;
   
-  -- Return summary
+  -- Return summary with processed_ids array
   RETURN jsonb_build_object(
-    'processed', processed_count,
-    'failed', failed_count,
-    'failed_items', failed_items
+    'processed', COALESCE(array_length(processed_ids, 1), 0),
+    'processed_ids', processed_ids,
+    'rejected', rejected
   );
 END;
 $function$;
@@ -59,5 +58,5 @@ $function$;
 DO $$
 BEGIN
   RAISE NOTICE '✅ Successfully recreated send_intake_items_to_inventory RPC';
-  RAISE NOTICE 'Function now recognizes the updated_by column';
+  RAISE NOTICE 'Function now returns processed_ids array and rejected array';
 END $$;

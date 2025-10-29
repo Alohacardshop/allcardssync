@@ -315,14 +315,24 @@ export function useBatchSendToShopify() {
           }
 
           // Step 3: Queue successful items for Shopify sync
-          const inventoryResult = inventoryData as any
-          if (inventoryResult?.processed_ids && inventoryResult.processed_ids.length > 0) {
-            logger.info(`Queueing ${inventoryResult.processed_ids.length} items for Shopify sync`, {}, 'useBatchSendToShopify')
+          const inventoryResult = inventoryData as {
+            processed: number;
+            processed_ids: string[];
+            rejected: Array<{ id: string; reason: string }>;
+          };
+          
+          const processedIds: string[] = inventoryResult?.processed_ids ?? [];
+          const rejected = inventoryResult?.rejected ?? [];
+          
+          logger.info(`Inventory send result: ${processedIds.length} processed, ${rejected.length} rejected`, {}, 'useBatchSendToShopify');
+          
+          if (processedIds.length > 0) {
+            logger.info(`Queueing ${processedIds.length} items for Shopify sync`, {}, 'useBatchSendToShopify')
             
             // Queue each item individually for Shopify sync with small delay to prevent position conflicts
-            for (let i = 0; i < inventoryResult.processed_ids.length; i++) {
-              const itemId = inventoryResult.processed_ids[i]
-              logger.debug(`Queuing item for Shopify sync`, { itemId, progress: `${i + 1}/${inventoryResult.processed_ids.length}` }, 'useBatchSendToShopify')
+            for (let i = 0; i < processedIds.length; i++) {
+              const itemId = processedIds[i]
+              logger.debug(`Queuing item for Shopify sync`, { itemId, progress: `${i + 1}/${processedIds.length}` }, 'useBatchSendToShopify')
               
               try {
                 const { error: queueError } = await supabase.rpc('queue_shopify_sync', {
@@ -339,7 +349,7 @@ export function useBatchSendToShopify() {
                   totalQueued++
                   
                   // Small delay between queuing items to prevent position conflicts
-                  if (i < inventoryResult.processed_ids.length - 1) {
+                  if (i < processedIds.length - 1) {
                     await delay(100) // 100ms delay between each queue operation
                   }
                 }
@@ -353,17 +363,26 @@ export function useBatchSendToShopify() {
               }
             }
 
-            totalProcessed += inventoryResult.processed_ids.length
+            totalProcessed += processedIds.length
+          } else {
+            logger.warn(`No items processed in chunk ${chunkIndex + 1}`, { rejected }, 'useBatchSendToShopify');
           }
 
           // Handle rejected items from inventory step
-          if (inventoryResult?.rejected && inventoryResult.rejected.length > 0) {
-            allRejectedItems.push(...inventoryResult.rejected)
-            totalRejected += inventoryResult.rejected.length
+          if (rejected.length > 0) {
+            allRejectedItems.push(...rejected);
+            totalRejected += rejected.length;
+            
+            // Show warning toast with rejection reasons
+            const reasonSummary = rejected.slice(0, 3).map(r => r.reason).join(', ');
+            toast.warning(`${rejected.length} items could not be processed`, {
+              description: reasonSummary + (rejected.length > 3 ? '...' : ''),
+              duration: 5000
+            });
           }
           
           processedItems += chunk.length
-          toast.success(`Chunk ${chunkIndex + 1}/${totalChunks} completed: ${inventoryResult?.processed_ids?.length || 0} items moved to inventory`)
+          toast.success(`Chunk ${chunkIndex + 1}/${totalChunks} completed: ${processedIds.length} items moved to inventory`)
           
           // Invalidate batch query to update UI across all components
           await queryClient.invalidateQueries({ 
