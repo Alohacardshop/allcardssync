@@ -112,6 +112,42 @@ chmod +x scripts/db-test-updated-by.sh
 
 ---
 
+### `db-discard-all.sql`
+
+Minimal SQL script to clear PostgREST prepared statement cache.
+
+**Purpose**: Forces PostgreSQL to reparse queries with the current schema after schema modifications.
+
+**Usage**:
+```bash
+# In Supabase SQL Editor
+# Copy and paste: scripts/db-discard-all.sql
+
+# Or for local PostgreSQL
+psql -f scripts/db-discard-all.sql
+```
+
+**When to use**:
+- ⚠️ After adding or removing columns from tables
+- ⚠️ After modifying trigger functions
+- ⚠️ After schema migrations that affect row types (NEW/OLD records)
+- ⚠️ When seeing "record has no field" errors
+- ✅ After running `db/migrations/2025-10-29_add_updated_by_to_intake_items.sql`
+
+**What it does**:
+- Clears all prepared statements in the current connection
+- Resets temporary tables and session-level variables
+- Forces recompilation of queries on next execution
+
+**Limitations**:
+- Only affects the CURRENT database connection
+- Other connections in PostgREST pool still have stale cache
+- For production, may need to restart PostgREST or wait for connection recycling
+
+**Safe**: No data is modified - this only clears query cache.
+
+---
+
 ## Related Documentation
 
 - **Cache Issues**: See `docs/supabase-cache-notes.md` for PostgREST cache troubleshooting
