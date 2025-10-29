@@ -1,0 +1,40 @@
+-- DISCARD ALL: Clear all cached prepared statements and temporary session state
+--
+-- WHEN TO USE:
+-- - After schema migrations that add/remove columns to tables referenced in triggers
+-- - When seeing "record 'new' has no field 'column_name'" errors
+-- - After recreating functions that reference NEW/OLD row types in triggers
+-- - When PostgREST connection pool has stale prepared statements
+--
+-- WHAT IT DOES:
+-- - Clears all prepared statements in the current connection
+-- - Resets temporary tables, sequences, and session-level variables
+-- - Forces PostgreSQL to recompile queries with current schema on next execution
+--
+-- LIMITATIONS:
+-- - Only affects the CURRENT database connection
+-- - Other connections in the pool still have stale cache
+-- - For production, may need to restart PostgREST or wait for connection recycling
+--
+-- HOW TO USE:
+-- 1. Connect to your database using psql or Supabase SQL Editor
+-- 2. Run this command in a transaction or standalone
+-- 3. Verify by running a test UPDATE on the affected table
+--
+-- EXAMPLE TEST AFTER RUNNING:
+-- UPDATE public.intake_items 
+-- SET updated_by = auth.uid()::text
+-- WHERE id = '<test-item-id>';
+-- 
+-- If this succeeds without error, the cache has been cleared for this connection.
+--
+-- NOTE: This is a session-level command, not transactional. 
+-- It executes immediately and cannot be rolled back.
+
+DISCARD ALL;
+
+-- After running this, the next query will force a recompile with current schema.
+-- If errors persist, you need to:
+-- 1. Recreate all trigger functions (CREATE OR REPLACE)
+-- 2. Restart PostgREST connection pool (production)
+-- 3. Advise users to hard refresh their browsers
