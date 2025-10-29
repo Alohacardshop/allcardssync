@@ -50,7 +50,6 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
   const [selectedVendor, setSelectedVendor] = useState<string>('');
   const [loadingVendors, setLoadingVendors] = useState(false);
   const [batchProgressOpen, setBatchProgressOpen] = useState(false);
-  const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const { sendChunkedBatchToShopify, isSending, progress } = useBatchSendToShopify();
   const { getAutoProcessConfig, getProcessingMode } = useBatchAutoProcessSettings();
@@ -142,156 +141,6 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
             item.catalog_snapshot.type === 'card_bulk');
   };
 
-  // Simplified fetch with single recovery attempt
-  const fetchRecentItemsWithRetry = useCallback(async (): Promise<void> => {
-    try {
-      setLoading(true);
-      
-      // If context is missing, try one recovery from active lot
-      if (!selectedLocation && assignedStore) {
-        try {
-          const { data: activeLot } = await supabase
-            .from('intake_lots')
-            .select('shopify_location_gid')
-            .eq('store_key', assignedStore)
-            .eq('status', 'active')
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-            
-          if (activeLot?.shopify_location_gid) {
-            await fetchRecentItems(assignedStore, activeLot.shopify_location_gid);
-            return;
-          }
-        } catch (error) {
-          logger.logError('Recovery from active lot failed', error instanceof Error ? error : new Error(String(error)));
-          // Continue to normal fetch
-        }
-      }
-      
-      await fetchRecentItems(assignedStore, selectedLocation);
-    } catch (error) {
-      logger.logError('fetchRecentItemsWithRetry error', error instanceof Error ? error : new Error(String(error)));
-      toast({ title: "Error", description: "Failed to load batch items" });
-    } finally {
-      setLoading(false);
-    }
-  }, [assignedStore, selectedLocation]);
-
-  // Fetch recent items from the current batch
-  const fetchRecentItems = async (storeKey?: string, locationGid?: string) => {
-    const store = storeKey || assignedStore;
-    const location = locationGid || selectedLocation;
-    
-    if (!store || !location) {
-      logger.logError('Store context missing', undefined, { store, location });
-      return;
-    }
-
-    logStoreContext('CurrentBatchPanel.fetchRecentItems', { assignedStore: store, selectedLocation: location });
-
-    try {
-      validateCompleteStoreContext({ assignedStore: store, selectedLocation: location }, 'fetch batch items');
-      
-      // First get the current lot for this user and store/location
-      const { data: lot, error: lotError } = await supabase
-        .from("intake_lots")
-        .select("*")
-        .eq("status", "active")
-        .eq("store_key", store)
-        .eq("shopify_location_gid", location)
-        .eq("created_by", (await supabase.auth.getUser()).data.user?.id)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (lotError) {
-        logger.logError('Error fetching lot', new Error(lotError.message));
-        return;
-      }
-
-      if (!lot) {
-        logger.logDebug('No active lot found', { store, location });
-        setRecentItems([]);
-        setCounts({ activeItems: 0, totalItems: 0 });
-        if (onBatchCountUpdate) {
-          onBatchCountUpdate(0);
-        }
-        return;
-      }
-
-      const currentUserId = (await supabase.auth.getUser()).data.user?.id;
-      logger.logDebug('Querying items for lot', {
-        lot_id: lot.id,
-        lot_number: lot.lot_number,
-        lot_created_by: lot.created_by,
-        lot_store_key: lot.store_key,
-        lot_location_gid: lot.shopify_location_gid,
-        current_user_id: currentUserId,
-        query_store: store,
-        query_location: location
-      });
-
-      // Then get recent items from this lot
-      const { data: items, error: itemsError } = await supabase
-        .from("intake_items")
-        .select("*")
-        .eq("lot_id", lot.id)
-        .is("deleted_at", null)
-        .is("removed_from_batch_at", null)
-        .order("created_at", { ascending: false })
-        .limit(20);
-
-      if (itemsError) {
-        logger.logError('Error fetching items', new Error(itemsError.message));
-        return;
-      }
-
-      logger.logDebug(`Loaded ${items?.length || 0} items from lot ${lot.lot_number}`, {
-        items: items?.map(i => ({
-          id: i.id,
-          created_by: i.created_by,
-          created_at: i.created_at,
-          lot_id: i.lot_id,
-          subject: i.subject,
-          deleted_at: i.deleted_at,
-          removed_from_batch_at: i.removed_from_batch_at
-        }))
-      });
-      // Cast the database items to our interface with proper type handling
-      const typedItems: IntakeItem[] = (items || []).map(item => {
-        const catalogSnapshot = item.catalog_snapshot && typeof item.catalog_snapshot === 'object' 
-          ? (item.catalog_snapshot as Record<string, any>) 
-          : null;
-          
-        return {
-          ...item,
-          catalog_snapshot: catalogSnapshot,
-          image_urls: Array.isArray(item.image_urls) ? 
-            (item.image_urls as any[]).map(url => String(url)) : 
-            item.image_urls ? [String(item.image_urls)] : []
-        };
-      });
-      setRecentItems(typedItems);
-
-      // Update counts
-      const newCounts = {
-        activeItems: items?.length || 0,
-        totalItems: lot.total_items || 0
-      };
-      setCounts(newCounts);
-
-      // Notify parent of batch count update
-      if (onBatchCountUpdate) {
-        onBatchCountUpdate(newCounts.activeItems);
-      }
-
-    } catch (error) {
-      logger.logError('Error in fetchRecentItems', error instanceof Error ? error : new Error(String(error)));
-      throw error; // Re-throw to be caught by fetchRecentItemsWithRetry
-    }
-  };
-
   const handleEditItem = (item: IntakeItem) => {
     setEditingItem(item);
   };
@@ -338,7 +187,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
           })
           
           console.log('Refreshing batch items...')
-          fetchRecentItemsWithRetry()
+          refetch()
           return // Success - exit function
         }
         
@@ -434,7 +283,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
       if (error) throw error;
 
       toast({ title: "Success", description: "Item removed from batch" });
-      fetchRecentItemsWithRetry();
+      refetch();
     } catch (error: any) {
       logger.logError('Error deleting item', error);
       toast({ title: "Error", description: error.message });
@@ -458,7 +307,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
       if (error) throw error;
 
       toast({ title: "Success", description: "Batch cleared" });
-      fetchRecentItemsWithRetry();
+      refetch();
     } catch (error: any) {
       logger.logError('Error clearing batch', error);
       toast({ title: "Error", description: error.message });
@@ -481,7 +330,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
       if (error) throw error;
 
       toast({ title: "Success", description: "New lot started" });
-      fetchRecentItemsWithRetry();
+      refetch();
     } catch (error: any) {
       logger.logError('Error starting new lot', error);
       toast({ title: "Error", description: error.message });
@@ -531,7 +380,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
       );
       
       if (result.ok) {
-        await fetchRecentItemsWithRetry();
+        await refetch();
         toast({ title: "Success", description: `Processed ${result.processed} items successfully` });
       }
     } catch (error) {
@@ -541,21 +390,6 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
       setBatchProgressOpen(false);
     }
   };
-
-  // Load items when store context changes (with cleanup)
-  useEffect(() => {
-    if (assignedStore) {
-      fetchRecentItemsWithRetry();
-    }
-    
-    // Cleanup any pending retry timeouts
-    return () => {
-      if (retryTimeoutRef.current) {
-        clearTimeout(retryTimeoutRef.current);
-        retryTimeoutRef.current = null;
-      }
-    };
-  }, [assignedStore, selectedLocation, lastAddedItemId, fetchRecentItemsWithRetry]);
 
   // Load vendors when store changes
   useEffect(() => {
@@ -595,32 +429,6 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
 
     loadVendors();
   }, [assignedStore]);
-
-  // Event-based refresh listener
-  useEffect(() => {
-    const handleBatchItemAdded = (event: CustomEvent) => {
-      logger.logDebug('Item added event received', { detail: event.detail });
-      
-      // Only refresh if it's for our current store
-      if (event.detail.store === assignedStore) {
-        setLastAddedItemId(event.detail.itemId);
-        // Also directly fetch to ensure refresh happens
-        fetchRecentItemsWithRetry();
-      }
-    };
-    
-    window.addEventListener('batchItemAdded', handleBatchItemAdded as EventListener);
-    return () => window.removeEventListener('batchItemAdded', handleBatchItemAdded as EventListener);
-  }, [assignedStore]);
-
-  // Cleanup timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (retryTimeoutRef.current) {
-        clearTimeout(retryTimeoutRef.current);
-      }
-    };
-  }, []);
 
   if (loading) {
   return (
@@ -1006,7 +814,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
               });
               
               setEditingItem(null);
-              fetchRecentItemsWithRetry();
+              refetch();
             } catch (error) {
               logger.logError('Error updating item', error instanceof Error ? error : new Error(String(error)), { itemId: values?.id });
               toast({
