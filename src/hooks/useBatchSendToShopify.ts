@@ -174,20 +174,85 @@ export function useBatchSendToShopify() {
             }
           }
 
-          // Step 2: Send items to inventory (without Shopify sync)
-          const { data: inventoryData, error: inventoryError } = await supabase.rpc('send_intake_items_to_inventory', {
-            item_ids: chunk
-          })
+          // Step 2: Send items to inventory (with retry logic)
+          let inventoryData: any = null
+          let inventoryError: any = null
+          let attemptNumber = 0
+          const maxAttempts = 2
+          
+          while (attemptNumber < maxAttempts) {
+            attemptNumber++
+            logger.debug(`Sending chunk ${chunkIndex + 1}/${totalChunks} to inventory (attempt ${attemptNumber}/${maxAttempts})`, { chunkSize: chunk.length }, 'useBatchSendToShopify')
+            
+            const { data, error } = await supabase.rpc('send_intake_items_to_inventory', {
+              item_ids: chunk
+            })
+            
+            inventoryData = data
+            inventoryError = error
+            
+            // Success - break out of retry loop
+            if (!error) {
+              const result = data as any
+              logger.debug(`Chunk ${chunkIndex + 1} inventory operation succeeded`, { processed: result?.processed || 0 }, 'useBatchSendToShopify')
+              break
+            }
+            
+            // Log full error response at debug level
+            logger.debug('Inventory RPC full error response', { 
+              error, 
+              message: error.message, 
+              code: error.code,
+              details: error.details,
+              hint: error.hint 
+            }, 'useBatchSendToShopify')
+            
+            // Check if this is a schema/cache error
+            const isCacheError = error.message?.includes('has no field') || 
+                                error.message?.includes('column') ||
+                                error.message?.includes('does not exist')
+            
+            // If it's a cache error and we have retries left, wait and retry
+            if (isCacheError && attemptNumber < maxAttempts) {
+              logger.warn(`Schema cache error detected, retrying... (${attemptNumber}/${maxAttempts})`, { error: error.message }, 'useBatchSendToShopify')
+              await exponentialBackoff(attemptNumber - 1, 500) // Start with 500ms base delay
+              continue
+            }
+            
+            // Otherwise, break out of retry loop with the error
+            break
+          }
 
           if (inventoryError) {
-            logger.error(`Chunk ${chunkIndex + 1} inventory error`, new Error(inventoryError.message), { chunk: chunkIndex + 1 }, 'useBatchSendToShopify')
+            const errorMsg = inventoryError.message || 'Unknown error'
+            logger.error(`Chunk ${chunkIndex + 1} inventory error after ${attemptNumber} attempts`, new Error(errorMsg), { 
+              chunk: chunkIndex + 1,
+              attempts: attemptNumber,
+              errorDetails: inventoryError 
+            }, 'useBatchSendToShopify')
+            
+            // Provide actionable error message
+            let userFacingError = errorMsg
+            if (errorMsg.includes('has no field') || errorMsg.includes('column') || errorMsg.includes('does not exist')) {
+              userFacingError = `Database schema error: ${errorMsg}. This may indicate a database cache issue. Please contact support or run the database recompilation script.`
+              toast.error('Database Schema Error', {
+                description: 'There appears to be a database schema synchronization issue. Please refresh the page or contact support.',
+                duration: 8000
+              })
+            } else {
+              toast.error(`Chunk ${chunkIndex + 1} Failed`, {
+                description: userFacingError,
+                duration: 5000
+              })
+            }
             
             if (config.failFast) {
-              throw new Error(`Chunk ${chunkIndex + 1} failed: ${inventoryError.message}`)
+              throw new Error(`Chunk ${chunkIndex + 1} failed after ${attemptNumber} attempts: ${userFacingError}`)
             }
+            
             // Add failed items to rejected list
             chunk.forEach(itemId => {
-              allRejectedItems.push({ id: itemId, reason: inventoryError.message })
+              allRejectedItems.push({ id: itemId, reason: userFacingError })
             })
             totalRejected += chunk.length
             continue

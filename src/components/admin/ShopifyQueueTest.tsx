@@ -62,15 +62,46 @@ export default function ShopifyQueueTest() {
         data: { itemIds: testItems.map(item => item.id) }
       })
 
-      // Step 2: Send to inventory (should queue for Shopify)
+      // Step 2: Send to inventory (with retry logic)
       addResult({ step: 'Sending to inventory', status: 'pending', message: 'Moving items from batch to inventory...' })
       
-      const { data: inventoryResult, error: inventoryError } = await supabase.rpc('send_intake_items_to_inventory', {
-        item_ids: testItems.map(item => item.id)
-      })
+      let inventoryResult: any = null
+      let inventoryError: any = null
+      const maxAttempts = 2
+      
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        const { data, error } = await supabase.rpc('send_intake_items_to_inventory', {
+          item_ids: testItems.map(item => item.id)
+        })
+        
+        inventoryResult = data
+        inventoryError = error
+        
+        if (!error) break // Success
+        
+        // Check if this is a retryable error
+        const isCacheError = error.message?.includes('has no field') || 
+                            error.message?.includes('column') ||
+                            error.message?.includes('does not exist')
+        
+        if (isCacheError && attempt < maxAttempts) {
+          console.warn(`Schema cache error on attempt ${attempt}, retrying...`, error)
+          await new Promise(resolve => setTimeout(resolve, attempt * 500))
+          continue
+        }
+        
+        break // Not retryable or out of attempts
+      }
 
       if (inventoryError) {
-        addResult({ step: 'Sending to inventory', status: 'error', message: `Failed: ${inventoryError.message}` })
+        const errorMsg = inventoryError.message || 'Unknown error'
+        let detailedMsg = `Failed: ${errorMsg}`
+        
+        if (errorMsg.includes('has no field') || errorMsg.includes('column') || errorMsg.includes('does not exist')) {
+          detailedMsg += ' (Database schema issue - may need recompilation)'
+        }
+        
+        addResult({ step: 'Sending to inventory', status: 'error', message: detailedMsg })
         return
       }
 

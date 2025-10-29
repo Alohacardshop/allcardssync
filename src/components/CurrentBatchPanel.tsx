@@ -303,55 +303,98 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
     });
     
     try {
-      console.log('Calling RPC: send_intake_item_to_inventory');
-      console.log('RPC Parameters:', { item_id: itemId });
+      // Retry logic with exponential backoff
+      let lastError: any = null
+      const maxAttempts = 2
       
-      const { data, error } = await supabase.rpc("send_intake_item_to_inventory", {
-        item_id: itemId
-      });
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        console.log(`Attempt ${attempt}/${maxAttempts}: Calling RPC send_intake_item_to_inventory`)
+        console.log('RPC Parameters:', { item_id: itemId })
+        
+        const { data, error } = await supabase.rpc("send_intake_item_to_inventory", {
+          item_id: itemId
+        })
 
-      console.log('RPC Response:', { data, error });
-      
-      if (error) {
-        console.error('RPC Error:', {
+        // Log full response at debug level
+        console.log('RPC Response:', { data, error, attempt })
+        
+        if (!error) {
+          console.log('✅ SUCCESS - Item sent to inventory')
+          console.log('Response data:', data)
+          
+          toast({ 
+            title: "Success", 
+            description: `Item sent to inventory${data ? ` (ID: ${data})` : ''}` 
+          })
+          
+          console.log('Refreshing batch items...')
+          fetchRecentItemsWithRetry()
+          return // Success - exit function
+        }
+        
+        // Store the error
+        lastError = error
+        
+        // Log detailed error information
+        console.error('RPC Error (attempt ' + attempt + '):', {
           message: error.message,
           code: error.code,
           details: error.details,
           hint: error.hint,
           fullError: error
-        });
-        throw error;
+        })
+        
+        // Check if this is a schema/cache error
+        const isCacheError = error.message?.includes('has no field') || 
+                            error.message?.includes('column') ||
+                            error.message?.includes('does not exist')
+        
+        // If it's a cache error and we have retries left, wait and retry
+        if (isCacheError && attempt < maxAttempts) {
+          console.warn(`Schema cache error detected, retrying in ${attempt * 500}ms...`)
+          await new Promise(resolve => setTimeout(resolve, attempt * 500))
+          continue
+        }
+        
+        // If not a retryable error, break immediately
+        break
       }
-
-      console.log('✅ SUCCESS - Item sent to inventory');
-      console.log('Response data:', data);
       
-      toast({ 
-        title: "Success", 
-        description: `Item sent to inventory${data ? ` (ID: ${data})` : ''}` 
-      });
-      
-      console.log('Refreshing batch items...');
-      fetchRecentItemsWithRetry();
+      // If we got here, all attempts failed
+      throw lastError
       
     } catch (error: any) {
-      console.error('=== SEND TO INVENTORY - ERROR ===');
-      console.error('Error object:', error);
-      console.error('Error message:', error.message);
-      console.error('Error code:', error.code);
-      console.error('Error details:', error.details);
-      console.error('Error hint:', error.hint);
-      console.error('Stack trace:', error.stack);
+      console.error('=== SEND TO INVENTORY - ERROR (All attempts failed) ===')
+      console.error('Error object:', error)
+      console.error('Error message:', error.message)
+      console.error('Error code:', error.code)
+      console.error('Error details:', error.details)
+      console.error('Error hint:', error.hint)
+      console.error('Stack trace:', error.stack)
       
-      logger.logError('Error sending to inventory', error);
+      logger.logError('Error sending to inventory', error)
+      
+      // Provide actionable error message
+      let errorDescription = error.message || 'Unknown error'
+      if (error.code) {
+        errorDescription += ` (Code: ${error.code})`
+      }
+      
+      // Add remediation hint for schema errors
+      if (error.message?.includes('has no field') || 
+          error.message?.includes('column') || 
+          error.message?.includes('does not exist')) {
+        errorDescription += '\n\n⚠️ This appears to be a database schema issue. Try refreshing the page. If the problem persists, contact support.'
+      }
       
       toast({ 
         title: "Error", 
-        description: `${error.message || 'Unknown error'}${error.code ? ` (Code: ${error.code})` : ''}`,
-        variant: "destructive"
-      });
+        description: errorDescription,
+        variant: "destructive",
+        duration: 8000
+      })
     } finally {
-      console.log('=== SEND TO INVENTORY - END ===');
+      console.log('=== SEND TO INVENTORY - END ===')
     }
   };
 
