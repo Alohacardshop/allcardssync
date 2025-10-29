@@ -3,9 +3,11 @@
 # Usage: ./scripts/db-fix-intake-items.sh
 #
 # This script runs all necessary fixes for the updated_by column issue:
-# 1. Recompiles triggers to recognize new columns
+# 1. Recompiles ALL trigger functions attached to intake_items to recognize new columns
 # 2. Recreates the send_intake_items_to_inventory RPC
 # 3. Clears PostgreSQL prepared statement cache
+#
+# SAFE FOR SUPABASE: All SQL is compatible with Supabase SQL Editor (no psql-specific commands)
 
 set -e  # Exit on error
 
@@ -20,16 +22,21 @@ NC='\033[0m' # No Color
 # Check if running in Supabase project
 if [ -f "supabase/config.toml" ]; then
   echo "${YELLOW}ℹ️  Detected Supabase project${NC}"
-  echo "Run these commands in your Supabase SQL Editor:"
+  echo "Run these SQL files in your Supabase SQL Editor:"
   echo "https://supabase.com/dashboard/project/dmpoandoydaqxhzdjnmk/sql/new"
   echo ""
-  echo "Copy and paste each file's contents:"
-  echo "1. db/fixes/recompile_intake_items_triggers.sql"
-  echo "2. db/fixes/recreate_send_intake_items_to_inventory.sql"  
-  echo "3. db/fixes/discard_all.sql"
+  echo "📋 Copy and paste IN THIS ORDER:"
   echo ""
-  echo "Or run the migration:"
-  echo "db/migrations/2025-10-29_add_updated_by_to_intake_items.sql"
+  echo "1️⃣  db/fixes/recompile_intake_items_triggers.sql"
+  echo "   (Recompiles all 10 trigger functions)"
+  echo ""
+  echo "2️⃣  db/fixes/recreate_send_intake_items_to_inventory.sql"
+  echo "   (Updates the RPC function)"
+  echo ""
+  echo "3️⃣  db/fixes/discard_all.sql"
+  echo "   (Clears prepared statement cache)"
+  echo ""
+  echo "${GREEN}✅ After running all 3 files, the 'record new has no field updated_by' error will be fixed${NC}"
   exit 0
 fi
 
