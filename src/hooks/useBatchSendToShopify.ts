@@ -4,16 +4,16 @@ import { supabase } from "@/integrations/supabase/client"
 import { toast } from "sonner"
 import { ShopifyError, RateLimitError } from "@/types/errors"
 import { logger } from "@/lib/logger"
+import { queryKeys } from "@/lib/queryKeys"
 
 /**
  * useBatchSendToShopify Hook
  * 
- * Enhanced error handling (2025-10-29):
- * - Detects PostgreSQL cache errors ("record 'new' has no field")
+ * Enhanced with new atomic RPC (2025-10-29):
+ * - Uses send_and_queue_inventory RPC that handles both inventory marking + Shopify queueing atomically
+ * - Simplified error handling without manual queue step
  * - Automatic retry with 2-second backoff for transient cache errors
  * - Shows first 100 chars of PostgREST errors in toast notifications
- * - Provides actionable instructions to run DB fix scripts when cache errors detected
- * - Comprehensive logging of all error scenarios
  * 
  * Error scenarios handled:
  * 1. "record 'new'" / "record 'old'" errors → Suggests running db-fix-intake-items.sh
@@ -156,7 +156,6 @@ export function useBatchSendToShopify() {
     let totalRejected = 0
     let totalQueued = 0
     const allRejectedItems: Array<{ id: string; reason: string }> = []
-    const allQueuedItems: string[] = []
 
     try {
       if (autoProcess) {
@@ -193,7 +192,7 @@ export function useBatchSendToShopify() {
             }
           }
 
-          // Step 2: Send items to inventory (with retry logic)
+          // Step 2: Send items to inventory AND queue for Shopify (atomic operation)
           let inventoryData: any = null
           let inventoryError: any = null
           let attemptNumber = 0
@@ -203,7 +202,7 @@ export function useBatchSendToShopify() {
             attemptNumber++
             logger.debug(`Sending chunk ${chunkIndex + 1}/${totalChunks} to inventory (attempt ${attemptNumber}/${maxAttempts})`, { chunkSize: chunk.length }, 'useBatchSendToShopify')
             
-            const { data, error } = await supabase.rpc('send_intake_items_to_inventory', {
+            const { data, error } = await supabase.rpc('send_and_queue_inventory' as any, {
               item_ids: chunk
             })
             
@@ -213,7 +212,7 @@ export function useBatchSendToShopify() {
             // Success - break out of retry loop
             if (!error) {
               const result = data as any
-              logger.debug(`Chunk ${chunkIndex + 1} inventory operation succeeded`, { processed: result?.processed || 0 }, 'useBatchSendToShopify')
+              logger.debug(`Chunk ${chunkIndex + 1} inventory+queue operation succeeded`, { processed: result?.processed || 0 }, 'useBatchSendToShopify')
               break
             }
             
@@ -314,7 +313,7 @@ export function useBatchSendToShopify() {
             continue
           }
 
-          // Step 3: Queue successful items for Shopify sync
+          // Extract results from atomic RPC (marks inventory + queues Shopify)
           const inventoryResult = inventoryData as {
             processed: number;
             processed_ids: string[];
@@ -324,51 +323,17 @@ export function useBatchSendToShopify() {
           const processedIds: string[] = inventoryResult?.processed_ids ?? [];
           const rejected = inventoryResult?.rejected ?? [];
           
-          logger.info(`Inventory send result: ${processedIds.length} processed, ${rejected.length} rejected`, {}, 'useBatchSendToShopify');
+          logger.info(`Inventory+Queue result: ${processedIds.length} processed & queued, ${rejected.length} rejected`, {}, 'useBatchSendToShopify');
           
-          if (processedIds.length > 0) {
-            logger.info(`Queueing ${processedIds.length} items for Shopify sync`, {}, 'useBatchSendToShopify')
-            
-            // Queue each item individually for Shopify sync with small delay to prevent position conflicts
-            for (let i = 0; i < processedIds.length; i++) {
-              const itemId = processedIds[i]
-              logger.debug(`Queuing item for Shopify sync`, { itemId, progress: `${i + 1}/${processedIds.length}` }, 'useBatchSendToShopify')
-              
-              try {
-                const { error: queueError } = await supabase.rpc('queue_shopify_sync', {
-                  item_id: itemId,
-                  sync_action: 'create'
-                })
-
-                if (queueError) {
-                  logger.error(`Failed to queue item`, new Error(queueError.message), { itemId }, 'useBatchSendToShopify')
-                  allRejectedItems.push({ id: itemId, reason: `Queue failed: ${queueError.message}` })
-                  totalRejected++
-                } else {
-                  allQueuedItems.push(itemId)
-                  totalQueued++
-                  
-                  // Small delay between queuing items to prevent position conflicts
-                  if (i < processedIds.length - 1) {
-                    await delay(100) // 100ms delay between each queue operation
-                  }
-                }
-              } catch (queueError: unknown) {
-                logger.error(`Failed to queue item`, queueError instanceof Error ? queueError : new Error(String(queueError)), { itemId }, 'useBatchSendToShopify')
-                const errorMessage = queueError && typeof queueError === 'object' && 'message' in queueError 
-                  ? (queueError as { message: string }).message 
-                  : String(queueError)
-                allRejectedItems.push({ id: itemId, reason: `Queue failed: ${errorMessage}` })
-                totalRejected++
-              }
-            }
-
-            totalProcessed += processedIds.length
-          } else {
+          // Update totals
+          totalProcessed += processedIds.length;
+          totalQueued += processedIds.length; // All processed items are also queued
+          
+          if (processedIds.length === 0) {
             logger.warn(`No items processed in chunk ${chunkIndex + 1}`, { rejected }, 'useBatchSendToShopify');
           }
 
-          // Handle rejected items from inventory step
+          // Handle rejected items
           if (rejected.length > 0) {
             allRejectedItems.push(...rejected);
             totalRejected += rejected.length;
@@ -382,11 +347,11 @@ export function useBatchSendToShopify() {
           }
           
           processedItems += chunk.length
-          toast.success(`Chunk ${chunkIndex + 1}/${totalChunks} completed: ${processedIds.length} items moved to inventory`)
+          toast.success(`Chunk ${chunkIndex + 1}/${totalChunks} completed: ${processedIds.length} items moved to inventory & queued`)
           
           // Invalidate batch query to update UI across all components
           await queryClient.invalidateQueries({ 
-            queryKey: ['currentBatch', storeKey, locationGid] 
+            queryKey: queryKeys.currentBatch(storeKey, locationGid)
           });
           
         } catch (chunkError: unknown) {

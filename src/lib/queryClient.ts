@@ -1,10 +1,5 @@
 import { QueryClient } from '@tanstack/react-query';
-
-// Query key factory for consistency
-export const queryKeys = {
-  currentBatch: (storeKey?: string | null, locationGid?: string | null) => 
-    ['currentBatch', storeKey, locationGid].filter(Boolean),
-};
+import { queryKeys } from './queryKeys';
 
 // Sane React Query defaults - no blind polling
 export const queryClient = new QueryClient({
@@ -29,6 +24,8 @@ export const queryClient = new QueryClient({
     },
   },
 });
+
+export { queryKeys };
 
 // Query deduplication logging (development only)
 if (process.env.NODE_ENV === 'development') {

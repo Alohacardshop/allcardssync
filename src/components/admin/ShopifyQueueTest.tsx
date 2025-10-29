@@ -62,15 +62,15 @@ export default function ShopifyQueueTest() {
         data: { itemIds: testItems.map(item => item.id) }
       })
 
-      // Step 2: Send to inventory (with retry logic)
-      addResult({ step: 'Sending to inventory', status: 'pending', message: 'Moving items from batch to inventory...' })
+      // Step 2: Send to inventory AND queue for Shopify (atomic operation)
+      addResult({ step: 'Send to inventory + queue', status: 'pending', message: 'Moving items to inventory and queueing for Shopify...' })
       
       let inventoryResult: any = null
       let inventoryError: any = null
       const maxAttempts = 2
       
       for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-        const { data, error } = await supabase.rpc('send_intake_items_to_inventory', {
+        const { data, error } = await supabase.rpc('send_and_queue_inventory' as any, {
           item_ids: testItems.map(item => item.id)
         })
         
@@ -86,7 +86,7 @@ export default function ShopifyQueueTest() {
         
         if (isCacheError && attempt < maxAttempts) {
           console.warn(`Schema cache error on attempt ${attempt}, retrying...`, error)
-          await new Promise(resolve => setTimeout(resolve, attempt * 500))
+          await new Promise(resolve => setTimeout(resolve, 2000)) // 2s backoff
           continue
         }
         
@@ -101,48 +101,28 @@ export default function ShopifyQueueTest() {
           detailedMsg += ' (Database schema issue - may need recompilation)'
         }
         
-        addResult({ step: 'Sending to inventory', status: 'error', message: detailedMsg })
+        addResult({ step: 'Send to inventory + queue', status: 'error', message: detailedMsg })
         return
       }
 
-      const processed = (inventoryResult as any)?.processed_ids?.length || 0
+      const processed = (inventoryResult as any)?.processed || 0
+      const processedIds = (inventoryResult as any)?.processed_ids || []
+      const rejected = (inventoryResult as any)?.rejected || []
+      
       addResult({ 
-        step: 'Sending to inventory', 
+        step: 'Send to inventory + queue', 
         status: 'success', 
-        message: `✅ ${processed} items moved to inventory`,
+        message: `✅ ${processed} items moved to inventory & queued for Shopify${rejected.length > 0 ? `, ${rejected.length} rejected` : ''}`,
         data: inventoryResult
       })
 
-      // Step 3: Queue items for Shopify sync
-      addResult({ step: 'Queueing for Shopify', status: 'pending', message: 'Adding items to Shopify sync queue...' })
-      
-      let queuedCount = 0
-      for (const itemId of (inventoryResult as any)?.processed_ids || []) {
-        const { error: queueError } = await supabase.rpc('queue_shopify_sync', {
-          item_id: itemId,
-          sync_action: 'create'
-        })
-
-        if (queueError) {
-          addResult({ step: 'Queueing for Shopify', status: 'error', message: `Failed to queue ${itemId}: ${queueError.message}` })
-        } else {
-          queuedCount++
-        }
-      }
-
-      addResult({ 
-        step: 'Queueing for Shopify', 
-        status: queuedCount > 0 ? 'success' : 'error', 
-        message: `✅ ${queuedCount} items queued for Shopify sync`
-      })
-
-      // Step 4: Check queue status
+      // Step 3: Check queue status
       addResult({ step: 'Checking queue status', status: 'pending', message: 'Verifying items are in queue...' })
       
       const { data: queueItems, error: queueError } = await supabase
         .from('shopify_sync_queue')
         .select('*')
-        .in('inventory_item_id', (inventoryResult as any)?.processed_ids || [])
+        .in('inventory_item_id', processedIds)
 
       if (queueError) {
         addResult({ step: 'Checking queue status', status: 'error', message: `Failed: ${queueError.message}` })
@@ -156,7 +136,7 @@ export default function ShopifyQueueTest() {
         data: queueItems
       })
 
-      // Step 5: Trigger processor
+      // Step 4: Trigger processor
       addResult({ step: 'Triggering processor', status: 'pending', message: 'Starting Shopify sync processor...' })
       
       const { error: processorError } = await supabase.functions.invoke('shopify-sync', { body: {} })
@@ -274,7 +254,7 @@ export default function ShopifyQueueTest() {
             <div>
               <h4 className="font-semibold">Full Workflow Test</h4>
               <p className="text-sm text-muted-foreground">
-                Creates test items → moves to inventory → queues for Shopify → triggers processor
+                Creates test items → atomic send to inventory + queue → triggers processor
               </p>
             </div>
             <Button 

@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useLogger } from '@/hooks/useLogger';
-import { queryKeys } from './useAddIntakeItem';
+import { queryKeys } from '@/lib/queryKeys';
 
 interface CurrentBatchParams {
   storeKey?: string | null;

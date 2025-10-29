@@ -19,7 +19,8 @@ import { useLogger } from '@/hooks/useLogger';
 import { useCurrentBatch } from '@/hooks/useCurrentBatch';
 import { useSession } from '@/hooks/useSession';
 import { useQueryClient } from '@tanstack/react-query';
-import { queryKeys } from '@/hooks/useAddIntakeItem';
+import { queryKeys } from '@/lib/queryKeys';
+import { useSendToInventory } from '@/hooks/useSendToInventory';
 
 import type { IntakeItem } from "@/types/intake";
 
@@ -56,6 +57,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
 
   const { sendChunkedBatchToShopify, isSending, progress } = useBatchSendToShopify();
   const { getAutoProcessConfig, getProcessingMode } = useBatchAutoProcessSettings();
+  const sendToInventory = useSendToInventory();
 
   // Helper to format card name
   const formatCardName = (item: IntakeItem) => {
@@ -149,135 +151,29 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
   };
 
   const handleSendToInventory = async (itemId: string) => {
-    console.log('=== SEND TO INVENTORY - START ===');
-    console.log('Item ID:', itemId);
-    console.log('Store Context:', { assignedStore, selectedLocation });
-    
     if (!assignedStore || !selectedLocation) {
-      console.error('Store context missing!', { assignedStore, selectedLocation });
       toast({ title: "Error", description: "Store context missing" });
       return;
     }
     
-    const loadingToast = toast({ 
-      title: "Processing...", 
-      description: "Sending item to inventory" 
-    });
-    
     try {
-      // Retry logic with 2-second backoff for cache errors
-      let lastError: any = null
-      const maxAttempts = 2
-      
-      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-        console.log(`Attempt ${attempt}/${maxAttempts}: Calling RPC send_intake_item_to_inventory`)
-        console.log('RPC Parameters:', { item_id: itemId })
-        
-        const { data, error } = await supabase.rpc("send_intake_item_to_inventory", {
-          item_id: itemId
-        })
-
-        // Log full response at debug level
-        console.log('RPC Response:', { data, error, attempt })
-        
-        if (!error) {
-          console.log('✅ SUCCESS - Item sent to inventory')
-          console.log('Response data:', data)
-          
-          toast({ 
-            title: "Success", 
-            description: `Item sent to inventory${data ? ` (ID: ${data})` : ''}` 
-          })
-          
-          console.log('Invalidating batch query and refreshing...')
-          // Wait for DB commit, then invalidate cache
-          await new Promise(resolve => setTimeout(resolve, 100));
-          await queryClient.invalidateQueries({ 
-            queryKey: queryKeys.currentBatch(assignedStore, selectedLocation) 
-          });
-          
-          return // Success - exit function
-        }
-        
-        // Store the error
-        lastError = error
-        
-        // Log detailed error information with first 100 chars
-        const errorMessage = error.message || ''
-        const errorPreview = errorMessage.substring(0, 100)
-        console.error('RPC Error (attempt ' + attempt + '):', {
-          errorPreview,
-          message: errorMessage,
-          code: error.code,
-          details: error.details,
-          hint: error.hint,
-          fullError: error
-        })
-        
-        // Check if this is a schema/cache error (including "record 'new'")
-        const isCacheError = errorMessage.includes('has no field') || 
-                            errorMessage.includes('record "new"') ||
-                            errorMessage.includes('record "old"') ||
-                            errorMessage.includes('column') ||
-                            errorMessage.includes('does not exist')
-        
-        // If it's a cache error and we have retries left, wait 2 seconds and retry
-        if (isCacheError && attempt < maxAttempts) {
-          console.warn(`Database cache error detected, retrying with 2s backoff... (attempt ${attempt}/${maxAttempts})`, {
-            errorPreview
-          })
-          await new Promise(resolve => setTimeout(resolve, 2000)) // 2-second backoff as specified
-          continue
-        }
-        
-        // If not a retryable error, break immediately
-        break
-      }
-      
-      // If we got here, all attempts failed
-      throw lastError
-      
-    } catch (error: any) {
-      console.error('=== SEND TO INVENTORY - ERROR (All attempts failed) ===')
-      console.error('Error object:', error)
-      
-      const errorMessage = error.message || 'Unknown error'
-      const errorPreview = errorMessage.substring(0, 100) // First 100 chars
-      
-      logger.logError('Error sending to inventory', error)
-      
-      // Check for "record 'new'" cache error specifically
-      const isRecordNewError = errorMessage.includes('record "new"') || 
-                              errorMessage.includes('record "old"') ||
-                              errorMessage.includes('has no field')
-      
-      let errorDescription = `${errorPreview}${errorMessage.length > 100 ? '...' : ''}`
-      if (error.code) {
-        errorDescription += ` (Code: ${error.code})`
-      }
-      
-      // Add remediation instructions based on error type
-      if (isRecordNewError) {
-        errorDescription += '\n\n🔧 Database Cache Error - Run these SQL files in Supabase SQL Editor:\n' +
-          '1. db/fixes/recompile_intake_items_triggers.sql\n' +
-          '2. db/fixes/recreate_send_intake_items_to_inventory.sql\n' +
-          '3. db/fixes/discard_all.sql\n' +
-          '4. db/fixes/ensure_updated_by_trigger.sql\n' +
-          'Or run: ./scripts/db-fix-intake-items.sh'
-        
-        console.error('⚠️ Record "new" cache error detected - DB fix scripts required')
-      } else if (errorMessage.includes('column') || errorMessage.includes('does not exist')) {
-        errorDescription += '\n\n⚠️ Database schema issue detected. Try refreshing the page or running DB fix scripts.'
-      }
+      await sendToInventory.mutateAsync({
+        storeKey: assignedStore,
+        locationGid: selectedLocation,
+        itemIds: [itemId],
+      });
       
       toast({ 
+        title: "Success", 
+        description: "Item sent to inventory" 
+      });
+    } catch (error: any) {
+      logger.logError('Error sending to inventory', error);
+      toast({ 
         title: "Error Sending to Inventory", 
-        description: errorDescription,
+        description: error.message,
         variant: "destructive",
-        duration: isRecordNewError ? 15000 : 8000 // Longer duration for cache errors with instructions
-      })
-    } finally {
-      console.log('=== SEND TO INVENTORY - END ===')
+      });
     }
   };
 

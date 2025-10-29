@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useLogger } from '@/hooks/useLogger';
+import { queryKeys } from '@/lib/queryKeys';
 
 interface AddIntakeItemParams {
   store_key_in: string | null;
@@ -31,11 +32,6 @@ interface AddIntakeItemResponse {
   created_at: string;
   [key: string]: any;
 }
-
-export const queryKeys = {
-  currentBatch: (storeKey?: string | null, locationGid?: string | null) => 
-    ['currentBatch', storeKey, locationGid].filter(Boolean),
-};
 
 interface MutationContext {
   previousItems: any;
