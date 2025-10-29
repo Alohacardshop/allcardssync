@@ -287,23 +287,71 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
   };
 
   const handleSendToInventory = async (itemId: string) => {
+    console.log('=== SEND TO INVENTORY - START ===');
+    console.log('Item ID:', itemId);
+    console.log('Store Context:', { assignedStore, selectedLocation });
+    
     if (!assignedStore || !selectedLocation) {
+      console.error('Store context missing!', { assignedStore, selectedLocation });
       toast({ title: "Error", description: "Store context missing" });
       return;
     }
     
+    const loadingToast = toast({ 
+      title: "Processing...", 
+      description: "Sending item to inventory" 
+    });
+    
     try {
+      console.log('Calling RPC: send_intake_item_to_inventory');
+      console.log('RPC Parameters:', { item_id: itemId });
+      
       const { data, error } = await supabase.rpc("send_intake_item_to_inventory", {
         item_id: itemId
       });
 
-      if (error) throw error;
+      console.log('RPC Response:', { data, error });
+      
+      if (error) {
+        console.error('RPC Error:', {
+          message: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint,
+          fullError: error
+        });
+        throw error;
+      }
 
-      toast({ title: "Success", description: "Item sent to inventory" });
+      console.log('✅ SUCCESS - Item sent to inventory');
+      console.log('Response data:', data);
+      
+      toast({ 
+        title: "Success", 
+        description: `Item sent to inventory${data ? ` (ID: ${data})` : ''}` 
+      });
+      
+      console.log('Refreshing batch items...');
       fetchRecentItemsWithRetry();
+      
     } catch (error: any) {
+      console.error('=== SEND TO INVENTORY - ERROR ===');
+      console.error('Error object:', error);
+      console.error('Error message:', error.message);
+      console.error('Error code:', error.code);
+      console.error('Error details:', error.details);
+      console.error('Error hint:', error.hint);
+      console.error('Stack trace:', error.stack);
+      
       logger.logError('Error sending to inventory', error);
-      toast({ title: "Error", description: error.message });
+      
+      toast({ 
+        title: "Error", 
+        description: `${error.message || 'Unknown error'}${error.code ? ` (Code: ${error.code})` : ''}`,
+        variant: "destructive"
+      });
+    } finally {
+      console.log('=== SEND TO INVENTORY - END ===');
     }
   };
 
