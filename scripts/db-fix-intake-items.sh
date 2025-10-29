@@ -6,6 +6,7 @@
 # 1. Recompiles ALL trigger functions attached to intake_items to recognize new columns
 # 2. Recreates the send_intake_items_to_inventory RPC
 # 3. Clears PostgreSQL prepared statement cache
+# 4. Ensures updated_by trigger is properly configured
 #
 # SAFE FOR SUPABASE: All SQL is compatible with Supabase SQL Editor (no psql-specific commands)
 
@@ -36,24 +37,32 @@ if [ -f "supabase/config.toml" ]; then
   echo "3️⃣  db/fixes/discard_all.sql"
   echo "   (Clears prepared statement cache)"
   echo ""
-  echo "${GREEN}✅ After running all 3 files, the 'record new has no field updated_by' error will be fixed${NC}"
+  echo "4️⃣  db/fixes/ensure_updated_by_trigger.sql"
+  echo "   (Ensures updated_by trigger is properly configured)"
+  echo ""
+  echo "${GREEN}✅ After running all 4 files, the 'record new has no field updated_by' error will be fixed${NC}"
   exit 0
 fi
 
 # For local PostgreSQL
-echo "Step 1/3: Recompiling triggers..."
+echo "Step 1/4: Recompiling triggers..."
 psql -f db/fixes/recompile_intake_items_triggers.sql
 echo "${GREEN}✓ Triggers recompiled${NC}"
 echo ""
 
-echo "Step 2/3: Recreating RPC function..."
+echo "Step 2/4: Recreating RPC function..."
 psql -f db/fixes/recreate_send_intake_items_to_inventory.sql
 echo "${GREEN}✓ RPC function recreated${NC}"
 echo ""
 
-echo "Step 3/3: Clearing prepared statement cache..."
+echo "Step 3/4: Clearing prepared statement cache..."
 psql -f db/fixes/discard_all.sql
 echo "${GREEN}✓ Cache cleared${NC}"
+echo ""
+
+echo "Step 4/4: Ensuring updated_by trigger is configured..."
+psql -f db/fixes/ensure_updated_by_trigger.sql
+echo "${GREEN}✓ Trigger configured${NC}"
 echo ""
 
 echo "${GREEN}✅ All database fixes applied successfully!${NC}"
