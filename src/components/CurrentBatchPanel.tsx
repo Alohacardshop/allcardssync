@@ -303,7 +303,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
     });
     
     try {
-      // Retry logic with exponential backoff
+      // Retry logic with 2-second backoff for cache errors
       let lastError: any = null
       const maxAttempts = 2
       
@@ -335,24 +335,31 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
         // Store the error
         lastError = error
         
-        // Log detailed error information
+        // Log detailed error information with first 100 chars
+        const errorMessage = error.message || ''
+        const errorPreview = errorMessage.substring(0, 100)
         console.error('RPC Error (attempt ' + attempt + '):', {
-          message: error.message,
+          errorPreview,
+          message: errorMessage,
           code: error.code,
           details: error.details,
           hint: error.hint,
           fullError: error
         })
         
-        // Check if this is a schema/cache error
-        const isCacheError = error.message?.includes('has no field') || 
-                            error.message?.includes('column') ||
-                            error.message?.includes('does not exist')
+        // Check if this is a schema/cache error (including "record 'new'")
+        const isCacheError = errorMessage.includes('has no field') || 
+                            errorMessage.includes('record "new"') ||
+                            errorMessage.includes('record "old"') ||
+                            errorMessage.includes('column') ||
+                            errorMessage.includes('does not exist')
         
-        // If it's a cache error and we have retries left, wait and retry
+        // If it's a cache error and we have retries left, wait 2 seconds and retry
         if (isCacheError && attempt < maxAttempts) {
-          console.warn(`Schema cache error detected, retrying in ${attempt * 500}ms...`)
-          await new Promise(resolve => setTimeout(resolve, attempt * 500))
+          console.warn(`Database cache error detected, retrying with 2s backoff... (attempt ${attempt}/${maxAttempts})`, {
+            errorPreview
+          })
+          await new Promise(resolve => setTimeout(resolve, 2000)) // 2-second backoff as specified
           continue
         }
         
@@ -366,32 +373,41 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
     } catch (error: any) {
       console.error('=== SEND TO INVENTORY - ERROR (All attempts failed) ===')
       console.error('Error object:', error)
-      console.error('Error message:', error.message)
-      console.error('Error code:', error.code)
-      console.error('Error details:', error.details)
-      console.error('Error hint:', error.hint)
-      console.error('Stack trace:', error.stack)
+      
+      const errorMessage = error.message || 'Unknown error'
+      const errorPreview = errorMessage.substring(0, 100) // First 100 chars
       
       logger.logError('Error sending to inventory', error)
       
-      // Provide actionable error message
-      let errorDescription = error.message || 'Unknown error'
+      // Check for "record 'new'" cache error specifically
+      const isRecordNewError = errorMessage.includes('record "new"') || 
+                              errorMessage.includes('record "old"') ||
+                              errorMessage.includes('has no field')
+      
+      let errorDescription = `${errorPreview}${errorMessage.length > 100 ? '...' : ''}`
       if (error.code) {
         errorDescription += ` (Code: ${error.code})`
       }
       
-      // Add remediation hint for schema errors
-      if (error.message?.includes('has no field') || 
-          error.message?.includes('column') || 
-          error.message?.includes('does not exist')) {
-        errorDescription += '\n\n⚠️ This appears to be a database schema issue. Try refreshing the page. If the problem persists, contact support.'
+      // Add remediation instructions based on error type
+      if (isRecordNewError) {
+        errorDescription += '\n\n🔧 Database Cache Error - Run these SQL files in Supabase SQL Editor:\n' +
+          '1. db/fixes/recompile_intake_items_triggers.sql\n' +
+          '2. db/fixes/recreate_send_intake_items_to_inventory.sql\n' +
+          '3. db/fixes/discard_all.sql\n' +
+          '4. db/fixes/ensure_updated_by_trigger.sql\n' +
+          'Or run: ./scripts/db-fix-intake-items.sh'
+        
+        console.error('⚠️ Record "new" cache error detected - DB fix scripts required')
+      } else if (errorMessage.includes('column') || errorMessage.includes('does not exist')) {
+        errorDescription += '\n\n⚠️ Database schema issue detected. Try refreshing the page or running DB fix scripts.'
       }
       
       toast({ 
-        title: "Error", 
+        title: "Error Sending to Inventory", 
         description: errorDescription,
         variant: "destructive",
-        duration: 8000
+        duration: isRecordNewError ? 15000 : 8000 // Longer duration for cache errors with instructions
       })
     } finally {
       console.log('=== SEND TO INVENTORY - END ===')

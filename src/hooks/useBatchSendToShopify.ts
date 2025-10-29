@@ -4,6 +4,23 @@ import { toast } from "sonner"
 import { ShopifyError, RateLimitError } from "@/types/errors"
 import { logger } from "@/lib/logger"
 
+/**
+ * useBatchSendToShopify Hook
+ * 
+ * Enhanced error handling (2025-10-29):
+ * - Detects PostgreSQL cache errors ("record 'new' has no field")
+ * - Automatic retry with 2-second backoff for transient cache errors
+ * - Shows first 100 chars of PostgREST errors in toast notifications
+ * - Provides actionable instructions to run DB fix scripts when cache errors detected
+ * - Comprehensive logging of all error scenarios
+ * 
+ * Error scenarios handled:
+ * 1. "record 'new'" / "record 'old'" errors → Suggests running db-fix-intake-items.sh
+ * 2. Schema/column errors → Generic schema error with refresh suggestion
+ * 3. Rate limit errors → Exponential backoff retry
+ * 4. Network/transient errors → Standard error handling
+ */
+
 export interface BatchConfig {
   batchSize: number
   delayBetweenChunks: number
@@ -207,15 +224,22 @@ export function useBatchSendToShopify() {
               hint: error.hint 
             }, 'useBatchSendToShopify')
             
-            // Check if this is a schema/cache error
-            const isCacheError = error.message?.includes('has no field') || 
-                                error.message?.includes('column') ||
-                                error.message?.includes('does not exist')
+            // Check if this is a schema/cache error (PostgREST prepared statement issue)
+            const errorMessage = error.message || ''
+            const isCacheError = errorMessage.includes('has no field') || 
+                                errorMessage.includes('record "new"') ||
+                                errorMessage.includes('record "old"') ||
+                                errorMessage.includes('column') ||
+                                errorMessage.includes('does not exist')
             
-            // If it's a cache error and we have retries left, wait and retry
+            // If it's a cache error and we have retries left, wait and retry with 2s backoff
             if (isCacheError && attemptNumber < maxAttempts) {
-              logger.warn(`Schema cache error detected, retrying... (${attemptNumber}/${maxAttempts})`, { error: error.message }, 'useBatchSendToShopify')
-              await exponentialBackoff(attemptNumber - 1, 500) // Start with 500ms base delay
+              logger.warn(`Database cache error detected, retrying with 2s backoff... (attempt ${attemptNumber}/${maxAttempts})`, { 
+                error: errorMessage.substring(0, 100) 
+              }, 'useBatchSendToShopify')
+              
+              // Use 2-second backoff for cache errors as specified
+              await delay(2000)
               continue
             }
             
@@ -225,34 +249,64 @@ export function useBatchSendToShopify() {
 
           if (inventoryError) {
             const errorMsg = inventoryError.message || 'Unknown error'
+            const errorPreview = errorMsg.substring(0, 100) // First 100 chars for display
+            
             logger.error(`Chunk ${chunkIndex + 1} inventory error after ${attemptNumber} attempts`, new Error(errorMsg), { 
               chunk: chunkIndex + 1,
               attempts: attemptNumber,
+              errorPreview,
               errorDetails: inventoryError 
             }, 'useBatchSendToShopify')
             
-            // Provide actionable error message
-            let userFacingError = errorMsg
-            if (errorMsg.includes('has no field') || errorMsg.includes('column') || errorMsg.includes('does not exist')) {
-              userFacingError = `Database schema error: ${errorMsg}. This may indicate a database cache issue. Please contact support or run the database recompilation script.`
+            // Check for "record 'new'" cache error specifically
+            const isRecordNewError = errorMsg.includes('record "new"') || 
+                                    errorMsg.includes('record "old"') ||
+                                    errorMsg.includes('has no field')
+            
+            // Provide actionable error message with first 100 chars
+            if (isRecordNewError) {
+              const fixInstructions = [
+                'Database cache error detected. Run these SQL files in Supabase SQL Editor:',
+                '1. db/fixes/recompile_intake_items_triggers.sql',
+                '2. db/fixes/recreate_send_intake_items_to_inventory.sql',
+                '3. db/fixes/discard_all.sql',
+                '4. db/fixes/ensure_updated_by_trigger.sql',
+                'Or run: ./scripts/db-fix-intake-items.sh'
+              ].join('\n')
+              
+              toast.error('Database Cache Error - "record new" Field Missing', {
+                description: `Error: ${errorPreview}${errorMsg.length > 100 ? '...' : ''}\n\n${fixInstructions}`,
+                duration: 15000 // 15 seconds for longer instructions
+              })
+              
+              logger.error('Record "new" cache error - DB fix scripts required', new Error(errorMsg), {
+                errorPreview,
+                fixScripts: [
+                  'db/fixes/recompile_intake_items_triggers.sql',
+                  'db/fixes/recreate_send_intake_items_to_inventory.sql',
+                  'db/fixes/discard_all.sql',
+                  'db/fixes/ensure_updated_by_trigger.sql'
+                ]
+              }, 'useBatchSendToShopify')
+            } else if (errorMsg.includes('column') || errorMsg.includes('does not exist')) {
               toast.error('Database Schema Error', {
-                description: 'There appears to be a database schema synchronization issue. Please refresh the page or contact support.',
+                description: `${errorPreview}${errorMsg.length > 100 ? '...' : ''}. Database schema may be out of sync. Try refreshing or running DB fix scripts.`,
                 duration: 8000
               })
             } else {
               toast.error(`Chunk ${chunkIndex + 1} Failed`, {
-                description: userFacingError,
+                description: `${errorPreview}${errorMsg.length > 100 ? '...' : ''}`,
                 duration: 5000
               })
             }
             
             if (config.failFast) {
-              throw new Error(`Chunk ${chunkIndex + 1} failed after ${attemptNumber} attempts: ${userFacingError}`)
+              throw new Error(`Chunk ${chunkIndex + 1} failed after ${attemptNumber} attempts: ${errorPreview}`)
             }
             
             // Add failed items to rejected list
             chunk.forEach(itemId => {
-              allRejectedItems.push({ id: itemId, reason: userFacingError })
+              allRejectedItems.push({ id: itemId, reason: errorPreview })
             })
             totalRejected += chunk.length
             continue
