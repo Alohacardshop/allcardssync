@@ -18,6 +18,8 @@ import { BatchProgressDialog } from '@/components/BatchProgressDialog';
 import { useLogger } from '@/hooks/useLogger';
 import { useCurrentBatch } from '@/hooks/useCurrentBatch';
 import { useSession } from '@/hooks/useSession';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '@/hooks/useAddIntakeItem';
 
 import type { IntakeItem } from "@/types/intake";
 
@@ -29,6 +31,7 @@ interface CurrentBatchPanelProps {
 
 export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact = false }: CurrentBatchPanelProps) => {
   const logger = useLogger('CurrentBatchPanel');
+  const queryClient = useQueryClient();
   const { assignedStore, selectedLocation, availableLocations } = useStore();
   const { data: session } = useSession();
   
@@ -186,8 +189,13 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
             description: `Item sent to inventory${data ? ` (ID: ${data})` : ''}` 
           })
           
-          console.log('Refreshing batch items...')
-          refetch()
+          console.log('Invalidating batch query and refreshing...')
+          // Wait for DB commit, then invalidate cache
+          await new Promise(resolve => setTimeout(resolve, 100));
+          await queryClient.invalidateQueries({ 
+            queryKey: queryKeys.currentBatch(assignedStore, selectedLocation) 
+          });
+          
           return // Success - exit function
         }
         

@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { supabase } from "@/integrations/supabase/client"
 import { toast } from "sonner"
 import { ShopifyError, RateLimitError } from "@/types/errors"
@@ -60,6 +61,7 @@ export interface BatchSendResponse {
 }
 
 export function useBatchSendToShopify() {
+  const queryClient = useQueryClient()
   const [isSending, setIsSending] = useState(false)
   const [progress, setProgress] = useState<BatchProgress | null>(null)
   const sendTimeoutRef = useState<NodeJS.Timeout | null>(null)[0]
@@ -362,6 +364,11 @@ export function useBatchSendToShopify() {
           
           processedItems += chunk.length
           toast.success(`Chunk ${chunkIndex + 1}/${totalChunks} completed: ${inventoryResult?.processed_ids?.length || 0} items moved to inventory`)
+          
+          // Invalidate batch query to update UI across all components
+          await queryClient.invalidateQueries({ 
+            queryKey: ['currentBatch', storeKey, locationGid] 
+          });
           
         } catch (chunkError: unknown) {
           logger.error(`Chunk ${chunkIndex + 1} failed`, chunkError instanceof Error ? chunkError : new Error(String(chunkError)), { chunk: chunkIndex + 1 }, 'useBatchSendToShopify')
