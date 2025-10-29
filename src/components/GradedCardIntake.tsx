@@ -366,14 +366,6 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         }
       };
 
-      // Add vendor if set
-      if (formData.vendor) {
-        const { error: vendorError } = await supabase
-          .from('intake_items')
-          .update({ vendor: formData.vendor })
-          .eq('id', 'temp'); // Will be updated after insert
-      }
-
       const { data, error } = await supabase.rpc("create_raw_intake_item", itemPayload);
 
       if (error) throw error;
