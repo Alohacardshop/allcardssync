@@ -14,6 +14,7 @@ import { validateCompleteStoreContext, logStoreContext } from '@/utils/storeVali
 import { SubCategoryCombobox } from '@/components/ui/sub-category-combobox';
 import { detectMainCategory } from '@/utils/categoryMapping';
 import { useLogger } from '@/hooks/useLogger';
+import { useAddIntakeItem } from "@/hooks/useAddIntakeItem";
 
 interface BulkCardIntakeProps {
   onBatchAdd?: (item: any) => void;
@@ -27,6 +28,7 @@ const GAME_OPTIONS = [
 export function BulkCardIntake({ onBatchAdd }: BulkCardIntakeProps) {
   const logger = useLogger('BulkCardIntake');
   const { assignedStore, selectedLocation } = useStore();
+  const { mutateAsync: addItem, isPending: isAdding } = useAddIntakeItem();
   
   // Form state
   const [selectedGame, setSelectedGame] = useState('');
@@ -152,7 +154,7 @@ export function BulkCardIntake({ onBatchAdd }: BulkCardIntakeProps) {
     try {
       const gameTitle = `${selectedGame.charAt(0).toUpperCase() + selectedGame.slice(1)} Bulk Cards`;
       
-      const rpcParams = {
+      const result = await addItem({
         store_key_in: assignedStore!.trim(),
         shopify_location_gid_in: selectedLocation!.trim(),
         quantity_in: amount,
@@ -163,7 +165,7 @@ export function BulkCardIntake({ onBatchAdd }: BulkCardIntakeProps) {
         card_number_in: '',
         grade_in: '',
         price_in: totalPrice,
-        cost_in: totalPrice, // Use same amount for cost
+        cost_in: totalPrice,
         sku_in: `${selectedGame.toUpperCase()}-BULK-${Date.now()}`,
         source_provider_in: 'bulk_entry',
         main_category_in: mainCategory,
@@ -180,35 +182,19 @@ export function BulkCardIntake({ onBatchAdd }: BulkCardIntakeProps) {
           captured_at: new Date().toISOString()
         },
         processing_notes_in: `Bulk card entry: ${amount} ${selectedGame} cards at $${totalPrice.toFixed(2)} total ($${(totalPrice / amount).toFixed(2)} each)`
-      };
+      });
 
-      const response = await supabase.rpc('create_raw_intake_item', rpcParams);
-
-      if (response.error) {
-        logger.logError('Bulk add error', new Error(response.error.message));
-        toast.error(`Failed to add bulk item: ${response.error.message}`);
-      } else {
-        toast.success(`Successfully added ${amount} ${selectedGame} bulk cards to batch ($${totalPrice.toFixed(2)} total)`);
-        
-        // Dispatch browser event for real-time updates
-        const responseData = Array.isArray(response.data) ? response.data[0] : response.data;
-        window.dispatchEvent(new CustomEvent('intake:item-added', { 
-          detail: { ...responseData, lot_number: responseData?.lot_number }
-        }));
-
-        if (onBatchAdd) {
-          onBatchAdd(responseData);
-        }
-
-        // Reset form
-        setSelectedGame('');
-        setAmount(1);
-        setTotalPrice(0);
-        setSubCategory('');
+      if (onBatchAdd) {
+        onBatchAdd(result);
       }
+
+      // Reset form
+      setSelectedGame('');
+      setAmount(1);
+      setTotalPrice(0);
+      setSubCategory('');
     } catch (error: any) {
       logger.logError('Bulk add error', error);
-      toast.error(`Failed to add bulk item: ${error.message}`);
     } finally {
       setAddingBulk(false);
     }

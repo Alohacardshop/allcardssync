@@ -14,6 +14,7 @@ import { z } from "zod";
 import { parseClzComicsCsv, ClzComic } from "@/lib/csv/parseClzComics";
 import { SubCategoryCombobox } from "@/components/ui/sub-category-combobox";
 import { useLogger } from "@/hooks/useLogger";
+import { useAddIntakeItem } from "@/hooks/useAddIntakeItem";
 
 interface RawComicIntakeProps {
   onBatchAdd?: (item: any) => void;
@@ -22,6 +23,7 @@ interface RawComicIntakeProps {
 export const RawComicIntake = ({ onBatchAdd }: RawComicIntakeProps) => {
   const { assignedStore, selectedLocation } = useStore();
   const logger = useLogger('RawComicIntake');
+  const { mutateAsync: addItem, isPending: isAdding } = useAddIntakeItem();
   
   const [formData, setFormData] = useState({
     title: "",
@@ -161,7 +163,7 @@ export const RawComicIntake = ({ onBatchAdd }: RawComicIntakeProps) => {
     try {
       setSubmitting(true);
 
-      const { data, error } = await supabase.rpc("create_raw_intake_item", {
+      const result = await addItem({
         store_key_in: assignedStore,
         shopify_location_gid_in: selectedLocation,
         quantity_in: formData.quantity,
@@ -188,10 +190,6 @@ export const RawComicIntake = ({ onBatchAdd }: RawComicIntakeProps) => {
         }
       });
 
-      if (error) throw error;
-
-      toast.success("Comic added to batch successfully!");
-
       // Move to next comic if available, otherwise reset
       if (uploadedComics.length > 0 && currentComicIndex < uploadedComics.length - 1) {
         handleNextComic();
@@ -213,24 +211,13 @@ export const RawComicIntake = ({ onBatchAdd }: RawComicIntakeProps) => {
       }
 
       if (onBatchAdd) {
-        onBatchAdd(data);
+        onBatchAdd(result);
       }
-
-      const item = Array.isArray(data) ? data[0] : data;
-      window.dispatchEvent(new CustomEvent('batchItemAdded', {
-        detail: { 
-          itemId: item?.id,
-          lot: item?.lot_number,
-          store: assignedStore,
-          location: selectedLocation
-        }
-      }));
 
     } catch (error: any) {
       logger.logError('Failed to add comic to batch', error instanceof Error ? error : undefined, {
         title: formData.title,
       })
-      toast.error(`Failed to add to batch: ${error.message}`);
     } finally {
       setSubmitting(false);
     }

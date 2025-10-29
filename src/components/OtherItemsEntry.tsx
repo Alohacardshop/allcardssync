@@ -12,6 +12,7 @@ import { useIntakeValidation } from '@/hooks/useIntakeValidation';
 import { useLogger } from '@/hooks/useLogger';
 import { SubCategoryCombobox } from '@/components/ui/sub-category-combobox';
 import { detectMainCategory } from '@/utils/categoryMapping';
+import { useAddIntakeItem } from "@/hooks/useAddIntakeItem";
 
 interface OtherItemsEntryProps {
   onBatchAdd?: (item: any) => void;
@@ -20,6 +21,7 @@ interface OtherItemsEntryProps {
 export function OtherItemsEntry({ onBatchAdd }: OtherItemsEntryProps) {
   const { validateAccess, assignedStore, selectedLocation } = useIntakeValidation();
   const logger = useLogger('OtherItemsEntry');
+  const { mutateAsync: addItem, isPending: isAdding } = useAddIntakeItem();
   
   // Form state
   const [description, setDescription] = useState('');
@@ -66,7 +68,7 @@ export function OtherItemsEntry({ onBatchAdd }: OtherItemsEntryProps) {
     setAddingOther(true);
 
     try {
-      const rpcParams = {
+      const result = await addItem({
         store_key_in: assignedStore!.trim(),
         shopify_location_gid_in: selectedLocation!.trim(),
         quantity_in: amount,
@@ -77,7 +79,7 @@ export function OtherItemsEntry({ onBatchAdd }: OtherItemsEntryProps) {
         card_number_in: '',
         grade_in: '',
         price_in: totalPrice,
-        cost_in: totalPrice, // Use same amount for cost
+        cost_in: totalPrice,
         sku_in: `OTHER-${Date.now()}`,
         source_provider_in: 'other_entry',
         main_category_in: mainCategory,
@@ -93,35 +95,19 @@ export function OtherItemsEntry({ onBatchAdd }: OtherItemsEntryProps) {
           captured_at: new Date().toISOString()
         },
         processing_notes_in: `Other item entry: ${amount} ${description.trim()} at $${totalPrice.toFixed(2)} total ($${(totalPrice / amount).toFixed(2)} each)`
-      };
+      });
 
-      const response = await supabase.rpc('create_raw_intake_item', rpcParams);
-
-      if (response.error) {
-        logger.logError('Other item add error', response.error instanceof Error ? response.error : new Error(String(response.error)), { description, amount, totalPrice });
-        toast.error(`Failed to add other item: ${response.error.message}`);
-      } else {
-        toast.success(`Successfully added ${amount} ${description.trim()} to batch ($${totalPrice.toFixed(2)} total)`);
-        
-        // Dispatch browser event for real-time updates
-        const responseData = Array.isArray(response.data) ? response.data[0] : response.data;
-        window.dispatchEvent(new CustomEvent('intake:item-added', { 
-          detail: { ...responseData, lot_number: responseData?.lot_number }
-        }));
-
-        if (onBatchAdd) {
-          onBatchAdd(responseData);
-        }
-
-        // Reset form
-        setDescription('');
-        setAmount(1);
-        setTotalPrice(0);
-        setSubCategory('');
+      if (onBatchAdd) {
+        onBatchAdd(result);
       }
+
+      // Reset form
+      setDescription('');
+      setAmount(1);
+      setTotalPrice(0);
+      setSubCategory('');
     } catch (error: any) {
       logger.logError('Other item add error', error instanceof Error ? error : new Error(String(error)), { description, amount, totalPrice });
-      toast.error(`Failed to add other item: ${error.message}`);
     } finally {
       setAddingOther(false);
     }

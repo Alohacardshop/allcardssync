@@ -16,6 +16,8 @@ import { useBatchAutoProcessSettings } from '@/hooks/useBatchAutoProcessSettings
 import { BatchConfigDialog } from '@/components/BatchConfigDialog';
 import { BatchProgressDialog } from '@/components/BatchProgressDialog';
 import { useLogger } from '@/hooks/useLogger';
+import { useCurrentBatch } from '@/hooks/useCurrentBatch';
+import { useSession } from '@/hooks/useSession';
 
 import type { IntakeItem } from "@/types/intake";
 
@@ -28,9 +30,17 @@ interface CurrentBatchPanelProps {
 export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact = false }: CurrentBatchPanelProps) => {
   const logger = useLogger('CurrentBatchPanel');
   const { assignedStore, selectedLocation, availableLocations } = useStore();
-  const [recentItems, setRecentItems] = useState<IntakeItem[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [counts, setCounts] = useState({ activeItems: 0, totalItems: 0 });
+  const { data: session } = useSession();
+  
+  // Use React Query for batch data
+  const { data: batchData, isLoading: loading, refetch } = useCurrentBatch({
+    storeKey: assignedStore,
+    locationGid: selectedLocation,
+    userId: session?.user?.id
+  });
+  
+  const recentItems = batchData?.items || [];
+  const counts = batchData?.counts || { activeItems: 0, totalItems: 0 };
   const [editingItem, setEditingItem] = useState<IntakeItem | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [sendingBatch, setSendingBatch] = useState(false);

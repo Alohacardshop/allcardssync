@@ -1,5 +1,11 @@
 import { QueryClient } from '@tanstack/react-query';
 
+// Query key factory for consistency
+export const queryKeys = {
+  currentBatch: (storeKey?: string | null, locationGid?: string | null) => 
+    ['currentBatch', storeKey, locationGid].filter(Boolean),
+};
+
 // Sane React Query defaults - no blind polling
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -14,6 +20,12 @@ export const queryClient = new QueryClient({
     },
     mutations: {
       retry: 1, // Retry mutations once on failure
+      onError: (error) => {
+        // Global error handler for mutations
+        if (process.env.NODE_ENV === 'development') {
+          console.error('❌ Mutation error:', error);
+        }
+      },
     },
   },
 });

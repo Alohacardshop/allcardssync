@@ -15,30 +15,6 @@ export default function Index() {
   const [comicCondition, setComicCondition] = useState<'raw' | 'graded'>('raw');
   const [batchCount, setBatchCount] = useState(0);
 
-  // Listen for batch updates
-  useEffect(() => {
-    const handleBatchItemAdded = () => {
-      toast({
-        title: "Success",
-        description: "Item added to batch!"
-      });
-    };
-
-    window.addEventListener('batchItemAdded', handleBatchItemAdded as EventListener);
-    return () => {
-      window.removeEventListener('batchItemAdded', handleBatchItemAdded as EventListener);
-    };
-  }, []);
-
-  // Handle batch add callback (memoized to prevent remounting children)
-  const handleBatchAdd = useCallback(() => {
-    toast({
-      title: "Success", 
-      description: "Item added to batch!"
-    });
-  }, []);
-
-  // Memoized batch count update to prevent remounting children
   const handleBatchCountUpdate = useCallback((count: number) => {
     setBatchCount(count);
   }, []);
@@ -80,11 +56,11 @@ export default function Index() {
               </TabsList>
               
               <TabsContent value="raw">
-                <TCGPlayerBulkImport onBatchAdd={handleBatchAdd} />
+                <TCGPlayerBulkImport />
               </TabsContent>
               
               <TabsContent value="graded">
-                <GradedCardIntake onBatchAdd={handleBatchAdd} />
+                <GradedCardIntake />
               </TabsContent>
             </Tabs>
           </TabsContent>
@@ -104,11 +80,11 @@ export default function Index() {
               </TabsList>
               
               <TabsContent value="raw">
-                <RawComicIntake onBatchAdd={handleBatchAdd} />
+                <RawComicIntake />
               </TabsContent>
               
               <TabsContent value="graded">
-                <GradedComicIntake onBatchAdd={handleBatchAdd} />
+                <GradedComicIntake />
               </TabsContent>
             </Tabs>
           </TabsContent>

@@ -24,6 +24,7 @@ import { gradedCardSchema } from "@/lib/validation/intake-schemas";
 import { SubCategoryCombobox } from "@/components/ui/sub-category-combobox";
 import { detectMainCategory } from "@/utils/categoryMapping";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { useAddIntakeItem } from "@/hooks/useAddIntakeItem";
 
 interface GradedCardIntakeProps {
   onBatchAdd?: () => void;
@@ -51,6 +52,7 @@ const parsePSAGrade = (gradeStr: string): { numeric: string; original: string; h
 export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => {
   const logger = useLogger('GradedCardIntake');
   const { validateAccess, assignedStore, selectedLocation } = useIntakeValidation();
+  const { mutateAsync: addItem, isPending: isAdding } = useAddIntakeItem();
 
   // Grading service selection
   const [gradingService, setGradingService] = useState<'psa' | 'cgc'>('psa');
@@ -355,7 +357,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         card_number_in: formData.cardNumber,
         price_in: parseFloat(formData.price),
         cost_in: parseFloat(formData.cost),
-        sku_in: formData.certNumber, // Use cert number as SKU
+        sku_in: formData.certNumber,
         main_category_in: formData.mainCategory,
         sub_category_in: formData.subCategory,
         catalog_snapshot_in: {
@@ -366,17 +368,14 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         }
       };
 
-      const { data, error } = await supabase.rpc("create_raw_intake_item", itemPayload);
-
-      if (error) throw error;
+      const result = await addItem(itemPayload);
 
       // Update vendor immediately after insert
-      const insertedItem = Array.isArray(data) ? data[0] : data;
-      if (formData.vendor && insertedItem?.id) {
+      if (formData.vendor && result?.id) {
         await supabase
           .from('intake_items')
           .update({ vendor: formData.vendor })
-          .eq('id', insertedItem.id);
+          .eq('id', result.id);
       }
 
       // Reset form but keep vendor
@@ -402,27 +401,13 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         subCategory: "",
         vendor: currentVendor,
       });
-
-      toast.success("Card added to batch successfully!");
       
       if (onBatchAdd) {
         onBatchAdd();
       }
 
-      // Dispatch event for batch panel to refresh
-      const item = Array.isArray(data) ? data[0] : data;
-      window.dispatchEvent(new CustomEvent('batchItemAdded', {
-        detail: { 
-          itemId: item.id,
-          lot: item.lot_number,
-          store: assignedStore,
-          location: selectedLocation
-        }
-      }));
-
     } catch (error: any) {
       logger.logError('Submit error', error);
-      toast.error(`Failed to add to batch: ${error.message}`);
     } finally {
       setSubmitting(false);
     }

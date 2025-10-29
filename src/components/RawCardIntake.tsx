@@ -16,6 +16,7 @@ import { rawCardSchema } from "@/lib/validation/intake-schemas";
 import { SubCategoryCombobox } from "@/components/ui/sub-category-combobox";
 import { detectMainCategory } from "@/utils/categoryMapping";
 import { useLogger } from "@/hooks/useLogger";
+import { useAddIntakeItem } from "@/hooks/useAddIntakeItem";
 
 interface RawCardIntakeProps {
   onBatchAdd?: (item: any) => void;
@@ -25,6 +26,7 @@ export const RawCardIntake = ({ onBatchAdd }: RawCardIntakeProps) => {
   const { assignedStore, selectedLocation, validateAccess } = useIntakeValidation();
   const { settings } = useRawIntakeSettings();
   const logger = useLogger('RawCardIntake');
+  const { mutateAsync: addItem, isPending: isAdding } = useAddIntakeItem();
   const [brand, setBrand] = useState("");
   const [subject, setSubject] = useState("");
   const [cardNumber, setCardNumber] = useState("");
@@ -142,17 +144,14 @@ export const RawCardIntake = ({ onBatchAdd }: RawCardIntakeProps) => {
         }
       };
 
-      const { data, error } = await supabase.rpc("create_raw_intake_item", itemPayload);
-
-      if (error) throw error;
+      const result = await addItem(itemPayload);
 
       // Update vendor immediately after insert
-      const insertedItem = Array.isArray(data) ? data[0] : data;
-      if (vendor && insertedItem?.id) {
+      if (vendor && result?.id) {
         await supabase
           .from('intake_items')
           .update({ vendor })
-          .eq('id', insertedItem.id);
+          .eq('id', result.id);
       }
 
       toast({
@@ -172,26 +171,7 @@ export const RawCardIntake = ({ onBatchAdd }: RawCardIntakeProps) => {
       setVendor(currentVendor);
 
       // Trigger refresh
-      onBatchAdd?.(Array.isArray(data) ? data[0] : data);
-      
-      // Dispatch events for CurrentBatchPanel
-      const item = Array.isArray(data) ? data[0] : data;
-      window.dispatchEvent(new CustomEvent('intake:item-added', { 
-        detail: { 
-          item: item,
-          store: assignedStore,
-          location: selectedLocation
-        }
-      }));
-      
-      window.dispatchEvent(new CustomEvent('batchItemAdded', { 
-        detail: { 
-          itemId: item.id,
-          lot: item.lot_number,
-          store: assignedStore,
-          location: selectedLocation
-        }
-      }));
+      onBatchAdd?.(result);
 
     } catch (error) {
       logger.logError('Error adding raw card', error instanceof Error ? error : undefined, {

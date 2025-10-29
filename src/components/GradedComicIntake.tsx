@@ -13,6 +13,7 @@ import { CGCCertificateDisplay } from "@/components/CGCCertificateDisplay";
 import { useDebounce } from "@/hooks/useDebounce";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { CGCCertificateData } from "@/types/cgc";
+import { useAddIntakeItem } from "@/hooks/useAddIntakeItem";
 
 interface GradedComicIntakeProps {
   onBatchAdd?: () => void;
@@ -21,6 +22,7 @@ interface GradedComicIntakeProps {
 export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) => {
   const { validateAccess, assignedStore, selectedLocation } = useIntakeValidation();
   const logger = useLogger('GradedComicIntake');
+  const { mutateAsync: addItem, isPending: isAdding } = useAddIntakeItem();
 
   const [certInput, setCertInput] = useState("");
   const [barcodeInput, setBarcodeInput] = useState("");
@@ -164,7 +166,7 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
     try {
       setSubmitting(true);
 
-      const { data, error } = await supabase.rpc("create_raw_intake_item", {
+      await addItem({
         store_key_in: assignedStore,
         shopify_location_gid_in: selectedLocation,
         quantity_in: formData.quantity,
@@ -185,8 +187,6 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
         }
       });
 
-      if (error) throw error;
-
       setCertInput("");
       setBarcodeInput("");
       setComicData(null);
@@ -202,26 +202,13 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
         quantity: 1,
         mainCategory: "comics",
       });
-
-      toast.success("Comic added to batch successfully!");
       
       if (onBatchAdd) {
         onBatchAdd();
       }
 
-      const item = Array.isArray(data) ? data[0] : data;
-      window.dispatchEvent(new CustomEvent('batchItemAdded', {
-        detail: { 
-          itemId: item.id,
-          lot: item.lot_number,
-          store: assignedStore,
-          location: selectedLocation
-        }
-      }));
-
     } catch (error: any) {
       logger.logError("Submit error", error instanceof Error ? error : new Error(String(error)), { certNumber: formData.certNumber });
-      toast.error(`Failed to add to batch: ${error.message}`);
     } finally {
       setSubmitting(false);
     }
