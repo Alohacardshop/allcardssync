@@ -74,11 +74,14 @@ record "new" has no field "updated_by"
 # Run the script (it will detect Supabase automatically)
 ./scripts/db-fix-intake-items.sh
 
-# Then follow the instructions to run these files in SQL Editor:
+# Then follow the instructions to run these files in SQL Editor IN ORDER:
+# MAIN TRANSACTION (Sections 1-3): Run in one SQL Editor tab
 # 1. db/fixes/recompile_intake_items_triggers.sql
 # 2. db/fixes/recreate_send_intake_items_to_inventory.sql
-# 3. db/fixes/discard_all.sql
-# 4. db/fixes/ensure_updated_by_trigger.sql
+# 3. db/fixes/ensure_updated_by_trigger.sql
+
+# SEPARATE SESSION (Section 4): Open NEW SQL Editor tab and run
+# 4. scripts/db-discard-all.sql (⚠️ MUST run separately - cannot be in transaction)
 ```
 
 **Usage for Local PostgreSQL**:
@@ -93,8 +96,8 @@ chmod +x scripts/db-fix-intake-items.sh
 **SQL Files Included**:
 - `db/fixes/recompile_intake_items_triggers.sql` - Recompiles all 10 trigger functions on intake_items
 - `db/fixes/recreate_send_intake_items_to_inventory.sql` - Recreates the RPC with `updated_by` field
-- `db/fixes/discard_all.sql` - Clears prepared statement cache
 - `db/fixes/ensure_updated_by_trigger.sql` - Idempotently creates/updates the audit trigger
+- `scripts/db-discard-all.sql` - Clears prepared statement cache (⚠️ run separately)
 
 **When to use**:
 - ⚠️ After adding/removing columns to tables with triggers
@@ -162,19 +165,23 @@ chmod +x scripts/db-test-updated-by.sh
 
 **Purpose**: Minimal SQL script to clear PostgREST prepared statement cache and force schema reparse.
 
+**⚠️ CRITICAL: Must run in a SEPARATE session**
+- `DISCARD ALL` cannot run inside a transaction with other SQL statements
+- Must be executed in its own SQL Editor tab/session
+- Run this AFTER completing Sections 1-3 of the main fix script
+
 **What it does**:
 - Executes `DISCARD ALL` to clear all prepared statements in the current connection
 - Resets temporary tables and session-level variables
 - Forces PostgreSQL to recompile queries with the current schema on next execution
-- Includes success message for verification
 
 **Usage for Supabase**:
 ```bash
-# Open SQL Editor
-# https://supabase.com/dashboard/project/dmpoandoydaqxhzdjnmk/sql/new
-
-# Copy and paste: scripts/db-discard-all.sql
-# Click "Run" button
+# 1. First complete the main fix script (Sections 1-3)
+# 2. Then open a NEW SQL Editor tab:
+#    https://supabase.com/dashboard/project/dmpoandoydaqxhzdjnmk/sql/new
+# 3. Copy and paste: scripts/db-discard-all.sql
+# 4. Click "Run" button
 ```
 
 **Usage for Local PostgreSQL**:
@@ -225,9 +232,10 @@ All SQL scripts in this project are designed to work in the Supabase SQL Editor 
    - Check for success messages (✅) or errors (❌)
 
 5. **Run multiple files in order**:
-   - For `db-fix-intake-items.sh`, run files 1-4 in sequence
-   - Wait for each to complete before running the next
+   - For `db-fix-intake-items.sh`, run Sections 1-3 together in one SQL Editor tab
+   - Then open a NEW tab and run `scripts/db-discard-all.sql` separately
    - Each file includes verification checks
+   - **Important**: `DISCARD ALL` cannot run inside a transaction
 
 **Tips**:
 - Scripts include `DO $$ BEGIN ... END $$` blocks with RAISE NOTICE for progress tracking
