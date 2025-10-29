@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { supabase } from "@/integrations/supabase/client"
+import type { DatabaseFunctionsExtended } from "@/integrations/supabase/types-augmentation"
 import { toast } from "sonner"
 import { Loader2, TestTube, CheckCircle, XCircle } from "lucide-react"
 
@@ -70,9 +71,9 @@ export default function ShopifyQueueTest() {
       const maxAttempts = 2
       
       for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-        const { data, error } = await supabase.rpc('send_and_queue_inventory' as any, {
+        const { data, error } = await (supabase.rpc as any)('send_and_queue_inventory', {
           item_ids: testItems.map(item => item.id)
-        })
+        }) as { data: DatabaseFunctionsExtended['public']['Functions']['send_and_queue_inventory']['Returns'] | null, error: any }
         
         inventoryResult = data
         inventoryError = error

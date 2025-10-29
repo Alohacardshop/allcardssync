@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { supabase } from "@/integrations/supabase/client"
+import type { DatabaseFunctionsExtended } from "@/integrations/supabase/types-augmentation"
 import { toast } from "sonner"
 import { ShopifyError, RateLimitError } from "@/types/errors"
 import { logger } from "@/lib/logger"
@@ -202,9 +203,9 @@ export function useBatchSendToShopify() {
             attemptNumber++
             logger.debug(`Sending chunk ${chunkIndex + 1}/${totalChunks} to inventory (attempt ${attemptNumber}/${maxAttempts})`, { chunkSize: chunk.length }, 'useBatchSendToShopify')
             
-            const { data, error } = await supabase.rpc('send_and_queue_inventory' as any, {
+            const { data, error } = await (supabase.rpc as any)('send_and_queue_inventory', {
               item_ids: chunk
-            })
+            }) as { data: DatabaseFunctionsExtended['public']['Functions']['send_and_queue_inventory']['Returns'] | null, error: any }
             
             inventoryData = data
             inventoryError = error
