@@ -18,6 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { SubCategoryCombobox } from "@/components/ui/sub-category-combobox";
 import { detectMainCategory } from "@/utils/categoryMapping";
 import { logger } from "@/lib/logger";
+import { useAddIntakeItem } from "@/hooks/useAddIntakeItem";
 
 interface PSAImportItem {
   psaCert: string;
@@ -44,6 +45,7 @@ export const PSABulkImport = () => {
   const [progress, setProgress] = useState(0);
   const [manualInput, setManualInput] = useState('');
   const { assignedStore, selectedLocation, availableLocations } = useStore();
+  const { mutateAsync: addItem } = useAddIntakeItem();
   const batchId = uuidv4(); // Generate a unique batch ID for this import session
   const [mainCategory, setMainCategory] = useState('tcg');
   const [subCategory, setSubCategory] = useState('');
@@ -121,7 +123,7 @@ export const PSABulkImport = () => {
 
   const insertIntakeItem = async (item: PSAImportItem) => {
     try {
-      const rpcParams = {
+      const itemPayload = {
         store_key_in: assignedStore || null,
         shopify_location_gid_in: selectedLocation || null,
         quantity_in: 1,
@@ -145,8 +147,7 @@ export const PSABulkImport = () => {
         processing_notes_in: `PSA bulk import from ${file?.name}`
       };
 
-      const response: any = await supabase.rpc('create_raw_intake_item', rpcParams);
-      if (response.error) throw response.error;
+      await addItem(itemPayload);
     } catch (error: any) {
       logger.error('PSA bulk import error', error instanceof Error ? error : new Error(String(error)), { cert: item.psaCert }, 'psa-bulk-import');
       throw error;

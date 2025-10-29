@@ -19,6 +19,7 @@ import { CsvPasteArea } from '@/components/csv/CsvPasteArea';
 import { NormalizedCard } from '@/lib/csv/normalize';
 import { SubCategoryCombobox } from '@/components/ui/sub-category-combobox';
 import { detectMainCategory } from '@/utils/categoryMapping';
+import { useAddIntakeItem } from '@/hooks/useAddIntakeItem';
 
 interface TCGPlayerItem {
   tcgplayerId?: string; // TCGPlayer ID for SKU generation (readonly)
@@ -118,6 +119,7 @@ export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) =>
   const [editingItem, setEditingItem] = useState<TCGPlayerItem | null>(null);
   const [editingIndex, setEditingIndex] = useState<number>(-1);
   const { assignedStore, selectedLocation } = useStore();
+  const { mutateAsync: addItem } = useAddIntakeItem();
   const batchId = uuidv4(); // Generate a unique batch ID for this import session
   const [mainCategory, setMainCategory] = useState('tcg');
   const [subCategory, setSubCategory] = useState('');
@@ -356,7 +358,7 @@ export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) =>
     const sku = generateTCGSKU(item.tcgplayerId, gameKey, variantId, cardId);
     
     try {
-      const rpcParams = {
+      const itemPayload = {
         store_key_in: assignedStore || null,
         shopify_location_gid_in: selectedLocation || null,
         quantity_in: item.quantity,
@@ -421,19 +423,13 @@ export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) =>
         processing_notes_in: createHumanReadableDescription(item)
       };
 
-      const { data: response, error } = await supabase.rpc('create_raw_intake_item', rpcParams);
-      if (error) throw error;
+      const result = await addItem(itemPayload);
       
-      console.log('Raw intake item created:', response);
-      
-      // Handle array response from RPC function
-      const itemData = Array.isArray(response) ? response[0] : response;
-      
-      // Return the full item data for event dispatching
+      // Return the full item data
       return {
-        id: itemData?.id,
+        id: result.id,
         sku,
-        item_data: rpcParams,
+        item_data: itemPayload,
         store_key: assignedStore,
         location_gid: selectedLocation
       };
@@ -482,41 +478,15 @@ export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) =>
           generatedSku: result.sku
         };
 
-        // Dispatch events for batch management
-        if (result.id) {
-          // Dispatch custom event for components listening
-          window.dispatchEvent(new CustomEvent('intake:item-added', {
-            detail: {
-              itemId: result.id,
-              sku: result.sku,
-              store: result.store_key,
-              location: result.location_gid
-            }
-          }));
-
-          // Call onBatchAdd callback if provided
-          if (onBatchAdd) {
-            onBatchAdd({
-              id: result.id,
-              sku: result.sku,
-              store: result.store_key,
-              location: result.location_gid,
-              ...result.item_data
-            });
-          }
-
-          // Dispatch batchItemAdded event for CurrentBatchPanel
-          window.dispatchEvent(new CustomEvent('batchItemAdded', {
-            detail: {
-              item: {
-                id: result.id,
-                sku: result.sku,
-                ...result.item_data
-              },
-              store: result.store_key,
-              location: result.location_gid
-            }
-          }));
+        // Call onBatchAdd callback if provided
+        if (onBatchAdd && result.id) {
+          onBatchAdd({
+            id: result.id,
+            sku: result.sku,
+            store: result.store_key,
+            location: result.location_gid,
+            ...result.item_data
+          });
         }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
