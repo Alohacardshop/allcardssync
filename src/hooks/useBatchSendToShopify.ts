@@ -268,27 +268,20 @@ export function useBatchSendToShopify() {
             // Provide actionable error message with first 100 chars
             if (isRecordNewError) {
               const fixInstructions = [
-                'Database cache error detected. Run these SQL files in Supabase SQL Editor:',
-                '1. db/fixes/recompile_intake_items_triggers.sql',
-                '2. db/fixes/recreate_send_intake_items_to_inventory.sql',
-                '3. db/fixes/discard_all.sql',
-                '4. db/fixes/ensure_updated_by_trigger.sql',
-                'Or run: ./scripts/db-fix-intake-items.sh'
+                'Database cache error detected. Run DISCARD ALL in Supabase SQL Editor:',
+                'DISCARD ALL;',
+                '',
+                'This clears PostgREST cache and forces schema refresh.'
               ].join('\n')
               
-              toast.error('Database Cache Error - "record new" Field Missing', {
+              toast.error('Database Cache Error - Schema Out of Sync', {
                 description: `Error: ${errorPreview}${errorMsg.length > 100 ? '...' : ''}\n\n${fixInstructions}`,
                 duration: 15000 // 15 seconds for longer instructions
               })
               
-              logger.error('Record "new" cache error - DB fix scripts required', new Error(errorMsg), {
+              logger.error('Database cache error - DISCARD ALL required', new Error(errorMsg), {
                 errorPreview,
-                fixScripts: [
-                  'db/fixes/recompile_intake_items_triggers.sql',
-                  'db/fixes/recreate_send_intake_items_to_inventory.sql',
-                  'db/fixes/discard_all.sql',
-                  'db/fixes/ensure_updated_by_trigger.sql'
-                ]
+                fix: 'Run DISCARD ALL in Supabase SQL Editor'
               }, 'useBatchSendToShopify')
             } else if (errorMsg.includes('column') || errorMsg.includes('does not exist')) {
               toast.error('Database Schema Error', {
