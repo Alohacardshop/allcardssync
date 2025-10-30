@@ -23,25 +23,21 @@ const BulkImport = () => {
         <div className="grid gap-8">
           <Card>
             <CardHeader>
-              <CardTitle>TCGPlayer Bulk Import</CardTitle>
+              <CardTitle>Raw Cards</CardTitle>
               <p className="text-sm text-muted-foreground">
-                Import raw card data from TCGPlayer cart/list format
+                Import raw card data from TCGPlayer or add manually
               </p>
             </CardHeader>
-            <CardContent>
-              <TCGPlayerBulkImport />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Manual Raw Card Entry</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Quickly add individual raw cards to your batch
-              </p>
-            </CardHeader>
-            <CardContent>
-              <ManualRawCardEntry />
+            <CardContent className="space-y-8">
+              <div>
+                <h3 className="text-lg font-semibold mb-4">TCGPlayer CSV Parser</h3>
+                <TCGPlayerBulkImport />
+              </div>
+              
+              <div>
+                <h3 className="text-lg font-semibold mb-4">Manual Raw Card Entry</h3>
+                <ManualRawCardEntry />
+              </div>
             </CardContent>
           </Card>
 
