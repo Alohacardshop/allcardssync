@@ -33,6 +33,7 @@ const ShopifySync = React.lazy(() => import("./pages/ShopifySync"));
 const BulkImport = React.lazy(() => import("./pages/BulkImport"));
 const BulkTransfer = React.lazy(() => import("./pages/BulkTransfer"));
 const DiscordNotifications = React.lazy(() => import("./pages/admin/DiscordNotifications"));
+const PendingNotifications = React.lazy(() => import("./pages/PendingNotifications"));
 import { GlobalKeyboardHandler } from "./components/GlobalKeyboardHandler";
 import { FloatingActionButton } from "./components/FloatingActionButton";
 import { PerformanceMonitor } from "./components/PerformanceMonitor";
@@ -80,6 +81,7 @@ const App = () => (
                             <Route path="/admin" element={<AdminGuard><Admin /></AdminGuard>} />
                             <Route path="/admin/catalog" element={<AdminGuard><div className="p-8"><CatalogMigrationPlaceholder /></div></AdminGuard>} />
                             <Route path="/admin/notifications/discord" element={<AdminGuard><DiscordNotifications /></AdminGuard>} />
+                            <Route path="/admin/notifications/pending" element={<AdminGuard><PendingNotifications /></AdminGuard>} />
                             <Route path="/shopify-mapping" element={<ShopifyMapping />} />
                             <Route path="/shopify-sync" element={<ShopifySync />} />
                             <Route path="/bulk-transfer" element={<BulkTransfer />} />
