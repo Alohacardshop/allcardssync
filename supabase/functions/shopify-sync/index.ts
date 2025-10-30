@@ -257,12 +257,17 @@ async function createShopifyProduct(credentials: ShopifyCredentials, item: Inven
     const psaCertNumber = (item as any).psa_cert || (item as any).catalog_snapshot?.certNumber || (item as any).catalog_snapshot?.psa_cert || item.sku
     description = `${title}\nPSA Cert: ${psaCertNumber}`
     
-    // Tags for graded cards: brand, "graded", grade number, variant, category, lot number
+    // Comprehensive tags for graded cards
     if (item.brand_title) tags.push(item.brand_title.toLowerCase())
-    tags.push('graded')
-    if (item.grade) tags.push(`psa-${item.grade}`)
+    tags.push('graded', 'collectibles', 'trading-cards')
+    if (item.grade) tags.push(`psa-${item.grade}`, `grade-${item.grade}`)
+    if ((item as any).grading_company) tags.push((item as any).grading_company.toLowerCase())
     if (variant) tags.push(variant.toLowerCase())
     if (item.category) tags.push(item.category.toLowerCase().replace(/\s+/g, '-'))
+    if (year) tags.push(`year-${year}`)
+    if ((item as any).main_category) tags.push((item as any).main_category.toLowerCase())
+    if ((item as any).sub_category) tags.push((item as any).sub_category.toLowerCase().replace(/\s+/g, '-'))
+    if ((item as any).vendor) tags.push(`vendor-${(item as any).vendor.toLowerCase().replace(/\s+/g, '-')}`)
     if ((item as any).lot_number) tags.push(`lot-${(item as any).lot_number}`)
   } else {
     // For raw cards: keep simpler format but include variant if meaningful
@@ -286,12 +291,16 @@ async function createShopifyProduct(credentials: ShopifyCredentials, item: Inven
     const psaCertNumber = (item as any).psa_cert || (item as any).catalog_snapshot?.certNumber || (item as any).catalog_snapshot?.psa_cert || item.sku
     description = `${title}\nSKU: ${psaCertNumber}`
     
-    // Tags for raw cards: brand, condition, variant, category, lot number
+    // Comprehensive tags for raw cards
     if (item.brand_title) tags.push(item.brand_title.toLowerCase())
+    tags.push('raw', 'ungraded', 'collectibles', 'trading-cards')
     if (variant) tags.push(variant.toLowerCase())
     if (item.category) tags.push(item.category.toLowerCase().replace(/\s+/g, '-'))
+    if (item.year) tags.push(`year-${item.year}`)
+    if ((item as any).main_category) tags.push((item as any).main_category.toLowerCase())
+    if ((item as any).sub_category) tags.push((item as any).sub_category.toLowerCase().replace(/\s+/g, '-'))
+    if ((item as any).vendor) tags.push(`vendor-${(item as any).vendor.toLowerCase().replace(/\s+/g, '-')}`)
     if ((item as any).lot_number) tags.push(`lot-${(item as any).lot_number}`)
-    tags.push('raw')
   }
   
   // Extract image URLs from various sources
@@ -331,16 +340,135 @@ async function createShopifyProduct(credentials: ShopifyCredentials, item: Inven
   
   const handle = item.sku.toLowerCase().replace(/[^a-z0-9]/g, '-')
   
+  // Build comprehensive metafields for structured data
+  const metafields = []
+  
+  // Card identification metafields
+  if (item.card_number) {
+    metafields.push({
+      namespace: 'card_info',
+      key: 'card_number',
+      value: item.card_number,
+      type: 'single_line_text_field'
+    })
+  }
+  
+  if (item.year) {
+    metafields.push({
+      namespace: 'card_info',
+      key: 'year',
+      value: item.year,
+      type: 'single_line_text_field'
+    })
+  }
+  
+  if (item.brand_title) {
+    metafields.push({
+      namespace: 'card_info',
+      key: 'brand',
+      value: item.brand_title,
+      type: 'single_line_text_field'
+    })
+  }
+  
+  if (item.subject) {
+    metafields.push({
+      namespace: 'card_info',
+      key: 'subject',
+      value: item.subject,
+      type: 'single_line_text_field'
+    })
+  }
+  
+  // Category metafields
+  if ((item as any).main_category) {
+    metafields.push({
+      namespace: 'taxonomy',
+      key: 'main_category',
+      value: (item as any).main_category,
+      type: 'single_line_text_field'
+    })
+  }
+  
+  if ((item as any).sub_category) {
+    metafields.push({
+      namespace: 'taxonomy',
+      key: 'sub_category',
+      value: (item as any).sub_category,
+      type: 'single_line_text_field'
+    })
+  }
+  
+  // Grading metafields
+  if (item.type === 'Graded') {
+    if (item.grade) {
+      metafields.push({
+        namespace: 'grading',
+        key: 'grade',
+        value: item.grade,
+        type: 'single_line_text_field'
+      })
+    }
+    
+    if ((item as any).grading_company) {
+      metafields.push({
+        namespace: 'grading',
+        key: 'company',
+        value: (item as any).grading_company,
+        type: 'single_line_text_field'
+      })
+    }
+    
+    if (item.psa_cert) {
+      metafields.push({
+        namespace: 'grading',
+        key: 'cert_number',
+        value: item.psa_cert,
+        type: 'single_line_text_field'
+      })
+    }
+  }
+  
+  // Inventory tracking metafields
+  if ((item as any).lot_number) {
+    metafields.push({
+      namespace: 'inventory',
+      key: 'lot_number',
+      value: (item as any).lot_number,
+      type: 'single_line_text_field'
+    })
+  }
+  
+  if ((item as any).vendor) {
+    metafields.push({
+      namespace: 'inventory',
+      key: 'vendor',
+      value: (item as any).vendor,
+      type: 'single_line_text_field'
+    })
+  }
+  
+  // Store full catalog snapshot as JSON for future reference
+  if ((item as any).catalog_snapshot) {
+    metafields.push({
+      namespace: 'internal',
+      key: 'catalog_snapshot',
+      value: JSON.stringify((item as any).catalog_snapshot),
+      type: 'json'
+    })
+  }
+  
   const productData = {
     product: {
       title,
       body_html: description,
       handle,
       product_type: item.category,
-      vendor: (item as any).vendor || 'aloha card shop hawaii', // Use vendor from item or fallback
+      vendor: (item as any).vendor || 'aloha card shop hawaii',
       status: 'active',
       tags: tags.join(', '),
-      images: images, // Add images array
+      images: images,
+      metafields: metafields,
       variants: [{
         sku: item.sku,
         price: item.price.toString(),
@@ -349,7 +477,7 @@ async function createShopifyProduct(credentials: ShopifyCredentials, item: Inven
         inventory_policy: 'deny',
         inventory_quantity: item.quantity,
         barcode: item.type === 'Graded' ? item.psa_cert : undefined,
-        weight: 3, // 3oz as requested
+        weight: 3,
         weight_unit: 'oz'
       }]
     }
