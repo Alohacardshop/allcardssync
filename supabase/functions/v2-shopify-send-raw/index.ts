@@ -327,6 +327,39 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Build tags array with main_category and sub_category
+    const tagsArray = [...new Set(isComic ? [
+      'comics',
+      'raw',
+      brandTitle, // Publisher (DC, Marvel, etc.)
+      condition,
+      intakeItem.main_category,
+      intakeItem.sub_category || 'american', // Comic sub-category
+      intakeItem.lot_number || 'Unknown Lot',
+      subject ? `Title: ${subject}` : null,
+      cardNumber ? `Issue: ${cardNumber}` : null,
+      vendor
+    ].filter(Boolean) : [
+      'Raw Card',
+      'single', 
+      brandTitle, 
+      condition, // Condition as separate tag
+      intakeItem.main_category,
+      intakeItem.sub_category || (intakeItem.main_category === 'comics' ? 'american' : intakeItem.main_category === 'sports' ? 'baseball' : 'pokemon'), // Use sub_category or default by main_category
+      intakeItem.lot_number || 'Unknown Lot', // Lot number
+      subject ? `Card: ${subject}` : null, // Card name
+      cardNumber ? `Number: ${cardNumber}` : null, // Card number
+      vendor // Add vendor to tags
+    ].filter(Boolean))];
+
+    // Add tags as metafield
+    metafields.push({
+      namespace: 'acs.sync',
+      key: 'tags',
+      type: 'list.single_line_text_field',
+      value: JSON.stringify(tagsArray)
+    });
+
     // Prepare Shopify product data
     const productData = {
       product: {
@@ -334,27 +367,7 @@ Deno.serve(async (req) => {
         body_html: description,
         vendor: vendor || brandTitle || (isComic ? 'Comics' : 'Trading Cards'),
         product_type: isComic ? 'Raw Comic' : 'Raw Card',
-        tags: [...new Set(isComic ? [
-          'comics',
-          'raw',
-          brandTitle, // Publisher (DC, Marvel, etc.)
-          condition,
-          intakeItem.sub_category || 'american', // Comic sub-category
-          intakeItem.lot_number || 'Unknown Lot',
-          subject ? `Title: ${subject}` : null,
-          cardNumber ? `Issue: ${cardNumber}` : null,
-          vendor
-        ].filter(Boolean) : [
-          'Raw Card',
-          'single', 
-          brandTitle, 
-          condition, // Condition as separate tag
-          intakeItem.sub_category || (intakeItem.main_category === 'comics' ? 'american' : intakeItem.main_category === 'sports' ? 'baseball' : 'pokemon'), // Use sub_category or default by main_category
-          intakeItem.lot_number || 'Unknown Lot', // Lot number
-          subject ? `Card: ${subject}` : null, // Card name
-          cardNumber ? `Number: ${cardNumber}` : null, // Card number
-          vendor // Add vendor to tags
-        ].filter(Boolean))].join(', '),
+        tags: tagsArray.join(', '),
         variants: [{
           sku: intakeItem.sku,
           price: intakeItem.price?.toString() || '0.00',

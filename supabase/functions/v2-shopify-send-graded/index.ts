@@ -293,6 +293,36 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Build tags array with main_category and sub_category
+    const tagsArray = [...new Set(isComic ? [
+      'comics',
+      'graded',
+      gradingCompany,
+      grade ? `Grade ${grade}` : null,
+      brandTitle, // Publisher (DC, Marvel, etc.)
+      year,
+      intakeItem.main_category,
+      intakeItem.sub_category || 'american',
+      vendor
+    ].filter(Boolean) : [
+      gradingCompany,
+      grade ? `Grade ${grade}` : null,
+      brandTitle, 
+      year,
+      intakeItem.main_category,
+      intakeItem.sub_category,
+      intakeItem.game || intakeItem.catalog_snapshot?.game, 
+      vendor
+    ].filter(Boolean))];
+
+    // Add tags as metafield
+    metafields.push({
+      namespace: 'acs.sync',
+      key: 'tags',
+      type: 'list.single_line_text_field',
+      value: JSON.stringify(tagsArray)
+    });
+
     // Prepare Shopify product data
     const productData = {
       product: {
@@ -300,23 +330,7 @@ Deno.serve(async (req) => {
         body_html: description,
         vendor: vendor || brandTitle || (isComic ? 'Comics' : 'Trading Cards'),
         product_type: isComic ? 'Graded Comic' : 'Graded Card',
-        tags: [...new Set(isComic ? [
-          'comics',
-          'graded',
-          gradingCompany,
-          grade ? `Grade ${grade}` : null,
-          brandTitle, // Publisher (DC, Marvel, etc.)
-          year,
-          intakeItem.sub_category || 'american',
-          vendor
-        ].filter(Boolean) : [
-          gradingCompany,
-          grade ? `Grade ${grade}` : null,
-          brandTitle, 
-          year, 
-          intakeItem.game || intakeItem.catalog_snapshot?.game, 
-          vendor
-        ].filter(Boolean))].join(', '),
+        tags: tagsArray.join(', '),
         variants: [{
           sku: item.sku,
           price: item.price?.toString() || '0.00',
