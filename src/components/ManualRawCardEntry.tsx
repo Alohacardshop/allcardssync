@@ -298,13 +298,30 @@ export const ManualRawCardEntry: React.FC<ManualRawCardEntryProps> = ({ onBatchA
           </div>
 
           <div>
-            <Label htmlFor="numberedBox">Numbered Box</Label>
+            <Label htmlFor="numberedBox">Numbered</Label>
             <Input
               id="numberedBox"
               value={formData.numberedBox}
               onChange={(e) => handleInputChange('numberedBox', e.target.value)}
               placeholder="e.g., Box #1, Box A"
             />
+          </div>
+        </div>
+
+        {/* Right Column */}
+        <div className="space-y-4">
+          <div>
+            <Label htmlFor="condition">Condition</Label>
+            <Select value={formData.condition} onValueChange={(value) => handleInputChange('condition', value)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select condition" />
+              </SelectTrigger>
+              <SelectContent className="bg-popover z-50">
+                {CONDITION_OPTIONS.map(opt => (
+                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div>
@@ -332,23 +349,6 @@ export const ManualRawCardEntry: React.FC<ManualRawCardEntryProps> = ({ onBatchA
               onChange={(e) => handleInputChange('grade', e.target.value)}
               placeholder="e.g., 10, 9.5, 8"
             />
-          </div>
-        </div>
-
-        {/* Right Column */}
-        <div className="space-y-4">
-          <div>
-            <Label htmlFor="condition">Condition</Label>
-            <Select value={formData.condition} onValueChange={(value) => handleInputChange('condition', value)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select condition" />
-              </SelectTrigger>
-              <SelectContent>
-                {CONDITION_OPTIONS.map(opt => (
-                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
           </div>
 
           <div>
