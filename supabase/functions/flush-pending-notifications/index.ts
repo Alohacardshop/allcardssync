@@ -103,34 +103,14 @@ Deno.serve(async (req) => {
       try {
         const message = renderMessage(config.templates.queued, notification.payload, config);
 
-        // Generate barcode for order ID (SVG format)
-        let barcodeSvg: string | null = null;
-        try {
-          const orderId = notification.payload.id?.toString() || notification.payload.order_number?.toString() || 'NO-ID';
-          // Generate simple SVG barcode
-          barcodeSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="100" viewBox="0 0 300 100">
-            <rect width="100%" height="100%" fill="white"/>
-            <text x="150" y="90" text-anchor="middle" font-family="monospace" font-size="12">${orderId}</text>
-          </svg>`;
-        } catch (error) {
-          console.warn('Failed to generate barcode:', error);
-        }
-
-        // Build FormData with message and barcode
-        const formData = new FormData();
-        formData.append('payload_json', JSON.stringify({
-          content: message,
-          allowed_mentions: { parse: ['roles'] },
-        }));
-
-        if (barcodeSvg) {
-          const blob = new Blob([barcodeSvg], { type: 'image/svg+xml' });
-          formData.append('files[0]', blob, 'barcode.svg');
-        }
-
+        // Send to Discord
         const discordResponse = await fetch(queuedChannel.webhook_url, {
           method: 'POST',
-          body: formData,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            content: message,
+            allowed_mentions: { parse: ['roles'] },
+          }),
         });
 
         if (!discordResponse.ok) {
