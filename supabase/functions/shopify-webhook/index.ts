@@ -1,5 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.56.0";
+import JsBarcode from 'https://esm.sh/jsbarcode@3.11.6';
+import { createCanvas } from 'https://deno.land/x/canvas@v1.4.1/mod.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -141,6 +143,11 @@ serve(async (req) => {
         break;
       
       case 'orders/create':
+        // Send Discord notification for new orders
+        await sendDiscordNotification(supabase, payload);
+        await handleOrderUpdate(supabase, payload, shopifyDomain);
+        break;
+      
       case 'orders/updated':
       case 'orders/fulfilled':
         await handleOrderUpdate(supabase, payload, shopifyDomain);
@@ -235,6 +242,150 @@ async function handleProductListingRemove(supabase: any, payload: any, shopifyDo
 
   if (error) {
     console.error('Failed to update items for unpublished product:', error);
+  }
+}
+
+function isOpenNowInHawaii(): boolean {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Pacific/Honolulu',
+    hour: 'numeric',
+    hour12: false,
+  }).formatToParts(new Date());
+  
+  const hour = parseInt(parts.find((p) => p.type === 'hour')?.value ?? '0', 10);
+  return hour >= 9 && hour < 19;
+}
+
+function hasEbayTag(tags: any): boolean {
+  if (!tags) return false;
+  
+  if (typeof tags === 'string') {
+    return tags.toLowerCase().split(',').map((t) => t.trim()).includes('ebay');
+  }
+  
+  if (Array.isArray(tags)) {
+    return tags.some((tag) => tag.toString().toLowerCase().trim() === 'ebay');
+  }
+  
+  return false;
+}
+
+function renderMessage(template: string, payload: any, roleId: string, mentionEnabled: boolean): string {
+  let message = template;
+
+  message = message.replace(/{id}/g, payload.id || payload.order_number || '');
+  message = message.replace(/{customer_name}/g, payload.customer?.first_name || payload.billing_address?.first_name || 'N/A');
+  message = message.replace(/{total}/g, payload.total_price || payload.current_total_price || '');
+  message = message.replace(/{created_at}/g, payload.created_at || '');
+  message = message.replace(/{tags}/g, JSON.stringify(payload.tags || []));
+  
+  const rawJson = JSON.stringify(payload, null, 2);
+  message = message.replace(/{raw_json}/g, rawJson.substring(0, 1800) + (rawJson.length > 1800 ? '...' : ''));
+  
+  message = message.replace(/{role_id}/g, roleId);
+
+  if (!mentionEnabled) {
+    message = message.split('\n').filter((line) => !line.includes('<@&')).join('\n');
+  }
+
+  return message;
+}
+
+async function sendDiscordNotification(supabase: any, payload: any) {
+  try {
+    console.log('Checking Discord notification for order:', payload.id, payload.tags);
+    
+    if (!hasEbayTag(payload.tags)) {
+      console.log('Not an eBay order, skipping Discord notification');
+      return;
+    }
+
+    const { data: settings, error: configError } = await supabase
+      .from('app_settings')
+      .select('key, value')
+      .in('key', ['discord.webhooks', 'discord.mention', 'discord.templates']);
+
+    if (configError) {
+      console.error('Failed to load Discord config:', configError);
+      return;
+    }
+
+    const config = {
+      webhooks: settings?.find((s) => s.key === 'discord.webhooks')?.value || { channels: [], immediate_channel: '', queued_channel: '' },
+      mention: settings?.find((s) => s.key === 'discord.mention')?.value || { enabled: false, role_id: '' },
+      templates: settings?.find((s) => s.key === 'discord.templates')?.value || { immediate: '', queued: '' },
+    };
+
+    const isOpen = isOpenNowInHawaii();
+    console.log('Business hours check:', isOpen ? 'OPEN' : 'CLOSED');
+
+    if (isOpen) {
+      const immediateChannel = config.webhooks.channels.find((ch: any) => ch.name === config.webhooks.immediate_channel);
+      
+      if (!immediateChannel || !immediateChannel.webhook_url) {
+        console.warn('No immediate channel webhook configured');
+        return;
+      }
+
+      const message = renderMessage(config.templates.immediate, payload, config.mention.role_id, config.mention.enabled);
+
+      let barcodeBuffer: Uint8Array | null = null;
+      try {
+        const orderId = payload.id?.toString() || payload.order_number?.toString() || 'NO-ID';
+        const canvas = createCanvas(300, 100);
+        JsBarcode(canvas, orderId, {
+          format: 'CODE128',
+          width: 2,
+          height: 60,
+          displayValue: true,
+        });
+        const dataUrl = canvas.toDataURL('image/png');
+        const base64Data = dataUrl.split(',')[1];
+        barcodeBuffer = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+      } catch (error) {
+        console.warn('Failed to generate barcode:', error);
+      }
+
+      const formData = new FormData();
+      formData.append('payload_json', JSON.stringify({
+        content: message,
+        allowed_mentions: { parse: ['roles'] },
+      }));
+
+      if (barcodeBuffer) {
+        const blob = new Blob([barcodeBuffer], { type: 'image/png' });
+        formData.append('files[0]', blob, 'barcode.png');
+      }
+
+      const discordResponse = await fetch(immediateChannel.webhook_url, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!discordResponse.ok) {
+        const errorText = await discordResponse.text();
+        console.error('Discord API error:', discordResponse.status, errorText);
+        await supabase.from('pending_notifications').insert({ payload });
+      } else {
+        console.log('Sent Discord notification immediately');
+      }
+    } else {
+      const { data: existing } = await supabase
+        .from('pending_notifications')
+        .select('id')
+        .eq('sent', false)
+        .contains('payload', { id: payload.id })
+        .limit(1);
+
+      if (!existing || existing.length === 0) {
+        await supabase.from('pending_notifications').insert({ payload });
+        console.log('Queued Discord notification for next business hours');
+      } else {
+        console.log('Order already queued');
+      }
+    }
+  } catch (error) {
+    console.error('Discord notification error:', error);
   }
 }
 
