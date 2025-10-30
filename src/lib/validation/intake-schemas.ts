@@ -123,5 +123,83 @@ export const gradedCardSchema = z.object({
     .or(z.literal("")),
 });
 
+/**
+ * Manual Raw Card Entry Schema
+ * Relaxed validation - only main category, sub-category, and price are required
+ */
+export const manualRawCardSchema = z.object({
+  mainCategory: z.string()
+    .trim()
+    .min(1, { message: "Main category is required" }),
+  
+  subCategory: z.string()
+    .trim()
+    .min(1, { message: "Sub-category is required" }),
+  
+  brand: z.string()
+    .trim()
+    .max(200, { message: "Brand must be less than 200 characters" })
+    .optional()
+    .or(z.literal("")),
+  
+  subject: z.string()
+    .trim()
+    .max(500, { message: "Card name must be less than 500 characters" })
+    .optional()
+    .or(z.literal("")),
+  
+  cardNumber: z.string()
+    .trim()
+    .max(50, { message: "Card number must be less than 50 characters" })
+    .optional()
+    .or(z.literal("")),
+  
+  year: z.string()
+    .trim()
+    .max(10, { message: "Year must be less than 10 characters" })
+    .optional()
+    .or(z.literal("")),
+  
+  condition: z.string()
+    .trim()
+    .max(50, { message: "Condition must be less than 50 characters" })
+    .optional()
+    .or(z.literal("")),
+  
+  price: z.string()
+    .refine((val) => {
+      if (!val) return false;
+      const num = parseFloat(val);
+      return !isNaN(num) && num >= 0 && num <= 999999;
+    }, { message: "Price is required and must be between 0 and 999,999" }),
+  
+  cost: z.string()
+    .refine((val) => {
+      if (!val) return true;
+      const num = parseFloat(val);
+      return !isNaN(num) && num >= 0 && num <= 999999;
+    }, { message: "Cost must be a valid number between 0 and 999,999" })
+    .optional()
+    .or(z.literal("")),
+  
+  quantity: z.number()
+    .int({ message: "Quantity must be a whole number" })
+    .min(1, { message: "Quantity must be at least 1" })
+    .max(10000, { message: "Quantity cannot exceed 10,000" }),
+  
+  vendor: z.string()
+    .trim()
+    .max(100, { message: "Vendor must be less than 100 characters" })
+    .optional()
+    .or(z.literal("")),
+  
+  notes: z.string()
+    .trim()
+    .max(1000, { message: "Notes must be less than 1000 characters" })
+    .optional()
+    .or(z.literal("")),
+});
+
 export type RawCardInput = z.infer<typeof rawCardSchema>;
 export type GradedCardInput = z.infer<typeof gradedCardSchema>;
+export type ManualRawCardInput = z.infer<typeof manualRawCardSchema>;

@@ -4,6 +4,7 @@ import { Navigation } from "@/components/Navigation";
 import { StoreLocationSelector } from "@/components/StoreLocationSelector";
 import { PSABulkImport } from "@/components/PSABulkImport";
 import { TCGPlayerBulkImport } from "@/components/TCGPlayerBulkImport";
+import { ManualRawCardEntry } from "@/components/ManualRawCardEntry";
 
 const BulkImport = () => {
 
@@ -22,18 +23,6 @@ const BulkImport = () => {
         <div className="grid gap-8">
           <Card>
             <CardHeader>
-              <CardTitle>Bulk PSA Import</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Upload a CSV file or enter multiple PSA certificate numbers for bulk import
-              </p>
-            </CardHeader>
-            <CardContent>
-              <PSABulkImport />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
               <CardTitle>TCGPlayer Bulk Import</CardTitle>
               <p className="text-sm text-muted-foreground">
                 Import raw card data from TCGPlayer cart/list format
@@ -41,6 +30,30 @@ const BulkImport = () => {
             </CardHeader>
             <CardContent>
               <TCGPlayerBulkImport />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Manual Raw Card Entry</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Quickly add individual raw cards to your batch
+              </p>
+            </CardHeader>
+            <CardContent>
+              <ManualRawCardEntry />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Bulk PSA Import</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Upload a CSV file or enter multiple PSA certificate numbers for bulk import
+              </p>
+            </CardHeader>
+            <CardContent>
+              <PSABulkImport />
             </CardContent>
           </Card>
         </div>
