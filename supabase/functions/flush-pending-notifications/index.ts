@@ -1,6 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_lib/cors.ts';
-import JsBarcode from 'https://esm.sh/jsbarcode@3.11.6';
 
 interface DiscordConfig {
   webhooks: {

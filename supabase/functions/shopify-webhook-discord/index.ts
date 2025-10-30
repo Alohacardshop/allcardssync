@@ -1,6 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_lib/cors.ts';
-import JsBarcode from 'https://esm.sh/jsbarcode@3.11.6';
 
 interface DiscordConfig {
   webhooks: {
@@ -125,31 +124,6 @@ Deno.serve(async (req) => {
       let barcodeSvg: string | null = null;
       try {
         const orderId = payload.id?.toString() || payload.order_number?.toString() || 'NO-ID';
-        // Create a simple XML node mock for jsbarcode
-        const xmlSerializer = {
-          node: null as any,
-          getAttribute: () => null,
-          setAttribute: () => {},
-        };
-        
-        let svgString = '';
-        JsBarcode(xmlSerializer as any, orderId, {
-          format: 'CODE128',
-          width: 2,
-          height: 60,
-          displayValue: true,
-          xmlDocument: {
-            createElementNS: () => ({
-              setAttribute: (name: string, value: string) => {
-                if (name === 'width') svgString = `<svg xmlns="http://www.w3.org/2000/svg" width="${value}"`;
-                if (name === 'height') svgString += ` height="${value}">`;
-              },
-              appendChild: (child: any) => {},
-            }),
-          } as any,
-        });
-        
-        // Generate SVG manually
         barcodeSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="100" viewBox="0 0 300 100">
           <rect width="100%" height="100%" fill="white"/>
           <text x="150" y="90" text-anchor="middle" font-family="monospace" font-size="12">${orderId}</text>
