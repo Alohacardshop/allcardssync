@@ -315,15 +315,7 @@ Deno.serve(async (req) => {
       vendor
     ].filter(Boolean))];
 
-    // Add tags as metafield
-    metafields.push({
-      namespace: 'acs.sync',
-      key: 'tags',
-      type: 'list.single_line_text_field',
-      value: JSON.stringify(tagsArray)
-    });
-
-    // Prepare Shopify product data
+    // Prepare Shopify product data (without metafields - will add them separately)
     const productData = {
       product: {
         title: title,
@@ -344,8 +336,7 @@ Deno.serve(async (req) => {
         images: imageUrl ? [{
           src: imageUrl,
           alt: title
-        }] : [],
-        metafields: metafields
+        }] : []
       }
     }
 
@@ -439,6 +430,40 @@ Deno.serve(async (req) => {
     if (!inventoryResponse.ok) {
       const errorText = await inventoryResponse.text()
       console.warn(`Failed to set inventory level: ${errorText}`)
+    }
+
+    // Now create metafields separately after product creation
+    console.log('DEBUG: Creating metafields for product:', product.id)
+    
+    // Add tags as a list metafield (not JSON string)
+    metafields.push({
+      namespace: 'acs.sync',
+      key: 'tags',
+      type: 'list.single_line_text_field',
+      value: JSON.stringify(tagsArray) // Shopify REST API expects JSON string for lists
+    });
+
+    // Create each metafield
+    for (const metafield of metafields) {
+      try {
+        const metafieldResponse = await fetch(`https://${domain}/admin/api/2024-07/products/${product.id}/metafields.json`, {
+          method: 'POST',
+          headers: {
+            'X-Shopify-Access-Token': token,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ metafield })
+        })
+
+        if (!metafieldResponse.ok) {
+          const errorText = await metafieldResponse.text()
+          console.warn(`Failed to create metafield ${metafield.namespace}.${metafield.key}: ${errorText}`)
+        } else {
+          console.log(`Successfully created metafield: ${metafield.namespace}.${metafield.key}`)
+        }
+      } catch (metafieldError) {
+        console.warn(`Error creating metafield ${metafield.namespace}.${metafield.key}:`, metafieldError)
+      }
     }
 
     // Update intake item with Shopify IDs and preserve all raw data
