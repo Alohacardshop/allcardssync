@@ -4,7 +4,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2 } from "lucide-react";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Loader2, Package } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useIntakeValidation } from "@/hooks/useIntakeValidation";
@@ -199,8 +200,18 @@ export const ManualRawCardEntry: React.FC<ManualRawCardEntryProps> = ({ onBatchA
   };
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-2">
+          <Package className="h-5 w-5 text-muted-foreground" />
+          <CardTitle>Manual Raw Card Entry</CardTitle>
+        </div>
+        <CardDescription>
+          Manually enter raw trading card details for inventory intake
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Left Column */}
         <div className="space-y-4">
           <div>
@@ -362,14 +373,15 @@ export const ManualRawCardEntry: React.FC<ManualRawCardEntryProps> = ({ onBatchA
         />
       </div>
 
-      <Button 
-        onClick={handleSubmit} 
-        disabled={isPending}
-        className="w-full"
-      >
-        {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-        Add to Batch
-      </Button>
-    </div>
+        <Button 
+          onClick={handleSubmit} 
+          disabled={isPending}
+          className="w-full"
+        >
+          {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          Add to Batch
+        </Button>
+      </CardContent>
+    </Card>
   );
 };

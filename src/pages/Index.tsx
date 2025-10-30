@@ -57,15 +57,11 @@ export default function Index() {
               </TabsList>
               
               <TabsContent value="raw">
-                <div className="space-y-8">
-                  <div>
-                    <h3 className="text-xl font-semibold mb-4">📋 TCGPlayer CSV Parser</h3>
-                    <TCGPlayerBulkImport />
-                  </div>
+                <div className="space-y-6">
+                  <TCGPlayerBulkImport onBatchAdd={handleBatchCountUpdate} />
                   
-                  <div className="border-t border-border pt-6">
-                    <h3 className="text-xl font-semibold mb-4">✍️ Manual Raw Card Entry</h3>
-                    <ManualRawCardEntry />
+                  <div className="pt-6 border-t">
+                    <ManualRawCardEntry onBatchAdd={handleBatchCountUpdate} />
                   </div>
                 </div>
               </TabsContent>
