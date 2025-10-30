@@ -14,6 +14,24 @@ export type Database = {
   }
   public: {
     Tables: {
+      app_settings: {
+        Row: {
+          key: string
+          updated_at: string
+          value: Json
+        }
+        Insert: {
+          key: string
+          updated_at?: string
+          value: Json
+        }
+        Update: {
+          key?: string
+          updated_at?: string
+          value?: Json
+        }
+        Relationships: []
+      }
       audit_log: {
         Row: {
           action: string
@@ -832,6 +850,27 @@ export type Database = {
         }
         Relationships: []
       }
+      pending_notifications: {
+        Row: {
+          created_at: string
+          id: number
+          payload: Json
+          sent: boolean
+        }
+        Insert: {
+          created_at?: string
+          id?: number
+          payload: Json
+          sent?: boolean
+        }
+        Update: {
+          created_at?: string
+          id?: number
+          payload?: Json
+          sent?: boolean
+        }
+        Relationships: []
+      }
       pricing_job_runs: {
         Row: {
           actual_batches: number
@@ -1325,13 +1364,17 @@ export type Database = {
           max_retries: number
           processor_heartbeat: string | null
           processor_id: string | null
+          quantity: number
           queue_position: number
           retry_after: string | null
           retry_count: number
           shopify_product_id: string | null
+          sold_at: string | null
           started_at: string | null
           status: string
           updated_at: string
+          updated_by: string | null
+          variant: string | null
         }
         Insert: {
           action: string
@@ -1344,13 +1387,17 @@ export type Database = {
           max_retries?: number
           processor_heartbeat?: string | null
           processor_id?: string | null
+          quantity?: number
           queue_position?: number
           retry_after?: string | null
           retry_count?: number
           shopify_product_id?: string | null
+          sold_at?: string | null
           started_at?: string | null
           status?: string
           updated_at?: string
+          updated_by?: string | null
+          variant?: string | null
         }
         Update: {
           action?: string
@@ -1363,13 +1410,17 @@ export type Database = {
           max_retries?: number
           processor_heartbeat?: string | null
           processor_id?: string | null
+          quantity?: number
           queue_position?: number
           retry_after?: string | null
           retry_count?: number
           shopify_product_id?: string | null
+          sold_at?: string | null
           started_at?: string | null
           status?: string
           updated_at?: string
+          updated_by?: string | null
+          variant?: string | null
         }
         Relationships: [
           {

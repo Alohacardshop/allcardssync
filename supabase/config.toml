@@ -139,3 +139,13 @@ verify_jwt = true
 
 [functions.shopify-resync-inventory]
 verify_jwt = true
+
+# Discord notification functions
+[functions.discord-test]
+verify_jwt = true
+
+[functions.shopify-webhook-discord]
+verify_jwt = false
+
+[functions.flush-pending-notifications]
+verify_jwt = false
