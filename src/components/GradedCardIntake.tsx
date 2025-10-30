@@ -575,6 +575,23 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
                   className="border-2 border-primary/20 bg-primary/5"
                 />
               )}
+              
+              {/* Raw Data Display */}
+              <Collapsible open={showRawData} onOpenChange={setShowRawData}>
+                <CollapsibleTrigger asChild>
+                  <Button variant="outline" size="sm" className="w-full">
+                    {showRawData ? <ChevronUp className="h-4 w-4 mr-2" /> : <ChevronDown className="h-4 w-4 mr-2" />}
+                    {showRawData ? 'Hide' : 'Show'} Raw Data
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-2">
+                  <div className="p-4 bg-muted rounded-md">
+                    <pre className="text-xs overflow-auto max-h-96">
+                      {JSON.stringify(cardData, null, 2)}
+                    </pre>
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
             </div>
           )}
 
