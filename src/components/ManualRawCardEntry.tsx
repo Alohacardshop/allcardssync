@@ -42,6 +42,8 @@ export const ManualRawCardEntry: React.FC<ManualRawCardEntryProps> = ({ onBatchA
     condition: "not_specified",
     variation: "",
     numberedBox: "",
+    gradingCompany: "",
+    grade: "",
     price: "",
     cost: "",
     quantity: 1,
@@ -160,6 +162,8 @@ export const ManualRawCardEntry: React.FC<ManualRawCardEntryProps> = ({ onBatchA
           condition: formData.condition,
           variation: formData.variation,
           numbered_box: formData.numberedBox,
+          grading_company: formData.gradingCompany,
+          grade: formData.grade,
           year: formData.year,
           entry_method: "manual"
         }
@@ -187,6 +191,8 @@ export const ManualRawCardEntry: React.FC<ManualRawCardEntryProps> = ({ onBatchA
             condition: "not_specified",
             variation: "",
             numberedBox: "",
+            gradingCompany: "",
+            grade: "",
             price: "",
             cost: "",
             quantity: 1,
@@ -298,6 +304,33 @@ export const ManualRawCardEntry: React.FC<ManualRawCardEntryProps> = ({ onBatchA
               value={formData.numberedBox}
               onChange={(e) => handleInputChange('numberedBox', e.target.value)}
               placeholder="e.g., Box #1, Box A"
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="gradingCompany">Grading Company</Label>
+            <Select value={formData.gradingCompany} onValueChange={(value) => handleInputChange('gradingCompany', value)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select company" />
+              </SelectTrigger>
+              <SelectContent className="bg-popover z-50">
+                <SelectItem value="">None</SelectItem>
+                <SelectItem value="PSA">PSA</SelectItem>
+                <SelectItem value="CGC">CGC</SelectItem>
+                <SelectItem value="BGS">BGS</SelectItem>
+                <SelectItem value="SGC">SGC</SelectItem>
+                <SelectItem value="MISC">MISC</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <Label htmlFor="grade">Grade</Label>
+            <Input
+              id="grade"
+              value={formData.grade}
+              onChange={(e) => handleInputChange('grade', e.target.value)}
+              placeholder="e.g., 10, 9.5, 8"
             />
           </div>
         </div>
