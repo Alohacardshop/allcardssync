@@ -250,21 +250,24 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         const normalizedData = normalizePSAData(data.data);
         setCardData({ ...normalizedData, source: data.source });
         
-        // Auto-detect main category from PSA data
+        // Auto-detect main category from PSA data - prioritize category field over brandTitle
         const detectedCategory = detectMainCategory(
-          normalizedData.brandTitle || normalizedData.category || ''
+          normalizedData.category || normalizedData.brandTitle || ''
         );
         
         // Try to auto-detect sub-category from category field
-        const categoryField = normalizedData.category || "";
-        const subCategoryGuess = categoryField.toLowerCase().includes('baseball') ? 'Baseball' :
-                                 categoryField.toLowerCase().includes('football') ? 'Football' :
-                                 categoryField.toLowerCase().includes('basketball') ? 'Basketball' :
-                                 categoryField.toLowerCase().includes('hockey') ? 'Hockey' :
-                                 categoryField.toLowerCase().includes('soccer') ? 'Soccer' :
-                                 categoryField.toLowerCase().includes('pokemon') ? 'Pokemon' :
-                                 categoryField.toLowerCase().includes('magic') ? 'Magic: The Gathering' :
-                                 categoryField.toLowerCase().includes('yugioh') || categoryField.toLowerCase().includes('yu-gi-oh') ? 'Yu-Gi-Oh!' :
+        const categoryField = (normalizedData.category || "").toLowerCase();
+        const brandField = (normalizedData.brandTitle || "").toLowerCase();
+        const combinedText = `${categoryField} ${brandField}`;
+        
+        const subCategoryGuess = combinedText.includes('baseball') ? 'Baseball' :
+                                 combinedText.includes('football') ? 'Football' :
+                                 combinedText.includes('basketball') ? 'Basketball' :
+                                 combinedText.includes('hockey') ? 'Hockey' :
+                                 combinedText.includes('soccer') ? 'Soccer' :
+                                 combinedText.includes('pokemon') ? 'Pokemon' :
+                                 combinedText.includes('magic') ? 'Magic: The Gathering' :
+                                 combinedText.includes('yugioh') || combinedText.includes('yu-gi-oh') ? 'Yu-Gi-Oh!' :
                                  "";
         
         // Auto-populate form with fetched data
@@ -285,13 +288,12 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         const cgcData = data.data as CGCCertificateData;
         setCardData(cgcData);
         
-        // Auto-detect main category from CGC data
-        const detectedCategory = detectMainCategory(
-          cgcData.seriesName || cgcData.setName || ''
-        );
+        // Auto-detect main category from CGC data - check set name for sports/TCG indicators
+        const combinedCGC = `${cgcData.setName || ''} ${cgcData.seriesName || ''}`;
+        const detectedCategory = detectMainCategory(combinedCGC);
         
         // Try to auto-detect sub-category from CGC data
-        const seriesOrSet = `${cgcData.seriesName || ''} ${cgcData.setName || ''}`.toLowerCase();
+        const seriesOrSet = combinedCGC.toLowerCase();
         const subCategoryGuess = seriesOrSet.includes('baseball') ? 'Baseball' :
                                  seriesOrSet.includes('football') ? 'Football' :
                                  seriesOrSet.includes('basketball') ? 'Basketball' :
