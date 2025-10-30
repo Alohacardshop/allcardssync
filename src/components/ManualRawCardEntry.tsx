@@ -51,27 +51,28 @@ export const ManualRawCardEntry: React.FC<ManualRawCardEntryProps> = ({ onBatchA
   const [vendors, setVendors] = useState<string[]>([]);
   const [loadingVendors, setLoadingVendors] = useState(false);
 
-  // Load vendors when store/location changes
+  // Load vendors when store changes
   useEffect(() => {
     const loadVendors = async () => {
-      if (!assignedStore || !selectedLocation) return;
+      if (!assignedStore) return;
       
       setLoadingVendors(true);
       try {
         const { data, error } = await supabase
           .from('shopify_location_vendors')
-          .select('vendor_name')
+          .select('vendor_name, is_default')
           .eq('store_key', assignedStore)
-          .eq('location_gid', selectedLocation)
-          .order('vendor_name');
+          .is('location_gid', null)
+          .order('is_default', { ascending: false })
+          .order('vendor_name', { ascending: true });
 
         if (error) throw error;
         
         const vendorList = data?.map(v => v.vendor_name) || [];
         setVendors(vendorList);
         
-        // Set default vendor if available
-        const defaultVendor = data?.find(v => (v as any).is_default)?.vendor_name;
+        // Auto-select default vendor if available
+        const defaultVendor = data?.find(v => v.is_default)?.vendor_name;
         if (defaultVendor && !formData.vendor) {
           setFormData(prev => ({ ...prev, vendor: defaultVendor }));
         }
@@ -83,7 +84,7 @@ export const ManualRawCardEntry: React.FC<ManualRawCardEntryProps> = ({ onBatchA
     };
 
     loadVendors();
-  }, [assignedStore, selectedLocation]);
+  }, [assignedStore]);
 
   // Auto-detect main category from brand
   useEffect(() => {
