@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { Loader2, Package } from "lucide-react";
+import { Loader2, Package, RotateCcw } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useIntakeValidation } from "@/hooks/useIntakeValidation";
@@ -271,6 +271,29 @@ export const ManualRawCardEntry: React.FC<ManualRawCardEntryProps> = ({ onBatchA
     }
   };
 
+  const handleClear = () => {
+    setFormData({
+      mainCategory: "tcg",
+      subCategory: "",
+      brand: "",
+      subject: "",
+      cardNumber: "",
+      year: "",
+      condition: "not_specified",
+      variation: "",
+      numberedBox: "",
+      gradingCompany: "",
+      grade: "",
+      price: "",
+      cost: "",
+      quantity: 1,
+      vendor: formData.vendor, // Keep the vendor selection
+    });
+    setQuickEntry("");
+    setCostPercentage(70);
+    toast.success("Form cleared");
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -504,14 +527,25 @@ export const ManualRawCardEntry: React.FC<ManualRawCardEntryProps> = ({ onBatchA
         </div>
       </div>
 
-        <Button
-          onClick={handleSubmit} 
-          disabled={isPending}
-          className="w-full"
-        >
-          {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Add to Batch
-        </Button>
+        <div className="space-y-2">
+          <Button
+            onClick={handleSubmit} 
+            disabled={isPending}
+            className="w-full"
+          >
+            {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Add to Batch
+          </Button>
+          
+          <Button
+            onClick={handleClear}
+            variant="outline"
+            className="w-full"
+          >
+            <RotateCcw className="mr-2 h-4 w-4" />
+            Clear Form
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );
