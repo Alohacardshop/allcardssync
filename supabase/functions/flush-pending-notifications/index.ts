@@ -103,12 +103,36 @@ Deno.serve(async (req) => {
       try {
         const message = renderMessage(config.templates.queued, notification.payload, config);
 
+        // Build embeds for line items with images
+        const embeds = [];
+        if (notification.payload.line_items && Array.isArray(notification.payload.line_items)) {
+          for (const item of notification.payload.line_items.slice(0, 10)) { // Max 10 embeds
+            const embed: any = {
+              title: item.title || item.name || 'Product',
+              fields: [
+                { name: 'SKU', value: item.sku || 'N/A', inline: true },
+                { name: 'Quantity', value: (item.quantity || 1).toString(), inline: true },
+                { name: 'Price', value: `$${item.price || '0.00'}`, inline: true },
+              ],
+              color: 0x5865F2, // Discord blurple
+            };
+            
+            // Add image if available
+            if (item.image_url) {
+              embed.thumbnail = { url: item.image_url };
+            }
+            
+            embeds.push(embed);
+          }
+        }
+
         // Send to Discord
         const discordResponse = await fetch(queuedChannel.webhook_url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             content: message,
+            embeds: embeds.length > 0 ? embeds : undefined,
             allowed_mentions: { parse: ['roles'] },
           }),
         });
