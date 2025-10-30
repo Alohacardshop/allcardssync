@@ -53,6 +53,7 @@ export const ManualRawCardEntry: React.FC<ManualRawCardEntryProps> = ({ onBatchA
   const [costPercentage, setCostPercentage] = useState(70);
   const [vendors, setVendors] = useState<string[]>([]);
   const [loadingVendors, setLoadingVendors] = useState(false);
+  const [quickEntry, setQuickEntry] = useState("");
 
   // Load vendors when store changes
   useEffect(() => {
@@ -116,6 +117,62 @@ export const ManualRawCardEntry: React.FC<ManualRawCardEntryProps> = ({ onBatchA
 
   const handleInputChange = (field: string, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const parseQuickEntry = (text: string) => {
+    if (!text.trim()) return;
+
+    // Match pattern: Year Brand/Set CardName Variation /Number
+    // Example: "2024 National Treasures Alexandre Sarr Patch /49"
+    
+    // Extract year (4 digits at start)
+    const yearMatch = text.match(/^(\d{4})\s+/);
+    const year = yearMatch ? yearMatch[1] : "";
+    let remaining = year ? text.slice(yearMatch[0].length) : text;
+
+    // Extract numbered (/XX at end)
+    const numberedMatch = remaining.match(/\s+(\/\d+)\s*$/);
+    const numbered = numberedMatch ? numberedMatch[1] : "";
+    remaining = numbered ? remaining.slice(0, -numberedMatch[0].length) : remaining;
+
+    // Split remaining into parts
+    const parts = remaining.trim().split(/\s+/);
+    
+    if (parts.length >= 2) {
+      // First 1-2 words are likely brand/set
+      const brandParts = parts.slice(0, 2);
+      const brand = brandParts.join(" ");
+      
+      // Rest is card name and possibly variation
+      const nameParts = parts.slice(2);
+      
+      // Check if last word is a common variation type
+      const commonVariations = ["Patch", "Auto", "Autograph", "Jersey", "Relic", "Holo", "Foil", "Refractor"];
+      let variation = "";
+      let subject = nameParts.join(" ");
+      
+      if (nameParts.length > 0) {
+        const lastWord = nameParts[nameParts.length - 1];
+        if (commonVariations.some(v => v.toLowerCase() === lastWord.toLowerCase())) {
+          variation = lastWord;
+          subject = nameParts.slice(0, -1).join(" ");
+        }
+      }
+
+      setFormData(prev => ({
+        ...prev,
+        year: year || prev.year,
+        brand: brand || prev.brand,
+        subject: subject || prev.subject,
+        variation: variation || prev.variation,
+        numberedBox: numbered || prev.numberedBox,
+      }));
+
+      setQuickEntry("");
+      toast.success("Card info parsed successfully!");
+    } else {
+      toast.error("Could not parse entry. Format: Year Brand CardName Variation /Number");
+    }
   };
 
   const handleSubmit = async () => {
@@ -221,6 +278,30 @@ export const ManualRawCardEntry: React.FC<ManualRawCardEntryProps> = ({ onBatchA
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
+        {/* Quick Entry Field */}
+        <div className="space-y-2">
+          <Label htmlFor="quickEntry">Quick Entry (Optional)</Label>
+          <div className="flex gap-2">
+            <Input
+              id="quickEntry"
+              value={quickEntry}
+              onChange={(e) => setQuickEntry(e.target.value)}
+              placeholder="Paste card info: 2024 National Treasures Alexandre Sarr Patch /49"
+              className="flex-1"
+            />
+            <Button 
+              type="button"
+              onClick={() => parseQuickEntry(quickEntry)}
+              variant="secondary"
+            >
+              Parse
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Paste a full card description and click Parse to auto-fill fields below
+          </p>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Left Column */}
         <div className="space-y-4">
@@ -303,7 +384,7 @@ export const ManualRawCardEntry: React.FC<ManualRawCardEntryProps> = ({ onBatchA
               id="numberedBox"
               value={formData.numberedBox}
               onChange={(e) => handleInputChange('numberedBox', e.target.value)}
-              placeholder="e.g., Box #1, Box A"
+              placeholder="e.g., /25, /50"
             />
           </div>
         </div>
