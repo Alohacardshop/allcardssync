@@ -19,7 +19,7 @@ interface ManualRawCardEntryProps {
 }
 
 const CONDITION_OPTIONS = [
-  { value: "", label: "Not specified" },
+  { value: "not_specified", label: "Not specified" },
   { value: "Near Mint", label: "Near Mint (NM)" },
   { value: "Lightly Played", label: "Lightly Played (LP)" },
   { value: "Moderately Played", label: "Moderately Played (MP)" },
@@ -38,7 +38,7 @@ export const ManualRawCardEntry: React.FC<ManualRawCardEntryProps> = ({ onBatchA
     subject: "",
     cardNumber: "",
     year: "",
-    condition: "",
+    condition: "not_specified",
     price: "",
     cost: "",
     quantity: 1,
@@ -140,7 +140,7 @@ export const ManualRawCardEntry: React.FC<ManualRawCardEntryProps> = ({ onBatchA
         brand_title_in: formData.brand || null,
         subject_in: formData.subject || null,
         category_in: formData.subCategory || null,
-        variant_in: formData.condition || "Raw",
+        variant_in: formData.condition === "not_specified" ? "Raw" : formData.condition,
         card_number_in: formData.cardNumber || null,
         year_in: formData.year || null,
         price_in: parseFloat(formData.price),
@@ -164,7 +164,7 @@ export const ManualRawCardEntry: React.FC<ManualRawCardEntryProps> = ({ onBatchA
       addItem(itemPayload, {
         onSuccess: async (data) => {
           // Update vendor if selected
-          if (formData.vendor) {
+          if (formData.vendor && formData.vendor !== "no_vendor") {
             await supabase
               .from('intake_items')
               .update({ vendor: formData.vendor })
@@ -180,7 +180,7 @@ export const ManualRawCardEntry: React.FC<ManualRawCardEntryProps> = ({ onBatchA
             subject: "",
             cardNumber: "",
             year: "",
-            condition: "",
+            condition: "not_specified",
             price: "",
             cost: "",
             quantity: 1,
@@ -340,7 +340,7 @@ export const ManualRawCardEntry: React.FC<ManualRawCardEntryProps> = ({ onBatchA
                 <SelectValue placeholder={loadingVendors ? "Loading..." : "Select vendor"} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">No vendor</SelectItem>
+                <SelectItem value="no_vendor">No vendor</SelectItem>
                 {vendors.map(vendor => (
                   <SelectItem key={vendor} value={vendor}>{vendor}</SelectItem>
                 ))}
