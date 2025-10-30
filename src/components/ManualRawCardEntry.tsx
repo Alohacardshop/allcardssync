@@ -314,7 +314,7 @@ export const ManualRawCardEntry: React.FC<ManualRawCardEntryProps> = ({ onBatchA
                 <SelectValue placeholder="Select company" />
               </SelectTrigger>
               <SelectContent className="bg-popover z-50">
-                <SelectItem value="">None</SelectItem>
+                <SelectItem value="none">None</SelectItem>
                 <SelectItem value="PSA">PSA</SelectItem>
                 <SelectItem value="CGC">CGC</SelectItem>
                 <SelectItem value="BGS">BGS</SelectItem>
