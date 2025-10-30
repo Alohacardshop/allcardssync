@@ -89,6 +89,33 @@ export type Database = {
         }
         Relationships: []
       }
+      discord_notified_orders: {
+        Row: {
+          created_at: string
+          id: number
+          notified_at: string
+          order_id: string
+          order_name: string
+          store_key: string
+        }
+        Insert: {
+          created_at?: string
+          id?: number
+          notified_at?: string
+          order_id: string
+          order_name: string
+          store_key: string
+        }
+        Update: {
+          created_at?: string
+          id?: number
+          notified_at?: string
+          order_id?: string
+          order_name?: string
+          store_key?: string
+        }
+        Relationships: []
+      }
       edge_function_logs: {
         Row: {
           created_at: string

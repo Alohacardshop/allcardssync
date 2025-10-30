@@ -147,5 +147,8 @@ verify_jwt = true
 [functions.shopify-webhook-discord]
 verify_jwt = false
 
+[functions.shopify-poll-ebay-orders]
+verify_jwt = false
+
 [functions.flush-pending-notifications]
 verify_jwt = false
