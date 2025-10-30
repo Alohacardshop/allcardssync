@@ -40,11 +40,12 @@ export const ManualRawCardEntry: React.FC<ManualRawCardEntryProps> = ({ onBatchA
     cardNumber: "",
     year: "",
     condition: "not_specified",
+    variation: "",
+    numberedBox: "",
     price: "",
     cost: "",
     quantity: 1,
     vendor: "",
-    notes: "",
   });
   
   const [costPercentage, setCostPercentage] = useState(70);
@@ -148,7 +149,7 @@ export const ManualRawCardEntry: React.FC<ManualRawCardEntryProps> = ({ onBatchA
         price_in: parseFloat(formData.price),
         cost_in: formData.cost ? parseFloat(formData.cost) : null,
         sku_in: generatedSku,
-        processing_notes_in: formData.notes || null,
+        processing_notes_in: formData.variation || null,
         main_category_in: formData.mainCategory,
         sub_category_in: formData.subCategory,
         catalog_snapshot_in: {
@@ -157,8 +158,9 @@ export const ManualRawCardEntry: React.FC<ManualRawCardEntryProps> = ({ onBatchA
           subject: formData.subject,
           card_number: formData.cardNumber,
           condition: formData.condition,
+          variation: formData.variation,
+          numbered_box: formData.numberedBox,
           year: formData.year,
-          notes: formData.notes,
           entry_method: "manual"
         }
       };
@@ -183,11 +185,12 @@ export const ManualRawCardEntry: React.FC<ManualRawCardEntryProps> = ({ onBatchA
             cardNumber: "",
             year: "",
             condition: "not_specified",
+            variation: "",
+            numberedBox: "",
             price: "",
             cost: "",
             quantity: 1,
             vendor: vendorToKeep,
-            notes: "",
           });
           
           if (onBatchAdd) {
@@ -277,6 +280,26 @@ export const ManualRawCardEntry: React.FC<ManualRawCardEntryProps> = ({ onBatchA
               placeholder="e.g., 1999, 2024"
             />
           </div>
+
+          <div>
+            <Label htmlFor="variation">Variation</Label>
+            <Input
+              id="variation"
+              value={formData.variation}
+              onChange={(e) => handleInputChange('variation', e.target.value)}
+              placeholder="e.g., Holo, Reverse Holo"
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="numberedBox">Numbered Box</Label>
+            <Input
+              id="numberedBox"
+              value={formData.numberedBox}
+              onChange={(e) => handleInputChange('numberedBox', e.target.value)}
+              placeholder="e.g., Box #1, Box A"
+            />
+          </div>
         </div>
 
         {/* Right Column */}
@@ -362,19 +385,7 @@ export const ManualRawCardEntry: React.FC<ManualRawCardEntryProps> = ({ onBatchA
         </div>
       </div>
 
-      {/* Full Width */}
-      <div>
-        <Label htmlFor="notes">Notes</Label>
-        <Textarea
-          id="notes"
-          value={formData.notes}
-          onChange={(e) => handleInputChange('notes', e.target.value)}
-          placeholder="Any additional notes or observations..."
-          rows={3}
-        />
-      </div>
-
-        <Button 
+        <Button
           onClick={handleSubmit} 
           disabled={isPending}
           className="w-full"
