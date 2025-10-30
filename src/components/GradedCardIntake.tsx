@@ -67,6 +67,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
   const [abortController, setAbortController] = useState<AbortController | null>(null);
   const [showRawData, setShowRawData] = useState(false);
   const [populatedFieldsCount, setPopulatedFieldsCount] = useState(0);
+  const [costPercentage, setCostPercentage] = useState(70); // Default 70%
 
   // Debounce barcode input for auto-fetch
   const debouncedBarcode = useDebounce(barcodeInput, 250);
@@ -152,14 +153,14 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
     }
   }, [certInput]);
 
-  // Auto-calculate cost as 70% of price
+  // Auto-calculate cost based on price and percentage
   useEffect(() => {
     if (formData.price && !isNaN(parseFloat(formData.price))) {
       const price = parseFloat(formData.price);
-      const calculatedCost = (price * 0.7).toFixed(2);
+      const calculatedCost = (price * (costPercentage / 100)).toFixed(2);
       setFormData(prev => ({ ...prev, cost: calculatedCost }));
     }
-  }, [formData.price]);
+  }, [formData.price, costPercentage]);
 
   // Reset fetch state on mount to recover from stuck states
   useEffect(() => {
@@ -254,6 +255,18 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
           normalizedData.brandTitle || normalizedData.category || ''
         );
         
+        // Try to auto-detect sub-category from category field
+        const categoryField = normalizedData.category || "";
+        const subCategoryGuess = categoryField.toLowerCase().includes('baseball') ? 'Baseball' :
+                                 categoryField.toLowerCase().includes('football') ? 'Football' :
+                                 categoryField.toLowerCase().includes('basketball') ? 'Basketball' :
+                                 categoryField.toLowerCase().includes('hockey') ? 'Hockey' :
+                                 categoryField.toLowerCase().includes('soccer') ? 'Soccer' :
+                                 categoryField.toLowerCase().includes('pokemon') ? 'Pokemon' :
+                                 categoryField.toLowerCase().includes('magic') ? 'Magic: The Gathering' :
+                                 categoryField.toLowerCase().includes('yugioh') || categoryField.toLowerCase().includes('yu-gi-oh') ? 'Yu-Gi-Oh!' :
+                                 "";
+        
         // Auto-populate form with fetched data
         setFormData(prev => ({
           ...prev,
@@ -265,6 +278,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
           grade: normalizedData.grade || "",
           varietyPedigree: normalizedData.varietyPedigree || "",
           mainCategory: detectedCategory,
+          subCategory: subCategoryGuess,
         }));
       } else {
         // CGC data handling
@@ -275,6 +289,18 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         const detectedCategory = detectMainCategory(
           cgcData.seriesName || cgcData.setName || ''
         );
+        
+        // Try to auto-detect sub-category from CGC data
+        const seriesOrSet = `${cgcData.seriesName || ''} ${cgcData.setName || ''}`.toLowerCase();
+        const subCategoryGuess = seriesOrSet.includes('baseball') ? 'Baseball' :
+                                 seriesOrSet.includes('football') ? 'Football' :
+                                 seriesOrSet.includes('basketball') ? 'Basketball' :
+                                 seriesOrSet.includes('hockey') ? 'Hockey' :
+                                 seriesOrSet.includes('soccer') ? 'Soccer' :
+                                 seriesOrSet.includes('pokemon') ? 'Pokemon' :
+                                 seriesOrSet.includes('magic') ? 'Magic: The Gathering' :
+                                 seriesOrSet.includes('yugioh') || seriesOrSet.includes('yu-gi-oh') ? 'Yu-Gi-Oh!' :
+                                 "";
         
         // Auto-populate form with CGC data
         setFormData(prev => ({
@@ -287,6 +313,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
           grade: cgcData.grade || "",
           varietyPedigree: cgcData.autographGrade || "",
           mainCategory: detectedCategory,
+          subCategory: subCategoryGuess,
         }));
       }
 
@@ -687,6 +714,25 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
                 value={formData.price}
                 onChange={(e) => updateFormField('price', e.target.value)}
                 className={!formData.price ? "border-destructive/50" : ""}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="costPercentage">Cost % of Price</Label>
+              <Input
+                id="costPercentage"
+                type="number"
+                min="0"
+                max="100"
+                step="1"
+                placeholder="70"
+                value={costPercentage}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value);
+                  if (!isNaN(val) && val >= 0 && val <= 100) {
+                    setCostPercentage(val);
+                  }
+                }}
               />
             </div>
 
