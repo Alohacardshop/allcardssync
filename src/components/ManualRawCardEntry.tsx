@@ -116,7 +116,12 @@ export const ManualRawCardEntry: React.FC<ManualRawCardEntryProps> = ({ onBatchA
   }, [formData.price, costPercentage]);
 
   const handleInputChange = (field: string, value: any) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    setFormData(prev => ({ 
+      ...prev, 
+      [field]: value,
+      // Reset sub-category when main category changes
+      ...(field === 'mainCategory' ? { subCategory: '' } : {})
+    }));
   };
 
   const parseQuickEntry = (text: string) => {
