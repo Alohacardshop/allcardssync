@@ -152,3 +152,6 @@ verify_jwt = false
 
 [functions.flush-pending-notifications]
 verify_jwt = false
+
+[functions.reset-notifications]
+verify_jwt = false

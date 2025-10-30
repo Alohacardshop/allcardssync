@@ -51,6 +51,27 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    // Check for reset parameter
+    const url = new URL(req.url);
+    const shouldReset = url.searchParams.get('reset') === 'true';
+    
+    console.log('Reset parameter:', shouldReset, 'Full URL:', req.url);
+    
+    if (shouldReset) {
+      console.log('Resetting all sent notifications...');
+      const { data: resetData, error: resetError } = await supabase
+        .from('pending_notifications')
+        .update({ sent: false })
+        .eq('sent', true)
+        .select();
+      
+      if (resetError) {
+        console.error('Reset error:', resetError);
+      } else {
+        console.log('Reset complete, affected rows:', resetData?.length || 0);
+      }
+    }
+
     console.log('Starting flush-pending-notifications...');
 
     // Load config
