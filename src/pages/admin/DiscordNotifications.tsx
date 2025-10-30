@@ -10,7 +10,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { Trash2, Plus } from 'lucide-react';
+import { Trash2, Plus, Send } from 'lucide-react';
 import { AdminGuard } from '@/components/AdminGuard';
 import { Navigation } from '@/components/Navigation';
 
@@ -72,6 +72,9 @@ export default function DiscordNotifications() {
     templates: DEFAULT_TEMPLATES,
   });
   const [testChannel, setTestChannel] = useState('');
+  const [manualOrderNumber, setManualOrderNumber] = useState('');
+  const [manualStoreKey, setManualStoreKey] = useState('');
+  const [sendingManual, setSendingManual] = useState(false);
 
   useEffect(() => {
     loadConfig();
@@ -167,6 +170,39 @@ export default function DiscordNotifications() {
       toast({ title: 'Error', description: error.message || 'Failed to send test message', variant: 'destructive' });
     } finally {
       setTesting(false);
+    }
+  };
+
+  const sendManualNotification = async () => {
+    if (!manualOrderNumber || !manualStoreKey) {
+      toast({ title: 'Error', description: 'Please enter both order number and store key', variant: 'destructive' });
+      return;
+    }
+
+    setSendingManual(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('shopify-order-notify', {
+        body: {
+          orderNumber: manualOrderNumber,
+          storeKey: manualStoreKey,
+        },
+      });
+
+      if (error) throw error;
+
+      toast({ 
+        title: 'Success', 
+        description: `Notification sent for order ${data.orderNumber}` 
+      });
+      setManualOrderNumber('');
+    } catch (error: any) {
+      toast({ 
+        title: 'Error', 
+        description: error.message || 'Failed to send notification', 
+        variant: 'destructive' 
+      });
+    } finally {
+      setSendingManual(false);
     }
   };
 
@@ -382,6 +418,43 @@ export default function DiscordNotifications() {
                 </div>
                 <Button onClick={testWebhook} disabled={testing || !testChannel}>
                   {testing ? 'Sending...' : 'Send Test'}
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Manual Notification for Imported Orders */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Send Manual Notification</CardTitle>
+                <CardDescription>
+                  Send Discord notification for imported orders (use order name like "15-13759-56842")
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <Label htmlFor="manual-order">Order Name/Number</Label>
+                  <Input
+                    id="manual-order"
+                    placeholder="e.g., 15-13759-56842"
+                    value={manualOrderNumber}
+                    onChange={(e) => setManualOrderNumber(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="manual-store">Store Key</Label>
+                  <Input
+                    id="manual-store"
+                    placeholder="e.g., hawaii or las_vegas"
+                    value={manualStoreKey}
+                    onChange={(e) => setManualStoreKey(e.target.value)}
+                  />
+                </div>
+                <Button 
+                  onClick={sendManualNotification} 
+                  disabled={sendingManual || !manualOrderNumber || !manualStoreKey}
+                >
+                  <Send className="mr-2 h-4 w-4" />
+                  {sendingManual ? 'Sending...' : 'Send Notification'}
                 </Button>
               </CardContent>
             </Card>
