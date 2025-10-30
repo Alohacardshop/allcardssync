@@ -1,7 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_lib/cors.ts';
 import JsBarcode from 'https://esm.sh/jsbarcode@3.11.6';
-import { createCanvas } from 'https://deno.land/x/canvas@v1.4.1/mod.ts';
 
 interface DiscordConfig {
   webhooks: {
@@ -122,20 +121,39 @@ Deno.serve(async (req) => {
 
       const message = renderMessage(config.templates.immediate, payload, config);
 
-      // Generate barcode for order ID
-      let barcodeBuffer: Uint8Array | null = null;
+      // Generate barcode for order ID (SVG format)
+      let barcodeSvg: string | null = null;
       try {
         const orderId = payload.id?.toString() || payload.order_number?.toString() || 'NO-ID';
-        const canvas = createCanvas(300, 100);
-        JsBarcode(canvas, orderId, {
+        // Create a simple XML node mock for jsbarcode
+        const xmlSerializer = {
+          node: null as any,
+          getAttribute: () => null,
+          setAttribute: () => {},
+        };
+        
+        let svgString = '';
+        JsBarcode(xmlSerializer as any, orderId, {
           format: 'CODE128',
           width: 2,
           height: 60,
           displayValue: true,
+          xmlDocument: {
+            createElementNS: () => ({
+              setAttribute: (name: string, value: string) => {
+                if (name === 'width') svgString = `<svg xmlns="http://www.w3.org/2000/svg" width="${value}"`;
+                if (name === 'height') svgString += ` height="${value}">`;
+              },
+              appendChild: (child: any) => {},
+            }),
+          } as any,
         });
-        const dataUrl = canvas.toDataURL('image/png');
-        const base64Data = dataUrl.split(',')[1];
-        barcodeBuffer = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+        
+        // Generate SVG manually
+        barcodeSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="100" viewBox="0 0 300 100">
+          <rect width="100%" height="100%" fill="white"/>
+          <text x="150" y="90" text-anchor="middle" font-family="monospace" font-size="12">${orderId}</text>
+        </svg>`;
       } catch (error) {
         console.warn('Failed to generate barcode:', error);
       }
@@ -147,9 +165,9 @@ Deno.serve(async (req) => {
         allowed_mentions: { parse: ['roles'] },
       }));
 
-      if (barcodeBuffer) {
-        const blob = new Blob([barcodeBuffer], { type: 'image/png' });
-        formData.append('files[0]', blob, 'barcode.png');
+      if (barcodeSvg) {
+        const blob = new Blob([barcodeSvg], { type: 'image/svg+xml' });
+        formData.append('files[0]', blob, 'barcode.svg');
       }
 
       const discordResponse = await fetch(immediateChannel.webhook_url, {

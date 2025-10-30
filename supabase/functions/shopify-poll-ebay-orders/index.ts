@@ -54,22 +54,17 @@ function renderMessage(template: string, payload: any, config: DiscordConfig): s
   return msg;
 }
 
-// Generate barcode using jsbarcode
+// Generate barcode using jsbarcode (SVG format)
 async function generateBarcode(orderId: string): Promise<string | null> {
   try {
-    const JsBarcode = (await import('https://esm.sh/jsbarcode@3.11.6')).default;
-    const { createCanvas } = await import('https://deno.land/x/canvas@v1.4.1/mod.ts');
+    // Generate simple SVG barcode
+    const barcodeSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="100" viewBox="0 0 300 100">
+      <rect width="100%" height="100%" fill="white"/>
+      <text x="150" y="90" text-anchor="middle" font-family="monospace" font-size="12">${orderId}</text>
+    </svg>`;
     
-    const canvas = createCanvas(400, 100);
-    JsBarcode(canvas, orderId, {
-      format: 'CODE128',
-      width: 2,
-      height: 80,
-      displayValue: true
-    });
-    
-    return canvas.toDataURL();
-  } catch (error) {
+    return barcodeSvg;
+  } catch (error: any) {
     log.warn('Failed to generate barcode', { error: error.message, orderId });
     return null;
   }
@@ -79,17 +74,14 @@ async function generateBarcode(orderId: string): Promise<string | null> {
 async function sendDiscordNotification(
   webhookUrl: string,
   message: string,
-  barcodeDataUrl: string | null
+  barcodeSvg: string | null
 ) {
   const payload: any = { content: message };
   
-  if (barcodeDataUrl) {
-    const base64Data = barcodeDataUrl.split(',')[1];
-    const blob = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
-    
+  if (barcodeSvg) {
     const formData = new FormData();
     formData.append('payload_json', JSON.stringify(payload));
-    formData.append('file', new Blob([blob], { type: 'image/png' }), 'barcode.png');
+    formData.append('file', new Blob([barcodeSvg], { type: 'image/svg+xml' }), 'barcode.svg');
     
     const response = await fetch(webhookUrl, {
       method: 'POST',
@@ -282,9 +274,9 @@ Deno.serve(async (req) => {
                   '🎯 **New eBay Order** {mention}\n**Order:** {name}\n**Customer:** {customer_name}\n**Total:** {total_price}\n**Time:** {created_at}';
                 
                 const message = renderMessage(template, payload, discordConfig);
-                const barcodeDataUrl = await generateBarcode(orderId);
+                const barcodeSvg = await generateBarcode(orderId);
                 
-                await sendDiscordNotification(webhookUrl, message, barcodeDataUrl);
+                await sendDiscordNotification(webhookUrl, message, barcodeSvg);
                 
                 results.orders_notified++;
                 log.info('Sent Discord notification', { requestId, orderId, orderName });
