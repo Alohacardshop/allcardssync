@@ -91,18 +91,32 @@ Queue for off-hours notifications:
 
 **Immediate:**
 ```
-<@&{role_id}> New **eBay** order received!
-• Order ID: {id}
-• Customer: {customer_name}
-• Total: {total}
+<@&{role_id}> 🛍️ **NEW EBAY ORDER**
+
+**Order Details:**
+• Order #: `{id}`
+• Customer: **{customer_name}**
+• Total: **{total}**
+• Created: {created_at}
+• Tags: {tags}
+
+---
+_Order received during business hours_
 ```
 
 **Queued:**
 ```
-<@&{role_id}> Queued **eBay** order from off-hours:
-• Order ID: {id}
-• Customer: {customer_name}
-• Total: {total}
+<@&{role_id}> 🌙 **QUEUED EBAY ORDER** (Off-Hours)
+
+**Order Details:**
+• Order #: `{id}`
+• Customer: **{customer_name}**
+• Total: **{total}**
+• Created: {created_at}
+• Tags: {tags}
+
+---
+_Order received outside business hours (before 9am or after 7pm HST)_
 ```
 
 ## Shopify Integration
