@@ -25,6 +25,9 @@ import { SubCategoryCombobox } from "@/components/ui/sub-category-combobox";
 import { detectMainCategory } from "@/utils/categoryMapping";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useAddIntakeItem } from "@/hooks/useAddIntakeItem";
+import { useCurrentBatch } from "@/hooks/useCurrentBatch";
+import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface GradedCardIntakeProps {
   onBatchAdd?: () => void;
@@ -53,6 +56,12 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
   const logger = useLogger('GradedCardIntake');
   const { validateAccess, assignedStore, selectedLocation } = useIntakeValidation();
   const { mutateAsync: addItem, isPending: isAdding } = useAddIntakeItem();
+  const { user } = useAuth();
+  const { data: batchData } = useCurrentBatch({ 
+    storeKey: assignedStore, 
+    locationGid: selectedLocation,
+    userId: user?.id 
+  });
 
   // Grading service selection
   const [gradingService, setGradingService] = useState<'psa' | 'cgc'>('psa');
@@ -407,8 +416,10 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
           .eq('id', result.id);
       }
 
-      // Reset form but keep vendor
+      // Reset form but keep vendor, mainCategory, and subCategory
       const currentVendor = formData.vendor;
+      const currentMainCategory = formData.mainCategory;
+      const currentSubCategory = formData.subCategory;
       setCertInput("");
       setBarcodeInput("");
       setCardData(null);
@@ -426,8 +437,8 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         quantity: 1,
         psaEstimate: "",
         varietyPedigree: "",
-        mainCategory: "tcg",
-        subCategory: "",
+        mainCategory: currentMainCategory,
+        subCategory: currentSubCategory,
         vendor: currentVendor,
       });
       
@@ -455,9 +466,17 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
     <div className="space-y-6">
       <Card className="w-full max-w-4xl mx-auto">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Award className="h-5 w-5" />
-            Graded Cards Intake
+          <CardTitle className="flex items-center gap-2 justify-between">
+            <div className="flex items-center gap-2">
+              <Award className="h-5 w-5" />
+              Graded Cards Intake
+            </div>
+            {batchData && batchData.counts.activeItems > 0 && (
+              <Badge variant="secondary" className="text-sm">
+                <Package className="h-3 w-3 mr-1" />
+                Current Batch: {batchData.counts.activeItems} {batchData.counts.activeItems === 1 ? 'item' : 'items'}
+              </Badge>
+            )}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">

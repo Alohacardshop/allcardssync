@@ -42,6 +42,27 @@ export function useBatchAutoProcessSettings() {
         return acc;
       }, {} as Record<string, string>) || {};
 
+      // Initialize default settings if they don't exist
+      if (data?.length === 0) {
+        const defaults = [
+          { key_name: 'BATCH_AUTO_PROCESS_ENABLED', key_value: 'true', description: 'Enable automatic batch processing for large batches', category: 'batch_processing' },
+          { key_name: 'BATCH_AUTO_SIZE', key_value: '5', description: 'Number of items to process per chunk', category: 'batch_processing' },
+          { key_name: 'BATCH_AUTO_DELAY', key_value: '1000', description: 'Delay in milliseconds between processing chunks', category: 'batch_processing' },
+          { key_name: 'BATCH_AUTO_MAX_ITEMS', key_value: '100', description: 'Maximum items that can be auto-processed in one batch', category: 'batch_processing' }
+        ];
+
+        const { error: insertError } = await supabase
+          .from('system_settings')
+          .insert(defaults);
+
+        if (!insertError) {
+          logger.info('Initialized default batch processing settings', {}, 'batch-auto-process');
+          // Reload after initialization
+          await loadSettings();
+          return;
+        }
+      }
+
       setSettings({
         enabled: settingsMap.BATCH_AUTO_PROCESS_ENABLED === 'true',
         batchSize: parseInt(settingsMap.BATCH_AUTO_SIZE) || 5,
