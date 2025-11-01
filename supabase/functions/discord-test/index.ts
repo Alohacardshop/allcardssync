@@ -1,7 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_lib/cors.ts';
 import JsBarcode from 'https://esm.sh/jsbarcode@3.11.6';
-import { createCanvas } from 'https://deno.land/x/canvas@v1.4.1/mod.ts';
 
 interface DiscordConfig {
   webhooks: {
@@ -81,19 +80,17 @@ Deno.serve(async (req) => {
       message = message.split('\n').filter((line) => !line.includes('<@&')).join('\n');
     }
 
-    // Generate barcode for order ID
-    let barcodeBuffer: Uint8Array | null = null;
+    // Generate barcode SVG for order ID
+    let barcodeSvg: string | null = null;
     try {
-      const canvas = createCanvas(300, 100);
-      JsBarcode(canvas, testPayload.id, {
+      const svg = JsBarcode(testPayload.id, {
         format: 'CODE128',
         width: 2,
         height: 60,
         displayValue: true,
+        xmlDocument: true,
       });
-      const dataUrl = canvas.toDataURL('image/png');
-      const base64Data = dataUrl.split(',')[1];
-      barcodeBuffer = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+      barcodeSvg = svg;
     } catch (error) {
       console.warn('Failed to generate barcode:', error);
     }
@@ -105,9 +102,9 @@ Deno.serve(async (req) => {
       allowed_mentions: { parse: ['roles'] },
     }));
 
-    if (barcodeBuffer) {
-      const blob = new Blob([barcodeBuffer], { type: 'image/png' });
-      formData.append('files[0]', blob, 'barcode.png');
+    if (barcodeSvg) {
+      const svgBlob = new Blob([barcodeSvg], { type: 'image/svg+xml' });
+      formData.append('files[0]', svgBlob, 'barcode.svg');
     }
 
     const discordResponse = await fetch(channel.webhook_url, {
