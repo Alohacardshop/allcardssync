@@ -217,6 +217,23 @@ export function RealTimeSyncMonitor() {
     }
   }
 
+  const handleDeleteItem = async (itemId: string) => {
+    try {
+      const { error } = await supabase
+        .from('shopify_sync_queue')
+        .delete()
+        .eq('id', itemId)
+
+      if (error) throw error
+
+      toast.success('Item deleted')
+      queryClient.invalidateQueries({ queryKey: ['sync-monitor-queue'] })
+    } catch (error: any) {
+      console.error('Error deleting item:', error)
+      toast.error(`Failed to delete item: ${error.message}`)
+    }
+  }
+
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'queued': return <Clock className="h-4 w-4" />
@@ -454,6 +471,14 @@ export function RealTimeSyncMonitor() {
                         <AlertTriangle className="h-3 w-3 text-red-500" />
                       </Button>
                     )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                      onClick={() => handleDeleteItem(item.id)}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
                   </div>
                 </div>
               ))}
