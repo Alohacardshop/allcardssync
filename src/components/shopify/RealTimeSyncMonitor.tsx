@@ -206,7 +206,6 @@ export function RealTimeSyncMonitor() {
         .from('shopify_sync_queue')
         .delete()
         .eq('status', 'completed')
-        .lt('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
 
       if (error) throw error
 
