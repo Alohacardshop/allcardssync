@@ -380,6 +380,32 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
       return;
     }
 
+    // Check for duplicate SKU (cert number)
+    try {
+      const { data: existingItems, error: checkError } = await supabase
+        .from('intake_items')
+        .select('id, shopify_product_id, created_at')
+        .eq('sku', formData.certNumber)
+        .is('deleted_at', null)
+        .limit(1);
+      
+      if (checkError) {
+        console.error('SKU check error:', checkError);
+        // Don't block submission on check error
+      } else if (existingItems && existingItems.length > 0) {
+        const existing = existingItems[0];
+        const createdDate = new Date(existing.created_at).toLocaleDateString();
+        toast.warning(`⚠️ SKU ${formData.certNumber} already exists (added ${createdDate}). Proceeding anyway...`, {
+          duration: 5000
+        });
+        // Wait a moment so user can see the warning
+        await new Promise(resolve => setTimeout(resolve, 1500));
+      }
+    } catch (error) {
+      console.error('Error checking for duplicate SKU:', error);
+      // Don't block submission on error
+    }
+
     try {
       setSubmitting(true);
 

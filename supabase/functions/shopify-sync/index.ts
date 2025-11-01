@@ -55,6 +55,11 @@ async function rateLimitDelay() {
   lastRequestTime = Date.now()
 }
 
+// Sleep utility for delays
+async function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
 async function handleRateLimitError(response: Response, retryCount: number = 0): Promise<number> {
   // Parse retry-after header (can be in seconds or HTTP date)
   const retryAfter = response.headers.get('retry-after')
@@ -150,7 +155,23 @@ async function shopifyRequest(credentials: ShopifyCredentials, endpoint: string,
 async function findExistingProduct(credentials: ShopifyCredentials, sku: string, title?: string) {
   console.log(`🔍 Searching for existing product with SKU: ${sku}`)
   
-  // First try to find by handle (which is the SKU converted to handle format)
+  // Method 1: Search by SKU in variants (most reliable)
+  try {
+    const products = await shopifyRequest(credentials, `products.json?limit=250&fields=id,title,variants`)
+    if (products.products) {
+      for (const product of products.products) {
+        const variant = product.variants?.find((v: any) => v.sku === sku)
+        if (variant) {
+          console.log(`✅ Found existing product by SKU: ${product.id}, variant: ${variant.id}`)
+          return { product, variant }
+        }
+      }
+    }
+  } catch (error) {
+    console.log(`⚠️ SKU search failed: ${error}`)
+  }
+  
+  // Method 2: Try to find by handle (SKU converted to handle format)
   const handle = sku.toLowerCase().replace(/[^a-z0-9]/g, '-')
   try {
     const products = await shopifyRequest(credentials, `products.json?limit=1&fields=id,title,variants&handle=${handle}`)
@@ -163,41 +184,30 @@ async function findExistingProduct(credentials: ShopifyCredentials, sku: string,
   } catch (error) {
     console.log(`⚠️ Handle search failed: ${error}`)
   }
-  
-  // Try to find by SKU in variants
-  try {
-    const products = await shopifyRequest(credentials, `products.json?limit=250&fields=id,title,variants`)
-    for (const product of products.products || []) {
-      const variant = product.variants.find((v: any) => v.sku === sku)
-      if (variant) {
-        console.log(`✅ Found existing product by SKU: ${product.id}, variant: ${variant.id}`)
-        return { product, variant }
-      }
-    }
-  } catch (error) {
-    console.log(`⚠️ SKU search failed: ${error}`)
-  }
 
-  // For graded cards, try to find by barcode (PSA cert)
-  if (title && title.includes('PSA')) {
-    const psaCert = title.match(/PSA\s+(\d+)/)?.[1]
-    if (psaCert) {
+  // Method 3: For graded cards, try to find by barcode (PSA/CGC cert)
+  if (title && (title.includes('PSA') || title.includes('CGC'))) {
+    const certMatch = title.match(/(?:PSA|CGC)\s+(\d+)/i)
+    const certNumber = certMatch?.[1]
+    if (certNumber) {
       try {
         const products = await shopifyRequest(credentials, `products.json?limit=250&fields=id,title,variants`)
-        for (const product of products.products || []) {
-          const variant = product.variants.find((v: any) => v.barcode === psaCert)
-          if (variant) {
-            console.log(`✅ Found existing graded product by PSA cert: ${product.id}, variant: ${variant.id}`)
-            return { product, variant }
+        if (products.products) {
+          for (const product of products.products) {
+            const variant = product.variants?.find((v: any) => v.barcode === certNumber)
+            if (variant) {
+              console.log(`✅ Found existing graded product by cert: ${product.id}, variant: ${variant.id}`)
+              return { product, variant }
+            }
           }
         }
       } catch (error) {
-        console.log(`⚠️ PSA cert search failed: ${error}`)
+        console.log(`⚠️ Cert search failed: ${error}`)
       }
     }
   }
 
-  console.log(`❌ No existing product found`)
+  console.log(`❌ No existing product found for SKU: ${sku}`)
   return { product: null, variant: null }
 }
 
@@ -613,10 +623,22 @@ async function processQueueItem(supabase: any, queueItem: SyncQueueItem) {
           product = existing.product
           variant = existing.variant
         } else {
-          // Create new product
-          const created = await createShopifyProduct(credentials, item)
-          product = created.product
-          variant = created.variant
+          // No existing product found - wait and recheck to avoid race conditions
+          console.log('⏳ No existing found, waiting 2s and rechecking to prevent duplicates...')
+          await sleep(2000) // Give Shopify time to index any recently created products
+          
+          const recheck = await findExistingProduct(credentials, item.sku, `${item.brand_title} ${item.subject} ${item.card_number}`.trim())
+          if (recheck.variant) {
+            console.log('✅ Found on recheck! Using existing product instead of creating duplicate')
+            product = recheck.product
+            variant = recheck.variant
+          } else {
+            // Still not found - safe to create new product
+            console.log('🆕 Creating new Shopify product')
+            const created = await createShopifyProduct(credentials, item)
+            product = created.product
+            variant = created.variant
+          }
         }
         
         shopifyProductId = product.id.toString()
