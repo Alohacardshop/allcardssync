@@ -819,7 +819,7 @@ Deno.serve(async (req) => {
       .delete()
       .like('error_message', '%GraphQL%')
     
-    // Get pending queue items (max 2 at a time for better stability)  
+    // Get all pending queue items to process sequentially
     const { data: queueItems, error: queueError } = await supabase
       .from('shopify_sync_queue')
       .select('*')
@@ -827,7 +827,7 @@ Deno.serve(async (req) => {
       .or('retry_after.is.null,retry_after.lte.now()')
       .order('retry_count', { ascending: true }) // Process items with fewer retries first
       .order('created_at', { ascending: true })
-      .limit(2)
+      .limit(50) // Process up to 50 items per run
     
     if (queueError) {
       throw new Error(`Failed to fetch queue items: ${queueError.message}`)
@@ -841,32 +841,39 @@ Deno.serve(async (req) => {
       )
     }
     
-    console.log(`📦 Processing ${queueItems.length} queue items with REST API only...`)
+    console.log(`📦 Processing ${queueItems.length} queue items sequentially...`)
     
-    // Process items sequentially to respect rate limits
+    // Process items one by one to respect rate limits
     let processed = 0
-    for (const queueItem of queueItems) {
+    let failed = 0
+    for (let i = 0; i < queueItems.length; i++) {
+      const queueItem = queueItems[i]
+      console.log(`📦 Processing item ${i + 1}/${queueItems.length}: ${queueItem.inventory_item_id}`)
+      
       try {
         await processQueueItem(supabase, queueItem)
         processed++
+        console.log(`✅ Processed ${processed}/${queueItems.length} items successfully`)
       } catch (error) {
-        console.error(`Failed to process item ${queueItem.id}:`, error)
+        failed++
+        console.error(`❌ Failed to process item ${queueItem.id} (${failed} failures):`, error)
         // Continue processing other items
       }
       
-      // Delay between items to respect rate limits
-      if (processed < queueItems.length) {
-        await new Promise(resolve => setTimeout(resolve, 2000))
+      // Delay between items to respect rate limits (1 second between items)
+      if (i < queueItems.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 1000))
       }
     }
     
-    console.log(`✅ Processed ${processed}/${queueItems.length} items successfully`)
+    console.log(`✅ Processed ${processed}/${queueItems.length} items successfully${failed > 0 ? `, ${failed} failed` : ''}`)
     
     return new Response(
       JSON.stringify({ 
         success: true, 
-        message: `Processed ${processed}/${queueItems.length} items`,
-        processed 
+        message: `Processed ${processed}/${queueItems.length} items${failed > 0 ? ` (${failed} failed)` : ''}`,
+        processed,
+        failed
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
