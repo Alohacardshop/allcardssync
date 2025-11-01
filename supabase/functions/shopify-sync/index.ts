@@ -150,11 +150,24 @@ async function shopifyRequest(credentials: ShopifyCredentials, endpoint: string,
 async function findExistingProduct(credentials: ShopifyCredentials, sku: string, title?: string) {
   console.log(`🔍 Searching for existing product with SKU: ${sku}`)
   
-  // First try to find by SKU
+  // First try to find by handle (which is the SKU converted to handle format)
+  const handle = sku.toLowerCase().replace(/[^a-z0-9]/g, '-')
   try {
-    const products = await shopifyRequest(credentials, `products.json?limit=1&fields=id,title,variants&handle=${sku}`)
+    const products = await shopifyRequest(credentials, `products.json?limit=1&fields=id,title,variants&handle=${handle}`)
     if (products.products && products.products.length > 0) {
       const product = products.products[0]
+      const variant = product.variants[0] // Use first variant for existing product
+      console.log(`✅ Found existing product by handle: ${product.id}, variant: ${variant.id}`)
+      return { product, variant }
+    }
+  } catch (error) {
+    console.log(`⚠️ Handle search failed: ${error}`)
+  }
+  
+  // Try to find by SKU in variants
+  try {
+    const products = await shopifyRequest(credentials, `products.json?limit=250&fields=id,title,variants`)
+    for (const product of products.products || []) {
       const variant = product.variants.find((v: any) => v.sku === sku)
       if (variant) {
         console.log(`✅ Found existing product by SKU: ${product.id}, variant: ${variant.id}`)
@@ -170,7 +183,7 @@ async function findExistingProduct(credentials: ShopifyCredentials, sku: string,
     const psaCert = title.match(/PSA\s+(\d+)/)?.[1]
     if (psaCert) {
       try {
-        const products = await shopifyRequest(credentials, `products.json?limit=1&fields=id,title,variants`)
+        const products = await shopifyRequest(credentials, `products.json?limit=250&fields=id,title,variants`)
         for (const product of products.products || []) {
           const variant = product.variants.find((v: any) => v.barcode === psaCert)
           if (variant) {
@@ -181,23 +194,6 @@ async function findExistingProduct(credentials: ShopifyCredentials, sku: string,
       } catch (error) {
         console.log(`⚠️ PSA cert search failed: ${error}`)
       }
-    }
-  }
-
-  // For raw cards, try to find by title to add variant
-  if (title) {
-    try {
-      const searchTitle = title.replace(/[^a-zA-Z0-9\s]/g, '').trim()
-      const products = await shopifyRequest(credentials, `products.json?limit=5&title=${encodeURIComponent(searchTitle)}`)
-      
-      for (const product of products.products || []) {
-        if (product.title.toLowerCase().includes(searchTitle.toLowerCase())) {
-          console.log(`✅ Found similar product for new variant: ${product.id}`)
-          return { product, variant: null }
-        }
-      }
-    } catch (error) {
-      console.log(`⚠️ Title search failed: ${error}`)
     }
   }
 
@@ -600,13 +596,22 @@ async function processQueueItem(supabase: any, queueItem: SyncQueueItem) {
         const existing = await findExistingProduct(credentials, item.sku, `${item.brand_title} ${item.subject} ${item.card_number}`.trim())
         
         if (existing.variant) {
-          // Use existing variant
+          // Product already exists - update variant price and inventory
+          console.log(`🔄 Updating existing product: ${existing.product.id}, variant: ${existing.variant.id}`)
+          
+          // Update variant if needed
+          await shopifyRequest(credentials, `variants/${existing.variant.id}.json`, {
+            method: 'PUT',
+            body: JSON.stringify({
+              variant: {
+                price: item.price.toString(),
+                cost: item.cost ? item.cost.toString() : undefined,
+              }
+            })
+          })
+          
           product = existing.product
           variant = existing.variant
-        } else if (existing.product && item.type === 'Raw') {
-          // Add variant to existing product
-          variant = await createProductVariant(credentials, existing.product.id, item)
-          product = existing.product
         } else {
           // Create new product
           const created = await createShopifyProduct(credentials, item)
