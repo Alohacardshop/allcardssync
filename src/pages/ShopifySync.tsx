@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RefreshCw, Upload, AlertTriangle } from 'lucide-react';
 import { ShopifyRetryPanel } from '@/components/ShopifyRetryPanel';
 import { SystemHealthCard } from '@/components/SystemHealthCard';
+import { RealTimeSyncMonitor } from '@/components/shopify/RealTimeSyncMonitor';
 
 export default function ShopifySync() {
   return (
@@ -85,19 +86,7 @@ export default function ShopifySync() {
             </TabsContent>
 
             <TabsContent value="monitor" className="mt-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Sync Monitoring</CardTitle>
-                  <CardDescription>
-                    Real-time monitoring of Shopify sync operations and queue health.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-center py-8 text-muted-foreground">
-                    Sync monitoring dashboard coming soon...
-                  </div>
-                </CardContent>
-              </Card>
+              <RealTimeSyncMonitor />
             </TabsContent>
 
             <TabsContent value="settings" className="mt-6">
