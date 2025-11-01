@@ -56,17 +56,24 @@ interface QueueStats {
 export function RealTimeSyncMonitor() {
   const queryClient = useQueryClient()
   
-  const { data: queueData, isLoading } = useQuery({
+  const { data: queueData, isLoading, error: queryError } = useQuery({
     queryKey: ['sync-monitor-queue'],
     queryFn: async () => {
       // Fetch recent queue items
-    const { data: items } = await supabase
+    const { data: items, error } = await supabase
       .from('shopify_sync_queue')
       .select('*')
       .order('created_at', { ascending: false })
       .limit(50)
 
+    if (error) {
+      console.error('Error fetching sync queue:', error)
+      throw error
+    }
+
     if (!items) return { items: [], stats: getEmptyStats() }
+    
+    console.log('Sync monitor: fetched', items.length, 'items')
     
     // Calculate stats
     const total = items.length
@@ -120,6 +127,11 @@ export function RealTimeSyncMonitor() {
 
   const queueItems = queueData?.items || []
   const stats = queueData?.stats || getEmptyStats()
+
+  // Show error if query failed
+  if (queryError) {
+    console.error('Sync monitor query error:', queryError)
+  }
 
   function getEmptyStats(): QueueStats {
     return {
@@ -228,6 +240,33 @@ export function RealTimeSyncMonitor() {
 
   return (
     <div className="space-y-6">
+      {queryError && (
+        <Card className="border-destructive">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" />
+              <p>Error loading sync queue: {(queryError as Error).message}</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {isLoading && (
+        <Card>
+          <CardContent className="pt-6">
+            <p className="text-muted-foreground">Loading sync queue...</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {!isLoading && queueItems.length === 0 && !queryError && (
+        <Card>
+          <CardContent className="pt-6">
+            <p className="text-muted-foreground">No items in sync queue</p>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Stats Overview */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
