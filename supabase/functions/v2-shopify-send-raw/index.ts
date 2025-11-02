@@ -2,20 +2,10 @@ import { corsHeaders } from '../_shared/cors.ts'
 import { requireAuth, requireRole, requireStoreAccess } from '../_shared/auth.ts'
 import { SendRawSchema, SendRawInput } from '../_shared/validation.ts'
 
-// Helper function to generate barcode: TCGPlayerID-Condition
+// Helper function to generate barcode: pure numeric TCGPlayer ID
+// TCGPlayer IDs are already condition-specific, so no need to append condition
 function generateBarcodeForRawCard(item: any): string {
-  const tcgplayerId = item.catalog_snapshot?.tcgplayer_id || item.sku;
-  const condition = item.variant || item.grade || 'NM';
-  
-  // Abbreviate condition for barcode
-  const conditionAbbrev = condition.toLowerCase().includes('near mint') || condition === 'NM' ? 'NM' 
-    : condition.toLowerCase().includes('lightly played') || condition === 'LP' ? 'LP'
-    : condition.toLowerCase().includes('moderately played') || condition === 'MP' ? 'MP'
-    : condition.toLowerCase().includes('heavily played') || condition === 'HP' ? 'HP'
-    : condition.toLowerCase().includes('damaged') || condition === 'DMG' ? 'DMG'
-    : 'NM';
-  
-  return `${tcgplayerId}-${conditionAbbrev}`;
+  return item.catalog_snapshot?.tcgplayer_id || item.sku || '';
 }
 
 Deno.serve(async (req) => {
