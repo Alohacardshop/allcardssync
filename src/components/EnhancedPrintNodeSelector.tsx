@@ -9,6 +9,7 @@ import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
 import { Loader2, CheckCircle, XCircle, Cloud, Printer, Star, Settings2 } from 'lucide-react';
 import { usePrintNode } from '@/contexts/PrintNodeContext';
+import { useUserPrinterPreferences } from '@/hooks/useUserPrinterPreferences';
 import { printNodeService } from '@/lib/printNodeService';
 import { codeDefaultRawCard2x1 } from '@/lib/labels/templateStore';
 import { zplFromElements } from '@/lib/labels/zpl';
@@ -37,16 +38,20 @@ export function EnhancedPrintNodeSelector({ printerPrefs, onPrefsChange }: Enhan
     refreshPrinters
   } = usePrintNode();
 
-  // Load saved default printer on mount
+  const { preference, savePreference, clearPreference, loadPreference } = useUserPrinterPreferences();
+
+  // Load saved default printer from database
   useEffect(() => {
-    const savedDefault = localStorage.getItem('printnode-default-printer');
-    if (savedDefault) {
-      setDefaultPrinterId(savedDefault);
-      if (printerPrefs.printNodeId?.toString() === savedDefault) {
-        setIsDefaultPrinter(true);
+    if (preference?.printer_id) {
+      setDefaultPrinterId(preference.printer_id);
+      setIsDefaultPrinter(printerPrefs.printNodeId?.toString() === preference.printer_id);
+      
+      // Also set as selected if not already
+      if (!selectedPrinterId) {
+        setSelectedPrinterId(preference.printer_id);
       }
     }
-  }, [printerPrefs.printNodeId]);
+  }, [preference, printerPrefs.printNodeId]);
 
   const handleSaveApiKey = async () => {
     const keyToSave = localApiKey.trim() || apiKey.trim();
@@ -73,20 +78,43 @@ export function EnhancedPrintNodeSelector({ printerPrefs, onPrefsChange }: Enhan
     setIsDefaultPrinter(savedDefault === printerId);
   };
 
-  const handleSetAsDefault = () => {
-    if (selectedPrinterId) {
+  const handleSetAsDefault = async () => {
+    if (!selectedPrinterId) return;
+    
+    const selectedPrinter = printers.find(p => p.id.toString() === selectedPrinterId);
+    
+    try {
+      await savePreference({
+        printer_type: 'printnode',
+        printer_id: selectedPrinterId,
+        printer_name: selectedPrinter?.name || 'PrintNode Printer'
+      });
+      
+      // Also save to localStorage as backup
       localStorage.setItem('printnode-default-printer', selectedPrinterId);
       setDefaultPrinterId(selectedPrinterId);
       setIsDefaultPrinter(true);
-      toast.success('Printer set as default');
+      
+      // Update parent component
+      onPrefsChange({
+        ...printerPrefs,
+        usePrintNode: true,
+        printNodeId: parseInt(selectedPrinterId)
+      });
+    } catch (error) {
+      toast.error('Failed to set default printer');
     }
   };
 
-  const handleRemoveDefault = () => {
-    localStorage.removeItem('printnode-default-printer');
-    setDefaultPrinterId('');
-    setIsDefaultPrinter(false);
-    toast.success('Default printer removed');
+  const handleRemoveDefault = async () => {
+    try {
+      await clearPreference();
+      localStorage.removeItem('printnode-default-printer');
+      setDefaultPrinterId('');
+      setIsDefaultPrinter(false);
+    } catch (error) {
+      toast.error('Failed to remove default printer');
+    }
   };
 
   const handleTestPrint = async () => {

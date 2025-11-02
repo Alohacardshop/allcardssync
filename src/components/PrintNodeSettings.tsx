@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Loader2, CheckCircle, XCircle, Cloud } from 'lucide-react';
 import { usePrintNode } from '@/contexts/PrintNodeContext';
+import { useUserPrinterPreferences } from '@/hooks/useUserPrinterPreferences';
 import { printNodeService } from '@/lib/printNodeService';
 import { codeDefaultRawCard2x1 } from '@/lib/labels/templateStore';
 import { zplFromElements } from '@/lib/labels/zpl';
@@ -27,6 +28,8 @@ export function PrintNodeSettings() {
     setSelectedPrinterId,
     refreshPrinters
   } = usePrintNode();
+  
+  const { savePreference } = useUserPrinterPreferences();
 
   const handleSaveApiKey = async () => {
     const keyToSave = localApiKey.trim() || apiKey.trim();
@@ -34,9 +37,28 @@ export function PrintNodeSettings() {
     
     try {
       await saveApiKey(keyToSave);
-      setLocalApiKey(''); // Clear local input after successful save
+      setLocalApiKey('');
     } catch (error) {
       // Error handling is done in the context
+    }
+  };
+
+  const handlePrinterChange = async (printerId: string) => {
+    const printer = printers.find(p => p.id.toString() === printerId);
+    
+    // Update context
+    setSelectedPrinterId(printerId);
+    
+    // Save to database
+    try {
+      await savePreference({
+        printer_type: 'printnode',
+        printer_id: printerId,
+        printer_name: printer?.name || 'PrintNode Printer'
+      });
+      logger.info('Printer preference saved to database', { printerId, printerName: printer?.name }, 'printnode-settings');
+    } catch (error) {
+      logger.error('Failed to save printer preference', error as Error, undefined, 'printnode-settings');
     }
   };
 
@@ -103,7 +125,7 @@ export function PrintNodeSettings() {
         {isConnected && printers.length > 0 && (
           <div className="space-y-2">
             <Label htmlFor="printnode-printer">Select Printer</Label>
-            <Select value={selectedPrinterId} onValueChange={setSelectedPrinterId}>
+            <Select value={selectedPrinterId} onValueChange={handlePrinterChange}>
               <SelectTrigger>
                 <SelectValue placeholder="Choose a PrintNode printer" />
               </SelectTrigger>
