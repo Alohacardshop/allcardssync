@@ -30,13 +30,41 @@ export async function getPrinterConfig(
       return getLocalStorageConfig();
     }
 
+    // If store/location not provided, try to auto-detect from context
+    let effectiveStore = storeKey;
+    let effectiveLocation = locationGid;
+
+    if (!effectiveStore || !effectiveLocation) {
+      // Try to get from localStorage (where StoreContext saves them)
+      const savedLocation = localStorage.getItem('selected_shopify_location');
+      
+      // Get user's default store assignment
+      const { data: assignments } = await supabase
+        .from('user_shopify_assignments')
+        .select('store_key, location_gid, is_default')
+        .eq('user_id', user.id)
+        .order('is_default', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (assignments) {
+        effectiveStore = effectiveStore || assignments.store_key;
+        effectiveLocation = effectiveLocation || savedLocation || assignments.location_gid;
+        
+        logger.debug('Auto-detected store/location', {
+          store: effectiveStore,
+          location: effectiveLocation
+        }, 'printer-config');
+      }
+    }
+
     // Check cache
     const now = Date.now();
     if (
       configCache &&
       configCache.userId === user.id &&
-      configCache.storeKey === storeKey &&
-      configCache.locationGid === locationGid &&
+      configCache.storeKey === effectiveStore &&
+      configCache.locationGid === effectiveLocation &&
       now - configCache.timestamp < CACHE_DURATION
     ) {
       return configCache.config;
@@ -48,11 +76,11 @@ export async function getPrinterConfig(
       .select('*')
       .eq('user_id', user.id);
 
-    if (storeKey) {
-      query = query.eq('store_key', storeKey);
+    if (effectiveStore) {
+      query = query.eq('store_key', effectiveStore);
     }
-    if (locationGid) {
-      query = query.eq('location_gid', locationGid);
+    if (effectiveLocation) {
+      query = query.eq('location_gid', effectiveLocation);
     }
 
     const { data, error } = await query.maybeSingle();
@@ -78,10 +106,18 @@ export async function getPrinterConfig(
     configCache = {
       config,
       userId: user.id,
-      storeKey: storeKey || null,
-      locationGid: locationGid || null,
+      storeKey: effectiveStore || null,
+      locationGid: effectiveLocation || null,
       timestamp: now,
     };
+
+    logger.debug('Loaded printer config', {
+      usePrintNode: config.usePrintNode,
+      printerId: config.printNodeId,
+      printerName: config.printerName,
+      store: effectiveStore,
+      location: effectiveLocation
+    }, 'printer-config');
 
     return config;
   } catch (error) {
