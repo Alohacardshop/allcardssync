@@ -42,15 +42,33 @@ function hasEbayTag(tags: any): boolean {
   return false;
 }
 
+function extractBarcodeNumber(payload: any): string {
+  return payload.id?.toString() || payload.order_number?.toString() || payload.name || 'N/A';
+}
+
+function formatItemList(lineItems: any[]): string {
+  if (!lineItems || lineItems.length === 0) return 'No items';
+  
+  return lineItems.map((item) => {
+    const name = item.title || item.name || 'Unknown Item';
+    const sku = item.sku ? ` - SKU: ${item.sku}` : '';
+    const qty = item.quantity || 1;
+    const price = item.price ? `$${item.price}` : 'N/A';
+    return `• ${name}${sku} - Qty: ${qty} - ${price}`;
+  }).join('\n');
+}
+
 function renderMessage(template: string, payload: any, config: DiscordConfig): string {
   let message = template;
 
   // Replace variables
   message = message.replace(/{id}/g, payload.id || payload.order_number || '');
+  message = message.replace(/{barcode_number}/g, extractBarcodeNumber(payload));
   message = message.replace(/{customer_name}/g, payload.customer?.first_name || payload.billing_address?.first_name || 'N/A');
   message = message.replace(/{total}/g, payload.total_price || payload.current_total_price || '');
   message = message.replace(/{created_at}/g, payload.created_at || '');
   message = message.replace(/{tags}/g, JSON.stringify(payload.tags || []));
+  message = message.replace(/{item_list}/g, formatItemList(payload.line_items || []));
   
   // Truncate raw_json to avoid Discord limits
   const rawJson = JSON.stringify(payload, null, 2);
@@ -122,11 +140,14 @@ Deno.serve(async (req) => {
 
       // Build embeds for line items with images
       const embeds = [];
+      const barcodeNumber = extractBarcodeNumber(payload);
+      
       if (payload.line_items && Array.isArray(payload.line_items)) {
         for (const item of payload.line_items.slice(0, 10)) { // Max 10 embeds
           const embed: any = {
             title: item.title || item.name || 'Product',
             fields: [
+              { name: '🔢 Barcode', value: `\`${barcodeNumber}\``, inline: false },
               { name: 'SKU', value: item.sku || 'N/A', inline: true },
               { name: 'Quantity', value: (item.quantity || 1).toString(), inline: true },
               { name: 'Price', value: `$${item.price || '0.00'}`, inline: true },
@@ -134,9 +155,9 @@ Deno.serve(async (req) => {
             color: 0x5865F2, // Discord blurple
           };
           
-          // Add image if available
+          // Add image as main image (large display) if available
           if (item.image_url) {
-            embed.thumbnail = { url: item.image_url };
+            embed.image = { url: item.image_url };
           }
           
           embeds.push(embed);
