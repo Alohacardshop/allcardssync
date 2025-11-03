@@ -544,18 +544,9 @@ const Inventory = () => {
     setSyncingRowId(item.id);
     
     try {
-      // Helper to generate barcode for raw cards (matches bulk resync logic)
+      // Helper to generate barcode for raw cards (TCGPlayer ID only)
       const generateBarcode = (item: any) => {
-        if (!item.catalog_snapshot?.tcgplayer_product_id) return item.sku;
-        const tcgplayerId = item.catalog_snapshot.tcgplayer_product_id;
-        const condition = item.variant || item.grade || 'NM';
-        const conditionAbbrev = condition.toLowerCase().includes('near mint') ? 'NM' 
-          : condition.toLowerCase().includes('lightly') ? 'LP'
-          : condition.toLowerCase().includes('moderately') ? 'MP'
-          : condition.toLowerCase().includes('heavily') ? 'HP'
-          : condition.toLowerCase().includes('damaged') ? 'DMG'
-          : 'NM';
-        return `${tcgplayerId}-${conditionAbbrev}`;
+        return item.catalog_snapshot?.tcgplayer_product_id || item.sku;
       };
 
       // Use direct send functions with barcode (same as bulk resync)
