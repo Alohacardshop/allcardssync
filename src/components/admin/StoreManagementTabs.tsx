@@ -14,18 +14,16 @@ import { InventorySyncSettings } from "./InventorySyncSettings";
 import { WebhookTestPanel } from "./WebhookTestPanel";
 import { ShopifyTagImport } from "./ShopifyTagImport";
 import ShopifyQueueTest from "./ShopifyQueueTest";
-import { CategoryManagement } from "./CategoryManagement";
 
 export function StoreManagementTabs() {
   return (
     <Tabs defaultValue="config" className="space-y-6">
-      <TabsList className="grid w-full grid-cols-6">
+      <TabsList className="grid w-full grid-cols-5">
         <TabsTrigger value="config">Configuration</TabsTrigger>
         <TabsTrigger value="sync">Sync & Import</TabsTrigger>
         <TabsTrigger value="webhooks">Webhooks</TabsTrigger>
         <TabsTrigger value="testing">Testing</TabsTrigger>
         <TabsTrigger value="data">Data Management</TabsTrigger>
-        <TabsTrigger value="categories">Categories</TabsTrigger>
       </TabsList>
 
       {/* Configuration Tab */}
@@ -61,11 +59,6 @@ export function StoreManagementTabs() {
         <VendorManagement />
         <DuplicateCleanup />
         <ShopifyReconciliation />
-      </TabsContent>
-
-      {/* Categories Tab */}
-      <TabsContent value="categories" className="space-y-6">
-        <CategoryManagement />
       </TabsContent>
     </Tabs>
   );

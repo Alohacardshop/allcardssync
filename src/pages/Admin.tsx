@@ -9,7 +9,8 @@ import {
   Package,
   Building2,
   Command,
-  Menu
+  Menu,
+  Tag
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import {
@@ -40,6 +41,7 @@ import { EnhancedBreadcrumb } from "@/components/admin/EnhancedBreadcrumb";
 import { CatalogTabsSection } from "@/components/admin/CatalogTabsSection";
 import { HardwareTabsSection } from "@/components/admin/HardwareTabsSection";
 import { SystemTabsSection } from "@/components/admin/SystemTabsSection";
+import { CategoryManagement } from "@/components/admin/CategoryManagement";
 
 const adminSections = [
   {
@@ -81,6 +83,11 @@ const adminSections = [
     id: 'vendors',
     title: 'Vendors',
     icon: Building2,
+  },
+  {
+    id: 'categories',
+    title: 'Categories',
+    icon: Tag,
   },
 ];
 
@@ -146,6 +153,8 @@ export default function Admin() {
         return <SystemTabsSection />;
       case 'vendors':
         return <VendorManagement />;
+      case 'categories':
+        return <CategoryManagement />;
       default:
         return <div>Section not found</div>;
     }
