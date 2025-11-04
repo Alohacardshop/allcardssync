@@ -234,6 +234,11 @@ export const ManualRawCardEntry: React.FC<ManualRawCardEntryProps> = ({ onBatchA
 
       addItem(itemPayload, {
         onSuccess: async (data) => {
+          // Check if it was a duplicate SKU quantity update
+          if ((data as any).isDuplicate) {
+            toast.success(`SKU already exists - updated quantity from ${(data as any).oldQuantity} to ${(data as any).newQuantity}`);
+          }
+          
           // Update vendor if selected
           if (formData.vendor && formData.vendor !== "no_vendor") {
             await supabase
