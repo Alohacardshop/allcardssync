@@ -1277,7 +1277,8 @@ const Inventory = () => {
         .from('intake_items')
         .select('*')
         .is('printed_at', null)
-        .is('deleted_at', null);
+        .is('deleted_at', null)
+        .order('created_at', { ascending: true });  // Consistent chronological order
       
       // Add store/location filtering if assigned
       if (assignedStore) {
@@ -1544,11 +1545,14 @@ const Inventory = () => {
     let failCount = 0;
 
     try {
+      // Preserve selection order
+      const selectionOrder = Array.from(selectedItems);
+      
       // Fetch fresh data from database to get ALL original information
       const { data: freshItems, error: fetchError } = await supabase
         .from('intake_items')
         .select('*')
-        .in('id', Array.from(selectedItems));
+        .in('id', selectionOrder);
 
       if (fetchError) {
         console.error('Failed to fetch items:', fetchError);
@@ -1563,11 +1567,17 @@ const Inventory = () => {
         return;
       }
 
-      // Filter for raw items only
-      const selectedRawItems = freshItems.filter(item => {
-        const itemType = item.type?.toLowerCase() || 'raw';
-        return itemType === 'raw' && !item.deleted_at;
-      });
+      // Create a map for fast lookup
+      const itemsMap = new Map(freshItems.map(item => [item.id, item]));
+      
+      // Sort items to match original selection order and filter for raw items only
+      const selectedRawItems = selectionOrder
+        .map(id => itemsMap.get(id))
+        .filter(item => {
+          if (!item) return false;
+          const itemType = item.type?.toLowerCase() || 'raw';
+          return itemType === 'raw' && !item.deleted_at;
+        });
 
       if (selectedRawItems.length === 0) {
         toast.info('No raw cards selected for reprinting');
