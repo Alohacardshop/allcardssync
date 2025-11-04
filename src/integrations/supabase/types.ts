@@ -242,6 +242,7 @@ export type Database = {
           psa_last_check: string | null
           psa_snapshot: Json | null
           psa_verified: boolean | null
+          purchase_location_id: string | null
           pushed_at: string | null
           quantity: number
           removed_from_batch_at: string | null
@@ -314,6 +315,7 @@ export type Database = {
           psa_last_check?: string | null
           psa_snapshot?: Json | null
           psa_verified?: boolean | null
+          purchase_location_id?: string | null
           pushed_at?: string | null
           quantity?: number
           removed_from_batch_at?: string | null
@@ -386,6 +388,7 @@ export type Database = {
           psa_last_check?: string | null
           psa_snapshot?: Json | null
           psa_verified?: boolean | null
+          purchase_location_id?: string | null
           pushed_at?: string | null
           quantity?: number
           removed_from_batch_at?: string | null
@@ -425,6 +428,13 @@ export type Database = {
             columns: ["lot_id"]
             isOneToOne: false
             referencedRelation: "intake_lots"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "intake_items_purchase_location_id_fkey"
+            columns: ["purchase_location_id"]
+            isOneToOne: false
+            referencedRelation: "purchase_locations"
             referencedColumns: ["id"]
           },
         ]
@@ -1205,6 +1215,39 @@ export type Database = {
           ip_address?: string | null
           response_time_ms?: number | null
           success?: boolean | null
+        }
+        Relationships: []
+      }
+      purchase_locations: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          metadata: Json | null
+          name: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          metadata?: Json | null
+          name: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          metadata?: Json | null
+          name?: string
+          sort_order?: number
+          updated_at?: string
         }
         Relationships: []
       }

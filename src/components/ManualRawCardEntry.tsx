@@ -14,6 +14,7 @@ import { manualRawCardSchema } from "@/lib/validation/intake-schemas";
 import { SubCategoryCombobox } from "@/components/ui/sub-category-combobox";
 import { detectMainCategory } from "@/utils/categoryMapping";
 import { useAddIntakeItem } from "@/hooks/useAddIntakeItem";
+import { PurchaseLocationSelect } from "@/components/ui/PurchaseLocationSelect";
 
 interface ManualRawCardEntryProps {
   onBatchAdd?: (item: any) => void;
@@ -48,6 +49,7 @@ export const ManualRawCardEntry: React.FC<ManualRawCardEntryProps> = ({ onBatchA
     cost: "",
     quantity: 1,
     vendor: "",
+    purchaseLocationId: "",
   });
   
   const [costPercentage, setCostPercentage] = useState(70);
@@ -239,16 +241,24 @@ export const ManualRawCardEntry: React.FC<ManualRawCardEntryProps> = ({ onBatchA
             toast.success(`SKU already exists - updated quantity from ${(data as any).oldQuantity} to ${(data as any).newQuantity}`);
           }
           
-          // Update vendor if selected
-          if (formData.vendor && formData.vendor !== "no_vendor") {
+          // Update vendor and purchase location if selected
+          if ((formData.vendor && formData.vendor !== "no_vendor") || formData.purchaseLocationId) {
+            const updates: any = {};
+            if (formData.vendor && formData.vendor !== "no_vendor") {
+              updates.vendor = formData.vendor;
+            }
+            if (formData.purchaseLocationId) {
+              updates.purchase_location_id = formData.purchaseLocationId;
+            }
             await supabase
               .from('intake_items')
-              .update({ vendor: formData.vendor })
+              .update(updates)
               .eq('id', data.id);
           }
           
           // Reset form but keep vendor selection
           const vendorToKeep = formData.vendor;
+          const purchaseLocationToKeep = formData.purchaseLocationId;
           setFormData({
             mainCategory: "tcg",
             subCategory: "",
@@ -265,6 +275,7 @@ export const ManualRawCardEntry: React.FC<ManualRawCardEntryProps> = ({ onBatchA
             cost: "",
             quantity: 1,
             vendor: vendorToKeep,
+            purchaseLocationId: purchaseLocationToKeep,
           });
           
           if (onBatchAdd) {
@@ -294,6 +305,7 @@ export const ManualRawCardEntry: React.FC<ManualRawCardEntryProps> = ({ onBatchA
       cost: "",
       quantity: 1,
       vendor: formData.vendor, // Keep the vendor selection
+      purchaseLocationId: formData.purchaseLocationId, // Keep the purchase location selection
     });
     setQuickEntry("");
     setCostPercentage(70);
@@ -529,6 +541,14 @@ export const ManualRawCardEntry: React.FC<ManualRawCardEntryProps> = ({ onBatchA
                 ))}
               </SelectContent>
             </Select>
+          </div>
+          
+          <div>
+            <PurchaseLocationSelect
+              value={formData.purchaseLocationId}
+              onChange={(value) => handleInputChange('purchaseLocationId', value)}
+              label="Purchase Location"
+            />
           </div>
         </div>
       </div>

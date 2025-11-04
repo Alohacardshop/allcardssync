@@ -36,10 +36,13 @@ Deno.serve(async (req) => {
     const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2')
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-    // 6. Get intake item data
+    // 6. Get intake item data with purchase location
     const { data: intakeItem, error: fetchError } = await supabase
       .from('intake_items')
-      .select('*')
+      .select(`
+        *,
+        purchase_location:purchase_locations(name, description)
+      `)
       .eq('id', item_id)
       .single()
     
@@ -307,6 +310,16 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Purchase location
+    if (purchaseLocation) {
+      metafields.push({
+        namespace: 'acs.sync',
+        key: 'purchase_location',
+        type: 'single_line_text_field',
+        value: purchaseLocation
+      });
+    }
+
     // Rich JSON data
     if (intakeItem.catalog_snapshot) {
       metafields.push({
@@ -317,7 +330,8 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Build tags array with main_category and sub_category
+    // Build tags array with main_category, sub_category, and purchase location
+    const purchaseLocation = Array.isArray(intakeItem.purchase_location) ? intakeItem.purchase_location[0]?.name : intakeItem.purchase_location?.name;
     const tagsArray = [...new Set(isComic ? [
       'comics',
       'raw',
@@ -328,7 +342,8 @@ Deno.serve(async (req) => {
       intakeItem.lot_number || 'Unknown Lot',
       subject ? `Title: ${subject}` : null,
       cardNumber ? `Issue: ${cardNumber}` : null,
-      vendor
+      vendor,
+      purchaseLocation ? `Purchased: ${purchaseLocation}` : null
     ].filter(Boolean) : [
       'Raw Card',
       'single', 
@@ -339,7 +354,8 @@ Deno.serve(async (req) => {
       intakeItem.lot_number || 'Unknown Lot', // Lot number
       subject ? `Card: ${subject}` : null, // Card name
       cardNumber ? `Number: ${cardNumber}` : null, // Card number
-      vendor // Add vendor to tags
+      vendor, // Add vendor to tags
+      purchaseLocation ? `Purchased: ${purchaseLocation}` : null
     ].filter(Boolean))];
 
     // Prepare Shopify product data (without metafields - will add them separately)

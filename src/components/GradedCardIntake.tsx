@@ -28,6 +28,7 @@ import { useAddIntakeItem } from "@/hooks/useAddIntakeItem";
 import { useCurrentBatch } from "@/hooks/useCurrentBatch";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
+import { PurchaseLocationSelect } from "@/components/ui/PurchaseLocationSelect";
 
 interface GradedCardIntakeProps {
   onBatchAdd?: () => void;
@@ -99,6 +100,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
     mainCategory: "tcg",
     subCategory: "",
     vendor: "",
+    purchaseLocationId: "",
   });
 
   // Load vendors for the store
@@ -436,9 +438,19 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
 
       // Update vendor immediately after insert
       if (formData.vendor && result?.id) {
+        const updates: any = { vendor: formData.vendor };
+        if (formData.purchaseLocationId) {
+          updates.purchase_location_id = formData.purchaseLocationId;
+        }
         await supabase
           .from('intake_items')
-          .update({ vendor: formData.vendor })
+          .update(updates)
+          .eq('id', result.id);
+      } else if (formData.purchaseLocationId && result?.id) {
+        // Update purchase location even if no vendor
+        await supabase
+          .from('intake_items')
+          .update({ purchase_location_id: formData.purchaseLocationId })
           .eq('id', result.id);
       }
 
@@ -466,6 +478,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         mainCategory: currentMainCategory,
         subCategory: currentSubCategory,
         vendor: currentVendor,
+        purchaseLocationId: formData.purchaseLocationId,
       });
       
       if (onBatchAdd) {
@@ -821,6 +834,14 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
                 min="1"
                 value={formData.quantity}
                 onChange={(e) => updateFormField('quantity', parseInt(e.target.value) || 1)}
+              />
+            </div>
+            
+            <div>
+              <PurchaseLocationSelect
+                value={formData.purchaseLocationId}
+                onChange={(value) => updateFormField('purchaseLocationId', value)}
+                label="Purchase Location"
               />
             </div>
           </div>

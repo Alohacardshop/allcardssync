@@ -42,6 +42,8 @@ import { CatalogTabsSection } from "@/components/admin/CatalogTabsSection";
 import { HardwareTabsSection } from "@/components/admin/HardwareTabsSection";
 import { SystemTabsSection } from "@/components/admin/SystemTabsSection";
 import { CategoryManagement } from "@/components/admin/CategoryManagement";
+import { PurchaseLocationsManager } from "@/components/admin/PurchaseLocationsManager";
+import { MapPin } from "lucide-react";
 
 const adminSections = [
   {
@@ -88,6 +90,11 @@ const adminSections = [
     id: 'categories',
     title: 'Categories',
     icon: Tag,
+  },
+  {
+    id: 'purchase-locations',
+    title: 'Purchase Locations',
+    icon: MapPin,
   },
 ];
 
@@ -155,6 +162,8 @@ export default function Admin() {
         return <VendorManagement />;
       case 'categories':
         return <CategoryManagement />;
+      case 'purchase-locations':
+        return <PurchaseLocationsManager />;
       default:
         return <div>Section not found</div>;
     }
