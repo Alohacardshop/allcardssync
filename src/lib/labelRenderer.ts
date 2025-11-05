@@ -479,9 +479,23 @@ export const generateZPLFromLabelData = (
   // Barcode section - match canvas positioning exactly
   if (fieldConfig.barcodeMode !== 'none') {
     const barcodeY = padding + topRowHeight + 5;
-    const barcodeWidth = 120;
     const barcodeHeight = 50;
-    const barcodeX = (widthDots - barcodeWidth) / 2; // Center the barcode
+    
+    // Calculate optimal module width based on barcode data length
+    // Code128 uses ~11 modules per character + ~35 for start/stop
+    const barcodeDataLength = (labelData.barcode || '').length;
+    const estimatedModules = barcodeDataLength * 11 + 35;
+    const availableWidth = widthDots - (padding * 2);
+    
+    // Calculate module width: smaller for longer barcodes (graded cards)
+    let moduleWidth = 2; // default
+    if (estimatedModules * 2 > availableWidth) {
+      moduleWidth = 1; // Use narrower bars for long barcodes
+    }
+    
+    // Estimate actual barcode width with calculated module width
+    const estimatedBarcodeWidth = estimatedModules * moduleWidth;
+    const barcodeX = Math.max(padding, (widthDots - estimatedBarcodeWidth) / 2);
     
     if (fieldConfig.barcodeMode === 'barcode') {
       elements.push({
@@ -489,6 +503,7 @@ export const generateZPLFromLabelData = (
         x: Math.round(barcodeX),
         y: barcodeY,
         height: barcodeHeight,
+        moduleWidth: moduleWidth,
         humanReadable: false,
         data: labelData.barcode
       });

@@ -2,7 +2,7 @@ export type Dpi = 203 | 300;
 
 export type ZPLElement =
   | { kind: 'text'; x: number; y: number; font?: 'A'|'0'; height?: number; width?: number; rotation?: 'N'|'R'|'I'|'B'; data: string; }
-  | { kind: 'barcode128'; x: number; y: number; height?: number; humanReadable?: boolean; data: string; }
+  | { kind: 'barcode128'; x: number; y: number; height?: number; moduleWidth?: number; humanReadable?: boolean; data: string; }
   | { kind: 'qrcode'; x: number; y: number; model?: 1|2; mag?: number; data: string; }
   | { kind: 'box'; x: number; y: number; w: number; h: number; thickness?: number; }
   | { kind: 'line'; x: number; y: number; w: number; h: number; };
@@ -89,8 +89,9 @@ export function buildZPLWithCut(
         
       case 'barcode128':
         const bcHeight = element.height || 50;
+        const moduleWidth = element.moduleWidth || 2;
         const humanReadable = element.humanReadable ? 'Y' : 'N';
-        lines.push(`^FO${element.x},${element.y}^BCN,${bcHeight},${humanReadable}^FD${element.data}^FS`);
+        lines.push(`^FO${element.x},${element.y}^BY${moduleWidth}^BCN,${bcHeight},${humanReadable}^FD${element.data}^FS`);
         break;
         
       case 'qrcode':
