@@ -361,12 +361,15 @@ Deno.serve(async (req) => {
         variants: [{
           sku: item.sku,
           price: item.price?.toString() || '0.00',
+          cost: item.cost ? item.cost.toString() : (intakeItem.cost ? intakeItem.cost.toString() : undefined),
           inventory_quantity: item.quantity || 1,
           inventory_management: 'shopify',
           requires_shipping: true,
           taxable: true,
-          barcode: generateBarcodeForGradedItem(item, intakeItem), // Use certificate number as barcode
-          inventory_policy: 'deny'
+          barcode: generateBarcodeForGradedItem(item, intakeItem),
+          inventory_policy: 'deny',
+          weight: intakeItem.product_weight || 3,
+          weight_unit: 'oz'
         }],
         images: imageUrl ? [{
           src: imageUrl,
@@ -412,8 +415,11 @@ Deno.serve(async (req) => {
           variant: {
             id: variant.id,
             price: item.price?.toString() || '0.00',
+            cost: item.cost ? item.cost.toString() : (intakeItem.cost ? intakeItem.cost.toString() : undefined),
             sku: item.sku,
-            barcode: generateBarcodeForGradedItem(item, intakeItem)
+            barcode: generateBarcodeForGradedItem(item, intakeItem),
+            weight: intakeItem.product_weight || 3,
+            weight_unit: 'oz'
           }
         })
       })

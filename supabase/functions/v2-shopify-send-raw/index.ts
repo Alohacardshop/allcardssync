@@ -381,12 +381,15 @@ Deno.serve(async (req) => {
         variants: [{
           sku: intakeItem.sku,
           price: intakeItem.price?.toString() || '0.00',
+          cost: intakeItem.cost ? intakeItem.cost.toString() : undefined,
           inventory_quantity: intakeItem.quantity || 1,
           inventory_management: 'shopify',
           requires_shipping: true,
           taxable: true,
-          barcode: generateBarcodeForRawCard(intakeItem), // TCGPlayerID-Condition format
-          inventory_policy: 'deny'
+          barcode: generateBarcodeForRawCard(intakeItem),
+          inventory_policy: 'deny',
+          weight: intakeItem.product_weight || 3,
+          weight_unit: 'oz'
         }],
         images: imageUrl ? [{
           src: imageUrl,
@@ -430,8 +433,11 @@ Deno.serve(async (req) => {
           variant: {
             id: variant.id,
             price: intakeItem.price?.toString() || '0.00',
+            cost: intakeItem.cost ? intakeItem.cost.toString() : undefined,
             sku: intakeItem.sku,
-            barcode: generateBarcodeForRawCard(intakeItem)
+            barcode: generateBarcodeForRawCard(intakeItem),
+            weight: intakeItem.product_weight || 3,
+            weight_unit: 'oz'
           }
         })
       })
