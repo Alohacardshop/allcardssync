@@ -174,14 +174,13 @@ export const RawComicIntake = ({ onBatchAdd }: RawComicIntakeProps) => {
         brand_title_in: formData.publisher,
         subject_in: formData.title,
         category_in: "Comics",
-        variant_in: formData.condition,
+        variant_in: formData.condition || "Raw",
         card_number_in: formData.issueNumber,
         price_in: parseFloat(formData.price),
         cost_in: parseFloat(formData.cost),
         sku_in: "",
         main_category_in: "comics",
         sub_category_in: formData.subCategory,
-        purchase_location_id_in: formData.purchaseLocationId || null,
         processing_notes_in: formData.processingNotes,
         catalog_snapshot_in: {
           title: formData.title,
@@ -193,6 +192,14 @@ export const RawComicIntake = ({ onBatchAdd }: RawComicIntakeProps) => {
           source: 'clz_csv'
         }
       });
+
+      // Update purchase location if selected
+      if (formData.purchaseLocationId && result.id) {
+        await supabase
+          .from('intake_items')
+          .update({ purchase_location_id: formData.purchaseLocationId })
+          .eq('id', result.id);
+      }
 
       // Move to next comic if available, otherwise reset
       if (uploadedComics.length > 0 && currentComicIndex < uploadedComics.length - 1) {

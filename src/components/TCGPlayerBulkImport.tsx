@@ -376,7 +376,6 @@ export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) =>
         source_provider_in: 'tcgplayer',
         main_category_in: mainCategory,
         sub_category_in: subCategory,
-        purchase_location_id_in: purchaseLocationId || null,
         // Enhanced catalog snapshot with all TCGPlayer data
         catalog_snapshot_in: {
           name: item.name,
@@ -427,6 +426,14 @@ export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) =>
       };
 
       const result = await addItem(itemPayload);
+      
+      // Update purchase location if selected
+      if (purchaseLocationId && result.id) {
+        await supabase
+          .from('intake_items')
+          .update({ purchase_location_id: purchaseLocationId })
+          .eq('id', result.id);
+      }
       
       // Return the full item data
       return {

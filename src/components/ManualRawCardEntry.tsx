@@ -202,6 +202,22 @@ export const ManualRawCardEntry: React.FC<ManualRawCardEntryProps> = ({ onBatchA
         `${formData.brand}-${formData.subject}-${formData.cardNumber || 'unknown'}`.replace(/\s+/g, '-').toLowerCase()
       );
 
+      // Determine if this is a graded card
+      const isGraded = formData.gradingCompany && formData.gradingCompany !== "none";
+      const itemType = isGraded ? "Graded" : "Raw";
+      
+      // Set variant based on grading or condition
+      let variant: string;
+      if (isGraded) {
+        // For graded cards: "BGS 9.5", "SGC 10", etc.
+        variant = formData.grade 
+          ? `${formData.gradingCompany} ${formData.grade}`
+          : formData.gradingCompany;
+      } else {
+        // For raw cards: use condition or default to "Raw"
+        variant = formData.condition === "not_specified" ? "Raw" : formData.condition;
+      }
+
       const itemPayload: any = {
         store_key_in: assignedStore,
         shopify_location_gid_in: selectedLocation,
@@ -209,9 +225,11 @@ export const ManualRawCardEntry: React.FC<ManualRawCardEntryProps> = ({ onBatchA
         brand_title_in: formData.brand || null,
         subject_in: formData.subject || null,
         category_in: formData.subCategory || null,
-        variant_in: formData.condition === "not_specified" ? "Raw" : formData.condition,
+        variant_in: variant,
         card_number_in: formData.cardNumber || null,
         grade_in: formData.grade || null,
+        grading_company_in: isGraded ? formData.gradingCompany : null,
+        type_in: itemType,
         price_in: parseFloat(formData.price),
         cost_in: formData.cost ? parseFloat(formData.cost) : null,
         sku_in: generatedSku,
@@ -220,7 +238,7 @@ export const ManualRawCardEntry: React.FC<ManualRawCardEntryProps> = ({ onBatchA
         main_category_in: formData.mainCategory,
         sub_category_in: formData.subCategory,
         catalog_snapshot_in: {
-          type: "manual_raw_card",
+          type: isGraded ? "manual_graded_card" : "manual_raw_card",
           brand: formData.brand,
           subject: formData.subject,
           card_number: formData.cardNumber,

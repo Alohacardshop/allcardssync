@@ -172,7 +172,6 @@ export function BulkCardIntake({ onBatchAdd }: BulkCardIntakeProps) {
         source_provider_in: 'bulk_entry',
         main_category_in: mainCategory,
         sub_category_in: subCategory,
-        purchase_location_id_in: purchaseLocationId || null,
         catalog_snapshot_in: {
           name: gameTitle,
           game: selectedGame,
@@ -186,6 +185,14 @@ export function BulkCardIntake({ onBatchAdd }: BulkCardIntakeProps) {
         },
         processing_notes_in: `Bulk card entry: ${amount} ${selectedGame} cards at $${totalPrice.toFixed(2)} total ($${(totalPrice / amount).toFixed(2)} each)`
       });
+
+      // Update purchase location if selected
+      if (purchaseLocationId && result.id) {
+        await supabase
+          .from('intake_items')
+          .update({ purchase_location_id: purchaseLocationId })
+          .eq('id', result.id);
+      }
 
       if (onBatchAdd) {
         onBatchAdd(result);

@@ -86,7 +86,6 @@ export function OtherItemsEntry({ onBatchAdd }: OtherItemsEntryProps) {
         source_provider_in: 'other_entry',
         main_category_in: mainCategory,
         sub_category_in: subCategory,
-        purchase_location_id_in: purchaseLocationId || null,
         catalog_snapshot_in: {
           name: description.trim(),
           type: 'other_item'
@@ -99,6 +98,14 @@ export function OtherItemsEntry({ onBatchAdd }: OtherItemsEntryProps) {
         },
         processing_notes_in: `Other item entry: ${amount} ${description.trim()} at $${totalPrice.toFixed(2)} total ($${(totalPrice / amount).toFixed(2)} each)`
       });
+
+      // Update purchase location if selected
+      if (purchaseLocationId && result.id) {
+        await supabase
+          .from('intake_items')
+          .update({ purchase_location_id: purchaseLocationId })
+          .eq('id', result.id);
+      }
 
       if (onBatchAdd) {
         onBatchAdd(result);
