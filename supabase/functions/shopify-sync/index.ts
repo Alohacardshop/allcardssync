@@ -29,15 +29,35 @@ interface InventoryItem {
   quantity: number
   type: 'Graded' | 'Raw'
   psa_cert: string
+  cgc_cert?: string
+  grading_company?: string
   year?: string
   cost?: number
   shopify_product_id?: string
   shopify_variant_id?: string
+  catalog_snapshot?: any
 }
 
 interface ShopifyCredentials {
   domain: string
   access_token: string
+}
+
+// Helper function to get barcode for items
+// Priority: Certificate number (PSA/CGC) > TCGPlayer ID > SKU
+function getItemBarcode(item: InventoryItem): string | undefined {
+  // For graded items, use certificate number
+  if (item.type === 'Graded') {
+    if (item.psa_cert) return item.psa_cert;
+    if (item.cgc_cert) return item.cgc_cert;
+  }
+  
+  // For raw items, use TCGPlayer ID if available
+  const tcgPlayerId = item.catalog_snapshot?.tcgplayer_id;
+  if (tcgPlayerId) return tcgPlayerId;
+  
+  // Fallback to SKU
+  return item.sku || undefined;
 }
 
 // Rate limiting state
@@ -482,7 +502,7 @@ async function createShopifyProduct(credentials: ShopifyCredentials, item: Inven
         inventory_management: 'shopify',
         inventory_policy: 'deny',
         inventory_quantity: item.quantity,
-        barcode: item.type === 'Graded' ? item.psa_cert : undefined,
+        barcode: getItemBarcode(item),
         weight: 3,
         weight_unit: 'oz'
       }]
@@ -512,7 +532,7 @@ async function createProductVariant(credentials: ShopifyCredentials, productId: 
       inventory_management: 'shopify',
       inventory_policy: 'deny',
       inventory_quantity: item.quantity,
-      barcode: item.type === 'Graded' ? item.psa_cert : undefined,
+      barcode: getItemBarcode(item),
       option1: item.variant || 'Default',
       weight: 3, // 3oz as requested
       weight_unit: 'oz'

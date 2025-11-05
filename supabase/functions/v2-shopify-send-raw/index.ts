@@ -2,10 +2,22 @@ import { corsHeaders } from '../_shared/cors.ts'
 import { requireAuth, requireRole, requireStoreAccess } from '../_shared/auth.ts'
 import { SendRawSchema, SendRawInput } from '../_shared/validation.ts'
 
-// Helper function to generate barcode: pure numeric TCGPlayer ID
-// TCGPlayer IDs are already condition-specific, so no need to append condition
+// Helper function to generate barcode for raw cards
+// Priority: Certificate number (if graded) > TCGPlayer ID > SKU
 function generateBarcodeForRawCard(item: any): string {
-  return item.catalog_snapshot?.tcgplayer_id || item.sku || '';
+  // Check for grading certificates first (in case item has grading info)
+  const psaCert = item.psa_cert || item.psa_cert_number;
+  if (psaCert) return psaCert;
+  
+  const cgcCert = item.cgc_cert || item.catalog_snapshot?.cgc_cert;
+  if (cgcCert) return cgcCert;
+  
+  // Use TCGPlayer ID for true raw cards
+  const tcgPlayerId = item.catalog_snapshot?.tcgplayer_id;
+  if (tcgPlayerId) return tcgPlayerId;
+  
+  // Fallback to SKU
+  return item.sku || '';
 }
 
 Deno.serve(async (req) => {

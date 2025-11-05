@@ -2,6 +2,21 @@ import { corsHeaders } from '../_shared/cors.ts'
 import { requireAuth, requireRole, requireStoreAccess } from '../_shared/auth.ts'
 import { SendGradedSchema, SendGradedInput } from '../_shared/validation.ts'
 
+// Helper function to generate barcode for graded items
+// Priority: Certificate number (PSA/CGC) > SKU
+function generateBarcodeForGradedItem(item: any, intakeItem: any): string {
+  // Check for PSA certificate
+  const psaCert = item.psa_cert || intakeItem.psa_cert || intakeItem.psa_cert_number;
+  if (psaCert) return psaCert;
+  
+  // Check for CGC certificate
+  const cgcCert = intakeItem.cgc_cert || intakeItem.catalog_snapshot?.cgc_cert;
+  if (cgcCert) return cgcCert;
+  
+  // Fallback to SKU
+  return item.sku || intakeItem.sku || '';
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
@@ -350,7 +365,7 @@ Deno.serve(async (req) => {
           inventory_management: 'shopify',
           requires_shipping: true,
           taxable: true,
-          barcode: item.sku, // SKU and barcode should be the same
+          barcode: generateBarcodeForGradedItem(item, intakeItem), // Use certificate number as barcode
           inventory_policy: 'deny'
         }],
         images: imageUrl ? [{
@@ -398,7 +413,7 @@ Deno.serve(async (req) => {
             id: variant.id,
             price: item.price?.toString() || '0.00',
             sku: item.sku,
-            barcode: item.sku
+            barcode: generateBarcodeForGradedItem(item, intakeItem)
           }
         })
       })
