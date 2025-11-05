@@ -867,14 +867,10 @@ const Inventory = () => {
   const handlePrint = useCallback(async (item: any) => {
     const itemType = item.type?.toLowerCase() || 'raw';
     
-    // Only allow printing for Raw items
-    if (itemType !== 'raw') {
-      toast.error('Printing is only available for Raw cards');
-      return;
-    }
-    
-    if (!item.sku) {
-      toast.error('No SKU available for printing');
+    // Check if item has printable data (SKU for raw, cert number for graded)
+    const hasPrintableData = item.sku || item.psa_cert || item.cgc_cert;
+    if (!hasPrintableData) {
+      toast.error('No SKU or certificate number available for printing');
       return;
     }
 
@@ -958,7 +954,7 @@ const Inventory = () => {
         CONDITION: item.condition || 'NM',
         PRICE: item.price ? `$${item.price.toFixed(2)}` : '$0.00',
         SKU: item.sku || '',
-        BARCODE: item.sku || item.id?.slice(-8) || 'NO-SKU',
+        BARCODE: item.psa_cert || item.cgc_cert || item.sku || item.id?.slice(-8) || 'NO-SKU',
       };
 
       logger.info('Template variables generated', { templateFormat: tpl.format });
