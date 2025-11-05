@@ -36,7 +36,10 @@ Deno.serve(async (req) => {
     // Get the intake item with PSA data
     const { data: intakeItem, error: fetchError } = await supabase
       .from('intake_items')
-      .select('*')
+      .select(`
+        *,
+        purchase_location:purchase_locations(name, description)
+      `)
       .eq('id', item.id)
       .single()
 
@@ -80,6 +83,11 @@ Deno.serve(async (req) => {
     const variant = item.variant || intakeItem.variant || ''
     const category = item.category_tag || intakeItem.category || ''
     const gradingCompany = intakeItem.grading_company || 'PSA'
+    
+    // Extract purchase location
+    const purchaseLocation = Array.isArray(intakeItem.purchase_location) 
+      ? intakeItem.purchase_location[0]?.name 
+      : intakeItem.purchase_location?.name
 
     // Debug logging
     console.log('DEBUG: Title construction data:', {
@@ -293,6 +301,16 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Purchase location
+    if (purchaseLocation) {
+      metafields.push({
+        namespace: 'acs.sync',
+        key: 'purchase_location',
+        type: 'single_line_text_field',
+        value: purchaseLocation
+      });
+    }
+
     // Build tags array with main_category and sub_category
     const tagsArray = [...new Set(isComic ? [
       'comics',
@@ -303,7 +321,8 @@ Deno.serve(async (req) => {
       year,
       intakeItem.main_category,
       intakeItem.sub_category || 'american',
-      vendor
+      vendor,
+      purchaseLocation ? `Purchased: ${purchaseLocation}` : null
     ].filter(Boolean) : [
       gradingCompany,
       grade ? `Grade ${grade}` : null,
@@ -312,7 +331,8 @@ Deno.serve(async (req) => {
       intakeItem.main_category,
       intakeItem.sub_category,
       intakeItem.game || intakeItem.catalog_snapshot?.game, 
-      vendor
+      vendor,
+      purchaseLocation ? `Purchased: ${purchaseLocation}` : null
     ].filter(Boolean))];
 
     // Prepare Shopify product data (without metafields - will add them separately)

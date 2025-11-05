@@ -14,6 +14,7 @@ import { useDebounce } from "@/hooks/useDebounce";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { CGCCertificateData } from "@/types/cgc";
 import { useAddIntakeItem } from "@/hooks/useAddIntakeItem";
+import { PurchaseLocationSelect } from '@/components/ui/PurchaseLocationSelect';
 
 interface GradedComicIntakeProps {
   onBatchAdd?: () => void;
@@ -44,6 +45,7 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
     cost: "",
     quantity: 1,
     mainCategory: "comics",
+    purchaseLocationId: ""
   });
 
   const sanitizeCertNumber = (input: string): string => {
@@ -180,6 +182,7 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
         cost_in: parseFloat(formData.cost),
         sku_in: formData.certNumber,
         main_category_in: formData.mainCategory,
+        purchase_location_id_in: formData.purchaseLocationId || null,
         catalog_snapshot_in: {
           ...comicData,
           cgc_cert: formData.certNumber,
@@ -201,6 +204,7 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
         cost: "",
         quantity: 1,
         mainCategory: "comics",
+        purchaseLocationId: ""
       });
       
       if (onBatchAdd) {
@@ -372,6 +376,13 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
                 onChange={(e) => updateFormField('quantity', parseInt(e.target.value) || 1)}
               />
             </div>
+          </div>
+
+          <div>
+            <PurchaseLocationSelect
+              value={formData.purchaseLocationId}
+              onChange={(value) => updateFormField('purchaseLocationId', value)}
+            />
           </div>
 
           <Button 

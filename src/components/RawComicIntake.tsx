@@ -15,6 +15,7 @@ import { parseClzComicsCsv, ClzComic } from "@/lib/csv/parseClzComics";
 import { SubCategoryCombobox } from "@/components/ui/sub-category-combobox";
 import { useLogger } from "@/hooks/useLogger";
 import { useAddIntakeItem } from "@/hooks/useAddIntakeItem";
+import { PurchaseLocationSelect } from "@/components/ui/PurchaseLocationSelect";
 
 interface RawComicIntakeProps {
   onBatchAdd?: (item: any) => void;
@@ -35,7 +36,8 @@ export const RawComicIntake = ({ onBatchAdd }: RawComicIntakeProps) => {
     cost: "",
     quantity: 1,
     processingNotes: "",
-    subCategory: "american"
+    subCategory: "american",
+    purchaseLocationId: ""
   });
   
   const [submitting, setSubmitting] = useState(false);
@@ -106,7 +108,8 @@ export const RawComicIntake = ({ onBatchAdd }: RawComicIntakeProps) => {
       cost: "",
       quantity: 1,
       processingNotes: comic.variantDescription ? `Variant: ${comic.variantDescription}` : "",
-      subCategory: "american"
+      subCategory: "american",
+      purchaseLocationId: formData.purchaseLocationId
     });
   };
 
@@ -178,6 +181,7 @@ export const RawComicIntake = ({ onBatchAdd }: RawComicIntakeProps) => {
         sku_in: "",
         main_category_in: "comics",
         sub_category_in: formData.subCategory,
+        purchase_location_id_in: formData.purchaseLocationId || null,
         processing_notes_in: formData.processingNotes,
         catalog_snapshot_in: {
           title: formData.title,
@@ -204,7 +208,8 @@ export const RawComicIntake = ({ onBatchAdd }: RawComicIntakeProps) => {
           cost: "",
           quantity: 1,
           processingNotes: "",
-          subCategory: "american"
+          subCategory: "american",
+          purchaseLocationId: ""
         });
         setUploadedComics([]);
         setCurrentComicIndex(0);
@@ -384,6 +389,13 @@ export const RawComicIntake = ({ onBatchAdd }: RawComicIntakeProps) => {
               min="1"
               value={formData.quantity}
               onChange={(e) => updateFormField("quantity", parseInt(e.target.value) || 1)}
+            />
+          </div>
+
+          <div>
+            <PurchaseLocationSelect
+              value={formData.purchaseLocationId}
+              onChange={(value) => updateFormField("purchaseLocationId", value)}
             />
           </div>
         </div>

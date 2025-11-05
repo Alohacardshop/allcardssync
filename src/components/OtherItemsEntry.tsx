@@ -13,6 +13,7 @@ import { useLogger } from '@/hooks/useLogger';
 import { SubCategoryCombobox } from '@/components/ui/sub-category-combobox';
 import { detectMainCategory } from '@/utils/categoryMapping';
 import { useAddIntakeItem } from "@/hooks/useAddIntakeItem";
+import { PurchaseLocationSelect } from '@/components/ui/PurchaseLocationSelect';
 
 interface OtherItemsEntryProps {
   onBatchAdd?: (item: any) => void;
@@ -30,6 +31,7 @@ export function OtherItemsEntry({ onBatchAdd }: OtherItemsEntryProps) {
   const [addingOther, setAddingOther] = useState(false);
   const [mainCategory, setMainCategory] = useState('tcg');
   const [subCategory, setSubCategory] = useState('');
+  const [purchaseLocationId, setPurchaseLocationId] = useState('');
 
   // Auto-detect main category when description changes
   React.useEffect(() => {
@@ -84,6 +86,7 @@ export function OtherItemsEntry({ onBatchAdd }: OtherItemsEntryProps) {
         source_provider_in: 'other_entry',
         main_category_in: mainCategory,
         sub_category_in: subCategory,
+        purchase_location_id_in: purchaseLocationId || null,
         catalog_snapshot_in: {
           name: description.trim(),
           type: 'other_item'
@@ -201,6 +204,13 @@ export function OtherItemsEntry({ onBatchAdd }: OtherItemsEntryProps) {
             Price per item: ${(totalPrice / amount).toFixed(2)}
           </div>
         )}
+
+        <div>
+          <PurchaseLocationSelect
+            value={purchaseLocationId}
+            onChange={setPurchaseLocationId}
+          />
+        </div>
 
         {/* Add to Batch Button */}
         <Button

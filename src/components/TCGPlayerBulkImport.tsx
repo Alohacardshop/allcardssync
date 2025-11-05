@@ -20,6 +20,7 @@ import { NormalizedCard } from '@/lib/csv/normalize';
 import { SubCategoryCombobox } from '@/components/ui/sub-category-combobox';
 import { detectMainCategory } from '@/utils/categoryMapping';
 import { useAddIntakeItem } from '@/hooks/useAddIntakeItem';
+import { PurchaseLocationSelect } from '@/components/ui/PurchaseLocationSelect';
 
 interface TCGPlayerItem {
   tcgplayerId?: string; // TCGPlayer ID for SKU generation (readonly)
@@ -123,6 +124,7 @@ export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) =>
   const batchId = uuidv4(); // Generate a unique batch ID for this import session
   const [mainCategory, setMainCategory] = useState('tcg');
   const [subCategory, setSubCategory] = useState('');
+  const [purchaseLocationId, setPurchaseLocationId] = useState('');
 
   // Handle CSV parsing results
   const handleCsvParsed = (cards: NormalizedCard[]) => {
@@ -374,6 +376,7 @@ export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) =>
         source_provider_in: 'tcgplayer',
         main_category_in: mainCategory,
         sub_category_in: subCategory,
+        purchase_location_id_in: purchaseLocationId || null,
         // Enhanced catalog snapshot with all TCGPlayer data
         catalog_snapshot_in: {
           name: item.name,
@@ -626,6 +629,13 @@ Prices from Market Price on 8/24/2025 and are subject to change.`;
                     }}
                   />
                 </div>
+              </div>
+
+              <div>
+                <PurchaseLocationSelect
+                  value={purchaseLocationId}
+                  onChange={setPurchaseLocationId}
+                />
               </div>
             </CardContent>
           </Card>
