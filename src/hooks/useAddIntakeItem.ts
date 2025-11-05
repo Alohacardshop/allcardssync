@@ -59,6 +59,7 @@ export const useAddIntakeItem = () => {
           .eq('store_key', params.store_key_in)
           .eq('type', 'Raw')
           .is('deleted_at', null)
+          .is('removed_from_batch_at', null)
           .maybeSingle();
 
         if (queryError) {
