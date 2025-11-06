@@ -34,6 +34,7 @@ const BulkImport = React.lazy(() => import("./pages/BulkImport"));
 const BulkTransfer = React.lazy(() => import("./pages/BulkTransfer"));
 const DiscordNotifications = React.lazy(() => import("./pages/admin/DiscordNotifications"));
 const PendingNotifications = React.lazy(() => import("./pages/PendingNotifications"));
+const CardShowTool = React.lazy(() => import("./pages/tools/CardShowTool"));
 import { GlobalKeyboardHandler } from "./components/GlobalKeyboardHandler";
 import { FloatingActionButton } from "./components/FloatingActionButton";
 import { PerformanceMonitor } from "./components/PerformanceMonitor";
@@ -86,6 +87,7 @@ const App = () => (
                             <Route path="/shopify-sync" element={<ShopifySync />} />
                             <Route path="/bulk-transfer" element={<BulkTransfer />} />
                             <Route path="/print-logs" element={<PrintLogs />} />
+                            <Route path="/tools/card-show-tool" element={<CardShowTool />} />
                             
                             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                             <Route path="*" element={<NotFound />} />

@@ -4,7 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { RefreshCw, Store as StoreIcon, ShoppingCart, MapPin, Package, Home, Archive, Tags, Printer, LogOut, Settings, Menu, X } from 'lucide-react';
+import { RefreshCw, Store as StoreIcon, ShoppingCart, MapPin, Package, Home, Archive, Tags, Printer, LogOut, Settings, Menu, X, Wrench } from 'lucide-react';
 import { useStore } from '@/contexts/StoreContext';
 import { supabase } from '@/integrations/supabase/client';
 import { resetLogin } from '@/lib/authUtils';
@@ -155,6 +155,11 @@ export function NavigationBar() {
     navItems.push({ to: '/admin', label: 'Admin', icon: Settings });
   }
 
+  // Tools menu items
+  const toolsMenuItems = [
+    { to: '/tools/card-show-tool', label: 'Card Show Tool' },
+  ];
+
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-card border-b shadow-sm">
       <div className="container mx-auto px-4 py-3">
@@ -190,6 +195,30 @@ export function NavigationBar() {
                   </Link>
                 );
               })}
+              
+              {/* Tools Dropdown */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    className={`flex items-center gap-2 px-3 py-2 text-sm font-medium ${
+                      location.pathname.startsWith('/tools')
+                        ? 'bg-primary text-primary-foreground'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    <Wrench className="h-4 w-4" />
+                    Tools
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {toolsMenuItems.map((item) => (
+                    <DropdownMenuItem key={item.to} onClick={() => navigate(item.to)}>
+                      {item.label}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
 
