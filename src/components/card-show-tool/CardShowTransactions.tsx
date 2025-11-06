@@ -59,10 +59,10 @@ export function CardShowTransactions() {
       }
 
       // Transaction type filter
-      if (txnTypeFilter && txn.txn_type !== txnTypeFilter) return false;
+      if (txnTypeFilter && txnTypeFilter !== "all" && txn.txn_type !== txnTypeFilter) return false;
 
       // Show filter
-      if (showFilter && txn.show_id !== showFilter) return false;
+      if (showFilter && showFilter !== "all" && txn.show_id !== showFilter) return false;
 
       // Date range filters
       if (startDate) {
@@ -126,13 +126,13 @@ export function CardShowTransactions() {
   };
 
   const clearFilters = () => {
-    setTxnTypeFilter("");
-    setShowFilter("");
+    setTxnTypeFilter("all");
+    setShowFilter("all");
     setStartDate("");
     setEndDate("");
   };
 
-  const hasActiveFilters = txnTypeFilter || showFilter || startDate || endDate;
+  const hasActiveFilters = (txnTypeFilter && txnTypeFilter !== "all") || (showFilter && showFilter !== "all") || startDate || endDate;
 
   const handleExportCSV = () => {
     if (!filteredAndSortedTransactions || filteredAndSortedTransactions.length === 0) {
@@ -258,7 +258,7 @@ export function CardShowTransactions() {
                     <SelectValue placeholder="All" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All</SelectItem>
+                    <SelectItem value="all">All</SelectItem>
                     <SelectItem value="BUY">Buy</SelectItem>
                     <SelectItem value="SELL">Sell</SelectItem>
                   </SelectContent>
@@ -272,7 +272,7 @@ export function CardShowTransactions() {
                     <SelectValue placeholder="All" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All</SelectItem>
+                    <SelectItem value="all">All</SelectItem>
                     {shows?.map((show) => (
                       <SelectItem key={show.id} value={show.id}>
                         {show.name}

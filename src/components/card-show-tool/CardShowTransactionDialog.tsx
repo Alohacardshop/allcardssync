@@ -40,7 +40,7 @@ export function CardShowTransactionDialog({ item, open, onOpenChange }: CardShow
         alt_item_id: item.id,
         txn_type: txnType,
         price: parseFloat(price),
-        show_id: showId || null,
+        show_id: (showId && showId !== "none") ? showId : null,
         notes: notes || null,
         txn_date: new Date().toISOString(),
       });
@@ -114,7 +114,7 @@ export function CardShowTransactionDialog({ item, open, onOpenChange }: CardShow
                 <SelectValue placeholder="Select a show" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">None</SelectItem>
+                <SelectItem value="none">None</SelectItem>
                 {shows?.map((show) => (
                   <SelectItem key={show.id} value={show.id}>
                     {show.name}

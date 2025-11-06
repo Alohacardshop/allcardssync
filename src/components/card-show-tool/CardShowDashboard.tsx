@@ -68,11 +68,11 @@ export function CardShowDashboard() {
         query = query.ilike("title", `%${searchTerm}%`);
       }
 
-      if (gradingServiceFilter) {
+      if (gradingServiceFilter && gradingServiceFilter !== "all") {
         query = query.eq("grading_service", gradingServiceFilter);
       }
 
-      if (gradeFilter) {
+      if (gradeFilter && gradeFilter !== "all") {
         query = query.eq("grade", gradeFilter);
       }
 
@@ -80,7 +80,7 @@ export function CardShowDashboard() {
       if (error) throw error;
 
       // Client-side filter for show (since it's in transactions)
-      if (showFilter && data) {
+      if (showFilter && showFilter !== "all" && data) {
         return data.filter(item => 
           item.card_transactions?.some((txn: any) => txn.show_id === showFilter)
         );
@@ -147,12 +147,12 @@ export function CardShowDashboard() {
   };
 
   const clearFilters = () => {
-    setGradingServiceFilter("");
-    setGradeFilter("");
-    setShowFilter("");
+    setGradingServiceFilter("all");
+    setGradeFilter("all");
+    setShowFilter("all");
   };
 
-  const hasActiveFilters = gradingServiceFilter || gradeFilter || showFilter;
+  const hasActiveFilters = (gradingServiceFilter && gradingServiceFilter !== "all") || (gradeFilter && gradeFilter !== "all") || (showFilter && showFilter !== "all");
 
   const handleExportCSV = () => {
     if (!items || items.length === 0) {
@@ -271,7 +271,7 @@ export function CardShowDashboard() {
                     <SelectValue placeholder="All" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All</SelectItem>
+                    <SelectItem value="all">All</SelectItem>
                     <SelectItem value="PSA">PSA</SelectItem>
                     <SelectItem value="BGS">BGS</SelectItem>
                     <SelectItem value="CGC">CGC</SelectItem>
@@ -287,7 +287,7 @@ export function CardShowDashboard() {
                     <SelectValue placeholder="All" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All</SelectItem>
+                    <SelectItem value="all">All</SelectItem>
                     <SelectItem value="10">10</SelectItem>
                     <SelectItem value="9.5">9.5</SelectItem>
                     <SelectItem value="9">9</SelectItem>
@@ -306,7 +306,7 @@ export function CardShowDashboard() {
                     <SelectValue placeholder="All" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All</SelectItem>
+                    <SelectItem value="all">All</SelectItem>
                     {shows?.map((show) => (
                       <SelectItem key={show.id} value={show.id}>
                         {show.name}

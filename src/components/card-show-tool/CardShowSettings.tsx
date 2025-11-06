@@ -38,8 +38,8 @@ export function CardShowSettings() {
   // Sync state when profile loads
   useEffect(() => {
     if (profile) {
-      setSelectedShowId(profile.default_show_id || "");
-      setSelectedLocationId(profile.default_location_id || "");
+      setSelectedShowId(profile.default_show_id || "none");
+      setSelectedLocationId(profile.default_location_id || "none");
     }
   }, [profile]);
 
@@ -91,8 +91,8 @@ export function CardShowSettings() {
 
   const handleSave = () => {
     updateProfileMutation.mutate({
-      default_show_id: selectedShowId || null,
-      default_location_id: selectedLocationId || null,
+      default_show_id: (selectedShowId && selectedShowId !== "none") ? selectedShowId : null,
+      default_location_id: (selectedLocationId && selectedLocationId !== "none") ? selectedLocationId : null,
     });
   };
 
@@ -113,7 +113,7 @@ export function CardShowSettings() {
               <SelectValue placeholder="Select a show" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">None</SelectItem>
+              <SelectItem value="none">None</SelectItem>
               {shows?.map((show) => (
                 <SelectItem key={show.id} value={show.id}>
                   {show.name}
@@ -130,7 +130,7 @@ export function CardShowSettings() {
               <SelectValue placeholder="Select a location" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">None</SelectItem>
+              <SelectItem value="none">None</SelectItem>
               {locations?.map((location) => (
                 <SelectItem key={location.id} value={location.id}>
                   {location.name}

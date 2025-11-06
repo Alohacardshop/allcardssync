@@ -34,8 +34,8 @@ export function CardShowAddByCert() {
         body: {
           certNumber: certNumber.trim(),
           defaults: {
-            buy: buyPrice ? { price: parseFloat(buyPrice), showId: selectedShowId || null } : undefined,
-            sell: sellPrice ? { price: parseFloat(sellPrice), showId: selectedShowId || null } : undefined,
+            buy: buyPrice ? { price: parseFloat(buyPrice), showId: (selectedShowId && selectedShowId !== "none") ? selectedShowId : null } : undefined,
+            sell: sellPrice ? { price: parseFloat(sellPrice), showId: (selectedShowId && selectedShowId !== "none") ? selectedShowId : null } : undefined,
           },
         },
       });
@@ -124,7 +124,7 @@ export function CardShowAddByCert() {
               <SelectValue placeholder="Select a show" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">None</SelectItem>
+              <SelectItem value="none">None</SelectItem>
               {shows?.map((show) => (
                 <SelectItem key={show.id} value={show.id}>
                   {show.name}
