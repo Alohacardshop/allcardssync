@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { chromium } from "https://deno.land/x/playwright@1.40.0/index.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -122,14 +123,85 @@ serve(async (req) => {
         });
       }
 
-      // TODO: Implement actual login test with Playwright
-      // For now, just return success if credentials exist
-      return new Response(JSON.stringify({ 
-        success: true, 
-        message: 'Credentials configured (test login not yet implemented)' 
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      console.log('Testing ALT login with stored credentials...');
+
+      // Actually test the login with Playwright
+      const browser = await chromium.launch({
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox'],
       });
+
+      try {
+        const context = await browser.newContext({
+          userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        });
+
+        const page = await context.newPage();
+        console.log('Navigating to ALT login...');
+
+        await page.goto('https://app.alt.xyz/login', { waitUntil: 'networkidle', timeout: 15000 });
+        console.log('On login page');
+
+        // Fill credentials
+        await page.fill('input[type="email"], input[name="email"]', data.email);
+        await page.fill('input[type="password"], input[name="password"]', data.password);
+        console.log('Credentials filled, submitting...');
+
+        // Click login button
+        await page.click('button[type="submit"], button:has-text("Log in"), button:has-text("Sign in")');
+        
+        // Wait for navigation
+        await page.waitForLoadState('networkidle', { timeout: 15000 });
+        const currentUrl = page.url();
+        console.log('After login, URL:', currentUrl);
+
+        // Check if we're still on login page (failed) or redirected (success)
+        const loginFailed = currentUrl.includes('/login') || await page.locator('input[type="email"]').count() > 0;
+
+        if (loginFailed) {
+          // Check for error message
+          const errorMsg = await page.locator('.error, [role="alert"], .alert-error').textContent().catch(() => null);
+          
+          return new Response(JSON.stringify({ 
+            success: false, 
+            message: errorMsg || 'Login failed - invalid credentials or CAPTCHA required' 
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Update session status
+        await supabaseClient
+          .from('scrape_sessions')
+          .upsert({
+            service: 'ALT',
+            status: 'ready',
+            last_login_at: new Date().toISOString(),
+            last_cookie_refresh_at: new Date().toISOString(),
+            message: 'Successfully tested login credentials',
+          }, {
+            onConflict: 'service',
+          });
+
+        return new Response(JSON.stringify({ 
+          success: true, 
+          message: 'Login successful! Credentials are valid.' 
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+
+      } catch (error) {
+        console.error('Login test error:', error);
+        return new Response(JSON.stringify({ 
+          success: false, 
+          message: `Login test failed: ${error.message}` 
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      } finally {
+        await browser.close();
+        console.log('Browser closed');
+      }
     }
 
     return new Response(JSON.stringify({ error: 'Not found' }), {

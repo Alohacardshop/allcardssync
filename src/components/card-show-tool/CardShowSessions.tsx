@@ -60,11 +60,25 @@ export function CardShowSessions() {
 
   const clearCredentialsMutation = useMutation({
     mutationFn: async () => {
-      const { data, error } = await supabase.functions.invoke("card-show-credentials", {
-        method: "DELETE",
-      });
-      if (error) throw error;
-      return data;
+      // Call DELETE endpoint directly with fetch
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const response = await fetch(
+        `${supabaseUrl}/functions/v1/card-show-credentials`,
+        {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to clear credentials');
+      }
+      
+      return response.json();
     },
     onSuccess: () => {
       toast.success("Credentials cleared");
