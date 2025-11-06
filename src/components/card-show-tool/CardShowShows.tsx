@@ -1,16 +1,29 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Plus, Pencil } from "lucide-react";
+import { Plus, Pencil, Trash2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { CardShowCreateShowDialog } from "./CardShowCreateShowDialog";
 import { CardShowEditShowDialog } from "./CardShowEditShowDialog";
+import { toast } from "sonner";
 
 export function CardShowShows() {
   const { isAdmin } = useAuth();
+  const queryClient = useQueryClient();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedShow, setSelectedShow] = useState<any>(null);
 
   const { data: shows, isLoading } = useQuery({
@@ -26,6 +39,26 @@ export function CardShowShows() {
       
       if (error) throw error;
       return data;
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (showId: string) => {
+      const { error } = await supabase
+        .from("shows")
+        .delete()
+        .eq("id", showId);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Show deleted successfully");
+      queryClient.invalidateQueries({ queryKey: ["shows"] });
+      setDeleteDialogOpen(false);
+      setSelectedShow(null);
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to delete show");
     },
   });
 
@@ -68,17 +101,31 @@ export function CardShowShows() {
                 <td className="p-3 text-sm text-muted-foreground">{show.notes || "-"}</td>
                 {isAdmin && (
                   <td className="p-3 text-right">
-                    <Button 
-                      variant="ghost" 
-                      size="sm"
-                      onClick={() => {
-                        setSelectedShow(show);
-                        setEditDialogOpen(true);
-                      }}
-                    >
-                      <Pencil className="h-4 w-4 mr-1" />
-                      Edit
-                    </Button>
+                    <div className="flex items-center justify-end gap-2">
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => {
+                          setSelectedShow(show);
+                          setEditDialogOpen(true);
+                        }}
+                      >
+                        <Pencil className="h-4 w-4 mr-1" />
+                        Edit
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => {
+                          setSelectedShow(show);
+                          setDeleteDialogOpen(true);
+                        }}
+                        className="text-destructive hover:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4 mr-1" />
+                        Delete
+                      </Button>
+                    </div>
                   </td>
                 )}
               </tr>
@@ -106,6 +153,25 @@ export function CardShowShows() {
               onOpenChange={setEditDialogOpen} 
             />
           )}
+          <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete Show</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Are you sure you want to delete "{selectedShow?.name}"? This action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => selectedShow && deleteMutation.mutate(selectedShow.id)}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </>
       )}
     </div>
