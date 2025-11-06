@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Plus, Pencil, Trash2, Search, X } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,6 +26,7 @@ export function CardShowLocations() {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState<any>(null);
+  const [searchTerm, setSearchTerm] = useState("");
 
   const { data: locations, isLoading } = useQuery({
     queryKey: ["locations"],
@@ -38,6 +40,24 @@ export function CardShowLocations() {
       return data;
     },
   });
+
+  // Filter and search locations
+  const filteredLocations = useMemo(() => {
+    if (!locations) return [];
+
+    return locations.filter((location) => {
+      const matchesSearch = searchTerm === "" || 
+        location.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (location.code && location.code.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (location.notes && location.notes.toLowerCase().includes(searchTerm.toLowerCase()));
+
+      return matchesSearch;
+    });
+  }, [locations, searchTerm]);
+
+  const clearFilters = () => {
+    setSearchTerm("");
+  };
 
   const deleteMutation = useMutation({
     mutationFn: async (locationId: string) => {
@@ -75,6 +95,32 @@ export function CardShowLocations() {
         )}
       </div>
 
+      {/* Search */}
+      <div className="flex gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search locations by name, code, or notes..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+
+        {searchTerm && (
+          <Button variant="outline" size="icon" onClick={clearFilters}>
+            <X className="h-4 w-4" />
+          </Button>
+        )}
+      </div>
+
+      {/* Results count */}
+      {locations && (
+        <div className="text-sm text-muted-foreground">
+          Showing {filteredLocations.length} of {locations.length} locations
+        </div>
+      )}
+
       <div className="rounded-lg border overflow-hidden">
         <table className="w-full">
           <thead className="bg-muted">
@@ -86,7 +132,7 @@ export function CardShowLocations() {
             </tr>
           </thead>
           <tbody>
-            {locations?.map((location: any) => (
+            {filteredLocations?.map((location: any) => (
               <tr key={location.id} className="border-t hover:bg-muted/50">
                 <td className="p-3 font-medium">{location.name}</td>
                 <td className="p-3">
@@ -127,6 +173,12 @@ export function CardShowLocations() {
           </tbody>
         </table>
       </div>
+
+      {filteredLocations?.length === 0 && locations && locations.length > 0 && (
+        <div className="text-center py-12 text-muted-foreground">
+          No locations match your search. <Button variant="link" onClick={clearFilters}>Clear search</Button>
+        </div>
+      )}
 
       {locations?.length === 0 && (
         <div className="text-center py-12 text-muted-foreground">
