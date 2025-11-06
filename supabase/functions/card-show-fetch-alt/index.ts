@@ -44,10 +44,10 @@ serve(async (req) => {
       });
     }
 
-    const { certNumber, gradingService, defaults } = await req.json();
+    const { certNumber, defaults } = await req.json();
 
-    if (!certNumber || !gradingService) {
-      return new Response(JSON.stringify({ error: 'Certificate number and grading service required' }), {
+    if (!certNumber) {
+      return new Response(JSON.stringify({ error: 'Certificate number required' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });

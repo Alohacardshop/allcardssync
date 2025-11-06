@@ -11,7 +11,6 @@ import { Loader2, ExternalLink } from "lucide-react";
 
 export function CardShowAddByCert() {
   const [certNumber, setCertNumber] = useState("");
-  const [gradingService, setGradingService] = useState("PSA");
   const [buyPrice, setBuyPrice] = useState("");
   const [sellPrice, setSellPrice] = useState("");
   const [selectedShowId, setSelectedShowId] = useState("");
@@ -34,7 +33,6 @@ export function CardShowAddByCert() {
       const { data, error } = await supabase.functions.invoke("card-show-fetch-alt", {
         body: {
           certNumber: certNumber.trim(),
-          gradingService,
           defaults: {
             buy: buyPrice ? { price: parseFloat(buyPrice), showId: selectedShowId || null } : undefined,
             sell: sellPrice ? { price: parseFloat(sellPrice), showId: selectedShowId || null } : undefined,
@@ -83,31 +81,15 @@ export function CardShowAddByCert() {
       </div>
 
       <div className="rounded-lg border p-6 space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <Label htmlFor="cert-number">Certificate Number</Label>
-            <Input
-              id="cert-number"
-              placeholder="115164590"
-              value={certNumber}
-              onChange={(e) => setCertNumber(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleLookup()}
-            />
-          </div>
-          <div>
-            <Label htmlFor="grading-service">Grading Service</Label>
-            <Select value={gradingService} onValueChange={setGradingService}>
-              <SelectTrigger id="grading-service">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="PSA">PSA</SelectItem>
-                <SelectItem value="BGS">BGS</SelectItem>
-                <SelectItem value="CGC">CGC</SelectItem>
-                <SelectItem value="SGC">SGC</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+        <div>
+          <Label htmlFor="cert-number">Certificate Number</Label>
+          <Input
+            id="cert-number"
+            placeholder="115164590 (ALT will auto-detect grading service)"
+            value={certNumber}
+            onChange={(e) => setCertNumber(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleLookup()}
+          />
         </div>
 
         <div className="grid grid-cols-2 gap-4">
