@@ -294,18 +294,18 @@ export function CardShowSessions() {
         )}
       </div>
 
-      <div className="rounded-lg border p-4 bg-amber-50 dark:bg-amber-950">
-        <h4 className="font-semibold mb-2 text-amber-900 dark:text-amber-100">⚠️ Automated Scraping Not Yet Available</h4>
-        <p className="text-sm text-amber-900 dark:text-amber-100 mb-3">
-          Browser automation (Playwright) cannot run in Supabase Edge Functions. To enable automated card lookups, choose one of these options:
+      <div className="rounded-lg border p-4 bg-blue-50 dark:bg-blue-950">
+        <h4 className="font-semibold mb-2 text-blue-900 dark:text-blue-100">✅ ScrapingBee Integration Active</h4>
+        <p className="text-sm text-blue-900 dark:text-blue-100 mb-3">
+          Automated card lookups are enabled via ScrapingBee. The system will automatically fetch card details from ALT when you enter a certificate number.
         </p>
-        <ul className="text-sm space-y-2 text-amber-900 dark:text-amber-100">
-          <li><strong>Option 1 (Recommended):</strong> Use an external scraping API service like ScrapingBee or Bright Data</li>
-          <li><strong>Option 2:</strong> Deploy your own Playwright server (Railway, Render, Fly.io) and connect it to this system</li>
-          <li><strong>Option 3:</strong> Use manual card entry as a fallback (no automation required)</li>
+        <ul className="text-sm space-y-2 text-blue-900 dark:text-blue-100">
+          <li><strong>Current Setup:</strong> ScrapingBee API handles browser automation and HTML rendering</li>
+          <li><strong>Features:</strong> Auto-detects grading service, extracts all card details, saves to database</li>
+          <li><strong>Status:</strong> Ready to use - just enter certificate numbers in the "Lookup Cert" tab</li>
         </ul>
-        <p className="text-sm text-amber-900 dark:text-amber-100 mt-3">
-          See the documentation for detailed setup instructions for each option.
+        <p className="text-sm text-blue-900 dark:text-blue-100 mt-3">
+          The credentials stored here are available if you want to switch to a self-hosted scraping solution in the future.
         </p>
       </div>
     </div>

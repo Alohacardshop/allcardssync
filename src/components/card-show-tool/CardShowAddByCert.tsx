@@ -45,8 +45,8 @@ export function CardShowAddByCert() {
       return data;
     },
     onSuccess: (data) => {
-      setResult(data);
-      toast.success("Certificate found!");
+      setResult(data.card);
+      toast.success("Card fetched successfully from ALT!");
     },
     onError: (error: any) => {
       toast.error(error.message || "Failed to lookup certificate");
@@ -76,7 +76,7 @@ export function CardShowAddByCert() {
       <div>
         <h2 className="text-2xl font-bold mb-2">Certificate Lookup</h2>
         <p className="text-muted-foreground">
-          Enter a certificate number to automatically fetch card details from ALT
+          Enter a certificate number to automatically fetch card details from ALT via ScrapingBee
         </p>
       </div>
 
@@ -144,41 +144,43 @@ export function CardShowAddByCert() {
         </Button>
       </div>
 
-      {result && result.item && (
+      {result && (
         <div className="rounded-lg border p-6 space-y-4 bg-card">
           <div className="flex items-start justify-between">
             <div className="flex-1">
-              <h3 className="text-xl font-semibold mb-2">{result.item.title}</h3>
+              <h3 className="text-xl font-semibold mb-2">{result.title}</h3>
               <div className="flex items-center gap-2 mb-2">
-                <Badge className={getGradeBadgeColor(result.item.grade)}>
-                  {result.item.grading_service} {result.item.grade}
+                <Badge className={getGradeBadgeColor(result.grade || "0")}>
+                  {result.grading_service} {result.grade}
                 </Badge>
-                <Badge variant="outline">{result.item.set_name}</Badge>
-                {result.item.year && <Badge variant="outline">{result.item.year}</Badge>}
+                {result.set_name && <Badge variant="outline">{result.set_name}</Badge>}
               </div>
-              {result.item.population && (
+              {result.population && (
                 <p className="text-sm text-muted-foreground">
-                  Population: {result.item.population}
+                  Population: {result.population}
                 </p>
               )}
-              {result.item.alt_value && (
-                <p className="text-lg font-semibold mt-2">
-                  ALT Value: ${result.item.alt_value.toFixed(2)}
+              {result.alt_value && (
+                <p className="text-lg font-semibold mt-2 text-green-600">
+                  ALT Value: ${result.alt_value.toFixed(2)}
                 </p>
               )}
+              <p className="text-xs text-muted-foreground mt-2">
+                Last checked: {new Date(result.alt_checked_at).toLocaleString()}
+              </p>
             </div>
-            {result.item.image_url && (
+            {result.image_url && (
               <img
-                src={result.item.image_url}
-                alt={result.item.title}
+                src={result.image_url}
+                alt={result.title}
                 className="w-32 h-auto rounded border"
               />
             )}
           </div>
 
-          {result.item.alt_url && (
+          {result.alt_url && (
             <a
-              href={result.item.alt_url}
+              href={result.alt_url}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
@@ -189,7 +191,7 @@ export function CardShowAddByCert() {
 
           <div className="bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 p-4 rounded">
             <p className="text-sm text-green-900 dark:text-green-100">
-              ✓ Item added to inventory successfully!
+              ✓ Card saved to inventory successfully!
             </p>
           </div>
         </div>

@@ -55,45 +55,40 @@ Replace `USER_UUID_HERE` with the actual user UUID from `auth.users`.
 
 ### 3. Automated Scraping Setup
 
-**⚠️ Important Limitation**: Browser automation (Playwright) cannot run directly in Supabase Edge Functions because they don't support browser binaries. The edge functions and UI are fully functional, but automated scraping requires an external service.
+**✅ IMPLEMENTED: ScrapingBee Integration**
 
-#### Current Status
+The Card Show Tool now uses ScrapingBee for automated card scraping from ALT. This integration is fully functional and ready to use.
 
-✅ **Implemented & Working:**
-- Admin credential management
-- Certificate lookup UI
-- Database schema for ALT items
-- Edge function infrastructure
-- All UI components and navigation
+#### Current Implementation
 
-❌ **Requires External Setup:**
-- Automated browser scraping from ALT
-- Playwright execution
+**ScrapingBee API Integration:**
+- External scraping service handles browser automation
+- Renders JavaScript and handles dynamic content
+- Returns HTML for parsing
+- No server maintenance required
 
-#### Implementation Options
+**Setup Steps:**
+1. ✅ Sign up for ScrapingBee: https://www.scrapingbee.com/
+2. ✅ Add API key to Supabase secrets: `SCRAPING_BEE_API_KEY`
+3. ✅ Edge function configured to call ScrapingBee API
+4. ✅ HTML parsing extracts card details
+5. ✅ Data saved to `alt_items` table
+6. ✅ Optional buy/sell transaction recording
 
-Choose one of these approaches to enable automated card lookups:
+**Features:**
+- Auto-detects grading service from certificate number
+- Extracts title, grade, set name, image URL, ALT value, population
+- Saves to database with timestamp
+- Displays card details in UI
+- Links directly to ALT for verification
 
-##### Option 1: External Scraping API (Recommended - Fastest Setup)
+**Pricing:** ScrapingBee offers various plans starting at ~$50/month for moderate usage.
 
-Use a managed scraping service that handles browser automation:
+#### Alternative Options (Not Implemented)
 
-**Recommended Services:**
-- **ScrapingBee** (https://www.scrapingbee.com/) - ~$50-100/month
-- **Bright Data** (https://brightdata.com/) - Enterprise pricing
-- **ScraperAPI** (https://www.scraperapi.com/) - ~$50-200/month
+If you prefer a different approach, you can implement one of these alternatives:
 
-**Implementation Steps:**
-1. Sign up for a scraping service and get API key
-2. Add API key to Supabase secrets: `SCRAPING_SERVICE_API_KEY`
-3. Update `card-show-fetch-alt` edge function to call the scraping API
-4. The service handles browser rendering, returns HTML/JSON
-5. Parse response and save to `alt_items` table
-
-**Pros:** No server maintenance, handles CAPTCHAs, reliable, fast setup  
-**Cons:** Monthly cost ($50-200), dependency on third party
-
-##### Option 2: Self-Hosted Playwright Server
+##### Option 2: Self-Hosted Playwright Server (Alternative)
 
 Deploy your own Node.js server with Playwright installed:
 
@@ -129,13 +124,9 @@ No automation - staff manually enters card details:
 
 #### Recommended Approach
 
-For most production use cases, **Option 1 (External Scraping API)** is recommended:
-- Fastest time to production
-- Reliable and maintained by experts
-- Handles edge cases (CAPTCHAs, rate limiting)
-- Cost is predictable and reasonable
+✅ **Currently Implemented: ScrapingBee** - The system is configured with ScrapingBee integration for production-ready automated scraping. Simply add your `SCRAPING_BEE_API_KEY` to Supabase secrets and start looking up cards.
 
-The credentials you save in the Sessions tab will be used by whichever option you choose.
+The credentials management in the Sessions tab can be used if you switch to a self-hosted solution in the future.
 
 ## Database Schema
 
