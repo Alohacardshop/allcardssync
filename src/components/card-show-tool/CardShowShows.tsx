@@ -1,11 +1,17 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
+import { Plus, Pencil } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { CardShowCreateShowDialog } from "./CardShowCreateShowDialog";
+import { CardShowEditShowDialog } from "./CardShowEditShowDialog";
 
 export function CardShowShows() {
   const { isAdmin } = useAuth();
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [selectedShow, setSelectedShow] = useState<any>(null);
 
   const { data: shows, isLoading } = useQuery({
     queryKey: ["shows"],
@@ -32,7 +38,7 @@ export function CardShowShows() {
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold">Shows</h2>
         {isAdmin && (
-          <Button>
+          <Button onClick={() => setCreateDialogOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
             Create Show
           </Button>
@@ -62,7 +68,17 @@ export function CardShowShows() {
                 <td className="p-3 text-sm text-muted-foreground">{show.notes || "-"}</td>
                 {isAdmin && (
                   <td className="p-3 text-right">
-                    <Button variant="ghost" size="sm">Edit</Button>
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={() => {
+                        setSelectedShow(show);
+                        setEditDialogOpen(true);
+                      }}
+                    >
+                      <Pencil className="h-4 w-4 mr-1" />
+                      Edit
+                    </Button>
                   </td>
                 )}
               </tr>
@@ -75,6 +91,22 @@ export function CardShowShows() {
         <div className="text-center py-12 text-muted-foreground">
           No shows yet. {isAdmin && "Create your first show to get started."}
         </div>
+      )}
+
+      {isAdmin && (
+        <>
+          <CardShowCreateShowDialog 
+            open={createDialogOpen} 
+            onOpenChange={setCreateDialogOpen} 
+          />
+          {selectedShow && (
+            <CardShowEditShowDialog 
+              show={selectedShow}
+              open={editDialogOpen} 
+              onOpenChange={setEditDialogOpen} 
+            />
+          )}
+        </>
       )}
     </div>
   );

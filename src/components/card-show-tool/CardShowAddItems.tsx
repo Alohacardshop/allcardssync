@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -28,28 +29,48 @@ export function CardShowAddItems() {
     setResults(null);
 
     try {
-      // TODO: Call edge function to process URLs
-      toast.info("ALT scraping not yet implemented - coming soon!");
+      const items = urlList.map(url => ({ alt_url: url }));
+      const defaults: any = {};
       
-      // Placeholder for edge function call:
-      // const { data, error } = await supabase.functions.invoke('card-show-fetch-alt', {
-      //   body: {
-      //     items: urlList.map(url => ({ alt_url: url })),
-      //     defaults: {
-      //       buy: buyPrice ? { price: parseFloat(buyPrice) } : undefined,
-      //       sell: sellPrice ? { price: parseFloat(sellPrice) } : undefined
-      //     }
-      //   }
-      // });
+      if (buyPrice) {
+        defaults.buy = { price: parseFloat(buyPrice) };
+      }
+      if (sellPrice) {
+        defaults.sell = { price: parseFloat(sellPrice) };
+      }
 
+      const { data, error } = await supabase.functions.invoke('card-show-fetch-alt', {
+        body: { items, defaults }
+      });
+
+      if (error) throw error;
+
+      const batchResults = data?.results || [];
+      const successCount = batchResults.filter((r: any) => r.success).length;
+      const failedUrls = batchResults
+        .filter((r: any) => !r.success)
+        .map((r: any) => r.alt_url);
+
+      setResults({
+        totalProcessed: urlList.length,
+        successCount,
+        failed: failedUrls,
+        needsSession: data?.needsSession || false
+      });
+
+      if (successCount > 0) {
+        toast.success(`Successfully processed ${successCount} out of ${urlList.length} items`);
+      } else {
+        toast.error("No items were successfully processed");
+      }
+    } catch (error: any) {
+      toast.error(error.message || "Failed to process items");
       setResults({
         totalProcessed: urlList.length,
         successCount: 0,
         failed: urlList,
         needsSession: true
       });
-    } catch (error: any) {
-      toast.error(error.message || "Failed to process items");
     } finally {
       setIsProcessing(false);
     }

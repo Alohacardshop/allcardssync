@@ -1,11 +1,17 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
+import { Plus, Pencil } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { CardShowCreateLocationDialog } from "./CardShowCreateLocationDialog";
+import { CardShowEditLocationDialog } from "./CardShowEditLocationDialog";
 
 export function CardShowLocations() {
   const { isAdmin } = useAuth();
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [selectedLocation, setSelectedLocation] = useState<any>(null);
 
   const { data: locations, isLoading } = useQuery({
     queryKey: ["locations"],
@@ -29,7 +35,7 @@ export function CardShowLocations() {
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold">Locations</h2>
         {isAdmin && (
-          <Button>
+          <Button onClick={() => setCreateDialogOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
             Create Location
           </Button>
@@ -56,7 +62,17 @@ export function CardShowLocations() {
                 <td className="p-3 text-sm text-muted-foreground">{location.notes || "-"}</td>
                 {isAdmin && (
                   <td className="p-3 text-right">
-                    <Button variant="ghost" size="sm">Edit</Button>
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={() => {
+                        setSelectedLocation(location);
+                        setEditDialogOpen(true);
+                      }}
+                    >
+                      <Pencil className="h-4 w-4 mr-1" />
+                      Edit
+                    </Button>
                   </td>
                 )}
               </tr>
@@ -69,6 +85,22 @@ export function CardShowLocations() {
         <div className="text-center py-12 text-muted-foreground">
           No locations yet. {isAdmin && "Create your first location to get started."}
         </div>
+      )}
+
+      {isAdmin && (
+        <>
+          <CardShowCreateLocationDialog 
+            open={createDialogOpen} 
+            onOpenChange={setCreateDialogOpen} 
+          />
+          {selectedLocation && (
+            <CardShowEditLocationDialog 
+              location={selectedLocation}
+              open={editDialogOpen} 
+              onOpenChange={setEditDialogOpen} 
+            />
+          )}
+        </>
       )}
     </div>
   );
