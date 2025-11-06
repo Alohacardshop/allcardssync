@@ -1,17 +1,42 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Download, RefreshCw, Edit, Plus } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Download, RefreshCw, Edit, Plus, Filter } from "lucide-react";
 import { toast } from "sonner";
+import { CardShowTransactionDialog } from "./CardShowTransactionDialog";
+import { CardShowEditDialog } from "./CardShowEditDialog";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 export function CardShowDashboard() {
+  const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
+  const [gradingServiceFilter, setGradingServiceFilter] = useState("");
+  const [gradeFilter, setGradeFilter] = useState("");
+  const [showFilter, setShowFilter] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<any>(null);
+  const [transactionDialogOpen, setTransactionDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+
+  const { data: shows } = useQuery({
+    queryKey: ["shows"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("shows")
+        .select("id, name")
+        .order("start_date", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+  });
 
   const { data: items, isLoading, refetch } = useQuery({
-    queryKey: ["alt-items", searchTerm],
+    queryKey: ["alt-items", searchTerm, gradingServiceFilter, gradeFilter, showFilter],
     queryFn: async () => {
       let query = supabase
         .from("alt_items")
@@ -32,9 +57,46 @@ export function CardShowDashboard() {
         query = query.ilike("title", `%${searchTerm}%`);
       }
 
+      if (gradingServiceFilter) {
+        query = query.eq("grading_service", gradingServiceFilter);
+      }
+
+      if (gradeFilter) {
+        query = query.eq("grade", gradeFilter);
+      }
+
       const { data, error } = await query;
       if (error) throw error;
+
+      // Client-side filter for show (since it's in transactions)
+      if (showFilter && data) {
+        return data.filter(item => 
+          item.card_transactions?.some((txn: any) => txn.show_id === showFilter)
+        );
+      }
+
       return data;
+    },
+  });
+
+  const refreshFromAltMutation = useMutation({
+    mutationFn: async (item: any) => {
+      const { data, error } = await supabase.functions.invoke("card-show-fetch-alt", {
+        body: {
+          certNumber: item.alt_uuid,
+          defaults: undefined,
+        },
+      });
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
+      return data;
+    },
+    onSuccess: () => {
+      toast.success("Card refreshed from ALT");
+      queryClient.invalidateQueries({ queryKey: ["alt-items"] });
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to refresh from ALT");
     },
   });
 
@@ -53,13 +115,24 @@ export function CardShowDashboard() {
     )[0];
   };
 
+  const clearFilters = () => {
+    setGradingServiceFilter("");
+    setGradeFilter("");
+    setShowFilter("");
+  };
+
+  const hasActiveFilters = gradingServiceFilter || gradeFilter || showFilter;
+
   const handleExportCSV = () => {
     if (!items || items.length === 0) {
       toast.error("No data to export");
       return;
     }
 
-    const headers = ["Title", "Grade", "Grading Service", "Set", "Year", "ALT Value", "Latest Buy", "Latest Sell"];
+    const headers = [
+      "Title", "Grade", "Grading Service", "Set", "Year", "Population",
+      "ALT Value", "ALT Checked", "Latest Buy", "Latest Sell", "Cert Number"
+    ];
     const rows = items.map(item => {
       const latestBuy = getLatestTransaction(item.card_transactions, "BUY");
       const latestSell = getLatestTransaction(item.card_transactions, "SELL");
@@ -70,9 +143,12 @@ export function CardShowDashboard() {
         item.grading_service || "",
         item.set_name || "",
         item.year || "",
+        item.population || "",
         item.alt_value || "",
+        item.alt_checked_at ? new Date(item.alt_checked_at).toLocaleDateString() : "",
         latestBuy?.price || "",
-        latestSell?.price || ""
+        latestSell?.price || "",
+        item.alt_uuid || ""
       ];
     });
 
@@ -84,9 +160,27 @@ export function CardShowDashboard() {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `card-show-export-${new Date().toISOString()}.csv`;
+    a.download = `card-show-export-${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     toast.success("CSV exported successfully");
+  };
+
+  const openTransactionDialog = (item: any) => {
+    setSelectedItem(item);
+    setTransactionDialogOpen(true);
+  };
+
+  const openEditDialog = (item: any) => {
+    setSelectedItem(item);
+    setEditDialogOpen(true);
+  };
+
+  const handleRefreshFromAlt = (item: any) => {
+    if (!item.alt_uuid) {
+      toast.error("No certificate number found");
+      return;
+    }
+    refreshFromAltMutation.mutate(item);
   };
 
   if (isLoading) {
@@ -95,20 +189,99 @@ export function CardShowDashboard() {
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-4 items-center">
-        <Input
-          placeholder="Search by title..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="max-w-md"
-        />
-        <Button onClick={() => refetch()} variant="outline" size="icon">
-          <RefreshCw className="h-4 w-4" />
-        </Button>
-        <Button onClick={handleExportCSV} variant="outline">
-          <Download className="h-4 w-4 mr-2" />
-          Export CSV
-        </Button>
+      <div className="space-y-4">
+        <div className="flex gap-4 items-center">
+          <Input
+            placeholder="Search by title..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="max-w-md"
+          />
+          <Button onClick={() => refetch()} variant="outline" size="icon" title="Refresh">
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+          <Button onClick={handleExportCSV} variant="outline">
+            <Download className="h-4 w-4 mr-2" />
+            Export CSV
+          </Button>
+        </div>
+
+        <Collapsible open={filtersOpen} onOpenChange={setFiltersOpen}>
+          <div className="flex items-center gap-2">
+            <CollapsibleTrigger asChild>
+              <Button variant="outline" size="sm">
+                <Filter className="h-4 w-4 mr-2" />
+                Filters
+                {hasActiveFilters && (
+                  <Badge variant="secondary" className="ml-2">
+                    {[gradingServiceFilter, gradeFilter, showFilter].filter(Boolean).length}
+                  </Badge>
+                )}
+              </Button>
+            </CollapsibleTrigger>
+            {hasActiveFilters && (
+              <Button variant="ghost" size="sm" onClick={clearFilters}>
+                Clear Filters
+              </Button>
+            )}
+          </div>
+          
+          <CollapsibleContent className="mt-4">
+            <div className="grid grid-cols-3 gap-4 p-4 rounded-lg border bg-muted/50">
+              <div>
+                <Label className="text-sm mb-2 block">Grading Service</Label>
+                <Select value={gradingServiceFilter} onValueChange={setGradingServiceFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="All" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">All</SelectItem>
+                    <SelectItem value="PSA">PSA</SelectItem>
+                    <SelectItem value="BGS">BGS</SelectItem>
+                    <SelectItem value="CGC">CGC</SelectItem>
+                    <SelectItem value="SGC">SGC</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label className="text-sm mb-2 block">Grade</Label>
+                <Select value={gradeFilter} onValueChange={setGradeFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="All" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">All</SelectItem>
+                    <SelectItem value="10">10</SelectItem>
+                    <SelectItem value="9.5">9.5</SelectItem>
+                    <SelectItem value="9">9</SelectItem>
+                    <SelectItem value="8.5">8.5</SelectItem>
+                    <SelectItem value="8">8</SelectItem>
+                    <SelectItem value="7.5">7.5</SelectItem>
+                    <SelectItem value="7">7</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label className="text-sm mb-2 block">Show</Label>
+                <Select value={showFilter} onValueChange={setShowFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="All" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">All</SelectItem>
+                    {shows?.map((show) => (
+                      <SelectItem key={show.id} value={show.id}>
+                        {show.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
       </div>
 
       <div className="rounded-lg border overflow-hidden">
@@ -173,14 +346,30 @@ export function CardShowDashboard() {
                     {latestSell ? `$${latestSell.price}` : "-"}
                   </td>
                   <td className="p-3 text-right">
-                    <div className="flex gap-2 justify-end">
-                      <Button size="icon" variant="ghost">
+                    <div className="flex gap-1 justify-end">
+                      <Button 
+                        size="icon" 
+                        variant="ghost" 
+                        onClick={() => openTransactionDialog(item)}
+                        title="Add Transaction"
+                      >
                         <Plus className="h-4 w-4" />
                       </Button>
-                      <Button size="icon" variant="ghost">
+                      <Button 
+                        size="icon" 
+                        variant="ghost" 
+                        onClick={() => openEditDialog(item)}
+                        title="Edit Values"
+                      >
                         <Edit className="h-4 w-4" />
                       </Button>
-                      <Button size="icon" variant="ghost">
+                      <Button 
+                        size="icon" 
+                        variant="ghost" 
+                        onClick={() => handleRefreshFromAlt(item)}
+                        disabled={refreshFromAltMutation.isPending || !item.alt_uuid}
+                        title="Refresh from ALT"
+                      >
                         <RefreshCw className="h-4 w-4" />
                       </Button>
                     </div>
@@ -194,8 +383,25 @@ export function CardShowDashboard() {
 
       {items?.length === 0 && (
         <div className="text-center py-12 text-muted-foreground">
-          No items found. Add items from ALT to get started.
+          {hasActiveFilters 
+            ? "No items match your filters. Try adjusting your search criteria."
+            : "No items found. Add items from ALT to get started."}
         </div>
+      )}
+
+      {selectedItem && (
+        <>
+          <CardShowTransactionDialog
+            item={selectedItem}
+            open={transactionDialogOpen}
+            onOpenChange={setTransactionDialogOpen}
+          />
+          <CardShowEditDialog
+            item={selectedItem}
+            open={editDialogOpen}
+            onOpenChange={setEditDialogOpen}
+          />
+        </>
       )}
     </div>
   );
