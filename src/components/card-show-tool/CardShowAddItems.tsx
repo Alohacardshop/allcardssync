@@ -85,8 +85,8 @@ export function CardShowAddItems() {
         </p>
       </div>
 
-      <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 p-4 rounded">
-        <p className="text-sm text-blue-900 dark:text-blue-100">
+      <div className="status-info p-4 rounded">
+        <p className="text-sm">
           💡 <strong>Tip:</strong> For single certificate lookups, use the <strong>Lookup Cert</strong> tab for a faster experience!
         </p>
       </div>
@@ -142,10 +142,10 @@ export function CardShowAddItems() {
           <h3 className="font-semibold">Results</h3>
           <div className="space-y-1 text-sm">
             <p>Total Processed: {results.totalProcessed}</p>
-            <p className="text-green-600">Success: {results.successCount}</p>
-            <p className="text-red-600">Failed: {results.failed?.length || 0}</p>
+            <p className="text-success">Success: {results.successCount}</p>
+            <p className="text-destructive">Failed: {results.failed?.length || 0}</p>
             {results.needsSession && (
-              <p className="text-amber-600">⚠️ ALT session needs to be initialized by admin</p>
+              <p className="text-warning">⚠️ ALT session needs to be initialized by admin</p>
             )}
           </div>
           {results.failed && results.failed.length > 0 && (
@@ -155,7 +155,7 @@ export function CardShowAddItems() {
               </summary>
               <ul className="mt-2 space-y-1 text-xs font-mono">
                 {results.failed.map((url: string, i: number) => (
-                  <li key={i} className="text-red-600">{url}</li>
+                  <li key={i} className="text-destructive">{url}</li>
                 ))}
               </ul>
             </details>

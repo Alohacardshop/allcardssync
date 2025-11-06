@@ -64,11 +64,11 @@ export function CardShowAddByCert() {
 
   const getGradeBadgeColor = (grade: string) => {
     const num = parseInt(grade);
-    if (num === 10) return "bg-gradient-to-r from-yellow-400 to-amber-500 text-black";
-    if (num >= 9) return "bg-blue-600";
-    if (num >= 8) return "bg-green-600";
-    if (num >= 7) return "bg-amber-600";
-    return "bg-gray-600";
+    if (num === 10) return "bg-rare text-foreground";
+    if (num >= 9) return "bg-primary text-primary-foreground";
+    if (num >= 8) return "bg-success text-success-foreground";
+    if (num >= 7) return "bg-warning text-warning-foreground";
+    return "bg-muted text-muted-foreground";
   };
 
   return (
@@ -161,7 +161,7 @@ export function CardShowAddByCert() {
                 </p>
               )}
               {result.alt_value && (
-                <p className="text-lg font-semibold mt-2 text-green-600">
+                <p className="text-lg font-semibold mt-2 text-success">
                   ALT Value: ${result.alt_value.toFixed(2)}
                 </p>
               )}
@@ -189,8 +189,8 @@ export function CardShowAddByCert() {
             </a>
           )}
 
-          <div className="bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 p-4 rounded">
-            <p className="text-sm text-green-900 dark:text-green-100">
+          <div className="status-success p-4 rounded">
+            <p className="text-sm">
               ✓ Card saved to inventory successfully!
             </p>
           </div>

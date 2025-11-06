@@ -221,8 +221,8 @@ export function CardShowSessions() {
             </div>
             
             {credentialsStatus?.configured && (
-              <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 p-3 rounded text-sm">
-                <p className="text-blue-900 dark:text-blue-100">
+              <div className="status-info p-3 rounded text-sm">
+                <p>
                   ✓ Credentials are stored securely. To enable automated scraping, you need to set up an external scraping service (see documentation for options).
                 </p>
               </div>
@@ -284,8 +284,8 @@ export function CardShowSessions() {
         </div>
 
         {session?.status === "needs-human" && (
-          <div className="bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 p-4 rounded">
-            <p className="text-sm text-amber-900 dark:text-amber-100">
+          <div className="status-warning p-4 rounded">
+            <p className="text-sm">
               <strong>Action Required:</strong> A browser window has opened for manual login. 
               Please complete the login process (including any CAPTCHA or MFA), then click the 
               "Continue" button above once you're logged in.
@@ -294,17 +294,17 @@ export function CardShowSessions() {
         )}
       </div>
 
-      <div className="rounded-lg border p-4 bg-blue-50 dark:bg-blue-950">
-        <h4 className="font-semibold mb-2 text-blue-900 dark:text-blue-100">✅ ScrapingBee Integration Active</h4>
-        <p className="text-sm text-blue-900 dark:text-blue-100 mb-3">
+      <div className="rounded-lg status-info p-4">
+        <h4 className="font-semibold mb-2">✅ ScrapingBee Integration Active</h4>
+        <p className="text-sm mb-3">
           Automated card lookups are enabled via ScrapingBee. The system will automatically fetch card details from ALT when you enter a certificate number.
         </p>
-        <ul className="text-sm space-y-2 text-blue-900 dark:text-blue-100">
+        <ul className="text-sm space-y-2">
           <li><strong>Current Setup:</strong> ScrapingBee API handles browser automation and HTML rendering</li>
           <li><strong>Features:</strong> Auto-detects grading service, extracts all card details, saves to database</li>
           <li><strong>Status:</strong> Ready to use - just enter certificate numbers in the "Lookup Cert" tab</li>
         </ul>
-        <p className="text-sm text-blue-900 dark:text-blue-100 mt-3">
+        <p className="text-sm mt-3">
           The credentials stored here are available if you want to switch to a self-hosted scraping solution in the future.
         </p>
       </div>
