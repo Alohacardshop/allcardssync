@@ -142,7 +142,6 @@ serve(async (req) => {
       alt_value: altValue,
       population: population,
       alt_checked_at: new Date().toISOString(),
-      created_by: user.id,
     };
 
     const { data: altItem, error: insertError } = await supabaseClient
