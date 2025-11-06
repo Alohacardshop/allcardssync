@@ -155,3 +155,10 @@ verify_jwt = false
 
 [functions.reset-notifications]
 verify_jwt = false
+
+# Card Show Tool functions
+[functions.card-show-credentials]
+verify_jwt = true
+
+[functions.card-show-fetch-alt]
+verify_jwt = true

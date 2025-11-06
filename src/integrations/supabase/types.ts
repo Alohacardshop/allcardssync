@@ -14,6 +14,30 @@ export type Database = {
   }
   public: {
     Tables: {
+      alt_credentials: {
+        Row: {
+          created_at: string | null
+          email: string
+          id: string
+          password: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          email: string
+          id?: string
+          password: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          email?: string
+          id?: string
+          password?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       alt_items: {
         Row: {
           alt_checked_at: string | null

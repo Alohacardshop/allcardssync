@@ -2,6 +2,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Navigate } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CardShowDashboard } from "@/components/card-show-tool/CardShowDashboard";
+import { CardShowAddByCert } from "@/components/card-show-tool/CardShowAddByCert";
 import { CardShowAddItems } from "@/components/card-show-tool/CardShowAddItems";
 import { CardShowShows } from "@/components/card-show-tool/CardShowShows";
 import { CardShowLocations } from "@/components/card-show-tool/CardShowLocations";
@@ -34,8 +35,9 @@ export default function CardShowTool() {
       </div>
 
       <Tabs defaultValue="dashboard" className="w-full">
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
+          <TabsTrigger value="lookup">Lookup Cert</TabsTrigger>
           <TabsTrigger value="add">Add Items</TabsTrigger>
           <TabsTrigger value="shows">Shows</TabsTrigger>
           <TabsTrigger value="locations">Locations</TabsTrigger>
@@ -45,6 +47,10 @@ export default function CardShowTool() {
 
         <TabsContent value="dashboard" className="mt-6">
           <CardShowDashboard />
+        </TabsContent>
+
+        <TabsContent value="lookup" className="mt-6">
+          <CardShowAddByCert />
         </TabsContent>
 
         <TabsContent value="add" className="mt-6">

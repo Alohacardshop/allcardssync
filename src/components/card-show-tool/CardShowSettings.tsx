@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,9 @@ import { useAuth } from "@/contexts/AuthContext";
 export function CardShowSettings() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  
+  const [selectedShowId, setSelectedShowId] = useState<string>("");
+  const [selectedLocationId, setSelectedLocationId] = useState<string>("");
 
   const { data: profile } = useQuery({
     queryKey: ["user-profile", user?.id],
@@ -30,6 +34,14 @@ export function CardShowSettings() {
     },
     enabled: !!user,
   });
+  
+  // Sync state when profile loads
+  useEffect(() => {
+    if (profile) {
+      setSelectedShowId(profile.default_show_id || "");
+      setSelectedLocationId(profile.default_location_id || "");
+    }
+  }, [profile]);
 
   const { data: shows } = useQuery({
     queryKey: ["shows"],
@@ -78,12 +90,9 @@ export function CardShowSettings() {
   });
 
   const handleSave = () => {
-    const defaultShowId = (document.getElementById("default-show") as HTMLSelectElement)?.value || null;
-    const defaultLocationId = (document.getElementById("default-location") as HTMLSelectElement)?.value || null;
-
     updateProfileMutation.mutate({
-      default_show_id: defaultShowId,
-      default_location_id: defaultLocationId,
+      default_show_id: selectedShowId || null,
+      default_location_id: selectedLocationId || null,
     });
   };
 
@@ -99,7 +108,7 @@ export function CardShowSettings() {
       <div className="space-y-4">
         <div>
           <Label htmlFor="default-show">Default Show</Label>
-          <Select defaultValue={profile?.default_show_id || ""}>
+          <Select value={selectedShowId} onValueChange={setSelectedShowId}>
             <SelectTrigger id="default-show">
               <SelectValue placeholder="Select a show" />
             </SelectTrigger>
@@ -116,7 +125,7 @@ export function CardShowSettings() {
 
         <div>
           <Label htmlFor="default-location">Default Location</Label>
-          <Select defaultValue={profile?.default_location_id || ""}>
+          <Select value={selectedLocationId} onValueChange={setSelectedLocationId}>
             <SelectTrigger id="default-location">
               <SelectValue placeholder="Select a location" />
             </SelectTrigger>

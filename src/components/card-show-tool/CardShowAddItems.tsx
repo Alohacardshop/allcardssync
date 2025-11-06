@@ -64,6 +64,12 @@ export function CardShowAddItems() {
         </p>
       </div>
 
+      <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 p-4 rounded">
+        <p className="text-sm text-blue-900 dark:text-blue-100">
+          💡 <strong>Tip:</strong> For single certificate lookups, use the <strong>Lookup Cert</strong> tab for a faster experience!
+        </p>
+      </div>
+
       <div className="space-y-4">
         <div>
           <Label htmlFor="urls">ALT Research URLs</Label>

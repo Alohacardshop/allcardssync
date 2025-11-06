@@ -1,11 +1,21 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { LogIn, RefreshCw, PlayCircle } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { LogIn, RefreshCw, PlayCircle, ChevronDown, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 
 export function CardShowSessions() {
+  const queryClient = useQueryClient();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [credentialsOpen, setCredentialsOpen] = useState(false);
+
   const { data: session, isLoading, refetch } = useQuery({
     queryKey: ["scrape-sessions"],
     queryFn: async () => {
@@ -17,6 +27,65 @@ export function CardShowSessions() {
       
       if (error && error.code !== "PGRST116") throw error;
       return data;
+    },
+  });
+
+  const { data: credentialsStatus } = useQuery({
+    queryKey: ["alt-credentials-status"],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke("card-show-credentials/status");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const saveCredentialsMutation = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke("card-show-credentials", {
+        body: { email, password },
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      toast.success("Credentials saved successfully");
+      queryClient.invalidateQueries({ queryKey: ["alt-credentials-status"] });
+      setEmail("");
+      setPassword("");
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to save credentials");
+    },
+  });
+
+  const clearCredentialsMutation = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke("card-show-credentials", {
+        method: "DELETE",
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      toast.success("Credentials cleared");
+      queryClient.invalidateQueries({ queryKey: ["alt-credentials-status"] });
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to clear credentials");
+    },
+  });
+
+  const testCredentialsMutation = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke("card-show-credentials/test");
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      toast.success(data.message || "Connection test successful");
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Connection test failed");
     },
   });
 
@@ -57,6 +126,95 @@ export function CardShowSessions() {
           Manage authentication session for scraping ALT Research pages
         </p>
       </div>
+
+      {/* ALT Credentials Section */}
+      <Collapsible open={credentialsOpen} onOpenChange={setCredentialsOpen}>
+        <div className="rounded-lg border p-4">
+          <CollapsibleTrigger asChild>
+            <Button variant="ghost" className="w-full justify-between p-0 h-auto hover:bg-transparent">
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg font-semibold">ALT Credentials</h3>
+                {credentialsStatus?.configured && (
+                  <Badge variant="default">✓ Configured</Badge>
+                )}
+                {!credentialsStatus?.configured && (
+                  <Badge variant="destructive">⚠ Not Configured</Badge>
+                )}
+              </div>
+              <ChevronDown className={`h-5 w-5 transition-transform ${credentialsOpen ? 'rotate-180' : ''}`} />
+            </Button>
+          </CollapsibleTrigger>
+
+          <CollapsibleContent className="mt-4 space-y-4">
+            {credentialsStatus?.configured && (
+              <div className="bg-muted p-3 rounded text-sm">
+                <p className="font-semibold mb-1">Current Email:</p>
+                <p>{credentialsStatus.email_masked}</p>
+              </div>
+            )}
+
+            <div className="space-y-3">
+              <div>
+                <Label htmlFor="alt-email">ALT Email</Label>
+                <Input
+                  id="alt-email"
+                  type="email"
+                  placeholder="your.email@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="alt-password">ALT Password</Label>
+                <div className="relative">
+                  <Input
+                    id="alt-password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-0 top-0 h-full px-3"
+                    onClick={() => setShowPassword(!showPassword)}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                onClick={() => saveCredentialsMutation.mutate()}
+                disabled={!email || !password || saveCredentialsMutation.isPending}
+              >
+                {saveCredentialsMutation.isPending ? "Saving..." : "Save Credentials"}
+              </Button>
+              <Button
+                onClick={() => testCredentialsMutation.mutate()}
+                disabled={!credentialsStatus?.configured || testCredentialsMutation.isPending}
+                variant="outline"
+              >
+                {testCredentialsMutation.isPending ? "Testing..." : "Test Connection"}
+              </Button>
+              {credentialsStatus?.configured && (
+                <Button
+                  onClick={() => clearCredentialsMutation.mutate()}
+                  disabled={clearCredentialsMutation.isPending}
+                  variant="destructive"
+                >
+                  {clearCredentialsMutation.isPending ? "Clearing..." : "Clear Credentials"}
+                </Button>
+              )}
+            </div>
+          </CollapsibleContent>
+        </div>
+      </Collapsible>
 
       <div className="rounded-lg border p-6 space-y-4">
         <div className="flex items-center justify-between">
