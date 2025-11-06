@@ -209,13 +209,6 @@ export function CardShowSessions() {
               >
                 {saveCredentialsMutation.isPending ? "Saving..." : "Save Credentials"}
               </Button>
-              <Button
-                onClick={() => testCredentialsMutation.mutate()}
-                disabled={!credentialsStatus?.configured || testCredentialsMutation.isPending}
-                variant="outline"
-              >
-                {testCredentialsMutation.isPending ? "Testing..." : "Test Connection"}
-              </Button>
               {credentialsStatus?.configured && (
                 <Button
                   onClick={() => clearCredentialsMutation.mutate()}
@@ -226,6 +219,14 @@ export function CardShowSessions() {
                 </Button>
               )}
             </div>
+            
+            {credentialsStatus?.configured && (
+              <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 p-3 rounded text-sm">
+                <p className="text-blue-900 dark:text-blue-100">
+                  ✓ Credentials are stored securely. To enable automated scraping, you need to set up an external scraping service (see documentation for options).
+                </p>
+              </div>
+            )}
           </CollapsibleContent>
         </div>
       </Collapsible>
@@ -293,14 +294,19 @@ export function CardShowSessions() {
         )}
       </div>
 
-      <div className="rounded-lg border p-4 bg-muted/50">
-        <h4 className="font-semibold mb-2">About ALT Sessions</h4>
-        <ul className="text-sm space-y-1 text-muted-foreground">
-          <li>• Sessions use Playwright to automate browser login</li>
-          <li>• Cookies are saved locally for future requests</li>
-          <li>• If CAPTCHA or MFA is required, manual intervention is needed</li>
-          <li>• Sessions expire periodically and need to be refreshed</li>
+      <div className="rounded-lg border p-4 bg-amber-50 dark:bg-amber-950">
+        <h4 className="font-semibold mb-2 text-amber-900 dark:text-amber-100">⚠️ Automated Scraping Not Yet Available</h4>
+        <p className="text-sm text-amber-900 dark:text-amber-100 mb-3">
+          Browser automation (Playwright) cannot run in Supabase Edge Functions. To enable automated card lookups, choose one of these options:
+        </p>
+        <ul className="text-sm space-y-2 text-amber-900 dark:text-amber-100">
+          <li><strong>Option 1 (Recommended):</strong> Use an external scraping API service like ScrapingBee or Bright Data</li>
+          <li><strong>Option 2:</strong> Deploy your own Playwright server (Railway, Render, Fly.io) and connect it to this system</li>
+          <li><strong>Option 3:</strong> Use manual card entry as a fallback (no automation required)</li>
         </ul>
+        <p className="text-sm text-amber-900 dark:text-amber-100 mt-3">
+          See the documentation for detailed setup instructions for each option.
+        </p>
       </div>
     </div>
   );

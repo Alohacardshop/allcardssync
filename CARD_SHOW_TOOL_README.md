@@ -53,16 +53,89 @@ ON CONFLICT (user_id, role) DO NOTHING;
 
 Replace `USER_UUID_HERE` with the actual user UUID from `auth.users`.
 
-### 3. Running Playwright (Development)
+### 3. Automated Scraping Setup
 
-The Card Show Tool uses Playwright for web scraping ALT. 
+**⚠️ Important Limitation**: Browser automation (Playwright) cannot run directly in Supabase Edge Functions because they don't support browser binaries. The edge functions and UI are fully functional, but automated scraping requires an external service.
 
-**Note**: Playwright headful mode is not yet fully implemented in the current build. The scraping functionality will be added in a future update with proper Playwright edge function integration.
+#### Current Status
 
-When implemented, it will:
-- Run headful browser for login (to handle CAPTCHA/MFA)
-- Save cookies for subsequent requests
-- Allow manual intervention when authentication requires human input
+✅ **Implemented & Working:**
+- Admin credential management
+- Certificate lookup UI
+- Database schema for ALT items
+- Edge function infrastructure
+- All UI components and navigation
+
+❌ **Requires External Setup:**
+- Automated browser scraping from ALT
+- Playwright execution
+
+#### Implementation Options
+
+Choose one of these approaches to enable automated card lookups:
+
+##### Option 1: External Scraping API (Recommended - Fastest Setup)
+
+Use a managed scraping service that handles browser automation:
+
+**Recommended Services:**
+- **ScrapingBee** (https://www.scrapingbee.com/) - ~$50-100/month
+- **Bright Data** (https://brightdata.com/) - Enterprise pricing
+- **ScraperAPI** (https://www.scraperapi.com/) - ~$50-200/month
+
+**Implementation Steps:**
+1. Sign up for a scraping service and get API key
+2. Add API key to Supabase secrets: `SCRAPING_SERVICE_API_KEY`
+3. Update `card-show-fetch-alt` edge function to call the scraping API
+4. The service handles browser rendering, returns HTML/JSON
+5. Parse response and save to `alt_items` table
+
+**Pros:** No server maintenance, handles CAPTCHAs, reliable, fast setup  
+**Cons:** Monthly cost ($50-200), dependency on third party
+
+##### Option 2: Self-Hosted Playwright Server
+
+Deploy your own Node.js server with Playwright installed:
+
+**Recommended Platforms:**
+- Railway.app (https://railway.app/)
+- Render.com (https://render.com/)
+- Fly.io (https://fly.io/)
+
+**Implementation Steps:**
+1. Create a Node.js/Express server with Playwright
+2. Add API endpoint: `POST /scrape` that accepts cert numbers
+3. Deploy to cloud platform
+4. Store server URL in Supabase secrets: `PLAYWRIGHT_SERVER_URL`
+5. Update `card-show-fetch-alt` to call your server
+6. Your server does scraping, returns data
+
+**Pros:** Full control, no per-request costs, customizable  
+**Cons:** Server maintenance, scaling complexity, uptime responsibility
+
+##### Option 3: Manual Entry Fallback
+
+No automation - staff manually enters card details:
+
+**Implementation Steps:**
+1. Keep current credential storage for future use
+2. Add manual entry form in "Lookup Cert" tab
+3. Staff views card on ALT and types details
+4. Still saves to `alt_items` table
+5. All other features work normally
+
+**Pros:** No external dependencies, works immediately, no costs  
+**Cons:** Labor intensive, defeats automation purpose, slower workflow
+
+#### Recommended Approach
+
+For most production use cases, **Option 1 (External Scraping API)** is recommended:
+- Fastest time to production
+- Reliable and maintained by experts
+- Handles edge cases (CAPTCHAs, rate limiting)
+- Cost is predictable and reasonable
+
+The credentials you save in the Sessions tab will be used by whichever option you choose.
 
 ## Database Schema
 
@@ -222,14 +295,71 @@ When edge functions are fully implemented, the following endpoints will be avail
 - Admins must create shows and locations first
 - Check you have the `admin` role for creation access
 
+## Code Examples
+
+### Example: Integrating ScrapingBee
+
+Update `supabase/functions/card-show-fetch-alt/index.ts`:
+
+```typescript
+// After credentials check, call ScrapingBee
+const scrapingBeeKey = Deno.env.get('SCRAPING_BEE_API_KEY');
+const altUrl = `https://app.alt.xyz/cert/${certNumber}`;
+
+const response = await fetch(
+  `https://app.scrapingbee.com/api/v1/?api_key=${scrapingBeeKey}&url=${encodeURIComponent(altUrl)}&render_js=true`
+);
+
+const html = await response.text();
+// Parse HTML to extract card details
+// Save to alt_items table
+```
+
+### Example: Self-Hosted Playwright Server
+
+Simple Express server with Playwright:
+
+```javascript
+const express = require('express');
+const { chromium } = require('playwright');
+
+const app = express();
+app.use(express.json());
+
+app.post('/scrape', async (req, res) => {
+  const { certNumber, email, password } = req.body;
+  
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+  
+  // Login to ALT
+  await page.goto('https://app.alt.xyz/login');
+  await page.fill('[name="email"]', email);
+  await page.fill('[name="password"]', password);
+  await page.click('button[type="submit"]');
+  
+  // Navigate to cert
+  await page.goto(`https://app.alt.xyz/cert/${certNumber}`);
+  const data = await page.evaluate(() => {
+    // Extract card data from page
+    return { title: '...', grade: '...', /* etc */ };
+  });
+  
+  await browser.close();
+  res.json(data);
+});
+
+app.listen(3000);
+```
+
 ## Future Enhancements
 
-- [ ] Complete Playwright edge function integration
 - [ ] Bulk card import from CSV
 - [ ] Advanced filtering (date ranges, price ranges)
 - [ ] Show profit/loss reports
 - [ ] Email notifications for high-value cards
 - [ ] Mobile app integration
+- [ ] Automated price tracking and alerts
 
 ## Support
 
