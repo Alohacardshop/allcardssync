@@ -6,6 +6,7 @@ import { CardShowAddByCert } from "@/components/card-show-tool/CardShowAddByCert
 import { CardShowAddItems } from "@/components/card-show-tool/CardShowAddItems";
 import { CardShowShows } from "@/components/card-show-tool/CardShowShows";
 import { CardShowLocations } from "@/components/card-show-tool/CardShowLocations";
+import { CardShowTransactions } from "@/components/card-show-tool/CardShowTransactions";
 import { CardShowSessions } from "@/components/card-show-tool/CardShowSessions";
 import { CardShowSettings } from "@/components/card-show-tool/CardShowSettings";
 
@@ -35,10 +36,11 @@ export default function CardShowTool() {
       </div>
 
       <Tabs defaultValue="dashboard" className="w-full">
-        <TabsList className="grid w-full grid-cols-7">
+        <TabsList className={`grid w-full ${isAdmin ? 'grid-cols-8' : 'grid-cols-7'}`}>
           <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
           <TabsTrigger value="lookup">Lookup Cert</TabsTrigger>
           <TabsTrigger value="add">Add Items</TabsTrigger>
+          <TabsTrigger value="transactions">Transactions</TabsTrigger>
           <TabsTrigger value="shows">Shows</TabsTrigger>
           <TabsTrigger value="locations">Locations</TabsTrigger>
           {isAdmin && <TabsTrigger value="sessions">Sessions</TabsTrigger>}
@@ -55,6 +57,10 @@ export default function CardShowTool() {
 
         <TabsContent value="add" className="mt-6">
           <CardShowAddItems />
+        </TabsContent>
+
+        <TabsContent value="transactions" className="mt-6">
+          <CardShowTransactions />
         </TabsContent>
 
         <TabsContent value="shows" className="mt-6">
