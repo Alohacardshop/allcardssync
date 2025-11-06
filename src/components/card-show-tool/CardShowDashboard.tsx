@@ -6,11 +6,21 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Download, RefreshCw, Edit, Plus, Filter } from "lucide-react";
+import { Download, RefreshCw, Edit, Plus, Filter, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { CardShowTransactionDialog } from "./CardShowTransactionDialog";
 import { CardShowEditDialog } from "./CardShowEditDialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export function CardShowDashboard() {
   const queryClient = useQueryClient();
@@ -22,6 +32,7 @@ export function CardShowDashboard() {
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [transactionDialogOpen, setTransactionDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   const { data: shows } = useQuery({
     queryKey: ["shows"],
@@ -97,6 +108,26 @@ export function CardShowDashboard() {
     },
     onError: (error: any) => {
       toast.error(error.message || "Failed to refresh from ALT");
+    },
+  });
+
+  const deleteCardMutation = useMutation({
+    mutationFn: async (itemId: string) => {
+      const { error } = await supabase
+        .from("alt_items")
+        .delete()
+        .eq("id", itemId);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Card deleted successfully");
+      queryClient.invalidateQueries({ queryKey: ["alt-items"] });
+      setDeleteDialogOpen(false);
+      setSelectedItem(null);
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to delete card");
     },
   });
 
@@ -181,6 +212,11 @@ export function CardShowDashboard() {
       return;
     }
     refreshFromAltMutation.mutate(item);
+  };
+
+  const openDeleteDialog = (item: any) => {
+    setSelectedItem(item);
+    setDeleteDialogOpen(true);
   };
 
   if (isLoading) {
@@ -372,6 +408,15 @@ export function CardShowDashboard() {
                       >
                         <RefreshCw className="h-4 w-4" />
                       </Button>
+                      <Button 
+                        size="icon" 
+                        variant="ghost" 
+                        onClick={() => openDeleteDialog(item)}
+                        title="Delete Card"
+                        className="text-destructive hover:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
                   </td>
                 </tr>
@@ -403,6 +448,28 @@ export function CardShowDashboard() {
           />
         </>
       )}
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Card</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{selectedItem?.title}"? 
+              This will permanently remove the card and all associated transactions. 
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => selectedItem && deleteCardMutation.mutate(selectedItem.id)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteCardMutation.isPending ? "Deleting..." : "Delete Card"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
