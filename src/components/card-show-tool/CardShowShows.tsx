@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Pencil, Trash2, Search, X } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, X, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -30,6 +30,8 @@ export function CardShowShows() {
   const [searchTerm, setSearchTerm] = useState("");
   const [locationFilter, setLocationFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState("all");
+  const [sortColumn, setSortColumn] = useState<"name" | "location" | "date">("date");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
 
   const { data: shows, isLoading } = useQuery({
     queryKey: ["shows"],
@@ -64,7 +66,7 @@ export function CardShowShows() {
   const filteredShows = useMemo(() => {
     if (!shows) return [];
 
-    return shows.filter((show) => {
+    let filtered = shows.filter((show) => {
       // Search filter
       const matchesSearch = searchTerm === "" || 
         show.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -87,7 +89,46 @@ export function CardShowShows() {
 
       return matchesSearch && matchesLocation && matchesDate;
     });
-  }, [shows, searchTerm, locationFilter, dateFilter]);
+
+    // Sort
+    filtered.sort((a, b) => {
+      let comparison = 0;
+
+      if (sortColumn === "name") {
+        comparison = a.name.localeCompare(b.name);
+      } else if (sortColumn === "location") {
+        const aLocation = a.locations?.name || "";
+        const bLocation = b.locations?.name || "";
+        comparison = aLocation.localeCompare(bLocation);
+      } else if (sortColumn === "date") {
+        const aDate = a.start_date ? new Date(a.start_date).getTime() : 0;
+        const bDate = b.start_date ? new Date(b.start_date).getTime() : 0;
+        comparison = aDate - bDate;
+      }
+
+      return sortDirection === "asc" ? comparison : -comparison;
+    });
+
+    return filtered;
+  }, [shows, searchTerm, locationFilter, dateFilter, sortColumn, sortDirection]);
+
+  const handleSort = (column: "name" | "location" | "date") => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+    } else {
+      setSortColumn(column);
+      setSortDirection("asc");
+    }
+  };
+
+  const SortIcon = ({ column }: { column: "name" | "location" | "date" }) => {
+    if (sortColumn !== column) {
+      return <ArrowUpDown className="h-4 w-4 ml-2 inline opacity-30" />;
+    }
+    return sortDirection === "asc" 
+      ? <ArrowUp className="h-4 w-4 ml-2 inline" />
+      : <ArrowDown className="h-4 w-4 ml-2 inline" />;
+  };
 
   const clearFilters = () => {
     setSearchTerm("");
@@ -186,9 +227,27 @@ export function CardShowShows() {
         <table className="w-full">
           <thead className="bg-muted">
             <tr>
-              <th className="p-3 text-left">Name</th>
-              <th className="p-3 text-left">Location</th>
-              <th className="p-3 text-left">Dates</th>
+              <th 
+                className="p-3 text-left cursor-pointer hover:bg-muted/80 transition-colors select-none"
+                onClick={() => handleSort("name")}
+              >
+                Name
+                <SortIcon column="name" />
+              </th>
+              <th 
+                className="p-3 text-left cursor-pointer hover:bg-muted/80 transition-colors select-none"
+                onClick={() => handleSort("location")}
+              >
+                Location
+                <SortIcon column="location" />
+              </th>
+              <th 
+                className="p-3 text-left cursor-pointer hover:bg-muted/80 transition-colors select-none"
+                onClick={() => handleSort("date")}
+              >
+                Dates
+                <SortIcon column="date" />
+              </th>
               <th className="p-3 text-left">Notes</th>
               {isAdmin && <th className="p-3 text-right">Actions</th>}
             </tr>

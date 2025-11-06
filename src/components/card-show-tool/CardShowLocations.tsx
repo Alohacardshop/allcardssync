@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Pencil, Trash2, Search, X } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, X, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,6 +27,8 @@ export function CardShowLocations() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [sortColumn, setSortColumn] = useState<"name" | "code">("name");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
 
   const { data: locations, isLoading } = useQuery({
     queryKey: ["locations"],
@@ -45,7 +47,7 @@ export function CardShowLocations() {
   const filteredLocations = useMemo(() => {
     if (!locations) return [];
 
-    return locations.filter((location) => {
+    let filtered = locations.filter((location) => {
       const matchesSearch = searchTerm === "" || 
         location.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (location.code && location.code.toLowerCase().includes(searchTerm.toLowerCase())) ||
@@ -53,7 +55,42 @@ export function CardShowLocations() {
 
       return matchesSearch;
     });
-  }, [locations, searchTerm]);
+
+    // Sort
+    filtered.sort((a, b) => {
+      let comparison = 0;
+
+      if (sortColumn === "name") {
+        comparison = a.name.localeCompare(b.name);
+      } else if (sortColumn === "code") {
+        const aCode = a.code || "";
+        const bCode = b.code || "";
+        comparison = aCode.localeCompare(bCode);
+      }
+
+      return sortDirection === "asc" ? comparison : -comparison;
+    });
+
+    return filtered;
+  }, [locations, searchTerm, sortColumn, sortDirection]);
+
+  const handleSort = (column: "name" | "code") => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+    } else {
+      setSortColumn(column);
+      setSortDirection("asc");
+    }
+  };
+
+  const SortIcon = ({ column }: { column: "name" | "code" }) => {
+    if (sortColumn !== column) {
+      return <ArrowUpDown className="h-4 w-4 ml-2 inline opacity-30" />;
+    }
+    return sortDirection === "asc" 
+      ? <ArrowUp className="h-4 w-4 ml-2 inline" />
+      : <ArrowDown className="h-4 w-4 ml-2 inline" />;
+  };
 
   const clearFilters = () => {
     setSearchTerm("");
@@ -125,8 +162,20 @@ export function CardShowLocations() {
         <table className="w-full">
           <thead className="bg-muted">
             <tr>
-              <th className="p-3 text-left">Name</th>
-              <th className="p-3 text-left">Code</th>
+              <th 
+                className="p-3 text-left cursor-pointer hover:bg-muted/80 transition-colors select-none"
+                onClick={() => handleSort("name")}
+              >
+                Name
+                <SortIcon column="name" />
+              </th>
+              <th 
+                className="p-3 text-left cursor-pointer hover:bg-muted/80 transition-colors select-none"
+                onClick={() => handleSort("code")}
+              >
+                Code
+                <SortIcon column="code" />
+              </th>
               <th className="p-3 text-left">Notes</th>
               {isAdmin && <th className="p-3 text-right">Actions</th>}
             </tr>
