@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Download, RefreshCw, Edit, Plus, Filter, Trash2 } from "lucide-react";
+import { Download, RefreshCw, Edit, Plus, Filter, Trash2, PackagePlus } from "lucide-react";
 import { toast } from "sonner";
 import { CardShowTransactionDialog } from "./CardShowTransactionDialog";
 import { CardShowEditDialog } from "./CardShowEditDialog";
@@ -128,6 +128,39 @@ export function CardShowDashboard() {
     },
     onError: (error: any) => {
       toast.error(error.message || "Failed to delete card");
+    },
+  });
+
+  const sendToInventoryMutation = useMutation({
+    mutationFn: async (item: any) => {
+      // Map alt_items fields to intake_items fields
+      const intakeData = {
+        brand_title: item.set_name || item.title,
+        subject: item.title,
+        year: item.year,
+        card_number: item.alt_uuid, // Using cert number as card number
+        grade: item.grade,
+        grading_company: item.grading_service || 'PSA',
+        type: 'Graded',
+        price: item.alt_value,
+        image_urls: item.image_url ? [item.image_url] : null,
+        psa_cert: item.grading_service === 'PSA' ? item.alt_uuid : null,
+        cgc_cert: item.grading_service === 'CGC' ? item.alt_uuid : null,
+        processing_notes: `Imported from ALT on ${new Date().toLocaleDateString()}`,
+      };
+
+      const { error } = await supabase
+        .from("intake_items")
+        .insert(intakeData);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Card sent to inventory successfully!");
+      queryClient.invalidateQueries({ queryKey: ["intake-items"] });
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to send to inventory");
     },
   });
 
@@ -330,7 +363,7 @@ export function CardShowDashboard() {
               <th className="p-3 text-right">ALT Value</th>
               <th className="p-3 text-right">Latest Buy</th>
               <th className="p-3 text-right">Latest Sell</th>
-              <th className="p-3 text-right">Actions</th>
+              <th className="p-3 text-center">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -381,8 +414,18 @@ export function CardShowDashboard() {
                   <td className="p-3 text-right">
                     {latestSell ? `$${latestSell.price}` : "-"}
                   </td>
-                  <td className="p-3 text-right">
-                    <div className="flex gap-1 justify-end">
+                  <td className="p-3">
+                    <div className="flex gap-1 justify-center flex-wrap">
+                      <Button 
+                        size="sm" 
+                        variant="default" 
+                        onClick={() => sendToInventoryMutation.mutate(item)}
+                        disabled={sendToInventoryMutation.isPending}
+                        title="Send to Inventory"
+                      >
+                        <PackagePlus className="h-4 w-4 mr-1" />
+                        To Inventory
+                      </Button>
                       <Button 
                         size="icon" 
                         variant="ghost" 

@@ -191,7 +191,7 @@ export function CardShowAddByCert() {
 
           <div className="status-success p-4 rounded">
             <p className="text-sm">
-              ✓ Card saved to inventory successfully!
+              ✓ Card details fetched and saved! Go to Dashboard to review and send to inventory.
             </p>
           </div>
         </div>
