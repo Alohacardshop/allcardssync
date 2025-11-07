@@ -184,7 +184,7 @@ export function CardShowDashboard() {
     },
   });
 
-  const sendToInventoryMutation = useMutation({
+  const sendToShowInventoryMutation = useMutation({
     mutationFn: async (item: any) => {
       // Map alt_items fields to intake_items fields
       const intakeData = {
@@ -209,11 +209,11 @@ export function CardShowDashboard() {
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success("Card sent to inventory successfully!");
+      toast.success("Card sent to show inventory successfully!");
       queryClient.invalidateQueries({ queryKey: ["intake-items"] });
     },
     onError: (error: any) => {
-      toast.error(error.message || "Failed to send to inventory");
+      toast.error(error.message || "Failed to send to show inventory");
     },
   });
 
@@ -493,12 +493,12 @@ export function CardShowDashboard() {
                       <Button 
                         size="sm" 
                         variant="default" 
-                        onClick={() => sendToInventoryMutation.mutate(item)}
-                        disabled={sendToInventoryMutation.isPending}
-                        title="Send to Inventory"
+                        onClick={() => sendToShowInventoryMutation.mutate(item)}
+                        disabled={sendToShowInventoryMutation.isPending}
+                        title="Send to Show Inventory"
                       >
                         <PackagePlus className="h-4 w-4 mr-1" />
-                        To Inventory
+                        To Show Inventory
                       </Button>
                       
                       <DropdownMenu>
@@ -514,11 +514,11 @@ export function CardShowDashboard() {
                         <DropdownMenuContent align="end" className="w-48">
                           <DropdownMenuItem onClick={() => openTransactionDialog(item)}>
                             <Plus className="h-4 w-4 mr-2" />
-                            Add Transaction
+                            Add Show Transaction
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => openEditDialog(item)}>
                             <Edit className="h-4 w-4 mr-2" />
-                            Edit Values
+                            Edit Show Values
                           </DropdownMenuItem>
                           <DropdownMenuItem 
                             onClick={() => handleRefreshFromAlt(item)}

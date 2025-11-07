@@ -48,7 +48,7 @@ export function CardShowEditDialog({ item, open, onOpenChange }: CardShowEditDia
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Edit Card Details</DialogTitle>
+          <DialogTitle>Edit Show Card Details</DialogTitle>
         </DialogHeader>
         
         <div className="space-y-4">

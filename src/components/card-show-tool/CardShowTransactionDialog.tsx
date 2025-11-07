@@ -71,7 +71,7 @@ export function CardShowTransactionDialog({ item, open, onOpenChange }: CardShow
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Record Transaction</DialogTitle>
+          <DialogTitle>Record Show Transaction</DialogTitle>
         </DialogHeader>
         
         <div className="space-y-4">
