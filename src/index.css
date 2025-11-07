@@ -302,4 +302,45 @@ All colors MUST be HSL.
     background-color: hsl(var(--info) / 0.1);
     border: 1px solid hsl(var(--info) / 0.3);
   }
+
+  /* ========================================
+     DELETE BUTTON CLICKABILITY FIXES
+     ======================================== */
+
+  /* Ensure table rows don't interfere with action buttons */
+  .card-show-table tr {
+    position: relative;
+  }
+
+  /* Actions cell must be above everything */
+  .card-show-table td[class*="z-50"] {
+    position: relative;
+    z-index: 50 !important;
+  }
+
+  /* All buttons in actions cell must accept pointer events */
+  .card-show-table td[class*="z-50"] button {
+    pointer-events: auto !important;
+    position: relative;
+    z-index: 51 !important;
+  }
+
+  /* Icons inside buttons should not interfere */
+  .card-show-table button svg {
+    pointer-events: none !important;
+  }
+
+  /* Kill any hover overlays that might exist */
+  .row-overlay,
+  .row-hover-layer,
+  .row-hover,
+  .table-row-cover {
+    pointer-events: none !important;
+  }
+
+  /* Ensure no table-level absolute positioning blocks buttons */
+  .card-show-table {
+    position: relative;
+    isolation: isolate;
+  }
 }

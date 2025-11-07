@@ -12,6 +12,7 @@ import { CardShowTransactionDialog } from "./CardShowTransactionDialog";
 import { CardShowEditDialog } from "./CardShowEditDialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { EditablePriceCell } from "./EditablePriceCell";
+import OverlayDetector from "@/dev/OverlayDetector";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -251,10 +252,28 @@ export function CardShowDashboard() {
   };
 
   const openDeleteDialog = (item: any) => {
-    console.log('🗑️ Opening delete dialog for item:', item.id, item.title);
+    console.log('🗑️ openDeleteDialog called with:', {
+      itemId: item.id,
+      itemTitle: item.title,
+      currentDialogState: deleteDialogOpen,
+      currentSelectedItem: selectedItem,
+      currentSelectedItems: selectedItems
+    });
+    
     setSelectedItem(item);
     setSelectedItems([item.id]);
     setDeleteDialogOpen(true);
+    
+    console.log('🗑️ State should now be updated - verifying...');
+    
+    // Force verification after state update
+    requestAnimationFrame(() => {
+      console.log('🗑️ Dialog state after update:', {
+        deleteDialogOpen,
+        selectedItem,
+        selectedItems
+      });
+    });
   };
 
   const handleBulkDelete = () => {
@@ -405,8 +424,10 @@ export function CardShowDashboard() {
         </Collapsible>
       </div>
 
+      {process.env.NODE_ENV !== 'production' && <OverlayDetector />}
+      
       <div className="rounded-lg border overflow-hidden">
-        <table className="w-full">
+        <table className="w-full card-show-table">
           <thead className="bg-muted">
             <tr>
               <th className="p-3 text-left">
@@ -496,8 +517,8 @@ export function CardShowDashboard() {
                       transactionId={latestSell?.id}
                     />
                   </td>
-                  <td className="p-3 min-w-[240px] relative z-10 pointer-events-auto">
-                    <div className="flex gap-2 justify-end items-center flex-nowrap isolate pointer-events-auto">
+                  <td className="p-3 min-w-[240px] relative z-50 pointer-events-auto">
+                    <div className="flex gap-2 justify-end items-center flex-nowrap relative z-50 pointer-events-auto">
                       <Button 
                         size="sm" 
                         variant="default" 
@@ -531,18 +552,37 @@ export function CardShowDashboard() {
                         size="sm"
                         variant="destructive"
                         onClick={(e) => {
-                          console.log('🖱️ Delete button clicked for item:', item.id);
+                          console.log('🖱️ DELETE BUTTON CLICKED - Event details:', {
+                            target: e.target,
+                            currentTarget: e.currentTarget,
+                            itemId: item.id,
+                            itemTitle: item.title,
+                            timestamp: new Date().toISOString()
+                          });
                           e.preventDefault();
                           e.stopPropagation();
+                          
+                          // Force the dialog open
+                          console.log('📂 Opening delete dialog for:', item.id);
                           openDeleteDialog(item);
+                          
+                          // Verify dialog state after opening
+                          setTimeout(() => {
+                            console.log('📂 Dialog state after open attempt:', {
+                              deleteDialogOpen,
+                              selectedItem,
+                              selectedItems
+                            });
+                          }, 100);
                         }}
                         disabled={deleteCardMutation.isPending}
                         title="Delete item"
                         aria-label={`Delete ${item.title ?? 'item'}`}
                         data-testid={`delete-${item.id}`}
-                        className="hover:opacity-80 flex-shrink-0 pointer-events-auto relative z-20"
+                        className="hover:opacity-80 flex-shrink-0 pointer-events-auto relative z-50 cursor-pointer"
+                        style={{ touchAction: 'none' }}
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="h-4 w-4 pointer-events-none" />
                       </Button>
                       
                       <DropdownMenu>
