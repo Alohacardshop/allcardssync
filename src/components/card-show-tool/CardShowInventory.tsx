@@ -358,7 +358,7 @@ export function CardShowInventory() {
                     </p>
                   )}
 
-                  <div className="flex gap-2 pt-2">
+                  <div className="flex gap-2 pt-2 flex-wrap">
                     <Button
                       onClick={() => sendToMainInventoryMutation.mutate([item.id])}
                       disabled={sendToMainInventoryMutation.isPending}
@@ -366,7 +366,7 @@ export function CardShowInventory() {
                       className="flex-1"
                     >
                       <Send className="h-4 w-4 mr-1" />
-                      To Main Inventory
+                      To Main
                     </Button>
                     <Button
                       onClick={() => returnToAvailableMutation.mutate([item.id])}
@@ -375,6 +375,17 @@ export function CardShowInventory() {
                       size="sm"
                     >
                       Return
+                    </Button>
+                    <Button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedItems([item.id]);
+                        setDeleteDialogOpen(true);
+                      }}
+                      variant="destructive"
+                      size="sm"
+                    >
+                      <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
                 </div>

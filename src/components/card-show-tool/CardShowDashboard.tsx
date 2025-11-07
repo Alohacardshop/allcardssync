@@ -478,7 +478,7 @@ export function CardShowDashboard() {
                     {latestSell ? `$${latestSell.price}` : "-"}
                   </td>
                   <td className="p-3">
-                    <div className="flex gap-1 justify-center flex-wrap relative z-50 pointer-events-auto isolation-auto">
+                    <div className="flex gap-1 justify-center flex-wrap">
                       <Button 
                         size="sm" 
                         variant="default" 
@@ -500,7 +500,7 @@ export function CardShowDashboard() {
                             <MoreVertical className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-48">
+                        <DropdownMenuContent align="end" className="w-48 z-[100]">
                           <DropdownMenuItem onClick={() => openTransactionDialog(item)}>
                             <Plus className="h-4 w-4 mr-2" />
                             Add Show Transaction
