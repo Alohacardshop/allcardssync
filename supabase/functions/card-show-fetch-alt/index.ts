@@ -124,10 +124,33 @@ serve(async (req) => {
       const serviceMatch = section.match(/(PSA|BGS|CGC|SGC)/i);
       const gradingService = serviceMatch ? serviceMatch[1].toUpperCase() : 'PSA';
 
-      // Image URL
-      const imgMatch = section.match(/<img[^>]+src=["']([^"']+(?:card|item|image)[^"']+)["']/i) ||
-                      section.match(/<img[^>]+src=["'](https:\/\/[^"']+\.(jpg|jpeg|png|webp))["']/i);
-      const imageUrl = imgMatch ? imgMatch[1] : null;
+      // Image URL - try multiple patterns
+      const imgMatch = section.match(/<img[^>]+src=["']([^"']+)["'][^>]*>/i);
+      let imageUrl = null;
+      
+      if (imgMatch) {
+        const src = imgMatch[1];
+        // Filter out icons, logos, and very small images
+        if (!src.match(/icon|logo|avatar|button|banner/i) && 
+            (src.match(/card|item|image|product|cert/i) || src.match(/\.(jpg|jpeg|png|webp)/i))) {
+          imageUrl = src.startsWith('http') ? src : `https://app.alt.xyz${src}`;
+        }
+      }
+      
+      // Fallback: Look for any image with common card image patterns
+      if (!imageUrl) {
+        const allImages = section.match(/<img[^>]+src=["']([^"']+)["'][^>]*>/gi) || [];
+        for (const img of allImages) {
+          const srcMatch = img.match(/src=["']([^"']+)["']/i);
+          if (srcMatch) {
+            const src = srcMatch[1];
+            if (src.match(/\.(jpg|jpeg|png|webp)/i) && !src.match(/icon|logo|avatar|button|banner/i)) {
+              imageUrl = src.startsWith('http') ? src : `https://app.alt.xyz${src}`;
+              break;
+            }
+          }
+        }
+      }
 
       // ALT value/price
       const valueMatch = section.match(/\$\s*([\d,]+(?:\.\d{2})?)/);

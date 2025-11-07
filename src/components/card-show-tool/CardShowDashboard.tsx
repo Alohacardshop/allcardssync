@@ -113,12 +113,17 @@ export function CardShowDashboard() {
 
   const deleteCardMutation = useMutation({
     mutationFn: async (itemId: string) => {
+      console.log('[deleteCard] Attempting to delete item:', itemId);
       const { error } = await supabase
         .from("alt_items")
         .delete()
         .eq("id", itemId);
       
-      if (error) throw error;
+      if (error) {
+        console.error('[deleteCard] Delete error:', error);
+        throw error;
+      }
+      console.log('[deleteCard] Successfully deleted item:', itemId);
     },
     onSuccess: () => {
       toast.success("Card deleted successfully");
@@ -127,6 +132,7 @@ export function CardShowDashboard() {
       setSelectedItem(null);
     },
     onError: (error: any) => {
+      console.error('[deleteCard] Mutation error:', error);
       toast.error(error.message || "Failed to delete card");
     },
   });
@@ -373,15 +379,19 @@ export function CardShowDashboard() {
 
               return (
                 <tr key={item.id} className="border-t hover:bg-muted/50">
-                  <td className="p-3">
-                    {item.image_url && (
-                      <img
-                        src={item.image_url}
-                        alt={item.title || "Card"}
-                        className="w-12 h-12 object-cover rounded"
-                      />
-                    )}
-                  </td>
+                   <td className="p-3">
+                     {item.image_url ? (
+                       <img
+                         src={item.image_url}
+                         alt={item.title || "Card"}
+                         className="w-20 h-28 object-contain rounded border"
+                       />
+                     ) : (
+                       <div className="w-20 h-28 flex items-center justify-center bg-muted rounded border text-xs text-muted-foreground">
+                         No Image
+                       </div>
+                     )}
+                   </td>
                   <td className="p-3">
                     <a
                       href={item.alt_url}
@@ -503,9 +513,16 @@ export function CardShowDashboard() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={deleteCardMutation.isPending}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => selectedItem && deleteCardMutation.mutate(selectedItem.id)}
+              onClick={(e) => {
+                e.preventDefault();
+                if (selectedItem?.id) {
+                  console.log('[deleteDialog] Delete button clicked, item id:', selectedItem.id);
+                  deleteCardMutation.mutate(selectedItem.id);
+                }
+              }}
+              disabled={deleteCardMutation.isPending || !selectedItem?.id}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {deleteCardMutation.isPending ? "Deleting..." : "Delete Card"}
