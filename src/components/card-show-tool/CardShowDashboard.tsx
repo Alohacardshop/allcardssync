@@ -123,14 +123,20 @@ export function CardShowDashboard() {
 
   const deleteCardMutation = useMutation({
     mutationFn: async (itemIds: string[]) => {
+      console.log('🗑️ Deleting items:', itemIds);
       const { error } = await supabase
         .from("alt_items")
         .delete()
         .in("id", itemIds);
       
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Delete error:', error);
+        throw error;
+      }
+      console.log('✅ Delete successful');
     },
     onSuccess: () => {
+      console.log('✅ Delete mutation success, invalidating queries');
       toast.success(`${selectedItems.length} item(s) deleted successfully`);
       queryClient.invalidateQueries({ queryKey: ["alt-items"] });
       setDeleteDialogOpen(false);
@@ -138,6 +144,7 @@ export function CardShowDashboard() {
       setSelectedItems([]);
     },
     onError: (error: any) => {
+      console.error('❌ Delete mutation error:', error);
       toast.error(error.message || "Failed to delete card(s)");
     },
   });
@@ -244,6 +251,7 @@ export function CardShowDashboard() {
   };
 
   const openDeleteDialog = (item: any) => {
+    console.log('🗑️ Opening delete dialog for item:', item.id, item.title);
     setSelectedItem(item);
     setSelectedItems([item.id]);
     setDeleteDialogOpen(true);
@@ -523,6 +531,8 @@ export function CardShowDashboard() {
                         size="sm"
                         variant="destructive"
                         onClick={(e) => {
+                          console.log('🖱️ Delete button clicked for item:', item.id);
+                          e.preventDefault();
                           e.stopPropagation();
                           openDeleteDialog(item);
                         }}
@@ -621,7 +631,9 @@ export function CardShowDashboard() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               type="button"
-              onClick={() => {
+              onClick={(e) => {
+                console.log('✅ Confirm delete clicked, deleting items:', selectedItems);
+                e.preventDefault();
                 deleteCardMutation.mutate(selectedItems);
               }}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
