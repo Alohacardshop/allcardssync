@@ -488,8 +488,8 @@ export function CardShowDashboard() {
                       transactionId={latestSell?.id}
                     />
                   </td>
-                  <td className="p-3 min-w-[240px]">
-                    <div className="flex gap-2 justify-end items-center flex-nowrap isolate">
+                  <td className="p-3 min-w-[240px] relative z-10 pointer-events-auto">
+                    <div className="flex gap-2 justify-end items-center flex-nowrap isolate pointer-events-auto">
                       <Button 
                         size="sm" 
                         variant="default" 
@@ -504,27 +504,34 @@ export function CardShowDashboard() {
                         <PackagePlus className="h-4 w-4" />
                       </Button>
                       <Button
+                        type="button"
                         size="sm"
                         variant="outline"
                         onClick={(e) => {
+                          e.preventDefault();
                           e.stopPropagation();
                           openEditDialog(item);
                         }}
-                        title="Edit"
-                        className="hover:bg-accent flex-shrink-0"
+                        title="Edit item"
+                        aria-label="Edit item"
+                        className="hover:bg-accent flex-shrink-0 pointer-events-auto"
                       >
                         <Edit className="h-4 w-4" />
                       </Button>
                       <Button
+                        type="button"
                         size="sm"
                         variant="destructive"
                         onClick={(e) => {
+                          e.preventDefault();
                           e.stopPropagation();
                           openDeleteDialog(item);
                         }}
                         disabled={deleteCardMutation.isPending}
-                        title="Delete"
-                        className="hover:opacity-80 flex-shrink-0"
+                        title="Delete item"
+                        aria-label="Delete item"
+                        data-testid="delete-item-button"
+                        className="hover:opacity-80 flex-shrink-0 pointer-events-auto"
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -532,10 +539,15 @@ export function CardShowDashboard() {
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button 
+                            type="button"
                             size="sm" 
                             variant="outline"
-                            className="hover:bg-accent flex-shrink-0"
-                            onClick={(e) => e.stopPropagation()}
+                            className="hover:bg-accent flex-shrink-0 pointer-events-auto"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                            }}
+                            aria-label="More actions"
                           >
                             <MoreVertical className="h-4 w-4" />
                           </Button>
@@ -609,9 +621,15 @@ export function CardShowDashboard() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => deleteCardMutation.mutate(selectedItems)}
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                deleteCardMutation.mutate(selectedItems);
+              }}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               disabled={deleteCardMutation.isPending}
+              aria-label="Confirm delete"
+              data-testid="confirm-delete-button"
             >
               {deleteCardMutation.isPending ? "Deleting..." : "Delete"}
             </AlertDialogAction>
