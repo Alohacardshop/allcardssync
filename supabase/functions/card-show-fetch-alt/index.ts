@@ -87,117 +87,180 @@ serve(async (req) => {
     const html = await response.text();
     console.log(`[card-show-fetch-alt] Received HTML, length: ${html.length}`);
 
-    // Parse HTML to extract card details
-    // ALT structure typically has:
-    // - Title in h1 or card title element
-    // - Grade badge/label
-    // - Grading service (PSA, BGS, CGC, SGC)
-    // - Image URL
-    // - ALT value/price
-    // - Population data
+    // Parse HTML to extract multiple cards
+    const cards = [];
     
-    // Simple regex-based parsing (you may need to adjust based on ALT's actual HTML structure)
-    const titleMatch = html.match(/<h1[^>]*>([^<]+)<\/h1>/i) || 
-                      html.match(/class="[^"]*card[_-]?title[^"]*"[^>]*>([^<]+)</i);
-    const title = titleMatch ? titleMatch[1].trim() : `Card ${certNumber}`;
+    // Strategy 1: Look for multiple card containers (div with card-related classes)
+    const cardContainerRegex = /<div[^>]*class="[^"]*(?:card|item|result)[^"]*"[^>]*>[\s\S]*?<\/div>/gi;
+    const containers = html.match(cardContainerRegex) || [];
+    
+    // Strategy 2: If no containers found, parse entire HTML as single card
+    const htmlSections = containers.length > 0 ? containers : [html];
+    
+    console.log(`[card-show-fetch-alt] Found ${htmlSections.length} potential card section(s)`);
+    
+    for (let i = 0; i < htmlSections.length; i++) {
+      const section = htmlSections[i];
+      
+      // Extract card details from this section
+      const titleMatch = section.match(/<h[1-6][^>]*>([^<]+)<\/h[1-6]>/i) || 
+                        section.match(/class="[^"]*(?:card|item)[_-]?title[^"]*"[^>]*>([^<]+)</i) ||
+                        section.match(/>([^<]{10,100})</); // Fallback: any text 10-100 chars
+      const title = titleMatch ? titleMatch[1].trim() : `Card ${certNumber}-${i + 1}`;
+      
+      // Skip if title looks like navigation or header text
+      if (title.match(/^(home|back|search|menu|cart|login|sign|filter)/i)) {
+        continue;
+      }
 
-    // Grade extraction - look for grade badge or label
-    const gradeMatch = html.match(/grade["\s:]+(\d+(?:\.\d+)?)/i) ||
-                      html.match(/>\s*(\d+(?:\.\d+)?)\s*<\/.*grade/i);
-    const grade = gradeMatch ? gradeMatch[1] : null;
+      // Grade extraction
+      const gradeMatch = section.match(/grade["\s:]+(\d+(?:\.\d+)?)/i) ||
+                        section.match(/>\s*(\d+(?:\.\d+)?)\s*<\/.*grade/i) ||
+                        section.match(/\b(\d+(?:\.\d)?)\s*PSA\b/i) ||
+                        section.match(/\bPSA\s*(\d+(?:\.\d)?)\b/i);
+      const grade = gradeMatch ? gradeMatch[1] : null;
 
-    // Grading service - PSA, BGS, CGC, SGC
-    const serviceMatch = html.match(/(PSA|BGS|CGC|SGC)/i);
-    const gradingService = serviceMatch ? serviceMatch[1].toUpperCase() : 'PSA';
+      // Grading service
+      const serviceMatch = section.match(/(PSA|BGS|CGC|SGC)/i);
+      const gradingService = serviceMatch ? serviceMatch[1].toUpperCase() : 'PSA';
 
-    // Image URL
-    const imgMatch = html.match(/<img[^>]+src=["']([^"']+card[^"']+)["']/i) ||
-                    html.match(/<img[^>]+src=["'](https:\/\/[^"']+\.(jpg|jpeg|png|webp))["']/i);
-    const imageUrl = imgMatch ? imgMatch[1] : null;
+      // Image URL
+      const imgMatch = section.match(/<img[^>]+src=["']([^"']+(?:card|item|image)[^"']+)["']/i) ||
+                      section.match(/<img[^>]+src=["'](https:\/\/[^"']+\.(jpg|jpeg|png|webp))["']/i);
+      const imageUrl = imgMatch ? imgMatch[1] : null;
 
-    // ALT value/price
-    const valueMatch = html.match(/\$\s*([\d,]+(?:\.\d{2})?)/);
-    const altValue = valueMatch ? parseFloat(valueMatch[1].replace(/,/g, '')) : null;
+      // ALT value/price
+      const valueMatch = section.match(/\$\s*([\d,]+(?:\.\d{2})?)/);
+      const altValue = valueMatch ? parseFloat(valueMatch[1].replace(/,/g, '')) : null;
 
-    // Set name extraction
-    const setMatch = html.match(/set["\s:]+([^<"]+)/i) ||
-                    html.match(/series["\s:]+([^<"]+)/i);
-    const setName = setMatch ? setMatch[1].trim() : null;
+      // Set name extraction
+      const setMatch = section.match(/set["\s:]+([^<"]{3,50})/i) ||
+                      section.match(/series["\s:]+([^<"]{3,50})/i);
+      const setName = setMatch ? setMatch[1].trim() : null;
 
-    // Population
-    const popMatch = html.match(/population["\s:]+(\d+)/i);
-    const population = popMatch ? parseInt(popMatch[1]) : null;
+      // Population
+      const popMatch = section.match(/population["\s:]+(\d+)/i) ||
+                      section.match(/pop["\s:]+(\d+)/i);
+      const population = popMatch ? parseInt(popMatch[1]) : null;
+      
+      // Only add cards that have meaningful data
+      if (grade || altValue || imageUrl) {
+        cards.push({
+          title,
+          grade,
+          grading_service: gradingService,
+          set_name: setName,
+          image_url: imageUrl,
+          alt_value: altValue,
+          population,
+        });
+      }
+    }
+    
+    // If no cards parsed, create a default one with whatever we can extract
+    if (cards.length === 0) {
+      const titleMatch = html.match(/<h1[^>]*>([^<]+)<\/h1>/i);
+      const gradeMatch = html.match(/\b(\d+(?:\.\d)?)\b/);
+      const serviceMatch = html.match(/(PSA|BGS|CGC|SGC)/i);
+      
+      cards.push({
+        title: titleMatch ? titleMatch[1].trim() : `Card ${certNumber}`,
+        grade: gradeMatch ? gradeMatch[1] : null,
+        grading_service: serviceMatch ? serviceMatch[1].toUpperCase() : 'PSA',
+        set_name: null,
+        image_url: null,
+        alt_value: null,
+        population: null,
+      });
+    }
 
-    console.log(`[card-show-fetch-alt] Parsed: ${title}, ${gradingService} ${grade}, $${altValue}`);
+    console.log(`[card-show-fetch-alt] Parsed ${cards.length} card(s)`);
 
-    // Save to alt_items table
-    const altItemData = {
-      alt_uuid: certNumber, // Using cert number as unique identifier
-      alt_url: altUrl,
-      title: title,
-      grade: grade,
-      grading_service: gradingService,
-      set_name: setName,
-      image_url: imageUrl,
-      alt_value: altValue,
-      population: population,
-      alt_checked_at: new Date().toISOString(),
-    };
+    // Save all cards to alt_items table
+    const savedCards = [];
+    
+    for (const cardData of cards) {
+      // Create unique identifier using cert number + title hash to avoid conflicts
+      const titleHash = cardData.title.substring(0, 20).replace(/[^a-zA-Z0-9]/g, '');
+      const uniqueId = `${certNumber}-${titleHash}`;
+      
+      const altItemData = {
+        alt_uuid: uniqueId,
+        alt_url: altUrl,
+        title: cardData.title,
+        grade: cardData.grade,
+        grading_service: cardData.grading_service,
+        set_name: cardData.set_name,
+        image_url: cardData.image_url,
+        alt_value: cardData.alt_value,
+        population: cardData.population,
+        alt_checked_at: new Date().toISOString(),
+      };
 
-    const { data: altItem, error: insertError } = await supabaseClient
-      .from('alt_items')
-      .upsert(altItemData, { onConflict: 'alt_uuid' })
-      .select()
-      .single();
+      const { data: altItem, error: insertError } = await supabaseClient
+        .from('alt_items')
+        .upsert(altItemData, { onConflict: 'alt_uuid' })
+        .select()
+        .single();
 
-    if (insertError) {
-      console.error('[card-show-fetch-alt] Error saving to alt_items:', insertError);
-      return new Response(JSON.stringify({ error: insertError.message }), {
+      if (insertError) {
+        console.warn(`[card-show-fetch-alt] Error saving card "${cardData.title}":`, insertError.message);
+      } else {
+        savedCards.push(altItem);
+      }
+    }
+    
+    if (savedCards.length === 0) {
+      console.error('[card-show-fetch-alt] No cards were saved successfully');
+      return new Response(JSON.stringify({ error: 'Failed to save any cards' }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // If defaults were provided (buy/sell prices), create transactions
+    // If defaults were provided (buy/sell prices), create transactions for all cards
     if (defaults?.buy || defaults?.sell) {
-      const transactions = [];
-      
-      if (defaults.buy) {
-        transactions.push({
-          alt_item_id: altItem.id,
-          show_id: defaults.buy.showId,
-          txn_type: 'BUY',
-          price: defaults.buy.price,
-          txn_date: new Date().toISOString(),
-        });
-      }
-      
-      if (defaults.sell) {
-        transactions.push({
-          alt_item_id: altItem.id,
-          show_id: defaults.sell.showId,
-          txn_type: 'SELL',
-          price: defaults.sell.price,
-          txn_date: new Date().toISOString(),
-        });
-      }
-
-      if (transactions.length > 0) {
-        const { error: txnError } = await supabaseClient
-          .from('card_transactions')
-          .insert(transactions);
+      for (const altItem of savedCards) {
+        const transactions = [];
         
-        if (txnError) {
-          console.warn('[card-show-fetch-alt] Error saving transactions:', txnError);
+        if (defaults.buy) {
+          transactions.push({
+            alt_item_id: altItem.id,
+            show_id: defaults.buy.showId,
+            txn_type: 'BUY',
+            price: defaults.buy.price,
+            txn_date: new Date().toISOString(),
+          });
+        }
+        
+        if (defaults.sell) {
+          transactions.push({
+            alt_item_id: altItem.id,
+            show_id: defaults.sell.showId,
+            txn_type: 'SELL',
+            price: defaults.sell.price,
+            txn_date: new Date().toISOString(),
+          });
+        }
+
+        if (transactions.length > 0) {
+          const { error: txnError } = await supabaseClient
+            .from('card_transactions')
+            .insert(transactions);
+          
+          if (txnError) {
+            console.warn(`[card-show-fetch-alt] Error saving transactions for item ${altItem.id}:`, txnError);
+          }
         }
       }
     }
 
-    console.log(`[card-show-fetch-alt] Successfully saved card ${certNumber}`);
+    console.log(`[card-show-fetch-alt] Successfully saved ${savedCards.length} card(s) for cert ${certNumber}`);
 
     return new Response(JSON.stringify({ 
       success: true,
-      card: altItem
+      cards: savedCards,
+      count: savedCards.length
     }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

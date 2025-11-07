@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +14,8 @@ export function CardShowAddByCert() {
   const [buyPrice, setBuyPrice] = useState("");
   const [sellPrice, setSellPrice] = useState("");
   const [selectedShowId, setSelectedShowId] = useState("");
-  const [result, setResult] = useState<any>(null);
+  const [results, setResults] = useState<any[]>([]);
+  const queryClient = useQueryClient();
 
   const { data: shows } = useQuery({
     queryKey: ["shows"],
@@ -45,12 +46,13 @@ export function CardShowAddByCert() {
       return data;
     },
     onSuccess: (data) => {
-      setResult(data.card);
-      toast.success("Card fetched successfully from ALT!");
+      setResults(data.cards || []);
+      toast.success(`Found ${data.count || 0} card(s) from ALT!`);
+      queryClient.invalidateQueries({ queryKey: ["alt-items"] });
     },
     onError: (error: any) => {
       toast.error(error.message || "Failed to lookup certificate");
-      setResult(null);
+      setResults([]);
     },
   });
 
@@ -144,55 +146,73 @@ export function CardShowAddByCert() {
         </Button>
       </div>
 
-      {result && (
-        <div className="rounded-lg border p-6 space-y-4 bg-card">
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <h3 className="text-xl font-semibold mb-2">{result.title}</h3>
-              <div className="flex items-center gap-2 mb-2">
-                <Badge className={getGradeBadgeColor(result.grade || "0")}>
-                  {result.grading_service} {result.grade}
-                </Badge>
-                {result.set_name && <Badge variant="outline">{result.set_name}</Badge>}
-              </div>
-              {result.population && (
-                <p className="text-sm text-muted-foreground">
-                  Population: {result.population}
-                </p>
-              )}
-              {result.alt_value && (
-                <p className="text-lg font-semibold mt-2 text-success">
-                  ALT Value: ${result.alt_value.toFixed(2)}
-                </p>
-              )}
-              <p className="text-xs text-muted-foreground mt-2">
-                Last checked: {new Date(result.alt_checked_at).toLocaleString()}
-              </p>
-            </div>
-            {result.image_url && (
-              <img
-                src={result.image_url}
-                alt={result.title}
-                className="w-32 h-auto rounded border"
-              />
-            )}
-          </div>
-
-          {result.alt_url && (
-            <a
-              href={result.alt_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
-            >
-              View on ALT <ExternalLink className="h-3 w-3" />
-            </a>
-          )}
-
+      {results.length > 0 && (
+        <div className="space-y-4">
           <div className="status-success p-4 rounded">
             <p className="text-sm">
-              ✓ Card details fetched and saved! Go to Dashboard to review and send to inventory.
+              ✓ {results.length} card(s) fetched and saved! Go to Dashboard to review and send to inventory.
             </p>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            {results.map((card, index) => (
+              <div key={index} className="rounded-lg border p-6 space-y-4 bg-card">
+                <div className="flex items-start gap-4">
+                  {card.image_url && (
+                    <img
+                      src={card.image_url}
+                      alt={card.title}
+                      className="w-24 h-32 object-contain rounded border"
+                    />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-lg font-semibold mb-2 truncate">{card.title}</h3>
+                    <div className="flex items-center gap-2 mb-2 flex-wrap">
+                      {card.grading_service && (
+                        <Badge variant="secondary">{card.grading_service}</Badge>
+                      )}
+                      {card.grade && (
+                        <Badge className={getGradeBadgeColor(card.grade)}>
+                          Grade {card.grade}
+                        </Badge>
+                      )}
+                    </div>
+                    {card.set_name && (
+                      <Badge variant="outline" className="mb-2">{card.set_name}</Badge>
+                    )}
+                  </div>
+                </div>
+                
+                <div className="space-y-1">
+                  {card.alt_value && (
+                    <p className="text-lg font-semibold text-success">
+                      ALT Value: ${card.alt_value.toFixed(2)}
+                    </p>
+                  )}
+                  {card.population && (
+                    <p className="text-sm text-muted-foreground">
+                      Population: {card.population}
+                    </p>
+                  )}
+                  {card.alt_checked_at && (
+                    <p className="text-xs text-muted-foreground">
+                      Last checked: {new Date(card.alt_checked_at).toLocaleString()}
+                    </p>
+                  )}
+                </div>
+
+                {card.alt_url && (
+                  <a
+                    href={card.alt_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+                  >
+                    View on ALT <ExternalLink className="h-3 w-3" />
+                  </a>
+                )}
+              </div>
+            ))}
           </div>
         </div>
       )}
