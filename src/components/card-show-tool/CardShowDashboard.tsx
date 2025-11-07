@@ -244,11 +244,9 @@ export function CardShowDashboard() {
   };
 
   const openDeleteDialog = (item: any) => {
-    console.log("Opening delete dialog for item:", item.id);
     setSelectedItem(item);
     setSelectedItems([item.id]);
     setDeleteDialogOpen(true);
-    console.log("Delete dialog state set to true");
   };
 
   const handleBulkDelete = () => {
@@ -526,7 +524,6 @@ export function CardShowDashboard() {
                         variant="destructive"
                         onClick={(e) => {
                           e.stopPropagation();
-                          console.log("Delete button clicked for item:", item.id);
                           openDeleteDialog(item);
                         }}
                         disabled={deleteCardMutation.isPending}
@@ -625,7 +622,6 @@ export function CardShowDashboard() {
             <AlertDialogAction
               type="button"
               onClick={() => {
-                console.log("Confirm delete clicked, deleting items:", selectedItems);
                 deleteCardMutation.mutate(selectedItems);
               }}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
