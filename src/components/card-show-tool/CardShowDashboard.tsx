@@ -427,7 +427,7 @@ export function CardShowDashboard() {
                     {latestSell ? `$${latestSell.price}` : "-"}
                   </td>
                   <td className="p-3">
-                    <div className="flex gap-1 justify-center flex-wrap">
+                    <div className="flex gap-1 justify-center flex-wrap relative z-10">
                       <Button 
                         size="sm" 
                         variant="default" 
@@ -463,18 +463,14 @@ export function CardShowDashboard() {
                       >
                         <RefreshCw className="h-4 w-4" />
                       </Button>
-                       <Button 
-                        type="button"
+                      <Button 
                         size="icon" 
-                        variant="outline" 
-                        onClick={(e) => {
+                        variant="destructive" 
+                        onClick={() => {
                           console.log('[Delete Button] Clicked for item:', item.id, item.title);
-                          e.stopPropagation();
-                          e.preventDefault();
                           openDeleteDialog(item);
                         }}
                         title="Delete Card"
-                        className="text-destructive hover:text-destructive-foreground hover:bg-destructive border-destructive"
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
