@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { RefreshCw, Send, Package, Search, X, Trash2 } from "lucide-react";
+import { RefreshCw, Send, Package, Search, X, Trash2, Edit } from "lucide-react";
 import { toast } from "sonner";
+import { EditablePriceCell } from "./EditablePriceCell";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   AlertDialog,
@@ -27,13 +28,21 @@ export function CardShowInventory() {
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
-  // Fetch show inventory items (status = 'in_show_inventory')
+  // Fetch show inventory items (status = 'in_show_inventory') with transactions
   const { data: items = [], isLoading, refetch } = useQuery({
     queryKey: ['alt_items', 'show_inventory'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('alt_items')
-        .select('*')
+        .select(`
+          *,
+          card_transactions(
+            id,
+            txn_type,
+            price,
+            txn_date
+          )
+        `)
         .eq('status', 'in_show_inventory')
         .order('created_at', { ascending: false });
       
@@ -41,6 +50,13 @@ export function CardShowInventory() {
       return data || [];
     },
   });
+
+  const getLatestTransaction = (transactions: any[], type: "BUY" | "SELL") => {
+    const filtered = transactions?.filter((t: any) => t.txn_type === type) || [];
+    return filtered.sort((a: any, b: any) => 
+      new Date(b.txn_date).getTime() - new Date(a.txn_date).getTime()
+    )[0];
+  };
 
   // Send to main inventory mutation
   const sendToMainInventoryMutation = useMutation({
@@ -340,7 +356,7 @@ export function CardShowInventory() {
                   />
                 )}
                 
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <h3 className="font-semibold line-clamp-2">{item.title || 'Untitled'}</h3>
                   
                   <div className="flex items-center gap-2 flex-wrap">
@@ -353,12 +369,36 @@ export function CardShowInventory() {
                   </div>
 
                   {item.alt_value && (
-                    <p className="text-lg font-bold text-primary">
-                      ${Number(item.alt_value).toFixed(2)}
-                    </p>
+                    <div className="text-sm">
+                      <span className="text-muted-foreground">ALT Value: </span>
+                      <span className="font-bold text-primary">
+                        ${Number(item.alt_value).toFixed(2)}
+                      </span>
+                    </div>
                   )}
 
-                  <div className="flex gap-2 pt-2 flex-wrap">
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div>
+                      <span className="text-muted-foreground block mb-1">Buy:</span>
+                      <EditablePriceCell
+                        itemId={item.id}
+                        currentPrice={getLatestTransaction(item.card_transactions, "BUY")?.price || null}
+                        transactionType="BUY"
+                        transactionId={getLatestTransaction(item.card_transactions, "BUY")?.id}
+                      />
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground block mb-1">Sell:</span>
+                      <EditablePriceCell
+                        itemId={item.id}
+                        currentPrice={getLatestTransaction(item.card_transactions, "SELL")?.price || null}
+                        transactionType="SELL"
+                        transactionId={getLatestTransaction(item.card_transactions, "SELL")?.id}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 pt-2">
                     <Button
                       onClick={() => sendToMainInventoryMutation.mutate([item.id])}
                       disabled={sendToMainInventoryMutation.isPending}
@@ -374,7 +414,7 @@ export function CardShowInventory() {
                       variant="outline"
                       size="sm"
                     >
-                      Return
+                      <RefreshCw className="h-4 w-4" />
                     </Button>
                     <Button
                       onClick={(e) => {

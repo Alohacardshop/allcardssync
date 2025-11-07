@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { CardShowTransactionDialog } from "./CardShowTransactionDialog";
 import { CardShowEditDialog } from "./CardShowEditDialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { EditablePriceCell } from "./EditablePriceCell";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -412,8 +413,8 @@ export function CardShowDashboard() {
               <th className="p-3 text-left">Title</th>
               <th className="p-3 text-left">Grade</th>
               <th className="p-3 text-right">ALT Value</th>
-              <th className="p-3 text-right">Latest Buy</th>
-              <th className="p-3 text-right">Latest Sell</th>
+              <th className="p-3 text-right">Buy</th>
+              <th className="p-3 text-right">Sell</th>
               <th className="p-3 text-center">Actions</th>
             </tr>
           </thead>
@@ -472,10 +473,20 @@ export function CardShowDashboard() {
                     )}
                   </td>
                   <td className="p-3 text-right">
-                    {latestBuy ? `$${latestBuy.price}` : "-"}
+                    <EditablePriceCell
+                      itemId={item.id}
+                      currentPrice={latestBuy?.price || null}
+                      transactionType="BUY"
+                      transactionId={latestBuy?.id}
+                    />
                   </td>
                   <td className="p-3 text-right">
-                    {latestSell ? `$${latestSell.price}` : "-"}
+                    <EditablePriceCell
+                      itemId={item.id}
+                      currentPrice={latestSell?.price || null}
+                      transactionType="SELL"
+                      transactionId={latestSell?.id}
+                    />
                   </td>
                   <td className="p-3">
                     <div className="flex gap-1 justify-center flex-wrap">
@@ -486,14 +497,29 @@ export function CardShowDashboard() {
                         disabled={sendToShowInventoryMutation.isPending}
                         title="Send to Show Inventory"
                       >
-                        <PackagePlus className="h-4 w-4 mr-1" />
-                        To Show Inventory
+                        <PackagePlus className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => openEditDialog(item)}
+                        title="Edit"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => openDeleteDialog(item)}
+                        title="Delete"
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
                       
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button 
-                            size="icon" 
+                            size="sm" 
                             variant="ghost"
                             className="relative z-50"
                           >
@@ -503,11 +529,7 @@ export function CardShowDashboard() {
                         <DropdownMenuContent align="end" className="w-48 z-[100]">
                           <DropdownMenuItem onClick={() => openTransactionDialog(item)}>
                             <Plus className="h-4 w-4 mr-2" />
-                            Add Show Transaction
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => openEditDialog(item)}>
-                            <Edit className="h-4 w-4 mr-2" />
-                            Edit Show Values
+                            Add Transaction
                           </DropdownMenuItem>
                           <DropdownMenuItem 
                             onClick={() => handleRefreshFromAlt(item)}
@@ -515,17 +537,6 @@ export function CardShowDashboard() {
                           >
                             <RefreshCw className="h-4 w-4 mr-2" />
                             Refresh from ALT
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem 
-                            onClick={() => {
-                              console.log('[Delete Menu] Clicked for item:', item.id, item.title);
-                              openDeleteDialog(item);
-                            }}
-                            className="text-destructive focus:text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Delete Card
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
