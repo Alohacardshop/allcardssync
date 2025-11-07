@@ -113,17 +113,55 @@ export function CardShowDashboard() {
 
   const deleteCardMutation = useMutation({
     mutationFn: async (itemId: string) => {
+      console.log('=== DELETE CARD DEBUG START ===');
       console.log('[deleteCard] Attempting to delete item:', itemId);
-      const { error } = await supabase
+      
+      // Check authentication
+      const { data: { session } } = await supabase.auth.getSession();
+      console.log('[deleteCard] Current user:', session?.user?.id);
+      console.log('[deleteCard] User email:', session?.user?.email);
+      
+      if (!session?.user) {
+        throw new Error('You must be logged in to delete cards');
+      }
+      
+      // Check user role
+      const { data: userRoles, error: roleError } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', session.user.id);
+      
+      console.log('[deleteCard] User roles:', userRoles);
+      console.log('[deleteCard] Role check error:', roleError);
+      
+      // Attempt delete
+      console.log('[deleteCard] Executing delete query...');
+      const { data, error, status, statusText } = await supabase
         .from("alt_items")
         .delete()
-        .eq("id", itemId);
+        .eq("id", itemId)
+        .select();
+      
+      console.log('[deleteCard] Delete response:', { data, error, status, statusText });
       
       if (error) {
-        console.error('[deleteCard] Delete error:', error);
+        console.error('[deleteCard] Delete failed with error:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code,
+        });
+        
+        // Provide helpful error messages
+        if (error.code === 'PGRST301' || error.message.includes('row-level security')) {
+          throw new Error(`Permission denied: You need staff or admin role to delete cards. Current roles: ${userRoles?.map(r => r.role).join(', ') || 'none'}`);
+        }
+        
         throw error;
       }
+      
       console.log('[deleteCard] Successfully deleted item:', itemId);
+      console.log('=== DELETE CARD DEBUG END ===');
     },
     onSuccess: () => {
       toast.success("Card deleted successfully");
@@ -133,7 +171,9 @@ export function CardShowDashboard() {
     },
     onError: (error: any) => {
       console.error('[deleteCard] Mutation error:', error);
-      toast.error(error.message || "Failed to delete card");
+      toast.error(error.message || "Failed to delete card", {
+        description: "Check console for detailed error information"
+      });
     },
   });
 
