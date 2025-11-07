@@ -31,18 +31,18 @@ export default function CardShowTool() {
   return (
     <div className="container mx-auto p-6">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold text-foreground">Card Show Tool</h1>
-        <p className="text-muted-foreground">Manage card show inventory and transactions</p>
+        <h1 className="text-3xl font-bold text-foreground">Show Tools</h1>
+        <p className="text-muted-foreground">Manage show inventory, transactions, and locations</p>
       </div>
 
       <Tabs defaultValue="dashboard" className="w-full">
         <TabsList className={`grid w-full ${isAdmin ? 'grid-cols-8' : 'grid-cols-7'}`}>
-          <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
+          <TabsTrigger value="dashboard">Show Dashboard</TabsTrigger>
           <TabsTrigger value="lookup">Lookup Cert</TabsTrigger>
           <TabsTrigger value="add">Add Items</TabsTrigger>
-          <TabsTrigger value="transactions">Transactions</TabsTrigger>
-          <TabsTrigger value="shows">Shows</TabsTrigger>
-          <TabsTrigger value="locations">Locations</TabsTrigger>
+          <TabsTrigger value="transactions">Show Transactions</TabsTrigger>
+          <TabsTrigger value="shows">Manage Shows</TabsTrigger>
+          <TabsTrigger value="locations">Show Locations</TabsTrigger>
           {isAdmin && <TabsTrigger value="sessions">Sessions</TabsTrigger>}
           <TabsTrigger value="settings">Settings</TabsTrigger>
         </TabsList>

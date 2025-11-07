@@ -69,8 +69,8 @@ serve(async (req) => {
     
     console.log(`[card-show-fetch-alt] Fetching cert ${certNumber} from ALT via ScrapingBee`);
 
-    // Call ScrapingBee to render the page
-    const scrapingBeeUrl = `https://app.scrapingbee.com/api/v1/?api_key=${scrapingBeeKey}&url=${encodeURIComponent(altUrl)}&render_js=true&premium_proxy=true&country_code=us`;
+    // Call ScrapingBee with longer wait time for images to load
+    const scrapingBeeUrl = `https://app.scrapingbee.com/api/v1/?api_key=${scrapingBeeKey}&url=${encodeURIComponent(altUrl)}&render_js=true&premium_proxy=true&country_code=us&wait=5000&wait_for=.card-image,img,.product-image`;
     
     const response = await fetch(scrapingBeeUrl);
     
@@ -124,20 +124,54 @@ serve(async (req) => {
       const serviceMatch = section.match(/(PSA|BGS|CGC|SGC)/i);
       const gradingService = serviceMatch ? serviceMatch[1].toUpperCase() : 'PSA';
 
-      // Image URL - try multiple patterns
-      const imgMatch = section.match(/<img[^>]+src=["']([^"']+)["'][^>]*>/i);
+      // Image URL - try multiple patterns (img tags, CSS background-image, srcset)
       let imageUrl = null;
       
+      // Strategy 1: Look for img tags with src
+      const imgMatch = section.match(/<img[^>]+src=["']([^"']+)["'][^>]*>/i);
       if (imgMatch) {
         const src = imgMatch[1];
-        // Filter out icons, logos, and very small images
         if (!src.match(/icon|logo|avatar|button|banner/i) && 
             (src.match(/card|item|image|product|cert/i) || src.match(/\.(jpg|jpeg|png|webp)/i))) {
           imageUrl = src.startsWith('http') ? src : `https://app.alt.xyz${src}`;
         }
       }
       
-      // Fallback: Look for any image with common card image patterns
+      // Strategy 2: Look for CSS background-image
+      if (!imageUrl) {
+        const bgMatch = section.match(/background-image:\s*url\(['"]?([^'")\s]+)['"]?\)/i);
+        if (bgMatch) {
+          const src = bgMatch[1];
+          if (!src.match(/icon|logo|avatar|button|banner/i)) {
+            imageUrl = src.startsWith('http') ? src : `https://app.alt.xyz${src}`;
+          }
+        }
+      }
+      
+      // Strategy 3: Look for srcset attributes
+      if (!imageUrl) {
+        const srcsetMatch = section.match(/srcset=["']([^"']+)["']/i);
+        if (srcsetMatch) {
+          const srcset = srcsetMatch[1];
+          const firstSrc = srcset.split(',')[0].trim().split(' ')[0];
+          if (firstSrc && !firstSrc.match(/icon|logo|avatar|button|banner/i)) {
+            imageUrl = firstSrc.startsWith('http') ? firstSrc : `https://app.alt.xyz${firstSrc}`;
+          }
+        }
+      }
+      
+      // Strategy 4: Look for picture elements
+      if (!imageUrl) {
+        const pictureMatch = section.match(/<picture[^>]*>[\s\S]*?<source[^>]+srcset=["']([^"']+)["']/i);
+        if (pictureMatch) {
+          const src = pictureMatch[1].split(',')[0].trim().split(' ')[0];
+          if (src && !src.match(/icon|logo|avatar|button|banner/i)) {
+            imageUrl = src.startsWith('http') ? src : `https://app.alt.xyz${src}`;
+          }
+        }
+      }
+      
+      // Strategy 5: Fallback - any image with card-like patterns
       if (!imageUrl) {
         const allImages = section.match(/<img[^>]+src=["']([^"']+)["'][^>]*>/gi) || [];
         for (const img of allImages) {
@@ -150,6 +184,13 @@ serve(async (req) => {
             }
           }
         }
+      }
+      
+      // Log image detection results for debugging
+      if (imageUrl) {
+        console.log(`[card-show-fetch-alt] Found image for cert ${certNumber}: ${imageUrl}`);
+      } else {
+        console.log(`[card-show-fetch-alt] No image found for cert ${certNumber} in section`);
       }
 
       // ALT value/price

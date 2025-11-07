@@ -157,7 +157,7 @@ export function NavigationBar() {
 
   // Tools menu items
   const toolsMenuItems = [
-    { to: '/tools/card-show-tool', label: 'Card Show Tool' },
+    { to: '/tools/card-show-tool', label: 'Show Tools' },
   ];
 
   return (
