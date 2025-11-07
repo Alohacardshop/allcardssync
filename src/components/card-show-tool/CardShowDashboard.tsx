@@ -488,14 +488,18 @@ export function CardShowDashboard() {
                       transactionId={latestSell?.id}
                     />
                   </td>
-                  <td className="p-3 relative z-10">
-                    <div className="flex gap-1 justify-end items-center">
+                  <td className="p-3">
+                    <div className="flex gap-2 justify-end items-center flex-nowrap">
                       <Button 
                         size="sm" 
                         variant="default" 
-                        onClick={() => sendToShowInventoryMutation.mutate(item)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          sendToShowInventoryMutation.mutate(item);
+                        }}
                         disabled={sendToShowInventoryMutation.isPending}
                         title="Send to Show Inventory"
+                        className="flex-shrink-0"
                       >
                         <PackagePlus className="h-4 w-4" />
                       </Button>
@@ -507,7 +511,7 @@ export function CardShowDashboard() {
                           openEditDialog(item);
                         }}
                         title="Edit"
-                        className="hover:bg-accent"
+                        className="hover:bg-accent flex-shrink-0"
                       >
                         <Edit className="h-4 w-4" />
                       </Button>
@@ -520,7 +524,7 @@ export function CardShowDashboard() {
                         }}
                         disabled={deleteCardMutation.isPending}
                         title="Delete"
-                        className="hover:opacity-80"
+                        className="hover:opacity-80 flex-shrink-0"
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -530,13 +534,13 @@ export function CardShowDashboard() {
                           <Button 
                             size="sm" 
                             variant="outline"
-                            className="relative z-50 hover:bg-accent"
+                            className="hover:bg-accent flex-shrink-0"
                             onClick={(e) => e.stopPropagation()}
                           >
                             <MoreVertical className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-48 z-[100] bg-popover">
+                        <DropdownMenuContent align="end" className="w-48 bg-popover border shadow-lg">
                           <DropdownMenuItem onClick={() => openTransactionDialog(item)}>
                             <Plus className="h-4 w-4 mr-2" />
                             Add Transaction
