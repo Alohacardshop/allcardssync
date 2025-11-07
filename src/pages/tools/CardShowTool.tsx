@@ -4,6 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CardShowDashboard } from "@/components/card-show-tool/CardShowDashboard";
 import { CardShowAddByCert } from "@/components/card-show-tool/CardShowAddByCert";
 import { CardShowAddItems } from "@/components/card-show-tool/CardShowAddItems";
+import { CardShowInventory } from "@/components/card-show-tool/CardShowInventory";
 import { CardShowShows } from "@/components/card-show-tool/CardShowShows";
 import { CardShowLocations } from "@/components/card-show-tool/CardShowLocations";
 import { CardShowTransactions } from "@/components/card-show-tool/CardShowTransactions";
@@ -36,10 +37,11 @@ export default function CardShowTool() {
       </div>
 
       <Tabs defaultValue="dashboard" className="w-full">
-        <TabsList className={`grid w-full ${isAdmin ? 'grid-cols-8' : 'grid-cols-7'}`}>
+        <TabsList className={`grid w-full ${isAdmin ? 'grid-cols-9' : 'grid-cols-8'}`}>
           <TabsTrigger value="dashboard">Show Dashboard</TabsTrigger>
           <TabsTrigger value="lookup">Lookup Cert</TabsTrigger>
           <TabsTrigger value="add">Add Items</TabsTrigger>
+          <TabsTrigger value="inventory">Show Inventory</TabsTrigger>
           <TabsTrigger value="transactions">Show Transactions</TabsTrigger>
           <TabsTrigger value="shows">Manage Shows</TabsTrigger>
           <TabsTrigger value="locations">Show Locations</TabsTrigger>
@@ -57,6 +59,10 @@ export default function CardShowTool() {
 
         <TabsContent value="add" className="mt-6">
           <CardShowAddItems />
+        </TabsContent>
+
+        <TabsContent value="inventory" className="mt-6">
+          <CardShowInventory />
         </TabsContent>
 
         <TabsContent value="transactions" className="mt-6">

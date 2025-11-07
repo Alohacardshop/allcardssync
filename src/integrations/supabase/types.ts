@@ -52,6 +52,7 @@ export type Database = {
           image_url: string | null
           population: string | null
           set_name: string | null
+          status: string | null
           title: string | null
           updated_at: string | null
           year: string | null
@@ -69,6 +70,7 @@ export type Database = {
           image_url?: string | null
           population?: string | null
           set_name?: string | null
+          status?: string | null
           title?: string | null
           updated_at?: string | null
           year?: string | null
@@ -86,6 +88,7 @@ export type Database = {
           image_url?: string | null
           population?: string | null
           set_name?: string | null
+          status?: string | null
           title?: string | null
           updated_at?: string | null
           year?: string | null

@@ -69,6 +69,7 @@ export function CardShowDashboard() {
             shows(name)
           )
         `)
+        .eq("status", "available")
         .order("created_at", { ascending: false });
 
       if (searchTerm) {
@@ -186,34 +187,19 @@ export function CardShowDashboard() {
 
   const sendToShowInventoryMutation = useMutation({
     mutationFn: async (item: any) => {
-      // Map alt_items fields to intake_items fields
-      const intakeData = {
-        brand_title: item.set_name || item.title,
-        subject: item.title,
-        year: item.year,
-        card_number: item.alt_uuid, // Using cert number as card number
-        grade: item.grade,
-        grading_company: item.grading_service || 'PSA',
-        type: 'Graded',
-        price: item.alt_value,
-        image_urls: item.image_url ? [item.image_url] : null,
-        psa_cert: item.grading_service === 'PSA' ? item.alt_uuid : null,
-        cgc_cert: item.grading_service === 'CGC' ? item.alt_uuid : null,
-        processing_notes: `Imported from ALT on ${new Date().toLocaleDateString()}`,
-      };
-
       const { error } = await supabase
-        .from("intake_items")
-        .insert(intakeData);
+        .from("alt_items")
+        .update({ status: 'in_show_inventory' })
+        .eq('id', item.id);
 
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success("Card sent to show inventory successfully!");
-      queryClient.invalidateQueries({ queryKey: ["intake-items"] });
+      toast.success("Card moved to show inventory");
+      queryClient.invalidateQueries({ queryKey: ["alt-items"] });
     },
     onError: (error: any) => {
-      toast.error(error.message || "Failed to send to show inventory");
+      toast.error(error.message || "Failed to move to show inventory");
     },
   });
 
