@@ -313,16 +313,13 @@ All colors MUST be HSL.
   }
 
   /* Actions cell must be above everything */
-  .card-show-table td[class*="z-50"] {
-    position: relative;
-    z-index: 50 !important;
+  .actions-cell { 
+    position: relative; 
+    z-index: 50 !important; 
   }
-
-  /* All buttons in actions cell must accept pointer events */
-  .card-show-table td[class*="z-50"] button {
-    pointer-events: auto !important;
-    position: relative;
-    z-index: 51 !important;
+  
+  .actions-cell * { 
+    pointer-events: auto !important; 
   }
 
   /* Icons inside buttons should not interfere */
@@ -342,5 +339,21 @@ All colors MUST be HSL.
   .card-show-table {
     position: relative;
     isolation: isolate;
+  }
+
+  /* Dialog/Popover/Portal backdrop must not steal clicks */
+  dialog[data-overlay],
+  div[data-overlay],
+  div[role="presentation"][data-overlay],
+  [aria-hidden="true"][data-portal-overlay] {
+    pointer-events: none !important;
+  }
+
+  /* Only the panel/content should be interactive */
+  [data-dialog-panel],
+  [data-popover-panel],
+  [data-floating-panel],
+  [data-radix-popper-content-wrapper] {
+    pointer-events: auto !important;
   }
 }

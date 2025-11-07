@@ -22,6 +22,7 @@ import { ChevronDown } from "lucide-react";
 import { useState } from "react";
 
 export default function CardShowTool() {
+  console.log('[CardShowTool Route] mounted');
   const { user, isAdmin, loading } = useAuth();
   const [activeTab, setActiveTab] = useState("dashboard");
 

@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 export function CardShowDashboard() {
+  console.log('[CardShowDashboard] mounted');
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
   const [gradingServiceFilter, setGradingServiceFilter] = useState("");
@@ -517,20 +518,25 @@ export function CardShowDashboard() {
                       transactionId={latestSell?.id}
                     />
                   </td>
-                  <td className="p-3 min-w-[240px] relative z-50 pointer-events-auto">
-                    <div className="flex gap-2 justify-end items-center flex-nowrap relative z-50 pointer-events-auto">
+                  <td className="actions-cell relative p-3 min-w-[240px]">
+                    {/* Local click shield to stop row/Link handlers */}
+                    <div
+                      onClick={(e) => e.stopPropagation()}
+                      className="relative z-[60] pointer-events-auto flex gap-2 justify-end items-center flex-nowrap"
+                    >
                       <Button 
                         size="sm" 
                         variant="default" 
                         onClick={(e) => {
+                          e.preventDefault();
                           e.stopPropagation();
                           sendToShowInventoryMutation.mutate(item);
                         }}
                         disabled={sendToShowInventoryMutation.isPending}
                         title="Send to Show Inventory"
-                        className="flex-shrink-0"
+                        className="flex-shrink-0 relative z-[70] pointer-events-auto"
                       >
-                        <PackagePlus className="h-4 w-4" />
+                        <PackagePlus className="h-4 w-4 pointer-events-none" />
                       </Button>
                       <Button
                         type="button"
@@ -543,9 +549,9 @@ export function CardShowDashboard() {
                         }}
                         title="Edit item"
                         aria-label="Edit item"
-                        className="hover:bg-accent flex-shrink-0 pointer-events-auto"
+                        className="hover:bg-accent flex-shrink-0 relative z-[70] pointer-events-auto"
                       >
-                        <Edit className="h-4 w-4" />
+                        <Edit className="h-4 w-4 pointer-events-none" />
                       </Button>
                       <Button
                         type="button"
@@ -562,25 +568,14 @@ export function CardShowDashboard() {
                           e.preventDefault();
                           e.stopPropagation();
                           
-                          // Force the dialog open
-                          console.log('📂 Opening delete dialog for:', item.id);
+                          console.log('[Delete] click', item.id);
                           openDeleteDialog(item);
-                          
-                          // Verify dialog state after opening
-                          setTimeout(() => {
-                            console.log('📂 Dialog state after open attempt:', {
-                              deleteDialogOpen,
-                              selectedItem,
-                              selectedItems
-                            });
-                          }, 100);
                         }}
-                        disabled={deleteCardMutation.isPending}
+                        disabled={false}
                         title="Delete item"
                         aria-label={`Delete ${item.title ?? 'item'}`}
                         data-testid={`delete-${item.id}`}
-                        className="hover:opacity-80 flex-shrink-0 pointer-events-auto relative z-50 cursor-pointer"
-                        style={{ touchAction: 'none' }}
+                        className="relative z-[70] inline-flex items-center justify-center rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 pointer-events-auto cursor-pointer"
                       >
                         <Trash2 className="h-4 w-4 pointer-events-none" />
                       </Button>
