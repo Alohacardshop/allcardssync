@@ -321,6 +321,21 @@ export function CardShowDashboard() {
             <Download className="h-4 w-4 mr-2" />
             Export CSV
           </Button>
+          
+          {/* DEBUG TEST BUTTON - Remove after testing */}
+          {items && items.length > 0 && (
+            <Button 
+              onClick={() => {
+                console.log('[DEBUG TEST] Test delete button clicked!');
+                openDeleteDialog(items[0]);
+              }}
+              variant="destructive"
+              size="sm"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Test Delete (First Item)
+            </Button>
+          )}
         </div>
 
         <Collapsible open={filtersOpen} onOpenChange={setFiltersOpen}>
@@ -467,7 +482,7 @@ export function CardShowDashboard() {
                     {latestSell ? `$${latestSell.price}` : "-"}
                   </td>
                   <td className="p-3">
-                    <div className="flex gap-1 justify-center flex-wrap relative z-10">
+                    <div className="flex gap-1 justify-center flex-wrap relative z-50 pointer-events-auto isolation-auto">
                       <Button 
                         size="sm" 
                         variant="default" 
