@@ -149,16 +149,12 @@ export function NavigationBar() {
     { to: '/', label: 'Dashboard', icon: Home },
     { to: '/inventory', label: 'Inventory', icon: Archive },
     { to: '/admin/label-studio', label: 'Labels', icon: Tags },
+    { to: '/tools/card-show-tool', label: 'Show Tools', icon: Wrench },
   ];
 
   if (isAdmin) {
     navItems.push({ to: '/admin', label: 'Admin', icon: Settings });
   }
-
-  // Tools menu items
-  const toolsMenuItems = [
-    { to: '/tools/card-show-tool', label: 'Show Tools' },
-  ];
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-card border-b shadow-sm">
@@ -195,30 +191,6 @@ export function NavigationBar() {
                   </Link>
                 );
               })}
-              
-              {/* Tools Dropdown */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    className={`flex items-center gap-2 px-3 py-2 text-sm font-medium ${
-                      location.pathname.startsWith('/tools')
-                        ? 'bg-primary text-primary-foreground'
-                        : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    <Wrench className="h-4 w-4" />
-                    Tools
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  {toolsMenuItems.map((item) => (
-                    <DropdownMenuItem key={item.to} onClick={() => navigate(item.to)}>
-                      {item.label}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
             </div>
           </div>
 
