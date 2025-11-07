@@ -244,9 +244,11 @@ export function CardShowDashboard() {
   };
 
   const openDeleteDialog = (item: any) => {
+    console.log("Opening delete dialog for item:", item.id);
     setSelectedItem(item);
     setSelectedItems([item.id]);
     setDeleteDialogOpen(true);
+    console.log("Delete dialog state set to true");
   };
 
   const handleBulkDelete = () => {
@@ -523,15 +525,15 @@ export function CardShowDashboard() {
                         size="sm"
                         variant="destructive"
                         onClick={(e) => {
-                          e.preventDefault();
                           e.stopPropagation();
+                          console.log("Delete button clicked for item:", item.id);
                           openDeleteDialog(item);
                         }}
                         disabled={deleteCardMutation.isPending}
                         title="Delete item"
-                        aria-label="Delete item"
-                        data-testid="delete-item-button"
-                        className="hover:opacity-80 flex-shrink-0 pointer-events-auto"
+                        aria-label={`Delete ${item.title ?? 'item'}`}
+                        data-testid={`delete-${item.id}`}
+                        className="hover:opacity-80 flex-shrink-0 pointer-events-auto relative z-20"
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -622,8 +624,8 @@ export function CardShowDashboard() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               type="button"
-              onClick={(e) => {
-                e.preventDefault();
+              onClick={() => {
+                console.log("Confirm delete clicked, deleting items:", selectedItems);
                 deleteCardMutation.mutate(selectedItems);
               }}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
