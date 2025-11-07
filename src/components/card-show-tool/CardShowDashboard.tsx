@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Download, RefreshCw, Edit, Plus, Filter, Trash2, PackagePlus } from "lucide-react";
+import { Download, RefreshCw, Edit, Plus, Filter, Trash2, PackagePlus, MoreVertical } from "lucide-react";
 import { toast } from "sonner";
 import { CardShowTransactionDialog } from "./CardShowTransactionDialog";
 import { CardShowEditDialog } from "./CardShowEditDialog";
@@ -21,6 +21,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 
 export function CardShowDashboard() {
   const queryClient = useQueryClient();
@@ -493,42 +500,46 @@ export function CardShowDashboard() {
                         <PackagePlus className="h-4 w-4 mr-1" />
                         To Inventory
                       </Button>
-                      <Button 
-                        size="icon" 
-                        variant="ghost" 
-                        onClick={() => openTransactionDialog(item)}
-                        title="Add Transaction"
-                      >
-                        <Plus className="h-4 w-4" />
-                      </Button>
-                      <Button 
-                        size="icon" 
-                        variant="ghost" 
-                        onClick={() => openEditDialog(item)}
-                        title="Edit Values"
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button 
-                        size="icon" 
-                        variant="ghost" 
-                        onClick={() => handleRefreshFromAlt(item)}
-                        disabled={refreshFromAltMutation.isPending || !item.alt_uuid}
-                        title="Refresh from ALT"
-                      >
-                        <RefreshCw className="h-4 w-4" />
-                      </Button>
-                      <Button 
-                        size="icon" 
-                        variant="destructive" 
-                        onClick={() => {
-                          console.log('[Delete Button] Clicked for item:', item.id, item.title);
-                          openDeleteDialog(item);
-                        }}
-                        title="Delete Card"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button 
+                            size="icon" 
+                            variant="ghost"
+                            className="relative z-50"
+                          >
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48">
+                          <DropdownMenuItem onClick={() => openTransactionDialog(item)}>
+                            <Plus className="h-4 w-4 mr-2" />
+                            Add Transaction
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => openEditDialog(item)}>
+                            <Edit className="h-4 w-4 mr-2" />
+                            Edit Values
+                          </DropdownMenuItem>
+                          <DropdownMenuItem 
+                            onClick={() => handleRefreshFromAlt(item)}
+                            disabled={refreshFromAltMutation.isPending || !item.alt_uuid}
+                          >
+                            <RefreshCw className="h-4 w-4 mr-2" />
+                            Refresh from ALT
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem 
+                            onClick={() => {
+                              console.log('[Delete Menu] Clicked for item:', item.id, item.title);
+                              openDeleteDialog(item);
+                            }}
+                            className="text-destructive focus:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete Card
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </td>
                 </tr>
