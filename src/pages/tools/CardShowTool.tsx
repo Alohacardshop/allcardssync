@@ -10,9 +10,20 @@ import { CardShowLocations } from "@/components/card-show-tool/CardShowLocations
 import { CardShowTransactions } from "@/components/card-show-tool/CardShowTransactions";
 import { CardShowSessions } from "@/components/card-show-tool/CardShowSessions";
 import { CardShowSettings } from "@/components/card-show-tool/CardShowSettings";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import { Button } from "@/components/ui/button";
+import { ChevronDown } from "lucide-react";
+import { useState } from "react";
 
 export default function CardShowTool() {
   const { user, isAdmin, loading } = useAuth();
+  const [activeTab, setActiveTab] = useState("dashboard");
 
   if (loading) {
     return (
@@ -36,18 +47,58 @@ export default function CardShowTool() {
         <p className="text-muted-foreground">Manage show inventory, transactions, and locations</p>
       </div>
 
-      <Tabs defaultValue="dashboard" className="w-full">
-        <TabsList className={`grid w-full ${isAdmin ? 'grid-cols-9' : 'grid-cols-8'}`}>
-          <TabsTrigger value="dashboard">Show Dashboard</TabsTrigger>
-          <TabsTrigger value="lookup">Lookup Cert</TabsTrigger>
-          <TabsTrigger value="add">Add Items</TabsTrigger>
-          <TabsTrigger value="inventory">Show Inventory</TabsTrigger>
-          <TabsTrigger value="transactions">Show Transactions</TabsTrigger>
-          <TabsTrigger value="shows">Manage Shows</TabsTrigger>
-          <TabsTrigger value="locations">Show Locations</TabsTrigger>
-          {isAdmin && <TabsTrigger value="sessions">Sessions</TabsTrigger>}
-          <TabsTrigger value="settings">Settings</TabsTrigger>
-        </TabsList>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <div className="flex items-center gap-2 mb-6">
+          <TabsList className="flex-1">
+            <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
+            <TabsTrigger value="add">Add Items</TabsTrigger>
+            <TabsTrigger value="inventory">Inventory</TabsTrigger>
+            <TabsTrigger value="transactions">Transactions</TabsTrigger>
+          </TabsList>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="gap-2">
+                Manage
+                <ChevronDown className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48 bg-card z-50">
+              <DropdownMenuItem onClick={() => setActiveTab("shows")}>
+                Manage Shows
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setActiveTab("locations")}>
+                Show Locations
+              </DropdownMenuItem>
+              {isAdmin && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => setActiveTab("sessions")}>
+                    ALT Sessions
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="gap-2">
+                Tools
+                <ChevronDown className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48 bg-card z-50">
+              <DropdownMenuItem onClick={() => setActiveTab("lookup")}>
+                Lookup by Cert
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => setActiveTab("settings")}>
+                Settings
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
 
         <TabsContent value="dashboard" className="mt-6">
           <CardShowDashboard />
