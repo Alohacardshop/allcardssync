@@ -3,7 +3,6 @@ import { Navigate } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CardShowDashboard } from "@/components/card-show-tool/CardShowDashboard";
 import { CardShowAddByCert } from "@/components/card-show-tool/CardShowAddByCert";
-import { CardShowAddItems } from "@/components/card-show-tool/CardShowAddItems";
 import { CardShowInventory } from "@/components/card-show-tool/CardShowInventory";
 import { CardShowShows } from "@/components/card-show-tool/CardShowShows";
 import { CardShowLocations } from "@/components/card-show-tool/CardShowLocations";
@@ -90,10 +89,6 @@ export default function CardShowTool() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48 bg-card z-50">
-              <DropdownMenuItem onClick={() => setActiveTab("lookup")}>
-                Lookup by Cert
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => setActiveTab("settings")}>
                 Settings
               </DropdownMenuItem>
@@ -105,12 +100,8 @@ export default function CardShowTool() {
           <CardShowDashboard />
         </TabsContent>
 
-        <TabsContent value="lookup" className="mt-6">
-          <CardShowAddByCert />
-        </TabsContent>
-
         <TabsContent value="add" className="mt-6">
-          <CardShowAddItems />
+          <CardShowAddByCert />
         </TabsContent>
 
         <TabsContent value="inventory" className="mt-6">
