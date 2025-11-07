@@ -53,122 +53,219 @@ serve(async (req) => {
       });
     }
 
-    // Get PSA API token
-    const psaToken = Deno.env.get('PSA_PUBLIC_API_TOKEN');
-    if (!psaToken) {
-      console.error('[card-show-fetch-alt] PSA API token not configured');
+    // Get ScrapingBee API key
+    const scrapingBeeKey = Deno.env.get('SCRAPING_BEE_API_KEY');
+    if (!scrapingBeeKey) {
       return new Response(JSON.stringify({ 
-        error: 'PSA API token not configured. Please ask an admin to add PSA_PUBLIC_API_TOKEN in Supabase secrets.' 
+        error: 'ScrapingBee API key not configured. Please ask an admin to add SCRAPING_BEE_API_KEY in Supabase secrets.' 
       }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    console.log(`[card-show-fetch-alt] Fetching cert ${certNumber} from PSA API`);
+    // Construct ALT URL
+    const altUrl = `https://app.alt.xyz/cert/${certNumber}`;
+    
+    console.log(`[card-show-fetch-alt] Fetching cert ${certNumber} from ALT via ScrapingBee`);
 
-    // Fetch from PSA API (much faster than scraping)
-    const certUrl = `https://api.psacard.com/publicapi/cert/GetByCertNumber/${certNumber}`;
-    const imagesUrl = `https://api.psacard.com/publicapi/cert/GetImagesByCertNumber/${certNumber}`;
-
+    // Call ScrapingBee with optimized parameters
+    const scrapingBeeUrl = `https://app.scrapingbee.com/api/v1/?api_key=${scrapingBeeKey}&url=${encodeURIComponent(altUrl)}&render_js=true&premium_proxy=true&wait=2000&block_resources=false`;
+    
+    // Use longer timeout for ScrapingBee
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
-
+    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+    
+    let response;
     try {
-      const [certResponse, imagesResponse] = await Promise.all([
-        fetch(certUrl, {
-          headers: {
-            'authorization': `bearer ${psaToken}`,
-            'Content-Type': 'application/json'
-          },
-          signal: controller.signal
-        }),
-        fetch(imagesUrl, {
-          headers: {
-            'authorization': `bearer ${psaToken}`,
-            'Content-Type': 'application/json'
-          },
-          signal: controller.signal
-        }).catch(() => null) // Images are optional
-      ]);
-
+      response = await fetch(scrapingBeeUrl, { signal: controller.signal });
       clearTimeout(timeoutId);
-
-      if (!certResponse.ok) {
-        console.error(`[card-show-fetch-alt] PSA API error: ${certResponse.status} ${certResponse.statusText}`);
-        return new Response(JSON.stringify({ 
-          error: `Failed to fetch from PSA API: ${certResponse.statusText}` 
-        }), {
-          status: certResponse.status,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
-      const certData = await certResponse.json();
-      const imagesData = imagesResponse?.ok ? await imagesResponse.json() : null;
-
-      console.log(`[card-show-fetch-alt] PSA API response received for cert ${certNumber}`);
-
-      // Validate certificate data
-      if (!certData?.PSACert?.CertNumber) {
-        console.warn('[card-show-fetch-alt] No valid certificate data');
-        return new Response(JSON.stringify({ 
-          error: 'Certificate not found or invalid' 
-        }), {
-          status: 404,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
-      const psaCert = certData.PSACert;
       
-      // Extract image URL from images data
-      let imageUrl = null;
-      if (imagesData && Array.isArray(imagesData) && imagesData.length > 0) {
-        // Find FrontImage
-        const frontImage = imagesData.find((img: any) => img.ImageType === 'FrontImage');
-        imageUrl = frontImage?.ImageURL || imagesData[0]?.ImageURL || null;
+      console.log(`[card-show-fetch-alt] ScrapingBee response status: ${response.status}`);
+    } catch (error) {
+      clearTimeout(timeoutId);
+      if (error.name === 'AbortError') {
+        console.error('[card-show-fetch-alt] ScrapingBee request timed out after 60 seconds');
+        return new Response(JSON.stringify({ 
+          error: 'Request timed out after 60 seconds. ALT might be slow or unreachable.' 
+        }), {
+          status: 504,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      console.error(`[card-show-fetch-alt] Fetch error: ${error.message}`);
+      throw error;
+    }
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[card-show-fetch-alt] ScrapingBee error: ${response.status} ${response.statusText}`);
+      console.error(`[card-show-fetch-alt] Error details: ${errorText.substring(0, 500)}`);
+      return new Response(JSON.stringify({ 
+        error: `Failed to fetch from ALT: ${response.statusText}`,
+        details: errorText.substring(0, 200)
+      }), {
+        status: response.status,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const html = await response.text();
+    console.log(`[card-show-fetch-alt] Received HTML from ALT, length: ${html.length}`);
+
+    // Parse HTML to extract card data
+    const cards = [];
+    
+    // Look for card containers
+    const cardContainerRegex = /<div[^>]*class="[^"]*(?:card|item|result)[^"]*"[^>]*>[\s\S]*?<\/div>/gi;
+    const containers = html.match(cardContainerRegex) || [];
+    
+    const htmlSections = containers.length > 0 ? containers : [html];
+    
+    console.log(`[card-show-fetch-alt] Found ${htmlSections.length} potential card section(s)`);
+    
+    for (let i = 0; i < htmlSections.length; i++) {
+      const section = htmlSections[i];
+      
+      // Extract title
+      const titleMatch = section.match(/<h[1-6][^>]*>([^<]+)<\/h[1-6]>/i) || 
+                        section.match(/class="[^"]*(?:card|item)[_-]?title[^"]*"[^>]*>([^<]+)</i) ||
+                        section.match(/>([^<]{10,100})</);
+      const title = titleMatch ? titleMatch[1].trim() : `Card ${certNumber}-${i + 1}`;
+      
+      // Skip navigation text
+      if (title.match(/^(home|back|search|menu|cart|login|sign|filter)/i)) {
+        continue;
       }
 
-      // Build card title from PSA data
-      const year = psaCert.Year || '';
-      const brand = psaCert.Brand || '';
-      const subject = psaCert.Subject || '';
-      const cardNumber = psaCert.CardNumber || '';
-      const title = `${year} ${brand} ${subject} ${cardNumber}`.trim() || `PSA ${certNumber}`;
+      // Extract grade
+      const gradeMatch = section.match(/grade["\s:]+(\d+(?:\.\d+)?)/i) ||
+                        section.match(/>\s*(\d+(?:\.\d+)?)\s*<\/.*grade/i) ||
+                        section.match(/\b(\d+(?:\.\d)?)\s*PSA\b/i) ||
+                        section.match(/\bPSA\s*(\d+(?:\.\d)?)\b/i);
+      const grade = gradeMatch ? gradeMatch[1] : null;
 
-      // Parse grade
-      const grade = psaCert.CardGrade?.toString() || null;
+      // Extract grading service
+      const serviceMatch = section.match(/(PSA|BGS|CGC|SGC)/i);
+      const gradingService = serviceMatch ? serviceMatch[1].toUpperCase() : 'PSA';
 
-      const cardData = {
-        alt_uuid: `PSA-${certNumber}`,
-        alt_url: `https://www.psacard.com/cert/${certNumber}`,
-        title,
-        grade,
-        grading_service: 'PSA',
-        set_name: psaCert.Category || null,
-        image_url: imageUrl,
-        alt_value: null, // PSA API doesn't provide value
+      // Extract image URL
+      let imageUrl = null;
+      
+      const imgMatch = section.match(/<img[^>]+src=["']([^"']+)["'][^>]*>/i);
+      if (imgMatch) {
+        const src = imgMatch[1];
+        if (!src.match(/icon|logo|avatar|button|banner/i) && 
+            (src.match(/card|item|image|product|cert/i) || src.match(/\.(jpg|jpeg|png|webp)/i))) {
+          imageUrl = src.startsWith('http') ? src : `https://app.alt.xyz${src}`;
+        }
+      }
+      
+      if (!imageUrl) {
+        const bgMatch = section.match(/background-image:\s*url\(['"]?([^'")\s]+)['"]?\)/i);
+        if (bgMatch) {
+          const src = bgMatch[1];
+          if (!src.match(/icon|logo|avatar|button|banner/i)) {
+            imageUrl = src.startsWith('http') ? src : `https://app.alt.xyz${src}`;
+          }
+        }
+      }
+      
+      if (imageUrl) {
+        console.log(`[card-show-fetch-alt] Found image: ${imageUrl}`);
+      }
+
+      // Extract ALT value
+      const valueMatch = section.match(/\$\s*([\d,]+(?:\.\d{2})?)/);
+      const altValue = valueMatch ? parseFloat(valueMatch[1].replace(/,/g, '')) : null;
+
+      // Extract set name
+      const setMatch = section.match(/set["\s:]+([^<"]{3,50})/i) ||
+                      section.match(/series["\s:]+([^<"]{3,50})/i);
+      const setName = setMatch ? setMatch[1].trim() : null;
+
+      // Extract population
+      const popMatch = section.match(/population["\s:]+(\d+)/i) ||
+                      section.match(/pop["\s:]+(\d+)/i);
+      const population = popMatch ? parseInt(popMatch[1]) : null;
+      
+      // Only add cards with meaningful data
+      if (grade || altValue || imageUrl) {
+        cards.push({
+          title,
+          grade,
+          grading_service: gradingService,
+          set_name: setName,
+          image_url: imageUrl,
+          alt_value: altValue,
+          population,
+        });
+      }
+    }
+    
+    // Fallback if no cards parsed
+    if (cards.length === 0) {
+      const titleMatch = html.match(/<h1[^>]*>([^<]+)<\/h1>/i);
+      const gradeMatch = html.match(/\b(\d+(?:\.\d)?)\b/);
+      const serviceMatch = html.match(/(PSA|BGS|CGC|SGC)/i);
+      
+      cards.push({
+        title: titleMatch ? titleMatch[1].trim() : `Card ${certNumber}`,
+        grade: gradeMatch ? gradeMatch[1] : null,
+        grading_service: serviceMatch ? serviceMatch[1].toUpperCase() : 'PSA',
+        set_name: null,
+        image_url: null,
+        alt_value: null,
         population: null,
+      });
+    }
+
+    console.log(`[card-show-fetch-alt] Parsed ${cards.length} card(s) from ALT`);
+
+    // Save cards to database
+    const savedCards = [];
+    
+    for (const cardData of cards) {
+      const titleHash = cardData.title.substring(0, 20).replace(/[^a-zA-Z0-9]/g, '');
+      const uniqueId = `${certNumber}-${titleHash}`;
+      
+      const altItemData = {
+        alt_uuid: uniqueId,
+        alt_url: altUrl,
+        title: cardData.title,
+        grade: cardData.grade,
+        grading_service: cardData.grading_service,
+        set_name: cardData.set_name,
+        image_url: cardData.image_url,
+        alt_value: cardData.alt_value,
+        population: cardData.population,
         alt_checked_at: new Date().toISOString(),
       };
 
       const { data: altItem, error: insertError } = await supabaseClient
         .from('alt_items')
-        .upsert(cardData, { onConflict: 'alt_uuid' })
+        .upsert(altItemData, { onConflict: 'alt_uuid' })
         .select()
         .single();
 
       if (insertError) {
-        console.error(`[card-show-fetch-alt] Error saving card:`, insertError.message);
-        return new Response(JSON.stringify({ error: 'Failed to save card data' }), {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+        console.warn(`[card-show-fetch-alt] Error saving card "${cardData.title}":`, insertError.message);
+      } else {
+        savedCards.push(altItem);
       }
+    }
+    
+    if (savedCards.length === 0) {
+      console.error('[card-show-fetch-alt] No cards were saved successfully');
+      return new Response(JSON.stringify({ error: 'Failed to save any cards' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
-      // If defaults were provided (buy/sell prices), create transactions
-      if (defaults?.buy || defaults?.sell) {
+    // Create transactions if defaults provided
+    if (defaults?.buy || defaults?.sell) {
+      for (const altItem of savedCards) {
         const transactions = [];
         
         if (defaults.buy) {
@@ -197,36 +294,22 @@ serve(async (req) => {
             .insert(transactions);
           
           if (txnError) {
-            console.warn(`[card-show-fetch-alt] Error saving transactions:`, txnError);
+            console.warn(`[card-show-fetch-alt] Error saving transactions for item ${altItem.id}:`, txnError);
           }
         }
       }
-
-      console.log(`[card-show-fetch-alt] Successfully saved card for cert ${certNumber}`);
-
-      return new Response(JSON.stringify({ 
-        success: true,
-        cards: [altItem],
-        count: 1
-      }), {
-        status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-
-    } catch (error) {
-      clearTimeout(timeoutId);
-      if (error.name === 'AbortError') {
-        console.error('[card-show-fetch-alt] PSA API request timed out after 15 seconds');
-        return new Response(JSON.stringify({ 
-          error: 'Request timed out. PSA API might be slow or unreachable.' 
-        }), {
-          status: 504,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-      console.error(`[card-show-fetch-alt] Error fetching from PSA API:`, error.message);
-      throw error;
     }
+
+    console.log(`[card-show-fetch-alt] Successfully saved ${savedCards.length} card(s) for cert ${certNumber}`);
+
+    return new Response(JSON.stringify({ 
+      success: true,
+      cards: savedCards,
+      count: savedCards.length
+    }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
 
   } catch (error) {
     console.error('Error in card-show-fetch-alt:', error);
