@@ -464,15 +464,17 @@ export function CardShowDashboard() {
                         <RefreshCw className="h-4 w-4" />
                       </Button>
                        <Button 
+                        type="button"
                         size="icon" 
                         variant="ghost" 
                         onClick={(e) => {
                           console.log('[Delete Button] Clicked for item:', item.id, item.title);
                           e.stopPropagation();
+                          e.preventDefault();
                           openDeleteDialog(item);
                         }}
                         title="Delete Card"
-                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                        className="text-destructive hover:text-destructive hover:bg-destructive/10 pointer-events-auto cursor-pointer"
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
