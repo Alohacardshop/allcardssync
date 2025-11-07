@@ -5,15 +5,27 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { RefreshCw, Send, Package, Search, X } from "lucide-react";
+import { RefreshCw, Send, Package, Search, X, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export function CardShowInventory() {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
   const [gradingServiceFilter, setGradingServiceFilter] = useState<string>("");
   const [gradeFilter, setGradeFilter] = useState<string>("");
+  const [selectedItems, setSelectedItems] = useState<string[]>([]);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   // Fetch show inventory items (status = 'in_show_inventory')
   const { data: items = [], isLoading, refetch } = useQuery({
@@ -88,11 +100,33 @@ export function CardShowInventory() {
     },
     onSuccess: () => {
       toast.success('Items returned to available');
+      setSelectedItems([]);
       queryClient.invalidateQueries({ queryKey: ['alt_items', 'show_inventory'] });
     },
     onError: (error) => {
       console.error('Error returning to available:', error);
       toast.error('Failed to return items');
+    },
+  });
+
+  // Delete items mutation
+  const deleteItemsMutation = useMutation({
+    mutationFn: async (itemIds: string[]) => {
+      const { error } = await supabase
+        .from("alt_items")
+        .delete()
+        .in("id", itemIds);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success(`${selectedItems.length} item(s) deleted successfully`);
+      setSelectedItems([]);
+      setDeleteDialogOpen(false);
+      queryClient.invalidateQueries({ queryKey: ['alt_items', 'show_inventory'] });
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to delete items");
     },
   });
 
@@ -119,6 +153,26 @@ export function CardShowInventory() {
 
   const hasActiveFilters = searchTerm || gradingServiceFilter || gradeFilter;
 
+  const toggleItemSelection = (itemId: string) => {
+    setSelectedItems(prev => 
+      prev.includes(itemId) 
+        ? prev.filter(id => id !== itemId)
+        : [...prev, itemId]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedItems.length === filteredItems.length) {
+      setSelectedItems([]);
+    } else {
+      setSelectedItems(filteredItems.map((item: any) => item.id));
+    }
+  };
+
+  const getItemsToDelete = () => {
+    return filteredItems.filter((item: any) => selectedItems.includes(item.id));
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center p-8">
@@ -143,6 +197,64 @@ export function CardShowInventory() {
           Refresh
         </Button>
       </div>
+
+      {/* Bulk Actions Bar */}
+      {selectedItems.length > 0 && (
+        <div className="flex items-center gap-4 p-3 bg-muted rounded-lg">
+          <span className="text-sm font-medium">
+            {selectedItems.length} item(s) selected
+          </span>
+          <div className="flex gap-2">
+            <Button 
+              onClick={() => sendToMainInventoryMutation.mutate(selectedItems)}
+              disabled={sendToMainInventoryMutation.isPending}
+              size="sm"
+            >
+              <Send className="h-4 w-4 mr-2" />
+              Send to Main
+            </Button>
+            <Button 
+              onClick={() => returnToAvailableMutation.mutate(selectedItems)}
+              disabled={returnToAvailableMutation.isPending}
+              variant="outline"
+              size="sm"
+            >
+              Return to Available
+            </Button>
+            <Button 
+              onClick={() => setDeleteDialogOpen(true)}
+              variant="destructive"
+              size="sm"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete
+            </Button>
+            <Button 
+              onClick={() => setSelectedItems([])}
+              variant="ghost"
+              size="sm"
+            >
+              Clear
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Select All */}
+      {filteredItems.length > 0 && (
+        <div className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            id="select-all"
+            checked={filteredItems.length > 0 && selectedItems.length === filteredItems.length}
+            onChange={toggleSelectAll}
+            className="cursor-pointer"
+          />
+          <label htmlFor="select-all" className="text-sm cursor-pointer">
+            Select All ({filteredItems.length} items)
+          </label>
+        </div>
+      )}
 
       {/* Search and Filters */}
       <div className="flex gap-2 flex-wrap">
@@ -210,7 +322,15 @@ export function CardShowInventory() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredItems.map((item: any) => (
-            <Card key={item.id} className="overflow-hidden">
+            <Card key={item.id} className="overflow-hidden relative">
+              <div className="absolute top-2 left-2 z-10">
+                <input
+                  type="checkbox"
+                  checked={selectedItems.includes(item.id)}
+                  onChange={() => toggleItemSelection(item.id)}
+                  className="cursor-pointer w-5 h-5"
+                />
+              </div>
               <CardContent className="p-4">
                 {item.image_url && (
                   <img 
@@ -263,6 +383,40 @@ export function CardShowInventory() {
           ))}
         </div>
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete {selectedItems.length} Item{selectedItems.length !== 1 ? 's' : ''}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. The following item{selectedItems.length !== 1 ? 's' : ''} will be permanently deleted from show inventory:
+              {selectedItems.length <= 3 && (
+                <ul className="mt-2 space-y-1 list-disc list-inside">
+                  {getItemsToDelete().map((item: any) => (
+                    <li key={item.id} className="text-sm">{item.title}</li>
+                  ))}
+                </ul>
+              )}
+              {selectedItems.length > 3 && (
+                <p className="mt-2 font-medium">{selectedItems.length} items will be deleted</p>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteItemsMutation.mutate(selectedItems)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteItemsMutation.isPending}
+            >
+              {deleteItemsMutation.isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

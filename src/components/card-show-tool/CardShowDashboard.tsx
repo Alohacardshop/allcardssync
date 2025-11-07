@@ -37,6 +37,7 @@ export function CardShowDashboard() {
   const [showFilter, setShowFilter] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<any>(null);
+  const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [transactionDialogOpen, setTransactionDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -120,68 +121,23 @@ export function CardShowDashboard() {
   });
 
   const deleteCardMutation = useMutation({
-    mutationFn: async (itemId: string) => {
-      console.log('=== DELETE CARD DEBUG START ===');
-      console.log('[deleteCard] Attempting to delete item:', itemId);
-      
-      // Check authentication
-      const { data: { session } } = await supabase.auth.getSession();
-      console.log('[deleteCard] Current user:', session?.user?.id);
-      console.log('[deleteCard] User email:', session?.user?.email);
-      
-      if (!session?.user) {
-        throw new Error('You must be logged in to delete cards');
-      }
-      
-      // Check user role
-      const { data: userRoles, error: roleError } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', session.user.id);
-      
-      console.log('[deleteCard] User roles:', userRoles);
-      console.log('[deleteCard] Role check error:', roleError);
-      
-      // Attempt delete
-      console.log('[deleteCard] Executing delete query...');
-      const { data, error, status, statusText } = await supabase
+    mutationFn: async (itemIds: string[]) => {
+      const { error } = await supabase
         .from("alt_items")
         .delete()
-        .eq("id", itemId)
-        .select();
+        .in("id", itemIds);
       
-      console.log('[deleteCard] Delete response:', { data, error, status, statusText });
-      
-      if (error) {
-        console.error('[deleteCard] Delete failed with error:', {
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code,
-        });
-        
-        // Provide helpful error messages
-        if (error.code === 'PGRST301' || error.message.includes('row-level security')) {
-          throw new Error(`Permission denied: You need staff or admin role to delete cards. Current roles: ${userRoles?.map(r => r.role).join(', ') || 'none'}`);
-        }
-        
-        throw error;
-      }
-      
-      console.log('[deleteCard] Successfully deleted item:', itemId);
-      console.log('=== DELETE CARD DEBUG END ===');
+      if (error) throw error;
     },
     onSuccess: () => {
-      toast.success("Card deleted successfully");
+      toast.success(`${selectedItems.length} item(s) deleted successfully`);
       queryClient.invalidateQueries({ queryKey: ["alt-items"] });
       setDeleteDialogOpen(false);
       setSelectedItem(null);
+      setSelectedItems([]);
     },
     onError: (error: any) => {
-      console.error('[deleteCard] Mutation error:', error);
-      toast.error(error.message || "Failed to delete card", {
-        description: "Check console for detailed error information"
-      });
+      toast.error(error.message || "Failed to delete card(s)");
     },
   });
 
@@ -287,10 +243,33 @@ export function CardShowDashboard() {
   };
 
   const openDeleteDialog = (item: any) => {
-    console.log('[openDeleteDialog] Called with item:', item);
     setSelectedItem(item);
+    setSelectedItems([item.id]);
     setDeleteDialogOpen(true);
-    console.log('[openDeleteDialog] Dialog should be open, selectedItem set to:', item.id);
+  };
+
+  const handleBulkDelete = () => {
+    setDeleteDialogOpen(true);
+  };
+
+  const toggleItemSelection = (itemId: string) => {
+    setSelectedItems(prev => 
+      prev.includes(itemId) 
+        ? prev.filter(id => id !== itemId)
+        : [...prev, itemId]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedItems.length === items?.length) {
+      setSelectedItems([]);
+    } else {
+      setSelectedItems(items?.map((item: any) => item.id) || []);
+    }
+  };
+
+  const getItemsToDelete = () => {
+    return items?.filter((item: any) => selectedItems.includes(item.id)) || [];
   };
 
   if (isLoading) {
@@ -314,22 +293,30 @@ export function CardShowDashboard() {
             <Download className="h-4 w-4 mr-2" />
             Export CSV
           </Button>
-          
-          {/* DEBUG TEST BUTTON - Remove after testing */}
-          {items && items.length > 0 && (
+        </div>
+
+        {selectedItems.length > 0 && (
+          <div className="flex items-center gap-4 p-3 bg-muted rounded-lg">
+            <span className="text-sm font-medium">
+              {selectedItems.length} item(s) selected
+            </span>
             <Button 
-              onClick={() => {
-                console.log('[DEBUG TEST] Test delete button clicked!');
-                openDeleteDialog(items[0]);
-              }}
+              onClick={handleBulkDelete}
               variant="destructive"
               size="sm"
             >
               <Trash2 className="h-4 w-4 mr-2" />
-              Test Delete (First Item)
+              Delete Selected
             </Button>
-          )}
-        </div>
+            <Button 
+              onClick={() => setSelectedItems([])}
+              variant="ghost"
+              size="sm"
+            >
+              Clear Selection
+            </Button>
+          </div>
+        )}
 
         <Collapsible open={filtersOpen} onOpenChange={setFiltersOpen}>
           <div className="flex items-center gap-2">
@@ -413,6 +400,14 @@ export function CardShowDashboard() {
         <table className="w-full">
           <thead className="bg-muted">
             <tr>
+              <th className="p-3 text-left">
+                <input
+                  type="checkbox"
+                  checked={items?.length > 0 && selectedItems.length === items?.length}
+                  onChange={toggleSelectAll}
+                  className="cursor-pointer"
+                />
+              </th>
               <th className="p-3 text-left">Image</th>
               <th className="p-3 text-left">Title</th>
               <th className="p-3 text-left">Grade</th>
@@ -429,6 +424,14 @@ export function CardShowDashboard() {
 
               return (
                 <tr key={item.id} className="border-t hover:bg-muted/50">
+                  <td className="p-3">
+                    <input
+                      type="checkbox"
+                      checked={selectedItems.includes(item.id)}
+                      onChange={() => toggleItemSelection(item.id)}
+                      className="cursor-pointer"
+                    />
+                  </td>
                    <td className="p-3">
                      {item.image_url ? (
                        <img
@@ -561,27 +564,31 @@ export function CardShowDashboard() {
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Card</AlertDialogTitle>
+            <AlertDialogTitle>
+              Delete {selectedItems.length} Item{selectedItems.length !== 1 ? 's' : ''}?
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete "{selectedItem?.title}"? 
-              This will permanently remove the card and all associated transactions. 
-              This action cannot be undone.
+              This action cannot be undone. The following item{selectedItems.length !== 1 ? 's' : ''} will be permanently deleted:
+              {selectedItems.length <= 3 && (
+                <ul className="mt-2 space-y-1 list-disc list-inside">
+                  {getItemsToDelete().map((item: any) => (
+                    <li key={item.id} className="text-sm">{item.title}</li>
+                  ))}
+                </ul>
+              )}
+              {selectedItems.length > 3 && (
+                <p className="mt-2 font-medium">{selectedItems.length} items will be deleted</p>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleteCardMutation.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={(e) => {
-                e.preventDefault();
-                if (selectedItem?.id) {
-                  console.log('[deleteDialog] Delete button clicked, item id:', selectedItem.id);
-                  deleteCardMutation.mutate(selectedItem.id);
-                }
-              }}
-              disabled={deleteCardMutation.isPending || !selectedItem?.id}
+              onClick={() => deleteCardMutation.mutate(selectedItems)}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteCardMutation.isPending}
             >
-              {deleteCardMutation.isPending ? "Deleting..." : "Delete Card"}
+              {deleteCardMutation.isPending ? "Deleting..." : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
