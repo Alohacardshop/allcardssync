@@ -69,20 +69,24 @@ serve(async (req) => {
     
     console.log(`[card-show-fetch-alt] Fetching cert ${certNumber} from ALT via ScrapingBee`);
 
-    // Call ScrapingBee with longer wait time for images to load
-    const scrapingBeeUrl = `https://app.scrapingbee.com/api/v1/?api_key=${scrapingBeeKey}&url=${encodeURIComponent(altUrl)}&render_js=true&premium_proxy=true&country_code=us&wait=5000&wait_for=.card-image,img,.product-image`;
+    // Call ScrapingBee with simplified parameters (no wait_for to avoid timeouts)
+    const scrapingBeeUrl = `https://app.scrapingbee.com/api/v1/?api_key=${scrapingBeeKey}&url=${encodeURIComponent(altUrl)}&render_js=true&premium_proxy=true&country_code=us&wait=3000`;
+    
+    console.log(`[card-show-fetch-alt] ScrapingBee URL: ${scrapingBeeUrl.replace(scrapingBeeKey, 'REDACTED')}`);
     
     // Add timeout to prevent hanging
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 second timeout
     
     try {
       var response = await fetch(scrapingBeeUrl, { signal: controller.signal });
       clearTimeout(timeoutId);
+      
+      console.log(`[card-show-fetch-alt] ScrapingBee response status: ${response.status}`);
     } catch (error) {
       clearTimeout(timeoutId);
       if (error.name === 'AbortError') {
-        console.error('[card-show-fetch-alt] ScrapingBee request timed out after 30 seconds');
+        console.error('[card-show-fetch-alt] ScrapingBee request timed out after 45 seconds');
         return new Response(JSON.stringify({ 
           error: 'Request timed out. ALT might be slow or unreachable.' 
         }), {
@@ -90,13 +94,17 @@ serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
+      console.error(`[card-show-fetch-alt] Fetch error: ${error.message}`);
       throw error;
     }
     
     if (!response.ok) {
+      const errorText = await response.text();
       console.error(`[card-show-fetch-alt] ScrapingBee error: ${response.status} ${response.statusText}`);
+      console.error(`[card-show-fetch-alt] Error details: ${errorText}`);
       return new Response(JSON.stringify({ 
-        error: `Failed to fetch from ALT: ${response.statusText}` 
+        error: `Failed to fetch from ALT: ${response.statusText}`,
+        details: errorText.substring(0, 200) // Include first 200 chars of error
       }), {
         status: response.status,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
