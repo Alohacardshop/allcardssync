@@ -72,7 +72,26 @@ serve(async (req) => {
     // Call ScrapingBee with longer wait time for images to load
     const scrapingBeeUrl = `https://app.scrapingbee.com/api/v1/?api_key=${scrapingBeeKey}&url=${encodeURIComponent(altUrl)}&render_js=true&premium_proxy=true&country_code=us&wait=5000&wait_for=.card-image,img,.product-image`;
     
-    const response = await fetch(scrapingBeeUrl);
+    // Add timeout to prevent hanging
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+    
+    try {
+      var response = await fetch(scrapingBeeUrl, { signal: controller.signal });
+      clearTimeout(timeoutId);
+    } catch (error) {
+      clearTimeout(timeoutId);
+      if (error.name === 'AbortError') {
+        console.error('[card-show-fetch-alt] ScrapingBee request timed out after 30 seconds');
+        return new Response(JSON.stringify({ 
+          error: 'Request timed out. ALT might be slow or unreachable.' 
+        }), {
+          status: 504,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      throw error;
+    }
     
     if (!response.ok) {
       console.error(`[card-show-fetch-alt] ScrapingBee error: ${response.status} ${response.statusText}`);
