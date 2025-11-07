@@ -553,33 +553,6 @@ export function CardShowDashboard() {
                       >
                         <Edit className="h-4 w-4 pointer-events-none" />
                       </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="destructive"
-                        onClick={(e) => {
-                          console.log('🖱️ DELETE BUTTON CLICKED - Event details:', {
-                            target: e.target,
-                            currentTarget: e.currentTarget,
-                            itemId: item.id,
-                            itemTitle: item.title,
-                            timestamp: new Date().toISOString()
-                          });
-                          e.preventDefault();
-                          e.stopPropagation();
-                          
-                          console.log('[Delete] click', item.id);
-                          openDeleteDialog(item);
-                        }}
-                        disabled={false}
-                        title="Delete item"
-                        aria-label={`Delete ${item.title ?? 'item'}`}
-                        data-testid={`delete-${item.id}`}
-                        className="relative z-[70] inline-flex items-center justify-center rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 pointer-events-auto cursor-pointer"
-                      >
-                        <Trash2 className="h-4 w-4 pointer-events-none" />
-                      </Button>
-                      
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button 
