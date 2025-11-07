@@ -466,7 +466,7 @@ export function CardShowDashboard() {
                        <Button 
                         type="button"
                         size="icon" 
-                        variant="ghost" 
+                        variant="outline" 
                         onClick={(e) => {
                           console.log('[Delete Button] Clicked for item:', item.id, item.title);
                           e.stopPropagation();
@@ -474,7 +474,7 @@ export function CardShowDashboard() {
                           openDeleteDialog(item);
                         }}
                         title="Delete Card"
-                        className="text-destructive hover:text-destructive hover:bg-destructive/10 pointer-events-auto cursor-pointer"
+                        className="text-destructive hover:text-destructive-foreground hover:bg-destructive border-destructive"
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
