@@ -254,8 +254,10 @@ export function CardShowDashboard() {
   };
 
   const openDeleteDialog = (item: any) => {
+    console.log('[openDeleteDialog] Called with item:', item);
     setSelectedItem(item);
     setDeleteDialogOpen(true);
+    console.log('[openDeleteDialog] Dialog should be open, selectedItem set to:', item.id);
   };
 
   if (isLoading) {
@@ -461,12 +463,16 @@ export function CardShowDashboard() {
                       >
                         <RefreshCw className="h-4 w-4" />
                       </Button>
-                      <Button 
+                       <Button 
                         size="icon" 
                         variant="ghost" 
-                        onClick={() => openDeleteDialog(item)}
+                        onClick={(e) => {
+                          console.log('[Delete Button] Clicked for item:', item.id, item.title);
+                          e.stopPropagation();
+                          openDeleteDialog(item);
+                        }}
                         title="Delete Card"
-                        className="text-destructive hover:text-destructive"
+                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
