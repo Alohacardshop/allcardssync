@@ -92,7 +92,10 @@ export function EditablePriceCell({
           size="icon"
           variant="ghost"
           className="h-8 w-8"
-          onClick={handleSave}
+          onClick={(e) => {
+            e.stopPropagation();
+            handleSave();
+          }}
           disabled={updatePriceMutation.isPending}
         >
           <Check className="h-4 w-4 text-green-600" />
@@ -101,7 +104,10 @@ export function EditablePriceCell({
           size="icon"
           variant="ghost"
           className="h-8 w-8"
-          onClick={handleCancel}
+          onClick={(e) => {
+            e.stopPropagation();
+            handleCancel();
+          }}
           disabled={updatePriceMutation.isPending}
         >
           <X className="h-4 w-4 text-red-600" />
@@ -112,8 +118,11 @@ export function EditablePriceCell({
 
   return (
     <div
-      className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 p-1 rounded group"
-      onClick={() => setIsEditing(true)}
+      className="inline-flex items-center gap-2 cursor-pointer hover:bg-muted/50 p-1 rounded group"
+      onClick={(e) => {
+        e.stopPropagation();
+        setIsEditing(true);
+      }}
     >
       <span className="font-medium">
         {currentPrice ? `$${currentPrice}` : "-"}

@@ -472,7 +472,7 @@ export function CardShowDashboard() {
                       </div>
                     )}
                   </td>
-                  <td className="p-3 text-right">
+                  <td className="p-3 text-right w-32">
                     <EditablePriceCell
                       itemId={item.id}
                       currentPrice={latestBuy?.price || null}
@@ -480,7 +480,7 @@ export function CardShowDashboard() {
                       transactionId={latestBuy?.id}
                     />
                   </td>
-                  <td className="p-3 text-right">
+                  <td className="p-3 text-right w-32">
                     <EditablePriceCell
                       itemId={item.id}
                       currentPrice={latestSell?.price || null}
@@ -488,8 +488,8 @@ export function CardShowDashboard() {
                       transactionId={latestSell?.id}
                     />
                   </td>
-                  <td className="p-3">
-                    <div className="flex gap-2 justify-end items-center flex-nowrap">
+                  <td className="p-3 min-w-[240px]">
+                    <div className="flex gap-2 justify-end items-center flex-nowrap isolate">
                       <Button 
                         size="sm" 
                         variant="default" 
