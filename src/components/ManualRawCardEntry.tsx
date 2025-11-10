@@ -228,8 +228,6 @@ export const ManualRawCardEntry: React.FC<ManualRawCardEntryProps> = ({ onBatchA
         variant_in: variant,
         card_number_in: formData.cardNumber || null,
         grade_in: formData.grade || null,
-        grading_company_in: isGraded ? formData.gradingCompany : null,
-        type_in: itemType,
         price_in: parseFloat(formData.price),
         cost_in: formData.cost ? parseFloat(formData.cost) : null,
         sku_in: generatedSku,
