@@ -166,6 +166,35 @@ export const manualRawCardSchema = z.object({
     .optional()
     .or(z.literal("")),
   
+  variation: z.string()
+    .trim()
+    .max(100, { message: "Variation must be less than 100 characters" })
+    .optional()
+    .or(z.literal("")),
+  
+  numberedBox: z.string()
+    .trim()
+    .max(50, { message: "Numbered must be less than 50 characters" })
+    .optional()
+    .or(z.literal("")),
+  
+  gradingCompany: z.string()
+    .trim()
+    .max(50, { message: "Grading company must be less than 50 characters" })
+    .optional()
+    .or(z.literal("")),
+  
+  grade: z.string()
+    .trim()
+    .max(20, { message: "Grade must be less than 20 characters" })
+    .optional()
+    .or(z.literal("")),
+  
+  purchaseLocationId: z.string()
+    .trim()
+    .optional()
+    .or(z.literal("")),
+  
   price: z.string()
     .refine((val) => {
       if (!val) return false;
