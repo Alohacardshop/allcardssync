@@ -149,7 +149,7 @@ export function NavigationBar() {
     { to: '/', label: 'Dashboard', icon: Home },
     { to: '/inventory', label: 'Inventory', icon: Archive },
     { to: '/admin/label-studio', label: 'Labels', icon: Tags },
-    { to: '/tools/card-show-tool', label: 'Show Tools', icon: Wrench },
+    // { to: '/tools/card-show-tool', label: 'Show Tools', icon: Wrench },
   ];
 
   if (isAdmin) {
