@@ -146,19 +146,16 @@ export const RawCardIntake = ({ onBatchAdd }: RawCardIntakeProps) => {
 
       const result = await addItem(itemPayload);
 
-      // Update vendor immediately after insert
-      if (vendor && result?.id) {
+      // Update vendor immediately after insert (only if not a duplicate)
+      if (vendor && result?.id && !(result as any).isDuplicate) {
         await supabase
           .from('intake_items')
           .update({ vendor })
           .eq('id', result.id);
       }
 
-      toast({
-        title: "Card Added",
-        description: `${brand} ${subject} added to batch`,
-        variant: "default",
-      });
+      // Show appropriate success message (hook already shows toast, so skip this)
+      // The useAddIntakeItem hook now handles the success toast
 
       // Reset form but keep vendor
       const currentVendor = vendor;

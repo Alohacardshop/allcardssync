@@ -104,6 +104,65 @@ export const useAddIntakeItem = () => {
       const { data, error } = await supabase.rpc('create_raw_intake_item', params);
 
       if (error) {
+        // Check if this is a duplicate key constraint violation (race condition)
+        const isDuplicateKeyError = error.message?.includes('duplicate key') || 
+                                     error.message?.includes('uniq_active_sku_per_store');
+        
+        if (isDuplicateKeyError && params.sku_in && params.store_key_in) {
+          logger.logInfo('Duplicate key constraint detected, updating existing item', { sku: params.sku_in });
+          
+          // Query for the existing item
+          const { data: existing, error: queryError } = await supabase
+            .from('intake_items')
+            .select('id, quantity, sku')
+            .eq('sku', params.sku_in)
+            .eq('store_key', params.store_key_in)
+            .eq('type', 'Raw')
+            .is('deleted_at', null)
+            .is('removed_from_batch_at', null)
+            .maybeSingle();
+
+          if (queryError) {
+            logger.logError('Failed to query for duplicate item', queryError);
+            throw queryError;
+          }
+
+          if (existing) {
+            // Update existing item's quantity
+            const newQuantity = (existing.quantity || 0) + (params.quantity_in || 1);
+            
+            const { error: updateError } = await supabase
+              .from('intake_items')
+              .update({ 
+                quantity: newQuantity,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', existing.id);
+
+            if (updateError) {
+              logger.logError('Failed to update existing item quantity', updateError);
+              throw updateError;
+            }
+
+            logger.logInfo('Updated existing item quantity after constraint error', { 
+              id: existing.id, 
+              sku: existing.sku,
+              oldQuantity: existing.quantity,
+              newQuantity 
+            });
+
+            return {
+              id: existing.id,
+              lot_number: 'existing',
+              lot_id: '',
+              created_at: new Date().toISOString(),
+              isDuplicate: true,
+              oldQuantity: existing.quantity,
+              newQuantity
+            } as AddIntakeItemResponse;
+          }
+        }
+        
         logger.logError('Failed to create intake item', error);
         throw error;
       }
@@ -168,7 +227,14 @@ export const useAddIntakeItem = () => {
         await queryClient.invalidateQueries({ queryKey: context.queryKey });
       }
 
-      toast.success('Item added to batch successfully!');
+      // Show appropriate success message based on duplicate status
+      if ((data as any).isDuplicate) {
+        const oldQty = (data as any).oldQuantity || 0;
+        const newQty = (data as any).newQuantity || 0;
+        toast.success(`Quantity updated from ${oldQty} to ${newQty}`);
+      } else {
+        toast.success('Item added to batch successfully!');
+      }
     },
 
     onError: (error, variables, context) => {

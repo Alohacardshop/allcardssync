@@ -483,13 +483,15 @@ export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) =>
         const result = await insertIntakeItem(item);
         
         // Check if it was a duplicate SKU update
-        const isDuplicate = (result.item_data as any)?.isDuplicate;
+        const isDuplicate = (result as any)?.isDuplicate;
+        const oldQuantity = (result as any)?.oldQuantity;
+        const newQuantity = (result as any)?.newQuantity;
         
         updatedItems[i] = { 
           ...updatedItems[i], 
           status: 'success',
           generatedSku: result.sku,
-          error: isDuplicate ? `SKU exists - updated quantity from ${(result.item_data as any)?.oldQuantity} to ${(result.item_data as any)?.newQuantity}` : undefined
+          error: isDuplicate ? `Quantity updated: ${oldQuantity} → ${newQuantity}` : undefined
         };
 
         // Call onBatchAdd callback if provided
