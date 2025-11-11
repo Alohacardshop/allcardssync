@@ -53,12 +53,11 @@ export const useAddIntakeItem = () => {
       if (params.sku_in && params.store_key_in) {
         const { data: existing, error: queryError } = await supabase
           .from('intake_items')
-          .select('id, quantity, sku')
+          .select('id, quantity, sku, removed_from_batch_at')
           .eq('sku', params.sku_in)
           .eq('store_key', params.store_key_in)
           .eq('type', 'Raw')
           .is('deleted_at', null)
-          .is('removed_from_batch_at', null)
           .maybeSingle();
 
         if (queryError) {
@@ -114,12 +113,11 @@ export const useAddIntakeItem = () => {
           // Query for the existing item
           const { data: existing, error: queryError } = await supabase
             .from('intake_items')
-            .select('id, quantity, sku')
+            .select('id, quantity, sku, removed_from_batch_at')
             .eq('sku', params.sku_in)
             .eq('store_key', params.store_key_in)
             .eq('type', 'Raw')
             .is('deleted_at', null)
-            .is('removed_from_batch_at', null)
             .maybeSingle();
 
           if (queryError) {
