@@ -40,6 +40,7 @@ interface TCGPlayerItem {
   totalPrice: number;
   status: 'pending' | 'processing' | 'success' | 'error';
   error?: string;
+  info?: string; // For non-error messages like duplicate updates
   generatedSku?: string;
   variantId?: string; // TCG variant ID if resolved
   cardId?: string; // TCG card ID if found
@@ -491,7 +492,7 @@ export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) =>
           ...updatedItems[i], 
           status: 'success',
           generatedSku: result.sku,
-          error: isDuplicate ? `Quantity updated: ${oldQuantity} → ${newQuantity}` : undefined
+          info: isDuplicate ? `Quantity updated: ${oldQuantity} → ${newQuantity}` : undefined
         };
 
         // Call onBatchAdd callback if provided
@@ -777,6 +778,11 @@ Prices from Market Price on 8/24/2025 and are subject to change.`;
                         {item.error && (
                           <div className="text-xs text-red-600 mt-1 truncate max-w-24" title={item.error}>
                             {item.error}
+                          </div>
+                        )}
+                        {item.info && (
+                          <div className="text-xs text-blue-600 mt-1 truncate max-w-24" title={item.info}>
+                            {item.info}
                           </div>
                         )}
                       </TableCell>
