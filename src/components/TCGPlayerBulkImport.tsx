@@ -149,7 +149,22 @@ export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) =>
     }));
     
     setItems(tcgItems);
-    toast.success(`Loaded ${tcgItems.length} items from CSV`);
+    
+    // Auto-detect sub-category from first item's product line
+    if (tcgItems.length > 0 && tcgItems[0].productLine) {
+      const detectedGame = detectGameFromProductLine(tcgItems[0].productLine);
+      
+      if (detectedGame) {
+        setSubCategory(detectedGame);
+        setMainCategory('tcg');
+        toast.success(`Loaded ${tcgItems.length} items. Auto-detected game: ${capitalize(detectedGame)}`);
+      } else {
+        toast.success(`Loaded ${tcgItems.length} items from CSV`);
+        toast.info('Please select a sub-category manually');
+      }
+    } else {
+      toast.success(`Loaded ${tcgItems.length} items from CSV`);
+    }
   };
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
