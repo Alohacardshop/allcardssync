@@ -6,11 +6,12 @@ export interface InventoryFilters {
   locationGid: string;
   activeTab: 'raw' | 'graded' | 'raw_comics' | 'graded_comics';
   statusFilter: 'all' | 'active' | 'out-of-stock' | 'sold' | 'deleted' | 'errors';
-  batchFilter: 'all' | 'in_batch' | 'removed_from_batch';
+  batchFilter: 'all' | 'in_batch' | 'removed_from_batch' | 'current_batch';
   printStatusFilter?: 'all' | 'printed' | 'not-printed';
   comicsSubCategory?: string | null;
   searchTerm?: string;
   autoRefreshEnabled?: boolean;
+  currentBatchLotId?: string | null;
 }
 
 const PAGE_SIZE = 25;
@@ -27,6 +28,7 @@ export function useInventoryListQuery(filters: InventoryFilters) {
       filters.printStatusFilter,
       filters.comicsSubCategory,
       filters.searchTerm,
+      filters.currentBatchLotId,
     ],
     queryFn: async ({ pageParam = 0 }) => {
       const {
@@ -99,6 +101,8 @@ export function useInventoryListQuery(filters: InventoryFilters) {
         query = query.is('removed_from_batch_at', null);
       } else if (batchFilter === 'removed_from_batch') {
         query = query.not('removed_from_batch_at', 'is', null);
+      } else if (batchFilter === 'current_batch' && filters.currentBatchLotId) {
+        query = query.eq('lot_id', filters.currentBatchLotId).is('removed_from_batch_at', null);
       }
 
       // Apply print status filter (Raw cards only)

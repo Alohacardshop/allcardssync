@@ -40,6 +40,7 @@ import { useInventoryListQuery } from '@/hooks/useInventoryListQuery';
 import { useInventoryItemDetail } from '@/hooks/useInventoryItemDetail';
 import { Progress } from '@/components/ui/progress';
 import { useQueryClient } from '@tanstack/react-query';
+import { useCurrentBatch } from '@/hooks/useCurrentBatch';
 
 // Lazy load heavy components for faster initial render
 const InventoryAnalytics = lazy(() => import('@/components/InventoryAnalytics').then(m => ({ default: m.InventoryAnalytics })));
@@ -229,8 +230,8 @@ const Inventory = () => {
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'out-of-stock' | 'sold' | 'deleted' | 'errors'>('active');
   const [printStatusFilter, setPrintStatusFilter] = useState<'all' | 'printed' | 'not-printed'>('all');
   const [showSoldItems, setShowSoldItems] = useState(false);
-  const [batchFilter, setBatchFilter] = useState<'all' | 'in_batch' | 'removed_from_batch'>(() => {
-    return (localStorage.getItem('inventory-batch-filter') as 'all' | 'in_batch' | 'removed_from_batch') || 'all';
+  const [batchFilter, setBatchFilter] = useState<'all' | 'in_batch' | 'removed_from_batch' | 'current_batch'>(() => {
+    return (localStorage.getItem('inventory-batch-filter') as 'all' | 'in_batch' | 'removed_from_batch' | 'current_batch') || 'all';
   });
   
   // Category tab state
@@ -273,6 +274,23 @@ const Inventory = () => {
   const { settings: cutterSettings } = useCutterSettings();
   const { resyncAll, resyncSelected, isResyncing } = useShopifyResync();
   const queryClient = useQueryClient();
+  
+  // Get user ID for current batch
+  const [userId, setUserId] = useState<string | undefined>();
+  useEffect(() => {
+    const getUserId = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setUserId(user?.id);
+    };
+    getUserId();
+  }, []);
+  
+  // Get current active batch
+  const { data: currentBatch } = useCurrentBatch({ 
+    storeKey: assignedStore, 
+    locationGid: selectedLocation,
+    userId 
+  });
 
   // Optimistic update helper for instant UI feedback
   const createOptimisticUpdate = useCallback((
@@ -330,6 +348,7 @@ const Inventory = () => {
     comicsSubCategory: null,
     searchTerm: debouncedSearchTerm,
     autoRefreshEnabled,
+    currentBatchLotId: currentBatch?.items?.[0]?.lot_id,
   });
 
   // Flatten paginated data
@@ -2123,7 +2142,8 @@ const Inventory = () => {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Items</SelectItem>
-                      <SelectItem value="in_batch">In Batch</SelectItem>
+                      <SelectItem value="current_batch">Current Batch {currentBatch?.items?.[0]?.lot_number && `(${currentBatch.items[0].lot_number})`}</SelectItem>
+                      <SelectItem value="in_batch">In Any Batch</SelectItem>
                       <SelectItem value="removed_from_batch">Removed from Batch</SelectItem>
                     </SelectContent>
                   </Select>
