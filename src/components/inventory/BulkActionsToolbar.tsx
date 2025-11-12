@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { CheckSquare, Printer, RotateCcw, Upload, Scissors, Trash2, Loader2 } from 'lucide-react';
+import { CheckSquare, Printer, RotateCcw, Upload, Scissors, Trash2, Loader2, Package } from 'lucide-react';
 
 interface BulkActionsToolbarProps {
   selectedCount: number;
@@ -13,6 +13,7 @@ interface BulkActionsToolbarProps {
   onSelectAll: () => void;
   onClearSelection: () => void;
   onBulkPrintRaw: () => void;
+  onPrintBatches: () => void;
   onReprintSelected: () => void;
   onBulkRetrySync: () => void;
   onSyncSelected: () => void;
@@ -32,6 +33,7 @@ export const BulkActionsToolbar = React.memo(({
   onSelectAll,
   onClearSelection,
   onBulkPrintRaw,
+  onPrintBatches,
   onReprintSelected,
   onBulkRetrySync,
   onSyncSelected,
@@ -81,6 +83,16 @@ export const BulkActionsToolbar = React.memo(({
             <Printer className="h-4 w-4 mr-2" />
           )}
           {bulkPrinting ? 'Printing...' : 'Print All Unprinted Raw'}
+        </Button>
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onPrintBatches}
+          disabled={bulkPrinting}
+        >
+          <Package className="h-4 w-4 mr-2" />
+          Print by Batch
         </Button>
 
         {selectedCount > 0 && (

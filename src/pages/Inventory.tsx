@@ -41,6 +41,7 @@ import { useInventoryItemDetail } from '@/hooks/useInventoryItemDetail';
 import { Progress } from '@/components/ui/progress';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCurrentBatch } from '@/hooks/useCurrentBatch';
+import { BatchSelectorDialog } from '@/components/BatchSelectorDialog';
 
 // Lazy load heavy components for faster initial render
 const InventoryAnalytics = lazy(() => import('@/components/InventoryAnalytics').then(m => ({ default: m.InventoryAnalytics })));
@@ -260,6 +261,7 @@ const Inventory = () => {
   const [showRemovalDialog, setShowRemovalDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showResyncConfirm, setShowResyncConfirm] = useState(false);
+  const [showBatchSelector, setShowBatchSelector] = useState(false);
   const [selectedItemForRemoval, setSelectedItemForRemoval] = useState<any>(null);
   const [selectedItemsForDeletion, setSelectedItemsForDeletion] = useState<any[]>([]);
   const [syncDetailsRow, setSyncDetailsRow] = useState<any>(null);
@@ -1549,6 +1551,180 @@ const Inventory = () => {
     }
   }, []);
 
+  const handlePrintBatches = useCallback(async (batchIds: string[]) => {
+    if (batchIds.length === 0) {
+      toast.info('No batches selected');
+      return;
+    }
+
+    setBulkPrinting(true);
+    
+    try {
+      // Fetch all unprinted items from selected batches
+      const { data: batchItems, error: fetchError } = await supabase
+        .from('intake_items')
+        .select('*')
+        .in('lot_id', batchIds)
+        .is('printed_at', null)
+        .is('deleted_at', null)
+        .is('removed_from_batch_at', null)
+        .order('created_at', { ascending: true });
+
+      if (fetchError) {
+        toast.error(`Failed to fetch batch items: ${fetchError.message}`);
+        return;
+      }
+
+      if (!batchItems || batchItems.length === 0) {
+        toast.info('No unprinted items found in selected batches');
+        return;
+      }
+
+      // Show confirmation
+      const confirmed = window.confirm(
+        `Print ${batchItems.length} unprinted labels from ${batchIds.length} ${batchIds.length === 1 ? 'batch' : 'batches'}?`
+      );
+
+      if (!confirmed) {
+        return;
+      }
+
+      logger.info('Batch print: Processing items', { 
+        batchCount: batchIds.length, 
+        itemCount: batchItems.length 
+      });
+
+      // Helper function to truncate text for labels
+      const truncateForLabel = (text: string, maxLength: number = 70): string => {
+        if (text.length <= maxLength) return text;
+        return text.substring(0, maxLength - 3) + '...';
+      };
+
+      // Generate proper title for card
+      const generateTitle = (item: any) => {
+        let name = item.subject || 'Card';
+        if (item.card_number && name.includes(` - ${item.card_number}`)) {
+          name = name.replace(` - ${item.card_number}`, '').trim();
+        }
+        return name;
+      };
+
+      // Load template
+      let tpl = null;
+      
+      try {
+        const { data: zplTemplates } = await supabase
+          .from('label_templates')
+          .select('*')
+          .eq('template_type', 'raw')
+          .eq('is_default', true)
+          .limit(1);
+          
+        if (zplTemplates && zplTemplates.length > 0) {
+          const zplTemplate = zplTemplates[0];
+          tpl = {
+            id: zplTemplate.id,
+            name: zplTemplate.name,
+            format: 'zpl_studio' as const,
+            zpl: typeof (zplTemplate.canvas as any)?.zplLabel === 'string' 
+              ? (zplTemplate.canvas as any).zplLabel 
+              : '^XA^FO50,50^A0N,30,30^FD{{CARDNAME}}^FS^FO50,100^A0N,20,20^FD{{CONDITION}}^FS^FO50,150^BY2^BCN,60,Y,N,N^FD{{BARCODE}}^FS^XZ',
+            scope: 'org'
+          };
+        }
+      } catch (error) {
+        logger.warn('Batch print: Failed to load ZPL Studio template', error as Error);
+      }
+      
+      if (!tpl || !tpl.zpl) {
+        tpl = await getTemplate('raw_card_2x1');
+      }
+      
+      if (!tpl) {
+        toast.error('No label template available');
+        setBulkPrinting(false);
+        return;
+      }
+
+      const { sanitizeLabel } = await import('@/lib/print/sanitizeZpl');
+      let successCount = 0;
+      const errors: string[] = [];
+
+      for (const item of batchItems) {
+        try {
+          const title = generateTitle(item);
+          const subtitle = [item.brand_title, item.card_number].filter(Boolean).join(' ');
+          const condition = item.type || 'Raw';
+
+          const vars: JobVars = {
+            CARDNAME: truncateForLabel(title, 40),
+            PRICE: item.price ? `$${parseFloat(item.price.toString()).toFixed(2)}` : '',
+            BARCODE: item.sku || '',
+            CONDITION: condition,
+          };
+
+          let zpl: string;
+          if (tpl.format === 'zpl_studio' && tpl.zpl) {
+            const { zplFromTemplateString } = await import('@/lib/labels/zpl');
+            zpl = zplFromTemplateString(tpl.zpl, vars);
+          } else {
+            throw new Error('Only ZPL Studio templates are supported');
+          }
+
+          if (!zpl || zpl.trim().length === 0) {
+            throw new Error('Generated ZPL is empty');
+          }
+
+          const safeZpl = sanitizeLabel(zpl);
+          const qty = item.quantity || 1;
+          
+          await printQueue.enqueueSafe({ 
+            zpl: safeZpl, 
+            qty, 
+            usePQ: true 
+          });
+          
+          successCount++;
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          console.error(`Failed to generate ZPL for ${item.sku}:`, error);
+          errors.push(`${item.sku}: ${errorMsg}`);
+        }
+      }
+
+      if (successCount > 0) {
+        // Mark items as printed
+        const printedItemIds = batchItems.map(item => item.id);
+        const { error: updateError } = await supabase
+          .from('intake_items')
+          .update({ printed_at: new Date().toISOString() })
+          .in('id', printedItemIds);
+        
+        if (updateError) {
+          console.error('Batch print: Failed to update items:', updateError);
+        }
+        
+        toast.success(`Queued ${successCount} labels from ${batchIds.length} ${batchIds.length === 1 ? 'batch' : 'batches'}`);
+        
+        // Refresh
+        setTimeout(() => {
+          refetch();
+        }, 500);
+      } else {
+        toast.error('Failed to generate any labels');
+      }
+
+      if (errors.length > 0) {
+        console.error('Batch print errors:', errors);
+      }
+    } catch (error) {
+      logger.error('Batch print error', error as Error);
+      toast.error(`Print error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setBulkPrinting(false);
+    }
+  }, [refetch]);
+
   const handleReprintSelected = useCallback(async () => {
     if (selectedItems.size === 0) {
       toast.info('No items selected for reprinting');
@@ -2161,6 +2337,7 @@ const Inventory = () => {
                   onSelectAll={selectAllVisible}
                   onClearSelection={clearSelection}
                   onBulkPrintRaw={handleBulkPrintRaw}
+                  onPrintBatches={() => setShowBatchSelector(true)}
                   onReprintSelected={handleReprintSelected}
                   onBulkRetrySync={handleBulkRetrySync}
                   onSyncSelected={handleSyncSelected}
@@ -2331,6 +2508,14 @@ const Inventory = () => {
             await handlePrintWithPrinter(printer.id);
           }}
           allowDefaultOnly={true}
+        />
+
+        <BatchSelectorDialog
+          open={showBatchSelector}
+          onOpenChange={setShowBatchSelector}
+          storeKey={assignedStore || ''}
+          locationGid={selectedLocation || ''}
+          onPrintBatches={handlePrintBatches}
         />
 
         {expandedItems.size > 0 && (
