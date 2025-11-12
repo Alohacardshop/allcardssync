@@ -53,7 +53,7 @@ export const useAddIntakeItem = () => {
       if (params.sku_in && params.store_key_in) {
         const { data: existing, error: queryError } = await supabase
           .from('intake_items')
-          .select('id, quantity, sku, removed_from_batch_at')
+          .select('id, quantity, sku, removed_from_batch_at, lot_id')
           .eq('sku', params.sku_in)
           .eq('store_key', params.store_key_in)
           .eq('type', 'Raw')
@@ -65,13 +65,29 @@ export const useAddIntakeItem = () => {
         }
 
         if (existing) {
-          // Update existing item's quantity
+          // Get or create active lot for current batch
+          const { data: lotData, error: lotError } = await supabase
+            .rpc('get_or_create_active_lot', {
+              _store_key: params.store_key_in,
+              _location_gid: params.shopify_location_gid_in
+            });
+
+          if (lotError) {
+            logger.logError('Failed to get active lot', lotError);
+            throw lotError;
+          }
+
+          const activeLotId = Array.isArray(lotData) ? lotData[0]?.id : (lotData as any)?.id;
+
+          // Update existing item's quantity and move to current batch
           const newQuantity = (existing.quantity || 0) + (params.quantity_in || 1);
           
           const { error: updateError } = await supabase
             .from('intake_items')
             .update({ 
               quantity: newQuantity,
+              lot_id: activeLotId, // Move to current batch
+              removed_from_batch_at: null, // Clear any removal flag
               updated_at: new Date().toISOString()
             })
             .eq('id', existing.id);
@@ -81,17 +97,18 @@ export const useAddIntakeItem = () => {
             throw updateError;
           }
 
-          logger.logInfo('Updated existing item quantity', { 
+          logger.logInfo('Updated existing item and moved to current batch', { 
             id: existing.id, 
             sku: existing.sku,
             oldQuantity: existing.quantity,
-            newQuantity 
+            newQuantity,
+            movedToLot: activeLotId
           });
 
           return {
             id: existing.id,
             lot_number: 'existing',
-            lot_id: '',
+            lot_id: activeLotId,
             created_at: new Date().toISOString(),
             isDuplicate: true,
             oldQuantity: existing.quantity,
@@ -113,7 +130,7 @@ export const useAddIntakeItem = () => {
           // Query for the existing item
           const { data: existing, error: queryError } = await supabase
             .from('intake_items')
-            .select('id, quantity, sku, removed_from_batch_at')
+            .select('id, quantity, sku, removed_from_batch_at, lot_id')
             .eq('sku', params.sku_in)
             .eq('store_key', params.store_key_in)
             .eq('type', 'Raw')
@@ -126,13 +143,29 @@ export const useAddIntakeItem = () => {
           }
 
           if (existing) {
-            // Update existing item's quantity
+            // Get or create active lot for current batch
+            const { data: lotData, error: lotError } = await supabase
+              .rpc('get_or_create_active_lot', {
+                _store_key: params.store_key_in,
+                _location_gid: params.shopify_location_gid_in
+              });
+
+            if (lotError) {
+              logger.logError('Failed to get active lot', lotError);
+              throw lotError;
+            }
+
+            const activeLotId = Array.isArray(lotData) ? lotData[0]?.id : (lotData as any)?.id;
+
+            // Update existing item's quantity and move to current batch
             const newQuantity = (existing.quantity || 0) + (params.quantity_in || 1);
             
             const { error: updateError } = await supabase
               .from('intake_items')
               .update({ 
                 quantity: newQuantity,
+                lot_id: activeLotId, // Move to current batch
+                removed_from_batch_at: null, // Clear any removal flag
                 updated_at: new Date().toISOString()
               })
               .eq('id', existing.id);
@@ -142,17 +175,18 @@ export const useAddIntakeItem = () => {
               throw updateError;
             }
 
-            logger.logInfo('Updated existing item quantity after constraint error', { 
+            logger.logInfo('Updated existing item quantity and moved to current batch', { 
               id: existing.id, 
               sku: existing.sku,
               oldQuantity: existing.quantity,
-              newQuantity 
+              newQuantity,
+              movedToLot: activeLotId
             });
 
             return {
               id: existing.id,
               lot_number: 'existing',
-              lot_id: '',
+              lot_id: activeLotId,
               created_at: new Date().toISOString(),
               isDuplicate: true,
               oldQuantity: existing.quantity,
