@@ -127,6 +127,22 @@ export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) =>
   const [subCategory, setSubCategory] = useState('');
   const [purchaseLocationId, setPurchaseLocationId] = useState('');
 
+  // DEBUG: Log context values whenever they change
+  React.useEffect(() => {
+    console.log('🔍 TCGPlayerBulkImport Context Values:', {
+      assignedStore,
+      selectedLocation,
+      subCategory,
+      itemsCount: items.length,
+      buttonShouldBeDisabled: !subCategory || !assignedStore || !selectedLocation,
+      individualChecks: {
+        hasSubCategory: !!subCategory,
+        hasAssignedStore: !!assignedStore,
+        hasSelectedLocation: !!selectedLocation
+      }
+    });
+  }, [assignedStore, selectedLocation, subCategory, items.length]);
+
   // Handle CSV parsing results
   const handleCsvParsed = (cards: NormalizedCard[]) => {
     const tcgItems: TCGPlayerItem[] = cards.map(card => ({
@@ -362,6 +378,14 @@ export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) =>
   };
 
   const insertIntakeItem = async (item: TCGPlayerItem) => {
+    console.log('📦 Inserting item:', {
+      name: item.name,
+      assignedStore,
+      selectedLocation,
+      subCategory,
+      hasAllRequired: !!(assignedStore && selectedLocation && subCategory)
+    });
+    
     // Try to resolve variant ID first
     const { cardId, variantId } = await resolveVariantId(item);
     
@@ -831,9 +855,19 @@ Prices from Market Price on 8/24/2025 and are subject to change.`;
             {!importing && items.length > 0 && (
               <div className="mt-4 flex gap-2">
                 <Button 
-                  onClick={handleAddToBatch} 
+                  onClick={() => {
+                    console.log('🔘 Button clicked with state:', {
+                      assignedStore,
+                      selectedLocation,
+                      subCategory,
+                      itemsCount: items.length,
+                      buttonShouldBeDisabled: !subCategory || !assignedStore || !selectedLocation
+                    });
+                    handleAddToBatch();
+                  }} 
                   disabled={!subCategory || !assignedStore || !selectedLocation}
                   title={!subCategory ? "Select a sub-category first" : !assignedStore || !selectedLocation ? "Select a store and location first" : ""}
+                  className={(!subCategory || !assignedStore || !selectedLocation) ? 'opacity-50 cursor-not-allowed' : ''}
                 >
                   <Upload className="h-4 w-4 mr-2" />
                   Add {items.length} Items to Batch
