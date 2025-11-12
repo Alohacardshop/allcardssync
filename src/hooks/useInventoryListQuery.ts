@@ -64,7 +64,8 @@ export function useInventoryListQuery(filters: InventoryFilters) {
           main_category,
           removed_from_batch_at,
           deleted_at,
-          sold_at
+          sold_at,
+          card_number
         `,
           { count: 'exact' }
         )
