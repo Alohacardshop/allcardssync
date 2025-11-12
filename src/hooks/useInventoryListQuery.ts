@@ -113,12 +113,19 @@ export function useInventoryListQuery(filters: InventoryFilters) {
         query = query.is('printed_at', null);
       }
 
-      // Apply search filter
+      // Apply search filter - search across multiple fields
       if (searchTerm && searchTerm.trim()) {
         const searchLower = searchTerm.toLowerCase().trim();
-        query = query.or(
-          `sku.ilike.%${searchLower}%,brand_title.ilike.%${searchLower}%,subject.ilike.%${searchLower}%,card_number.ilike.%${searchLower}%`
-        );
+        
+        // Split search term into words for better matching
+        const searchWords = searchLower.split(/\s+/).filter(word => word.length > 0);
+        
+        // For each word, create an OR condition across all searchable fields
+        searchWords.forEach(word => {
+          query = query.or(
+            `sku.ilike.%${word}%,brand_title.ilike.%${word}%,subject.ilike.%${word}%,card_number.ilike.%${word}%`
+          );
+        });
       }
 
       // Order by created_at descending
