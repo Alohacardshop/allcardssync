@@ -830,7 +830,11 @@ Prices from Market Price on 8/24/2025 and are subject to change.`;
             
             {!importing && items.length > 0 && (
               <div className="mt-4 flex gap-2">
-                <Button onClick={handleAddToBatch} disabled={!subCategory}>
+                <Button 
+                  onClick={handleAddToBatch} 
+                  disabled={!subCategory || !assignedStore || !selectedLocation}
+                  title={!subCategory ? "Select a sub-category first" : !assignedStore || !selectedLocation ? "Select a store and location first" : ""}
+                >
                   <Upload className="h-4 w-4 mr-2" />
                   Add {items.length} Items to Batch
                 </Button>
