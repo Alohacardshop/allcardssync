@@ -107,7 +107,7 @@ const COMICS_GAMES = [
  * - Converts to lowercase
  * - Handles unicode normalization
  */
-function normalizeForMatching(input: string): string {
+export function normalizeForMatching(input: string): string {
   if (!input || typeof input !== 'string') return '';
   
   return input

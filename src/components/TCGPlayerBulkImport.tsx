@@ -18,7 +18,7 @@ import { tcgSupabase } from '@/integrations/supabase/client';
 import { CsvPasteArea } from '@/components/csv/CsvPasteArea';
 import { NormalizedCard } from '@/lib/csv/normalize';
 import { SubCategoryCombobox } from '@/components/ui/sub-category-combobox';
-import { detectMainCategory } from '@/utils/categoryMapping';
+import { detectMainCategory, normalizeForMatching } from '@/utils/categoryMapping';
 import { useAddIntakeItem } from '@/hooks/useAddIntakeItem';
 import { PurchaseLocationSelect } from '@/components/ui/PurchaseLocationSelect';
 
@@ -54,13 +54,15 @@ interface TCGPlayerBulkImportProps {
 const detectGameFromProductLine = (productLine?: string): string | null => {
   if (!productLine) return null;
   
-  const line = productLine.toLowerCase();
-  if (line.includes('pokemon')) return 'pokemon';
-  if (line.includes('magic') || line.includes('mtg')) return 'mtg';
-  if (line.includes('yugioh') || line.includes('yu-gi-oh')) return 'yugioh';
-  if (line.includes('dragon ball')) return 'dragonball';
-  if (line.includes('digimon')) return 'digimon';
-  if (line.includes('flesh and blood')) return 'fab';
+  // Use normalizeForMatching to handle unicode (é→e, ñ→n, etc.)
+  const normalized = normalizeForMatching(productLine);
+  
+  if (normalized.includes('pokemon')) return 'pokemon';
+  if (normalized.includes('magic') || normalized.includes('mtg')) return 'mtg';
+  if (normalized.includes('yugioh') || normalized.includes('yu gi oh')) return 'yugioh';
+  if (normalized.includes('dragon ball')) return 'dragonball';
+  if (normalized.includes('digimon')) return 'digimon';
+  if (normalized.includes('flesh and blood')) return 'fab';
   
   return null;
 };
