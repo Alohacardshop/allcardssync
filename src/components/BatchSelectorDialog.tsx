@@ -71,6 +71,12 @@ export function BatchSelectorDialog({
             <Package className="h-12 w-12 text-muted-foreground mb-2" />
             <p className="text-muted-foreground">No batches found</p>
           </div>
+        ) : batches.every((b: any) => (b.unprinted_count || 0) === 0) ? (
+          <div className="flex flex-col items-center justify-center py-8 text-center">
+            <Package className="h-12 w-12 text-muted-foreground mb-2" />
+            <p className="text-muted-foreground">No batches with unprinted items</p>
+            <p className="text-xs text-muted-foreground mt-1">All items in these batches have been printed or deleted</p>
+          </div>
         ) : (
           <>
             <div className="flex items-center justify-between pb-2">
@@ -99,7 +105,7 @@ export function BatchSelectorDialog({
                       onCheckedChange={() => handleToggleBatch(batch.id)}
                       onClick={(e) => e.stopPropagation()}
                     />
-                    <div className="flex-1 min-w-0">
+                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2 mb-1">
                         <span className="font-mono font-semibold">
                           {batch.lot_number}
@@ -108,13 +114,22 @@ export function BatchSelectorDialog({
                           {formatDistanceToNow(new Date(batch.created_at), { addSuffix: true })}
                         </span>
                       </div>
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                        <span>{batch.total_items || 0} items</span>
+                      <div className="flex items-center gap-4 text-sm">
+                        <span className={
+                          (batch as any).unprinted_count > 0 
+                            ? "text-foreground font-medium" 
+                            : "text-muted-foreground"
+                        }>
+                          {(batch as any).unprinted_count || 0} unprinted
+                        </span>
+                        <span className="text-muted-foreground">
+                          {batch.total_items || 0} total
+                        </span>
                         {batch.total_value && (
-                          <span>${(batch.total_value as number).toFixed(2)}</span>
+                          <span className="text-muted-foreground">${(batch.total_value as number).toFixed(2)}</span>
                         )}
                         {batch.status && (
-                          <span className="capitalize">{batch.status}</span>
+                          <span className="text-muted-foreground capitalize">{batch.status}</span>
                         )}
                       </div>
                     </div>
@@ -135,7 +150,9 @@ export function BatchSelectorDialog({
                 disabled={selectedBatchIds.length === 0}
               >
                 <Printer className="h-4 w-4 mr-2" />
-                Print {selectedBatchIds.length} {selectedBatchIds.length === 1 ? 'Batch' : 'Batches'}
+                Print {selectedBatchIds.length > 0 
+                  ? `${batches?.filter((b: any) => selectedBatchIds.includes(b.id)).reduce((sum: number, b: any) => sum + (b.unprinted_count || 0), 0)} Labels` 
+                  : 'Labels'}
               </Button>
             </div>
           </>
