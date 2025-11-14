@@ -29,7 +29,7 @@ export function useBatchesList({ storeKey, locationGid }: UseBatchesListProps) {
         .select('lot_id')
         .in('lot_id', lotIds)
         .is('deleted_at', null)
-        .is('removed_from_batch_at', null)
+        .not('removed_from_batch_at', 'is', null)
         .is('printed_at', null);
 
       if (countsError) throw countsError;
