@@ -58,6 +58,38 @@ function formatItemList(lineItems: any[]): string {
   }).join('\n');
 }
 
+function getStoreLocation(payload: any): string {
+  // Check shipping address state
+  const shippingState = payload.shipping_address?.province || payload.shipping_address?.province_code || '';
+  if (shippingState.toLowerCase().includes('hawaii') || shippingState.toLowerCase() === 'hi') {
+    return '🌺 Hawaii';
+  }
+  if (shippingState.toLowerCase().includes('nevada') || shippingState.toLowerCase() === 'nv') {
+    return '🎰 Las Vegas';
+  }
+  
+  // Check billing address as fallback
+  const billingState = payload.billing_address?.province || payload.billing_address?.province_code || '';
+  if (billingState.toLowerCase().includes('hawaii') || billingState.toLowerCase() === 'hi') {
+    return '🌺 Hawaii';
+  }
+  if (billingState.toLowerCase().includes('nevada') || billingState.toLowerCase() === 'nv') {
+    return '🎰 Las Vegas';
+  }
+  
+  // Default based on store domain if available
+  const shopDomain = payload.shop_domain || payload.source_name || '';
+  if (shopDomain.toLowerCase().includes('hawaii')) {
+    return '🌺 Hawaii';
+  }
+  if (shopDomain.toLowerCase().includes('vegas') || shopDomain.toLowerCase().includes('las-vegas')) {
+    return '🎰 Las Vegas';
+  }
+  
+  // Default to Las Vegas if no match
+  return '🎰 Las Vegas';
+}
+
 function renderMessage(template: string, payload: any, config: DiscordConfig): string {
   let message = template;
 
@@ -138,6 +170,9 @@ Deno.serve(async (req) => {
 
       const message = renderMessage(config.templates.immediate, payload, config);
 
+      // Get store location
+      const storeLocation = getStoreLocation(payload);
+
       // Build embeds for line items with images
       const embeds = [];
       const barcodeNumber = extractBarcodeNumber(payload);
@@ -153,11 +188,14 @@ Deno.serve(async (req) => {
               { name: 'Price', value: `$${item.price || '0.00'}`, inline: true },
             ],
             color: 0x5865F2, // Discord blurple
+            footer: {
+              text: `Store: ${storeLocation}`
+            }
           };
           
-          // Add image as main image (large display) if available
+          // Add image as thumbnail for compact display
           if (item.image_url) {
-            embed.image = { url: item.image_url };
+            embed.thumbnail = { url: item.image_url };
           }
           
           embeds.push(embed);

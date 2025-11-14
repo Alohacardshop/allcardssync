@@ -95,10 +95,30 @@ Deno.serve(async (req) => {
       console.warn('Failed to generate barcode:', error);
     }
 
-    // Build FormData with message and barcode
+    // Build FormData with message, embeds, and barcode
     const formData = new FormData();
+    
+    // Create test embed with thumbnail and location
+    const testEmbed = {
+      title: 'Test Product',
+      fields: [
+        { name: '🔢 Barcode', value: `\`${testPayload.id}\``, inline: false },
+        { name: 'SKU', value: 'TEST-SKU-001', inline: true },
+        { name: 'Quantity', value: '1', inline: true },
+        { name: 'Price', value: '$99.99', inline: true },
+      ],
+      color: 0x5865F2,
+      footer: {
+        text: 'Store: 🎰 Las Vegas'
+      },
+      thumbnail: {
+        url: 'https://via.placeholder.com/150'
+      }
+    };
+    
     formData.append('payload_json', JSON.stringify({
       content: `🧪 **TEST MESSAGE**\n\n${message}`,
+      embeds: [testEmbed],
       allowed_mentions: { parse: ['roles'] },
     }));
 
