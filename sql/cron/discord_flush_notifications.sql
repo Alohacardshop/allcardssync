@@ -5,7 +5,7 @@ CREATE EXTENSION IF NOT EXISTS pg_net;
 -- Schedule Discord notifications flush at 9am HST (19:00 UTC) daily
 SELECT cron.schedule(
   'flush-discord-notifications',
-  '0 19 * * *', -- 09:00 HST = 19:00 UTC
+  '0 18 * * *', -- 08:00 HST = 18:00 UTC
   $$
   SELECT net.http_post(
     url := 'https://dmpoandoydaqxhzdjnmk.supabase.co/functions/v1/flush-pending-notifications',
