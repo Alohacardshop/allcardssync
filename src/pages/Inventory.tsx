@@ -1567,7 +1567,7 @@ const Inventory = () => {
         .in('lot_id', batchIds)
         .is('printed_at', null)
         .is('deleted_at', null)
-        .is('removed_from_batch_at', null)
+        .not('removed_from_batch_at', 'is', null)
         .order('created_at', { ascending: true });
 
       if (fetchError) {
