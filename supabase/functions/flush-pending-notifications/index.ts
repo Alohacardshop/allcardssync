@@ -18,31 +18,35 @@ interface DiscordConfig {
 }
 
 function getStoreLocation(payload: any): string {
-  // Check shipping address state
-  const shippingState = payload.shipping_address?.province || payload.shipping_address?.province_code || '';
-  if (shippingState.toLowerCase().includes('hawaii') || shippingState.toLowerCase() === 'hi') {
-    return '🌺 Hawaii';
-  }
-  if (shippingState.toLowerCase().includes('nevada') || shippingState.toLowerCase() === 'nv') {
-    return '🎰 Las Vegas';
-  }
-  
-  // Check billing address as fallback
-  const billingState = payload.billing_address?.province || payload.billing_address?.province_code || '';
-  if (billingState.toLowerCase().includes('hawaii') || billingState.toLowerCase() === 'hi') {
-    return '🌺 Hawaii';
-  }
-  if (billingState.toLowerCase().includes('nevada') || billingState.toLowerCase() === 'nv') {
-    return '🎰 Las Vegas';
-  }
-  
-  // Default based on store domain if available
+  // Check shop domain/source name (indicates which Shopify store)
   const shopDomain = payload.shop_domain || payload.source_name || '';
   if (shopDomain.toLowerCase().includes('hawaii')) {
     return '🌺 Hawaii';
   }
   if (shopDomain.toLowerCase().includes('vegas') || shopDomain.toLowerCase().includes('las-vegas')) {
     return '🎰 Las Vegas';
+  }
+  
+  // Check location name if available
+  const locationName = payload.location?.name || payload.fulfillment_location?.name || '';
+  if (locationName.toLowerCase().includes('hawaii')) {
+    return '🌺 Hawaii';
+  }
+  if (locationName.toLowerCase().includes('vegas') || locationName.toLowerCase().includes('702')) {
+    return '🎰 Las Vegas';
+  }
+  
+  // Check any fulfillment line items for location info
+  if (payload.fulfillments && Array.isArray(payload.fulfillments)) {
+    for (const fulfillment of payload.fulfillments) {
+      const fulfillmentLocation = fulfillment.location?.name || '';
+      if (fulfillmentLocation.toLowerCase().includes('hawaii')) {
+        return '🌺 Hawaii';
+      }
+      if (fulfillmentLocation.toLowerCase().includes('vegas') || fulfillmentLocation.toLowerCase().includes('702')) {
+        return '🎰 Las Vegas';
+      }
+    }
   }
   
   // Default to Las Vegas if no match
