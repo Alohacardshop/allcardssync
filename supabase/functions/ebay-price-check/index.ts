@@ -6,6 +6,47 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// In-memory token cache (reused across function invocations)
+let cachedToken: { token: string; expiresAt: number } | null = null;
+
+async function getEbayOAuthToken(clientId: string, clientSecret: string): Promise<string> {
+  // Check if we have a valid cached token
+  if (cachedToken && cachedToken.expiresAt > Date.now()) {
+    console.log('[eBay OAuth] Using cached token');
+    return cachedToken.token;
+  }
+
+  console.log('[eBay OAuth] Fetching new token');
+  const credentials = btoa(`${clientId}:${clientSecret}`);
+  
+  const response = await fetch('https://api.ebay.com/identity/v1/oauth2/token', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Authorization': `Basic ${credentials}`
+    },
+    body: 'grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope'
+  });
+  
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('[eBay OAuth] Token request failed:', response.status, errorText);
+    throw new Error(`OAuth token request failed: ${response.statusText}`);
+  }
+  
+  const data = await response.json();
+  
+  // Cache token (tokens typically expire after 2 hours)
+  // Set expiry 5 minutes before actual expiry for safety
+  cachedToken = {
+    token: data.access_token,
+    expiresAt: Date.now() + ((data.expires_in - 300) * 1000)
+  };
+  
+  console.log('[eBay OAuth] New token cached, expires in', data.expires_in, 'seconds');
+  return data.access_token;
+}
+
 interface EbayPriceCheckRequest {
   searchQuery: string;
   itemId: string;
@@ -51,11 +92,10 @@ function removeOutliers(prices: number[]): {
   return { average: finalAvg, used: usedPrices, outliers };
 }
 
-async function fetchEbaySoldListings(searchQuery: string, ebayApiKey: string): Promise<number[]> {
+async function fetchEbaySoldListings(searchQuery: string, oauthToken: string): Promise<number[]> {
   const params = new URLSearchParams({
     'OPERATION-NAME': 'findCompletedItems',
     'SERVICE-VERSION': '1.0.0',
-    'SECURITY-APPNAME': ebayApiKey,
     'RESPONSE-DATA-FORMAT': 'JSON',
     'REST-PAYLOAD': '',
     'keywords': searchQuery,
@@ -69,8 +109,16 @@ async function fetchEbaySoldListings(searchQuery: string, ebayApiKey: string): P
 
   const url = `https://svcs.ebay.com/services/search/FindingService/v1?${params.toString()}`;
 
-  const response = await fetch(url);
+  const response = await fetch(url, {
+    headers: {
+      'Authorization': `Bearer ${oauthToken}`,
+      'X-EBAY-API-CALL-NAME': 'findCompletedItems',
+    }
+  });
+  
   if (!response.ok) {
+    const errorText = await response.text();
+    console.error('[eBay API] Request failed:', response.status, errorText);
     throw new Error(`eBay API error: ${response.statusText}`);
   }
 
@@ -104,17 +152,22 @@ serve(async (req) => {
   }
 
   try {
-    const ebayApiKey = Deno.env.get('EBAY_API_KEY');
-    if (!ebayApiKey) {
-      throw new Error('EBAY_API_KEY not configured');
+    const clientId = Deno.env.get('EBAY_CLIENT_ID');
+    const clientSecret = Deno.env.get('EBAY_CLIENT_SECRET');
+    
+    if (!clientId || !clientSecret) {
+      throw new Error('EBAY_CLIENT_ID and EBAY_CLIENT_SECRET must be configured');
     }
 
     const { searchQuery, itemId, currentPrice }: EbayPriceCheckRequest = await req.json();
 
     console.log(`[eBay Price Check] Checking prices for: ${searchQuery}`);
 
-    // Fetch sold listings from eBay
-    const rawPrices = await fetchEbaySoldListings(searchQuery, ebayApiKey);
+    // Get OAuth token (cached or fresh)
+    const oauthToken = await getEbayOAuthToken(clientId, clientSecret);
+
+    // Fetch sold listings from eBay using OAuth
+    const rawPrices = await fetchEbaySoldListings(searchQuery, oauthToken);
 
     if (rawPrices.length === 0) {
       return new Response(
