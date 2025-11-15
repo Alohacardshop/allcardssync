@@ -111,8 +111,7 @@ async function fetchEbaySoldListings(searchQuery: string, oauthToken: string): P
 
   const response = await fetch(url, {
     headers: {
-      'Authorization': `Bearer ${oauthToken}`,
-      'X-EBAY-API-CALL-NAME': 'findCompletedItems',
+      'X-EBAY-SOA-SECURITY-IAFTOKEN': oauthToken,
     }
   });
   
