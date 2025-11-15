@@ -31,10 +31,6 @@ port = 54326
 [functions]
 verify_jwt = true
 
-# eBay price check (temporarily public for testing)
-[functions.ebay-price-check]
-verify_jwt = false
-
 # SHOPIFY FUNCTIONS: All require JWT + admin/staff role verification
 [functions.shopify-delete-duplicates]
 verify_jwt = true
