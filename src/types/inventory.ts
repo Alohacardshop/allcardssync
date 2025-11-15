@@ -18,6 +18,14 @@ export interface InventoryItem extends IntakeItem {
   last_shopify_synced_at?: string | null;
   last_shopify_correlation_id?: string | null;
   
+  // eBay price check data
+  ebay_price_check?: {
+    checked_at: string;
+    ebay_average: number;
+    difference_percent: number;
+    price_count: number;
+  } | null;
+  
   // Removal metadata
   removed_at?: string | null;
   removal_reason?: string | null;
