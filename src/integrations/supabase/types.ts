@@ -347,6 +347,7 @@ export type Database = {
           created_by: string | null
           deleted_at: string | null
           deleted_reason: string | null
+          ebay_price_check: Json | null
           grade: string | null
           grading_company: string
           grading_data: Json | null
@@ -420,6 +421,7 @@ export type Database = {
           created_by?: string | null
           deleted_at?: string | null
           deleted_reason?: string | null
+          ebay_price_check?: Json | null
           grade?: string | null
           grading_company?: string
           grading_data?: Json | null
@@ -493,6 +495,7 @@ export type Database = {
           created_by?: string | null
           deleted_at?: string | null
           deleted_reason?: string | null
+          ebay_price_check?: Json | null
           grade?: string | null
           grading_company?: string
           grading_data?: Json | null

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { CheckSquare, Printer, RotateCcw, Upload, Scissors, Trash2, Loader2, Package } from 'lucide-react';
+import { CheckSquare, Printer, RotateCcw, Upload, Scissors, Trash2, Loader2, Package, DollarSign } from 'lucide-react';
 
 interface BulkActionsToolbarProps {
   selectedCount: number;
@@ -20,6 +20,7 @@ interface BulkActionsToolbarProps {
   onResyncSelected: () => void;
   onSendCutCommand: () => void;
   onDeleteSelected: () => void;
+  onCheckEbayPrices?: () => void;
 }
 
 export const BulkActionsToolbar = React.memo(({
@@ -39,7 +40,8 @@ export const BulkActionsToolbar = React.memo(({
   onSyncSelected,
   onResyncSelected,
   onSendCutCommand,
-  onDeleteSelected
+  onDeleteSelected,
+  onCheckEbayPrices
 }: BulkActionsToolbarProps) => {
   return (
     <div className="flex items-center justify-between">
