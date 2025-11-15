@@ -42,6 +42,7 @@ import { Progress } from '@/components/ui/progress';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCurrentBatch } from '@/hooks/useCurrentBatch';
 import { BatchSelectorDialog } from '@/components/BatchSelectorDialog';
+import { abbreviateGrade } from '@/lib/labelData';
 
 // Lazy load heavy components for faster initial render
 const InventoryAnalytics = lazy(() => import('@/components/InventoryAnalytics').then(m => ({ default: m.InventoryAnalytics })));
@@ -1663,7 +1664,21 @@ const Inventory = () => {
         try {
           const title = generateTitle(item);
           const subtitle = [item.brand_title, item.card_number].filter(Boolean).join(' ');
-          const condition = item.type || 'Raw';
+          
+          // Don't show condition for graded cards, only for raw cards
+          let condition = '';
+          if (item.type === 'Raw') {
+            // Try to get condition from TCGPlayer catalog data first
+            const catalogSnapshot = item.catalog_snapshot as { condition?: string } | null;
+            const tcgCondition = catalogSnapshot?.condition;
+            if (tcgCondition) {
+              condition = abbreviateGrade(tcgCondition);
+            } else if (item.variant) {
+              // Fallback: parse from variant (e.g., "Near Mint - Foil" → "Near Mint")
+              const variantCondition = item.variant.split(' - ')[0];
+              condition = abbreviateGrade(variantCondition);
+            }
+          }
 
           const vars: JobVars = {
             CARDNAME: truncateForLabel(title, 40),
