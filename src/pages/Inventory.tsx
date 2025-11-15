@@ -1551,7 +1551,7 @@ const Inventory = () => {
     }
   }, []);
 
-  const handlePrintBatches = useCallback(async (batchIds: string[]) => {
+  const handlePrintBatches = useCallback(async (batchIds: string[], includeAlreadyPrinted: boolean = false) => {
     if (batchIds.length === 0) {
       toast.info('No batches selected');
       return;
@@ -1560,15 +1560,20 @@ const Inventory = () => {
     setBulkPrinting(true);
     
     try {
-      // Fetch all unprinted items from selected batches
-      const { data: batchItems, error: fetchError } = await supabase
+      // Fetch items from selected batches
+      let query = supabase
         .from('intake_items')
         .select('*')
         .in('lot_id', batchIds)
-        .is('printed_at', null)
         .is('deleted_at', null)
-        .not('removed_from_batch_at', 'is', null)
-        .order('created_at', { ascending: true });
+        .not('removed_from_batch_at', 'is', null);
+
+      // Only filter by printed_at if we're not including already printed items
+      if (!includeAlreadyPrinted) {
+        query = query.is('printed_at', null);
+      }
+
+      const { data: batchItems, error: fetchError } = await query.order('created_at', { ascending: true });
 
       if (fetchError) {
         toast.error(`Failed to fetch batch items: ${fetchError.message}`);
@@ -1576,13 +1581,17 @@ const Inventory = () => {
       }
 
       if (!batchItems || batchItems.length === 0) {
-        toast.info('No unprinted items found in selected batches');
+        toast.info(includeAlreadyPrinted 
+          ? 'No items found in selected batches' 
+          : 'No unprinted items found in selected batches');
         return;
       }
 
       // Show confirmation
       const confirmed = window.confirm(
-        `Print ${batchItems.length} unprinted labels from ${batchIds.length} ${batchIds.length === 1 ? 'batch' : 'batches'}?`
+        includeAlreadyPrinted
+          ? `Print/Reprint ${batchItems.length} label${batchItems.length !== 1 ? 's' : ''} from ${batchIds.length} ${batchIds.length === 1 ? 'batch' : 'batches'}?`
+          : `Print ${batchItems.length} unprinted label${batchItems.length !== 1 ? 's' : ''} from ${batchIds.length} ${batchIds.length === 1 ? 'batch' : 'batches'}?`
       );
 
       if (!confirmed) {

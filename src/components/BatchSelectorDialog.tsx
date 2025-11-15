@@ -12,7 +12,7 @@ interface BatchSelectorDialogProps {
   onOpenChange: (open: boolean) => void;
   storeKey: string;
   locationGid: string;
-  onPrintBatches: (batchIds: string[]) => void;
+  onPrintBatches: (batchIds: string[], includeAlreadyPrinted: boolean) => void;
 }
 
 export function BatchSelectorDialog({
@@ -23,6 +23,7 @@ export function BatchSelectorDialog({
   onPrintBatches,
 }: BatchSelectorDialogProps) {
   const [selectedBatchIds, setSelectedBatchIds] = useState<string[]>([]);
+  const [includeAlreadyPrinted, setIncludeAlreadyPrinted] = useState(false);
   const { data: batches, isLoading } = useBatchesList({ storeKey, locationGid });
 
   const handleToggleBatch = (batchId: string) => {
@@ -43,11 +44,17 @@ export function BatchSelectorDialog({
 
   const handlePrint = () => {
     if (selectedBatchIds.length > 0) {
-      onPrintBatches(selectedBatchIds);
+      onPrintBatches(selectedBatchIds, includeAlreadyPrinted);
       onOpenChange(false);
       setSelectedBatchIds([]);
+      setIncludeAlreadyPrinted(false);
     }
   };
+
+  const totalUnprintedCount = selectedBatchIds.reduce((sum, batchId) => {
+    const batch = batches?.find((b: any) => b.id === batchId);
+    return sum + (batch?.unprinted_count || 0);
+  }, 0);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -58,7 +65,7 @@ export function BatchSelectorDialog({
             Select Batches to Print
           </DialogTitle>
           <DialogDescription>
-            Select one or more batches to print all unprinted labels from them
+            Select one or more batches to print labels. Use the toggle below to include already printed items if needed (e.g., after printer jams).
           </DialogDescription>
         </DialogHeader>
 
@@ -79,17 +86,33 @@ export function BatchSelectorDialog({
           </div>
         ) : (
           <>
-            <div className="flex items-center justify-between pb-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleSelectAll}
-              >
-                {selectedBatchIds.length === batches.length ? 'Deselect All' : 'Select All'}
-              </Button>
-              <span className="text-sm text-muted-foreground">
-                {selectedBatchIds.length} of {batches.length} selected
-              </span>
+            <div className="flex flex-col gap-3 pb-2">
+              <div className="flex items-center justify-between">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSelectAll}
+                >
+                  {selectedBatchIds.length === batches.length ? 'Deselect All' : 'Select All'}
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  {selectedBatchIds.length} of {batches.length} selected
+                </span>
+              </div>
+              
+              <div className="flex items-center gap-2 p-3 rounded-lg border bg-muted/30">
+                <Checkbox
+                  id="include-printed"
+                  checked={includeAlreadyPrinted}
+                  onCheckedChange={(checked) => setIncludeAlreadyPrinted(checked as boolean)}
+                />
+                <label
+                  htmlFor="include-printed"
+                  className="text-sm font-medium cursor-pointer flex-1"
+                >
+                  Include already printed items (for reprinting after jams, etc.)
+                </label>
+              </div>
             </div>
 
             <ScrollArea className="h-[400px] pr-4">
@@ -150,9 +173,10 @@ export function BatchSelectorDialog({
                 disabled={selectedBatchIds.length === 0}
               >
                 <Printer className="h-4 w-4 mr-2" />
-                Print {selectedBatchIds.length > 0 
-                  ? `${batches?.filter((b: any) => selectedBatchIds.includes(b.id)).reduce((sum: number, b: any) => sum + (b.unprinted_count || 0), 0)} Labels` 
-                  : 'Labels'}
+                {includeAlreadyPrinted 
+                  ? `Print/Reprint Selected Batches`
+                  : `Print ${totalUnprintedCount} Unprinted Label${totalUnprintedCount !== 1 ? 's' : ''}`
+                }
               </Button>
             </div>
           </>
