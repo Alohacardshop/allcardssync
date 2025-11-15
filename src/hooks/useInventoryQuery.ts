@@ -74,6 +74,7 @@ export function useInventoryQuery(filters: InventoryFilters) {
           sub_category,
           cost,
           removed_from_batch_at,
+          ebay_price_check,
           intake_lots(
             lot_number,
             status

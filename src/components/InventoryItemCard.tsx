@@ -5,6 +5,9 @@ import { Button } from '@/components/ui/button';
 import { Trash2, Package, Calendar, DollarSign, Eye, EyeOff, FileText, Tag, Printer, ExternalLink, RotateCcw, Loader2, CheckSquare, Square, CheckCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
+import { EbayPriceComparison } from '@/components/inventory/EbayPriceComparison';
+import { checkEbayPrice, generateEbaySearchQuery } from '@/lib/ebayPriceCheck';
+import { toast } from 'sonner';
 import { 
   Tooltip,
   TooltipContent,
@@ -126,6 +129,28 @@ export const InventoryItemCard = memo(({
     });
   };
 
+  const handleCheckEbayPrice = async () => {
+    try {
+      const searchQuery = generateEbaySearchQuery(item);
+      if (!searchQuery) {
+        toast.error('Unable to generate search query for this item');
+        return;
+      }
+      
+      toast.loading('Checking eBay prices...', { id: 'ebay-check' });
+      
+      await checkEbayPrice(item.id, searchQuery, item.price || 0);
+      
+      toast.success('eBay prices updated!', { id: 'ebay-check' });
+      
+      // Invalidate queries to refresh the data
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory-list'] });
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to check eBay prices', { id: 'ebay-check' });
+    }
+  };
+
   const getStatusBadge = (item: any) => {
     if (item.deleted_at) {
       return <Badge variant="destructive">Deleted</Badge>;
@@ -230,6 +255,11 @@ export const InventoryItemCard = memo(({
           <div className="flex items-center space-x-1">
             <DollarSign className="h-3 w-3 text-muted-foreground" />
             <span>${parseFloat(String(item.price || 0)).toFixed(2)}</span>
+            <EbayPriceComparison
+              currentPrice={item.price || 0}
+              ebayData={item.ebay_price_check || undefined}
+              onCheck={handleCheckEbayPrice}
+            />
           </div>
           <div className="flex items-center space-x-1">
             <Package className="h-3 w-3 text-muted-foreground" />

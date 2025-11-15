@@ -65,7 +65,8 @@ export function useInventoryListQuery(filters: InventoryFilters) {
           removed_from_batch_at,
           deleted_at,
           sold_at,
-          card_number
+          card_number,
+          ebay_price_check
         `,
           { count: 'exact' }
         )
