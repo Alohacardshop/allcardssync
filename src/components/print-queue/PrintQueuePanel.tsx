@@ -8,8 +8,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Play, Pause, SkipForward, Trash2, Search, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { usePrintQueue } from '@/hooks/usePrintQueue';
-import { generatePrintJobsFromIntakeItems } from '@/lib/print/generateJobs';
-import { getWorkstationId } from '@/lib/workstationId';
 
 interface PrintJob {
   id: string;
@@ -30,13 +28,10 @@ export default function PrintQueuePanel() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [unprintedCount, setUnprintedCount] = useState(0);
   const { queueStatus, processQueue, clearQueue } = usePrintQueue();
 
   useEffect(() => {
     fetchJobs();
-    fetchUnprintedCount();
     
     const channel = supabase
       .channel('print_jobs_changes')
@@ -45,16 +40,8 @@ export default function PrintQueuePanel() {
       })
       .subscribe();
 
-    const itemsChannel = supabase
-      .channel('intake_items_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'intake_items' }, () => {
-        fetchUnprintedCount();
-      })
-      .subscribe();
-
     return () => {
       supabase.removeChannel(channel);
-      supabase.removeChannel(itemsChannel);
     };
   }, [statusFilter, searchTerm]);
 
@@ -110,43 +97,6 @@ export default function PrintQueuePanel() {
     }
   };
 
-  const handleGenerateJobs = async () => {
-    setIsGenerating(true);
-    try {
-      const result = await generatePrintJobsFromIntakeItems({
-        workstationId: getWorkstationId(),
-      });
-
-      if (result.errors.length > 0) {
-        toast.error(`Created ${result.created} jobs, skipped ${result.skipped}. Errors: ${result.errors.join(', ')}`);
-      } else if (result.created === 0) {
-        toast.info(`No matching items found. ${result.skipped} items skipped.`);
-      } else {
-        toast.success(`Created ${result.created} print jobs${result.skipped > 0 ? `, skipped ${result.skipped}` : ''}`);
-      }
-
-      fetchJobs();
-      fetchUnprintedCount();
-    } catch (error: any) {
-      toast.error(`Error generating jobs: ${error.message}`);
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
-  const fetchUnprintedCount = async () => {
-    try {
-      const { count } = await supabase
-        .from('intake_items')
-        .select('*', { count: 'exact', head: true })
-        .is('printed_at', null)
-        .is('deleted_at', null);
-
-      setUnprintedCount(count || 0);
-    } catch (error) {
-      console.error('Error fetching unprinted count:', error);
-    }
-  };
 
   const getStatusBadge = (status: string) => {
     const variants: Record<string, any> = {
@@ -192,24 +142,6 @@ export default function PrintQueuePanel() {
         </Button>
       </div>
 
-      {unprintedCount > 0 && (
-        <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-          <div className="flex items-center gap-2">
-            <Badge variant="secondary">{unprintedCount}</Badge>
-            <span className="text-sm text-muted-foreground">
-              unprinted items ready for job generation
-            </span>
-          </div>
-          <Button
-            onClick={handleGenerateJobs}
-            disabled={isGenerating}
-            size="sm"
-            variant="outline"
-          >
-            {isGenerating ? "Generating..." : "Generate Print Jobs"}
-          </Button>
-        </div>
-      )}
 
       <div className="grid gap-4">
         <Card>
