@@ -16,7 +16,7 @@ import { logger } from '@/lib/logger';
 
 export function ShopifyTagImport() {
   const { assignedStore } = useStore();
-  const [gradedTags, setGradedTags] = useState("graded,Professional Sports Authenticator (PSA),PSA");
+  const [gradedTags, setGradedTags] = useState("graded,PSA");
   const [rawTags, setRawTags] = useState("single");
   const [updatedSince, setUpdatedSince] = useState("");
   const [maxPages, setMaxPages] = useState("10");
