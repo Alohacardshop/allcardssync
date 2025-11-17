@@ -28,6 +28,7 @@ const NotFound = React.lazy(() => import("./pages/NotFound"));
 const Auth = React.lazy(() => import("./pages/Auth"));
 const PrintLogs = React.lazy(() => import("./pages/PrintLogs"));
 const ZPLSettings = React.lazy(() => import("./pages/ZPLSettings"));
+const BarcodePrinting = React.lazy(() => import("./pages/BarcodePrinting"));
 const ShopifyMapping = React.lazy(() => import("./pages/ShopifyMapping"));
 const ShopifySync = React.lazy(() => import("./pages/ShopifySync"));
 const BulkImport = React.lazy(() => import("./pages/BulkImport"));
@@ -76,8 +77,8 @@ const App = () => (
                             <Route path="/test-hardware" element={<TestHardwarePage />} />
                             <Route path="/inventory" element={<ErrorBoundaryWrapper componentName="Inventory"><Inventory /></ErrorBoundaryWrapper>} />
                             <Route path="/batches" element={<ErrorBoundaryWrapper componentName="Batch Management"><Batches /></ErrorBoundaryWrapper>} />
-                            <Route path="/admin/label-studio" element={<LabelStudio />} />
                             <Route path="/bulk-import" element={<BulkImport />} />
+                            <Route path="/barcode-printing" element={<BarcodePrinting />} />
                             <Route path="/admin" element={<AdminGuard><Admin /></AdminGuard>} />
                             <Route path="/admin/catalog" element={<AdminGuard><div className="p-8"><CatalogMigrationPlaceholder /></div></AdminGuard>} />
                             <Route path="/admin/notifications/discord" element={<AdminGuard><DiscordNotifications /></AdminGuard>} />
@@ -85,7 +86,11 @@ const App = () => (
                             <Route path="/shopify-mapping" element={<ShopifyMapping />} />
                             <Route path="/shopify-sync" element={<ShopifySync />} />
                             <Route path="/bulk-transfer" element={<BulkTransfer />} />
-                            <Route path="/print-logs" element={<PrintLogs />} />
+                            
+                            {/* Legacy routes - redirect to new barcode printing page */}
+                            <Route path="/labels" element={<BarcodePrinting />} />
+                            <Route path="/print-logs" element={<BarcodePrinting />} />
+                            <Route path="/admin/label-studio" element={<BarcodePrinting />} />
                             
                             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                             <Route path="*" element={<NotFound />} />

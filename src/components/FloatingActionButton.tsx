@@ -24,7 +24,7 @@ export function FloatingActionButton() {
     {
       icon: Printer,
       label: 'Print Labels',
-      action: () => navigate('/labels'),
+      action: () => navigate('/barcode-printing'),
       color: 'bg-purple-500 hover:bg-purple-600'
     },
     {
