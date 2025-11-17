@@ -12,7 +12,6 @@ import { Search, Filter, ChevronDown, X } from 'lucide-react';
 import { generatePrintJobsFromIntakeItems } from '@/lib/print/generateJobs';
 import { getWorkstationId } from '@/lib/workstationId';
 import { toast } from 'sonner';
-import { DateRangeFilter } from '@/components/search/DateRangeFilter';
 
 export default function PulledItemsFilter() {
   const [items, setItems] = useState<any[]>([]);
@@ -24,7 +23,7 @@ export default function PulledItemsFilter() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [availableTags, setAvailableTags] = useState<string[]>([]);
-  const [dateRange, setDateRange] = useState<[Date | null, Date | null]>([null, null]);
+  const [dateFilter, setDateFilter] = useState<'today' | 'yesterday' | '7days' | '30days' | null>(null);
 
   useEffect(() => {
     fetchAllItems();
@@ -33,7 +32,7 @@ export default function PulledItemsFilter() {
   useEffect(() => {
     filterItems();
     setSelectedItems(new Set()); // Clear selection when filters change
-  }, [searchTerm, selectedIncludeTags, selectedExcludeTags, dateRange, allItems]);
+  }, [searchTerm, selectedIncludeTags, selectedExcludeTags, dateFilter, allItems]);
 
   const fetchAllItems = async () => {
     setLoading(true);
@@ -82,31 +81,35 @@ export default function PulledItemsFilter() {
       );
     }
 
-    // Date range filter
-    const [dateFrom, dateTo] = dateRange;
-    if (dateFrom || dateTo) {
+    // Date filter
+    if (dateFilter) {
       filtered = filtered.filter(item => {
         if (!item.pushed_at) return false;
         
         const pushedDate = new Date(item.pushed_at);
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
         
-        if (dateFrom && dateTo) {
-          const fromStart = new Date(dateFrom);
-          fromStart.setHours(0, 0, 0, 0);
-          const toEnd = new Date(dateTo);
-          toEnd.setHours(23, 59, 59, 999);
-          return pushedDate >= fromStart && pushedDate <= toEnd;
-        } else if (dateFrom) {
-          const fromStart = new Date(dateFrom);
-          fromStart.setHours(0, 0, 0, 0);
-          return pushedDate >= fromStart;
-        } else if (dateTo) {
-          const toEnd = new Date(dateTo);
-          toEnd.setHours(23, 59, 59, 999);
-          return pushedDate <= toEnd;
+        switch (dateFilter) {
+          case 'today':
+            return pushedDate >= today;
+          case 'yesterday':
+            const tomorrowStart = new Date(today);
+            tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+            return pushedDate >= yesterday && pushedDate < tomorrowStart;
+          case '7days':
+            const sevenDaysAgo = new Date(today);
+            sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+            return pushedDate >= sevenDaysAgo;
+          case '30days':
+            const thirtyDaysAgo = new Date(today);
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+            return pushedDate >= thirtyDaysAgo;
+          default:
+            return true;
         }
-        
-        return true;
       });
     }
 
@@ -240,14 +243,6 @@ export default function PulledItemsFilter() {
                   className="pl-10"
                 />
               </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Date Added to Shopify</Label>
-              <DateRangeFilter
-                value={dateRange}
-                onValueChange={setDateRange}
-              />
             </div>
 
             <div className="space-y-2">
