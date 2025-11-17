@@ -18,7 +18,7 @@ export default function BarcodePrinting() {
   return (
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex flex-col gap-4 mb-6">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-3">
             <Printer className="h-8 w-8 text-primary" />
             <h1 className="text-3xl font-bold">Barcode Printing</h1>
@@ -28,6 +28,7 @@ export default function BarcodePrinting() {
             onClick={() => setShowPullDialog(true)}
             disabled={!assignedStore || !selectedLocation}
             size="lg"
+            className="shrink-0"
           >
             <Download className="mr-2 h-4 w-4" />
             Pull from Shopify
