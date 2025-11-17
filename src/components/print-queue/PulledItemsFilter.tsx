@@ -6,83 +6,109 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Search, Filter } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { Search, Filter, ChevronDown, X } from 'lucide-react';
 import { generatePrintJobsFromIntakeItems } from '@/lib/print/generateJobs';
 import { getWorkstationId } from '@/lib/workstationId';
 import { toast } from 'sonner';
 
 export default function PulledItemsFilter() {
   const [items, setItems] = useState<any[]>([]);
+  const [allItems, setAllItems] = useState<any[]>([]); // Store all items for tag extraction
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [includeTags, setIncludeTags] = useState('');
-  const [excludeTags, setExcludeTags] = useState('printed');
+  const [selectedIncludeTags, setSelectedIncludeTags] = useState<string[]>([]);
+  const [selectedExcludeTags, setSelectedExcludeTags] = useState<string[]>(['printed']);
   const [isGenerating, setIsGenerating] = useState(false);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+  const [availableTags, setAvailableTags] = useState<string[]>([]);
 
   useEffect(() => {
-    fetchItems();
-    setSelectedItems(new Set()); // Clear selection when filters change
-  }, [searchTerm, includeTags, excludeTags]);
+    fetchAllItems();
+  }, []);
 
-  const fetchItems = async () => {
+  useEffect(() => {
+    filterItems();
+    setSelectedItems(new Set()); // Clear selection when filters change
+  }, [searchTerm, selectedIncludeTags, selectedExcludeTags, allItems]);
+
+  const fetchAllItems = async () => {
     setLoading(true);
     try {
-      let query = supabase
+      const { data, error } = await supabase
         .from('intake_items')
         .select('*')
         .is('printed_at', null)
         .is('deleted_at', null)
-        .order('created_at', { ascending: false })
-        .limit(100);
-
-      if (searchTerm) {
-        query = query.or(`sku.ilike.%${searchTerm}%,brand_title.ilike.%${searchTerm}%,subject.ilike.%${searchTerm}%`);
-      }
-
-      const { data, error } = await query;
+        .order('created_at', { ascending: false });
 
       if (error) throw error;
 
-      // Filter by tags in memory (since tags are stored in JSON fields)
-      let filtered = data || [];
-
-      if (includeTags || excludeTags) {
-        filtered = filtered.filter(item => {
-          const itemTags = [
-            ...((item.shopify_snapshot as any)?.tags || []),
-            ...((item.source_payload as any)?.tags || []),
-          ].map((t: string) => t.toLowerCase());
-
-          // Check exclude tags
-          if (excludeTags) {
-            const exclude = excludeTags.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
-            const hasExcluded = exclude.some(tag => 
-              itemTags.some(itemTag => itemTag.includes(tag))
-            );
-            if (hasExcluded) return false;
-          }
-
-          // Check include tags
-          if (includeTags) {
-            const include = includeTags.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
-            const hasIncluded = include.some(tag => 
-              itemTags.some(itemTag => itemTag.includes(tag))
-            );
-            if (!hasIncluded) return false;
-          }
-
-          return true;
-        });
-      }
-
-      setItems(filtered);
+      setAllItems(data || []);
+      
+      // Extract all unique tags
+      const tagsSet = new Set<string>();
+      (data || []).forEach(item => {
+        const itemTags = [
+          ...((item.shopify_snapshot as any)?.tags || []),
+          ...((item.source_payload as any)?.tags || []),
+        ];
+        itemTags.forEach((tag: string) => tagsSet.add(tag));
+      });
+      
+      setAvailableTags(Array.from(tagsSet).sort());
+      filterItems();
     } catch (error) {
       console.error('Failed to fetch items:', error);
       toast.error('Failed to load items');
     } finally {
       setLoading(false);
     }
+  };
+
+  const filterItems = () => {
+    let filtered = [...allItems];
+
+    // Search filter
+    if (searchTerm) {
+      const search = searchTerm.toLowerCase();
+      filtered = filtered.filter(item => 
+        item.sku?.toLowerCase().includes(search) ||
+        item.brand_title?.toLowerCase().includes(search) ||
+        item.subject?.toLowerCase().includes(search)
+      );
+    }
+
+    // Tag filters
+    if (selectedIncludeTags.length > 0 || selectedExcludeTags.length > 0) {
+      filtered = filtered.filter(item => {
+        const itemTags = [
+          ...((item.shopify_snapshot as any)?.tags || []),
+          ...((item.source_payload as any)?.tags || []),
+        ].map((t: string) => t.toLowerCase());
+
+        // Check exclude tags
+        if (selectedExcludeTags.length > 0) {
+          const hasExcluded = selectedExcludeTags.some(tag => 
+            itemTags.some(itemTag => itemTag.includes(tag.toLowerCase()))
+          );
+          if (hasExcluded) return false;
+        }
+
+        // Check include tags
+        if (selectedIncludeTags.length > 0) {
+          const hasIncluded = selectedIncludeTags.some(tag => 
+            itemTags.some(itemTag => itemTag.includes(tag.toLowerCase()))
+          );
+          if (!hasIncluded) return false;
+        }
+
+        return true;
+      });
+    }
+
+    setItems(filtered);
   };
 
   const handleGenerateJobs = async () => {
@@ -142,6 +168,18 @@ export default function PulledItemsFilter() {
   const isAllSelected = items.length > 0 && selectedItems.size === items.length;
   const isSomeSelected = selectedItems.size > 0 && selectedItems.size < items.length;
 
+  const toggleIncludeTag = (tag: string) => {
+    setSelectedIncludeTags(prev => 
+      prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
+    );
+  };
+
+  const toggleExcludeTag = (tag: string) => {
+    setSelectedExcludeTags(prev => 
+      prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
+    );
+  };
+
   const getTags = (item: any): string[] => {
     return [
       ...((item.shopify_snapshot as any)?.tags || []),
@@ -175,23 +213,105 @@ export default function PulledItemsFilter() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="include-tags">Include Tags</Label>
-              <Input
-                id="include-tags"
-                placeholder="sports, tcg"
-                value={includeTags}
-                onChange={(e) => setIncludeTags(e.target.value)}
-              />
+              <Label>Include Tags (must have)</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="w-full justify-between">
+                    {selectedIncludeTags.length > 0 
+                      ? `${selectedIncludeTags.length} selected`
+                      : 'Select tags...'}
+                    <ChevronDown className="h-4 w-4 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[300px] p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Search tags..." />
+                    <CommandList>
+                      <CommandEmpty>No tags found.</CommandEmpty>
+                      <CommandGroup>
+                        {availableTags.map((tag) => (
+                          <CommandItem
+                            key={tag}
+                            onSelect={() => toggleIncludeTag(tag)}
+                          >
+                            <Checkbox
+                              checked={selectedIncludeTags.includes(tag)}
+                              className="mr-2"
+                            />
+                            {tag}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              {selectedIncludeTags.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {selectedIncludeTags.map(tag => (
+                    <Badge 
+                      key={tag} 
+                      variant="secondary"
+                      className="cursor-pointer"
+                      onClick={() => toggleIncludeTag(tag)}
+                    >
+                      {tag}
+                      <X className="h-3 w-3 ml-1" />
+                    </Badge>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="exclude-tags">Exclude Tags</Label>
-              <Input
-                id="exclude-tags"
-                placeholder="printed"
-                value={excludeTags}
-                onChange={(e) => setExcludeTags(e.target.value)}
-              />
+              <Label>Exclude Tags (must not have)</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="w-full justify-between">
+                    {selectedExcludeTags.length > 0 
+                      ? `${selectedExcludeTags.length} selected`
+                      : 'Select tags...'}
+                    <ChevronDown className="h-4 w-4 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[300px] p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Search tags..." />
+                    <CommandList>
+                      <CommandEmpty>No tags found.</CommandEmpty>
+                      <CommandGroup>
+                        {availableTags.map((tag) => (
+                          <CommandItem
+                            key={tag}
+                            onSelect={() => toggleExcludeTag(tag)}
+                          >
+                            <Checkbox
+                              checked={selectedExcludeTags.includes(tag)}
+                              className="mr-2"
+                            />
+                            {tag}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              {selectedExcludeTags.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {selectedExcludeTags.map(tag => (
+                    <Badge 
+                      key={tag} 
+                      variant="destructive"
+                      className="cursor-pointer"
+                      onClick={() => toggleExcludeTag(tag)}
+                    >
+                      {tag}
+                      <X className="h-3 w-3 ml-1" />
+                    </Badge>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
