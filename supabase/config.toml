@@ -162,3 +162,7 @@ verify_jwt = true
 
 [functions.card-show-fetch-alt]
 verify_jwt = true
+
+# Print Queue Management
+[functions.shopify-tag-manager]
+verify_jwt = true
