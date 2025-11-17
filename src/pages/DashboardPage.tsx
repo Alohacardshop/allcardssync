@@ -1,37 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Navigation } from "@/components/Navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
-import { Separator } from "@/components/ui/separator";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { 
-  Activity, 
-  AlertTriangle, 
-  CheckCircle, 
-  Clock, 
-  DollarSign,
-  Package,
-  Printer,
-  ShoppingCart,
-  TrendingUp,
-  Users,
-  Zap,
-  Download,
-  Upload,
-  RefreshCw,
-  Plus,
-  Award,
-  FileEdit,
-  Archive
-} from "lucide-react";
+import { ShoppingCart, Award, FileEdit, ArrowRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { GradedCardIntake } from "@/components/GradedCardIntake";
-import { TCGPlayerBulkImport } from "@/components/TCGPlayerBulkImport";
 import { CurrentBatchPanel } from "@/components/CurrentBatchPanel";
 import { SystemHealthCard } from "@/components/SystemHealthCard";
 import { RefreshSectionButton } from "@/components/RefreshButton";
@@ -45,8 +18,6 @@ interface SystemStats {
 
 export default function DashboardPage() {
   const navigate = useNavigate();
-  const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState("graded");
   const { isLive, toggleLive } = useLiveMode(['dashboard'], 'dashboard-live-mode');
 
   // Use React Query for stats instead of manual state + useEffect
@@ -73,45 +44,6 @@ export default function DashboardPage() {
     };
   }
 
-  const handleBatchAdd = useCallback(() => {
-    // Refresh stats when items are added to batch - invalidate the query
-    // queryClient.invalidateQueries(['dashboard', 'stats']); // Can be called if needed
-  }, []);
-
-  const handleQuickAction = (action: string) => {
-    switch (action) {
-      case 'bulk-intake':
-        navigate('/bulk-import');
-        break;
-      case 'print-queue':
-        navigate('/barcode-printing');
-        break;
-      case 'force-sync':
-        toast({ title: "Force sync initiated", description: "Shopify sync started in background" });
-        break;
-      case 'export-data':
-        toast({ title: "Export started", description: "Your data export is being prepared" });
-        break;
-      default:
-        break;
-    }
-  };
-
-  const handleEndOfDayReport = async () => {
-    try {
-      // In real app, this would generate and download a CSV
-      toast({ 
-        title: "End of Day Report", 
-        description: "Report generated and downloaded successfully" 
-      });
-    } catch (error) {
-      toast({ 
-        title: "Export failed", 
-        description: "Unable to generate end of day report",
-        variant: "destructive"
-      });
-    }
-  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -134,14 +66,13 @@ export default function DashboardPage() {
                 label="Refresh" 
                 size="sm"
               />
-              <Navigation />
             </div>
           </div>
         </div>
       </header>
 
       <main className="container mx-auto px-4 py-8">
-        {/* System Stats and Health */}
+        {/* System Stats */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 mb-6">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -161,43 +92,45 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Main Content Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-3 h-auto">
-            <TabsTrigger value="graded" className="flex flex-col md:flex-row items-center gap-1 md:gap-2 py-3 md:py-2">
-              <Award className="h-4 w-4" />
-              <span className="text-xs md:text-sm">Graded</span>
-            </TabsTrigger>
-            <TabsTrigger value="raw" className="flex flex-col md:flex-row items-center gap-1 md:gap-2 py-3 md:py-2">
-              <FileEdit className="h-4 w-4" />
-              <span className="text-xs md:text-sm">Raw</span>
-            </TabsTrigger>
-            <TabsTrigger value="batch" className="flex flex-col md:flex-row items-center gap-1 md:gap-2 py-3 md:py-2">
-              <Archive className="h-4 w-4" />
-              <span className="text-xs md:text-sm">Batch</span>
-            </TabsTrigger>
-          </TabsList>
+        {/* Quick Actions */}
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Quick Actions</CardTitle>
+            <CardDescription>Start adding items to inventory</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Button
+                variant="outline"
+                className="h-24 flex flex-col items-center justify-center gap-2 hover:bg-primary/5 hover:border-primary/50"
+                onClick={() => navigate('/intake/graded')}
+              >
+                <Award className="h-8 w-8 text-primary" />
+                <div className="text-center">
+                  <div className="font-semibold">Add Graded Cards</div>
+                  <div className="text-xs text-muted-foreground">PSA, CGC certificates</div>
+                </div>
+                <ArrowRight className="h-4 w-4 absolute right-4" />
+              </Button>
 
-          <TabsContent value="graded" className="mt-6">
-            <GradedCardIntake onBatchAdd={handleBatchAdd} />
-          </TabsContent>
+              <Button
+                variant="outline"
+                className="h-24 flex flex-col items-center justify-center gap-2 hover:bg-primary/5 hover:border-primary/50"
+                onClick={() => navigate('/intake/bulk')}
+              >
+                <FileEdit className="h-8 w-8 text-primary" />
+                <div className="text-center">
+                  <div className="font-semibold">Bulk Import</div>
+                  <div className="text-xs text-muted-foreground">CSV, TCGPlayer data</div>
+                </div>
+                <ArrowRight className="h-4 w-4 absolute right-4" />
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
 
-          <TabsContent value="raw" className="mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Raw Cards Intake</CardTitle>
-                <CardDescription>Add raw (ungraded) cards to inventory</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <TCGPlayerBulkImport onBatchAdd={handleBatchAdd} />
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="batch" className="mt-6">
-            <CurrentBatchPanel />
-          </TabsContent>
-        </Tabs>
+        {/* Current Batch */}
+        <CurrentBatchPanel />
       </main>
     </div>
   );

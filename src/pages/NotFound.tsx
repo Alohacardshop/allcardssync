@@ -1,6 +1,5 @@
 import { useLocation, Link } from "react-router-dom";
 import { useEffect } from "react";
-import { Navigation } from "@/components/Navigation";
 import { logger } from '@/lib/logger';
 
 const NotFound = () => {
@@ -11,18 +10,15 @@ const NotFound = () => {
   }, [location.pathname]);
 
   return (
-    <>
-      <Navigation />
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="text-center">
-          <h1 className="text-4xl font-bold mb-4 text-foreground">404</h1>
-          <p className="text-xl text-muted-foreground mb-4">Oops! Page not found</p>
-          <Link to="/" className="underline text-primary hover:opacity-80 transition-opacity">
-            Return to Home
-          </Link>
-        </div>
+    <div className="min-h-screen bg-background pt-16 flex items-center justify-center">
+      <div className="text-center">
+        <h1 className="text-4xl font-bold mb-4 text-foreground">404</h1>
+        <p className="text-xl text-muted-foreground mb-4">Oops! Page not found</p>
+        <Link to="/" className="underline text-primary hover:opacity-80 transition-opacity">
+          Return to Home
+        </Link>
       </div>
-    </>
+    </div>
   );
 };
 

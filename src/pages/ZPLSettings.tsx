@@ -8,7 +8,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
-import { Navigation } from "@/components/Navigation";
 import { useLocalStorageString } from "@/hooks/useLocalStorage";
 import { Settings, Save, Wifi, Info, TestTube } from "lucide-react";
 import { zebraNetworkService } from "@/lib/zebraNetworkService";
@@ -126,7 +125,6 @@ ${defaultCutMode === 'true' && hasCutter === 'true' ? '^MMB' : ''}
             <h1 className="text-2xl font-bold text-foreground">ZPL Printer Settings</h1>
             <p className="text-muted-foreground mt-1">Configure default printer settings and network parameters.</p>
           </div>
-          <Navigation />
         </div>
       </header>
 

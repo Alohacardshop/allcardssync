@@ -9,7 +9,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Printer, Eye, RotateCcw, Filter, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { Navigation } from "@/components/Navigation";
 import { zebraNetworkService } from "@/lib/zebraNetworkService";
 import { logger } from '@/lib/logger';
 
@@ -251,7 +250,6 @@ export default function PrintLogs() {
             <h1 className="text-2xl font-bold text-foreground">Print Logs</h1>
             <p className="text-muted-foreground mt-1">View and manage print job history and status.</p>
           </div>
-          <Navigation />
         </div>
       </header>
 

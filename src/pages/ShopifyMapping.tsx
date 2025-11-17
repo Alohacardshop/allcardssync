@@ -11,7 +11,6 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
-import { Navigation } from "@/components/Navigation";
 import { useStore } from "@/contexts/StoreContext";
 import { buildTitleFromParts } from "@/lib/labelData";
 import { AlertTriangle, CheckCircle, Clock, ExternalLink, RefreshCw, Edit3, MapPin, Settings } from "lucide-react";
@@ -300,7 +299,6 @@ export default function ShopifyMapping() {
               <h1 className="text-2xl font-bold text-foreground">Shopify Product Mapping</h1>
               <p className="text-muted-foreground mt-1">Map intake items to Shopify products and manage inventory sync.</p>
             </div>
-            <Navigation />
           </div>
           
           {/* Store Info */}

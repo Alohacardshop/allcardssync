@@ -5,8 +5,6 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Loader2, Plus, Filter } from "lucide-react"
 import { toast } from "sonner"
-import { Navigation } from "@/components/Navigation"
-import { MobileBottomNav } from "@/components/navigation/MobileBottomNav"
 import { MobileSearchFilters } from "@/components/mobile/MobileSearchFilters"
 import { logger } from '@/lib/logger';
 import { ResponsiveInventoryTable } from "@/components/enhanced/ResponsiveInventoryTable"
@@ -209,13 +207,11 @@ const MobileInventory = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background pb-16">
+      <div className="min-h-screen bg-background pb-16 pt-16">
         <header className="border-b bg-card/50">
           <div className="container mx-auto px-4 py-3">
-            <Navigation />
           </div>
         </header>
-        <MobileBottomNav />
         
         <div className="flex items-center justify-center min-h-[50vh]">
           <Loader2 className="h-8 w-8 animate-spin" />
@@ -226,15 +222,13 @@ const MobileInventory = () => {
 
   return (
     <div className="min-h-screen bg-background pb-16">
-      {/* Navigation */}
+      {/* Header removed - NavigationBar is now global */}
       <header className="border-b bg-card/50">
         <div className="container mx-auto px-4 py-3">
-          <Navigation />
         </div>
       </header>
 
-      {/* Mobile Bottom Navigation */}
-      <MobileBottomNav />
+        {/* Mobile Bottom Navigation removed */}
 
       <div className="container mx-auto px-4 py-6 space-y-6">
         {/* Header */}

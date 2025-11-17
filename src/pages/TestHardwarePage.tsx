@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Navigation } from "@/components/Navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -204,7 +203,6 @@ export default function TestHardwarePage() {
                 <h1 className="text-2xl font-bold">Hardware Testing</h1>
                 <Badge variant="outline">Diagnostics</Badge>
               </div>
-              <Navigation />
             </div>
           </div>
         </header>

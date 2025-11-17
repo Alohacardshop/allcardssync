@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Navigation } from "@/components/Navigation";
 import { BulkTransferScanner } from "@/components/BulkTransferScanner";
 import { TransferItemsList } from "@/components/TransferItemsList";
 import { TransferHistoryLog } from "@/components/TransferHistoryLog";
@@ -15,8 +14,7 @@ export default function BulkTransfer() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <Navigation />
+    <div className="min-h-screen bg-background pt-16">
       
       <main className="container mx-auto p-6 space-y-6">
         <div className="flex items-center justify-between">

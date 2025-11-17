@@ -1,8 +1,6 @@
 import { useState } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Navigation } from "@/components/Navigation"
-import { MobileBottomNav } from "@/components/navigation/MobileBottomNav"
 import { RealTimeSyncMonitor } from "@/components/shopify/RealTimeSyncMonitor"
 import { InventoryAnalytics } from "@/components/analytics/InventoryAnalytics"
 import { KeyboardShortcuts, useKeyboardShortcuts } from "@/components/interactions/KeyboardShortcuts"
@@ -69,15 +67,13 @@ const AdminEnhanced = () => {
   return (
     <ErrorBoundaryWithRecovery>
       <div className="min-h-screen bg-background pb-16 md:pb-0">
-        {/* Navigation */}
+        {/* Header removed - NavigationBar is now global */}
         <header className="border-b bg-card/50">
           <div className="container mx-auto px-4 py-3">
-            <Navigation />
           </div>
         </header>
 
-        {/* Mobile Bottom Navigation */}
-        <MobileBottomNav />
+        {/* Mobile Bottom Navigation removed */}
 
         <div className="container mx-auto px-4 py-6">
           {/* Header */}

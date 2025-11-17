@@ -12,7 +12,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { Trash2, Plus, Send } from 'lucide-react';
 import { AdminGuard } from '@/components/AdminGuard';
-import { Navigation } from '@/components/Navigation';
 
 interface DiscordChannel {
   name: string;
@@ -251,8 +250,7 @@ export default function DiscordNotifications() {
 
   return (
     <AdminGuard>
-      <div className="min-h-screen bg-background">
-        <Navigation />
+      <div className="min-h-screen bg-background pt-16">
         <div className="container mx-auto py-8 px-4 max-w-4xl">
           <div className="mb-8">
             <Button variant="ghost" onClick={() => navigate('/admin')}>

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Pencil, Send, Trash2, Eye, Plus, Loader2 } from "lucide-react";
+import { Pencil, Send, Trash2, Eye, Plus, Loader2, Package } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import EditIntakeItemDialog from "./EditIntakeItemDialog";
@@ -430,8 +430,12 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
         
         <CardContent>
           {recentItems.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              No items in current batch
+            <div className="text-center py-12 px-4">
+              <Package className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
+              <h3 className="text-lg font-semibold mb-2">No items in batch</h3>
+              <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+                Scan or import items to get started. Your batch will appear here.
+              </p>
             </div>
           ) : (
             <div className="space-y-3">
