@@ -67,8 +67,8 @@ export const META_KEYS = {
   INTAKE_ID: "intake_id",
   
   // Core Classification
-  MAIN_CATEGORY: "main_category",      // tcg, sports, comics
-  SUB_CATEGORY: "sub_category",        // pokemon, baseball, mtg, marvel, etc.
+  MAIN_CATEGORY: "main_category",      // tcg, comics
+  SUB_CATEGORY: "sub_category",        // pokemon, mtg, marvel, etc.
   ITEM_TYPE: "item_type",              // graded, raw
   
   // Grading Info

@@ -662,7 +662,6 @@ Prices from Market Price on 8/24/2025 and are subject to change.`;
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="tcg">🎴 TCG</SelectItem>
-                      <SelectItem value="sports">⚾ Sports</SelectItem>
                       <SelectItem value="comics">📚 Comics</SelectItem>
                     </SelectContent>
                   </Select>

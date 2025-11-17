@@ -299,7 +299,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         const cgcData = data.data as CGCCertificateData;
         setCardData(cgcData);
         
-        // Auto-detect main category from CGC data - check set name for sports/TCG indicators
+        // Auto-detect main category from CGC data
         const combinedCGC = `${cgcData.setName || ''} ${cgcData.seriesName || ''}`;
         const detectedCategory = detectMainCategory(combinedCGC);
         
@@ -668,7 +668,6 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="tcg">🎴 TCG</SelectItem>
-                  <SelectItem value="sports">⚾ Sports</SelectItem>
                   <SelectItem value="comics">📚 Comics</SelectItem>
                 </SelectContent>
               </Select>
@@ -714,7 +713,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
               <Label htmlFor="category">Category</Label>
               <Input
                 id="category"
-                placeholder="Category (e.g., Sports Card)"
+                placeholder="Category (e.g., TCG)"
                 value={formData.category}
                 onChange={(e) => updateFormField('category', e.target.value)}
               />

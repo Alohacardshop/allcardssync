@@ -462,7 +462,6 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
                           {item.main_category && (
                             <Badge variant="secondary" className="text-xs h-5">
                               {item.main_category === 'tcg' && '🎴 TCG'}
-                              {item.main_category === 'sports' && '⚾ Sports'}
                               {item.main_category === 'comics' && '📚 Comics'}
                             </Badge>
                           )}

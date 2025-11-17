@@ -375,7 +375,6 @@ export const ManualRawCardEntry: React.FC<ManualRawCardEntryProps> = ({ onBatchA
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="tcg">🃏 TCG (Trading Card Games)</SelectItem>
-                <SelectItem value="sports">⚾ Sports Cards</SelectItem>
                 <SelectItem value="comics">📚 Comics</SelectItem>
               </SelectContent>
             </Select>

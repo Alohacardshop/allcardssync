@@ -14,87 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      alt_credentials: {
-        Row: {
-          created_at: string | null
-          email: string
-          id: string
-          password: string
-          updated_at: string | null
-        }
-        Insert: {
-          created_at?: string | null
-          email: string
-          id?: string
-          password: string
-          updated_at?: string | null
-        }
-        Update: {
-          created_at?: string | null
-          email?: string
-          id?: string
-          password?: string
-          updated_at?: string | null
-        }
-        Relationships: []
-      }
-      alt_items: {
-        Row: {
-          alt_checked_at: string | null
-          alt_notes: string | null
-          alt_url: string | null
-          alt_uuid: string | null
-          alt_value: number | null
-          created_at: string | null
-          grade: string | null
-          grading_service: string | null
-          id: string
-          image_url: string | null
-          population: string | null
-          set_name: string | null
-          status: string | null
-          title: string | null
-          updated_at: string | null
-          year: string | null
-        }
-        Insert: {
-          alt_checked_at?: string | null
-          alt_notes?: string | null
-          alt_url?: string | null
-          alt_uuid?: string | null
-          alt_value?: number | null
-          created_at?: string | null
-          grade?: string | null
-          grading_service?: string | null
-          id?: string
-          image_url?: string | null
-          population?: string | null
-          set_name?: string | null
-          status?: string | null
-          title?: string | null
-          updated_at?: string | null
-          year?: string | null
-        }
-        Update: {
-          alt_checked_at?: string | null
-          alt_notes?: string | null
-          alt_url?: string | null
-          alt_uuid?: string | null
-          alt_value?: number | null
-          created_at?: string | null
-          grade?: string | null
-          grading_service?: string | null
-          id?: string
-          image_url?: string | null
-          population?: string | null
-          set_name?: string | null
-          status?: string | null
-          title?: string | null
-          updated_at?: string | null
-          year?: string | null
-        }
-        Relationships: []
-      }
       app_settings: {
         Row: {
           key: string
@@ -145,57 +64,6 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: []
-      }
-      card_transactions: {
-        Row: {
-          alt_item_id: string | null
-          created_at: string | null
-          id: string
-          notes: string | null
-          price: number | null
-          show_id: string | null
-          txn_date: string | null
-          txn_type: string
-          updated_at: string | null
-        }
-        Insert: {
-          alt_item_id?: string | null
-          created_at?: string | null
-          id?: string
-          notes?: string | null
-          price?: number | null
-          show_id?: string | null
-          txn_date?: string | null
-          txn_type: string
-          updated_at?: string | null
-        }
-        Update: {
-          alt_item_id?: string | null
-          created_at?: string | null
-          id?: string
-          notes?: string | null
-          price?: number | null
-          show_id?: string | null
-          txn_date?: string | null
-          txn_type?: string
-          updated_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "card_transactions_alt_item_id_fkey"
-            columns: ["alt_item_id"]
-            isOneToOne: false
-            referencedRelation: "alt_items"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "card_transactions_show_id_fkey"
-            columns: ["show_id"]
-            isOneToOne: false
-            referencedRelation: "shows"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       categories: {
         Row: {
@@ -992,33 +860,6 @@ export type Database = {
         }
         Relationships: []
       }
-      locations: {
-        Row: {
-          code: string | null
-          created_at: string | null
-          id: string
-          name: string
-          notes: string | null
-          updated_at: string | null
-        }
-        Insert: {
-          code?: string | null
-          created_at?: string | null
-          id?: string
-          name: string
-          notes?: string | null
-          updated_at?: string | null
-        }
-        Update: {
-          code?: string | null
-          created_at?: string | null
-          id?: string
-          name?: string
-          notes?: string | null
-          updated_at?: string | null
-        }
-        Relationships: []
-      }
       main_categories: {
         Row: {
           created_at: string | null
@@ -1440,39 +1281,6 @@ export type Database = {
         }
         Relationships: []
       }
-      scrape_sessions: {
-        Row: {
-          created_at: string | null
-          id: string
-          last_cookie_refresh_at: string | null
-          last_login_at: string | null
-          message: string | null
-          service: string
-          status: string | null
-          updated_at: string | null
-        }
-        Insert: {
-          created_at?: string | null
-          id?: string
-          last_cookie_refresh_at?: string | null
-          last_login_at?: string | null
-          message?: string | null
-          service: string
-          status?: string | null
-          updated_at?: string | null
-        }
-        Update: {
-          created_at?: string | null
-          id?: string
-          last_cookie_refresh_at?: string | null
-          last_login_at?: string | null
-          message?: string | null
-          service?: string
-          status?: string | null
-          updated_at?: string | null
-        }
-        Relationships: []
-      }
       sets: {
         Row: {
           cards_count: number | null
@@ -1700,50 +1508,6 @@ export type Database = {
             columns: ["inventory_item_id"]
             isOneToOne: false
             referencedRelation: "stale_lot_items"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      shows: {
-        Row: {
-          created_at: string | null
-          end_date: string | null
-          id: string
-          location: string | null
-          location_id: string | null
-          name: string
-          notes: string | null
-          start_date: string | null
-          updated_at: string | null
-        }
-        Insert: {
-          created_at?: string | null
-          end_date?: string | null
-          id?: string
-          location?: string | null
-          location_id?: string | null
-          name: string
-          notes?: string | null
-          start_date?: string | null
-          updated_at?: string | null
-        }
-        Update: {
-          created_at?: string | null
-          end_date?: string | null
-          id?: string
-          location?: string | null
-          location_id?: string | null
-          name?: string
-          notes?: string | null
-          start_date?: string | null
-          updated_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "shows_location_id_fkey"
-            columns: ["location_id"]
-            isOneToOne: false
-            referencedRelation: "locations"
             referencedColumns: ["id"]
           },
         ]
@@ -2021,22 +1785,7 @@ export type Database = {
           updated_at?: string | null
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "user_profiles_default_location_id_fkey"
-            columns: ["default_location_id"]
-            isOneToOne: false
-            referencedRelation: "locations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "user_profiles_default_show_id_fkey"
-            columns: ["default_show_id"]
-            isOneToOne: false
-            referencedRelation: "shows"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       user_roles: {
         Row: {
