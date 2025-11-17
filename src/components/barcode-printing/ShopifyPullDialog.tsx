@@ -37,8 +37,6 @@ export function ShopifyPullDialog({
   const [status, setStatus] = useState("active");
   const [timeframe, setTimeframe] = useState("all");
   const [customDate, setCustomDate] = useState("");
-  const [includeTags, setIncludeTags] = useState("");
-  const [excludeTags, setExcludeTags] = useState("printed");
   const [dryRun, setDryRun] = useState(false);
   const [autoGenerateJobs, setAutoGenerateJobs] = useState(true);
 
@@ -101,18 +99,6 @@ export function ShopifyPullDialog({
       const updatedSince = getUpdatedSince();
       if (updatedSince) {
         payload.updatedSince = updatedSince;
-      }
-
-      // Add include tags if specified
-      if (includeTags) {
-        const tags = includeTags.split(",").map(t => t.trim()).filter(Boolean);
-        payload.includeTags = tags;
-      }
-
-      // Add exclude tags if specified
-      if (excludeTags) {
-        const tags = excludeTags.split(",").map(t => t.trim()).filter(Boolean);
-        payload.excludeTags = tags;
       }
 
       const { data, error } = await supabase.functions.invoke('shopify-pull-products-by-tags', {
@@ -263,34 +249,6 @@ export function ShopifyPullDialog({
                 className="mt-2"
               />
             )}
-          </div>
-
-          {/* Include Tags */}
-          <div className="space-y-2">
-            <Label htmlFor="include-tags">Only Pull Products With Tags (Optional)</Label>
-            <Input
-              id="include-tags"
-              value={includeTags}
-              onChange={(e) => setIncludeTags(e.target.value)}
-              placeholder="sports, tcg, pokemon, baseball"
-            />
-            <p className="text-sm text-muted-foreground">
-              Only pull products that have these tags (comma-separated)
-            </p>
-          </div>
-
-          {/* Exclude Tags */}
-          <div className="space-y-2">
-            <Label htmlFor="exclude-tags">Exclude Products With Tags (Optional)</Label>
-            <Input
-              id="exclude-tags"
-              value={excludeTags}
-              onChange={(e) => setExcludeTags(e.target.value)}
-              placeholder="printed, archived, discontinued"
-            />
-            <p className="text-sm text-muted-foreground">
-              Don't pull products that have these tags (comma-separated)
-            </p>
           </div>
 
           {/* Dry Run */}

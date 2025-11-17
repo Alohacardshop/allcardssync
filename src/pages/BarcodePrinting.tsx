@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Printer, ListOrdered, FileText, Settings, Users, Cog, Download } from "lucide-react";
+import { Printer, ListOrdered, FileText, Settings, Users, Cog, Download, Filter } from "lucide-react";
 import PrintLogs from "./PrintLogs";
 import LabelStudio from "./admin/LabelStudio";
 import PrintQueuePanel from "@/components/print-queue/PrintQueuePanel";
 import PrintProfileManager from "@/components/print-queue/PrintProfileManager";
+import PulledItemsFilter from "@/components/print-queue/PulledItemsFilter";
 import { PrinterSettingsPanel } from "@/components/printer-settings/PrinterSettingsPanel";
 import { ShopifyPullDialog } from "@/components/barcode-printing/ShopifyPullDialog";
 import { useStore } from "@/contexts/StoreContext";
@@ -32,10 +33,14 @@ export default function BarcodePrinting() {
       </div>
 
       <Tabs defaultValue="queue" className="w-full">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="queue" className="flex items-center gap-2">
             <ListOrdered className="h-4 w-4" />
             Print Queue
+          </TabsTrigger>
+          <TabsTrigger value="filter" className="flex items-center gap-2">
+            <Filter className="h-4 w-4" />
+            Filter Items
           </TabsTrigger>
           <TabsTrigger value="profiles" className="flex items-center gap-2">
             <Users className="h-4 w-4" />
@@ -57,6 +62,10 @@ export default function BarcodePrinting() {
 
         <TabsContent value="queue" className="mt-6">
           <PrintQueuePanel />
+        </TabsContent>
+
+        <TabsContent value="filter" className="mt-6">
+          <PulledItemsFilter />
         </TabsContent>
 
         <TabsContent value="profiles" className="mt-6">
