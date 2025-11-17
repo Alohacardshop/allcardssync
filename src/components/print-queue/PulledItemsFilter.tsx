@@ -12,6 +12,7 @@ import { Search, Filter, ChevronDown, X } from 'lucide-react';
 import { generatePrintJobsFromIntakeItems } from '@/lib/print/generateJobs';
 import { getWorkstationId } from '@/lib/workstationId';
 import { toast } from 'sonner';
+import { DateRangeFilter } from '@/components/search/DateRangeFilter';
 
 export default function PulledItemsFilter() {
   const [items, setItems] = useState<any[]>([]);
@@ -23,6 +24,7 @@ export default function PulledItemsFilter() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [availableTags, setAvailableTags] = useState<string[]>([]);
+  const [dateRange, setDateRange] = useState<[Date | null, Date | null]>([null, null]);
 
   useEffect(() => {
     fetchAllItems();
@@ -31,7 +33,7 @@ export default function PulledItemsFilter() {
   useEffect(() => {
     filterItems();
     setSelectedItems(new Set()); // Clear selection when filters change
-  }, [searchTerm, selectedIncludeTags, selectedExcludeTags, allItems]);
+  }, [searchTerm, selectedIncludeTags, selectedExcludeTags, dateRange, allItems]);
 
   const fetchAllItems = async () => {
     setLoading(true);
@@ -78,6 +80,34 @@ export default function PulledItemsFilter() {
         item.brand_title?.toLowerCase().includes(search) ||
         item.subject?.toLowerCase().includes(search)
       );
+    }
+
+    // Date range filter
+    const [dateFrom, dateTo] = dateRange;
+    if (dateFrom || dateTo) {
+      filtered = filtered.filter(item => {
+        if (!item.pushed_at) return false;
+        
+        const pushedDate = new Date(item.pushed_at);
+        
+        if (dateFrom && dateTo) {
+          const fromStart = new Date(dateFrom);
+          fromStart.setHours(0, 0, 0, 0);
+          const toEnd = new Date(dateTo);
+          toEnd.setHours(23, 59, 59, 999);
+          return pushedDate >= fromStart && pushedDate <= toEnd;
+        } else if (dateFrom) {
+          const fromStart = new Date(dateFrom);
+          fromStart.setHours(0, 0, 0, 0);
+          return pushedDate >= fromStart;
+        } else if (dateTo) {
+          const toEnd = new Date(dateTo);
+          toEnd.setHours(23, 59, 59, 999);
+          return pushedDate <= toEnd;
+        }
+        
+        return true;
+      });
     }
 
     // Tag filters
@@ -197,7 +227,7 @@ export default function PulledItemsFilter() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-4">
             <div className="space-y-2">
               <Label htmlFor="search">Search</Label>
               <div className="relative">
@@ -210,6 +240,14 @@ export default function PulledItemsFilter() {
                   className="pl-10"
                 />
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Date Added to Shopify</Label>
+              <DateRangeFilter
+                value={dateRange}
+                onValueChange={setDateRange}
+              />
             </div>
 
             <div className="space-y-2">
