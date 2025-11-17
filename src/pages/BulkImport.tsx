@@ -4,7 +4,7 @@ import { Navigation } from "@/components/Navigation";
 import { StoreLocationSelector } from "@/components/StoreLocationSelector";
 import { PSABulkImport } from "@/components/PSABulkImport";
 import { TCGPlayerBulkImport } from "@/components/TCGPlayerBulkImport";
-import { ManualRawCardEntry } from "@/components/ManualRawCardEntry";
+
 
 const BulkImport = () => {
 
@@ -29,15 +29,7 @@ const BulkImport = () => {
               </p>
             </CardHeader>
             <CardContent className="space-y-8">
-              <div>
-                <h3 className="text-lg font-semibold mb-4">TCGPlayer CSV Parser</h3>
-                <TCGPlayerBulkImport />
-              </div>
-              
-              <div>
-                <h3 className="text-lg font-semibold mb-4">Manual Raw Card Entry</h3>
-                <ManualRawCardEntry />
-              </div>
+              <TCGPlayerBulkImport />
             </CardContent>
           </Card>
 
