@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Lock, Package, Layers } from 'lucide-react';
 import { GradedCardIntake } from '@/components/GradedCardIntake';
 import { TCGPlayerBulkImport } from '@/components/TCGPlayerBulkImport';
-import { ManualRawCardEntry } from '@/components/ManualRawCardEntry';
+
 import { GradedComicIntake } from '@/components/GradedComicIntake';
 import { RawComicIntake } from '@/components/RawComicIntake';
 import { CurrentBatchPanel } from '@/components/CurrentBatchPanel';
@@ -57,13 +57,7 @@ export default function Index() {
               </TabsList>
               
               <TabsContent value="raw">
-                <div className="space-y-6">
-                  <TCGPlayerBulkImport onBatchAdd={handleBatchCountUpdate} />
-                  
-                  <div className="pt-6 border-t">
-                    <ManualRawCardEntry onBatchAdd={handleBatchCountUpdate} />
-                  </div>
-                </div>
+                <TCGPlayerBulkImport onBatchAdd={handleBatchCountUpdate} />
               </TabsContent>
               
               <TabsContent value="graded">
