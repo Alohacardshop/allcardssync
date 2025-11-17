@@ -55,7 +55,7 @@ serve(async (req) => {
     }
     const { 
       storeKey, 
-      gradedTags = ["graded", "Professional Sports Authenticator (PSA)", "PSA"],
+      gradedTags = ["graded", "PSA"],
       rawTags = ["single"],
       updatedSince,
       maxPages = 50,

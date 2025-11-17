@@ -1,7 +1,7 @@
 # Category Detection & Input Validation Security
 
 ## Overview
-Enhanced category detection system with smart matching and comprehensive input validation to handle data from PSA, CGC, and other third-party APIs safely.
+Enhanced category detection system with smart matching and comprehensive input validation to handle data from PSA, CGC, and other third-party APIs safely for TCG and Comics categories.
 
 ## Security Improvements
 

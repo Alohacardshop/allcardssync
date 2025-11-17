@@ -22,7 +22,7 @@ const METAFIELD_DEFINITIONS = [
     name: "Main Category",
     key: "main_category",
     namespace: "acs.sync",
-    description: "Primary category (TCG, Sports, Comics)",
+    description: "Primary category (TCG, Comics)",
     type: "single_line_text_field",
     ownerType: "PRODUCT"
   },
