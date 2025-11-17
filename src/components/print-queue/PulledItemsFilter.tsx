@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Search, Filter } from 'lucide-react';
 import { generatePrintJobsFromIntakeItems } from '@/lib/print/generateJobs';
 import { getWorkstationId } from '@/lib/workstationId';
@@ -17,9 +18,11 @@ export default function PulledItemsFilter() {
   const [includeTags, setIncludeTags] = useState('');
   const [excludeTags, setExcludeTags] = useState('printed');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     fetchItems();
+    setSelectedItems(new Set()); // Clear selection when filters change
   }, [searchTerm, includeTags, excludeTags]);
 
   const fetchItems = async () => {
@@ -83,16 +86,33 @@ export default function PulledItemsFilter() {
   };
 
   const handleGenerateJobs = async () => {
+    if (selectedItems.size === 0) {
+      toast.error('Please select at least one item');
+      return;
+    }
+
     setIsGenerating(true);
     try {
-      const result = await generatePrintJobsFromIntakeItems({
-        workstationId: getWorkstationId(),
-      });
+      // Filter items to only selected ones
+      const selectedItemsList = items.filter(item => selectedItems.has(item.id));
+      
+      // Create print jobs for each selected item
+      let created = 0;
+      let skipped = 0;
+      
+      for (const item of selectedItemsList) {
+        const result = await generatePrintJobsFromIntakeItems({
+          workstationId: getWorkstationId(),
+        });
+        created += result.created;
+        skipped += result.skipped;
+      }
 
-      if (result.created === 0) {
-        toast.info(`No matching print profiles found for these items`);
+      if (created === 0) {
+        toast.info(`No matching print profiles found for selected items`);
       } else {
-        toast.success(`Created ${result.created} print jobs`);
+        toast.success(`Created ${created} print jobs for ${selectedItems.size} selected items`);
+        setSelectedItems(new Set()); // Clear selection after generating
       }
     } catch (error: any) {
       toast.error(`Error: ${error.message}`);
@@ -100,6 +120,27 @@ export default function PulledItemsFilter() {
       setIsGenerating(false);
     }
   };
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedItems(new Set(items.map(item => item.id)));
+    } else {
+      setSelectedItems(new Set());
+    }
+  };
+
+  const handleSelectItem = (itemId: string, checked: boolean) => {
+    const newSelected = new Set(selectedItems);
+    if (checked) {
+      newSelected.add(itemId);
+    } else {
+      newSelected.delete(itemId);
+    }
+    setSelectedItems(newSelected);
+  };
+
+  const isAllSelected = items.length > 0 && selectedItems.size === items.length;
+  const isSomeSelected = selectedItems.size > 0 && selectedItems.size < items.length;
 
   const getTags = (item: any): string[] => {
     return [
@@ -155,15 +196,33 @@ export default function PulledItemsFilter() {
           </div>
 
           <div className="flex items-center justify-between pt-2">
-            <div className="text-sm text-muted-foreground">
-              {loading ? 'Loading...' : `${items.length} items found`}
+            <div className="flex items-center gap-4">
+              <div className="text-sm text-muted-foreground">
+                {loading ? 'Loading...' : `${items.length} items found`}
+              </div>
+              {items.length > 0 && (
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="select-all"
+                    checked={isAllSelected}
+                    onCheckedChange={handleSelectAll}
+                    className={isSomeSelected ? "data-[state=checked]:bg-primary/50" : ""}
+                  />
+                  <label
+                    htmlFor="select-all"
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                  >
+                    Select All {selectedItems.size > 0 && `(${selectedItems.size} selected)`}
+                  </label>
+                </div>
+              )}
             </div>
             <Button
               onClick={handleGenerateJobs}
-              disabled={isGenerating || items.length === 0}
+              disabled={isGenerating || selectedItems.size === 0}
               size="sm"
             >
-              {isGenerating ? 'Generating...' : 'Generate Print Jobs for Filtered Items'}
+              {isGenerating ? 'Generating...' : `Generate Print Jobs (${selectedItems.size})`}
             </Button>
           </div>
         </CardContent>
@@ -171,25 +230,35 @@ export default function PulledItemsFilter() {
 
       <div className="grid gap-4">
         {items.map((item) => (
-          <Card key={item.id}>
+          <Card 
+            key={item.id}
+            className={selectedItems.has(item.id) ? 'ring-2 ring-primary' : ''}
+          >
             <CardContent className="p-4">
-              <div className="flex items-start justify-between">
-                <div className="space-y-1">
-                  <div className="font-medium">{item.brand_title || item.subject}</div>
-                  <div className="text-sm text-muted-foreground">
-                    SKU: {item.sku} • {item.main_category}
+              <div className="flex items-start gap-3">
+                <Checkbox
+                  checked={selectedItems.has(item.id)}
+                  onCheckedChange={(checked) => handleSelectItem(item.id, checked as boolean)}
+                  className="mt-1"
+                />
+                <div className="flex-1 flex items-start justify-between">
+                  <div className="space-y-1">
+                    <div className="font-medium">{item.brand_title || item.subject}</div>
+                    <div className="text-sm text-muted-foreground">
+                      SKU: {item.sku} • {item.main_category}
+                    </div>
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {getTags(item).map((tag, idx) => (
+                        <Badge key={idx} variant="secondary" className="text-xs">
+                          {tag}
+                        </Badge>
+                      ))}
+                    </div>
                   </div>
-                  <div className="flex flex-wrap gap-1 mt-2">
-                    {getTags(item).map((tag, idx) => (
-                      <Badge key={idx} variant="secondary" className="text-xs">
-                        {tag}
-                      </Badge>
-                    ))}
+                  <div className="text-right">
+                    <div className="font-medium">${item.price}</div>
+                    <div className="text-sm text-muted-foreground">{item.variant}</div>
                   </div>
-                </div>
-                <div className="text-right">
-                  <div className="font-medium">${item.price}</div>
-                  <div className="text-sm text-muted-foreground">{item.variant}</div>
                 </div>
               </div>
             </CardContent>
