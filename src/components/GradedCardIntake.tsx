@@ -271,12 +271,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         const brandField = (normalizedData.brandTitle || "").toLowerCase();
         const combinedText = `${categoryField} ${brandField}`;
         
-        const subCategoryGuess = combinedText.includes('baseball') ? 'Baseball' :
-                                 combinedText.includes('football') ? 'Football' :
-                                 combinedText.includes('basketball') ? 'Basketball' :
-                                 combinedText.includes('hockey') ? 'Hockey' :
-                                 combinedText.includes('soccer') ? 'Soccer' :
-                                 combinedText.includes('pokemon') ? 'Pokemon' :
+        const subCategoryGuess = combinedText.includes('pokemon') ? 'Pokemon' :
                                  combinedText.includes('magic') ? 'Magic: The Gathering' :
                                  combinedText.includes('yugioh') || combinedText.includes('yu-gi-oh') ? 'Yu-Gi-Oh!' :
                                  "";
@@ -305,12 +300,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
         
         // Try to auto-detect sub-category from CGC data
         const seriesOrSet = combinedCGC.toLowerCase();
-        const subCategoryGuess = seriesOrSet.includes('baseball') ? 'Baseball' :
-                                 seriesOrSet.includes('football') ? 'Football' :
-                                 seriesOrSet.includes('basketball') ? 'Basketball' :
-                                 seriesOrSet.includes('hockey') ? 'Hockey' :
-                                 seriesOrSet.includes('soccer') ? 'Soccer' :
-                                 seriesOrSet.includes('pokemon') ? 'Pokemon' :
+        const subCategoryGuess = seriesOrSet.includes('pokemon') ? 'Pokemon' :
                                  seriesOrSet.includes('magic') ? 'Magic: The Gathering' :
                                  seriesOrSet.includes('yugioh') || seriesOrSet.includes('yu-gi-oh') ? 'Yu-Gi-Oh!' :
                                  "";

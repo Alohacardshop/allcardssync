@@ -151,8 +151,8 @@ npm test src/utils/categoryMapping.test.ts
 - `EditIntakeItemDialog.tsx` - Manual category editing
 
 ### Database Tables:
-- `main_categories` - TCG, Sports, Comics
-- `sub_categories` - Pokemon, Magic, Baseball, etc.
+- `main_categories` - TCG, Comics
+- `sub_categories` - Pokemon, Magic, Marvel, DC, etc.
 - `intake_items` - All items with category references
 
 ## Future Enhancements
