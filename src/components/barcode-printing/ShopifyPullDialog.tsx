@@ -7,6 +7,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { generatePrintJobsFromIntakeItems } from "@/lib/print/generateJobs";
+import { getWorkstationId } from "@/lib/workstationId";
 import { Loader2 } from "lucide-react";
 
 interface ShopifyPullDialogProps {
@@ -37,6 +39,7 @@ export function ShopifyPullDialog({
   const [customDate, setCustomDate] = useState("");
   const [filterByTags, setFilterByTags] = useState("");
   const [dryRun, setDryRun] = useState(false);
+  const [autoGenerateJobs, setAutoGenerateJobs] = useState(true);
 
   // Calculate updatedSince based on timeframe
   const getUpdatedSince = () => {
@@ -128,6 +131,26 @@ export function ShopifyPullDialog({
       });
 
       if (!dryRun) {
+        // Auto-generate print jobs if enabled
+        if (autoGenerateJobs) {
+          try {
+            const jobResult = await generatePrintJobsFromIntakeItems({
+              storeKey,
+              workstationId: getWorkstationId(),
+              hoursAgo: 24, // Only create jobs for items pulled in last 24h
+            });
+
+            if (jobResult.created > 0) {
+              toast({
+                title: "Print jobs generated",
+                description: `Created ${jobResult.created} print jobs from pulled items`,
+              });
+            }
+          } catch (jobError) {
+            console.error("Error generating jobs:", jobError);
+          }
+        }
+
         onSuccess?.();
       }
       
@@ -264,6 +287,18 @@ export function ShopifyPullDialog({
             />
             <Label htmlFor="dryRun" className="font-normal cursor-pointer">
               Preview only (don't save to database)
+            </Label>
+          </div>
+
+          {/* Auto-generate Print Jobs */}
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="autoGenerateJobs"
+              checked={autoGenerateJobs}
+              onCheckedChange={(checked) => setAutoGenerateJobs(checked as boolean)}
+            />
+            <Label htmlFor="autoGenerateJobs" className="font-normal cursor-pointer">
+              Auto-generate print jobs after pull
             </Label>
           </div>
         </div>
