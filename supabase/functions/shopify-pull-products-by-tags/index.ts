@@ -269,7 +269,9 @@ serve(async (req) => {
                     variant_title: variant.title,
                     price: variant.price,
                     sku: variant.sku,
-                    tags: product.tags
+                    tags: typeof product.tags === 'string' 
+                      ? product.tags.split(',').map((t: string) => t.trim()).filter(Boolean)
+                      : (product.tags || [])
                   },
                   removed_from_batch_at: quantity > 0 ? new Date().toISOString() : null,
                 }, {
