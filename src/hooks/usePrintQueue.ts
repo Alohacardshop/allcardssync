@@ -5,6 +5,8 @@ import { LABEL_TEMPLATES } from '@/lib/templates';
 import { toast } from 'sonner';
 import { PrintJobData, PrintJobTarget } from "@/types/api"
 import { logger } from '@/lib/logger';
+import { printQueue } from '@/lib/print/queueInstance';
+import { sanitizeLabel } from '@/lib/print/sanitizeZpl';
 
 interface PrintJob {
   id: string;
@@ -41,8 +43,41 @@ export function usePrintQueue() {
   // Use unified print service instead of useZebraNetwork
   const selectedPrinter = null; // Mock for compatibility
   const printZPL = async (zplData: string, options?: { title?: string; copies?: number }) => {
-    return await print(zplData, options?.copies || 1);
+    try {
+      console.log('[usePrintQueue] Printing ZPL:', { length: zplData.length, copies: options?.copies || 1 });
+      
+      const safeZpl = sanitizeLabel(zplData);
+      await printQueue.enqueueSafe({ zpl: safeZpl, qty: options?.copies || 1, usePQ: true });
+      
+      return { success: true };
+    } catch (error) {
+      console.error('[usePrintQueue] Print error:', error);
+      toast.error('Failed to print label');
+      return { success: false, error: error instanceof Error ? error.message : 'Print failed' };
+    }
   };
+
+  const manageShopifyTags = useCallback(async (
+    productId: string,
+    storeKey: string,
+    action: 'add' | 'remove',
+    tags: string[]
+  ): Promise<boolean> => {
+    try {
+      const { data, error } = await supabase.functions.invoke('shopify-tag-manager', {
+        body: { productId, storeKey, action, tags }
+      });
+
+      if (error) throw error;
+      
+      console.log('[usePrintQueue] Tags updated:', data);
+      return true;
+    } catch (error) {
+      console.error('[usePrintQueue] Tag management error:', error);
+      toast.error('Failed to update Shopify tags');
+      return false;
+    }
+  }, []);
   
   // Get workstation ID for this browser
   const getWorkstationId = () => {
@@ -184,9 +219,57 @@ export function usePrintQueue() {
       }
 
       // Print the label
-      const result = await print(zpl, job.copies);
+      const result = await printZPL(zpl, { copies: job.copies });
 
       if (result.success) {
+        // Handle Shopify tag management if product info is available
+        if ((job.data as any).shopify_product_id && (job.data as any).store_key) {
+          // Get print profile to determine tag operations
+          const { data: profiles } = await supabase
+            .from('print_profiles')
+            .select('*')
+            .eq('is_active', true)
+            .order('priority', { ascending: true });
+
+          if (profiles && profiles.length > 0) {
+            // Find matching profile
+            const matchingProfile = profiles.find(profile => {
+              const jobData = job.data as any;
+              if (profile.match_type && jobData.type !== profile.match_type) return false;
+              if (profile.match_category && jobData.category !== profile.match_category) return false;
+              if (profile.match_tags && profile.match_tags.length > 0) {
+                const itemTags = jobData.tags || [];
+                if (!profile.match_tags.some((tag: string) => itemTags.includes(tag))) return false;
+              }
+              return true;
+            });
+
+            if (matchingProfile) {
+              const jobData = job.data as any;
+              
+              // Add tags
+              if (matchingProfile.add_tags && matchingProfile.add_tags.length > 0) {
+                await manageShopifyTags(
+                  jobData.shopify_product_id,
+                  jobData.store_key,
+                  'add',
+                  matchingProfile.add_tags
+                );
+              }
+
+              // Remove tags
+              if (matchingProfile.remove_tags && matchingProfile.remove_tags.length > 0) {
+                await manageShopifyTags(
+                  jobData.shopify_product_id,
+                  jobData.store_key,
+                  'remove',
+                  matchingProfile.remove_tags
+                );
+              }
+            }
+          }
+        }
+
         // Mark as printed
         await supabase
           .from('print_jobs')
@@ -349,6 +432,7 @@ export function usePrintQueue() {
   return {
     queueStatus,
     clearQueue,
-    processQueue
+    processQueue,
+    manageShopifyTags
   };
 }
