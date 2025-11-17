@@ -57,6 +57,8 @@ serve(async (req) => {
       storeKey, 
       gradedTags = ["graded", "PSA"],
       rawTags = ["single"],
+      includeTags = [],
+      excludeTags = [],
       updatedSince,
       maxPages = 50,
       dryRun = false,
@@ -76,6 +78,8 @@ serve(async (req) => {
     console.log(`Starting Shopify product import for store: ${storeKey}`);
     console.log(`Graded tags: ${JSON.stringify(gradedTags)}`);
     console.log(`Raw tags: ${JSON.stringify(rawTags)}`);
+    console.log(`Include tags: ${JSON.stringify(includeTags)}`);
+    console.log(`Exclude tags: ${JSON.stringify(excludeTags)}`);
 
     // Use service client already created above for auth check
     const supabase = authClient;
@@ -176,6 +180,29 @@ serve(async (req) => {
         try {
           // Check product tags to determine type
           const productTags = (product.tags || '').toLowerCase();
+          
+          // Check exclude tags first (if any exclude tag matches, skip this product)
+          if (excludeTags.length > 0) {
+            const hasExcludedTag = excludeTags.some(tag => 
+              productTags.includes(tag.toLowerCase())
+            );
+            if (hasExcludedTag) {
+              console.log(`Skipping product ${product.id} - has excluded tag`);
+              continue;
+            }
+          }
+          
+          // Check include tags (if specified, at least one must match)
+          if (includeTags.length > 0) {
+            const hasIncludedTag = includeTags.some(tag => 
+              productTags.includes(tag.toLowerCase())
+            );
+            if (!hasIncludedTag) {
+              console.log(`Skipping product ${product.id} - missing required include tag`);
+              continue;
+            }
+          }
+          
           const isGraded = gradedTags.some(tag => productTags.includes(tag.toLowerCase()));
           const isRaw = rawTags.some(tag => productTags.includes(tag.toLowerCase()));
           
