@@ -11,7 +11,6 @@ import { cn } from '@/lib/utils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useStore } from '@/contexts/StoreContext';
-import { Navigation } from '@/components/Navigation';
 import { useZebraNetwork } from "@/hooks/useZebraNetwork";
 import { ZebraPrinterSelectionDialog } from '@/components/ZebraPrinterSelectionDialog';
 import { getTemplate, loadOrgTemplate } from '@/lib/labels/templateStore';
@@ -2157,8 +2156,7 @@ const Inventory = () => {
 
   if (needsLoadingState) {
     return (
-      <div className="min-h-screen bg-background">
-        <Navigation />
+      <div className="min-h-screen bg-background pt-16">
         <div className="container mx-auto p-6">
           {/* Auth Debug Panel (only in development) */}
           {process.env.NODE_ENV === 'development' && (
@@ -2196,8 +2194,7 @@ const Inventory = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <Navigation />
+    <div className="min-h-screen bg-background pt-16">
       
       {/* Loading indicator for background refetches */}
       {isFetching && !isLoading && (

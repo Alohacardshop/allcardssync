@@ -17,7 +17,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Navigation } from "@/components/Navigation";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useStore } from "@/contexts/StoreContext";
@@ -254,7 +253,6 @@ export default function Batches() {
             <h1 className="text-2xl font-bold text-foreground">Batches</h1>
             <p className="text-muted-foreground mt-1">View and manage intake batches and their items</p>
           </div>
-          <Navigation />
         </div>
       </header>
 

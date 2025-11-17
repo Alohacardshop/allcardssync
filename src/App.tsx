@@ -22,12 +22,9 @@ const DashboardPage = React.lazy(() => import("./pages/DashboardPage"));
 const TestHardwarePage = React.lazy(() => import("./pages/TestHardwarePage"));
 const Inventory = React.lazy(() => import("./pages/Inventory"));
 const Batches = React.lazy(() => import("./pages/Batches"));
-const LabelStudio = React.lazy(() => import("./pages/admin/LabelStudio"));
 const Admin = React.lazy(() => import("./pages/Admin"));
 const NotFound = React.lazy(() => import("./pages/NotFound"));
 const Auth = React.lazy(() => import("./pages/Auth"));
-const PrintLogs = React.lazy(() => import("./pages/PrintLogs"));
-const ZPLSettings = React.lazy(() => import("./pages/ZPLSettings"));
 const BarcodePrinting = React.lazy(() => import("./pages/BarcodePrinting"));
 const ShopifyMapping = React.lazy(() => import("./pages/ShopifyMapping"));
 const ShopifySync = React.lazy(() => import("./pages/ShopifySync"));
@@ -35,6 +32,8 @@ const BulkImport = React.lazy(() => import("./pages/BulkImport"));
 const BulkTransfer = React.lazy(() => import("./pages/BulkTransfer"));
 const DiscordNotifications = React.lazy(() => import("./pages/admin/DiscordNotifications"));
 const PendingNotifications = React.lazy(() => import("./pages/PendingNotifications"));
+const GradedIntake = React.lazy(() => import("./pages/intake/GradedIntake"));
+const BulkIntake = React.lazy(() => import("./pages/intake/BulkIntake"));
 import { GlobalKeyboardHandler } from "./components/GlobalKeyboardHandler";
 import { FloatingActionButton } from "./components/FloatingActionButton";
 import { PerformanceMonitor } from "./components/PerformanceMonitor";
@@ -77,6 +76,8 @@ const App = () => (
                             <Route path="/test-hardware" element={<TestHardwarePage />} />
                             <Route path="/inventory" element={<ErrorBoundaryWrapper componentName="Inventory"><Inventory /></ErrorBoundaryWrapper>} />
                             <Route path="/batches" element={<ErrorBoundaryWrapper componentName="Batch Management"><Batches /></ErrorBoundaryWrapper>} />
+                            <Route path="/intake/graded" element={<GradedIntake />} />
+                            <Route path="/intake/bulk" element={<BulkIntake />} />
                             <Route path="/bulk-import" element={<BulkImport />} />
                             <Route path="/barcode-printing" element={<BarcodePrinting />} />
                             <Route path="/admin" element={<AdminGuard><Admin /></AdminGuard>} />
@@ -87,10 +88,10 @@ const App = () => (
                             <Route path="/shopify-sync" element={<ShopifySync />} />
                             <Route path="/bulk-transfer" element={<BulkTransfer />} />
                             
-                            {/* Legacy routes - redirect to new barcode printing page */}
-                            <Route path="/labels" element={<BarcodePrinting />} />
-                            <Route path="/print-logs" element={<BarcodePrinting />} />
-                            <Route path="/admin/label-studio" element={<BarcodePrinting />} />
+                            {/* Legacy routes - redirect */}
+                            <Route path="/labels" element={<Navigate to="/barcode-printing" replace />} />
+                            <Route path="/print-logs" element={<Navigate to="/barcode-printing" replace />} />
+                            <Route path="/admin/label-studio" element={<Navigate to="/barcode-printing" replace />} />
                             
                             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                             <Route path="*" element={<NotFound />} />

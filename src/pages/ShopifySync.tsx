@@ -3,7 +3,6 @@
  */
 
 import React from 'react';
-import { Navigation } from '@/components/Navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RefreshCw, Upload, AlertTriangle } from 'lucide-react';
@@ -20,7 +19,6 @@ export default function ShopifySync() {
             <div className="flex items-center gap-4">
               <h1 className="text-2xl font-bold">Shopify Sync</h1>
             </div>
-            <Navigation />
           </div>
         </div>
       </header>
