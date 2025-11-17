@@ -29,37 +29,48 @@ export function parseZPL(zpl: string): ZPLCommand[] {
   let currentY = 0;
   
   for (const line of lines) {
-    if (line.startsWith('^FO')) {
-      const match = line.match(/\^FO(\d+),(\d+)/);
-      if (match) {
-        currentX = parseInt(match[1]);
-        currentY = parseInt(match[2]);
-      }
-    } else if (line.includes('^A')) {
-      const fontMatch = line.match(/\^A([0-9A-Z]),(\d+),(\d+)/);
+    // Check for position command ^FO
+    const posMatch = line.match(/\^FO(\d+),(\d+)/);
+    if (posMatch) {
+      currentX = parseInt(posMatch[1]);
+      currentY = parseInt(posMatch[2]);
+    }
+    
+    // Check for text field with font ^A
+    if (line.includes('^A')) {
+      // More flexible font pattern to handle variations like ^A0N, ^AN, ^A0,64,64
+      const fontMatch = line.match(/\^A([0-9A-Z]+)[N,]?,?(\d+)?,?(\d+)?/);
       const dataMatch = line.match(/\^FD([^\^]+)\^FS/);
       
       if (fontMatch && dataMatch) {
+        const height = fontMatch[2] ? parseInt(fontMatch[2]) : 30;
+        const width = fontMatch[3] ? parseInt(fontMatch[3]) : 30;
+        
         commands.push({
           type: 'field',
           x: currentX,
           y: currentY,
           font: fontMatch[1],
-          height: parseInt(fontMatch[2]),
-          width: parseInt(fontMatch[3]),
+          height,
+          width,
           data: dataMatch[1]
         });
       }
-    } else if (line.includes('^BC')) {
-      const barcodeMatch = line.match(/\^BCN,(\d+)/);
+    }
+    
+    // Check for barcode ^BC
+    if (line.includes('^BC')) {
+      const barcodeMatch = line.match(/\^BC[NO]?,?(\d+)?/);
       const dataMatch = line.match(/\^FD([^\^]+)\^FS/);
       
       if (barcodeMatch && dataMatch) {
+        const height = barcodeMatch[1] ? parseInt(barcodeMatch[1]) : 60;
+        
         commands.push({
           type: 'barcode',
           x: currentX,
           y: currentY,
-          height: parseInt(barcodeMatch[1]),
+          height,
           data: dataMatch[1]
         });
       }
