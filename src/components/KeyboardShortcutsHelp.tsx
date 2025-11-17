@@ -24,7 +24,7 @@ const shortcuts: ShortcutItem[] = [
   { keys: 'G H', description: 'Go to Home/Dashboard', category: 'Navigation' },
   { keys: 'G I', description: 'Go to Inventory', category: 'Navigation' },
   { keys: 'G B', description: 'Go to Batches', category: 'Navigation' },
-  { keys: 'G L', description: 'Go to Labels', category: 'Navigation' },
+  { keys: 'G L', description: 'Go to Barcode Printing', category: 'Navigation' },
   { keys: 'Tab', description: 'Navigate through form fields', category: 'Forms' },
   { keys: 'Enter', description: 'Submit form or confirm action', category: 'Forms' },
 ];

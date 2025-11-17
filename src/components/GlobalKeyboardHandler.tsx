@@ -55,8 +55,8 @@ export function GlobalKeyboardHandler() {
           case 'p':
             event.preventDefault();
             // Open print dialog
-            navigate('/labels');
-            toast({ title: "Print dialog opened", description: "Navigated to label printing" });
+            navigate('/barcode-printing');
+            toast({ title: "Print dialog opened", description: "Navigated to barcode printing" });
             break;
 
           case '/':
@@ -117,8 +117,8 @@ export function GlobalKeyboardHandler() {
               toast({ title: "Navigation", description: "Navigated to Batches" });
               break;
             case 'l':
-              navigate('/labels');
-              toast({ title: "Navigation", description: "Navigated to Labels" });
+              navigate('/barcode-printing');
+              toast({ title: "Navigation", description: "Navigated to Barcode Printing" });
               break;
           }
           document.removeEventListener('keydown', handleNavKey);

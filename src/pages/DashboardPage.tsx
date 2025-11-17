@@ -84,7 +84,7 @@ export default function DashboardPage() {
         navigate('/bulk-import');
         break;
       case 'print-queue':
-        navigate('/labels');
+        navigate('/barcode-printing');
         break;
       case 'force-sync':
         toast({ title: "Force sync initiated", description: "Shopify sync started in background" });
