@@ -1,14 +1,14 @@
 # Category System Implementation Summary
 
 ## Overview
-Implemented a comprehensive hierarchical category system to organize inventory items by main categories (TCG, Sports, Comics) and sub-categories (Pokemon, Magic, Baseball, etc.).
+Implemented a comprehensive hierarchical category system to organize inventory items by main categories (TCG, Comics) and sub-categories (Pokemon, Magic, Marvel, DC, etc.).
 
 ## Database Changes
 
 ### Tables Created
-1. **main_categories** - Top-level categories (TCG, Sports, Comics)
+1. **main_categories** - Top-level categories (TCG, Comics)
    - Fields: `id` (text), `name`, `description`, `icon`, `sort_order`
-   - Pre-seeded with 3 main categories
+   - Pre-seeded with 2 main categories
 
 2. **sub_categories** - Specific sub-categories under each main category
    - Fields: `id` (uuid), `main_category_id`, `name`, `description`, `sort_order`, `is_active`
@@ -47,14 +47,14 @@ Implemented a comprehensive hierarchical category system to organize inventory i
 
 ### Pages Updated
 - **Inventory** (`src/pages/Inventory.tsx`)
-  - Main category tabs (TCG, Sports, Comics)
+  - Main category tabs (TCG, Comics)
   - Sub-category filter dropdown
   - Category-based filtering in queries
 
 ### Utilities
 - **categoryMapping** (`src/utils/categoryMapping.ts`)
   - Auto-detection of main category from game/brand names
-  - Supports Pokemon, Magic, Yu-Gi-Oh, Baseball, Football, Basketball, Marvel, DC, etc.
+  - Supports Pokemon, Magic, Yu-Gi-Oh, Marvel, DC, etc.
   - Extensible mapping lists for each category type
 
 ## Features
@@ -62,7 +62,6 @@ Implemented a comprehensive hierarchical category system to organize inventory i
 ### Auto-Detection
 - Automatically detects main category when user enters:
   - Game name (Pokemon → TCG)
-  - Brand/Set name (Yankees → Sports)
   - Subject/Description (Batman → Comics)
 - Works across all intake forms
 - Can be manually overridden if needed
@@ -70,7 +69,6 @@ Implemented a comprehensive hierarchical category system to organize inventory i
 ### Category Display
 - Visual badges showing main category with emoji icons:
   - 🎴 TCG
-  - ⚾ Sports
   - 📚 Comics
 - Sub-category shown in outline badge
 - Displayed in:
@@ -79,7 +77,7 @@ Implemented a comprehensive hierarchical category system to organize inventory i
   - Item details
 
 ### Filtering
-- **Main Category Tabs** - Click to filter by TCG, Sports, or Comics
+- **Main Category Tabs** - Click to filter by TCG or Comics
 - **Sub-Category Dropdown** - Further filter within selected main category
 - Combined with existing filters (status, type, batch, search)
 

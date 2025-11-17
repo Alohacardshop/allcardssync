@@ -362,7 +362,7 @@ Deno.serve(async (req) => {
       brandTitle, 
       condition, // Condition as separate tag
       intakeItem.main_category,
-      intakeItem.sub_category || (intakeItem.main_category === 'comics' ? 'american' : intakeItem.main_category === 'sports' ? 'baseball' : 'pokemon'), // Use sub_category or default by main_category
+      intakeItem.sub_category || (intakeItem.main_category === 'comics' ? 'american' : 'pokemon'), // Use sub_category or default by main_category
       intakeItem.lot_number || 'Unknown Lot', // Lot number
       subject ? `Card: ${subject}` : null, // Card name
       cardNumber ? `Number: ${cardNumber}` : null, // Card number
