@@ -56,25 +56,24 @@ export function zplPriceBarcodeThirds2x1({
   copies = 1
 }: ThirdsLabelData): string {
   // --- Geometry & safety margins (203 dpi default) ---
-  const PW = dpi === 300 ? 600 : 420;   // safer than full 2" to avoid right clipping
+  const PW = dpi === 300 ? 600 : 400;   // use more width
   const LL = dpi === 300 ? 300 : 203;   // 1" tall
-  const LH_X = dpi === 300 ? 16 : 14;   // left origin shift to avoid left clipping
-  const P = dpi === 300 ? 12 : 16;      // inner padding per third
+  const LH_X = dpi === 300 ? 8 : 6;     // reduced left margin for more usable space
+  const P = dpi === 300 ? 8 : 10;       // reduced padding for more space
 
   // Thirds
   const thirdH = Math.floor(LL / 3);
   const topY = 0, midY = thirdH, botY = thirdH * 2;
   const usableW = PW; // we use ^LH for left margin; FO x starts from 0
 
-  // Split top third horizontally: 30%/70%
-  const leftW  = Math.floor(usableW * 0.30);
+  // Split top third horizontally: 35%/65% for better balance
+  const leftW  = Math.floor(usableW * 0.35);
   const rightW = usableW - leftW;
 
-  // --- Condition (left 30%), we keep it big but allow cap per third height ---
-  const condMaxH = dpi === 300 ? 80 : 64; // your preferred big condition
-  const condBoxW = leftW - P;             // leave a little inner padding
-  const condH = Math.min(condMaxH, thirdH - 2 * P); // don't exceed top third
-  // Condition doesn't need to fit wide text normally ("NM", "LP", "HP"); keep fixed height:
+  // --- Condition (left 35%), make it bigger ---
+  const condMaxH = dpi === 300 ? 100 : 80; // increased from 64 to 80 for 203dpi
+  const condBoxW = leftW - P;
+  const condH = Math.min(condMaxH, thirdH - P); // use less padding constraint
   const condSize = condH;
 
   // --- Price (right 70%), auto-fit to its box width ---
@@ -88,18 +87,18 @@ export function zplPriceBarcodeThirds2x1({
   const condY  = topY + P + Math.max(0, Math.floor((topInnerH - condSize) / 2));
   const priceY = topY + P + Math.max(0, Math.floor((topInnerH - priceSize) / 2));
 
-  // --- Barcode in middle third: DOUBLE the condition height but clamp to middle third ---
-  const midInnerH = thirdH - 2 * P;
-  const desiredBcH = condSize * 2;
-  const bcH = Math.min(desiredBcH, midInnerH); // final barcode height
-  const moduleW = dpi === 300 ? 3 : 3;         // thicker bars look great when taller; keep 3
-  const byLine = `^BY${moduleW},2,${bcH}`;
+  // --- Barcode in middle third: make it span wider ---
+  const midInnerH = thirdH - P;
+  const desiredBcH = condSize * 1.5; // slightly shorter to fit better
+  const bcH = Math.min(desiredBcH, midInnerH);
+  const moduleW = dpi === 300 ? 4 : 4; // increased module width for wider barcode
+  const byLine = `^BY${moduleW},2.5,${bcH}`; // increased ratio for better spacing
 
-  // Center horizontally based on rough width estimate
+  // Center barcode with minimal margin
   const estW = estimateCode128WidthDots((sku ?? '').length, moduleW);
-  const quietX = Math.max(0, Math.floor((usableW - Math.min(estW, usableW - 2 * P)) / 2));
-  const bcX = Math.max(0, quietX); // starting x
-  const bcY = midY + Math.max(0, Math.floor((thirdH - bcH) / 2)); // vertical center in middle third
+  const margin = P / 2;
+  const bcX = Math.max(0, Math.floor((usableW - estW) / 2));
+  const bcY = midY + Math.max(0, Math.floor((thirdH - bcH) / 2));
 
   // --- Title in bottom third: up to 2 lines (fixed-ish size) ---
   const titleSize = dpi === 300 ? 28 : 17;
