@@ -148,7 +148,7 @@ export function NavigationBar() {
   const navItems = [
     { to: '/', label: 'Dashboard', icon: Home },
     { to: '/inventory', label: 'Inventory', icon: Archive },
-    { to: '/admin/label-studio', label: 'Labels', icon: Tags },
+    { to: '/barcode-printing', label: 'Barcode Printing', icon: Printer },
   ];
 
   if (isAdmin) {
