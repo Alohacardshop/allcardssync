@@ -186,7 +186,7 @@ export function CategoryManagement() {
         <CardHeader>
           <CardTitle>Category Management</CardTitle>
           <CardDescription>
-            Manage inventory categories and sub-categories for TCG, Sports, and Comics.
+            Manage inventory categories and sub-categories for TCG and Comics.
           </CardDescription>
         </CardHeader>
         <CardContent>
