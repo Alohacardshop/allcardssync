@@ -348,10 +348,55 @@ export default function PulledItemsFilter() {
             </div>
           </div>
 
+          {/* Quick Date Filters */}
+          <div className="space-y-2">
+            <Label>Date Added to Shopify</Label>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant={dateFilter === 'today' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setDateFilter(dateFilter === 'today' ? null : 'today')}
+              >
+                Today
+              </Button>
+              <Button
+                variant={dateFilter === 'yesterday' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setDateFilter(dateFilter === 'yesterday' ? null : 'yesterday')}
+              >
+                Yesterday
+              </Button>
+              <Button
+                variant={dateFilter === '7days' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setDateFilter(dateFilter === '7days' ? null : '7days')}
+              >
+                Last 7 Days
+              </Button>
+              <Button
+                variant={dateFilter === '30days' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setDateFilter(dateFilter === '30days' ? null : '30days')}
+              >
+                Last 30 Days
+              </Button>
+              {dateFilter && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setDateFilter(null)}
+                >
+                  <X className="h-4 w-4 mr-1" />
+                  Clear
+                </Button>
+              )}
+            </div>
+          </div>
+
           <div className="flex items-center justify-between pt-2">
             <div className="flex items-center gap-4">
               <div className="text-sm text-muted-foreground">
-                {loading ? 'Loading...' : `${items.length} items found`}
+                {loading ? 'Loading...' : `Showing ${items.length} of ${allItems.length} item(s)`}
               </div>
               {items.length > 0 && (
                 <div className="flex items-center space-x-2">
