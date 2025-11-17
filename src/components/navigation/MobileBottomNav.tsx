@@ -5,7 +5,7 @@ import {
   Archive, 
   Settings, 
   FileText,
-  Tags
+  Printer
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { useState, useEffect } from "react"
@@ -38,7 +38,7 @@ export function MobileBottomNav() {
     { to: "/", label: "Home", icon: Home },
     { to: "/inventory", label: "Inventory", icon: Package },
     { to: "/batches", label: "Batches", icon: Archive },
-    { to: "/labels", label: "Labels", icon: Tags },
+    { to: "/barcode-printing", label: "Barcode Printing", icon: Printer },
     { to: "/shopify-mapping", label: "Shopify", icon: FileText },
   ]
 
