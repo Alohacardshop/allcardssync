@@ -1004,6 +1004,71 @@ export type Database = {
         }
         Relationships: []
       }
+      print_profiles: {
+        Row: {
+          add_tags: string[] | null
+          copies: number | null
+          created_at: string | null
+          darkness: number | null
+          description: string | null
+          id: string
+          is_active: boolean | null
+          match_category: string | null
+          match_tags: string[] | null
+          match_type: string | null
+          name: string
+          priority: number
+          remove_tags: string[] | null
+          speed: number | null
+          template_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          add_tags?: string[] | null
+          copies?: number | null
+          created_at?: string | null
+          darkness?: number | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          match_category?: string | null
+          match_tags?: string[] | null
+          match_type?: string | null
+          name: string
+          priority?: number
+          remove_tags?: string[] | null
+          speed?: number | null
+          template_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          add_tags?: string[] | null
+          copies?: number | null
+          created_at?: string | null
+          darkness?: number | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          match_category?: string | null
+          match_tags?: string[] | null
+          match_type?: string | null
+          name?: string
+          priority?: number
+          remove_tags?: string[] | null
+          speed?: number | null
+          template_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "print_profiles_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "label_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       printer_settings: {
         Row: {
           bridge_port: number | null
