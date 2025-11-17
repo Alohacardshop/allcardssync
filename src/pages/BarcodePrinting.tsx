@@ -17,19 +17,31 @@ export default function BarcodePrinting() {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <Printer className="h-8 w-8 text-primary" />
-          <h1 className="text-3xl font-bold">Barcode Printing</h1>
+      <div className="flex flex-col gap-4 mb-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Printer className="h-8 w-8 text-primary" />
+            <h1 className="text-3xl font-bold">Barcode Printing</h1>
+          </div>
+          
+          <Button
+            onClick={() => setShowPullDialog(true)}
+            disabled={!assignedStore || !selectedLocation}
+            size="lg"
+          >
+            <Download className="mr-2 h-4 w-4" />
+            Pull from Shopify
+          </Button>
         </div>
         
-        <Button
-          onClick={() => setShowPullDialog(true)}
-          disabled={!assignedStore || !selectedLocation}
-        >
-          <Download className="mr-2 h-4 w-4" />
-          Pull from Shopify
-        </Button>
+        {(!assignedStore || !selectedLocation) && (
+          <div className="bg-muted/50 border border-border rounded-lg p-4 text-sm text-muted-foreground">
+            <p>
+              Select a store and location to enable Shopify product pulling. 
+              You can set these in your store selector at the top of the page.
+            </p>
+          </div>
+        )}
       </div>
 
       <Tabs defaultValue="queue" className="w-full">
