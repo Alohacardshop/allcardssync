@@ -1,17 +1,34 @@
+import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Printer, ListOrdered, FileText, Settings, Users, Cog } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Printer, ListOrdered, FileText, Settings, Users, Cog, Download } from "lucide-react";
 import PrintLogs from "./PrintLogs";
 import LabelStudio from "./admin/LabelStudio";
 import PrintQueuePanel from "@/components/print-queue/PrintQueuePanel";
 import PrintProfileManager from "@/components/print-queue/PrintProfileManager";
 import { PrinterSettingsPanel } from "@/components/printer-settings/PrinterSettingsPanel";
+import { ShopifyPullDialog } from "@/components/barcode-printing/ShopifyPullDialog";
+import { useStore } from "@/contexts/StoreContext";
 
 export default function BarcodePrinting() {
+  const { assignedStore, selectedLocation } = useStore();
+  const [showPullDialog, setShowPullDialog] = useState(false);
+
   return (
     <div className="container mx-auto p-6 space-y-6">
-      <div className="flex items-center gap-3 mb-6">
-        <Printer className="h-8 w-8 text-primary" />
-        <h1 className="text-3xl font-bold">Barcode Printing</h1>
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <Printer className="h-8 w-8 text-primary" />
+          <h1 className="text-3xl font-bold">Barcode Printing</h1>
+        </div>
+        
+        <Button
+          onClick={() => setShowPullDialog(true)}
+          disabled={!assignedStore || !selectedLocation}
+        >
+          <Download className="mr-2 h-4 w-4" />
+          Pull from Shopify
+        </Button>
       </div>
 
       <Tabs defaultValue="queue" className="w-full">
@@ -58,6 +75,18 @@ export default function BarcodePrinting() {
           <LabelStudio />
         </TabsContent>
       </Tabs>
+
+      {assignedStore && selectedLocation && (
+        <ShopifyPullDialog
+          open={showPullDialog}
+          onOpenChange={setShowPullDialog}
+          storeKey={assignedStore}
+          locationGid={selectedLocation}
+          onSuccess={() => {
+            console.log("Products pulled successfully");
+          }}
+        />
+      )}
     </div>
   );
 }
