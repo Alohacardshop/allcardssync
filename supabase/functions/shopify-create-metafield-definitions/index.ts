@@ -30,7 +30,7 @@ const METAFIELD_DEFINITIONS = [
     name: "Sub Category",
     key: "sub_category",
     namespace: "acs.sync",
-    description: "Specific subcategory (Pokemon, Baseball, Marvel, etc.)",
+    description: "Specific subcategory (Pokemon, Magic, Marvel, DC, etc.)",
     type: "single_line_text_field",
     ownerType: "PRODUCT"
   },
