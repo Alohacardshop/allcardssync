@@ -10,7 +10,6 @@
  * 
  * @example
  * detectMainCategory('Pokémon Base Set') // returns 'tcg'
- * detectMainCategory('Yankees Baseball') // returns 'sports'
  * detectMainCategory('Marvel Spider-Man') // returns 'comics'
  */
 
@@ -50,34 +49,6 @@ const TCG_GAMES = [
   'disney lorcana',
   'star wars',
   'starwars',
-];
-
-const SPORTS_GAMES = [
-  'baseball',
-  'basketball',
-  'football',
-  'hockey',
-  'soccer',
-  'golf',
-  'tennis',
-  'boxing',
-  'mma',
-  'ufc',
-  'nascar',
-  'wrestling',
-  'wwe',
-  'nfl',
-  'nba',
-  'mlb',
-  'nhl',
-  // Team names help identify sports
-  'yankees',
-  'dodgers',
-  'red sox',
-  'lakers',
-  'celtics',
-  'patriots',
-  'cowboys',
 ];
 
 const COMICS_GAMES = [
@@ -151,7 +122,7 @@ function smartMatch(input: string, keywords: string[]): boolean {
  * Detects the main category based on game, brand, or subject
  * Handles data from PSA API, CGC API, and other sources with special characters
  */
-export function detectMainCategory(input: string): 'tcg' | 'sports' | 'comics' {
+export function detectMainCategory(input: string): 'tcg' | 'comics' {
   // Validate input
   if (!input || typeof input !== 'string') {
     console.warn('[detectMainCategory] Invalid input:', input);
@@ -168,11 +139,6 @@ export function detectMainCategory(input: string): 'tcg' | 'sports' | 'comics' {
     return 'tcg';
   }
   
-  // Check Sports with smart matching
-  if (smartMatch(safeInput, SPORTS_GAMES)) {
-    return 'sports';
-  }
-  
   // Check Comics with smart matching
   if (smartMatch(safeInput, COMICS_GAMES)) {
     return 'comics';
@@ -185,10 +151,9 @@ export function detectMainCategory(input: string): 'tcg' | 'sports' | 'comics' {
 /**
  * Gets a display-friendly category name
  */
-export function getCategoryDisplay(category: 'tcg' | 'sports' | 'comics'): string {
+export function getCategoryDisplay(category: 'tcg' | 'comics'): string {
   const map = {
     tcg: '🎴 TCG',
-    sports: '⚾ Sports',
     comics: '📚 Comics',
   };
   return map[category] || map.tcg;

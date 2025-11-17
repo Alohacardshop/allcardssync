@@ -281,7 +281,6 @@ export const InventoryItemCard = memo(({
             {item.main_category && (
               <Badge variant="secondary" className="text-xs">
                 {item.main_category === 'tcg' && '🎴 TCG'}
-                {item.main_category === 'sports' && '⚾ Sports'}
                 {item.main_category === 'comics' && '📚 Comics'}
               </Badge>
             )}

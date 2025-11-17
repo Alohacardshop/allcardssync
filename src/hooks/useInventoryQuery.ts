@@ -88,9 +88,9 @@ export function useInventoryQuery(filters: InventoryFilters) {
 
       // Apply tab-based filtering
       if (activeTab === 'raw') {
-        query = query.in('main_category', ['tcg', 'sports']).eq('type', 'Raw');
+        query = query.eq('main_category', 'tcg').eq('type', 'Raw');
       } else if (activeTab === 'graded') {
-        query = query.in('main_category', ['tcg', 'sports']).eq('type', 'Graded');
+        query = query.eq('main_category', 'tcg').eq('type', 'Graded');
       } else if (activeTab === 'comics') {
         query = query.eq('main_category', 'comics');
         if (comicsSubCategory) {

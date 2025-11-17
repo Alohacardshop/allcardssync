@@ -240,7 +240,6 @@ export function BulkCardIntake({ onBatchAdd }: BulkCardIntakeProps) {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="tcg">🎴 TCG</SelectItem>
-                <SelectItem value="sports">⚾ Sports</SelectItem>
                 <SelectItem value="comics">📚 Comics</SelectItem>
               </SelectContent>
             </Select>
