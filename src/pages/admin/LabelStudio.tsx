@@ -29,6 +29,7 @@ import { sanitizeLabel } from '@/lib/print/sanitizeZpl';
 import { oncePer } from '@/lib/print/debounce';
 import { toast } from "sonner";
 import { supabase } from '@/integrations/supabase/client';
+import { ZPLPreviewCanvas } from '@/components/label-preview/ZPLPreviewCanvas';
 
 interface Template {
   id: string;
@@ -628,37 +629,42 @@ export default function LabelStudio() {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Eye className="w-5 h-5" />
-                  Editable ZPL Preview
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <Textarea
-                  value={editableZpl}
-                  onChange={(e) => setEditableZpl(e.target.value)}
-                  className="min-h-[300px] font-mono text-xs"
-                  placeholder="Generated ZPL will appear here. You can edit it directly for testing..."
-                />
-                <div className="flex gap-2">
-                  <Button onClick={copyZplToClipboard} variant="outline" size="sm">
-                    <Download className="w-4 h-4 mr-2" />
-                    Copy ZPL
-                  </Button>
-                  <Button onClick={resetZplToGenerated} variant="outline" size="sm">
-                    <RefreshCw className="w-4 h-4 mr-2" />
-                    Reset to Generated
-                  </Button>
-                  <Button onClick={handleTestPrint} size="sm">
-                    <Printer className="w-4 h-4 mr-2" />
-                    Test Print
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+            <ZPLPreviewCanvas 
+              zpl={editableZpl || generatedZpl}
+              variables={{ ...testVars }}
+            />
           </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Code className="w-5 h-5" />
+                Editable ZPL Code
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Textarea
+                value={editableZpl}
+                onChange={(e) => setEditableZpl(e.target.value)}
+                className="min-h-[300px] font-mono text-xs"
+                placeholder="Generated ZPL will appear here. You can edit it directly for testing..."
+              />
+              <div className="flex gap-2">
+                <Button onClick={copyZplToClipboard} variant="outline" size="sm">
+                  <Download className="w-4 h-4 mr-2" />
+                  Copy ZPL
+                </Button>
+                <Button onClick={resetZplToGenerated} variant="outline" size="sm">
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Reset to Generated
+                </Button>
+                <Button onClick={handleTestPrint} size="sm">
+                  <Printer className="w-4 h-4 mr-2" />
+                  Test Print
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="settings" className="space-y-4">
