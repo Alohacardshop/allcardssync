@@ -33,8 +33,29 @@ export function ShopifyPullDialog({
   const [gradedTags, setGradedTags] = useState("graded, PSA");
   const [rawTags, setRawTags] = useState("single");
   const [status, setStatus] = useState("active");
-  const [updatedSince, setUpdatedSince] = useState("");
+  const [timeframe, setTimeframe] = useState("all");
+  const [customDate, setCustomDate] = useState("");
+  const [filterByTags, setFilterByTags] = useState("");
   const [dryRun, setDryRun] = useState(false);
+
+  // Calculate updatedSince based on timeframe
+  const getUpdatedSince = () => {
+    if (timeframe === "custom") return customDate;
+    if (timeframe === "all") return "";
+    
+    const now = new Date();
+    const hours = {
+      "24h": 24,
+      "7d": 24 * 7,
+      "30d": 24 * 30
+    }[timeframe] || 0;
+    
+    if (hours > 0) {
+      now.setHours(now.getHours() - hours);
+      return now.toISOString();
+    }
+    return "";
+  };
 
   const handlePull = async () => {
     if (!includeGraded && !includeRaw) {
@@ -73,8 +94,21 @@ export function ShopifyPullDialog({
         payload.rawTags = [];
       }
 
+      const updatedSince = getUpdatedSince();
       if (updatedSince) {
         payload.updatedSince = updatedSince;
+      }
+
+      // Add tag filtering if specified
+      if (filterByTags) {
+        const tags = filterByTags.split(",").map(t => t.trim()).filter(Boolean);
+        // Merge with existing tags for better filtering
+        if (includeGraded && payload.gradedTags) {
+          payload.gradedTags = [...payload.gradedTags, ...tags];
+        }
+        if (includeRaw && payload.rawTags) {
+          payload.rawTags = [...payload.rawTags, ...tags];
+        }
       }
 
       const { data, error } = await supabase.functions.invoke('shopify-pull-products-by-tags', {
@@ -182,15 +216,43 @@ export function ShopifyPullDialog({
             </Select>
           </div>
 
-          {/* Updated Since */}
+          {/* Timeframe */}
           <div className="space-y-2">
-            <Label htmlFor="updatedSince">Updated Since (Optional)</Label>
+            <Label>Timeframe</Label>
+            <Select value={timeframe} onValueChange={setTimeframe}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Time</SelectItem>
+                <SelectItem value="24h">Last 24 Hours</SelectItem>
+                <SelectItem value="7d">Last 7 Days</SelectItem>
+                <SelectItem value="30d">Last 30 Days</SelectItem>
+                <SelectItem value="custom">Custom Date</SelectItem>
+              </SelectContent>
+            </Select>
+            {timeframe === "custom" && (
+              <Input
+                type="datetime-local"
+                value={customDate}
+                onChange={(e) => setCustomDate(e.target.value)}
+                className="mt-2"
+              />
+            )}
+          </div>
+
+          {/* Filter by Tags */}
+          <div className="space-y-2">
+            <Label htmlFor="filter-tags">Filter by Tags (Optional)</Label>
             <Input
-              id="updatedSince"
-              type="date"
-              value={updatedSince}
-              onChange={(e) => setUpdatedSince(e.target.value)}
+              id="filter-tags"
+              value={filterByTags}
+              onChange={(e) => setFilterByTags(e.target.value)}
+              placeholder="printed, not-printed, needs-review"
             />
+            <p className="text-sm text-muted-foreground">
+              Only pull products with these tags (comma-separated)
+            </p>
           </div>
 
           {/* Dry Run */}
