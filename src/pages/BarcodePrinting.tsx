@@ -1,9 +1,10 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Printer, ListOrdered, FileText, Settings, Users } from "lucide-react";
+import { Printer, ListOrdered, FileText, Settings, Users, Cog } from "lucide-react";
 import PrintLogs from "./PrintLogs";
 import LabelStudio from "./admin/LabelStudio";
 import PrintQueuePanel from "@/components/print-queue/PrintQueuePanel";
 import PrintProfileManager from "@/components/print-queue/PrintProfileManager";
+import { PrinterSettingsPanel } from "@/components/printer-settings/PrinterSettingsPanel";
 
 export default function BarcodePrinting() {
   return (
@@ -14,7 +15,7 @@ export default function BarcodePrinting() {
       </div>
 
       <Tabs defaultValue="queue" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="queue" className="flex items-center gap-2">
             <ListOrdered className="h-4 w-4" />
             Print Queue
@@ -22,6 +23,10 @@ export default function BarcodePrinting() {
           <TabsTrigger value="profiles" className="flex items-center gap-2">
             <Users className="h-4 w-4" />
             Print Profiles
+          </TabsTrigger>
+          <TabsTrigger value="printers" className="flex items-center gap-2">
+            <Cog className="h-4 w-4" />
+            Printer Settings
           </TabsTrigger>
           <TabsTrigger value="logs" className="flex items-center gap-2">
             <FileText className="h-4 w-4" />
@@ -39,6 +44,10 @@ export default function BarcodePrinting() {
 
         <TabsContent value="profiles" className="mt-6">
           <PrintProfileManager />
+        </TabsContent>
+
+        <TabsContent value="printers" className="mt-6">
+          <PrinterSettingsPanel />
         </TabsContent>
 
         <TabsContent value="logs" className="mt-6">
