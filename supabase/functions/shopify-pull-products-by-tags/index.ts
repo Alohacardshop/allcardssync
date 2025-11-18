@@ -175,19 +175,15 @@ serve(async (req) => {
       // Process each product
       for (const product of products) {
         try {
-          // Check product tags to determine type
+          // Check product tags to determine type (but don't skip - pull everything)
           const productTags = (product.tags || '').toLowerCase();
           const isGraded = gradedTags.some(tag => productTags.includes(tag.toLowerCase()));
           const isRaw = rawTags.some(tag => productTags.includes(tag.toLowerCase()));
           
-          // Skip products that don't match either category
-          if (!isGraded && !isRaw) {
-            continue;
-          }
-
-          const productType = isGraded ? 'graded' : 'raw';
+          // Categorize for statistics, but import all products
+          const productType = isGraded ? 'graded' : (isRaw ? 'raw' : 'other');
           if (productType === 'graded') gradedProducts++;
-          else rawProducts++;
+          else if (productType === 'raw') rawProducts++;
 
           // Get product image URLs
           const imageUrls = product.images?.map((img: any) => img.src) || [];
