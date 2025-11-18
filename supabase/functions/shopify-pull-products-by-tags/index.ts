@@ -274,7 +274,7 @@ serve(async (req) => {
                 variant.title !== 'Default Title' ? variant.title : null
               ].filter(Boolean).join(' - ');
 
-              // Upsert intake_items
+              // Upsert intake_items using the constraint name
               const { error: upsertError } = await supabase
                 .from('intake_items')
                 .upsert({
@@ -304,7 +304,8 @@ serve(async (req) => {
                   },
                   removed_from_batch_at: quantity > 0 ? new Date().toISOString() : null,
                 }, {
-                  onConflict: 'store_key,sku,shopify_location_gid'
+                  onConflict: 'uniq_store_sku_location',
+                  ignoreDuplicates: false
                 });
 
               if (upsertError) {
