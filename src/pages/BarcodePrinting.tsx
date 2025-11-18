@@ -15,57 +15,36 @@ export default function BarcodePrinting() {
   const { assignedStore, selectedLocation } = useStore();
   const [showPullDialog, setShowPullDialog] = useState(false);
 
-  // Debug logging - CRITICAL for diagnosis
-  console.log('[BarcodePrinting] ========== COMPONENT RENDERING ==========');
-  console.log('[BarcodePrinting] Component mounted/rendering');
-  console.log('[BarcodePrinting] assignedStore:', assignedStore);
-  console.log('[BarcodePrinting] selectedLocation:', selectedLocation);
-  console.log('[BarcodePrinting] About to render header section...');
-
   return (
     <div className="container mx-auto p-6 space-y-6">
-      {/* DEBUG HEADER - Super obvious, should ALWAYS be visible */}
-      <div style={{ 
-        border: '3px solid red', 
-        padding: '20px', 
-        marginBottom: '20px',
-        backgroundColor: '#ffe0e0'
-      }}>
-        <h1 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '12px' }}>
-          ✅ Barcode Printing (DEBUG HEADER - IF YOU SEE THIS, RENDERING WORKS)
-        </h1>
-        
-        <button
-          style={{ 
-            padding: '12px 24px', 
-            fontSize: '16px', 
-            marginTop: '12px',
-            backgroundColor: '#4CAF50',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer'
-          }}
-          onClick={() => {
-            console.log('🔥 TEST BUTTON CLICKED - Button is rendering and clickable!');
-            alert('Test button works! Button rendering is OK.');
-          }}
-        >
-          🔥 TEST BUTTON - CLICK ME TO CONFIRM VISIBILITY
-        </button>
-        
-        <div style={{ 
-          marginTop: '12px', 
-          padding: '10px',
-          backgroundColor: '#fff3cd',
-          border: '2px solid orange',
-          color: '#856404'
-        }}>
-          ⚠️ TEST WARNING - IF YOU SEE THIS, WARNING RENDERING WORKS
+      {/* Header Section - Rebuilt cleanly */}
+      <div className="space-y-4 mb-6">
+        {/* Title */}
+        <div className="flex items-center gap-3">
+          <Printer className="h-8 w-8 text-primary" />
+          <h1 className="text-3xl font-bold">Barcode Printing</h1>
         </div>
-        
-        <div style={{ marginTop: '12px', fontSize: '14px', color: '#666' }}>
-          Store: {assignedStore || 'NOT SET'} | Location: {selectedLocation || 'NOT SET'}
+
+        {/* Pull from Shopify Button - Always visible */}
+        <Button
+          onClick={() => setShowPullDialog(true)}
+          disabled={!assignedStore || !selectedLocation}
+          size="lg"
+        >
+          <Download className="h-4 w-4 mr-2" />
+          Pull from Shopify
+        </Button>
+
+        {/* Warning - Always visible for now */}
+        <div className="bg-muted/50 border border-border rounded-lg p-4">
+          <p className="text-sm text-muted-foreground">
+            {!assignedStore || !selectedLocation 
+              ? "⚠️ Select a store and location to enable Shopify product pulling."
+              : "✓ Store and location set. Ready to pull products."}
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Store: {assignedStore || 'Not set'} | Location: {selectedLocation || 'Not set'}
+          </p>
         </div>
       </div>
 
