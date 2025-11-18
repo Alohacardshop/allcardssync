@@ -250,13 +250,22 @@ serve(async (req) => {
               console.log(`Skipping inventory levels for variant ${variant.id} - no valid inventory_item_id (${variant.inventory_item_id})`);
             }
 
-            // Create/update intake_items for each location (or one row if no locations)
-            const locationsToProcess = inventoryLevels.length > 0 
-              ? inventoryLevels 
-              : [{ location_id: null, available: 0 }];
+            // Only process locations with actual inventory (location_id exists and quantity > 0)
+            const locationsToProcess = inventoryLevels.filter(level => 
+              level.location_id && level.available > 0
+            );
+
+            // Skip variant if no valid inventory locations
+            if (locationsToProcess.length === 0) {
+              console.log(`Skipping variant ${variant.id} (SKU: ${variant.sku}) - no locations with quantity > 0 (found ${inventoryLevels.length} locations total)`);
+              skippedVariants++;
+              continue;
+            }
+
+            console.log(`Processing variant ${variant.id} (SKU: ${variant.sku}): ${locationsToProcess.length} locations with inventory`);
 
             for (const level of locationsToProcess) {
-              const locationGid = level.location_id ? `gid://shopify/Location/${level.location_id}` : null;
+              const locationGid = `gid://shopify/Location/${level.location_id}`;
               const quantity = level.available || 0;
 
               // Build comprehensive title
