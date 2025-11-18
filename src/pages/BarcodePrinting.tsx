@@ -15,33 +15,37 @@ export default function BarcodePrinting() {
   const { assignedStore, selectedLocation } = useStore();
   const [showPullDialog, setShowPullDialog] = useState(false);
 
+  const handleOpenShopifyDialog = () => {
+    setShowPullDialog(true);
+  };
+
   return (
     <div className="container mx-auto p-6 space-y-6">
-      <div className="mt-4 mb-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Printer className="h-8 w-8 text-primary" />
-            <h1 className="text-3xl font-bold">Barcode Printing</h1>
-          </div>
+      <section className="mt-4 mb-4 space-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-base font-semibold">
+            Shopify import
+          </h2>
 
           <Button
-            onClick={() => setShowPullDialog(true)}
-            disabled={!assignedStore || !selectedLocation}
             size="lg"
+            onClick={handleOpenShopifyDialog}
+            disabled={!assignedStore || !selectedLocation}
           >
-            <Download className="h-4 w-4 mr-2" />
             Pull from Shopify
           </Button>
         </div>
 
-        {(!assignedStore || !selectedLocation) && (
-          <div className="bg-muted/50 border border-border rounded-lg p-3">
-            <p className="text-sm text-muted-foreground">
-              Select a store and location to enable Shopify product pulling.
-            </p>
-          </div>
+        {(!assignedStore || !selectedLocation) ? (
+          <p className="text-sm text-muted-foreground">
+            Select a store and location in the top bar before pulling products from Shopify.
+          </p>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Store and location set. You can now pull products from Shopify.
+          </p>
         )}
-      </div>
+      </section>
 
       <Tabs defaultValue="queue" className="w-full">
         <TabsList className="grid w-full grid-cols-6">
