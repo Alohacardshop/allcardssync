@@ -79,7 +79,14 @@ const App = () => (
                             <Route path="/intake/graded" element={<GradedIntake />} />
                             <Route path="/intake/bulk" element={<BulkIntake />} />
                             <Route path="/bulk-import" element={<BulkImport />} />
-                            <Route path="/barcode-printing" element={<BarcodePrinting />} />
+          <Route 
+            path="/barcode-printing" 
+            element={
+              <ErrorBoundaryWrapper componentName="BarcodePrinting">
+                <BarcodePrinting />
+              </ErrorBoundaryWrapper>
+            } 
+          />
                             <Route path="/admin" element={<AdminGuard><Admin /></AdminGuard>} />
                             <Route path="/admin/catalog" element={<AdminGuard><div className="p-8"><CatalogMigrationPlaceholder /></div></AdminGuard>} />
                             <Route path="/admin/notifications/discord" element={<AdminGuard><DiscordNotifications /></AdminGuard>} />

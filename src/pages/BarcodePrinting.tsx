@@ -15,29 +15,42 @@ export default function BarcodePrinting() {
   const { assignedStore, selectedLocation } = useStore();
   const [showPullDialog, setShowPullDialog] = useState(false);
 
+  // Debug logging
+  console.log('[BarcodePrinting] Component mounted/rendering');
+  console.log('[BarcodePrinting] Store context:', { assignedStore, selectedLocation });
+  console.log('[BarcodePrinting] Button should be:', (!assignedStore || !selectedLocation) ? 'disabled' : 'enabled');
+
   return (
     <div className="container mx-auto p-6 space-y-6">
-      <div className="flex flex-col gap-4 mb-6">
-        <div className="flex items-center justify-between gap-4 flex-wrap">
+      {/* Header Section - Simplified for visibility */}
+      <div className="w-full space-y-4 mb-6">
+        {/* Title and Button Row */}
+        <div className="w-full flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <Printer className="h-8 w-8 text-primary" />
-            <h1 className="text-3xl font-bold">Barcode Printing</h1>
+            <h1 className="text-3xl font-bold text-foreground">Barcode Printing</h1>
           </div>
           
           <Button
-            onClick={() => setShowPullDialog(true)}
+            onClick={() => {
+              console.log('[BarcodePrinting] Pull button clicked');
+              setShowPullDialog(true);
+            }}
             disabled={!assignedStore || !selectedLocation}
             size="lg"
-            className="shrink-0"
+            variant="default"
+            className="whitespace-nowrap"
+            style={{ minWidth: '200px' }}
           >
             <Download className="mr-2 h-4 w-4" />
             Pull from Shopify
           </Button>
         </div>
         
+        {/* Warning Message */}
         {(!assignedStore || !selectedLocation) && (
-          <div className="bg-muted/50 border border-border rounded-lg p-4 text-sm text-muted-foreground">
-            <p>
+          <div className="w-full bg-muted/50 border border-border rounded-lg p-4">
+            <p className="text-sm text-muted-foreground">
               Select a store and location to enable Shopify product pulling. 
               You can set these in your store selector at the top of the page.
             </p>
