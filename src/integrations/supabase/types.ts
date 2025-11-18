@@ -2493,6 +2493,26 @@ export type Database = {
         Args: { ids: string[]; reason?: string }
         Returns: Json
       }
+      upsert_shopify_intake_item: {
+        Args: {
+          p_brand_title: string
+          p_category: string
+          p_image_urls: Json
+          p_price: number
+          p_quantity: number
+          p_removed_from_batch_at: string
+          p_shopify_inventory_item_id: string
+          p_shopify_location_gid: string
+          p_shopify_product_id: string
+          p_shopify_snapshot: Json
+          p_shopify_variant_id: string
+          p_sku: string
+          p_source_provider: string
+          p_store_key: string
+          p_subject: string
+        }
+        Returns: undefined
+      }
       user_can_access_region: {
         Args: { _region_id: string; _user_id: string }
         Returns: boolean
