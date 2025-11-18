@@ -332,6 +332,8 @@ serve(async (req) => {
                       : (product.tags || [])
                   },
                   removed_from_batch_at: quantity > 0 ? new Date().toISOString() : null,
+                }, {
+                  onConflict: 'store_key,sku,shopify_location_gid'
                 });
 
               if (upsertError) {
