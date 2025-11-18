@@ -126,6 +126,7 @@ serve(async (req) => {
     let gradedProducts = 0;
     let rawProducts = 0;
     let totalVariants = 0;
+    let skippedVariants = 0;
     let upsertedRows = 0;
     let errors: string[] = [];
 
@@ -194,6 +195,13 @@ serve(async (req) => {
           // Process each variant
           for (const variant of product.variants || []) {
             totalVariants++;
+
+            // Skip variants without SKUs - they can't be properly tracked in inventory
+            if (!variant.sku || variant.sku.trim() === '') {
+              console.log(`Skipping variant ${variant.id} from product "${product.title}" - no SKU`);
+              skippedVariants++;
+              continue;
+            }
 
             if (dryRun) continue;
 
@@ -316,6 +324,7 @@ serve(async (req) => {
         gradedProducts,
         rawProducts,
         totalVariants,
+        skippedVariants,
         upsertedRows,
         pagesProcessed: pageCount,
         errors: errors.slice(0, 10) // Limit error array size
