@@ -21,7 +21,7 @@ export default function BarcodePrinting() {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
-      <section className="mt-4 mb-4 space-y-2">
+      <section className="mt-8 mb-6 space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-base font-semibold">
             Shopify import
