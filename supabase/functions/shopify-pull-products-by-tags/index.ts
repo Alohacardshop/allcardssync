@@ -2,6 +2,11 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.56.0";
 import { fetchWithRetry } from "../_shared/http.ts";
 
+// Declare EdgeRuntime for background tasks
+declare const EdgeRuntime: {
+  waitUntil(promise: Promise<any>): void;
+};
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -96,7 +101,31 @@ serve(async (req) => {
     console.log(`Raw tags: ${JSON.stringify(rawTags)}`);
     console.log(`Skip already pulled: ${skipAlreadyPulled}, Updated since: ${updatedSinceIso || 'none'}`);
 
-    // Get Shopify credentials (support multiple key formats for compatibility)
+    // Return immediately and process in background
+    const response = new Response(
+      JSON.stringify({
+        success: true,
+        message: 'Backfill started in background',
+        storeKey,
+        dryRun
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+
+    // Process backfill in background
+    EdgeRuntime.waitUntil(
+      (async () => {
+        try {
+          await processBackfill();
+        } catch (error) {
+          console.error('Background backfill error:', error);
+        }
+      })()
+    );
+
+    return response;
+
+    async function processBackfill() {
     const upper = storeKey.toUpperCase();
     const domainKeys = [
       `SHOPIFY_${upper}_DOMAIN`,
@@ -370,11 +399,7 @@ serve(async (req) => {
     };
 
     console.log('Import completed:', result);
-
-    return new Response(
-      JSON.stringify(result),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    } // End processBackfill
 
   } catch (error) {
     console.error('Import error:', error);
