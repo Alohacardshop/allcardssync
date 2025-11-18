@@ -60,7 +60,8 @@ serve(async (req) => {
       updatedSince,
       maxPages = 50,
       dryRun = false,
-      status = 'active'
+      status = 'active',
+      skipAlreadyPulled = true
     } = await req.json();
 
     if (!storeKey) {
@@ -70,15 +71,30 @@ serve(async (req) => {
       );
     }
 
-    // Normalize date to ISO8601 if provided
-    const updatedSinceIso = updatedSince ? new Date(updatedSince).toISOString() : undefined;
+    // Use service client already created above for auth check
+    const supabase = authClient;
+
+    // If skipAlreadyPulled is true and no updatedSince provided, get last pull time
+    let updatedSinceIso: string | undefined;
+    if (skipAlreadyPulled && !updatedSince) {
+      const { data: lastPullSetting } = await supabase
+        .from('system_settings')
+        .select('key_value')
+        .eq('key_name', `SHOPIFY_LAST_PULL_${storeKey.toUpperCase()}`)
+        .single();
+      
+      if (lastPullSetting?.key_value) {
+        updatedSinceIso = lastPullSetting.key_value as string;
+        console.log(`Using last pull time for incremental sync: ${updatedSinceIso}`);
+      }
+    } else if (updatedSince) {
+      updatedSinceIso = new Date(updatedSince).toISOString();
+    }
 
     console.log(`Starting Shopify product import for store: ${storeKey}`);
     console.log(`Graded tags: ${JSON.stringify(gradedTags)}`);
     console.log(`Raw tags: ${JSON.stringify(rawTags)}`);
-
-    // Use service client already created above for auth check
-    const supabase = authClient;
+    console.log(`Skip already pulled: ${skipAlreadyPulled}, Updated since: ${updatedSinceIso || 'none'}`);
 
     // Get Shopify credentials (support multiple key formats for compatibility)
     const upper = storeKey.toUpperCase();
@@ -312,6 +328,22 @@ serve(async (req) => {
       currentUrl = nextUrl;
     }
 
+    // Update last pull timestamp on successful pull (not in dry run)
+    if (!dryRun && upsertedRows > 0) {
+      const pullTimestamp = new Date().toISOString();
+      await supabase
+        .from('system_settings')
+        .upsert({
+          key_name: `SHOPIFY_LAST_PULL_${storeKey.toUpperCase()}`,
+          key_value: pullTimestamp,
+          description: `Last successful Shopify product pull for ${storeKey}`,
+          category: 'shopify'
+        }, {
+          onConflict: 'key_name'
+        });
+      console.log(`Updated last pull timestamp to: ${pullTimestamp}`);
+    }
+
     const result = {
       success: true,
       dryRun,
@@ -323,6 +355,7 @@ serve(async (req) => {
         skippedVariants,
         upsertedRows,
         pagesProcessed: pageCount,
+        updatedSince: updatedSinceIso,
         errors: errors.slice(0, 10) // Limit error array size
       }
     };
