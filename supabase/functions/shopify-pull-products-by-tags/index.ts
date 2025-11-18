@@ -303,38 +303,34 @@ serve(async (req) => {
                 variant.title !== 'Default Title' ? variant.title : null
               ].filter(Boolean).join(' - ');
 
-              // Upsert intake_items - onConflict expects column names
-              const { error: upsertError } = await supabase
-                .from('intake_items')
-                .upsert({
+              // Use database function to properly handle ON CONFLICT upsert
+              const { error: upsertError } = await supabase.rpc('upsert_shopify_intake_item', {
+                p_sku: variant.sku,
+                p_store_key: storeKey,
+                p_shopify_location_gid: locationGid,
+                p_shopify_product_id: product.id.toString(),
+                p_shopify_variant_id: variant.id.toString(),
+                p_shopify_inventory_item_id: variant.inventory_item_id?.toString() || null,
+                p_quantity: quantity,
+                p_price: parseFloat(variant.price) || 99999,
+                p_brand_title: title,
+                p_subject: product.title,
+                p_category: productType,
+                p_image_urls: imageUrls,
+                p_source_provider: 'shopify-pull',
+                p_shopify_snapshot: {
+                  product_id: product.id,
+                  variant_id: variant.id,
+                  title: product.title,
+                  variant_title: variant.title,
+                  price: variant.price,
                   sku: variant.sku,
-                  store_key: storeKey,
-                  shopify_product_id: product.id.toString(),
-                  shopify_variant_id: variant.id.toString(),
-                  shopify_inventory_item_id: variant.inventory_item_id?.toString(),
-                  shopify_location_gid: locationGid,
-                  quantity,
-                  price: parseFloat(variant.price) || 99999,
-                  brand_title: title,
-                  subject: product.title,
-                  category: productType,
-                  image_urls: imageUrls,
-                  source_provider: 'shopify-pull',
-                  shopify_snapshot: {
-                    product_id: product.id,
-                    variant_id: variant.id,
-                    title: product.title,
-                    variant_title: variant.title,
-                    price: variant.price,
-                    sku: variant.sku,
-                    tags: typeof product.tags === 'string' 
-                      ? product.tags.split(',').map((t: string) => t.trim()).filter(Boolean)
-                      : (product.tags || [])
-                  },
-                  removed_from_batch_at: quantity > 0 ? new Date().toISOString() : null,
-                }, {
-                  onConflict: 'store_key,sku,shopify_location_gid'
-                });
+                  tags: typeof product.tags === 'string' 
+                    ? product.tags.split(',').map((t: string) => t.trim()).filter(Boolean)
+                    : (product.tags || [])
+                },
+                p_removed_from_batch_at: quantity > 0 ? new Date().toISOString() : null
+              });
 
               if (upsertError) {
                 console.error(`Upsert error for SKU ${variant.sku}:`, upsertError);
