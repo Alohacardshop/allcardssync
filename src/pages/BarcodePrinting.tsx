@@ -17,35 +17,30 @@ export default function BarcodePrinting() {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
-      {/* Header Section - Rebuilt cleanly */}
-      <div className="space-y-4 mb-6">
-        {/* Title */}
-        <div className="flex items-center gap-3">
-          <Printer className="h-8 w-8 text-primary" />
-          <h1 className="text-3xl font-bold">Barcode Printing</h1>
+      <div className="mt-4 mb-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Printer className="h-8 w-8 text-primary" />
+            <h1 className="text-3xl font-bold">Barcode Printing</h1>
+          </div>
+
+          <Button
+            onClick={() => setShowPullDialog(true)}
+            disabled={!assignedStore || !selectedLocation}
+            size="lg"
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Pull from Shopify
+          </Button>
         </div>
 
-        {/* Pull from Shopify Button - Always visible */}
-        <Button
-          onClick={() => setShowPullDialog(true)}
-          disabled={!assignedStore || !selectedLocation}
-          size="lg"
-        >
-          <Download className="h-4 w-4 mr-2" />
-          Pull from Shopify
-        </Button>
-
-        {/* Warning - Always visible for now */}
-        <div className="bg-muted/50 border border-border rounded-lg p-4">
-          <p className="text-sm text-muted-foreground">
-            {!assignedStore || !selectedLocation 
-              ? "⚠️ Select a store and location to enable Shopify product pulling."
-              : "✓ Store and location set. Ready to pull products."}
-          </p>
-          <p className="text-xs text-muted-foreground mt-1">
-            Store: {assignedStore || 'Not set'} | Location: {selectedLocation || 'Not set'}
-          </p>
-        </div>
+        {(!assignedStore || !selectedLocation) && (
+          <div className="bg-muted/50 border border-border rounded-lg p-3">
+            <p className="text-sm text-muted-foreground">
+              Select a store and location to enable Shopify product pulling.
+            </p>
+          </div>
+        )}
       </div>
 
       <Tabs defaultValue="queue" className="w-full">
@@ -107,9 +102,7 @@ export default function BarcodePrinting() {
           onOpenChange={setShowPullDialog}
           storeKey={assignedStore}
           locationGid={selectedLocation}
-          onSuccess={() => {
-            console.log("Products pulled successfully");
-          }}
+          onSuccess={() => setShowPullDialog(false)}
         />
       )}
     </div>
