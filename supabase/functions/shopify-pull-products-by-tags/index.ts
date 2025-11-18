@@ -7,6 +7,24 @@ declare const EdgeRuntime: {
   waitUntil(promise: Promise<any>): void;
 };
 
+// Rate limiter to respect Shopify's 4 calls/second limit
+class RateLimiter {
+  private lastCallTime = 0;
+  private minDelay = 250; // 250ms = 4 calls per second
+
+  async throttle(): Promise<void> {
+    const now = Date.now();
+    const timeSinceLastCall = now - this.lastCallTime;
+    
+    if (timeSinceLastCall < this.minDelay) {
+      const delay = this.minDelay - timeSinceLastCall;
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+    
+    this.lastCallTime = Date.now();
+  }
+}
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -166,6 +184,9 @@ serve(async (req) => {
 
     const apiVersion = '2024-07';
 
+    // Create rate limiter to respect Shopify's 4 calls/second limit
+    const rateLimiter = new RateLimiter();
+
     // Statistics
     let totalProducts = 0;
     let gradedProducts = 0;
@@ -193,6 +214,9 @@ serve(async (req) => {
       pageCount++;
       
       console.log(`Fetching page ${pageCount}: ${currentUrl}`);
+
+      // Rate limit: Wait before making API call
+      await rateLimiter.throttle();
 
       const response = await fetchWithRetry(currentUrl, {
         headers: {
@@ -252,6 +276,9 @@ serve(async (req) => {
               try {
                 const levelsUrl = `https://${shopifyDomain}/admin/api/${apiVersion}/inventory_levels.json?inventory_item_ids=${variant.inventory_item_id}`;
                 console.log(`Fetching inventory levels for variant ${variant.id}, inventory_item_id: ${variant.inventory_item_id}`);
+                
+                // Rate limit: Wait before making API call
+                await rateLimiter.throttle();
                 
                 const levelsResponse = await fetchWithRetry(levelsUrl, {
                   headers: {
