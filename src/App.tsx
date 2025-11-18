@@ -34,6 +34,7 @@ const DiscordNotifications = React.lazy(() => import("./pages/admin/DiscordNotif
 const PendingNotifications = React.lazy(() => import("./pages/PendingNotifications"));
 const GradedIntake = React.lazy(() => import("./pages/intake/GradedIntake"));
 const BulkIntake = React.lazy(() => import("./pages/intake/BulkIntake"));
+const ShopifyBackfill = React.lazy(() => import("./pages/Admin/ShopifyBackfill"));
 import { GlobalKeyboardHandler } from "./components/GlobalKeyboardHandler";
 import { FloatingActionButton } from "./components/FloatingActionButton";
 import { PerformanceMonitor } from "./components/PerformanceMonitor";
@@ -91,6 +92,7 @@ const App = () => (
                             <Route path="/admin/catalog" element={<AdminGuard><div className="p-8"><CatalogMigrationPlaceholder /></div></AdminGuard>} />
                             <Route path="/admin/notifications/discord" element={<AdminGuard><DiscordNotifications /></AdminGuard>} />
                             <Route path="/admin/notifications/pending" element={<AdminGuard><PendingNotifications /></AdminGuard>} />
+                            <Route path="/admin/shopify-backfill" element={<AdminGuard><ShopifyBackfill /></AdminGuard>} />
                             <Route path="/shopify-mapping" element={<ShopifyMapping />} />
                             <Route path="/shopify-sync" element={<ShopifySync />} />
                             <Route path="/bulk-transfer" element={<BulkTransfer />} />
