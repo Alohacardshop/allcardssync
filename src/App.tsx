@@ -16,9 +16,13 @@ import { NavigationBar } from "@/components/NavigationBar";
 import { GlobalLoading } from "@/components/GlobalLoading";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { FontPreloader } from "@/components/fonts/FontPreloader";
+import { RequireApp } from "@/components/RequireApp";
+import { DashboardLayout } from "@/layouts/DashboardLayout";
 // Lazy load heavy routes
+const DashboardHome = React.lazy(() => import("./pages/DashboardHome"));
 const Index = React.lazy(() => import("./pages/Index"));
 const DashboardPage = React.lazy(() => import("./pages/DashboardPage"));
+const DocumentsPage = React.lazy(() => import("./features/docs/pages/DocumentsPage"));
 const TestHardwarePage = React.lazy(() => import("./pages/TestHardwarePage"));
 const Inventory = React.lazy(() => import("./pages/Inventory"));
 const Batches = React.lazy(() => import("./pages/Batches"));
@@ -72,30 +76,54 @@ const App = () => (
                       <AuthGuard>
                         <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><LoadingSpinner size="lg" /></div>}>
                           <Routes>
-                            <Route path="/" element={<ErrorBoundaryWrapper componentName="Index"><Index /></ErrorBoundaryWrapper>} />
-                            <Route path="/dashboard" element={<ErrorBoundaryWrapper componentName="Dashboard"><DashboardPage /></ErrorBoundaryWrapper>} />
-                            <Route path="/test-hardware" element={<TestHardwarePage />} />
-                            <Route path="/inventory" element={<ErrorBoundaryWrapper componentName="Inventory"><Inventory /></ErrorBoundaryWrapper>} />
-                            <Route path="/batches" element={<ErrorBoundaryWrapper componentName="Batch Management"><Batches /></ErrorBoundaryWrapper>} />
-                            <Route path="/intake/graded" element={<GradedIntake />} />
-                            <Route path="/intake/bulk" element={<BulkIntake />} />
-                            <Route path="/bulk-import" element={<BulkImport />} />
-          <Route 
-            path="/barcode-printing" 
-            element={
-              <ErrorBoundaryWrapper componentName="BarcodePrinting">
-                <BarcodePrinting />
-              </ErrorBoundaryWrapper>
-            } 
-          />
+                            {/* Dashboard Home */}
+                            <Route path="/" element={<ErrorBoundaryWrapper componentName="DashboardHome"><DashboardHome /></ErrorBoundaryWrapper>} />
+                            
+                            {/* Intake App (formerly Index) */}
+                            <Route path="/intake" element={
+                              <RequireApp appKey="intake">
+                                <ErrorBoundaryWrapper componentName="Intake"><Index /></ErrorBoundaryWrapper>
+                              </RequireApp>
+                            } />
+                            <Route path="/intake/graded" element={<RequireApp appKey="intake"><GradedIntake /></RequireApp>} />
+                            <Route path="/intake/bulk" element={<RequireApp appKey="intake"><BulkIntake /></RequireApp>} />
+                            
+                            {/* Inventory App */}
+                            <Route path="/inventory" element={
+                              <RequireApp appKey="inventory">
+                                <ErrorBoundaryWrapper componentName="Inventory"><Inventory /></ErrorBoundaryWrapper>
+                              </RequireApp>
+                            } />
+                            <Route path="/batches" element={<RequireApp appKey="inventory"><ErrorBoundaryWrapper componentName="Batch Management"><Batches /></ErrorBoundaryWrapper></RequireApp>} />
+                            <Route path="/bulk-import" element={<RequireApp appKey="inventory"><BulkImport /></RequireApp>} />
+                            <Route path="/bulk-transfer" element={<RequireApp appKey="inventory"><BulkTransfer /></RequireApp>} />
+                            <Route path="/shopify-mapping" element={<RequireApp appKey="inventory"><ShopifyMapping /></RequireApp>} />
+                            <Route path="/shopify-sync" element={<RequireApp appKey="inventory"><ShopifySync /></RequireApp>} />
+                            
+                            {/* Barcode App */}
+                            <Route path="/barcode-printing" element={
+                              <RequireApp appKey="barcode">
+                                <ErrorBoundaryWrapper componentName="BarcodePrinting"><BarcodePrinting /></ErrorBoundaryWrapper>
+                              </RequireApp>
+                            } />
+                            
+                            {/* Documents App */}
+                            <Route path="/docs" element={
+                              <RequireApp appKey="docs">
+                                <ErrorBoundaryWrapper componentName="Documents"><DocumentsPage /></ErrorBoundaryWrapper>
+                              </RequireApp>
+                            } />
+                            
+                            {/* Admin App */}
                             <Route path="/admin" element={<AdminGuard><Admin /></AdminGuard>} />
                             <Route path="/admin/catalog" element={<AdminGuard><div className="p-8"><CatalogMigrationPlaceholder /></div></AdminGuard>} />
                             <Route path="/admin/notifications/discord" element={<AdminGuard><DiscordNotifications /></AdminGuard>} />
                             <Route path="/admin/notifications/pending" element={<AdminGuard><PendingNotifications /></AdminGuard>} />
                             <Route path="/admin/shopify-backfill" element={<AdminGuard><ShopifyBackfill /></AdminGuard>} />
-                            <Route path="/shopify-mapping" element={<ShopifyMapping />} />
-                            <Route path="/shopify-sync" element={<ShopifySync />} />
-                            <Route path="/bulk-transfer" element={<BulkTransfer />} />
+                            
+                            {/* Other Pages */}
+                            <Route path="/dashboard" element={<ErrorBoundaryWrapper componentName="Dashboard"><DashboardPage /></ErrorBoundaryWrapper>} />
+                            <Route path="/test-hardware" element={<TestHardwarePage />} />
                             
                             {/* Legacy routes - redirect */}
                             <Route path="/labels" element={<Navigate to="/barcode-printing" replace />} />

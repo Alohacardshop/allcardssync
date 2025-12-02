@@ -4,7 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { RefreshCw, Store as StoreIcon, ShoppingCart, MapPin, Package, Home, Archive, Tags, Printer, LogOut, Settings, Menu, X, Wrench } from 'lucide-react';
+import { RefreshCw, Store as StoreIcon, ShoppingCart, MapPin, Package, Home, Archive, Tags, Printer, LogOut, Settings, Menu, X, Wrench, FileText } from 'lucide-react';
 import { useStore } from '@/contexts/StoreContext';
 import { supabase } from '@/integrations/supabase/client';
 import { resetLogin } from '@/lib/authUtils';
@@ -146,9 +146,11 @@ export function NavigationBar() {
 
   // Navigation items
   const navItems = [
-    { to: '/', label: 'Dashboard', icon: Home },
+    { to: '/', label: 'Home', icon: Home },
+    { to: '/intake', label: 'Intake', icon: ShoppingCart },
     { to: '/inventory', label: 'Inventory', icon: Archive },
-    { to: '/barcode-printing', label: 'Barcode Printing', icon: Printer },
+    { to: '/barcode-printing', label: 'Barcode', icon: Printer },
+    { to: '/docs', label: 'Docs', icon: FileText },
   ];
 
   if (isAdmin) {
@@ -163,10 +165,10 @@ export function NavigationBar() {
           {/* LEFT SIDE - Logo/Title & Desktop Navigation */}
           <div className="flex items-center gap-6">
             {/* Logo */}
-            <div className="flex items-center gap-3">
+            <Link to="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
               <Package className="h-6 w-6 text-primary" />
-              <h1 className="text-xl font-semibold">Inventory Management</h1>
-            </div>
+              <h1 className="text-xl font-semibold">Aloha Dashboard</h1>
+            </Link>
             
             {/* Desktop Navigation */}
             <div className="hidden md:flex items-center gap-1">
