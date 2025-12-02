@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { ZebraPrinterSelectionDialog } from '@/components/ZebraPrinterSelectionDialog';
 import { zebraNetworkService } from '@/lib/zebraNetworkService';
 import { getDirectPrinterConfig } from '@/hooks/usePrinter';
 import { ZPLLabel, generateZPLFromElements, LABEL_2x1_203, LABEL_2x1_300 } from '@/lib/zplElements';
@@ -18,7 +17,6 @@ interface BarcodeLabelProps {
 
 const BarcodeLabel = ({ value, label, className, showPrintButton = true, quantity = 1 }: BarcodeLabelProps) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [showPrinterDialog, setShowPrinterDialog] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -43,16 +41,12 @@ const BarcodeLabel = ({ value, label, className, showPrintButton = true, quantit
     };
   }, [value]);
 
-  const handlePrint = async () => {
-    setShowPrinterDialog(true);
-  };
-
   // Unified print function supporting both 203 and 300 DPI
   const printBarcodeLabelUnified = async (opts: {
     sku: string;
     title: string;
-    priceDisplay: string; // e.g. "$24.99"
-    condition: string;    // e.g. "NM"
+    priceDisplay: string;
+    condition: string;
     dpi: 203 | 300;
     copies?: number;
   }) => {
@@ -60,12 +54,11 @@ const BarcodeLabel = ({ value, label, className, showPrintButton = true, quantit
 
     const dims = dpi === 300 ? LABEL_2x1_300 : LABEL_2x1_203;
 
-    const label: ZPLLabel = {
+    const labelConfig: ZPLLabel = {
       width: dims.width,
       height: dims.height,
       dpi: dims.dpi,
       elements: [
-        // Condition (top-left)
         {
           id: 'condition',
           type: 'text',
@@ -76,7 +69,6 @@ const BarcodeLabel = ({ value, label, className, showPrintButton = true, quantit
           fontWidth: 24,
           text: condition
         },
-        // Price (top-right-ish; keep some margin)
         {
           id: 'price',
           type: 'text',
@@ -87,18 +79,16 @@ const BarcodeLabel = ({ value, label, className, showPrintButton = true, quantit
           fontWidth: 28,
           text: priceDisplay
         },
-        // Barcode (center area)
         {
           id: 'barcode',
           type: 'barcode',
           position: { x: 50, y: 60 },
           data: sku,
-          size: { width: 300, height: 40 }, // width is informational here; height is enforced below
+          size: { width: 300, height: 40 },
           barcodeType: 'CODE128',
           height: 40,
           humanReadable: false
         },
-        // Title (bottom line)
         {
           id: 'title',
           type: 'text',
@@ -112,10 +102,10 @@ const BarcodeLabel = ({ value, label, className, showPrintButton = true, quantit
       ]
     };
 
-    const zpl = generateZPLFromElements(label, 0, 0);
+    const zpl = generateZPLFromElements(labelConfig, 0, 0);
     const config = await getDirectPrinterConfig();
     if (!config) {
-      toast.error('No printer configured');
+      toast.error('No printer configured. Go to Settings to configure printer.');
       return;
     }
     const result = await zebraNetworkService.printZPLDirect(zpl, config.ip, config.port);
@@ -131,7 +121,7 @@ const BarcodeLabel = ({ value, label, className, showPrintButton = true, quantit
     }
   };
 
-  // New code-only thirds template print function
+  // Thirds template print function
   const printThirdsPriceLabel = async (opts: {
     condition: string;
     priceDisplay: string;
@@ -149,7 +139,7 @@ const BarcodeLabel = ({ value, label, className, showPrintButton = true, quantit
       });
       const config = await getDirectPrinterConfig();
       if (!config) {
-        throw new Error('No printer configured');
+        throw new Error('No printer configured. Go to Settings to configure printer.');
       }
       const res = await zebraNetworkService.printZPLDirect(zpl, config.ip, config.port);
       
@@ -177,7 +167,7 @@ const BarcodeLabel = ({ value, label, className, showPrintButton = true, quantit
         title: labelData.title || 'Sample Item',
         priceDisplay: labelData.price ? `$${labelData.price}` : '$0.00',
         condition: 'NM',
-        dpi: 203, // Default to 203 DPI for compatibility
+        dpi: 203,
         copies
       });
     } catch (error) {
@@ -188,7 +178,7 @@ const BarcodeLabel = ({ value, label, className, showPrintButton = true, quantit
     }
   };
 
-  const handlePrintWithPrinter = async (printer: any) => {
+  const handlePrint = async () => {
     if (!value) return;
     
     const labelData = {
@@ -198,51 +188,6 @@ const BarcodeLabel = ({ value, label, className, showPrintButton = true, quantit
     };
     
     await printLabel(labelData, 1);
-  };
-
-  const handleLegacyPrint = () => {
-    try {
-      if (!canvasRef.current) return;
-      const dataUrl = canvasRef.current.toDataURL("image/png");
-
-      // Create a hidden iframe to isolate print content (avoids printing full app)
-      const iframe = document.createElement("iframe");
-      iframe.style.position = "fixed";
-      iframe.style.right = "0";
-      iframe.style.bottom = "0";
-      iframe.style.width = "0";
-      iframe.style.height = "0";
-      iframe.style.border = "0";
-      document.body.appendChild(iframe);
-
-      const doc = iframe.contentWindow?.document;
-      if (!doc) {
-        iframe.remove();
-        return;
-      }
-
-      const html = `<!doctype html><html><head><title>Print Barcode</title><style>
-        @page { size: auto; margin: 6mm; }
-        html, body { height: 100%; }
-        body { display: flex; align-items: center; justify-content: center; }
-        img { width: 320px; }
-      </style></head>
-      <body>
-        <img src="${dataUrl}" alt="Barcode ${value}"
-          onload="setTimeout(() => { window.focus(); window.print(); }, 20)" />
-      </body></html>`;
-
-      doc.open();
-      doc.write(html);
-      doc.close();
-
-      const cleanup = () => setTimeout(() => iframe.remove(), 300);
-      iframe.contentWindow?.addEventListener("afterprint", cleanup, { once: true });
-      // Fallback cleanup in case afterprint doesn't fire
-      setTimeout(cleanup, 5000);
-    } catch (e) {
-      // no-op
-    }
   };
 
   return (
@@ -268,13 +213,6 @@ const BarcodeLabel = ({ value, label, className, showPrintButton = true, quantit
           </Button>
         </div>
       )}
-      
-      <ZebraPrinterSelectionDialog
-        open={showPrinterDialog}
-        onOpenChange={setShowPrinterDialog}
-        onPrint={handlePrintWithPrinter}
-        title="Select Printer for Barcode"
-      />
     </div>
   );
 };

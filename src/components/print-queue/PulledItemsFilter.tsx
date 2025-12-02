@@ -9,18 +9,15 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Search, Filter, ChevronDown, X } from 'lucide-react';
-import { generatePrintJobsFromIntakeItems } from '@/lib/print/generateJobs';
-import { getWorkstationId } from '@/lib/workstationId';
 import { toast } from 'sonner';
 
 export default function PulledItemsFilter() {
   const [items, setItems] = useState<any[]>([]);
-  const [allItems, setAllItems] = useState<any[]>([]); // Store all items for tag extraction
+  const [allItems, setAllItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedIncludeTags, setSelectedIncludeTags] = useState<string[]>([]);
   const [selectedExcludeTags, setSelectedExcludeTags] = useState<string[]>(['printed']);
-  const [isGenerating, setIsGenerating] = useState(false);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [dateFilter, setDateFilter] = useState<'today' | 'yesterday' | '7days' | '30days' | null>(null);
@@ -31,7 +28,7 @@ export default function PulledItemsFilter() {
 
   useEffect(() => {
     filterItems();
-    setSelectedItems(new Set()); // Clear selection when filters change
+    setSelectedItems(new Set());
   }, [searchTerm, selectedIncludeTags, selectedExcludeTags, dateFilter, allItems]);
 
   const fetchAllItems = async () => {
@@ -142,42 +139,6 @@ export default function PulledItemsFilter() {
     }
 
     setItems(filtered);
-  };
-
-  const handleGenerateJobs = async () => {
-    if (selectedItems.size === 0) {
-      toast.error('Please select at least one item');
-      return;
-    }
-
-    setIsGenerating(true);
-    try {
-      // Filter items to only selected ones
-      const selectedItemsList = items.filter(item => selectedItems.has(item.id));
-      
-      // Create print jobs for each selected item
-      let created = 0;
-      let skipped = 0;
-      
-      for (const item of selectedItemsList) {
-        const result = await generatePrintJobsFromIntakeItems({
-          workstationId: getWorkstationId(),
-        });
-        created += result.created;
-        skipped += result.skipped;
-      }
-
-      if (created === 0) {
-        toast.info(`No matching print profiles found for selected items`);
-      } else {
-        toast.success(`Created ${created} print jobs for ${selectedItems.size} selected items`);
-        setSelectedItems(new Set()); // Clear selection after generating
-      }
-    } catch (error: any) {
-      toast.error(`Error: ${error.message}`);
-    } finally {
-      setIsGenerating(false);
-    }
   };
 
   const handleSelectAll = (checked: boolean) => {
@@ -415,13 +376,6 @@ export default function PulledItemsFilter() {
                 </div>
               )}
             </div>
-            <Button
-              onClick={handleGenerateJobs}
-              disabled={isGenerating || selectedItems.size === 0}
-              size="sm"
-            >
-              {isGenerating ? 'Generating...' : `Generate Print Jobs (${selectedItems.size})`}
-            </Button>
           </div>
         </CardContent>
       </Card>

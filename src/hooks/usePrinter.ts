@@ -1,11 +1,12 @@
 /**
- * Simple Printer Hook
- * Direct TCP printing via zebra-tcp edge function
+ * Clean Printer Hook - Direct TCP Only
+ * Single hook for all printer operations
  */
 
 import { useState, useCallback, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { zebraNetworkService, type ZebraPrinter, type PrinterStatus, type PrintJobResult } from '@/lib/zebraNetworkService';
+import { zebraNetworkService, type PrinterStatus, type PrintJobResult } from '@/lib/zebraNetworkService';
 import { supabase } from '@/integrations/supabase/client';
 
 export interface PrinterConfig {
@@ -14,11 +15,8 @@ export interface PrinterConfig {
   name: string;
 }
 
-const DEFAULT_PRINTER: PrinterConfig = {
-  ip: '192.168.1.70',
-  port: 9100,
-  name: 'Zebra ZD410'
-};
+const STORAGE_KEY = 'zebra-printer-config';
+const DEFAULT_PORT = 9100;
 
 // Get or create consistent workstation ID
 function getWorkstationId(): string {
@@ -31,22 +29,21 @@ function getWorkstationId(): string {
 }
 
 export function usePrinter() {
-  const [printer, setPrinter] = useState<PrinterConfig>(DEFAULT_PRINTER);
-  const [status, setStatus] = useState<PrinterStatus | null>(null);
+  const queryClient = useQueryClient();
+  const [printer, setPrinter] = useState<PrinterConfig | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [isConnected, setIsConnected] = useState(false);
 
   // Load saved printer configuration
   const loadConfig = useCallback(async () => {
     try {
       // Try localStorage first
-      const saved = localStorage.getItem('zebra-printer-config');
+      const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed.ip) {
           setPrinter({
             ip: parsed.ip,
-            port: parsed.port || 9100,
+            port: parsed.port || DEFAULT_PORT,
             name: parsed.name || `Zebra (${parsed.ip})`
           });
           return;
@@ -64,11 +61,11 @@ export function usePrinter() {
       if (data?.printer_ip) {
         const config = {
           ip: data.printer_ip,
-          port: data.printer_port || 9100,
+          port: data.printer_port || DEFAULT_PORT,
           name: data.printer_name || `Zebra (${data.printer_ip})`
         };
         setPrinter(config);
-        localStorage.setItem('zebra-printer-config', JSON.stringify(config));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
       }
     } catch (error) {
       console.log('Failed to load printer config:', error);
@@ -78,7 +75,7 @@ export function usePrinter() {
   // Save printer configuration
   const saveConfig = useCallback(async (config: PrinterConfig) => {
     setPrinter(config);
-    localStorage.setItem('zebra-printer-config', JSON.stringify(config));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
 
     // Also save to database
     try {
@@ -95,55 +92,72 @@ export function usePrinter() {
     } catch (error) {
       console.log('Failed to save printer config to database:', error);
     }
-  }, []);
+    
+    queryClient.invalidateQueries({ queryKey: ['printerStatus'] });
+  }, [queryClient]);
+
+  // Printer status polling with React Query
+  const { data: status } = useQuery<PrinterStatus | null>({
+    queryKey: ['printerStatus', printer?.ip],
+    queryFn: async () => {
+      if (!printer) return null;
+      return zebraNetworkService.queryStatus(printer.ip, printer.port);
+    },
+    enabled: !!printer,
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      if (!data) return false;
+      // Poll more frequently if issues detected
+      return (!data.ready || data.paused || data.mediaOut || data.headOpen) ? 10000 : 30000;
+    },
+    staleTime: 20000,
+  });
 
   // Test connection
   const testConnection = useCallback(async (ip?: string, port?: number): Promise<boolean> => {
     setIsLoading(true);
     try {
-      const testIp = ip || printer.ip;
-      const testPort = port || printer.port;
+      const testIp = ip || printer?.ip;
+      const testPort = port || printer?.port || DEFAULT_PORT;
+      if (!testIp) return false;
+      
       const connected = await zebraNetworkService.testConnection(testIp, testPort);
-      setIsConnected(connected);
       return connected;
     } catch (error) {
-      setIsConnected(false);
       return false;
     } finally {
       setIsLoading(false);
     }
-  }, [printer.ip, printer.port]);
+  }, [printer?.ip, printer?.port]);
 
   // Get printer status
-  const refreshStatus = useCallback(async () => {
+  const refreshStatus = useCallback(async (): Promise<PrinterStatus | null> => {
+    if (!printer) return null;
+    
     try {
       const printerStatus = await zebraNetworkService.queryStatus(printer.ip, printer.port);
-      setStatus(printerStatus);
-      setIsConnected(printerStatus.ready !== undefined);
+      queryClient.setQueryData(['printerStatus', printer.ip], printerStatus);
       return printerStatus;
     } catch (error) {
-      setStatus(null);
-      setIsConnected(false);
       return null;
     }
-  }, [printer.ip, printer.port]);
+  }, [printer, queryClient]);
 
   // Print ZPL directly
   const print = useCallback(async (zpl: string, copies: number = 1): Promise<PrintJobResult> => {
+    if (!printer) {
+      return { success: false, error: 'No printer configured' };
+    }
+    
     setIsLoading(true);
     try {
-      const result = await zebraNetworkService.printZPLDirect(zpl, printer.ip, printer.port);
-      
-      if (result.success) {
-        // Handle multiple copies by sending multiple times if needed
-        if (copies > 1) {
-          for (let i = 1; i < copies; i++) {
-            await zebraNetworkService.printZPLDirect(zpl, printer.ip, printer.port);
-          }
-        }
-        return result;
+      // Handle copies using ^PQ if not present
+      let finalZpl = zpl;
+      if (copies > 1 && !zpl.includes('^PQ')) {
+        finalZpl = zpl.replace(/\^XZ\s*$/, `^PQ${copies}\n^XZ`);
       }
       
+      const result = await zebraNetworkService.printZPLDirect(finalZpl, printer.ip, printer.port);
       return result;
     } catch (error) {
       return {
@@ -153,13 +167,18 @@ export function usePrinter() {
     } finally {
       setIsLoading(false);
     }
-  }, [printer.ip, printer.port]);
+  }, [printer]);
 
   // Discover printers on network
-  const discoverPrinters = useCallback(async (networkBase: string = '192.168.1'): Promise<ZebraPrinter[]> => {
+  const discoverPrinters = useCallback(async (networkBase: string = '192.168.1'): Promise<PrinterConfig[]> => {
     setIsLoading(true);
     try {
-      return await zebraNetworkService.discoverPrinters(networkBase);
+      const printers = await zebraNetworkService.discoverPrinters(networkBase);
+      return printers.map(p => ({
+        ip: p.ip,
+        port: p.port,
+        name: p.name
+      }));
     } finally {
       setIsLoading(false);
     }
@@ -171,10 +190,12 @@ export function usePrinter() {
   }, [loadConfig]);
 
   return {
+    // Use 'config' alias for consistency, but keep 'printer' for backwards compat
+    config: printer,
     printer,
     status,
     isLoading,
-    isConnected,
+    isConnected: !!printer && !!status?.ready,
     saveConfig,
     testConnection,
     refreshStatus,
@@ -183,16 +204,16 @@ export function usePrinter() {
   };
 }
 
-// Export for use in queue instance
+// Export for use in queue instance and other places
 export async function getDirectPrinterConfig(): Promise<PrinterConfig | null> {
   try {
-    const saved = localStorage.getItem('zebra-printer-config');
+    const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
       if (parsed.ip) {
         return {
           ip: parsed.ip,
-          port: parsed.port || 9100,
+          port: parsed.port || DEFAULT_PORT,
           name: parsed.name || `Zebra (${parsed.ip})`
         };
       }
@@ -201,4 +222,9 @@ export async function getDirectPrinterConfig(): Promise<PrinterConfig | null> {
   } catch {
     return null;
   }
+}
+
+// Sync helper function
+export function getWorkstationIdSync(): string {
+  return getWorkstationId();
 }
