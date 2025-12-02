@@ -2524,7 +2524,7 @@ export type Database = {
       verify_user_access: { Args: { _user_id?: string }; Returns: Json }
     }
     Enums: {
-      app_role: "admin" | "staff"
+      app_role: "admin" | "staff" | "manager"
       sync_status: "pending" | "synced" | "error"
     }
     CompositeTypes: {
@@ -2653,7 +2653,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "staff"],
+      app_role: ["admin", "staff", "manager"],
       sync_status: ["pending", "synced", "error"],
     },
   },
