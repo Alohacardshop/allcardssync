@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ZebraPrinterSelectionDialog } from '@/components/ZebraPrinterSelectionDialog';
-import { print } from '@/lib/printService';
+import { zebraNetworkService } from '@/lib/zebraNetworkService';
+import { getDirectPrinterConfig } from '@/hooks/usePrinter';
 import { ZPLLabel, generateZPLFromElements, LABEL_2x1_203, LABEL_2x1_300 } from '@/lib/zplElements';
 import { zplPriceBarcodeThirds2x1 } from '@/lib/templates/priceBarcodeThirds2x1';
 import { toast } from 'sonner';
@@ -112,11 +113,16 @@ const BarcodeLabel = ({ value, label, className, showPrintButton = true, quantit
     };
 
     const zpl = generateZPLFromElements(label, 0, 0);
-    const result = await print(zpl, copies);
+    const config = await getDirectPrinterConfig();
+    if (!config) {
+      toast.error('No printer configured');
+      return;
+    }
+    const result = await zebraNetworkService.printZPLDirect(zpl, config.ip, config.port);
 
     if (result.success) {
       toast.success('Barcode label printed!', {
-        description: `Job ID: ${result.jobId} - ZD410 @ ${dpi} DPI`
+        description: `Sent to ${config.ip} @ ${dpi} DPI`
       });
     } else {
       toast.error('Print failed', {
@@ -141,11 +147,15 @@ const BarcodeLabel = ({ value, label, className, showPrintButton = true, quantit
         speedIps: 4,
         copies: opts.copies ?? 1
       });
-      const res = await print(zpl, opts.copies ?? 1);
+      const config = await getDirectPrinterConfig();
+      if (!config) {
+        throw new Error('No printer configured');
+      }
+      const res = await zebraNetworkService.printZPLDirect(zpl, config.ip, config.port);
       
       if (res?.success) {
         toast.success('Thirds label printed!', {
-          description: `Job ID: ${res.jobId} - ZD410 @ ${opts.dpi} DPI`
+          description: `Sent to ${config.ip} @ ${opts.dpi} DPI`
         });
       } else {
         throw new Error(res?.error || 'Failed to print');

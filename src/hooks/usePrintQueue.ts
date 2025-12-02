@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { print } from '@/lib/printService';
 import { LABEL_TEMPLATES } from '@/lib/templates';
 import { toast } from 'sonner';
 import { PrintJobData, PrintJobTarget } from "@/types/api"

@@ -18,10 +18,8 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { PrintNodeSettings } from "@/components/PrintNodeSettings";
+import { PrinterSettings } from "@/components/PrinterSettings";
 import { CutterSettings, CutterConfig } from "@/components/CutterSettings";
-import { DefaultPrinterSelector } from "@/components/DefaultPrinterSelector";
-import { PrintNodeProvider } from "@/contexts/PrintNodeContext";
 import { logger } from '@/lib/logger';
 import TemplateEditor from "@/components/admin/TemplateEditor";
 
@@ -194,7 +192,6 @@ export default function TestHardwarePage() {
   };
 
   return (
-    <PrintNodeProvider>
       <div className="min-h-screen bg-background">
         <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-50">
           <div className="container mx-auto px-4 py-4">
@@ -208,7 +205,7 @@ export default function TestHardwarePage() {
         </header>
 
       <main className="container mx-auto px-4 py-8">
-        {/* PrintNode Setup Section */}
+        {/* Printer Setup Section */}
         <Card className="mb-6">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -216,21 +213,15 @@ export default function TestHardwarePage() {
               Printer Setup
             </CardTitle>
             <CardDescription>
-              Configure PrintNode for reliable cloud-based printing
+              Configure your Zebra printer for direct TCP printing
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Default Printer Selection */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Printer Configuration */}
               <div>
-                <h3 className="text-lg font-semibold mb-4">Default Printer</h3>
-                <DefaultPrinterSelector />
-              </div>
-
-              {/* PrintNode Configuration */}
-              <div>
-                <h3 className="text-lg font-semibold mb-4">PrintNode Configuration</h3>
-                <PrintNodeSettings />
+                <h3 className="text-lg font-semibold mb-4">Printer Configuration</h3>
+                <PrinterSettings />
               </div>
 
               {/* Cutter Settings */}
@@ -402,6 +393,5 @@ export default function TestHardwarePage() {
         </div>
       </main>
     </div>
-    </PrintNodeProvider>
   );
 }
