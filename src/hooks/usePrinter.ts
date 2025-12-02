@@ -94,10 +94,22 @@ export function usePrinter() {
     }
 
     // Save to database with user + location
+    // Use delete + insert pattern due to functional unique index
     try {
+      const locationKey = selectedLocation || '';
+      
+      // Delete existing preference for this user/type/location
       await supabase
         .from('user_printer_preferences')
-        .upsert({
+        .delete()
+        .eq('user_id', user.id)
+        .eq('printer_type', 'label')
+        .eq('location_gid', locationKey || null);
+      
+      // Insert new preference
+      await supabase
+        .from('user_printer_preferences')
+        .insert({
           user_id: user.id,
           location_gid: selectedLocation || null,
           store_key: assignedStore || null,
@@ -105,7 +117,7 @@ export function usePrinter() {
           printer_ip: config.ip,
           printer_port: config.port,
           printer_name: config.name,
-        }, { onConflict: 'user_id,printer_type' });
+        });
     } catch (error) {
       console.log('Failed to save printer config to database:', error);
     }
