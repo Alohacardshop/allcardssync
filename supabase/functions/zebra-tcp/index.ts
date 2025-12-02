@@ -154,12 +154,26 @@ serve(async (req) => {
       )
     }
 
-    const tcpRequest: TCPRequest = await req.json()
+    let tcpRequest: TCPRequest;
+    try {
+      tcpRequest = await req.json();
+      console.log('Received request:', JSON.stringify(tcpRequest));
+    } catch (parseError) {
+      console.error('Failed to parse JSON body:', parseError);
+      return new Response(
+        JSON.stringify({ ok: false, error: 'Invalid JSON body' }),
+        { 
+          status: 400, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      )
+    }
     
     // Host is required, data can be empty for connection tests
     if (!tcpRequest.host) {
+      console.log('Missing host, received:', tcpRequest);
       return new Response(
-        JSON.stringify({ ok: false, error: 'Missing required field: host' }),
+        JSON.stringify({ ok: false, error: `Missing required field: host. Received: ${JSON.stringify(tcpRequest)}` }),
         { 
           status: 400, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
