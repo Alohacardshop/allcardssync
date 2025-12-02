@@ -5,12 +5,19 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Printer, Wifi, WifiOff, RefreshCw, Check, AlertCircle, Search, Zap } from 'lucide-react';
+import { Printer, Wifi, WifiOff, RefreshCw, Check, AlertCircle, Search, Zap, MapPin } from 'lucide-react';
 import { toast } from 'sonner';
 import { usePrinter, type PrinterConfig } from '@/hooks/usePrinter';
+import { useStore } from '@/contexts/StoreContext';
+import { useAuth } from '@/contexts/AuthContext';
 
 export const PrinterSettings: React.FC = () => {
   const { printer, status, isLoading, isConnected, saveConfig, testConnection, refreshStatus, discoverPrinters } = usePrinter();
+  const { selectedLocation, availableLocations } = useStore();
+  const { user } = useAuth();
+  
+  // Get location name for display
+  const currentLocationName = availableLocations.find(l => l.gid === selectedLocation)?.name || 'Unknown Location';
   
   const [editIp, setEditIp] = useState('');
   const [editPort, setEditPort] = useState('9100');
@@ -103,8 +110,10 @@ export const PrinterSettings: React.FC = () => {
           <Printer className="w-5 h-5" />
           Printer Settings
         </CardTitle>
-        <CardDescription>
-          Configure your Zebra label printer for direct TCP printing
+        <CardDescription className="flex items-center gap-2">
+          <MapPin className="w-4 h-4" />
+          Settings for <span className="font-medium">{currentLocationName}</span>
+          {user?.email && <span className="text-xs">• {user.email}</span>}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">

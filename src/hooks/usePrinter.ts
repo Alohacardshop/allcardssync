@@ -1,12 +1,13 @@
 /**
  * Clean Printer Hook - Direct TCP Only
- * Single hook for all printer operations
+ * Saves printer preferences per user + location
  */
 
 import { useState, useCallback, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
 import { zebraService, type PrinterStatus, type PrintResult, type DiscoveryOptions } from '@/lib/printer/zebraService';
+import { useAuth } from '@/contexts/AuthContext';
+import { useStore } from '@/contexts/StoreContext';
 import { supabase } from '@/integrations/supabase/client';
 
 export type { PrinterStatus, PrintResult };
@@ -21,25 +22,40 @@ export interface PrinterConfig {
 const STORAGE_KEY = 'zebra-printer-config';
 const DEFAULT_PORT = 9100;
 
-// Get or create consistent workstation ID
-function getWorkstationId(): string {
-  let workstationId = localStorage.getItem('workstation-id');
-  if (!workstationId) {
-    workstationId = crypto.randomUUID().substring(0, 8);
-    localStorage.setItem('workstation-id', workstationId);
-  }
-  return workstationId;
-}
-
 export function usePrinter() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const { selectedLocation, assignedStore } = useStore();
   const [printer, setPrinter] = useState<PrinterConfig | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Load saved printer configuration
+  // Load saved printer configuration for user + location
   const loadConfig = useCallback(async () => {
+    if (!user?.id) return;
+    
     try {
-      // Try localStorage first
+      // Try database first (user + location specific)
+      const { data } = await supabase
+        .from('user_printer_preferences')
+        .select('printer_ip, printer_port, printer_name')
+        .eq('user_id', user.id)
+        .eq('printer_type', 'label')
+        .eq('location_gid', selectedLocation || '')
+        .maybeSingle();
+
+      if (data?.printer_ip) {
+        const config = {
+          ip: data.printer_ip,
+          port: data.printer_port || DEFAULT_PORT,
+          name: data.printer_name || `Printer (${data.printer_ip})`
+        };
+        setPrinter(config);
+        // Also cache locally for quick access
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+        return;
+      }
+
+      // Fallback to localStorage if no DB config
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
@@ -47,57 +63,55 @@ export function usePrinter() {
           setPrinter({
             ip: parsed.ip,
             port: parsed.port || DEFAULT_PORT,
-            name: parsed.name || `Zebra (${parsed.ip})`
+            name: parsed.name || `Printer (${parsed.ip})`
           });
-          return;
         }
-      }
-
-      // Try database
-      const workstationId = getWorkstationId();
-      const { data } = await supabase
-        .from('printer_settings')
-        .select('printer_ip, printer_port, printer_name')
-        .eq('workstation_id', workstationId)
-        .maybeSingle();
-
-      if (data?.printer_ip) {
-        const config = {
-          ip: data.printer_ip,
-          port: data.printer_port || DEFAULT_PORT,
-          name: data.printer_name || `Zebra (${data.printer_ip})`
-        };
-        setPrinter(config);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
       }
     } catch (error) {
       console.log('Failed to load printer config:', error);
+      
+      // Fallback to localStorage on error
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed.ip) {
+            setPrinter(parsed);
+          }
+        }
+      } catch {}
     }
-  }, []);
+  }, [user?.id, selectedLocation]);
 
-  // Save printer configuration
+  // Save printer configuration for user + location
   const saveConfig = useCallback(async (config: PrinterConfig) => {
     setPrinter(config);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
 
-    // Also save to database
+    if (!user?.id) {
+      console.log('No user logged in, saved to localStorage only');
+      return;
+    }
+
+    // Save to database with user + location
     try {
-      const workstationId = getWorkstationId();
       await supabase
-        .from('printer_settings')
+        .from('user_printer_preferences')
         .upsert({
-          workstation_id: workstationId,
+          user_id: user.id,
+          location_gid: selectedLocation || null,
+          store_key: assignedStore || null,
+          printer_type: 'label',
           printer_ip: config.ip,
           printer_port: config.port,
           printer_name: config.name,
-          use_printnode: false,
-        }, { onConflict: 'workstation_id' });
+        }, { onConflict: 'user_id,printer_type' });
     } catch (error) {
       console.log('Failed to save printer config to database:', error);
     }
     
     queryClient.invalidateQueries({ queryKey: ['printerStatus'] });
-  }, [queryClient]);
+  }, [user?.id, selectedLocation, assignedStore, queryClient]);
 
   // Printer status polling with React Query
   const { data: status } = useQuery<PrinterStatus | null>({
@@ -182,7 +196,7 @@ export function usePrinter() {
     }
   }, []);
 
-  // Load config on mount
+  // Load config when user or location changes
   useEffect(() => {
     loadConfig();
   }, [loadConfig]);
@@ -212,7 +226,7 @@ export async function getDirectPrinterConfig(): Promise<PrinterConfig | null> {
         return {
           ip: parsed.ip,
           port: parsed.port || DEFAULT_PORT,
-          name: parsed.name || `Zebra (${parsed.ip})`
+          name: parsed.name || `Printer (${parsed.ip})`
         };
       }
     }
@@ -220,9 +234,4 @@ export async function getDirectPrinterConfig(): Promise<PrinterConfig | null> {
   } catch {
     return null;
   }
-}
-
-// Sync helper function
-export function getWorkstationIdSync(): string {
-  return getWorkstationId();
 }
