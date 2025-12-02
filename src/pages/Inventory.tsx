@@ -1240,16 +1240,9 @@ const Inventory = () => {
 
   const handleSendCutCommand = useCallback(async () => {
     try {
-      // Check if PrintNode is configured
-      const savedConfig = localStorage.getItem('zebra-printer-config');
-      if (!savedConfig) {
-        toast.error('No printer configured. Please configure PrintNode in Admin > Test Hardware.');
-        return;
-      }
-      
-      const config = JSON.parse(savedConfig);
-      if (!config.usePrintNode || !config.printNodeId) {
-        toast.error('PrintNode not configured. Please set up PrintNode in Admin > Test Hardware.');
+      const printerConfig = await getDirectPrinterConfig();
+      if (!printerConfig) {
+        toast.error('No printer configured. Please set up printer IP in Settings.');
         return;
       }
 
@@ -1258,7 +1251,7 @@ const Inventory = () => {
       
       logger.info('Sending cut command to printer', { cutZpl });
       
-      const result = await print(cutZpl, 1);
+      const result = await zebraNetworkService.printZPLDirect(cutZpl, printerConfig.ip, printerConfig.port);
       
       if (result.success) {
         toast.success('Cut command sent successfully');
