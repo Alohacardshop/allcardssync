@@ -5,24 +5,38 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Printer, Wifi, WifiOff, RefreshCw, Check, AlertCircle, MapPin, Info } from 'lucide-react';
+import { Printer, Wifi, WifiOff, RefreshCw, Check, AlertCircle, MapPin, Info, Server, Terminal } from 'lucide-react';
 import { toast } from 'sonner';
 import { usePrinter, type PrinterConfig } from '@/hooks/usePrinter';
 import { useStore } from '@/contexts/StoreContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { checkBridgeStatus, type BridgeStatus } from '@/lib/printer/zebraService';
 
 export const PrinterSettings: React.FC = () => {
   const { printer, status, isLoading, isConnected, saveConfig, testConnection, refreshStatus } = usePrinter();
   const { selectedLocation, availableLocations } = useStore();
   const { user } = useAuth();
   
-  // Get location name for display
   const currentLocationName = availableLocations.find(l => l.gid === selectedLocation)?.name || 'Unknown Location';
   
   const [editIp, setEditIp] = useState('');
   const [editPort, setEditPort] = useState('9100');
   const [editName, setEditName] = useState('');
   const [isTesting, setIsTesting] = useState(false);
+  const [bridgeStatus, setBridgeStatus] = useState<BridgeStatus | null>(null);
+  const [isCheckingBridge, setIsCheckingBridge] = useState(true);
+
+  // Check bridge status on mount
+  useEffect(() => {
+    checkBridge();
+  }, []);
+
+  const checkBridge = async () => {
+    setIsCheckingBridge(true);
+    const status = await checkBridgeStatus();
+    setBridgeStatus(status);
+    setIsCheckingBridge(false);
+  };
 
   // Sync form state when printer config loads
   useEffect(() => {
@@ -61,6 +75,11 @@ export const PrinterSettings: React.FC = () => {
   };
 
   const handleTestConnection = async () => {
+    if (!bridgeStatus?.connected) {
+      toast.error('Local bridge not running. Start the bridge first.');
+      return;
+    }
+    
     if (!editIp.trim()) {
       toast.error('Please enter an IP address first');
       return;
@@ -92,7 +111,47 @@ export const PrinterSettings: React.FC = () => {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Connection Status */}
+        {/* Bridge Status */}
+        <div className="flex items-center gap-3 p-3 rounded-lg bg-muted border">
+          <Server className={`w-5 h-5 ${bridgeStatus?.connected ? 'text-green-500' : 'text-destructive'}`} />
+          <div className="flex-1">
+            <div className="font-medium">Local Print Bridge</div>
+            <div className="text-sm text-muted-foreground">
+              {isCheckingBridge ? 'Checking...' : bridgeStatus?.connected 
+                ? `Running on localhost:17777 (v${bridgeStatus.version})` 
+                : 'Not running'}
+            </div>
+          </div>
+          <Badge variant={bridgeStatus?.connected ? 'default' : 'destructive'}>
+            {isCheckingBridge ? 'Checking' : bridgeStatus?.connected ? 'Online' : 'Offline'}
+          </Badge>
+          <Button variant="ghost" size="sm" onClick={checkBridge} disabled={isCheckingBridge}>
+            <RefreshCw className={`w-4 h-4 ${isCheckingBridge ? 'animate-spin' : ''}`} />
+          </Button>
+        </div>
+
+        {/* Bridge Not Running Warning */}
+        {!isCheckingBridge && !bridgeStatus?.connected && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              <strong>Local Print Bridge Required</strong>
+              <p className="mt-2 text-sm">
+                The local print bridge must be running on this computer to print labels.
+                Start it by running:
+              </p>
+              <div className="mt-2 p-2 bg-background rounded font-mono text-xs flex items-center gap-2">
+                <Terminal className="w-4 h-4" />
+                <code>node rollo-local-bridge/server.js</code>
+              </div>
+              <p className="mt-2 text-sm">
+                The bridge connects your browser to local network printers.
+              </p>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* Printer Connection Status */}
         <div className="flex items-center gap-3 p-3 rounded-lg bg-muted">
           {isConnected ? (
             <Wifi className="w-5 h-5 text-green-500" />
@@ -182,18 +241,21 @@ export const PrinterSettings: React.FC = () => {
 
         {/* Actions */}
         <div className="flex flex-wrap gap-2">
-          <Button onClick={handleSave} disabled={isLoading || isTesting || !editIp.trim()}>
+          <Button 
+            onClick={handleSave} 
+            disabled={isLoading || isTesting || !editIp.trim() || !bridgeStatus?.connected}
+          >
             Save Settings
           </Button>
           <Button 
             variant="outline" 
             onClick={handleTestConnection} 
-            disabled={isLoading || isTesting || !editIp.trim()}
+            disabled={isLoading || isTesting || !editIp.trim() || !bridgeStatus?.connected}
           >
             <RefreshCw className={`w-4 h-4 mr-2 ${isTesting ? 'animate-spin' : ''}`} />
             Test Connection
           </Button>
-          {printer?.ip && (
+          {printer?.ip && bridgeStatus?.connected && (
             <Button variant="ghost" onClick={refreshStatus} disabled={isLoading}>
               <RefreshCw className="w-4 h-4 mr-2" />
               Refresh Status
@@ -201,10 +263,9 @@ export const PrinterSettings: React.FC = () => {
           )}
         </div>
 
-        {/* Network note */}
+        {/* Info note */}
         <p className="text-xs text-muted-foreground">
-          Note: The printer must be accessible from our cloud servers. For local network printers, 
-          ensure your network allows incoming connections or use a VPN/tunnel solution.
+          Printing uses the local bridge running on this computer. The printer must be on the same network.
         </p>
       </CardContent>
     </Card>
