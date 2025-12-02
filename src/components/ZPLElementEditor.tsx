@@ -6,7 +6,79 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Trash2 } from 'lucide-react';
-import { ZPLElement, ZPL_FONTS } from '@/lib/zplElements';
+
+// ZPL Font definitions for the visual editor
+const ZPL_FONTS: Record<string, { baseHeight: number; baseWidth: number }> = {
+  '0': { baseHeight: 15, baseWidth: 12 },
+  'A': { baseHeight: 14, baseWidth: 10 },
+  'B': { baseHeight: 21, baseWidth: 13 },
+  'C': { baseHeight: 28, baseWidth: 18 },
+  'D': { baseHeight: 42, baseWidth: 26 },
+  'E': { baseHeight: 56, baseWidth: 42 },
+};
+
+// Visual editor element types (different from the core ZPL types)
+interface ZPLPosition {
+  x: number;
+  y: number;
+}
+
+interface ZPLSize {
+  width: number;
+  height: number;
+}
+
+interface ZPLTextElement {
+  id: string;
+  type: 'text';
+  position: ZPLPosition;
+  font: string;
+  fontSize: number;
+  fontWidth: number;
+  text: string;
+  rotation?: number;
+  boundingBox?: ZPLSize;
+  autoSize?: 'none' | 'shrink-to-fit';
+  textOverflow?: 'clip' | 'ellipsis' | 'wrap';
+}
+
+interface ZPLBarcodeElement {
+  id: string;
+  type: 'barcode';
+  position: ZPLPosition;
+  data: string;
+  barcodeType: string;
+  height: number;
+  size?: ZPLSize;
+  humanReadable?: boolean;
+}
+
+interface ZPLQRElement {
+  id: string;
+  type: 'qr';
+  position: ZPLPosition;
+  data: string;
+  model: number;
+  magnification: number;
+}
+
+interface ZPLBoxElement {
+  id: string;
+  type: 'box';
+  position: ZPLPosition;
+  size: ZPLSize;
+  thickness?: number;
+}
+
+interface ZPLLineElement {
+  id: string;
+  type: 'line';
+  position: ZPLPosition;
+  size: ZPLSize;
+  thickness?: number;
+}
+
+type ZPLElement = ZPLTextElement | ZPLBarcodeElement | ZPLQRElement | ZPLBoxElement | ZPLLineElement;
 
 interface ZPLElementEditorProps {
   element: ZPLElement | null;
@@ -39,14 +111,14 @@ export function ZPLElementEditor({ element, onUpdate, onDelete }: ZPLElementEdit
   };
 
   const handleSizeChange = (dimension: 'width' | 'height', value: number) => {
-    if ('size' in element) {
+    if ('size' in element && element.size) {
       onUpdate({
         ...element,
         size: {
           ...element.size,
           [dimension]: value
         }
-      });
+      } as ZPLElement);
     }
   };
 
@@ -70,7 +142,7 @@ export function ZPLElementEditor({ element, onUpdate, onDelete }: ZPLElementEdit
                 <Label htmlFor="font">Font</Label>
                 <Select 
                   value={element.font} 
-                  onValueChange={(value: any) => 
+                  onValueChange={(value) => 
                     onUpdate({ ...element, font: value })
                   }
                 >
@@ -78,11 +150,11 @@ export function ZPLElementEditor({ element, onUpdate, onDelete }: ZPLElementEdit
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-            {Object.entries(ZPL_FONTS).map(([key, font]) => (
-              <SelectItem key={key} value={key}>
-                Font {key} ({font.baseHeight}x{font.baseWidth})
-              </SelectItem>
-            ))}
+                    {Object.entries(ZPL_FONTS).map(([key, font]) => (
+                      <SelectItem key={key} value={key}>
+                        Font {key} ({font.baseHeight}x{font.baseWidth})
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -115,7 +187,7 @@ export function ZPLElementEditor({ element, onUpdate, onDelete }: ZPLElementEdit
               <div>
                 <Label htmlFor="rotation">Rotation</Label>
                 <Select 
-                  value={element.rotation.toString()} 
+                  value={(element.rotation ?? 0).toString()} 
                   onValueChange={(value) => 
                     onUpdate({ ...element, rotation: parseInt(value) as 0 | 90 | 180 | 270 })
                   }
@@ -208,7 +280,6 @@ export function ZPLElementEditor({ element, onUpdate, onDelete }: ZPLElementEdit
                         <SelectContent>
                           <SelectItem value="none">None</SelectItem>
                           <SelectItem value="shrink-to-fit">Shrink to Fit</SelectItem>
-                          <SelectItem value="grow-to-fit">Grow to Fit</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -227,7 +298,7 @@ export function ZPLElementEditor({ element, onUpdate, onDelete }: ZPLElementEdit
                         <SelectContent>
                           <SelectItem value="clip">Clip</SelectItem>
                           <SelectItem value="ellipsis">Ellipsis (...)</SelectItem>
-            <SelectItem value="wrap">Wrap</SelectItem>
+                          <SelectItem value="wrap">Wrap</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -254,7 +325,7 @@ export function ZPLElementEditor({ element, onUpdate, onDelete }: ZPLElementEdit
               <Label htmlFor="barcode-type">Barcode Type</Label>
               <Select
                 value={element.barcodeType}
-                onValueChange={(value: any) => onUpdate({ ...element, barcodeType: value })}
+                onValueChange={(value) => onUpdate({ ...element, barcodeType: value })}
               >
                 <SelectTrigger id="barcode-type">
                   <SelectValue />
@@ -280,7 +351,6 @@ export function ZPLElementEditor({ element, onUpdate, onDelete }: ZPLElementEdit
                   onChange={(e) => onUpdate({ 
                     ...element, 
                     size: { 
-                      ...element.size, 
                       width: Number(e.target.value),
                       height: element.size?.height || element.height
                     }
@@ -299,36 +369,12 @@ export function ZPLElementEditor({ element, onUpdate, onDelete }: ZPLElementEdit
                     ...element, 
                     height: Number(e.target.value),
                     size: {
-                      ...element.size,
                       width: element.size?.width || 120,
                       height: Number(e.target.value)
                     }
                   })}
                 />
               </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="barcode-ratio">Wide:Narrow Ratio</Label>
-              <Select
-                value={(element.size?.height || 3).toString()}
-                onValueChange={(value) => onUpdate({ 
-                  ...element, 
-                  size: { 
-                    ...element.size, 
-                    height: Number(value) 
-                  }
-                })}
-              >
-                <SelectTrigger id="barcode-ratio">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="2">2:1</SelectItem>
-                  <SelectItem value="3">3:1 (Recommended)</SelectItem>
-                  <SelectItem value="4">4:1</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
 
             <div className="flex items-center space-x-2">
@@ -359,7 +405,7 @@ export function ZPLElementEditor({ element, onUpdate, onDelete }: ZPLElementEdit
                 <Label htmlFor="qr-model">Model</Label>
                 <Select
                   value={element.model.toString()}
-                  onValueChange={(value) => onUpdate({ ...element, model: Number(value) as any })}
+                  onValueChange={(value) => onUpdate({ ...element, model: Number(value) })}
                 >
                   <SelectTrigger id="qr-model">
                     <SelectValue />
@@ -450,7 +496,7 @@ export function ZPLElementEditor({ element, onUpdate, onDelete }: ZPLElementEdit
         </div>
 
         {/* Size (for elements that have size) */}
-        {'size' in element && (
+        {'size' in element && element.size && (
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="size-width">Width</Label>
@@ -483,3 +529,7 @@ export function ZPLElementEditor({ element, onUpdate, onDelete }: ZPLElementEdit
     </Card>
   );
 }
+
+// Export types and constants for other components that might need them
+export type { ZPLElement, ZPLTextElement, ZPLBarcodeElement, ZPLQRElement, ZPLBoxElement, ZPLLineElement };
+export { ZPL_FONTS };

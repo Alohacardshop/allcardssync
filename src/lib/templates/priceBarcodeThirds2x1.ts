@@ -134,7 +134,6 @@ export function zplPriceBarcodeThirds2x1({
     // BOTTOM third: title (≤2 lines)
     `^FO${titleX},${titleY}^A0N,${titleSize},${titleSize}${titleFB}^FD${(title || '').trim()}^FS`,
 
-    // Let PrintNode handle copies
     '^XZ'
   ].join('\n');
 }

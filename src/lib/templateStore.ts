@@ -276,54 +276,7 @@ export async function deleteTemplate(templateId: string) {
   }
 }
 
-// Add ZPL generation function
-export interface ZPLLayout {
-  width: number;   // dots
-  height: number;  // dots
-  dpi: 203 | 300;
-  elements: SimpleZPLElement[];
-}
-
-export function generateZPLFromElements(
-  layout: ZPLLayout,
-  originX = 0,
-  originY = 0,
-  opts?: { stockMode?: 'gap' | 'blackmark'; leftShift?: number }
-): string {
-  const { width, height, elements } = layout;
-  const lines: string[] = [];
-  lines.push('^XA');
-  lines.push('^PW' + width);
-  lines.push('^LL' + height);
-  lines.push('^LH' + originX + ',' + originY);
-  lines.push('^PR2');     // print speed
-  lines.push('^MD0');     // darkness offset 0 (printer setting can vary)
-  lines.push('^MNY');     // gap/notch media (default)
-  lines.push('^MMC');     // cutter enabled (if printer supports)
-  
-  for (const el of elements) {
-    if (el.type === 'text') {
-      const font = el.font ?? '0';
-      const h = el.h ?? 30;
-      const w = el.w ?? 30;
-      lines.push(`^FO${el.x},${el.y}^A${font},${h},${w}^FD${escapeZPL(el.text || '')}^FS`);
-    } else if (el.type === 'barcode') {
-      const h = el.height ?? 80;
-      const m = el.moduleWidth ?? 2;
-      lines.push(`^FO${el.x},${el.y}^BY${m}^BCN,${h},Y,N,N^FD${escapeZPL(el.data || '')}^FS`);
-    } else if (el.type === 'line') {
-      const thickness = el.thickness ?? 2;
-      const widthPx = Math.max(1, Math.abs((el.x2 || el.x) - el.x));
-      const heightPx = Math.max(1, Math.abs((el.y2 || el.y) - el.y));
-      lines.push(`^FO${Math.min(el.x, el.x2 || el.x)},${Math.min(el.y, el.y2 || el.y)}^GB${widthPx},${heightPx},${thickness}^FS`);
-    }
-  }
-  
-  // Don't add ^PQ command here - let PrintNode handle copies
-  lines.push('^XZ');
-  return lines.join('');
-}
-
-function escapeZPL(s: string) {
-  return (s ?? '').replace(/\^/g, ' ').replace(/~/g, ' ');
+// ZPL escaping - use proper hex codes
+export function escapeZPL(s: string): string {
+  return (s ?? '').replace(/\^/g, '^5E').replace(/~/g, '^7E');
 }

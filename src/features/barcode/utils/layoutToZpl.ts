@@ -184,12 +184,12 @@ function fieldKeyToPlaceholder(fieldKey: FieldKey): string {
 }
 
 /**
- * Escape special ZPL characters
+ * Escape special ZPL characters using proper ZPL hex codes
  */
 function escapeZplText(text: string): string {
   return text
-    .replace(/\^/g, '_5E')
-    .replace(/~/g, '_7E');
+    .replace(/\^/g, '^5E')
+    .replace(/~/g, '^7E');
 }
 
 /**

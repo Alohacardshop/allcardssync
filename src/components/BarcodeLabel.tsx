@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { zebraService } from '@/lib/printer/zebraService';
 import { getDirectPrinterConfig } from '@/hooks/usePrinter';
-import { ZPLLabel, generateZPLFromElements, LABEL_2x1_203, LABEL_2x1_300 } from '@/lib/zplElements';
+import { elementsToZpl } from '@/lib/labels/zpl';
+import type { LabelLayout, ZPLElement } from '@/lib/labels/types';
 import { zplPriceBarcodeThirds2x1 } from '@/lib/templates/priceBarcodeThirds2x1';
 import { toast } from 'sonner';
 import { logger } from '@/lib/logger';
@@ -14,6 +15,10 @@ interface BarcodeLabelProps {
   showPrintButton?: boolean;
   quantity?: number;
 }
+
+// Label size constants
+const LABEL_2x1_203 = { width: 406, height: 203, dpi: 203 as const };
+const LABEL_2x1_300 = { width: 600, height: 300, dpi: 300 as const };
 
 const BarcodeLabel = ({ value, label, className, showPrintButton = true, quantity = 1 }: BarcodeLabelProps) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -54,55 +59,52 @@ const BarcodeLabel = ({ value, label, className, showPrintButton = true, quantit
 
     const dims = dpi === 300 ? LABEL_2x1_300 : LABEL_2x1_203;
 
-    const labelConfig: ZPLLabel = {
+    const elements: ZPLElement[] = [
+      {
+        type: 'text',
+        id: 'condition',
+        x: 20,
+        y: 20,
+        h: 24,
+        w: 24,
+        text: condition
+      },
+      {
+        type: 'text',
+        id: 'price',
+        x: dpi === 300 ? 420 : 300,
+        y: 20,
+        h: 28,
+        w: 28,
+        text: priceDisplay
+      },
+      {
+        type: 'barcode',
+        id: 'barcode',
+        x: 50,
+        y: 60,
+        height: 40,
+        data: sku
+      },
+      {
+        type: 'text',
+        id: 'title',
+        x: 20,
+        y: 140,
+        h: 18,
+        w: 18,
+        text: title
+      }
+    ];
+
+    const layout: LabelLayout = {
       width: dims.width,
       height: dims.height,
       dpi: dims.dpi,
-      elements: [
-        {
-          id: 'condition',
-          type: 'text',
-          position: { x: 20, y: 20 },
-          font: '0',
-          rotation: 0,
-          fontSize: 24,
-          fontWidth: 24,
-          text: condition
-        },
-        {
-          id: 'price',
-          type: 'text',
-          position: { x: dpi === 300 ? 420 : 300, y: 20 },
-          font: '0',
-          rotation: 0,
-          fontSize: 28,
-          fontWidth: 28,
-          text: priceDisplay
-        },
-        {
-          id: 'barcode',
-          type: 'barcode',
-          position: { x: 50, y: 60 },
-          data: sku,
-          size: { width: 300, height: 40 },
-          barcodeType: 'CODE128',
-          height: 40,
-          humanReadable: false
-        },
-        {
-          id: 'title',
-          type: 'text',
-          position: { x: 20, y: 140 },
-          font: '0',
-          rotation: 0,
-          fontSize: 18,
-          fontWidth: 18,
-          text: title
-        }
-      ]
+      elements
     };
 
-    const zpl = generateZPLFromElements(labelConfig, 0, 0);
+    const zpl = elementsToZpl(layout);
     const config = await getDirectPrinterConfig();
     if (!config) {
       toast.error('No printer configured. Go to Settings to configure printer.');
