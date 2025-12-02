@@ -136,19 +136,14 @@ export default function PrintLogs() {
       if (insertError) throw insertError;
 
       try {
-        // Use Zebra network service for reprinting
-        const printers = await zebraService.discoverPrinters();
-        if (printers.length === 0) {
-          throw new Error('No printers available');
+        // Use saved printer config for reprinting
+        const savedConfig = zebraService.getConfig();
+        if (!savedConfig?.ip) {
+          throw new Error('No printer configured. Please set up printer in Settings.');
         }
         
-        const savedPrinterName = localStorage.getItem('zebra-selected-printer-name');
-        const printer = savedPrinterName 
-          ? printers.find(p => p.name === savedPrinterName) || printers[0]
-          : printers[0];
-        
         // Send to printer
-        await zebraService.print(job.payload, printer.ip, printer.port);
+        await zebraService.print(job.payload, savedConfig.ip, savedConfig.port);
         
         // Update new job status
         await (supabase as any)

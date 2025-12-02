@@ -183,67 +183,9 @@ function parseStatusReply(reply: string): PrinterStatus {
   };
 }
 
-// Discover printers on network with progress callback
-export interface DiscoveryOptions {
-  networkBase?: string;
-  fullScan?: boolean;
-  onProgress?: (scanned: number, total: number, found: number) => void;
-}
-
-export async function discoverPrinters(
-  networkBaseOrOptions?: string | DiscoveryOptions
-): Promise<PrinterConfig[]> {
-  // Handle both old signature and new options object
-  const options: DiscoveryOptions = typeof networkBaseOrOptions === 'string' 
-    ? { networkBase: networkBaseOrOptions }
-    : networkBaseOrOptions || {};
-  
-  const networkBase = options.networkBase || '192.168.1';
-  const fullScan = options.fullScan || false;
-  const onProgress = options.onProgress;
-
-  // Quick scan: common printer IPs + DHCP ranges
-  const quickIps = [1, 10, 20, 50, 70, 100, 101, 102, 103, 104, 105, 
-                    150, 200, 201, 202, 248, 249, 250, 251, 252, 253, 254];
-  
-  // Full scan: all IPs 1-254
-  const ips = fullScan 
-    ? Array.from({ length: 254 }, (_, i) => i + 1)
-    : quickIps;
-  
-  const results: PrinterConfig[] = [];
-  const concurrency = fullScan ? 20 : 10;
-  const totalIps = ips.length;
-  let scannedCount = 0;
-
-  // Batch scan with concurrency limit
-  for (let i = 0; i < ips.length; i += concurrency) {
-    const batch = ips.slice(i, i + concurrency);
-    const batchResults = await Promise.all(
-      batch.map(async (lastOctet) => {
-        const ip = `${networkBase}.${lastOctet}`;
-        try {
-          const connected = await testConnection(ip, DEFAULT_PORT);
-          scannedCount++;
-          onProgress?.(scannedCount, totalIps, results.length);
-          return connected ? { ip, port: DEFAULT_PORT, name: `Network Printer (${ip})` } : null;
-        } catch {
-          scannedCount++;
-          onProgress?.(scannedCount, totalIps, results.length);
-          return null;
-        }
-      })
-    );
-    
-    const found = batchResults.filter((p): p is PrinterConfig => p !== null);
-    results.push(...found);
-    
-    // Update progress after each batch
-    onProgress?.(scannedCount, totalIps, results.length);
-  }
-  
-  return results;
-}
+// Note: Network discovery from cloud edge functions cannot reach local network printers.
+// Discovery has been removed - users should enter printer IP manually.
+// The IP can be found on the printer's display or by printing a config label.
 
 // Sync config to database for persistence per user + location
 export async function syncConfigToDatabase(
@@ -306,7 +248,6 @@ export const zebraService = {
   print,
   testConnection,
   queryStatus,
-  discoverPrinters,
   getConfig,
   saveConfig,
   clearConfig,
