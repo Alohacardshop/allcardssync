@@ -4,7 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Printer, Wifi, WifiOff, RefreshCw, Check, AlertCircle, Search } from 'lucide-react';
+import { Progress } from '@/components/ui/progress';
+import { Printer, Wifi, WifiOff, RefreshCw, Check, AlertCircle, Search, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { usePrinter, type PrinterConfig } from '@/hooks/usePrinter';
 
@@ -14,8 +15,10 @@ export const PrinterSettings: React.FC = () => {
   const [editIp, setEditIp] = useState('');
   const [editPort, setEditPort] = useState('9100');
   const [editName, setEditName] = useState('');
+  const [networkBase, setNetworkBase] = useState('192.168.1');
   const [discoveredPrinters, setDiscoveredPrinters] = useState<PrinterConfig[]>([]);
   const [isDiscovering, setIsDiscovering] = useState(false);
+  const [scanProgress, setScanProgress] = useState({ scanned: 0, total: 0, found: 0 });
 
   // Sync form state when printer config loads
   useEffect(() => {
@@ -23,6 +26,11 @@ export const PrinterSettings: React.FC = () => {
       setEditIp(printer.ip);
       setEditPort(String(printer.port));
       setEditName(printer.name);
+      // Extract network base from existing IP
+      const parts = printer.ip.split('.');
+      if (parts.length === 4) {
+        setNetworkBase(parts.slice(0, 3).join('.'));
+      }
     }
   }, [printer]);
 
@@ -30,7 +38,7 @@ export const PrinterSettings: React.FC = () => {
     const config: PrinterConfig = {
       ip: editIp,
       port: parseInt(editPort) || 9100,
-      name: editName || `Zebra (${editIp})`
+      name: editName || `Zebra ZD410 (${editIp})`
     };
     
     await saveConfig(config);
@@ -55,14 +63,20 @@ export const PrinterSettings: React.FC = () => {
     }
   };
 
-  const handleDiscover = async () => {
+  const handleDiscover = async (fullScan: boolean = false) => {
     setIsDiscovering(true);
+    setDiscoveredPrinters([]);
+    setScanProgress({ scanned: 0, total: fullScan ? 254 : 22, found: 0 });
+    
     try {
-      // Extract network base from current IP
-      const parts = editIp.split('.');
-      const networkBase = parts.slice(0, 3).join('.');
+      const printers = await discoverPrinters({
+        networkBase,
+        fullScan,
+        onProgress: (scanned, total, found) => {
+          setScanProgress({ scanned, total, found });
+        }
+      });
       
-      const printers = await discoverPrinters(networkBase);
       setDiscoveredPrinters(printers);
       
       if (printers.length > 0) {
@@ -168,20 +182,52 @@ export const PrinterSettings: React.FC = () => {
           </div>
         </div>
 
+        {/* Network Discovery */}
+        <div className="space-y-3">
+          <div>
+            <Label htmlFor="networkBase">Network Base (first 3 octets)</Label>
+            <Input
+              id="networkBase"
+              value={networkBase}
+              onChange={(e) => setNetworkBase(e.target.value)}
+              placeholder="192.168.1"
+              className="max-w-xs"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Your ZD410's IP can be found via Settings → Network on the printer display
+            </p>
+          </div>
+        </div>
+
         {/* Actions */}
         <div className="flex flex-wrap gap-2">
           <Button onClick={handleSave} disabled={isLoading}>
             Save Settings
           </Button>
-          <Button variant="outline" onClick={handleTestConnection} disabled={isLoading}>
+          <Button variant="outline" onClick={handleTestConnection} disabled={isLoading || !editIp}>
             <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
             Test Connection
           </Button>
-          <Button variant="outline" onClick={handleDiscover} disabled={isDiscovering}>
+          <Button variant="outline" onClick={() => handleDiscover(false)} disabled={isDiscovering}>
+            <Zap className={`w-4 h-4 mr-2`} />
+            Quick Scan
+          </Button>
+          <Button variant="outline" onClick={() => handleDiscover(true)} disabled={isDiscovering}>
             <Search className={`w-4 h-4 mr-2 ${isDiscovering ? 'animate-spin' : ''}`} />
-            Discover
+            Full Scan
           </Button>
         </div>
+
+        {/* Scan Progress */}
+        {isDiscovering && (
+          <div className="space-y-2">
+            <div className="flex justify-between text-sm">
+              <span>Scanning {networkBase}.x...</span>
+              <span>{scanProgress.scanned}/{scanProgress.total} ({scanProgress.found} found)</span>
+            </div>
+            <Progress value={(scanProgress.scanned / scanProgress.total) * 100} />
+          </div>
+        )}
 
         {/* Discovered Printers */}
         {discoveredPrinters.length > 0 && (

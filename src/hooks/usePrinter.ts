@@ -6,7 +6,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { zebraService, type PrinterStatus, type PrintResult } from '@/lib/printer/zebraService';
+import { zebraService, type PrinterStatus, type PrintResult, type DiscoveryOptions } from '@/lib/printer/zebraService';
 import { supabase } from '@/integrations/supabase/client';
 
 export type { PrinterStatus, PrintResult };
@@ -173,10 +173,10 @@ export function usePrinter() {
   }, [printer]);
 
   // Discover printers on network
-  const discoverPrinters = useCallback(async (networkBase: string = '192.168.1'): Promise<PrinterConfig[]> => {
+  const discoverPrinters = useCallback(async (options?: DiscoveryOptions | string): Promise<PrinterConfig[]> => {
     setIsLoading(true);
     try {
-      return await zebraService.discoverPrinters(networkBase);
+      return await zebraService.discoverPrinters(options);
     } finally {
       setIsLoading(false);
     }
