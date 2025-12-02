@@ -136,10 +136,10 @@ export function usePrinter() {
   const { data: status } = useQuery<PrinterStatus | null>({
     queryKey: ['printerStatus', printer?.ip],
     queryFn: async () => {
-      if (!printer) return null;
+      if (!printer?.ip) return null;
       return zebraService.queryStatus(printer.ip, printer.port);
     },
-    enabled: !!printer,
+    enabled: !!printer?.ip,
     refetchInterval: (query) => {
       const data = query.state.data;
       if (!data) return false;
