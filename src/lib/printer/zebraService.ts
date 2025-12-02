@@ -91,11 +91,21 @@ export async function print(zpl: string, ip?: string, port?: number): Promise<Pr
   }
 }
 
-// Test connection to printer
+// Test connection to printer (just checks if port is open)
 export async function testConnection(ip: string, port: number = DEFAULT_PORT): Promise<boolean> {
   try {
-    const status = await queryStatus(ip, port);
-    return status.ready !== undefined;
+    const { data: response, error: supabaseError } = await supabase.functions.invoke('zebra-tcp', {
+      body: {
+        host: ip,
+        port: port,
+        data: '', // Empty data just tests connection
+        expectReply: false,
+        timeoutMs: 2000
+      }
+    });
+
+    if (supabaseError) return false;
+    return response?.ok === true;
   } catch {
     return false;
   }
@@ -192,7 +202,7 @@ export async function discoverPrinters(
   const fullScan = options.fullScan || false;
   const onProgress = options.onProgress;
 
-  // Quick scan: common Zebra default IPs + DHCP ranges
+  // Quick scan: common printer IPs + DHCP ranges
   const quickIps = [1, 10, 20, 50, 70, 100, 101, 102, 103, 104, 105, 
                     150, 200, 201, 202, 248, 249, 250, 251, 252, 253, 254];
   
@@ -216,7 +226,7 @@ export async function discoverPrinters(
           const connected = await testConnection(ip, DEFAULT_PORT);
           scannedCount++;
           onProgress?.(scannedCount, totalIps, results.length);
-          return connected ? { ip, port: DEFAULT_PORT, name: `Zebra ZD410 (${ip})` } : null;
+          return connected ? { ip, port: DEFAULT_PORT, name: `Network Printer (${ip})` } : null;
         } catch {
           scannedCount++;
           onProgress?.(scannedCount, totalIps, results.length);
