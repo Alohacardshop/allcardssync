@@ -245,46 +245,54 @@ export async function discoverPrinters(
   return results;
 }
 
-// Sync config to database for persistence across workstations
-export async function syncConfigToDatabase(config: PrinterConfig): Promise<void> {
+// Sync config to database for persistence per user + location
+export async function syncConfigToDatabase(
+  config: PrinterConfig, 
+  userId: string, 
+  locationGid: string,
+  storeKey?: string
+): Promise<void> {
   try {
-    let workstationId = localStorage.getItem('workstation-id');
-    if (!workstationId) {
-      workstationId = crypto.randomUUID().substring(0, 8);
-      localStorage.setItem('workstation-id', workstationId);
-    }
-
     await supabase
-      .from('printer_settings')
+      .from('user_printer_preferences')
       .upsert({
-        workstation_id: workstationId,
+        user_id: userId,
+        location_gid: locationGid,
+        store_key: storeKey || null,
+        printer_type: 'label',
         printer_ip: config.ip,
         printer_port: config.port,
         printer_name: config.name,
-        use_printnode: false,
-      }, { onConflict: 'workstation_id' });
+      }, { onConflict: 'user_id,printer_type' });
   } catch (error) {
     console.error('Failed to sync printer config:', error);
   }
 }
 
-// Load config from database
-export async function loadConfigFromDatabase(): Promise<PrinterConfig | null> {
+// Load config from database for user + location
+export async function loadConfigFromDatabase(
+  userId: string, 
+  locationGid?: string
+): Promise<PrinterConfig | null> {
   try {
-    const workstationId = localStorage.getItem('workstation-id');
-    if (!workstationId) return null;
-
-    const { data } = await supabase
-      .from('printer_settings')
+    let query = supabase
+      .from('user_printer_preferences')
       .select('printer_ip, printer_port, printer_name')
-      .eq('workstation_id', workstationId)
-      .maybeSingle();
+      .eq('user_id', userId)
+      .eq('printer_type', 'label');
+    
+    // If location provided, prefer that location's config
+    if (locationGid) {
+      query = query.eq('location_gid', locationGid);
+    }
+
+    const { data } = await query.maybeSingle();
 
     if (data?.printer_ip) {
       return {
         ip: data.printer_ip,
         port: data.printer_port || DEFAULT_PORT,
-        name: data.printer_name || `Zebra (${data.printer_ip})`
+        name: data.printer_name || `Printer (${data.printer_ip})`
       };
     }
     return null;
