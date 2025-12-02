@@ -156,14 +156,20 @@ serve(async (req) => {
 
     const tcpRequest: TCPRequest = await req.json()
     
-    if (!tcpRequest.host || !tcpRequest.data) {
+    // Host is required, data can be empty for connection tests
+    if (!tcpRequest.host) {
       return new Response(
-        JSON.stringify({ ok: false, error: 'Missing required fields: host, data' }),
+        JSON.stringify({ ok: false, error: 'Missing required field: host' }),
         { 
           status: 400, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         }
       )
+    }
+    
+    // Default empty data for connection tests
+    if (tcpRequest.data === undefined) {
+      tcpRequest.data = '';
     }
 
     const result = await sendTCPWithRetries(tcpRequest);
