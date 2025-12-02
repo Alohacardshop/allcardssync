@@ -1,9 +1,14 @@
 # Unified Printing System Documentation
 
 ## Overview
-This system standardizes all printing on Zebra ZD410 + ZPL with PrintCloud (PrintNode) transport.
+This system standardizes all printing on Zebra ZD410 + ZPL via a local TCP bridge running on `localhost:17777`.
 
 ## Architecture
+
+### Transport Layer
+- **Local Bridge**: All printing routes through `http://localhost:17777`
+- **Endpoint**: `/rawtcp` for sending raw ZPL to printers
+- **No Cloud Dependencies**: Direct local TCP connection to printers
 
 ### Single ZPL Builder
 - **Function**: `generateZPLFromElements(label, xOffset, yOffset, options?)`
@@ -48,15 +53,22 @@ This system standardizes all printing on Zebra ZD410 + ZPL with PrintCloud (Prin
 - **Barcodes**: Use `^BCN` (non-rotated) or `^BCR` (rotated)
 - **Padding**: 8-12 dots above/below barcodes for HRI text
 
-### Transport Layer
-- **Single Service**: `print(zpl, copies)` in `src/lib/printService.ts`
-- **Transport**: PrintNode only (no direct TCP/HTTP)
-- **Encoding**: UTF-8 base64 using TextEncoder
-- **Error Handling**: Clear failures, no silent fallbacks
+### Printer Service
+- **Location**: `src/lib/printer/zebraService.ts`
+- **Functions**:
+  - `print(zpl, ip?, port?)` - Send ZPL to printer
+  - `testConnection(ip, port?)` - Test printer connectivity
+  - `checkBridgeStatus()` - Verify local bridge is running
+  - `getConfig()` / `saveConfig()` - Manage printer settings
+
+### Local Bridge Requirements
+The local print bridge must be running on port 17777. It accepts:
+- `POST /rawtcp` - Send raw data to printer (body: `{ host, port, data }`)
+- `GET /status` - Check bridge health
 
 ### Configuration
-- **Storage**: localStorage key `zebra-stock-config`
-- **Settings**: Stock mode, speed (2-6 IPS), darkness (0-30)
+- **Storage**: localStorage key `zebra-printer-config`
+- **Settings**: Printer IP, port, speed, darkness
 - **Persistence**: Saved automatically when changed
 
 ## Usage Examples
@@ -68,7 +80,7 @@ const zplCode = generateZPLFromElements(label, xOffset, yOffset, {
   darkness: stockConfig.darkness,
   copies
 });
-await print(zplCode, copies);
+await zebraService.print(zplCode);
 ```
 
 ### Inventory
@@ -83,11 +95,24 @@ const label = {
   ]
 };
 const zpl = generateZPLFromElements(label, 0, 0);
-await print(zpl, 1);
+await zebraService.print(zpl);
+```
+
+## File Structure
+
+```
+src/lib/printer/
+├── zebraService.ts      # Main printer service (bridge communication)
+├── index.ts             # Module exports
+
+src/lib/print/
+├── queueInstance.ts     # Print queue with local bridge transport
+
+src/components/
+├── PrinterSettings.tsx  # Printer configuration UI
 ```
 
 ## Migration Notes
-- Removed `simpleZPLTemplates.ts` (legacy)
-- All `zebraNetworkService.printZPL` calls replaced with unified `print()`
-- Designer consolidated to single "Print Current Label" button
-- Inventory uses same builder as Designer for consistent output
+- All cloud/edge function printing removed
+- Single transport method via local bridge
+- No PrintNode or external service dependencies
