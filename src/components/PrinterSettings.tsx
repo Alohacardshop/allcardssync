@@ -7,15 +7,14 @@ import { Badge } from '@/components/ui/badge';
 import { Printer, Wifi, WifiOff, RefreshCw, Check, AlertCircle, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { usePrinter, type PrinterConfig } from '@/hooks/usePrinter';
-import type { ZebraPrinter } from '@/lib/zebraNetworkService';
 
 export const PrinterSettings: React.FC = () => {
   const { printer, status, isLoading, isConnected, saveConfig, testConnection, refreshStatus, discoverPrinters } = usePrinter();
   
-  const [editIp, setEditIp] = useState(printer.ip);
-  const [editPort, setEditPort] = useState(String(printer.port));
-  const [editName, setEditName] = useState(printer.name);
-  const [discoveredPrinters, setDiscoveredPrinters] = useState<ZebraPrinter[]>([]);
+  const [editIp, setEditIp] = useState(printer?.ip || '');
+  const [editPort, setEditPort] = useState(String(printer?.port || 9100));
+  const [editName, setEditName] = useState(printer?.name || '');
+  const [discoveredPrinters, setDiscoveredPrinters] = useState<PrinterConfig[]>([]);
   const [isDiscovering, setIsDiscovering] = useState(false);
 
   const handleSave = async () => {
@@ -67,7 +66,7 @@ export const PrinterSettings: React.FC = () => {
     }
   };
 
-  const handleSelectDiscovered = (p: ZebraPrinter) => {
+  const handleSelectDiscovered = (p: PrinterConfig) => {
     setEditIp(p.ip);
     setEditPort(String(p.port));
     setEditName(p.name);
@@ -180,7 +179,7 @@ export const PrinterSettings: React.FC = () => {
             <div className="space-y-2">
               {discoveredPrinters.map((p) => (
                 <button
-                  key={p.id}
+                  key={p.ip}
                   onClick={() => handleSelectDiscovered(p)}
                   className="w-full p-3 text-left rounded-lg border hover:bg-muted transition-colors"
                 >

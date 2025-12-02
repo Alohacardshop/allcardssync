@@ -11,8 +11,7 @@ import { cn } from '@/lib/utils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useStore } from '@/contexts/StoreContext';
-import { useZebraNetwork } from "@/hooks/useZebraNetwork";
-import { ZebraPrinterSelectionDialog } from '@/components/ZebraPrinterSelectionDialog';
+import { usePrinter } from '@/hooks/usePrinter';
 import { getTemplate, loadOrgTemplate } from '@/lib/labels/templateStore';
 import { zplFromElements, zplFromTemplateString } from '@/lib/labels/zpl';
 import { sendZplToPrinter } from '@/lib/labels/print';
@@ -271,7 +270,7 @@ const Inventory = () => {
   const [removingFromShopify, setRemovingFromShopify] = useState(false);
   const [deletingItems, setDeletingItems] = useState(false);
   
-  const { printZPL, selectedPrinter } = useZebraNetwork();
+  const { print: printZPL, config: selectedPrinter } = usePrinter();
   const { assignedStore, selectedLocation } = useStore();
   const { sendChunkedBatchToShopify, isSending: isBatchSending, progress } = useBatchSendToShopify();
   const { settings: cutterSettings } = useCutterSettings();
@@ -1274,12 +1273,10 @@ const Inventory = () => {
     
     try {
       // Pre-flight check: Ensure printer is configured
-      const { getPrinterConfig } = await import('@/lib/printerConfigService');
-      const printerConfig = await getPrinterConfig(assignedStore || undefined, selectedLocation || undefined);
+      const printerConfig = await getDirectPrinterConfig();
       
-      if (!printerConfig || !printerConfig.usePrintNode || !printerConfig.printNodeId) {
-        toast.error('No printer configured. Please select a default printer first.');
-        setShowPrinterDialog(true);
+      if (!printerConfig) {
+        toast.error('No printer configured. Please configure printer in Settings.');
         return;
       }
       
@@ -2516,14 +2513,7 @@ const Inventory = () => {
           />
         )}
 
-        <ZebraPrinterSelectionDialog
-          open={showPrinterDialog}
-          onOpenChange={setShowPrinterDialog}
-          onPrint={async (printer) => {
-            await handlePrintWithPrinter(printer.id);
-          }}
-          allowDefaultOnly={true}
-        />
+        {/* Printer dialog removed - use Settings page to configure printer */}
 
         <BatchSelectorDialog
           open={showBatchSelector}
