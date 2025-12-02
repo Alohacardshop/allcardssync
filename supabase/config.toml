@@ -166,3 +166,7 @@ verify_jwt = true
 # Print Queue Management
 [functions.shopify-tag-manager]
 verify_jwt = true
+
+# Zebra printer TCP communication
+[functions.zebra-tcp]
+verify_jwt = true

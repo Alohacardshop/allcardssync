@@ -35,13 +35,20 @@ export function usePrinter() {
     
     try {
       // Try database first (user + location specific)
-      const { data } = await supabase
+      let query = supabase
         .from('user_printer_preferences')
         .select('printer_ip, printer_port, printer_name')
         .eq('user_id', user.id)
-        .eq('printer_type', 'label')
-        .eq('location_gid', selectedLocation || '')
-        .maybeSingle();
+        .eq('printer_type', 'label');
+      
+      // Handle null/empty location properly
+      if (selectedLocation) {
+        query = query.eq('location_gid', selectedLocation);
+      } else {
+        query = query.or('location_gid.is.null,location_gid.eq.');
+      }
+      
+      const { data } = await query.maybeSingle();
 
       if (data?.printer_ip) {
         const config = {
