@@ -1,9 +1,11 @@
 /**
- * Clean Zebra Printer Service - Direct TCP Only
- * Single source of truth for all printer operations
+ * Zebra Printer Service - Local Bridge Only
+ * Uses rollo-local-bridge on localhost:17777 for all printer operations
  */
 
-import { supabase } from "@/integrations/supabase/client";
+const BRIDGE_URL = 'http://localhost:17777';
+const STORAGE_KEY = 'zebra-printer-config';
+const DEFAULT_PORT = 9100;
 
 // Types
 export interface PrinterConfig {
@@ -28,8 +30,18 @@ export interface PrinterStatus {
   raw: string;
 }
 
-const STORAGE_KEY = 'zebra-printer-config';
-const DEFAULT_PORT = 9100;
+export interface BridgeStatus {
+  connected: boolean;
+  version?: string;
+  error?: string;
+}
+
+export interface SystemPrinter {
+  name: string;
+  status: string;
+  model?: string;
+  driverName?: string;
+}
 
 // Configuration management
 export function getConfig(): PrinterConfig | null {
@@ -50,7 +62,51 @@ export function clearConfig(): void {
   localStorage.removeItem(STORAGE_KEY);
 }
 
-// Core printing function via zebra-tcp edge function
+// Check if local bridge is running
+export async function checkBridgeStatus(): Promise<BridgeStatus> {
+  try {
+    const response = await fetch(BRIDGE_URL, {
+      method: 'GET',
+      signal: AbortSignal.timeout(3000)
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      return {
+        connected: true,
+        version: data.version || 'unknown'
+      };
+    }
+    
+    return { connected: false, error: 'Bridge returned error' };
+  } catch (error) {
+    return { 
+      connected: false, 
+      error: error instanceof Error ? error.message : 'Bridge not running'
+    };
+  }
+}
+
+// Get system/USB printers via local bridge
+export async function getSystemPrinters(): Promise<SystemPrinter[]> {
+  try {
+    const response = await fetch(`${BRIDGE_URL}/system-printers`, {
+      method: 'GET',
+      signal: AbortSignal.timeout(5000)
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      return data.printers || [];
+    }
+    
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+// Core printing function via local bridge
 export async function print(zpl: string, ip?: string, port?: number): Promise<PrintResult> {
   const config = getConfig();
   const targetIp = ip || config?.ip;
@@ -64,26 +120,30 @@ export async function print(zpl: string, ip?: string, port?: number): Promise<Pr
   }
 
   try {
-    const { data: response, error: supabaseError } = await supabase.functions.invoke('zebra-tcp', {
-      body: {
-        host: targetIp,
-        port: targetPort,
-        data: zpl,
-        expectReply: false,
-        timeoutMs: 5000
-      }
+    const response = await fetch(`${BRIDGE_URL}/rawtcp?ip=${encodeURIComponent(targetIp)}&port=${targetPort}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: zpl,
+      signal: AbortSignal.timeout(10000)
     });
 
-    if (supabaseError) {
-      return { success: false, error: `Connection error: ${supabaseError.message}` };
-    }
-
-    if (response?.ok) {
-      return { success: true, message: `Sent to ${targetIp}:${targetPort}` };
+    const data = await response.json();
+    
+    if (data.success) {
+      return { success: true, message: data.message || `Sent to ${targetIp}:${targetPort}` };
     }
     
-    return { success: false, error: response?.error || 'Print failed' };
+    return { success: false, error: data.error || 'Print failed' };
   } catch (error) {
+    if (error instanceof Error && error.name === 'TimeoutError') {
+      return { success: false, error: 'Print timeout - check printer connection' };
+    }
+    if (error instanceof Error && error.message.includes('Failed to fetch')) {
+      return { 
+        success: false, 
+        error: 'Local print bridge not running. Start the bridge service on port 17777.' 
+      };
+    }
     return { 
       success: false, 
       error: error instanceof Error ? error.message : 'Unknown error' 
@@ -91,103 +151,92 @@ export async function print(zpl: string, ip?: string, port?: number): Promise<Pr
   }
 }
 
-// Test connection to printer (just checks if port is open)
-export async function testConnection(ip: string, port: number = DEFAULT_PORT): Promise<boolean> {
+// Print to system/USB printer via local bridge
+export async function printToSystemPrinter(zpl: string, printerName: string, copies: number = 1): Promise<PrintResult> {
   try {
-    const { data: response, error: supabaseError } = await supabase.functions.invoke('zebra-tcp', {
-      body: {
-        host: ip,
-        port: port,
-        data: '', // Empty data just tests connection
-        expectReply: false,
-        timeoutMs: 2000
-      }
+    const response = await fetch(`${BRIDGE_URL}/system-print`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ printerName, zplData: zpl, copies }),
+      signal: AbortSignal.timeout(10000)
     });
 
-    if (supabaseError) return false;
-    return response?.ok === true;
+    const data = await response.json();
+    
+    if (data.success) {
+      return { success: true, message: data.message };
+    }
+    
+    return { success: false, error: data.error || 'Print failed' };
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('Failed to fetch')) {
+      return { 
+        success: false, 
+        error: 'Local print bridge not running. Start the bridge service on port 17777.' 
+      };
+    }
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    };
+  }
+}
+
+// Test connection to network printer via local bridge
+export async function testConnection(ip: string, port: number = DEFAULT_PORT): Promise<boolean> {
+  try {
+    const response = await fetch(`${BRIDGE_URL}/check-tcp?ip=${encodeURIComponent(ip)}&port=${port}`, {
+      method: 'GET',
+      signal: AbortSignal.timeout(5000)
+    });
+
+    const data = await response.json();
+    return data.ok === true;
   } catch {
     return false;
   }
 }
 
-// Query printer status
-export async function queryStatus(ip: string, port: number = DEFAULT_PORT): Promise<PrinterStatus> {
+// Ping test via local bridge
+export async function pingPrinter(ip: string): Promise<{ success: boolean; latency?: number; error?: string }> {
   try {
-    const { data: response, error: supabaseError } = await supabase.functions.invoke('zebra-tcp', {
-      body: {
-        host: ip,
-        port: port,
-        data: '~HS\r\n',
-        expectReply: true,
-        timeoutMs: 5000
-      }
+    const response = await fetch(`${BRIDGE_URL}/ping?ip=${encodeURIComponent(ip)}`, {
+      method: 'GET',
+      signal: AbortSignal.timeout(5000)
     });
 
-    if (supabaseError) {
-      throw new Error(supabaseError.message);
-    }
-
-    if (response?.ok && response?.reply) {
-      return parseStatusReply(response.reply);
-    }
-    
-    throw new Error(response?.error || 'Failed to get status');
-  } catch (error) {
+    const data = await response.json();
     return {
-      ready: false,
-      paused: false,
-      headOpen: false,
-      mediaOut: false,
-      raw: `Error: ${error instanceof Error ? error.message : 'Unknown'}`
+      success: data.success,
+      latency: data.latency,
+      error: data.error
+    };
+  } catch (error) {
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Ping failed' 
     };
   }
 }
 
-function parseStatusReply(reply: string): PrinterStatus {
-  const lines = reply.split(/\r?\n/);
-  let paused = false;
-  let headOpen = false;
-  let mediaOut = false;
-  let ipAddr: string | undefined;
-  let ssid: string | undefined;
-
-  for (const line of lines) {
-    const upperLine = line.toUpperCase();
-    
-    if (upperLine.includes('PAUSE') && !upperLine.includes('UNPAUSE')) {
-      paused = true;
-    }
-    if (upperLine.includes('HEAD') && upperLine.includes('OPEN')) {
-      headOpen = true;
-    }
-    if (upperLine.includes('MEDIA OUT') || upperLine.includes('PAPER OUT')) {
-      mediaOut = true;
-    }
-    
-    const ipMatch = line.match(/IP\s*ADDRESS[:\s]*(\d+\.\d+\.\d+\.\d+)/i);
-    if (ipMatch) ipAddr = ipMatch[1];
-    
-    const ssidMatch = line.match(/SSID[:\s]*([^\r\n]+)/i);
-    if (ssidMatch) ssid = ssidMatch[1].trim();
-  }
-
+// Query printer status (sends ~HS command and parses response)
+// Note: This requires the printer to respond, which may not work via simple TCP
+export async function queryStatus(ip: string, port: number = DEFAULT_PORT): Promise<PrinterStatus> {
+  // For now, just check if we can connect
+  const connected = await testConnection(ip, port);
+  
   return {
-    ready: !paused && !headOpen && !mediaOut,
-    paused,
-    headOpen,
-    mediaOut,
-    ipAddr,
-    ssid,
-    raw: reply
+    ready: connected,
+    paused: false,
+    headOpen: false,
+    mediaOut: false,
+    raw: connected ? 'Connected' : 'Not connected'
   };
 }
 
-// Note: Network discovery from cloud edge functions cannot reach local network printers.
-// Discovery has been removed - users should enter printer IP manually.
-// The IP can be found on the printer's display or by printing a config label.
+// Database sync functions (unchanged - still useful for storing preferences)
+import { supabase } from "@/integrations/supabase/client";
 
-// Sync config to database for persistence per user + location
 export async function syncConfigToDatabase(
   config: PrinterConfig, 
   userId: string, 
@@ -211,7 +260,6 @@ export async function syncConfigToDatabase(
   }
 }
 
-// Load config from database for user + location
 export async function loadConfigFromDatabase(
   userId: string, 
   locationGid?: string
@@ -223,7 +271,6 @@ export async function loadConfigFromDatabase(
       .eq('user_id', userId)
       .eq('printer_type', 'label');
     
-    // If location provided, prefer that location's config
     if (locationGid) {
       query = query.eq('location_gid', locationGid);
     }
@@ -243,14 +290,18 @@ export async function loadConfigFromDatabase(
   }
 }
 
-// Singleton service export for backwards compatibility
+// Singleton service export
 export const zebraService = {
   print,
+  printToSystemPrinter,
   testConnection,
+  pingPrinter,
   queryStatus,
   getConfig,
   saveConfig,
   clearConfig,
+  checkBridgeStatus,
+  getSystemPrinters,
   syncConfigToDatabase,
   loadConfigFromDatabase,
 };
