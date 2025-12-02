@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { testLocalBridge } from '@/lib/localPrintBridge';
+import { checkBridgeStatus } from '@/lib/printer/zebraService';
 
 interface CheckItem {
   id: string;
@@ -62,7 +62,7 @@ export function PreflightChecklist({ open, onClose, onComplete }: PreflightCheck
     {
       id: 'print-bridge',
       name: 'Print Bridge',
-      description: 'Check local print bridge service',
+      description: 'Check local print bridge service (port 17777)',
       status: 'pending',
       icon: Printer
     },
@@ -171,18 +171,14 @@ export function PreflightChecklist({ open, onClose, onComplete }: PreflightCheck
     updateCheck('print-bridge', { status: 'running' });
     
     try {
-      const result = await testLocalBridge({
-        bridgeUrl: 'http://localhost:3001',
-        printerIp: '192.168.1.70',
-        printerPort: 9100
-      });
+      const result = await checkBridgeStatus();
       
-      if (result.success) {
+      if (result.connected) {
         updateCheck('print-bridge', { status: 'success' });
       } else {
         updateCheck('print-bridge', { 
           status: 'error', 
-          error: result.error || 'Print bridge test failed' 
+          error: result.error || 'Print bridge not running on port 17777' 
         });
       }
     } catch (error) {

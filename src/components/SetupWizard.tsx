@@ -18,7 +18,7 @@ import {
   ArrowLeft
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { testLocalBridge } from '@/lib/localPrintBridge';
+import { checkBridgeStatus, testConnection } from '@/lib/printer/zebraService';
 import { supabase } from '@/integrations/supabase/client';
 
 interface SetupStep {
@@ -76,13 +76,23 @@ export function SetupWizard({ open, onComplete }: SetupWizardProps) {
   const testPrinterConnection = async () => {
     setPrinterTestResult('pending');
     try {
-      const result = await testLocalBridge({
-        bridgeUrl: 'http://localhost:3001',
-        printerIp: printerIP,
-        printerPort: 9100
-      });
+      // First check if the local bridge is running
+      const bridgeStatus = await checkBridgeStatus();
       
-      if (result.success) {
+      if (!bridgeStatus.connected) {
+        setPrinterTestResult('error');
+        toast({ 
+          title: "Bridge Not Running", 
+          description: "Local print bridge not found on port 17777",
+          variant: "destructive"
+        });
+        return;
+      }
+      
+      // Then test the printer connection
+      const printerConnected = await testConnection(printerIP, 9100);
+      
+      if (printerConnected) {
         setPrinterTestResult('success');
         updateStepCompletion('printer', true);
         toast({ 
@@ -100,7 +110,7 @@ export function SetupWizard({ open, onComplete }: SetupWizardProps) {
         setPrinterTestResult('error');
         toast({ 
           title: "Printer Test Failed", 
-          description: result.error,
+          description: "Could not connect to printer at " + printerIP,
           variant: "destructive"
         });
       }
@@ -218,7 +228,7 @@ export function SetupWizard({ open, onComplete }: SetupWizardProps) {
                 Printer Connection Test
               </CardTitle>
               <CardDescription>
-                Configure and test your label printer connection
+                Configure and test your label printer connection via local bridge (port 17777)
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -249,7 +259,7 @@ export function SetupWizard({ open, onComplete }: SetupWizardProps) {
                   <AlertDescription>
                     {printerTestResult === 'success' ? 
                       'Printer connection successful!' : 
-                      'Failed to connect to printer. Check IP address and network connection.'
+                      'Failed to connect to printer. Check IP address and ensure print bridge is running.'
                     }
                   </AlertDescription>
                 </Alert>
