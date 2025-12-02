@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,11 +11,20 @@ import { usePrinter, type PrinterConfig } from '@/hooks/usePrinter';
 export const PrinterSettings: React.FC = () => {
   const { printer, status, isLoading, isConnected, saveConfig, testConnection, refreshStatus, discoverPrinters } = usePrinter();
   
-  const [editIp, setEditIp] = useState(printer?.ip || '');
-  const [editPort, setEditPort] = useState(String(printer?.port || 9100));
-  const [editName, setEditName] = useState(printer?.name || '');
+  const [editIp, setEditIp] = useState('');
+  const [editPort, setEditPort] = useState('9100');
+  const [editName, setEditName] = useState('');
   const [discoveredPrinters, setDiscoveredPrinters] = useState<PrinterConfig[]>([]);
   const [isDiscovering, setIsDiscovering] = useState(false);
+
+  // Sync form state when printer config loads
+  useEffect(() => {
+    if (printer) {
+      setEditIp(printer.ip);
+      setEditPort(String(printer.port));
+      setEditName(printer.name);
+    }
+  }, [printer]);
 
   const handleSave = async () => {
     const config: PrinterConfig = {
@@ -93,8 +102,10 @@ export const PrinterSettings: React.FC = () => {
             <WifiOff className="w-5 h-5 text-muted-foreground" />
           )}
           <div className="flex-1">
-            <div className="font-medium">{printer.name}</div>
-            <div className="text-sm text-muted-foreground">{printer.ip}:{printer.port}</div>
+            <div className="font-medium">{printer?.name || 'Zebra ZD410'}</div>
+            <div className="text-sm text-muted-foreground">
+              {printer ? `${printer.ip}:${printer.port}` : 'Not configured'}
+            </div>
           </div>
           <Badge variant={isConnected ? 'default' : 'secondary'}>
             {isConnected ? 'Connected' : 'Disconnected'}
