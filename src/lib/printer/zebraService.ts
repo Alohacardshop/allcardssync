@@ -237,3 +237,16 @@ export async function loadConfigFromDatabase(): Promise<PrinterConfig | null> {
     return null;
   }
 }
+
+// Singleton service export for backwards compatibility
+export const zebraService = {
+  print,
+  testConnection,
+  queryStatus,
+  discoverPrinters,
+  getConfig,
+  saveConfig,
+  clearConfig,
+  syncConfigToDatabase,
+  loadConfigFromDatabase,
+};

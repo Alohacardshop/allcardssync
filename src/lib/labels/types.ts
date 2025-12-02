@@ -27,8 +27,6 @@ export interface LabelTemplate {
 }
 
 export interface PrinterPrefs {
-  usePrintNode?: boolean;
-  printNodeId?: number;
   speed?: number;      // -> ^PR
   darkness?: number;   // -> ^MD
   copies?: number;     // -> ^PQ

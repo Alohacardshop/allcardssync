@@ -1,5 +1,5 @@
 import { PrintQueue } from "./printQueue";
-import { zebraNetworkService } from "@/lib/zebraNetworkService";
+import { zebraService } from "@/lib/printer/zebraService";
 import { getDirectPrinterConfig } from "@/hooks/usePrinter";
 import { logger } from "@/lib/logger";
 
@@ -38,7 +38,7 @@ async function directTcpTransport(payload: string): Promise<void> {
     }, 'print-transport');
 
     // Send ZPL directly via TCP
-    const result = await zebraNetworkService.printZPLDirect(payload, config.ip, config.port);
+    const result = await zebraService.print(payload, config.ip, config.port);
     
     if (!result.success) {
       throw new Error(result.error || 'Print failed');
