@@ -11,7 +11,6 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { AuthGuard } from "@/components/AuthGuard";
 import { AdminGuard } from "@/components/AdminGuard";
 import { StoreProvider } from "@/contexts/StoreContext";
-import { PrintNodeProvider } from "@/contexts/PrintNodeContext";
 import { NavigationBar } from "@/components/NavigationBar";
 import { GlobalLoading } from "@/components/GlobalLoading";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
@@ -58,7 +57,6 @@ const App = () => (
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <AuthProvider>
-            <PrintNodeProvider>
               <StoreProvider>
               <Toaster />
               <Sonner />
@@ -155,7 +153,6 @@ const App = () => (
               <PrintQueueStatus />
             </BrowserRouter>
           </StoreProvider>
-        </PrintNodeProvider>
       </AuthProvider>
     </TooltipProvider>
   </QueryClientProvider>

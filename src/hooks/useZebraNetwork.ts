@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { zebraNetworkService, type ZebraPrinter } from '@/lib/zebraNetworkService';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { print } from '@/lib/printService';
+import { getDirectPrinterConfig } from '@/hooks/usePrinter';
 import { useZebraPrinterStatus } from './useZebraPrinterStatus';
 
 export function useZebraNetwork() {
@@ -179,7 +179,11 @@ export function useZebraNetwork() {
   }, [loadSavedPrinter, refreshPrinters]);
 
   const printZPL = useCallback(async (zplData: string, options?: { title?: string; copies?: number }) => {
-    const result = await print(zplData, options?.copies || 1);
+    const config = await getDirectPrinterConfig();
+    if (!config) {
+      return { success: false, error: 'No printer configured' };
+    }
+    const result = await zebraNetworkService.printZPLDirect(zplData, config.ip, config.port);
     return result;
   }, []);
 

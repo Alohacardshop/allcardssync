@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -20,6 +19,7 @@ import {
   RotateCcw,
   Code,
   Copy,
+  Clipboard,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { LabelCanvas } from './LabelCanvas';
@@ -28,7 +28,7 @@ import { PropertiesPanel } from './PropertiesPanel';
 import type { LabelLayout, LabelField, FieldKey, SampleData } from '../types/labelLayout';
 import { DEFAULT_LABEL_LAYOUT, DEFAULT_SAMPLE_DATA, FIELD_LABELS } from '../types/labelLayout';
 import { generateZplFromLayout, generateZplTemplate } from '../utils/layoutToZpl';
-import { printQueue } from '@/lib/print/queueInstance';
+import { usePrinter } from '@/hooks/usePrinter';
 import { sanitizeLabel } from '@/lib/print/sanitizeZpl';
 import { supabase } from '@/integrations/supabase/client';
 import type { Json } from '@/integrations/supabase/types';
@@ -50,6 +50,8 @@ export const LabelEditor: React.FC<LabelEditorProps> = ({
   const [sampleData, setSampleData] = useState<SampleData>(DEFAULT_SAMPLE_DATA);
   const [templateName, setTemplateName] = useState(layout.name);
   const [showZplCode, setShowZplCode] = useState(false);
+  
+  const { print, isLoading: isPrinting, isConnected } = usePrinter();
 
   const selectedField = layout.fields.find(f => f.id === selectedFieldId) || null;
 
@@ -191,12 +193,38 @@ export const LabelEditor: React.FC<LabelEditorProps> = ({
   const handleTestPrint = async () => {
     try {
       const safeZpl = sanitizeLabel(generatedZpl);
-      await printQueue.enqueueSafe({ zpl: safeZpl, qty: 1, usePQ: true });
-      toast.success('Test print sent');
+      const result = await print(safeZpl, 1);
+      
+      if (result.success) {
+        toast.success('Test print sent to printer');
+      } else {
+        toast.error(result.error || 'Print failed');
+        // Offer clipboard fallback
+        toast.info('Tip: Copy ZPL and paste into printer web interface', {
+          action: {
+            label: 'Copy ZPL',
+            onClick: () => {
+              navigator.clipboard.writeText(safeZpl);
+              toast.success('ZPL copied to clipboard');
+            }
+          }
+        });
+      }
     } catch (error) {
       console.error('Print failed:', error);
-      toast.error('Print failed');
+      toast.error('Print failed - try copying ZPL instead');
     }
+  };
+
+  const handleDownloadZpl = () => {
+    const blob = new Blob([generatedZpl], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${templateName || 'label'}.zpl`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success('ZPL file downloaded');
   };
 
   const handleCopyZpl = () => {
@@ -277,12 +305,21 @@ export const LabelEditor: React.FC<LabelEditorProps> = ({
           <Button variant="ghost" size="sm" onClick={handleResetLayout}>
             <RotateCcw className="w-4 h-4" />
           </Button>
-          <Button variant="ghost" size="sm" onClick={handleCopyZpl}>
+          <Button variant="ghost" size="sm" onClick={handleCopyZpl} title="Copy ZPL">
             <Copy className="w-4 h-4" />
           </Button>
-          <Button variant="outline" size="sm" onClick={handleTestPrint}>
+          <Button variant="ghost" size="sm" onClick={handleDownloadZpl} title="Download ZPL">
+            <Download className="w-4 h-4" />
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={handleTestPrint}
+            disabled={isPrinting}
+          >
             <Printer className="w-4 h-4 mr-1" />
-            Test Print
+            {isPrinting ? 'Printing...' : 'Test Print'}
+            {!isConnected && <span className="ml-1 text-amber-500">•</span>}
           </Button>
           <Button size="sm" onClick={handleSave}>
             <Save className="w-4 h-4 mr-1" />

@@ -8,7 +8,7 @@ import LabelStudio from "./admin/LabelStudio";
 import PrintQueuePanel from "@/components/print-queue/PrintQueuePanel";
 import PrintProfileManager from "@/components/print-queue/PrintProfileManager";
 import PulledItemsFilter from "@/components/print-queue/PulledItemsFilter";
-import { PrinterSettingsPanel } from "@/components/printer-settings/PrinterSettingsPanel";
+import { PrinterSettings } from "@/components/PrinterSettings";
 import { ShopifyPullDialog } from "@/components/barcode-printing/ShopifyPullDialog";
 import { useStore } from "@/contexts/StoreContext";
 
@@ -90,7 +90,7 @@ export default function BarcodePrinting() {
         </TabsContent>
 
         <TabsContent value="printers" className="mt-6">
-          <PrinterSettingsPanel />
+          <PrinterSettings />
         </TabsContent>
 
         <TabsContent value="logs" className="mt-6">
