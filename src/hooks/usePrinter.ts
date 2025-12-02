@@ -5,7 +5,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { zebraService, type PrinterStatus, type PrintResult, type DiscoveryOptions } from '@/lib/printer/zebraService';
+import { zebraService, type PrinterStatus, type PrintResult } from '@/lib/printer/zebraService';
 import { useAuth } from '@/contexts/AuthContext';
 import { useStore } from '@/contexts/StoreContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -205,16 +205,6 @@ export function usePrinter() {
     }
   }, [printer]);
 
-  // Discover printers on network
-  const discoverPrinters = useCallback(async (options?: DiscoveryOptions | string): Promise<PrinterConfig[]> => {
-    setIsLoading(true);
-    try {
-      return await zebraService.discoverPrinters(options);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
   // Load config when user or location changes
   useEffect(() => {
     loadConfig();
@@ -231,7 +221,6 @@ export function usePrinter() {
     testConnection,
     refreshStatus,
     print,
-    discoverPrinters,
   };
 }
 
