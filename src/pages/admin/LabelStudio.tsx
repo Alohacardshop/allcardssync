@@ -7,17 +7,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
-import { Separator } from "@/components/ui/separator";
 import { 
   Save, 
   Download, 
-  Upload, 
   RefreshCw, 
   Printer, 
   Settings, 
-  Eye,
   TestTube,
   FileText,
   Code,
@@ -43,8 +39,6 @@ interface Template {
 }
 
 interface PrinterPrefs {
-  usePrintNode?: boolean;
-  printNodeId?: number;
   speed?: number;
   darkness?: number;
   copies?: number;
@@ -72,7 +66,6 @@ export default function LabelStudio() {
   const [editableZpl, setEditableZpl] = useState('');
   
   const [printerPrefs, setPrinterPrefs] = useState<PrinterPrefs>({
-    usePrintNode: true,
     speed: 4,
     darkness: 10,
     copies: 1,
@@ -93,15 +86,7 @@ export default function LabelStudio() {
   useEffect(() => {
     try {
       const cfg = JSON.parse(localStorage.getItem('zebra-printer-config') || '{}');
-      const defaultPrinterId = localStorage.getItem('printnode-default-printer');
-      
-      const updatedPrefs = { ...cfg };
-      if (defaultPrinterId && !updatedPrefs.printNodeId) {
-        updatedPrefs.usePrintNode = true;
-        updatedPrefs.printNodeId = parseInt(defaultPrinterId);
-      }
-      
-      setPrinterPrefs(prev => ({ ...prev, ...updatedPrefs }));
+      setPrinterPrefs(prev => ({ ...prev, ...cfg }));
     } catch (error) {
       console.error('Failed to load printer config:', error);
     }
@@ -677,14 +662,6 @@ export default function LabelStudio() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <Label>Use PrintNode</Label>
-                  <Switch
-                    checked={printerPrefs.usePrintNode}
-                    onCheckedChange={(checked) => setPrinterPrefs(prev => ({ ...prev, usePrintNode: checked }))}
-                  />
-                </div>
-                
                 <div className="space-y-2">
                   <Label>Print Speed (IPS): {printerPrefs.speed}</Label>
                   <Slider

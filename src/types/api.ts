@@ -101,10 +101,9 @@ export interface PrintJobData {
 }
 
 export interface PrintJobTarget {
-  type: 'zebra_network' | 'printnode' | 'local'
+  type: 'zebra_network'
   printerIp?: string
   printerPort?: number
-  printerId?: string
   printerName?: string
 }
 
