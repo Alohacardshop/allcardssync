@@ -13,7 +13,7 @@ const ZD410_END_CUT_TAIL = `^XA
 ^MMT
 ^XZ`;
 
-// Direct TCP transport function via zebra-tcp edge function
+// Direct TCP transport function via local bridge (localhost:17777)
 async function directTcpTransport(payload: string): Promise<void> {
   try {
     logger.debug('Direct TCP transport starting', { 
