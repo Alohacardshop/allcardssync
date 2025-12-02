@@ -30,6 +30,7 @@ const Admin = React.lazy(() => import("./pages/Admin"));
 const NotFound = React.lazy(() => import("./pages/NotFound"));
 const Auth = React.lazy(() => import("./pages/Auth"));
 const BarcodePrinting = React.lazy(() => import("./pages/BarcodePrinting"));
+const LabelEditorPage = React.lazy(() => import("./features/barcode/pages/LabelEditorPage"));
 const ShopifyMapping = React.lazy(() => import("./pages/ShopifyMapping"));
 const ShopifySync = React.lazy(() => import("./pages/ShopifySync"));
 const BulkImport = React.lazy(() => import("./pages/BulkImport"));
@@ -104,6 +105,11 @@ const App = () => (
                             <Route path="/barcode-printing" element={
                               <RequireApp appKey="barcode">
                                 <ErrorBoundaryWrapper componentName="BarcodePrinting"><BarcodePrinting /></ErrorBoundaryWrapper>
+                              </RequireApp>
+                            } />
+                            <Route path="/barcode/label-editor" element={
+                              <RequireApp appKey="barcode">
+                                <ErrorBoundaryWrapper componentName="LabelEditor"><LabelEditorPage /></ErrorBoundaryWrapper>
                               </RequireApp>
                             } />
                             
