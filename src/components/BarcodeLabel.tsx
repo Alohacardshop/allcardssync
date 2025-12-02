@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { zebraNetworkService } from '@/lib/zebraNetworkService';
+import { zebraService } from '@/lib/printer/zebraService';
 import { getDirectPrinterConfig } from '@/hooks/usePrinter';
 import { ZPLLabel, generateZPLFromElements, LABEL_2x1_203, LABEL_2x1_300 } from '@/lib/zplElements';
 import { zplPriceBarcodeThirds2x1 } from '@/lib/templates/priceBarcodeThirds2x1';
@@ -108,7 +108,7 @@ const BarcodeLabel = ({ value, label, className, showPrintButton = true, quantit
       toast.error('No printer configured. Go to Settings to configure printer.');
       return;
     }
-    const result = await zebraNetworkService.printZPLDirect(zpl, config.ip, config.port);
+    const result = await zebraService.print(zpl, config.ip, config.port);
 
     if (result.success) {
       toast.success('Barcode label printed!', {
@@ -141,7 +141,7 @@ const BarcodeLabel = ({ value, label, className, showPrintButton = true, quantit
       if (!config) {
         throw new Error('No printer configured. Go to Settings to configure printer.');
       }
-      const res = await zebraNetworkService.printZPLDirect(zpl, config.ip, config.port);
+      const res = await zebraService.print(zpl, config.ip, config.port);
       
       if (res?.success) {
         toast.success('Thirds label printed!', {

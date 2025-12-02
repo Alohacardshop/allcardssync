@@ -17,7 +17,7 @@ import { zplFromElements, zplFromTemplateString } from '@/lib/labels/zpl';
 import { sendZplToPrinter } from '@/lib/labels/print';
 import { printQueue } from '@/lib/print/queueInstance';
 import type { JobVars, ZPLElement } from '@/lib/labels/types';
-import { zebraNetworkService } from '@/lib/zebraNetworkService';
+import { zebraService } from '@/lib/printer/zebraService';
 import { getDirectPrinterConfig } from '@/hooks/usePrinter';
 import { sendGradedToShopify, sendRawToShopify } from '@/hooks/useShopifySend';
 import { useBatchSendToShopify } from '@/hooks/useBatchSendToShopify';
@@ -1250,7 +1250,7 @@ const Inventory = () => {
       
       logger.info('Sending cut command to printer', { cutZpl });
       
-      const result = await zebraNetworkService.printZPLDirect(cutZpl, printerConfig.ip, printerConfig.port);
+      const result = await zebraService.print(cutZpl, printerConfig.ip, printerConfig.port);
       
       if (result.success) {
         toast.success('Cut command sent successfully');

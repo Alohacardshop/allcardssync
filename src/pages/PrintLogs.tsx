@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Printer, Eye, RotateCcw, Filter, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { zebraNetworkService } from "@/lib/zebraNetworkService";
+import { zebraService } from "@/lib/printer/zebraService";
 import { logger } from '@/lib/logger';
 
 interface PrintJob {
@@ -137,22 +137,18 @@ export default function PrintLogs() {
 
       try {
         // Use Zebra network service for reprinting
-        const printers = await zebraNetworkService.discoverPrinters();
+        const printers = await zebraService.discoverPrinters();
         if (printers.length === 0) {
           throw new Error('No printers available');
         }
         
-        // Use first available printer or find by saved name
         const savedPrinterName = localStorage.getItem('zebra-selected-printer-name');
         const printer = savedPrinterName 
           ? printers.find(p => p.name === savedPrinterName) || printers[0]
           : printers[0];
         
-        // Send to printer using Zebra service
-        await zebraNetworkService.printZPL(job.payload, printer, { 
-          title: `Reprint Job ${job.id}`, 
-          copies: job.copies 
-        });
+        // Send to printer
+        await zebraService.print(job.payload, printer.ip, printer.port);
         
         // Update new job status
         await (supabase as any)

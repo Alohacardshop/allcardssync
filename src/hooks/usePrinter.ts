@@ -6,8 +6,11 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { zebraNetworkService, type PrinterStatus, type PrintJobResult } from '@/lib/zebraNetworkService';
+import { zebraService, type PrinterStatus, type PrintResult } from '@/lib/printer/zebraService';
 import { supabase } from '@/integrations/supabase/client';
+
+export type { PrinterStatus, PrintResult };
+export type PrintJobResult = PrintResult; // Alias for backwards compatibility
 
 export interface PrinterConfig {
   ip: string;
@@ -101,7 +104,7 @@ export function usePrinter() {
     queryKey: ['printerStatus', printer?.ip],
     queryFn: async () => {
       if (!printer) return null;
-      return zebraNetworkService.queryStatus(printer.ip, printer.port);
+      return zebraService.queryStatus(printer.ip, printer.port);
     },
     enabled: !!printer,
     refetchInterval: (query) => {
@@ -121,7 +124,7 @@ export function usePrinter() {
       const testPort = port || printer?.port || DEFAULT_PORT;
       if (!testIp) return false;
       
-      const connected = await zebraNetworkService.testConnection(testIp, testPort);
+      const connected = await zebraService.testConnection(testIp, testPort);
       return connected;
     } catch (error) {
       return false;
@@ -135,7 +138,7 @@ export function usePrinter() {
     if (!printer) return null;
     
     try {
-      const printerStatus = await zebraNetworkService.queryStatus(printer.ip, printer.port);
+      const printerStatus = await zebraService.queryStatus(printer.ip, printer.port);
       queryClient.setQueryData(['printerStatus', printer.ip], printerStatus);
       return printerStatus;
     } catch (error) {
@@ -144,7 +147,7 @@ export function usePrinter() {
   }, [printer, queryClient]);
 
   // Print ZPL directly
-  const print = useCallback(async (zpl: string, copies: number = 1): Promise<PrintJobResult> => {
+  const print = useCallback(async (zpl: string, copies: number = 1): Promise<PrintResult> => {
     if (!printer) {
       return { success: false, error: 'No printer configured' };
     }
@@ -157,7 +160,7 @@ export function usePrinter() {
         finalZpl = zpl.replace(/\^XZ\s*$/, `^PQ${copies}\n^XZ`);
       }
       
-      const result = await zebraNetworkService.printZPLDirect(finalZpl, printer.ip, printer.port);
+      const result = await zebraService.print(finalZpl, printer.ip, printer.port);
       return result;
     } catch (error) {
       return {
@@ -173,12 +176,7 @@ export function usePrinter() {
   const discoverPrinters = useCallback(async (networkBase: string = '192.168.1'): Promise<PrinterConfig[]> => {
     setIsLoading(true);
     try {
-      const printers = await zebraNetworkService.discoverPrinters(networkBase);
-      return printers.map(p => ({
-        ip: p.ip,
-        port: p.port,
-        name: p.name
-      }));
+      return await zebraService.discoverPrinters(networkBase);
     } finally {
       setIsLoading(false);
     }

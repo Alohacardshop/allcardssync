@@ -1,11 +1,7 @@
 // Test utilities for Zebra printer functionality
-import { zebraNetworkService } from './zebraNetworkService';
+import { zebraService } from './printer/zebraService';
 import { simpleTestLabel, generateSampleZPL, testPattern } from './zplSamples';
 
-/**
- * Test direct ZPL printing to a network printer
- * Example: testDirectPrinting("192.168.1.70") 
- */
 export async function testDirectPrinting(
   host: string, 
   port: number = 9100, 
@@ -14,7 +10,7 @@ export async function testDirectPrinting(
   console.log(`🖨️ Testing direct ZPL printing to ${host}:${port}`);
   
   try {
-    const result = await zebraNetworkService.printZPLDirect(testLabel, host, port);
+    const result = await zebraService.print(testLabel, host, port);
     
     if (result.success) {
       console.log('✅ Print successful:', result.message);
@@ -29,14 +25,11 @@ export async function testDirectPrinting(
   }
 }
 
-/**
- * Test printer connectivity
- */
 export async function testPrinterConnection(host: string, port: number = 9100) {
   console.log(`🔍 Testing connection to ${host}:${port}`);
   
   try {
-    const isConnected = await zebraNetworkService.testConnection(host, port);
+    const isConnected = await zebraService.testConnection(host, port);
     
     if (isConnected) {
       console.log('✅ Printer is reachable');
@@ -51,9 +44,6 @@ export async function testPrinterConnection(host: string, port: number = 9100) {
   }
 }
 
-/**
- * Run full printer test suite
- */
 export async function runPrinterTests(host: string, port: number = 9100) {
   console.log(`🧪 Running full test suite for ${host}:${port}`);
   
@@ -63,39 +53,21 @@ export async function runPrinterTests(host: string, port: number = 9100) {
     return false;
   }
   
-  console.log('Testing simple label...');
   const simpleTest = await testDirectPrinting(host, port, simpleTestLabel);
-  
-  console.log('Testing generated label...');
   const generatedTest = await testDirectPrinting(host, port, generateSampleZPL());
-  
-  console.log('Testing pattern...');
   const patternTest = await testDirectPrinting(host, port, testPattern);
   
   const allPassed = simpleTest && generatedTest && patternTest;
-  
-  if (allPassed) {
-    console.log('✅ All tests passed!');
-  } else {
-    console.log('❌ Some tests failed');
-  }
+  console.log(allPassed ? '✅ All tests passed!' : '❌ Some tests failed');
   
   return allPassed;
 }
 
-// Export for global use in browser console
 if (typeof window !== 'undefined') {
   (window as any).zebraTest = {
     testDirectPrinting,
     testPrinterConnection,
     runPrinterTests,
-    samples: {
-      simpleTestLabel,
-      generateSampleZPL: generateSampleZPL(), 
-      testPattern
-    }
+    samples: { simpleTestLabel, generateSampleZPL: generateSampleZPL(), testPattern }
   };
-  
-  console.log('🖨️ Zebra test utilities available as window.zebraTest');
-  console.log('Usage: window.zebraTest.testDirectPrinting("192.168.1.70")');
 }

@@ -1,5 +1,5 @@
 import { LabelTemplate } from './types';
-import { elementsToZpl, zplToElements } from './zplElementConverter';
+import { elementsToZpl, zplToElements } from './zpl';
 
 const LS_KEY = 'label-templates/v1';
 
