@@ -30,7 +30,8 @@ export function generateZplFromLayout(
     `^MD${darkness}`, // Media darkness
     '^MNY', // Gap/notch mode (label with gaps)
     '^LH0,0', // Label home position
-    '^LT0', // Label top
+    `^LT${layout.labelTopOffset || 0}`, // Label top offset
+    `^LS${layout.labelLeftOffset || 0}`, // Label shift (left/right)
   ];
 
   // Sort fields by y position for consistent rendering
@@ -71,7 +72,8 @@ export function generateZplTemplate(layout: LabelLayout): string {
     '^MD{{DARKNESS}}',
     '^MNY',
     '^LH0,0',
-    '^LT0',
+    `^LT${layout.labelTopOffset || 0}`,
+    `^LS${layout.labelLeftOffset || 0}`,
   ];
 
   const enabledFields = layout.fields
