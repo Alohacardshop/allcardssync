@@ -50,8 +50,9 @@ function getMaxSingleLineFontSize(
 
 /**
  * Find best 2-line split and maximum font size for title text
+ * Exported for use in ZPL generation to ensure preview-print consistency
  */
-function getBestTwoLineSplit(
+export function getBestTwoLineSplit(
   text: string,
   boxWidth: number,
   boxHeight: number,
