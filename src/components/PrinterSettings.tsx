@@ -141,8 +141,9 @@ export const PrinterSettings: React.FC = () => {
               </p>
               <div className="mt-3 flex flex-col gap-2">
                 <a 
-                  href="/ZebraPrintBridge.exe" 
-                  download="ZebraPrintBridge.exe"
+                  href="https://drive.google.com/uc?export=download&id=1oH3cfm7oTiEwkUTbCbXW-MtofBPBSL_Z" 
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="inline-flex items-center gap-2 px-3 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90 w-fit"
                 >
                   <Download className="w-4 h-4" />
