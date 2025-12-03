@@ -2,6 +2,7 @@
 
 import type { LabelLayout, LabelField, SampleData, FieldKey } from '../types/labelLayout';
 import { CHAR_W_RATIO, fitFontSingleLine, estimateCode128WidthDots } from '@/lib/zplFit';
+import { getBestTwoLineSplit } from './textFitting';
 
 interface ZplGeneratorOptions {
   dpi?: 203 | 300;
@@ -45,8 +46,8 @@ export function generateZplFromLayout(
       // Generate barcode
       lines.push(...generateBarcodeZpl(field, value));
     } else {
-      // Generate text field
-      lines.push(...generateTextZpl(field, value));
+      // Generate text field - pass isTitle flag for smart two-line handling
+      lines.push(...generateTextZpl(field, value, field.fieldKey === 'title'));
     }
   }
 
@@ -83,7 +84,7 @@ export function generateZplTemplate(layout: LabelLayout): string {
     if (field.fieldKey === 'barcode') {
       lines.push(...generateBarcodeZpl(field, placeholder));
     } else {
-      lines.push(...generateTextZpl(field, placeholder));
+      lines.push(...generateTextZpl(field, placeholder, field.fieldKey === 'title'));
     }
   }
 
@@ -94,39 +95,56 @@ export function generateZplTemplate(layout: LabelLayout): string {
 }
 
 /**
- * Generate text field ZPL
+ * Generate text field ZPL using same smart fitting as preview
  */
-function generateTextZpl(field: LabelField, text: string): string[] {
+function generateTextZpl(field: LabelField, text: string, isTitle: boolean = false): string[] {
   const lines: string[] = [];
-  
-  // Calculate font size based on text length
-  const fontSize = fitFontSingleLine(text, field.width, field.maxFontSize, field.minFontSize);
-  
-  // Check if we need two lines
-  const estimatedWidth = text.length * fontSize * CHAR_W_RATIO;
-  const needsTwoLines = estimatedWidth > field.width && text.includes(' ');
-  
-  // Field origin
-  lines.push(`^FO${field.x},${field.y}`);
-  
-  // Text block with alignment
   const justification = field.alignment === 'center' ? 'C' : field.alignment === 'right' ? 'R' : 'L';
   
-  if (needsTwoLines) {
-    // Use field block for multi-line
-    const lineHeight = Math.ceil(fontSize * 1.2);
-    lines.push(`^FB${field.width},2,0,${justification}`);
-    lines.push(`^A0N,${Math.floor(fontSize * 0.85)},${Math.floor(fontSize * 0.85 * CHAR_W_RATIO)}`);
+  // For title fields, use same smart two-line split logic as preview
+  if (isTitle && text.includes(' ')) {
+    // Use getBestTwoLineSplit to get exact same result as preview
+    // Scale factor converts dots to approximate pixels for the algorithm
+    const scaleFactor = 2;
+    const pixelWidth = field.width * scaleFactor;
+    const pixelHeight = field.height * scaleFactor;
+    const maxFontPx = field.maxFontSize * scaleFactor;
+    const minFontPx = field.minFontSize * scaleFactor;
+    
+    const result = getBestTwoLineSplit(text, pixelWidth, pixelHeight, maxFontPx, minFontPx);
+    
+    // Convert pixel font back to dots
+    const fontSizeDots = Math.round(result.fontSize / scaleFactor);
+    const fontWidth = Math.floor(fontSizeDots * CHAR_W_RATIO);
+    
+    lines.push(`^FO${field.x},${field.y}`);
+    
+    if (result.lines.length === 2) {
+      // Two-line output with exact split from algorithm
+      const lineHeight = Math.ceil(fontSizeDots * 1.2);
+      lines.push(`^FB${field.width},2,0,${justification}`);
+      lines.push(`^A0N,${fontSizeDots},${fontWidth}`);
+      // Join with newline for ZPL field block
+      lines.push(`^FD${escapeZplText(result.lines.join('\\&'))}^FS`);
+    } else {
+      // Single line
+      if (field.alignment !== 'left') {
+        lines.push(`^FB${field.width},1,0,${justification}`);
+      }
+      lines.push(`^A0N,${fontSizeDots},${fontWidth}`);
+      lines.push(`^FD${escapeZplText(text)}^FS`);
+    }
   } else {
-    // Single line
+    // Non-title fields: maximize font for single line
+    const fontSize = fitFontSingleLine(text, field.width, field.maxFontSize, field.minFontSize);
+    
+    lines.push(`^FO${field.x},${field.y}`);
     if (field.alignment !== 'left') {
       lines.push(`^FB${field.width},1,0,${justification}`);
     }
     lines.push(`^A0N,${fontSize},${Math.floor(fontSize * CHAR_W_RATIO)}`);
+    lines.push(`^FD${escapeZplText(text)}^FS`);
   }
-  
-  // Field data
-  lines.push(`^FD${escapeZplText(text)}^FS`);
   
   return lines;
 }
