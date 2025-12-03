@@ -2,7 +2,6 @@
 
 import type { LabelLayout, LabelField, SampleData, FieldKey } from '../types/labelLayout';
 import { CHAR_W_RATIO, fitFontSingleLine, estimateCode128WidthDots } from '@/lib/zplFit';
-import { getBestTwoLineSplit } from './textFitting';
 
 interface ZplGeneratorOptions {
   dpi?: 203 | 300;
@@ -103,33 +102,51 @@ function generateTextZpl(field: LabelField, text: string, isTitle: boolean = fal
   const lines: string[] = [];
   const justification = field.alignment === 'center' ? 'C' : field.alignment === 'right' ? 'R' : 'L';
   
-  // For title fields, use same smart two-line split logic as preview
+  // For title fields, try to maximize font using two lines if beneficial
   if (isTitle && text.includes(' ')) {
-    // Use getBestTwoLineSplit to get exact same result as preview
-    // Scale factor converts dots to approximate pixels for the algorithm
-    const scaleFactor = 2;
-    const pixelWidth = field.width * scaleFactor;
-    const pixelHeight = field.height * scaleFactor;
-    const maxFontPx = field.maxFontSize * scaleFactor;
-    const minFontPx = field.minFontSize * scaleFactor;
+    // First check single-line fit
+    const singleLineFontSize = fitFontSingleLine(text, field.width, field.maxFontSize, field.minFontSize);
     
-    const result = getBestTwoLineSplit(text, pixelWidth, pixelHeight, maxFontPx, minFontPx);
+    // Check if two lines would allow a larger font
+    const words = text.split(' ');
+    let bestTwoLineFont = 0;
+    let bestSplitIndex = -1;
     
-    // Convert pixel font back to dots
-    const fontSizeDots = Math.round(result.fontSize / scaleFactor);
-    const fontWidth = Math.floor(fontSizeDots * CHAR_W_RATIO);
+    // Try each possible split point
+    for (let i = 1; i < words.length; i++) {
+      const line1 = words.slice(0, i).join(' ');
+      const line2 = words.slice(i).join(' ');
+      const longerLine = line1.length > line2.length ? line1 : line2;
+      
+      // Font that fits the longer line
+      const fontForWidth = fitFontSingleLine(longerLine, field.width, field.maxFontSize, field.minFontSize);
+      // Font constrained by height (2 lines with ~1.2 line height)
+      const fontForHeight = Math.floor(field.height / 2.4);
+      const twoLineFont = Math.min(fontForWidth, fontForHeight, field.maxFontSize);
+      
+      if (twoLineFont > bestTwoLineFont) {
+        bestTwoLineFont = twoLineFont;
+        bestSplitIndex = i;
+      }
+    }
     
     lines.push(`^FO${field.x},${field.y}`);
     
-    if (result.lines.length === 2) {
-      // Two-line output with exact split from algorithm
-      const lineHeight = Math.ceil(fontSizeDots * 1.2);
+    // Use two lines if it gives us a bigger font
+    if (bestTwoLineFont > singleLineFontSize && bestSplitIndex > 0) {
+      const line1 = words.slice(0, bestSplitIndex).join(' ');
+      const line2 = words.slice(bestSplitIndex).join(' ');
+      const fontSizeDots = Math.max(field.minFontSize, Math.min(bestTwoLineFont, field.maxFontSize));
+      const fontWidth = Math.floor(fontSizeDots * CHAR_W_RATIO);
+      
       lines.push(`^FB${field.width},2,0,${justification}`);
       lines.push(`^A0N,${fontSizeDots},${fontWidth}`);
-      // Join with newline for ZPL field block
-      lines.push(`^FD${escapeZplText(result.lines.join('\\&'))}^FS`);
+      lines.push(`^FD${escapeZplText(line1 + '\\&' + line2)}^FS`);
     } else {
-      // Single line
+      // Single line is better or equal
+      const fontSizeDots = Math.max(field.minFontSize, Math.min(singleLineFontSize, field.maxFontSize));
+      const fontWidth = Math.floor(fontSizeDots * CHAR_W_RATIO);
+      
       if (field.alignment !== 'left') {
         lines.push(`^FB${field.width},1,0,${justification}`);
       }
@@ -176,8 +193,8 @@ function generateBarcodeZpl(field: LabelField, data: string): string[] {
   // Barcode parameters
   lines.push(`^BY${moduleWidth}`);
   
-  // Code 128 barcode with human-readable text below
-  lines.push(`^BCN,${barcodeHeight},Y,N,N`);
+  // Code 128 barcode without human-readable text (cleaner look, more height)
+  lines.push(`^BCN,${barcodeHeight},N,N,N`);
   
   // Field data
   lines.push(`^FD${escapeZplText(data)}^FS`);
