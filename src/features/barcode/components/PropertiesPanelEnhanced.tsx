@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import type { LabelField, SampleData } from '../types/labelLayout';
 import { FIELD_LABELS } from '../types/labelLayout';
-import { calculateOptimalFontSize, dotsToPixels } from '../utils/textFitting';
+import { calculateOptimalFontSize, calculateTitleFontSize, dotsToPixels } from '../utils/textFitting';
 import { cn } from '@/lib/utils';
 
 interface PropertiesPanelEnhancedProps {
@@ -59,15 +59,18 @@ export const PropertiesPanelEnhanced: React.FC<PropertiesPanelEnhancedProps> = (
     onUpdateField(field.id, { [key]: value });
   };
 
-  // Calculate text fitting preview
+  // Calculate text fitting preview - use title-specific function for title fields (allows 2-line split)
   const sampleValue = sampleData[field.fieldKey] || '';
   const scale = 2; // Preview scale
-  const { fontSize, lines, isTwoLine } = calculateOptimalFontSize(
-    sampleValue,
-    dotsToPixels(field.width, scale) - 8,
-    dotsToPixels(field.maxFontSize, scale) * 0.6,
-    dotsToPixels(field.minFontSize, scale) * 0.6
-  );
+  const isTitle = field.fieldKey === 'title';
+  const contentWidth = dotsToPixels(field.width, scale) - 8;
+  const contentHeight = dotsToPixels(field.height, scale) - 16;
+  const maxFont = dotsToPixels(field.maxFontSize, scale) * 0.6;
+  const minFont = dotsToPixels(field.minFontSize, scale) * 0.6;
+  
+  const { fontSize, lines, isTwoLine } = isTitle
+    ? calculateTitleFontSize(sampleValue, contentWidth, contentHeight, maxFont, minFont)
+    : calculateOptimalFontSize(sampleValue, contentWidth, maxFont, minFont);
   
   const actualFontDots = Math.round(fontSize / scale / 0.6);
   const isAtMinSize = actualFontDots <= field.minFontSize + 2;

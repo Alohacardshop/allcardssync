@@ -58,8 +58,22 @@ export const FieldBoxEnhanced: React.FC<FieldBoxEnhancedProps> = ({
   // Calculate font size - use title-specific function for title field (allows 2 lines)
   const contentWidth = pixelWidth - 8;
   const contentHeight = pixelHeight - 16; // Account for padding and label
-  const maxFont = dotsToPixels(field.maxFontSize, scale) * 0.65;
-  const minFont = dotsToPixels(field.minFontSize, scale) * 0.65;
+  
+  /**
+   * Font size calibration factor (0.65)
+   * 
+   * This multiplier converts ZPL dot-based font sizes to screen pixel equivalents.
+   * ZPL uses 203 DPI where font sizes are specified in dots, but canvas text rendering
+   * uses pixel-based sizing at ~96 DPI. The 0.65 factor accounts for:
+   * - DPI difference between ZPL (203) and screen (~96)
+   * - Character aspect ratio differences (ZPL CHAR_W_RATIO = 0.62)
+   * - Visual consistency between preview and printed output
+   * 
+   * This ensures the on-screen preview closely matches the final printed label.
+   */
+  const FONT_CALIBRATION_FACTOR = 0.65;
+  const maxFont = dotsToPixels(field.maxFontSize, scale) * FONT_CALIBRATION_FACTOR;
+  const minFont = dotsToPixels(field.minFontSize, scale) * FONT_CALIBRATION_FACTOR;
   
   const { fontSize, lines, isTwoLine } = isTitle
     ? calculateTitleFontSize(sampleValue, contentWidth, contentHeight, maxFont, minFont)
@@ -189,10 +203,10 @@ export const FieldBoxEnhanced: React.FC<FieldBoxEnhancedProps> = ({
           </div>
         )}
 
-        {/* Font size indicator */}
+        {/* Font size indicator - convert back to dots using calibration factor */}
         {!isPreviewMode && isSelected && !isBarcode && (
           <div className="absolute bottom-0.5 right-1 text-[8px] font-mono text-muted-foreground bg-background/80 px-1 rounded">
-            {Math.round(fontSize / scale / 0.6)}pt
+            {Math.round(fontSize / scale / FONT_CALIBRATION_FACTOR)}pt
           </div>
         )}
       </div>
