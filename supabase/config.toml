@@ -186,3 +186,6 @@ verify_jwt = true
 [functions.ebay-order-webhook]
 verify_jwt = false
 
+[functions.ebay-sync-policies]
+verify_jwt = true
+
