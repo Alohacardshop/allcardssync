@@ -1,21 +1,19 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Printer, ListOrdered, FileText, Settings, Users, Cog, Download, Filter, PenTool } from "lucide-react";
+import { ListOrdered, FileText, Users, Cog, Filter, Settings } from "lucide-react";
 import PrintLogs from "./PrintLogs";
-import LabelStudio from "./admin/LabelStudio";
 import PrintQueuePanel from "@/components/print-queue/PrintQueuePanel";
 import PrintProfileManager from "@/components/print-queue/PrintProfileManager";
 import PulledItemsFilter from "@/components/print-queue/PulledItemsFilter";
 import { PrinterSettings } from "@/components/PrinterSettings";
 import { ShopifyPullDialog } from "@/components/barcode-printing/ShopifyPullDialog";
 import { useStore } from "@/contexts/StoreContext";
+import { LabelEditorEmbed } from "@/features/barcode/components/LabelEditorEmbed";
 
 export default function BarcodePrinting() {
   const { assignedStore, selectedLocation } = useStore();
   const [showPullDialog, setShowPullDialog] = useState(false);
-  const navigate = useNavigate();
 
   const handleOpenShopifyDialog = () => {
     setShowPullDialog(true);
@@ -98,13 +96,7 @@ export default function BarcodePrinting() {
         </TabsContent>
 
         <TabsContent value="templates" className="mt-6">
-          <div className="mb-4">
-            <Button onClick={() => navigate('/barcode/label-editor')} variant="outline">
-              <PenTool className="w-4 h-4 mr-2" />
-              Open Visual Label Editor
-            </Button>
-          </div>
-          <LabelStudio />
+          <LabelEditorEmbed />
         </TabsContent>
       </Tabs>
 
