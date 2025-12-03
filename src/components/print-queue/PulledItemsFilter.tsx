@@ -8,10 +8,26 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
-import { Search, Filter, ChevronDown, X } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Search, Filter, ChevronDown, X, Printer, Download, RefreshCw, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useStore } from '@/contexts/StoreContext';
+import { ShopifyPullDialog } from '@/components/barcode-printing/ShopifyPullDialog';
+import { printQueue } from '@/lib/print/queueInstance';
+import { zplFromTemplateString } from '@/lib/labels/zpl';
+
+interface SavedTemplate {
+  id: string;
+  name: string;
+  canvas: any;
+  is_default: boolean;
+}
 
 export default function PulledItemsFilter() {
+  const { assignedStore, selectedLocation } = useStore();
+  
+  // Items state
   const [items, setItems] = useState<any[]>([]);
   const [allItems, setAllItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -22,14 +38,47 @@ export default function PulledItemsFilter() {
   const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [dateFilter, setDateFilter] = useState<'today' | 'yesterday' | '7days' | '30days' | null>(null);
 
+  // Shopify pull state
+  const [showPullDialog, setShowPullDialog] = useState(false);
+  const [pullSectionOpen, setPullSectionOpen] = useState(true);
+
+  // Template state
+  const [templates, setTemplates] = useState<SavedTemplate[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
+  const [copies, setCopies] = useState(1);
+  const [isPrinting, setIsPrinting] = useState(false);
+
   useEffect(() => {
     fetchAllItems();
+    fetchTemplates();
   }, []);
 
   useEffect(() => {
     filterItems();
     setSelectedItems(new Set());
   }, [searchTerm, selectedIncludeTags, selectedExcludeTags, dateFilter, allItems]);
+
+  const fetchTemplates = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('label_templates')
+        .select('*')
+        .eq('template_type', 'raw')
+        .order('is_default', { ascending: false });
+
+      if (error) throw error;
+
+      setTemplates(data || []);
+      
+      // Set default template
+      const defaultTemplate = data?.find(t => t.is_default) || data?.[0];
+      if (defaultTemplate && !selectedTemplateId) {
+        setSelectedTemplateId(defaultTemplate.id);
+      }
+    } catch (error) {
+      console.error('Failed to load templates:', error);
+    }
+  };
 
   const fetchAllItems = async () => {
     setLoading(true);
@@ -181,13 +230,152 @@ export default function PulledItemsFilter() {
     ];
   };
 
+  // Abbreviate grade/condition for labels
+  const abbreviateGrade = (variant?: string): string => {
+    if (!variant) return '';
+    const map: Record<string, string> = {
+      'Near Mint': 'NM',
+      'Lightly Played': 'LP',
+      'Moderately Played': 'MP',
+      'Heavily Played': 'HP',
+      'Damaged': 'DMG',
+    };
+    return map[variant] || variant;
+  };
+
+  const handlePrintSelected = async () => {
+    if (selectedItems.size === 0) {
+      toast.error('No items selected');
+      return;
+    }
+
+    if (!selectedTemplateId) {
+      toast.error('Please select a label template');
+      return;
+    }
+
+    // Get template
+    const template = templates.find(t => t.id === selectedTemplateId);
+    if (!template) {
+      toast.error('Template not found');
+      return;
+    }
+
+    const zplBody = template.canvas?.zplLabel;
+    if (!zplBody) {
+      toast.error('Template has no ZPL body');
+      return;
+    }
+
+    setIsPrinting(true);
+    let printedCount = 0;
+    const itemIds = Array.from(selectedItems);
+
+    try {
+      for (const itemId of itemIds) {
+        const item = items.find(i => i.id === itemId);
+        if (!item) continue;
+
+        // Build variables for template
+        const vars = {
+          CARDNAME: item.subject || item.brand_title || '',
+          SETNAME: item.category || '',
+          CARDNUMBER: item.card_number || '',
+          CONDITION: abbreviateGrade(item.variant),
+          PRICE: item.price ? `$${Number(item.price).toFixed(2)}` : '',
+          SKU: item.sku || '',
+          BARCODE: item.sku || '',
+          VENDOR: item.vendor || '',
+          YEAR: item.year || '',
+          CATEGORY: item.main_category || '',
+        };
+
+        // Generate ZPL
+        const zpl = zplFromTemplateString(zplBody, vars);
+
+        // Queue for printing
+        await printQueue.enqueueSafe({ zpl, qty: copies, usePQ: true });
+        printedCount++;
+      }
+
+      // Update printed_at timestamps
+      const { error: updateError } = await supabase
+        .from('intake_items')
+        .update({ printed_at: new Date().toISOString() })
+        .in('id', itemIds);
+
+      if (updateError) {
+        console.error('Failed to update printed_at:', updateError);
+      }
+
+      toast.success(`Queued ${printedCount} label${printedCount > 1 ? 's' : ''} for printing`);
+      
+      // Clear selection and refresh items
+      setSelectedItems(new Set());
+      fetchAllItems();
+    } catch (error) {
+      console.error('Print error:', error);
+      toast.error('Failed to print labels');
+    } finally {
+      setIsPrinting(false);
+    }
+  };
+
+  const handlePullSuccess = () => {
+    setShowPullDialog(false);
+    fetchAllItems();
+  };
+
+  const canPull = assignedStore && selectedLocation;
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pb-24">
+      {/* Pull from Shopify Section */}
+      <Collapsible open={pullSectionOpen} onOpenChange={setPullSectionOpen}>
+        <Card>
+          <CollapsibleTrigger asChild>
+            <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
+              <CardTitle className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Download className="h-5 w-5" />
+                  Pull from Shopify
+                </div>
+                <ChevronDown className={`h-4 w-4 transition-transform ${pullSectionOpen ? 'rotate-180' : ''}`} />
+              </CardTitle>
+            </CardHeader>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <CardContent className="pt-0">
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-muted-foreground">
+                  {canPull 
+                    ? 'Pull products from your Shopify store to print labels.'
+                    : 'Select a store and location in the top bar to pull products.'}
+                </p>
+                <Button
+                  onClick={() => setShowPullDialog(true)}
+                  disabled={!canPull}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Pull Products
+                </Button>
+              </div>
+            </CardContent>
+          </CollapsibleContent>
+        </Card>
+      </Collapsible>
+
+      {/* Filter Section */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Filter className="h-5 w-5" />
-            Filter Pulled Items
+          <CardTitle className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Filter className="h-5 w-5" />
+              Filter Items
+            </div>
+            <Button variant="ghost" size="sm" onClick={fetchAllItems} disabled={loading}>
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            </Button>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -380,6 +568,7 @@ export default function PulledItemsFilter() {
         </CardContent>
       </Card>
 
+      {/* Items List */}
       <div className="grid gap-4">
         {items.map((item) => (
           <Card 
@@ -417,6 +606,78 @@ export default function PulledItemsFilter() {
           </Card>
         ))}
       </div>
+
+      {/* Sticky Action Bar */}
+      {selectedItems.size > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 bg-background border-t shadow-lg z-50">
+          <div className="container mx-auto p-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="space-y-1">
+                  <Label htmlFor="template" className="text-xs">Template</Label>
+                  <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
+                    <SelectTrigger id="template" className="w-[200px]">
+                      <SelectValue placeholder="Select template..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {templates.map((template) => (
+                        <SelectItem key={template.id} value={template.id}>
+                          {template.name} {template.is_default && '(default)'}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="copies" className="text-xs">Copies</Label>
+                  <Input
+                    id="copies"
+                    type="number"
+                    min={1}
+                    max={10}
+                    value={copies}
+                    onChange={(e) => setCopies(Math.max(1, parseInt(e.target.value) || 1))}
+                    className="w-20"
+                  />
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-muted-foreground">
+                  {selectedItems.size} item{selectedItems.size > 1 ? 's' : ''} selected
+                </span>
+                <Button 
+                  variant="outline" 
+                  onClick={() => setSelectedItems(new Set())}
+                >
+                  Clear
+                </Button>
+                <Button 
+                  onClick={handlePrintSelected}
+                  disabled={isPrinting || !selectedTemplateId}
+                >
+                  {isPrinting ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Printer className="h-4 w-4 mr-2" />
+                  )}
+                  Print Selected ({selectedItems.size})
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Shopify Pull Dialog */}
+      {assignedStore && selectedLocation && (
+        <ShopifyPullDialog
+          open={showPullDialog}
+          onOpenChange={setShowPullDialog}
+          storeKey={assignedStore}
+          locationGid={selectedLocation}
+          onSuccess={handlePullSuccess}
+        />
+      )}
     </div>
   );
 }
