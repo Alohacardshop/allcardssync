@@ -156,14 +156,13 @@ export const PrinterSettings: React.FC = () => {
   };
 
   // Feed: Use form feed control command
-  const handleFeedLabel = () => sendCommand('~JF', 'Feed');
+  const handleFeedLabel = () => sendCommand('^XA^XZ', 'Feed');
   
   // Calibrate: Media and ribbon sensor calibration
   const handleCalibrate = () => sendCommand('~JC', 'Calibrate');
   
-  // Cut: Send cut command (requires cutter module)
-  // ^MMC = Cutter mode, ^CN1 = Cut now
-  const handleCut = () => sendCommand('^XA^MMC^CN1^XZ', 'Cut');
+  // Cut: Direct cut test command for Zebra printers with cutter
+  const handleCut = () => sendCommand('~CT', 'Cut');
   
   // Cancel all queued jobs
   const handleCancelJobs = () => sendCommand('~JA', 'Cancel jobs');
