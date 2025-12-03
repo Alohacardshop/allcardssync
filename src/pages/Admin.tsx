@@ -10,7 +10,9 @@ import {
   Building2,
   Command,
   Menu,
-  Tag
+  Tag,
+  ShoppingCart,
+  MapPin
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import {
@@ -43,7 +45,7 @@ import { HardwareTabsSection } from "@/components/admin/HardwareTabsSection";
 import { SystemTabsSection } from "@/components/admin/SystemTabsSection";
 import { CategoryManagement } from "@/components/admin/CategoryManagement";
 import { PurchaseLocationsManager } from "@/components/admin/PurchaseLocationsManager";
-import { MapPin } from "lucide-react";
+import { EbayManagement } from "@/components/admin/EbayManagement";
 
 const adminSections = [
   {
@@ -65,6 +67,11 @@ const adminSections = [
     id: 'queue',
     title: 'Queue',
     icon: Package,
+  },
+  {
+    id: 'ebay',
+    title: 'eBay',
+    icon: ShoppingCart,
   },
   {
     id: 'users',
@@ -152,6 +159,8 @@ export default function Admin() {
         return <CatalogTabsSection />;
       case 'queue':
         return <QueueManagementTabs />;
+      case 'ebay':
+        return <EbayManagement />;
       case 'users':
         return <UserAssignmentManager />;
       case 'hardware':
