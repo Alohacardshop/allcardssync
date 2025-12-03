@@ -4,8 +4,8 @@ import { CSS } from '@dnd-kit/utilities';
 import { cn } from '@/lib/utils';
 import type { LabelField, SampleData } from '../types/labelLayout';
 import { FIELD_LABELS } from '../types/labelLayout';
-import { calculateOptimalFontSize, dotsToPixels } from '../utils/textFitting';
-import { GripVertical, Move } from 'lucide-react';
+import { calculateOptimalFontSize, calculateTitleFontSize, dotsToPixels } from '../utils/textFitting';
+import { Move } from 'lucide-react';
 
 interface FieldBoxEnhancedProps {
   field: LabelField;
@@ -53,14 +53,17 @@ export const FieldBoxEnhanced: React.FC<FieldBoxEnhancedProps> = ({
 
   const sampleValue = sampleData[field.fieldKey] || '';
   const isBarcode = field.fieldKey === 'barcode';
+  const isTitle = field.fieldKey === 'title';
   
-  // Calculate font size for preview
-  const { fontSize, lines, isTwoLine } = calculateOptimalFontSize(
-    sampleValue,
-    pixelWidth - 8,
-    dotsToPixels(field.maxFontSize, scale) * 0.6,
-    dotsToPixels(field.minFontSize, scale) * 0.6
-  );
+  // Calculate font size - use title-specific function for title field (allows 2 lines)
+  const contentWidth = pixelWidth - 8;
+  const contentHeight = pixelHeight - 16; // Account for padding and label
+  const maxFont = dotsToPixels(field.maxFontSize, scale) * 0.65;
+  const minFont = dotsToPixels(field.minFontSize, scale) * 0.65;
+  
+  const { fontSize, lines, isTwoLine } = isTitle
+    ? calculateTitleFontSize(sampleValue, contentWidth, contentHeight, maxFont, minFont)
+    : calculateOptimalFontSize(sampleValue, contentWidth, maxFont, minFont);
 
   const handleResizeStart = (e: React.MouseEvent) => {
     if (isPreviewMode) return;
