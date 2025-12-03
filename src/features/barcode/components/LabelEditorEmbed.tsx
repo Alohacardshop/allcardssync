@@ -9,6 +9,7 @@ import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import {
   Save,
   Download,
@@ -25,7 +26,12 @@ import {
   Trash2,
   Star,
   Plus,
-  FolderOpen,
+  PanelLeftClose,
+  PanelRightClose,
+  Maximize2,
+  Minimize2,
+  Settings2,
+  Palette,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { LabelCanvasEnhanced } from './LabelCanvasEnhanced';
@@ -59,6 +65,9 @@ export const LabelEditorEmbed: React.FC = () => {
   const [savedTemplates, setSavedTemplates] = useState<SavedTemplate[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
+  const [leftSidebarOpen, setLeftSidebarOpen] = useState(true);
+  const [rightSidebarOpen, setRightSidebarOpen] = useState(true);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   
   const { print, isLoading: isPrinting, isConnected } = usePrinter();
 
@@ -379,15 +388,141 @@ export const LabelEditorEmbed: React.FC = () => {
 
   const currentIsDefault = savedTemplates.find(t => t.id === selectedTemplateId)?.is_default;
 
+  // Left sidebar content (reusable for both inline and sheet)
+  const LeftSidebarContent = () => (
+    <>
+      <FieldPalette
+        layout={layout}
+        onToggleField={handleToggleField}
+        onAddField={handleAddField}
+      />
+
+      {/* Template actions */}
+      <Card className="mt-4">
+        <CardHeader className="py-2 px-3">
+          <CardTitle className="text-xs font-medium text-muted-foreground">Template Actions</CardTitle>
+        </CardHeader>
+        <CardContent className="p-2 pt-0 space-y-1.5">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleSaveAsNew}
+            className="w-full justify-start h-7 text-xs"
+          >
+            <Plus className="w-3 h-3 mr-1.5" />
+            Save as New
+          </Button>
+          {selectedTemplateId && (
+            <>
+              <Button
+                variant={currentIsDefault ? 'secondary' : 'outline'}
+                size="sm"
+                onClick={handleSetDefault}
+                className="w-full justify-start h-7 text-xs"
+                disabled={currentIsDefault}
+              >
+                <Star className={`w-3 h-3 mr-1.5 ${currentIsDefault ? 'fill-current' : ''}`} />
+                {currentIsDefault ? 'Default' : 'Set Default'}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleDeleteTemplate}
+                className="w-full justify-start h-7 text-xs text-destructive hover:text-destructive"
+              >
+                <Trash2 className="w-3 h-3 mr-1.5" />
+                Delete
+              </Button>
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </>
+  );
+
+  // Right sidebar content (reusable for both inline and sheet)
+  const RightSidebarContent = () => (
+    <>
+      <PropertiesPanelEnhanced
+        field={selectedField}
+        onUpdateField={handleUpdateField}
+        onRemoveField={handleRemoveField}
+        labelBounds={{ width: layout.widthDots, height: layout.heightDots }}
+        sampleData={sampleData}
+      />
+
+      {/* ZPL Preview - Collapsible */}
+      <Collapsible open={showZplCode} onOpenChange={setShowZplCode}>
+        <Card>
+          <CollapsibleTrigger asChild>
+            <CardHeader className="py-2 px-3 cursor-pointer hover:bg-muted/50">
+              <CardTitle className="text-xs font-medium flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <Code className="w-3.5 h-3.5" />
+                  ZPL Code
+                </span>
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showZplCode ? 'rotate-180' : ''}`} />
+              </CardTitle>
+            </CardHeader>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <CardContent className="px-3 pb-3 pt-0">
+              <pre className="text-[10px] bg-muted p-2 rounded overflow-auto max-h-32 font-mono leading-tight">
+                {generatedZpl}
+              </pre>
+            </CardContent>
+          </CollapsibleContent>
+        </Card>
+      </Collapsible>
+    </>
+  );
+
   return (
-    <div className="flex flex-col h-[calc(100vh-280px)] min-h-[600px] border rounded-lg bg-card overflow-hidden">
+    <div className={`flex flex-col border rounded-lg bg-card overflow-hidden transition-all duration-200 ${
+      isFullscreen 
+        ? 'fixed inset-4 z-50 h-auto' 
+        : 'h-[calc(100vh-220px)] min-h-[500px]'
+    }`}>
+      {/* Fullscreen backdrop */}
+      {isFullscreen && (
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-40" onClick={() => setIsFullscreen(false)} />
+      )}
+
       {/* Toolbar */}
-      <div className="flex items-center justify-between gap-2 p-3 border-b bg-muted/30">
+      <div className="flex items-center justify-between gap-2 p-2 border-b bg-muted/30 flex-wrap relative z-50">
         <div className="flex items-center gap-2">
+          {/* Sidebar toggles - visible on larger screens */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setLeftSidebarOpen(!leftSidebarOpen)}
+            className="h-8 w-8 p-0 hidden lg:flex"
+            title={leftSidebarOpen ? "Hide fields panel" : "Show fields panel"}
+          >
+            <PanelLeftClose className={`w-4 h-4 transition-transform ${!leftSidebarOpen ? 'rotate-180' : ''}`} />
+          </Button>
+
+          {/* Mobile sidebar trigger for left panel */}
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-8 w-8 p-0 lg:hidden">
+                <Palette className="w-4 h-4" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="left" className="w-64 p-4">
+              <SheetHeader>
+                <SheetTitle className="text-sm">Fields</SheetTitle>
+              </SheetHeader>
+              <div className="mt-4">
+                <LeftSidebarContent />
+              </div>
+            </SheetContent>
+          </Sheet>
+
           {/* Template selector */}
           <Select value={selectedTemplateId} onValueChange={handleLoadTemplate}>
-            <SelectTrigger className="w-48 h-8">
-              <SelectValue placeholder="Select template..." />
+            <SelectTrigger className="w-32 sm:w-40 h-8">
+              <SelectValue placeholder="Template..." />
             </SelectTrigger>
             <SelectContent>
               {savedTemplates.map(t => (
@@ -401,34 +536,34 @@ export const LabelEditorEmbed: React.FC = () => {
             </SelectContent>
           </Select>
 
-          <Button variant="ghost" size="sm" onClick={handleNewTemplate} title="New template">
+          <Button variant="ghost" size="sm" onClick={handleNewTemplate} title="New template" className="h-8 w-8 p-0">
             <Plus className="w-4 h-4" />
           </Button>
 
-          <Separator orientation="vertical" className="h-6" />
+          <Separator orientation="vertical" className="h-6 hidden sm:block" />
 
           <Input
             value={templateName}
             onChange={(e) => setTemplateName(e.target.value)}
-            className="w-48 h-8 text-sm"
+            className="w-32 sm:w-40 h-8 text-sm hidden sm:block"
             placeholder="Template name"
           />
 
-          <Badge variant="outline" className="font-mono text-xs whitespace-nowrap">
+          <Badge variant="outline" className="font-mono text-xs whitespace-nowrap hidden md:flex">
             2" × 1"
           </Badge>
         </div>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1">
           {/* Mode toggle */}
-          <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-background border">
-            <Edit3 className={`w-3.5 h-3.5 ${!isPreviewMode ? 'text-primary' : 'text-muted-foreground'}`} />
+          <div className="flex items-center gap-1 px-1.5 py-1 rounded-md bg-background border">
+            <Edit3 className={`w-3 h-3 ${!isPreviewMode ? 'text-primary' : 'text-muted-foreground'}`} />
             <Switch
               checked={isPreviewMode}
               onCheckedChange={setIsPreviewMode}
               className="scale-75"
             />
-            <Eye className={`w-3.5 h-3.5 ${isPreviewMode ? 'text-primary' : 'text-muted-foreground'}`} />
+            <Eye className={`w-3 h-3 ${isPreviewMode ? 'text-primary' : 'text-muted-foreground'}`} />
           </div>
 
           <Button
@@ -436,7 +571,7 @@ export const LabelEditorEmbed: React.FC = () => {
             size="sm"
             onClick={() => setShowGrid(!showGrid)}
             disabled={isPreviewMode}
-            className="h-8 w-8 p-0"
+            className="h-8 w-8 p-0 hidden sm:flex"
           >
             <Grid3X3 className="w-4 h-4" />
           </Button>
@@ -452,30 +587,41 @@ export const LabelEditorEmbed: React.FC = () => {
             >
               <ZoomOut className="w-4 h-4" />
             </Button>
-            <Badge variant="outline" className="font-mono text-xs w-10 justify-center">
+            <Badge variant="outline" className="font-mono text-xs w-8 justify-center">
               {scale}x
             </Badge>
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => setScale(s => Math.min(4, s + 0.5))}
-              disabled={scale >= 4}
+              onClick={() => setScale(s => Math.min(5, s + 0.5))}
+              disabled={scale >= 5}
               className="h-8 w-8 p-0"
             >
               <ZoomIn className="w-4 h-4" />
             </Button>
           </div>
 
-          <Separator orientation="vertical" className="h-6" />
+          <Separator orientation="vertical" className="h-6 hidden sm:block" />
 
-          <Button variant="ghost" size="sm" onClick={handleResetLayout} className="h-8 w-8 p-0" title="Reset">
+          <Button variant="ghost" size="sm" onClick={handleResetLayout} className="h-8 w-8 p-0 hidden sm:flex" title="Reset">
             <RotateCcw className="w-4 h-4" />
           </Button>
-          <Button variant="ghost" size="sm" onClick={handleCopyZpl} className="h-8 w-8 p-0" title="Copy ZPL">
+          <Button variant="ghost" size="sm" onClick={handleCopyZpl} className="h-8 w-8 p-0 hidden sm:flex" title="Copy ZPL">
             <Copy className="w-4 h-4" />
           </Button>
-          <Button variant="ghost" size="sm" onClick={handleDownloadZpl} className="h-8 w-8 p-0" title="Download">
+          <Button variant="ghost" size="sm" onClick={handleDownloadZpl} className="h-8 w-8 p-0 hidden sm:flex" title="Download">
             <Download className="w-4 h-4" />
+          </Button>
+
+          {/* Fullscreen toggle */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setIsFullscreen(!isFullscreen)}
+            className="h-8 w-8 p-0"
+            title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+          >
+            {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
           </Button>
 
           <Separator orientation="vertical" className="h-6" />
@@ -487,74 +633,59 @@ export const LabelEditorEmbed: React.FC = () => {
             disabled={isPrinting}
             className="h-8"
           >
-            <Printer className="w-4 h-4 mr-1" />
-            Print
+            <Printer className="w-4 h-4 sm:mr-1" />
+            <span className="hidden sm:inline">Print</span>
             {!isConnected && <span className="ml-1 text-amber-500">•</span>}
           </Button>
 
           <Button size="sm" onClick={handleSave} className="h-8">
-            <Save className="w-4 h-4 mr-1" />
-            Save
+            <Save className="w-4 h-4 sm:mr-1" />
+            <span className="hidden sm:inline">Save</span>
           </Button>
+
+          {/* Right sidebar toggle - visible on larger screens */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setRightSidebarOpen(!rightSidebarOpen)}
+            className="h-8 w-8 p-0 hidden lg:flex"
+            title={rightSidebarOpen ? "Hide properties panel" : "Show properties panel"}
+          >
+            <PanelRightClose className={`w-4 h-4 transition-transform ${!rightSidebarOpen ? 'rotate-180' : ''}`} />
+          </Button>
+
+          {/* Mobile sidebar trigger for right panel */}
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-8 w-8 p-0 lg:hidden">
+                <Settings2 className="w-4 h-4" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="right" className="w-72 p-4">
+              <SheetHeader>
+                <SheetTitle className="text-sm">Properties</SheetTitle>
+              </SheetHeader>
+              <div className="mt-4 space-y-3">
+                <RightSidebarContent />
+              </div>
+            </SheetContent>
+          </Sheet>
         </div>
       </div>
 
       {/* Main content */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Left sidebar - Field palette */}
-        <div className="w-56 border-r bg-muted/20 overflow-y-auto p-3">
-          <FieldPalette
-            layout={layout}
-            onToggleField={handleToggleField}
-            onAddField={handleAddField}
-          />
-
-          {/* Template actions */}
-          <Card className="mt-4">
-            <CardHeader className="py-2 px-3">
-              <CardTitle className="text-xs font-medium text-muted-foreground">Template Actions</CardTitle>
-            </CardHeader>
-            <CardContent className="p-2 pt-0 space-y-1.5">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleSaveAsNew}
-                className="w-full justify-start h-7 text-xs"
-              >
-                <Plus className="w-3 h-3 mr-1.5" />
-                Save as New
-              </Button>
-              {selectedTemplateId && (
-                <>
-                  <Button
-                    variant={currentIsDefault ? 'secondary' : 'outline'}
-                    size="sm"
-                    onClick={handleSetDefault}
-                    className="w-full justify-start h-7 text-xs"
-                    disabled={currentIsDefault}
-                  >
-                    <Star className={`w-3 h-3 mr-1.5 ${currentIsDefault ? 'fill-current' : ''}`} />
-                    {currentIsDefault ? 'Default' : 'Set Default'}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleDeleteTemplate}
-                    className="w-full justify-start h-7 text-xs text-destructive hover:text-destructive"
-                  >
-                    <Trash2 className="w-3 h-3 mr-1.5" />
-                    Delete
-                  </Button>
-                </>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+      <div className="flex flex-1 overflow-hidden relative z-50">
+        {/* Left sidebar - Field palette (desktop) */}
+        {leftSidebarOpen && (
+          <div className="hidden lg:block w-52 border-r bg-muted/20 overflow-y-auto p-3 shrink-0">
+            <LeftSidebarContent />
+          </div>
+        )}
 
         {/* Center - Canvas */}
-        <div className="flex-1 flex flex-col overflow-hidden bg-muted/10">
+        <div className="flex-1 flex flex-col overflow-hidden bg-muted/10 min-w-0">
           <ScrollArea className="flex-1">
-            <div className="flex items-center justify-center p-6 min-h-full">
+            <div className="flex items-center justify-center p-4 min-h-full">
               <LabelCanvasEnhanced
                 layout={layout}
                 scale={scale}
@@ -570,12 +701,12 @@ export const LabelEditorEmbed: React.FC = () => {
 
           {/* Sample data editor */}
           {isPreviewMode && (
-            <div className="border-t p-3 bg-background">
+            <div className="border-t p-2 bg-background shrink-0">
               <div className="flex items-center gap-2 mb-2">
                 <Label className="text-xs font-medium">Sample Data</Label>
                 <Badge variant="secondary" className="text-[10px]">Preview</Badge>
               </div>
-              <div className="grid grid-cols-3 md:grid-cols-5 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
                 {(Object.keys(sampleData) as Array<keyof SampleData>).map((key) => (
                   <div key={key}>
                     <Label className="text-[10px] text-muted-foreground capitalize">{key}</Label>
@@ -591,40 +722,12 @@ export const LabelEditorEmbed: React.FC = () => {
           )}
         </div>
 
-        {/* Right sidebar - Properties */}
-        <div className="w-64 border-l bg-muted/20 overflow-y-auto p-3 space-y-3">
-          <PropertiesPanelEnhanced
-            field={selectedField}
-            onUpdateField={handleUpdateField}
-            onRemoveField={handleRemoveField}
-            labelBounds={{ width: layout.widthDots, height: layout.heightDots }}
-            sampleData={sampleData}
-          />
-
-          {/* ZPL Preview - Collapsible */}
-          <Collapsible open={showZplCode} onOpenChange={setShowZplCode}>
-            <Card>
-              <CollapsibleTrigger asChild>
-                <CardHeader className="py-2 px-3 cursor-pointer hover:bg-muted/50">
-                  <CardTitle className="text-xs font-medium flex items-center justify-between">
-                    <span className="flex items-center gap-1.5">
-                      <Code className="w-3.5 h-3.5" />
-                      ZPL Code
-                    </span>
-                    <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showZplCode ? 'rotate-180' : ''}`} />
-                  </CardTitle>
-                </CardHeader>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <CardContent className="px-3 pb-3 pt-0">
-                  <pre className="text-[10px] bg-muted p-2 rounded overflow-auto max-h-32 font-mono leading-tight">
-                    {generatedZpl}
-                  </pre>
-                </CardContent>
-              </CollapsibleContent>
-            </Card>
-          </Collapsible>
-        </div>
+        {/* Right sidebar - Properties (desktop) */}
+        {rightSidebarOpen && (
+          <div className="hidden lg:block w-60 border-l bg-muted/20 overflow-y-auto p-3 space-y-3 shrink-0">
+            <RightSidebarContent />
+          </div>
+        )}
       </div>
     </div>
   );
