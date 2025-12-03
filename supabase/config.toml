@@ -167,3 +167,22 @@ verify_jwt = true
 [functions.shopify-tag-manager]
 verify_jwt = true
 
+# eBay integration functions
+[functions.ebay-auth-init]
+verify_jwt = true
+
+[functions.ebay-auth-callback]
+verify_jwt = false
+
+[functions.ebay-create-listing]
+verify_jwt = true
+
+[functions.ebay-sync-processor]
+verify_jwt = true
+
+[functions.ebay-price-check]
+verify_jwt = true
+
+[functions.ebay-order-webhook]
+verify_jwt = false
+
