@@ -6,72 +6,170 @@
 export function measureTextWidth(
   text: string,
   fontSize: number,
-  fontFamily: string = 'monospace'
+  fontFamily: string = 'sans-serif'
 ): number {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
   if (!ctx) return text.length * fontSize * 0.6;
   
-  ctx.font = `${fontSize}px ${fontFamily}`;
+  ctx.font = `bold ${fontSize}px ${fontFamily}`;
   return ctx.measureText(text).width;
 }
 
 /**
+ * Calculate the MAXIMUM font size that fits text on a single line
+ */
+function getMaxSingleLineFontSize(
+  text: string,
+  boxWidth: number,
+  maxFontSize: number,
+  minFontSize: number,
+  fontFamily: string = 'sans-serif'
+): number {
+  if (!text) return maxFontSize;
+  
+  // Binary search for optimal font size
+  let low = minFontSize;
+  let high = maxFontSize;
+  let bestFit = minFontSize;
+  
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+    const width = measureTextWidth(text, mid, fontFamily);
+    
+    if (width <= boxWidth) {
+      bestFit = mid;
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
+  }
+  
+  return bestFit;
+}
+
+/**
+ * Find best 2-line split and maximum font size for title text
+ */
+function getBestTwoLineSplit(
+  text: string,
+  boxWidth: number,
+  boxHeight: number,
+  maxFontSize: number,
+  minFontSize: number,
+  fontFamily: string = 'sans-serif'
+): { fontSize: number; lines: string[] } {
+  const words = text.trim().split(/\s+/);
+  
+  if (words.length < 2) {
+    // Single word - can't split, just return single line
+    const fontSize = getMaxSingleLineFontSize(text, boxWidth, maxFontSize, minFontSize, fontFamily);
+    return { fontSize, lines: [text.trim()] };
+  }
+  
+  let bestResult = { fontSize: minFontSize, lines: [text.trim()] };
+  
+  // Try all possible split points
+  for (let splitIdx = 1; splitIdx < words.length; splitIdx++) {
+    const line1 = words.slice(0, splitIdx).join(' ');
+    const line2 = words.slice(splitIdx).join(' ');
+    
+    // Find max font that fits both lines
+    const maxFont1 = getMaxSingleLineFontSize(line1, boxWidth, maxFontSize, minFontSize, fontFamily);
+    const maxFont2 = getMaxSingleLineFontSize(line2, boxWidth, maxFontSize, minFontSize, fontFamily);
+    const splitFontSize = Math.min(maxFont1, maxFont2);
+    
+    // Check if 2 lines fit in the box height (with some padding)
+    const lineHeight = splitFontSize * 1.1;
+    const totalHeight = lineHeight * 2;
+    
+    if (totalHeight <= boxHeight && splitFontSize > bestResult.fontSize) {
+      bestResult = { fontSize: splitFontSize, lines: [line1, line2] };
+    }
+  }
+  
+  return bestResult;
+}
+
+interface FitResult {
+  fontSize: number;
+  lines: string[];
+  isTwoLine: boolean;
+}
+
+/**
  * Calculate optimal font size for text to fit in a box
+ * Maximizes font size, using 2 lines if it results in larger text
  */
 export function calculateOptimalFontSize(
   text: string,
   boxWidth: number,
   maxFontSize: number,
   minFontSize: number,
-  fontFamily: string = 'monospace'
-): { fontSize: number; lines: string[]; isTwoLine: boolean } {
+  fontFamily: string = 'sans-serif',
+  allowTwoLines: boolean = false,
+  boxHeight: number = 0
+): FitResult {
   if (!text || text.trim().length === 0) {
     return { fontSize: maxFontSize, lines: [''], isTwoLine: false };
   }
 
   const trimmedText = text.trim();
   
-  // Try single line first, starting from max font size
-  for (let fontSize = maxFontSize; fontSize >= minFontSize; fontSize -= 2) {
-    const width = measureTextWidth(trimmedText, fontSize, fontFamily);
-    if (width <= boxWidth) {
-      return { fontSize, lines: [trimmedText], isTwoLine: false };
-    }
-  }
+  // Get best single-line font size
+  const singleLineFontSize = getMaxSingleLineFontSize(trimmedText, boxWidth, maxFontSize, minFontSize, fontFamily);
   
-  // If single line doesn't fit at min font size, try two lines
-  const words = trimmedText.split(/\s+/);
-  if (words.length >= 2) {
-    // Find the best split point (roughly half the text length)
-    const midPoint = Math.ceil(words.length / 2);
-    const line1 = words.slice(0, midPoint).join(' ');
-    const line2 = words.slice(midPoint).join(' ');
-    
-    // Try to fit both lines
-    for (let fontSize = maxFontSize; fontSize >= minFontSize; fontSize -= 2) {
-      const width1 = measureTextWidth(line1, fontSize, fontFamily);
-      const width2 = measureTextWidth(line2, fontSize, fontFamily);
-      
-      if (width1 <= boxWidth && width2 <= boxWidth) {
-        return { fontSize, lines: [line1, line2], isTwoLine: true };
-      }
+  // If 2 lines not allowed, return single line result
+  if (!allowTwoLines) {
+    if (singleLineFontSize >= minFontSize) {
+      return { fontSize: singleLineFontSize, lines: [trimmedText], isTwoLine: false };
     }
-    
-    // If still doesn't fit, use minimum font size with truncation
+    // Text doesn't fit, truncate
     return { 
       fontSize: minFontSize, 
-      lines: [truncateText(line1, boxWidth, minFontSize), truncateText(line2, boxWidth, minFontSize)], 
-      isTwoLine: true 
+      lines: [truncateText(trimmedText, boxWidth, minFontSize, fontFamily)], 
+      isTwoLine: false 
     };
   }
   
-  // Single word that doesn't fit - truncate
+  // For title (allowTwoLines=true), compare single vs two line options
+  const twoLineResult = getBestTwoLineSplit(trimmedText, boxWidth, boxHeight, maxFontSize, minFontSize, fontFamily);
+  
+  // Use 2 lines if it results in a larger or equal font size
+  if (twoLineResult.lines.length === 2 && twoLineResult.fontSize >= singleLineFontSize) {
+    return { fontSize: twoLineResult.fontSize, lines: twoLineResult.lines, isTwoLine: true };
+  }
+  
+  // Otherwise use single line
+  if (singleLineFontSize >= minFontSize) {
+    return { fontSize: singleLineFontSize, lines: [trimmedText], isTwoLine: false };
+  }
+  
+  // Fallback: try 2 lines even if smaller font
+  if (twoLineResult.fontSize >= minFontSize) {
+    return { fontSize: twoLineResult.fontSize, lines: twoLineResult.lines, isTwoLine: true };
+  }
+  
+  // Last resort: truncate
   return { 
     fontSize: minFontSize, 
-    lines: [truncateText(trimmedText, boxWidth, minFontSize)], 
+    lines: [truncateText(trimmedText, boxWidth, minFontSize, fontFamily)], 
     isTwoLine: false 
   };
+}
+
+/**
+ * Calculate font size for title field - always tries 2 lines for better fit
+ */
+export function calculateTitleFontSize(
+  text: string,
+  boxWidth: number,
+  boxHeight: number,
+  maxFontSize: number,
+  minFontSize: number,
+  fontFamily: string = 'sans-serif'
+): FitResult {
+  return calculateOptimalFontSize(text, boxWidth, maxFontSize, minFontSize, fontFamily, true, boxHeight);
 }
 
 /**
@@ -81,7 +179,7 @@ function truncateText(
   text: string,
   maxWidth: number,
   fontSize: number,
-  fontFamily: string = 'monospace'
+  fontFamily: string = 'sans-serif'
 ): string {
   let truncated = text;
   while (truncated.length > 1 && measureTextWidth(truncated + '…', fontSize, fontFamily) > maxWidth) {
