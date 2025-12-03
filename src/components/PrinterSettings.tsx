@@ -113,9 +113,9 @@ export const PrinterSettings: React.FC = () => {
     setIsPrinting(true);
     
     // Simple test label ZPL - 2" x 1" label
-    // ^LT-30 shifts content up by 30 dots (~1/8")
+    // ^LT-10 shifts content up slightly
     const testZpl = `^XA
-^LT-30
+^LT-10
 ^CF0,30
 ^FO50,20^FDTEST PRINT^FS
 ^CF0,20
