@@ -64,34 +64,44 @@ export function clearConfig(): void {
 
 // Check if local bridge is running
 export async function checkBridgeStatus(): Promise<BridgeStatus> {
+  const url = `${BRIDGE_URL}/status`;
+  console.log('[Bridge] Checking status at:', url);
+  
   try {
-    // Try /status endpoint first, then root
-    const response = await fetch(`${BRIDGE_URL}/status`, {
+    const response = await fetch(url, {
       method: 'GET',
       signal: AbortSignal.timeout(3000)
     });
     
+    console.log('[Bridge] Response status:', response.status);
+    
     if (response.ok) {
       const data = await response.json();
+      console.log('[Bridge] Connected successfully:', data);
       return {
         connected: true,
         version: data.version || 'unknown'
       };
     }
     
+    console.log('[Bridge] Response not OK');
     return { connected: false, error: 'Bridge returned error' };
   } catch (error) {
+    console.log('[Bridge] Fetch error:', error);
+    
     // Fallback: try root URL
     try {
+      console.log('[Bridge] Trying fallback URL:', BRIDGE_URL);
       const rootResponse = await fetch(BRIDGE_URL, {
         method: 'GET',
         signal: AbortSignal.timeout(2000)
       });
       if (rootResponse.ok) {
+        console.log('[Bridge] Fallback connected');
         return { connected: true, version: 'unknown' };
       }
-    } catch {
-      // Both failed
+    } catch (fallbackError) {
+      console.log('[Bridge] Fallback also failed:', fallbackError);
     }
     return { 
       connected: false, 
