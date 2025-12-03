@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Printer, Wifi, WifiOff, RefreshCw, Check, AlertCircle, MapPin, Info, Server, Download, FileText } from 'lucide-react';
+import { Printer, Wifi, WifiOff, RefreshCw, Check, AlertCircle, MapPin, Info, Server, Download, FileText, Scissors, Target, MoveDown, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { usePrinter, type PrinterConfig } from '@/hooks/usePrinter';
 import { zebraService } from '@/lib/printer/zebraService';
@@ -133,6 +133,29 @@ export const PrinterSettings: React.FC = () => {
       toast.error(`Print failed: ${result.error || 'Unknown error'}`);
     }
   };
+
+  const sendCommand = async (command: string, description: string) => {
+    if (!bridgeStatus?.connected) {
+      toast.error('Local bridge not running');
+      return;
+    }
+    if (!printer?.ip) {
+      toast.error('Save printer settings first');
+      return;
+    }
+
+    const result = await zebraService.print(command, printer.ip, printer.port);
+    if (result.success) {
+      toast.success(`${description} command sent`);
+    } else {
+      toast.error(`Failed: ${result.error || 'Unknown error'}`);
+    }
+  };
+
+  const handleCut = () => sendCommand('^XA^CN1^XZ', 'Cut');
+  const handleCalibrate = () => sendCommand('~JC', 'Calibrate');
+  const handleFeedLabel = () => sendCommand('^XA^XZ', 'Feed');
+  const handleCancelJobs = () => sendCommand('~JA', 'Cancel jobs');
 
   return (
     <Card>
@@ -315,6 +338,34 @@ export const PrinterSettings: React.FC = () => {
             </>
           )}
         </div>
+
+        {/* Printer Utilities */}
+        {printer?.ip && bridgeStatus?.connected && (
+          <div className="space-y-2">
+            <Label className="text-sm text-muted-foreground">Printer Utilities</Label>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" onClick={handleFeedLabel}>
+                <MoveDown className="w-4 h-4 mr-1" />
+                Feed Label
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleCalibrate}>
+                <Target className="w-4 h-4 mr-1" />
+                Calibrate
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleCut}>
+                <Scissors className="w-4 h-4 mr-1" />
+                Cut
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleCancelJobs}>
+                <XCircle className="w-4 h-4 mr-1" />
+                Cancel Jobs
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Feed advances one label. Calibrate auto-detects label size. Cut triggers the cutter (if equipped).
+            </p>
+          </div>
+        )}
 
         {/* Info note */}
         <p className="text-xs text-muted-foreground">
