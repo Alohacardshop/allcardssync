@@ -116,6 +116,147 @@ export type Database = {
         }
         Relationships: []
       }
+      ebay_store_config: {
+        Row: {
+          created_at: string
+          default_category_id: string | null
+          default_condition_id: string | null
+          default_fulfillment_policy_id: string | null
+          default_payment_policy_id: string | null
+          default_return_policy_id: string | null
+          default_shipping_policy_id: string | null
+          description_template: string | null
+          ebay_user_id: string | null
+          environment: string
+          id: string
+          is_active: boolean | null
+          location_key: string | null
+          marketplace_id: string
+          oauth_connected_at: string | null
+          store_key: string
+          title_template: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          default_category_id?: string | null
+          default_condition_id?: string | null
+          default_fulfillment_policy_id?: string | null
+          default_payment_policy_id?: string | null
+          default_return_policy_id?: string | null
+          default_shipping_policy_id?: string | null
+          description_template?: string | null
+          ebay_user_id?: string | null
+          environment?: string
+          id?: string
+          is_active?: boolean | null
+          location_key?: string | null
+          marketplace_id?: string
+          oauth_connected_at?: string | null
+          store_key: string
+          title_template?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          default_category_id?: string | null
+          default_condition_id?: string | null
+          default_fulfillment_policy_id?: string | null
+          default_payment_policy_id?: string | null
+          default_return_policy_id?: string | null
+          default_shipping_policy_id?: string | null
+          description_template?: string | null
+          ebay_user_id?: string | null
+          environment?: string
+          id?: string
+          is_active?: boolean | null
+          location_key?: string | null
+          marketplace_id?: string
+          oauth_connected_at?: string | null
+          store_key?: string
+          title_template?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      ebay_sync_queue: {
+        Row: {
+          action: string
+          completed_at: string | null
+          created_at: string
+          created_by: string | null
+          error_message: string | null
+          error_type: string | null
+          id: string
+          inventory_item_id: string
+          max_retries: number | null
+          payload: Json | null
+          processor_heartbeat: string | null
+          processor_id: string | null
+          queue_position: number
+          retry_after: string | null
+          retry_count: number | null
+          started_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          action: string
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          error_message?: string | null
+          error_type?: string | null
+          id?: string
+          inventory_item_id: string
+          max_retries?: number | null
+          payload?: Json | null
+          processor_heartbeat?: string | null
+          processor_id?: string | null
+          queue_position?: number
+          retry_after?: string | null
+          retry_count?: number | null
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          action?: string
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          error_message?: string | null
+          error_type?: string | null
+          id?: string
+          inventory_item_id?: string
+          max_retries?: number | null
+          payload?: Json | null
+          processor_heartbeat?: string | null
+          processor_id?: string | null
+          queue_position?: number
+          retry_after?: string | null
+          retry_count?: number | null
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ebay_sync_queue_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "intake_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ebay_sync_queue_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "stale_lot_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       edge_function_logs: {
         Row: {
           created_at: string
@@ -215,7 +356,14 @@ export type Database = {
           created_by: string | null
           deleted_at: string | null
           deleted_reason: string | null
+          ebay_inventory_item_sku: string | null
+          ebay_listing_id: string | null
+          ebay_listing_url: string | null
+          ebay_offer_id: string | null
           ebay_price_check: Json | null
+          ebay_sync_error: string | null
+          ebay_sync_snapshot: Json | null
+          ebay_sync_status: string | null
           grade: string | null
           grading_company: string
           grading_data: Json | null
@@ -223,12 +371,15 @@ export type Database = {
           image_urls: Json | null
           intake_batch_id: string | null
           label_snapshot: Json | null
+          last_ebay_synced_at: string | null
           last_shopify_correlation_id: string | null
           last_shopify_location_gid: string | null
           last_shopify_removal_error: string | null
           last_shopify_store_key: string | null
           last_shopify_sync_error: string | null
           last_shopify_synced_at: string | null
+          list_on_ebay: boolean | null
+          list_on_shopify: boolean | null
           lot_id: string | null
           lot_number: string
           main_category: string | null
@@ -289,7 +440,14 @@ export type Database = {
           created_by?: string | null
           deleted_at?: string | null
           deleted_reason?: string | null
+          ebay_inventory_item_sku?: string | null
+          ebay_listing_id?: string | null
+          ebay_listing_url?: string | null
+          ebay_offer_id?: string | null
           ebay_price_check?: Json | null
+          ebay_sync_error?: string | null
+          ebay_sync_snapshot?: Json | null
+          ebay_sync_status?: string | null
           grade?: string | null
           grading_company?: string
           grading_data?: Json | null
@@ -297,12 +455,15 @@ export type Database = {
           image_urls?: Json | null
           intake_batch_id?: string | null
           label_snapshot?: Json | null
+          last_ebay_synced_at?: string | null
           last_shopify_correlation_id?: string | null
           last_shopify_location_gid?: string | null
           last_shopify_removal_error?: string | null
           last_shopify_store_key?: string | null
           last_shopify_sync_error?: string | null
           last_shopify_synced_at?: string | null
+          list_on_ebay?: boolean | null
+          list_on_shopify?: boolean | null
           lot_id?: string | null
           lot_number?: string
           main_category?: string | null
@@ -363,7 +524,14 @@ export type Database = {
           created_by?: string | null
           deleted_at?: string | null
           deleted_reason?: string | null
+          ebay_inventory_item_sku?: string | null
+          ebay_listing_id?: string | null
+          ebay_listing_url?: string | null
+          ebay_offer_id?: string | null
           ebay_price_check?: Json | null
+          ebay_sync_error?: string | null
+          ebay_sync_snapshot?: Json | null
+          ebay_sync_status?: string | null
           grade?: string | null
           grading_company?: string
           grading_data?: Json | null
@@ -371,12 +539,15 @@ export type Database = {
           image_urls?: Json | null
           intake_batch_id?: string | null
           label_snapshot?: Json | null
+          last_ebay_synced_at?: string | null
           last_shopify_correlation_id?: string | null
           last_shopify_location_gid?: string | null
           last_shopify_removal_error?: string | null
           last_shopify_store_key?: string | null
           last_shopify_sync_error?: string | null
           last_shopify_synced_at?: string | null
+          list_on_ebay?: boolean | null
+          list_on_shopify?: boolean | null
           lot_id?: string | null
           lot_number?: string
           main_category?: string | null
@@ -2057,6 +2228,10 @@ export type Database = {
           user_id_in?: string
         }
         Returns: string
+      }
+      add_to_ebay_sync_queue: {
+        Args: { item_ids: string[]; sync_action?: string }
+        Returns: Json
       }
       add_to_shopify_sync_queue: {
         Args: { item_ids: string[]; sync_action?: string }
