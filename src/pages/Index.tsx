@@ -21,7 +21,7 @@ export default function Index() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-background pt-20">
+    <div className="min-h-screen bg-background">
       <div className="container mx-auto p-4">
         {/* TAB NAVIGATION - Collectible Type (Cards/Comics) */}
         <Tabs value={collectibleType} onValueChange={(value) => setCollectibleType(value as 'cards' | 'comics')} className="w-full">
