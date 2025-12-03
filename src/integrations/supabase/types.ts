@@ -116,6 +116,141 @@ export type Database = {
         }
         Relationships: []
       }
+      ebay_fulfillment_policies: {
+        Row: {
+          created_at: string
+          description: string | null
+          handling_time: Json | null
+          id: string
+          is_default: boolean | null
+          marketplace_id: string
+          name: string
+          policy_id: string
+          shipping_options: Json | null
+          store_key: string
+          synced_at: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          handling_time?: Json | null
+          id?: string
+          is_default?: boolean | null
+          marketplace_id: string
+          name: string
+          policy_id: string
+          shipping_options?: Json | null
+          store_key: string
+          synced_at?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          handling_time?: Json | null
+          id?: string
+          is_default?: boolean | null
+          marketplace_id?: string
+          name?: string
+          policy_id?: string
+          shipping_options?: Json | null
+          store_key?: string
+          synced_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      ebay_payment_policies: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_default: boolean | null
+          marketplace_id: string
+          name: string
+          payment_methods: Json | null
+          policy_id: string
+          store_key: string
+          synced_at: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_default?: boolean | null
+          marketplace_id: string
+          name: string
+          payment_methods?: Json | null
+          policy_id: string
+          store_key: string
+          synced_at?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_default?: boolean | null
+          marketplace_id?: string
+          name?: string
+          payment_methods?: Json | null
+          policy_id?: string
+          store_key?: string
+          synced_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      ebay_return_policies: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_default: boolean | null
+          marketplace_id: string
+          name: string
+          policy_id: string
+          refund_method: string | null
+          return_period: string | null
+          returns_accepted: boolean | null
+          store_key: string
+          synced_at: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_default?: boolean | null
+          marketplace_id: string
+          name: string
+          policy_id: string
+          refund_method?: string | null
+          return_period?: string | null
+          returns_accepted?: boolean | null
+          store_key: string
+          synced_at?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_default?: boolean | null
+          marketplace_id?: string
+          name?: string
+          policy_id?: string
+          refund_method?: string | null
+          return_period?: string | null
+          returns_accepted?: boolean | null
+          store_key?: string
+          synced_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       ebay_store_config: {
         Row: {
           created_at: string

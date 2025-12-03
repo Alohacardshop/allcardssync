@@ -6,11 +6,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { ArrowLeft, ExternalLink, CheckCircle, AlertCircle, Loader2, Settings, Link2 } from 'lucide-react';
+import { ArrowLeft, ExternalLink, CheckCircle, AlertCircle, Loader2, Settings, Link2, RefreshCw } from 'lucide-react';
 
 interface EbayStoreConfig {
   id: string;
@@ -29,18 +28,41 @@ interface EbayStoreConfig {
   description_template: string | null;
 }
 
+interface EbayPolicy {
+  id: string;
+  store_key: string;
+  policy_id: string;
+  name: string;
+  description: string | null;
+  is_default: boolean;
+  synced_at: string;
+}
+
 export default function EbaySettings() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [connecting, setConnecting] = useState(false);
+  const [syncingPolicies, setSyncingPolicies] = useState(false);
   const [configs, setConfigs] = useState<EbayStoreConfig[]>([]);
   const [selectedConfig, setSelectedConfig] = useState<EbayStoreConfig | null>(null);
   const [newStoreKey, setNewStoreKey] = useState('');
+  
+  // Policy states
+  const [fulfillmentPolicies, setFulfillmentPolicies] = useState<EbayPolicy[]>([]);
+  const [paymentPolicies, setPaymentPolicies] = useState<EbayPolicy[]>([]);
+  const [returnPolicies, setReturnPolicies] = useState<EbayPolicy[]>([]);
+  const [policiesLastSynced, setPoliciesLastSynced] = useState<string | null>(null);
 
   useEffect(() => {
     loadConfigs();
   }, []);
+
+  useEffect(() => {
+    if (selectedConfig?.store_key) {
+      loadPolicies(selectedConfig.store_key);
+    }
+  }, [selectedConfig?.store_key]);
 
   const loadConfigs = async () => {
     setLoading(true);
@@ -65,6 +87,74 @@ export default function EbaySettings() {
       toast.error('Failed to load eBay configurations: ' + error.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadPolicies = async (storeKey: string) => {
+    try {
+      const [fulfillment, payment, returns] = await Promise.all([
+        supabase
+          .from('ebay_fulfillment_policies')
+          .select('*')
+          .eq('store_key', storeKey)
+          .order('name'),
+        supabase
+          .from('ebay_payment_policies')
+          .select('*')
+          .eq('store_key', storeKey)
+          .order('name'),
+        supabase
+          .from('ebay_return_policies')
+          .select('*')
+          .eq('store_key', storeKey)
+          .order('name')
+      ]);
+
+      if (fulfillment.data) setFulfillmentPolicies(fulfillment.data);
+      if (payment.data) setPaymentPolicies(payment.data);
+      if (returns.data) setReturnPolicies(returns.data);
+
+      // Find last synced time
+      const allPolicies = [
+        ...(fulfillment.data || []),
+        ...(payment.data || []),
+        ...(returns.data || [])
+      ];
+      
+      if (allPolicies.length > 0) {
+        const latestSync = allPolicies.reduce((latest, p) => {
+          const syncDate = new Date(p.synced_at);
+          return syncDate > latest ? syncDate : latest;
+        }, new Date(0));
+        
+        if (latestSync.getTime() > 0) {
+          setPoliciesLastSynced(latestSync.toISOString());
+        }
+      } else {
+        setPoliciesLastSynced(null);
+      }
+    } catch (error: any) {
+      console.error('Failed to load policies:', error);
+    }
+  };
+
+  const syncPolicies = async () => {
+    if (!selectedConfig) return;
+
+    setSyncingPolicies(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('ebay-sync-policies', {
+        body: { store_key: selectedConfig.store_key }
+      });
+
+      if (error) throw error;
+
+      toast.success(data.message || 'Policies synced successfully');
+      await loadPolicies(selectedConfig.store_key);
+    } catch (error: any) {
+      toast.error('Failed to sync policies: ' + error.message);
+    } finally {
+      setSyncingPolicies(false);
     }
   };
 
@@ -145,10 +235,8 @@ export default function EbaySettings() {
       if (error) throw error;
       if (!data.auth_url) throw new Error('No auth URL returned');
 
-      // Open eBay auth in new window
       const authWindow = window.open(data.auth_url, 'ebay_auth', 'width=600,height=700');
       
-      // Poll for window close and reload configs
       const pollTimer = setInterval(() => {
         if (authWindow?.closed) {
           clearInterval(pollTimer);
@@ -158,7 +246,6 @@ export default function EbaySettings() {
         }
       }, 1000);
 
-      // Timeout after 5 minutes
       setTimeout(() => {
         clearInterval(pollTimer);
         setConnecting(false);
@@ -354,6 +441,112 @@ export default function EbaySettings() {
               </CardContent>
             </Card>
 
+            {/* Business Policies */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Business Policies</CardTitle>
+                    <CardDescription>
+                      Sync and select your eBay shipping, payment, and return policies
+                    </CardDescription>
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    onClick={syncPolicies}
+                    disabled={syncingPolicies || !selectedConfig.oauth_connected_at}
+                  >
+                    {syncingPolicies ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Syncing...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                        Sync Policies
+                      </>
+                    )}
+                  </Button>
+                </div>
+                {policiesLastSynced && (
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Last synced: {new Date(policiesLastSynced).toLocaleString()}
+                  </p>
+                )}
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {!selectedConfig.oauth_connected_at ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    Connect your eBay account to sync and select business policies
+                  </p>
+                ) : fulfillmentPolicies.length === 0 && paymentPolicies.length === 0 && returnPolicies.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    No policies synced yet. Click "Sync Policies" to load your eBay business policies.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-1 gap-4">
+                    <div className="space-y-2">
+                      <Label>Fulfillment Policy (Shipping)</Label>
+                      <Select
+                        value={selectedConfig.default_fulfillment_policy_id || ''}
+                        onValueChange={(v) => updateConfig({ default_fulfillment_policy_id: v || null })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a fulfillment policy" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {fulfillmentPolicies.map((policy) => (
+                            <SelectItem key={policy.policy_id} value={policy.policy_id}>
+                              {policy.name} {policy.is_default && '(Default)'}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Payment Policy</Label>
+                      <Select
+                        value={selectedConfig.default_payment_policy_id || ''}
+                        onValueChange={(v) => updateConfig({ default_payment_policy_id: v || null })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a payment policy" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {paymentPolicies.map((policy) => (
+                            <SelectItem key={policy.policy_id} value={policy.policy_id}>
+                              {policy.name} {policy.is_default && '(Default)'}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Return Policy</Label>
+                      <Select
+                        value={selectedConfig.default_return_policy_id || ''}
+                        onValueChange={(v) => updateConfig({ default_return_policy_id: v || null })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a return policy" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {returnPolicies.map((policy) => (
+                            <SelectItem key={policy.policy_id} value={policy.policy_id}>
+                              {policy.name} {policy.is_default && '(Default)'}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
             {/* Listing Defaults */}
             <Card>
               <CardHeader>
@@ -361,52 +554,23 @@ export default function EbaySettings() {
                 <CardDescription>Default settings for new eBay listings</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Default Category ID</Label>
-                    <Input
-                      placeholder="e.g., 183454 (Trading Cards)"
-                      value={selectedConfig.default_category_id || ''}
-                      onChange={(e) => updateConfig({ default_category_id: e.target.value || null })}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      <a 
-                        href="https://www.isoldwhat.com/" 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="text-primary hover:underline"
-                      >
-                        Find eBay Category IDs
-                      </a>
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Fulfillment Policy ID</Label>
-                    <Input
-                      placeholder="Your eBay fulfillment policy ID"
-                      value={selectedConfig.default_fulfillment_policy_id || ''}
-                      onChange={(e) => updateConfig({ default_fulfillment_policy_id: e.target.value || null })}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Payment Policy ID</Label>
-                    <Input
-                      placeholder="Your eBay payment policy ID"
-                      value={selectedConfig.default_payment_policy_id || ''}
-                      onChange={(e) => updateConfig({ default_payment_policy_id: e.target.value || null })}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Return Policy ID</Label>
-                    <Input
-                      placeholder="Your eBay return policy ID"
-                      value={selectedConfig.default_return_policy_id || ''}
-                      onChange={(e) => updateConfig({ default_return_policy_id: e.target.value || null })}
-                    />
-                  </div>
+                <div className="space-y-2">
+                  <Label>Default Category ID</Label>
+                  <Input
+                    placeholder="e.g., 183454 (Trading Cards)"
+                    value={selectedConfig.default_category_id || ''}
+                    onChange={(e) => updateConfig({ default_category_id: e.target.value || null })}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    <a 
+                      href="https://www.isoldwhat.com/" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-primary hover:underline"
+                    >
+                      Find eBay Category IDs
+                    </a>
+                  </p>
                 </div>
 
                 <div className="space-y-2">
