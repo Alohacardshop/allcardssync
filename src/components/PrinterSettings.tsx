@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Printer, Wifi, WifiOff, RefreshCw, Check, AlertCircle, MapPin, Info, Server, Terminal } from 'lucide-react';
+import { Printer, Wifi, WifiOff, RefreshCw, Check, AlertCircle, MapPin, Info, Server, Terminal, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { usePrinter, type PrinterConfig } from '@/hooks/usePrinter';
 import { useStore } from '@/contexts/StoreContext';
@@ -138,15 +138,20 @@ export const PrinterSettings: React.FC = () => {
               <strong>Local Print Bridge Required</strong>
               <p className="mt-2 text-sm">
                 The local print bridge must be running on this computer to print labels.
-                Start it by running:
               </p>
-              <div className="mt-2 p-2 bg-background rounded font-mono text-xs flex items-center gap-2">
-                <Terminal className="w-4 h-4" />
-                <code>node rollo-local-bridge/server.js</code>
+              <div className="mt-3 flex flex-col gap-2">
+                <a 
+                  href="/ZebraPrintBridge.exe" 
+                  download="ZebraPrintBridge.exe"
+                  className="inline-flex items-center gap-2 px-3 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90 w-fit"
+                >
+                  <Download className="w-4 h-4" />
+                  Download ZebraPrintBridge.exe
+                </a>
+                <p className="text-xs text-muted-foreground">
+                  Download and run the bridge on your computer. Keep it running while printing.
+                </p>
               </div>
-              <p className="mt-2 text-sm">
-                The bridge connects your browser to local network printers.
-              </p>
             </AlertDescription>
           </Alert>
         )}
