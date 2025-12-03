@@ -304,17 +304,136 @@ export default function EbayApp() {
 
           {/* Settings Tab */}
           <TabsContent value="settings" className="space-y-6">
-            {/* Store Selection / Creation */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Settings className="h-5 w-5" />
-                  eBay Store Configuration
-                </CardTitle>
-                <CardDescription>Select or create an eBay store configuration</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {configs.length > 0 && (
+            {/* Progress Indicator */}
+            {configs.length > 0 && selectedConfig && (
+              <Card className="border-primary/20 bg-primary/5">
+                <CardContent className="py-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-6">
+                      <div className="flex items-center gap-2">
+                        <div className="h-8 w-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-medium">
+                          <CheckCircle className="h-5 w-5" />
+                        </div>
+                        <span className="text-sm font-medium">1. Config Created</span>
+                      </div>
+                      <div className="h-px w-8 bg-border" />
+                      <div className="flex items-center gap-2">
+                        <div className={`h-8 w-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                          selectedConfig.oauth_connected_at 
+                            ? 'bg-primary text-primary-foreground' 
+                            : 'bg-muted text-muted-foreground'
+                        }`}>
+                          {selectedConfig.oauth_connected_at ? <CheckCircle className="h-5 w-5" /> : '2'}
+                        </div>
+                        <span className={`text-sm ${selectedConfig.oauth_connected_at ? 'font-medium' : 'text-muted-foreground'}`}>
+                          2. eBay Connected
+                        </span>
+                      </div>
+                      <div className="h-px w-8 bg-border" />
+                      <div className="flex items-center gap-2">
+                        <div className={`h-8 w-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                          fulfillmentPolicies.length > 0 
+                            ? 'bg-primary text-primary-foreground' 
+                            : 'bg-muted text-muted-foreground'
+                        }`}>
+                          {fulfillmentPolicies.length > 0 ? <CheckCircle className="h-5 w-5" /> : '3'}
+                        </div>
+                        <span className={`text-sm ${fulfillmentPolicies.length > 0 ? 'font-medium' : 'text-muted-foreground'}`}>
+                          3. Policies Synced
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Welcome/Onboarding when no configs */}
+            {configs.length === 0 ? (
+              <Card className="border-primary/30">
+                <CardHeader className="text-center pb-2">
+                  <div className="mx-auto mb-4 h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
+                    <ShoppingCart className="h-8 w-8 text-primary" />
+                  </div>
+                  <CardTitle className="text-2xl">Welcome to eBay Integration</CardTitle>
+                  <CardDescription className="text-base">
+                    Connect your eBay account to start listing items directly from your inventory
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {/* Setup Steps */}
+                  <div className="grid gap-4 py-4">
+                    <div className="flex items-start gap-4 p-4 rounded-lg bg-muted/50">
+                      <div className="h-8 w-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold shrink-0">
+                        1
+                      </div>
+                      <div>
+                        <p className="font-medium">Create Store Configuration</p>
+                        <p className="text-sm text-muted-foreground">
+                          Set up a configuration to link your inventory with eBay
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-4 p-4 rounded-lg bg-muted/30">
+                      <div className="h-8 w-8 rounded-full bg-muted text-muted-foreground flex items-center justify-center text-sm font-bold shrink-0">
+                        2
+                      </div>
+                      <div>
+                        <p className="font-medium text-muted-foreground">Connect eBay Account</p>
+                        <p className="text-sm text-muted-foreground">
+                          Authorize access to your eBay seller account
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-4 p-4 rounded-lg bg-muted/30">
+                      <div className="h-8 w-8 rounded-full bg-muted text-muted-foreground flex items-center justify-center text-sm font-bold shrink-0">
+                        3
+                      </div>
+                      <div>
+                        <p className="font-medium text-muted-foreground">Sync Business Policies</p>
+                        <p className="text-sm text-muted-foreground">
+                          Import your shipping, payment, and return policies
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  {/* Create First Config */}
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="store-key">Store Key</Label>
+                      <p className="text-sm text-muted-foreground">
+                        A unique identifier for this eBay configuration (e.g., "hawaii", "main", "primary")
+                      </p>
+                      <div className="flex gap-2">
+                        <Input
+                          id="store-key"
+                          placeholder="Enter store key..."
+                          value={newStoreKey}
+                          onChange={(e) => setNewStoreKey(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && newStoreKey.trim() && createConfig()}
+                        />
+                        <Button onClick={createConfig} disabled={!newStoreKey.trim()} size="lg">
+                          Get Started
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
+              /* Store Selection / Creation when configs exist */
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Settings className="h-5 w-5" />
+                    eBay Store Configuration
+                  </CardTitle>
+                  <CardDescription>Select or create an eBay store configuration</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
                   <div className="space-y-2">
                     <Label>Select Store</Label>
                     <Select
@@ -337,22 +456,25 @@ export default function EbayApp() {
                       </SelectContent>
                     </Select>
                   </div>
-                )}
 
-                <Separator />
+                  <Separator />
 
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="New store key (e.g., 'main', 'secondary')"
-                    value={newStoreKey}
-                    onChange={(e) => setNewStoreKey(e.target.value)}
-                  />
-                  <Button onClick={createConfig} disabled={!newStoreKey.trim()}>
-                    Create New
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+                  <div className="space-y-2">
+                    <Label className="text-sm text-muted-foreground">Add Another Store</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="New store key (e.g., 'secondary')"
+                        value={newStoreKey}
+                        onChange={(e) => setNewStoreKey(e.target.value)}
+                      />
+                      <Button onClick={createConfig} disabled={!newStoreKey.trim()} variant="outline">
+                        Create New
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {selectedConfig && (
               <>
