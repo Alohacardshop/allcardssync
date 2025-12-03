@@ -2,10 +2,11 @@ import React, { memo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Trash2, Package, Calendar, DollarSign, Eye, EyeOff, FileText, Tag, Printer, ExternalLink, RotateCcw, Loader2, CheckSquare, Square, CheckCircle } from 'lucide-react';
+import { Trash2, Package, Calendar, DollarSign, Eye, EyeOff, FileText, Tag, Printer, ExternalLink, RotateCcw, Loader2, CheckSquare, Square, CheckCircle, ShoppingBag } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 import { EbayPriceComparison } from '@/components/inventory/EbayPriceComparison';
+import { EbayStatusBadge } from '@/components/inventory/EbayStatusBadge';
 import { checkEbayPrice, generateEbaySearchQuery } from '@/lib/ebayPriceCheck';
 import { toast } from 'sonner';
 import { 
@@ -16,6 +17,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useEbayListing } from '@/hooks/useEbayListing';
 import type { InventoryItem } from '@/types/inventory';
 
 // Helper function outside component to prevent re-creation on every render
@@ -92,6 +94,7 @@ export const InventoryItemCard = memo(({
   onSyncDetails
 }: InventoryItemCardProps) => {
   const queryClient = useQueryClient();
+  const { toggleListOnEbay, isToggling } = useEbayListing();
 
   // Prefetch item details on hover for instant expansion
   const handleMouseEnter = () => {
@@ -219,12 +222,19 @@ export const InventoryItemCard = memo(({
               <CardTitle className="text-sm font-medium truncate">
                 {generateTitle(item)}
               </CardTitle>
-              <div className="flex items-center gap-2 mt-1">
+              <div className="flex items-center gap-2 mt-1 flex-wrap">
                 <span className="text-xs text-muted-foreground font-mono">
                   {item.sku}
                 </span>
                 {getStatusBadge(item)}
                 {getPrintStatusBadge(item)}
+                <EbayStatusBadge
+                  syncStatus={item.ebay_sync_status}
+                  listingId={item.ebay_listing_id}
+                  listingUrl={item.ebay_listing_url}
+                  syncError={item.ebay_sync_error}
+                  listOnEbay={item.list_on_ebay}
+                />
               </div>
             </div>
           </div>
@@ -381,6 +391,33 @@ export const InventoryItemCard = memo(({
             </Button>
           )}
           
+          {/* eBay toggle button */}
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant={item.list_on_ebay ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => toggleListOnEbay(item.id, item.list_on_ebay || false)}
+                  disabled={isToggling === item.id}
+                  className={cn(
+                    item.list_on_ebay && "bg-blue-600 hover:bg-blue-700"
+                  )}
+                >
+                  {isToggling === item.id ? (
+                    <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                  ) : (
+                    <ShoppingBag className="h-3 w-3 mr-1" />
+                  )}
+                  eBay
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{item.list_on_ebay ? 'Remove from eBay' : 'Mark for eBay listing'}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          
           <Button
             variant="ghost"
             size="sm"
@@ -401,6 +438,9 @@ export const InventoryItemCard = memo(({
     prevProps.item.price === nextProps.item.price &&
     prevProps.item.shopify_sync_status === nextProps.item.shopify_sync_status &&
     prevProps.item.printed_at === nextProps.item.printed_at &&
+    prevProps.item.list_on_ebay === nextProps.item.list_on_ebay &&
+    prevProps.item.ebay_sync_status === nextProps.item.ebay_sync_status &&
+    prevProps.item.ebay_listing_id === nextProps.item.ebay_listing_id &&
     prevProps.isSelected === nextProps.isSelected &&
     prevProps.isExpanded === nextProps.isExpanded &&
     prevProps.syncingRowId === nextProps.syncingRowId &&

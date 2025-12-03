@@ -18,6 +18,16 @@ export interface InventoryItem extends IntakeItem {
   last_shopify_synced_at?: string | null;
   last_shopify_correlation_id?: string | null;
   
+  // eBay listing fields
+  list_on_ebay?: boolean | null;
+  ebay_listing_id?: string | null;
+  ebay_offer_id?: string | null;
+  ebay_inventory_item_sku?: string | null;
+  ebay_sync_status?: 'pending' | 'queued' | 'processing' | 'synced' | 'error' | null;
+  ebay_sync_error?: string | null;
+  ebay_listing_url?: string | null;
+  last_ebay_synced_at?: string | null;
+  
   // eBay price check data
   ebay_price_check?: {
     checked_at: string;

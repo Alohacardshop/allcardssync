@@ -22,6 +22,7 @@ import { getDirectPrinterConfig } from '@/hooks/usePrinter';
 import { sendGradedToShopify, sendRawToShopify } from '@/hooks/useShopifySend';
 import { useBatchSendToShopify } from '@/hooks/useBatchSendToShopify';
 import { useShopifyResync } from '@/hooks/useShopifyResync';
+import { useEbayListing } from '@/hooks/useEbayListing';
 import { useDebounce } from '@/hooks/useDebounce';
 import { useLoadingStateManager } from '@/lib/loading/LoadingStateManager';
 import { InventorySkeleton } from '@/components/SmartLoadingSkeleton';
@@ -275,6 +276,7 @@ const Inventory = () => {
   const { sendChunkedBatchToShopify, isSending: isBatchSending, progress } = useBatchSendToShopify();
   const { settings: cutterSettings } = useCutterSettings();
   const { resyncAll, resyncSelected, isResyncing } = useShopifyResync();
+  const { bulkToggleEbay } = useEbayListing();
   const queryClient = useQueryClient();
   
   // Get user ID for current batch
@@ -2359,6 +2361,10 @@ const Inventory = () => {
                     const selectedItemsArray = filteredItems.filter(item => selectedItems.has(item.id));
                     setSelectedItemsForDeletion(selectedItemsArray);
                     setShowDeleteDialog(true);
+                  }}
+                  onBulkToggleEbay={(enable) => {
+                    const selectedIds = Array.from(selectedItems);
+                    bulkToggleEbay(selectedIds, enable);
                   }}
                 />
 
