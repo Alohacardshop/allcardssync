@@ -3,7 +3,7 @@
  * Uses rollo-local-bridge on localhost:17777 for all printer operations
  */
 
-const BRIDGE_URL = 'http://localhost:17777';
+const BRIDGE_URL = 'http://localhost:3001';
 const STORAGE_KEY = 'zebra-printer-config';
 const DEFAULT_PORT = 9100;
 
@@ -141,7 +141,7 @@ export async function print(zpl: string, ip?: string, port?: number): Promise<Pr
     if (error instanceof Error && error.message.includes('Failed to fetch')) {
       return { 
         success: false, 
-        error: 'Local print bridge not running. Start the bridge service on port 17777.' 
+        error: 'Local print bridge not running. Start ZebraPrintBridge.exe on this computer.' 
       };
     }
     return { 
@@ -172,7 +172,7 @@ export async function printToSystemPrinter(zpl: string, printerName: string, cop
     if (error instanceof Error && error.message.includes('Failed to fetch')) {
       return { 
         success: false, 
-        error: 'Local print bridge not running. Start the bridge service on port 17777.' 
+        error: 'Local print bridge not running. Start ZebraPrintBridge.exe on this computer.' 
       };
     }
     return { 
