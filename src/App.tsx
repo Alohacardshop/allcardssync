@@ -39,6 +39,7 @@ const PendingNotifications = React.lazy(() => import("./pages/PendingNotificatio
 const GradedIntake = React.lazy(() => import("./pages/intake/GradedIntake"));
 const BulkIntake = React.lazy(() => import("./pages/intake/BulkIntake"));
 const ShopifyBackfill = React.lazy(() => import("./pages/Admin/ShopifyBackfill"));
+const EbaySettings = React.lazy(() => import("./pages/EbaySettings"));
 import { GlobalKeyboardHandler } from "./components/GlobalKeyboardHandler";
 import { FloatingActionButton } from "./components/FloatingActionButton";
 import { PerformanceMonitor } from "./components/PerformanceMonitor";
@@ -124,6 +125,7 @@ const App = () => (
                             <Route path="/admin/notifications/discord" element={<AdminGuard><DiscordNotifications /></AdminGuard>} />
                             <Route path="/admin/notifications/pending" element={<AdminGuard><PendingNotifications /></AdminGuard>} />
                             <Route path="/admin/shopify-backfill" element={<AdminGuard><ShopifyBackfill /></AdminGuard>} />
+                            <Route path="/admin/ebay-settings" element={<AdminGuard><EbaySettings /></AdminGuard>} />
                             
                             {/* Other Pages */}
                             <Route path="/dashboard" element={<ErrorBoundaryWrapper componentName="Dashboard"><DashboardPage /></ErrorBoundaryWrapper>} />
