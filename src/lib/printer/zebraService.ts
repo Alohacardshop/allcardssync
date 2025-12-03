@@ -65,7 +65,8 @@ export function clearConfig(): void {
 // Check if local bridge is running
 export async function checkBridgeStatus(): Promise<BridgeStatus> {
   try {
-    const response = await fetch(BRIDGE_URL, {
+    // Try /status endpoint first, then root
+    const response = await fetch(`${BRIDGE_URL}/status`, {
       method: 'GET',
       signal: AbortSignal.timeout(3000)
     });
@@ -80,6 +81,18 @@ export async function checkBridgeStatus(): Promise<BridgeStatus> {
     
     return { connected: false, error: 'Bridge returned error' };
   } catch (error) {
+    // Fallback: try root URL
+    try {
+      const rootResponse = await fetch(BRIDGE_URL, {
+        method: 'GET',
+        signal: AbortSignal.timeout(2000)
+      });
+      if (rootResponse.ok) {
+        return { connected: true, version: 'unknown' };
+      }
+    } catch {
+      // Both failed
+    }
     return { 
       connected: false, 
       error: error instanceof Error ? error.message : 'Bridge not running'
