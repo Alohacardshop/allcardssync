@@ -1,15 +1,13 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import {
   Save,
   Download,
@@ -17,21 +15,19 @@ import {
   Edit3,
   Grid3X3,
   Printer,
-  ZoomIn,
-  ZoomOut,
   RotateCcw,
   Code,
   Copy,
   ChevronDown,
+  ChevronUp,
   Trash2,
   Star,
   Plus,
-  PanelLeftClose,
-  PanelRightClose,
   Maximize2,
   Minimize2,
+  Layers,
+  X,
   Settings2,
-  Palette,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { LabelCanvasEnhanced } from './LabelCanvasEnhanced';
@@ -58,17 +54,17 @@ export const LabelEditorEmbed: React.FC = () => {
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [showGrid, setShowGrid] = useState(true);
-  const [scale, setScale] = useState(3);
+  const [scale, setScale] = useState(2);
   const [sampleData, setSampleData] = useState<SampleData>(DEFAULT_SAMPLE_DATA);
   const [templateName, setTemplateName] = useState(layout.name);
   const [showZplCode, setShowZplCode] = useState(false);
   const [savedTemplates, setSavedTemplates] = useState<SavedTemplate[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
-  const [leftSidebarOpen, setLeftSidebarOpen] = useState(true);
-  const [rightSidebarOpen, setRightSidebarOpen] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showFieldPalette, setShowFieldPalette] = useState(false);
   
+  const canvasContainerRef = useRef<HTMLDivElement>(null);
   const { print, isLoading: isPrinting, isConnected } = usePrinter();
 
   const selectedField = layout.fields.find(f => f.id === selectedFieldId) || null;
@@ -76,6 +72,25 @@ export const LabelEditorEmbed: React.FC = () => {
   // Generate ZPL for preview
   const generatedZpl = generateZplFromLayout(layout, sampleData);
   const zplTemplate = generateZplTemplate(layout);
+
+  // Auto-fit scale based on container width
+  useEffect(() => {
+    const calculateScale = () => {
+      if (!canvasContainerRef.current) return;
+      const containerWidth = canvasContainerRef.current.clientWidth - 48; // padding
+      const containerHeight = canvasContainerRef.current.clientHeight - 48;
+      
+      const maxScaleW = containerWidth / layout.widthDots;
+      const maxScaleH = containerHeight / layout.heightDots;
+      const optimalScale = Math.min(maxScaleW, maxScaleH, 2.5);
+      
+      setScale(Math.max(1.5, Math.min(2.5, optimalScale)));
+    };
+
+    calculateScale();
+    window.addEventListener('resize', calculateScale);
+    return () => window.removeEventListener('resize', calculateScale);
+  }, [layout.widthDots, layout.heightDots, isFullscreen]);
 
   // Load templates on mount
   useEffect(() => {
@@ -93,7 +108,7 @@ export const LabelEditorEmbed: React.FC = () => {
       if (error) throw error;
 
       const templates: SavedTemplate[] = (data || [])
-        .filter(t => (t.canvas as any)?.layout) // Only visual layouts
+        .filter(t => (t.canvas as any)?.layout)
         .map(t => ({
           id: t.id,
           name: t.name,
@@ -104,7 +119,6 @@ export const LabelEditorEmbed: React.FC = () => {
 
       setSavedTemplates(templates);
 
-      // Auto-load default template
       const defaultTemplate = templates.find(t => t.is_default);
       if (defaultTemplate) {
         setLayout(defaultTemplate.layout);
@@ -182,6 +196,7 @@ export const LabelEditorEmbed: React.FC = () => {
       updatedAt: new Date().toISOString(),
     }));
     setSelectedFieldId(newField.id);
+    setShowFieldPalette(false);
   }, []);
 
   const handleRemoveField = useCallback((fieldId: string) => {
@@ -387,176 +402,76 @@ export const LabelEditorEmbed: React.FC = () => {
   };
 
   const currentIsDefault = savedTemplates.find(t => t.id === selectedTemplateId)?.is_default;
-
-  // Left sidebar content (reusable for both inline and sheet)
-  const LeftSidebarContent = () => (
-    <>
-      <FieldPalette
-        layout={layout}
-        onToggleField={handleToggleField}
-        onAddField={handleAddField}
-      />
-
-      {/* Template actions */}
-      <Card className="mt-4">
-        <CardHeader className="py-2 px-3">
-          <CardTitle className="text-xs font-medium text-muted-foreground">Template Actions</CardTitle>
-        </CardHeader>
-        <CardContent className="p-2 pt-0 space-y-1.5">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleSaveAsNew}
-            className="w-full justify-start h-7 text-xs"
-          >
-            <Plus className="w-3 h-3 mr-1.5" />
-            Save as New
-          </Button>
-          {selectedTemplateId && (
-            <>
-              <Button
-                variant={currentIsDefault ? 'secondary' : 'outline'}
-                size="sm"
-                onClick={handleSetDefault}
-                className="w-full justify-start h-7 text-xs"
-                disabled={currentIsDefault}
-              >
-                <Star className={`w-3 h-3 mr-1.5 ${currentIsDefault ? 'fill-current' : ''}`} />
-                {currentIsDefault ? 'Default' : 'Set Default'}
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleDeleteTemplate}
-                className="w-full justify-start h-7 text-xs text-destructive hover:text-destructive"
-              >
-                <Trash2 className="w-3 h-3 mr-1.5" />
-                Delete
-              </Button>
-            </>
-          )}
-        </CardContent>
-      </Card>
-    </>
-  );
-
-  // Right sidebar content (reusable for both inline and sheet)
-  const RightSidebarContent = () => (
-    <>
-      <PropertiesPanelEnhanced
-        field={selectedField}
-        onUpdateField={handleUpdateField}
-        onRemoveField={handleRemoveField}
-        labelBounds={{ width: layout.widthDots, height: layout.heightDots }}
-        sampleData={sampleData}
-      />
-
-      {/* ZPL Preview - Collapsible */}
-      <Collapsible open={showZplCode} onOpenChange={setShowZplCode}>
-        <Card>
-          <CollapsibleTrigger asChild>
-            <CardHeader className="py-2 px-3 cursor-pointer hover:bg-muted/50">
-              <CardTitle className="text-xs font-medium flex items-center justify-between">
-                <span className="flex items-center gap-1.5">
-                  <Code className="w-3.5 h-3.5" />
-                  ZPL Code
-                </span>
-                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showZplCode ? 'rotate-180' : ''}`} />
-              </CardTitle>
-            </CardHeader>
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            <CardContent className="px-3 pb-3 pt-0">
-              <pre className="text-[10px] bg-muted p-2 rounded overflow-auto max-h-32 font-mono leading-tight">
-                {generatedZpl}
-              </pre>
-            </CardContent>
-          </CollapsibleContent>
-        </Card>
-      </Collapsible>
-    </>
-  );
+  const enabledFieldsCount = layout.fields.filter(f => f.enabled).length;
 
   return (
     <div className={`flex flex-col border rounded-lg bg-card overflow-hidden transition-all duration-200 ${
       isFullscreen 
-        ? 'fixed inset-4 z-50 h-auto' 
-        : 'h-[calc(100vh-220px)] min-h-[500px]'
+        ? 'fixed inset-2 z-50' 
+        : 'h-[500px]'
     }`}>
       {/* Fullscreen backdrop */}
       {isFullscreen && (
-        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-40" onClick={() => setIsFullscreen(false)} />
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm -z-10" onClick={() => setIsFullscreen(false)} />
       )}
 
-      {/* Toolbar */}
-      <div className="flex items-center justify-between gap-2 p-2 border-b bg-muted/30 flex-wrap relative z-50">
-        <div className="flex items-center gap-2">
-          {/* Sidebar toggles - visible on larger screens */}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setLeftSidebarOpen(!leftSidebarOpen)}
-            className="h-8 w-8 p-0 hidden lg:flex"
-            title={leftSidebarOpen ? "Hide fields panel" : "Show fields panel"}
-          >
-            <PanelLeftClose className={`w-4 h-4 transition-transform ${!leftSidebarOpen ? 'rotate-180' : ''}`} />
-          </Button>
-
-          {/* Mobile sidebar trigger for left panel */}
-          <Sheet>
-            <SheetTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-8 w-8 p-0 lg:hidden">
-                <Palette className="w-4 h-4" />
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="left" className="w-64 p-4">
-              <SheetHeader>
-                <SheetTitle className="text-sm">Fields</SheetTitle>
-              </SheetHeader>
-              <div className="mt-4">
-                <LeftSidebarContent />
-              </div>
-            </SheetContent>
-          </Sheet>
-
-          {/* Template selector */}
+      {/* Compact Toolbar */}
+      <div className="flex items-center justify-between gap-2 px-3 py-2 border-b bg-muted/30">
+        {/* Left: Template & Name */}
+        <div className="flex items-center gap-2 min-w-0">
           <Select value={selectedTemplateId} onValueChange={handleLoadTemplate}>
-            <SelectTrigger className="w-32 sm:w-40 h-8">
+            <SelectTrigger className="w-[140px] h-8 text-xs">
               <SelectValue placeholder="Template..." />
             </SelectTrigger>
             <SelectContent>
               {savedTemplates.map(t => (
                 <SelectItem key={t.id} value={t.id}>
-                  <span className="flex items-center gap-2">
-                    {t.name}
+                  <span className="flex items-center gap-1.5">
                     {t.is_default && <Star className="w-3 h-3 text-amber-500 fill-amber-500" />}
+                    <span className="truncate">{t.name}</span>
                   </span>
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
 
-          <Button variant="ghost" size="sm" onClick={handleNewTemplate} title="New template" className="h-8 w-8 p-0">
-            <Plus className="w-4 h-4" />
-          </Button>
-
-          <Separator orientation="vertical" className="h-6 hidden sm:block" />
-
           <Input
             value={templateName}
             onChange={(e) => setTemplateName(e.target.value)}
-            className="w-32 sm:w-40 h-8 text-sm hidden sm:block"
-            placeholder="Template name"
+            className="w-[120px] h-8 text-xs hidden sm:block"
+            placeholder="Name..."
           />
 
-          <Badge variant="outline" className="font-mono text-xs whitespace-nowrap hidden md:flex">
-            2" × 1"
-          </Badge>
+          <div className="hidden md:flex items-center gap-1">
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleNewTemplate} title="New">
+              <Plus className="w-3.5 h-3.5" />
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="h-7 w-7" 
+              onClick={handleSetDefault}
+              disabled={!selectedTemplateId || currentIsDefault}
+              title="Set default"
+            >
+              <Star className={`w-3.5 h-3.5 ${currentIsDefault ? 'fill-amber-500 text-amber-500' : ''}`} />
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="h-7 w-7 text-destructive hover:text-destructive" 
+              onClick={handleDeleteTemplate}
+              disabled={!selectedTemplateId}
+              title="Delete"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </Button>
+          </div>
         </div>
 
+        {/* Center: Mode & Grid */}
         <div className="flex items-center gap-1">
-          {/* Mode toggle */}
-          <div className="flex items-center gap-1 px-1.5 py-1 rounded-md bg-background border">
+          <div className="flex items-center gap-1 px-2 py-1 rounded bg-background border text-xs">
             <Edit3 className={`w-3 h-3 ${!isPreviewMode ? 'text-primary' : 'text-muted-foreground'}`} />
             <Switch
               checked={isPreviewMode}
@@ -568,167 +483,187 @@ export const LabelEditorEmbed: React.FC = () => {
 
           <Button
             variant={showGrid ? 'secondary' : 'ghost'}
-            size="sm"
+            size="icon"
+            className="h-7 w-7"
             onClick={() => setShowGrid(!showGrid)}
             disabled={isPreviewMode}
-            className="h-8 w-8 p-0 hidden sm:flex"
           >
-            <Grid3X3 className="w-4 h-4" />
+            <Grid3X3 className="w-3.5 h-3.5" />
           </Button>
 
-          {/* Zoom */}
-          <div className="flex items-center gap-0.5">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setScale(s => Math.max(2, s - 0.5))}
-              disabled={scale <= 2}
-              className="h-8 w-8 p-0"
-            >
-              <ZoomOut className="w-4 h-4" />
-            </Button>
-            <Badge variant="outline" className="font-mono text-xs w-8 justify-center">
-              {scale}x
-            </Badge>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setScale(s => Math.min(5, s + 0.5))}
-              disabled={scale >= 5}
-              className="h-8 w-8 p-0"
-            >
-              <ZoomIn className="w-4 h-4" />
-            </Button>
-          </div>
+          <Badge variant="outline" className="font-mono text-[10px] hidden sm:flex">
+            {scale.toFixed(1)}x
+          </Badge>
+        </div>
 
-          <Separator orientation="vertical" className="h-6 hidden sm:block" />
-
-          <Button variant="ghost" size="sm" onClick={handleResetLayout} className="h-8 w-8 p-0 hidden sm:flex" title="Reset">
-            <RotateCcw className="w-4 h-4" />
+        {/* Right: Actions */}
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="icon" className="h-7 w-7 hidden sm:flex" onClick={handleResetLayout} title="Reset">
+            <RotateCcw className="w-3.5 h-3.5" />
           </Button>
-          <Button variant="ghost" size="sm" onClick={handleCopyZpl} className="h-8 w-8 p-0 hidden sm:flex" title="Copy ZPL">
-            <Copy className="w-4 h-4" />
+          <Button variant="ghost" size="icon" className="h-7 w-7 hidden sm:flex" onClick={handleCopyZpl} title="Copy ZPL">
+            <Copy className="w-3.5 h-3.5" />
           </Button>
-          <Button variant="ghost" size="sm" onClick={handleDownloadZpl} className="h-8 w-8 p-0 hidden sm:flex" title="Download">
-            <Download className="w-4 h-4" />
+          <Button variant="ghost" size="icon" className="h-7 w-7 hidden sm:flex" onClick={handleDownloadZpl} title="Download">
+            <Download className="w-3.5 h-3.5" />
           </Button>
-
-          {/* Fullscreen toggle */}
           <Button
             variant="ghost"
-            size="sm"
+            size="icon"
+            className="h-7 w-7"
             onClick={() => setIsFullscreen(!isFullscreen)}
-            className="h-8 w-8 p-0"
             title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
           >
-            {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+            {isFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
           </Button>
-
-          <Separator orientation="vertical" className="h-6" />
 
           <Button 
             variant="outline" 
-            size="sm" 
+            size="sm"
+            className="h-7 text-xs"
             onClick={handleTestPrint}
             disabled={isPrinting}
-            className="h-8"
           >
-            <Printer className="w-4 h-4 sm:mr-1" />
-            <span className="hidden sm:inline">Print</span>
+            <Printer className="w-3.5 h-3.5 mr-1" />
+            Print
             {!isConnected && <span className="ml-1 text-amber-500">•</span>}
           </Button>
 
-          <Button size="sm" onClick={handleSave} className="h-8">
-            <Save className="w-4 h-4 sm:mr-1" />
-            <span className="hidden sm:inline">Save</span>
+          <Button size="sm" className="h-7 text-xs" onClick={handleSave}>
+            <Save className="w-3.5 h-3.5 mr-1" />
+            Save
           </Button>
+        </div>
+      </div>
 
-          {/* Right sidebar toggle - visible on larger screens */}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setRightSidebarOpen(!rightSidebarOpen)}
-            className="h-8 w-8 p-0 hidden lg:flex"
-            title={rightSidebarOpen ? "Hide properties panel" : "Show properties panel"}
+      {/* Main Canvas Area */}
+      <div ref={canvasContainerRef} className="flex-1 relative overflow-hidden bg-muted/10">
+        {/* Canvas */}
+        <ScrollArea className="h-full">
+          <div 
+            className="flex items-center justify-center p-6 min-h-full"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                setSelectedFieldId(null);
+              }
+            }}
           >
-            <PanelRightClose className={`w-4 h-4 transition-transform ${!rightSidebarOpen ? 'rotate-180' : ''}`} />
-          </Button>
+            <LabelCanvasEnhanced
+              layout={layout}
+              scale={scale}
+              selectedFieldId={selectedFieldId}
+              onSelectField={setSelectedFieldId}
+              onUpdateField={handleUpdateField}
+              sampleData={sampleData}
+              isPreviewMode={isPreviewMode}
+              showGrid={showGrid}
+            />
+          </div>
+        </ScrollArea>
 
-          {/* Mobile sidebar trigger for right panel */}
-          <Sheet>
-            <SheetTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-8 w-8 p-0 lg:hidden">
-                <Settings2 className="w-4 h-4" />
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="right" className="w-72 p-4">
-              <SheetHeader>
-                <SheetTitle className="text-sm">Properties</SheetTitle>
-              </SheetHeader>
-              <div className="mt-4 space-y-3">
-                <RightSidebarContent />
-              </div>
-            </SheetContent>
-          </Sheet>
+        {/* Floating Field Palette */}
+        <div className="absolute top-3 left-3 z-10">
+          <Collapsible open={showFieldPalette} onOpenChange={setShowFieldPalette}>
+            <Card className="shadow-lg border-2 w-[180px]">
+              <CollapsibleTrigger asChild>
+                <CardHeader className="py-2 px-3 cursor-pointer hover:bg-muted/50">
+                  <CardTitle className="text-xs font-medium flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <Layers className="w-3.5 h-3.5" />
+                      Fields
+                      <Badge variant="secondary" className="text-[10px] h-4 px-1">{enabledFieldsCount}</Badge>
+                    </span>
+                    {showFieldPalette ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                  </CardTitle>
+                </CardHeader>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent className="p-2 pt-0">
+                  <FieldPalette
+                    layout={layout}
+                    onToggleField={handleToggleField}
+                    onAddField={handleAddField}
+                  />
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
         </div>
-      </div>
 
-      {/* Main content */}
-      <div className="flex flex-1 overflow-hidden relative z-50">
-        {/* Left sidebar - Field palette (desktop) */}
-        {leftSidebarOpen && (
-          <div className="hidden lg:block w-52 border-r bg-muted/20 overflow-y-auto p-3 shrink-0">
-            <LeftSidebarContent />
+        {/* Slide-in Properties Panel (only shows when field selected) */}
+        {selectedField && !isPreviewMode && (
+          <div className="absolute top-3 right-3 bottom-3 z-10 w-[240px] animate-in slide-in-from-right-5 duration-200">
+            <Card className="h-full shadow-lg border-2 flex flex-col">
+              <CardHeader className="py-2 px-3 flex-row items-center justify-between shrink-0">
+                <CardTitle className="text-xs font-medium flex items-center gap-1.5">
+                  <Settings2 className="w-3.5 h-3.5" />
+                  Properties
+                </CardTitle>
+                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setSelectedFieldId(null)}>
+                  <X className="w-3.5 h-3.5" />
+                </Button>
+              </CardHeader>
+              <CardContent className="p-2 pt-0 flex-1 overflow-auto">
+                <PropertiesPanelEnhanced
+                  field={selectedField}
+                  onUpdateField={handleUpdateField}
+                  onRemoveField={handleRemoveField}
+                  labelBounds={{ width: layout.widthDots, height: layout.heightDots }}
+                  sampleData={sampleData}
+                />
+              </CardContent>
+            </Card>
           </div>
         )}
 
-        {/* Center - Canvas */}
-        <div className="flex-1 flex flex-col overflow-hidden bg-muted/10 min-w-0">
-          <ScrollArea className="flex-1">
-            <div className="flex items-center justify-center p-4 min-h-full">
-              <LabelCanvasEnhanced
-                layout={layout}
-                scale={scale}
-                selectedFieldId={selectedFieldId}
-                onSelectField={setSelectedFieldId}
-                onUpdateField={handleUpdateField}
-                sampleData={sampleData}
-                isPreviewMode={isPreviewMode}
-                showGrid={showGrid}
-              />
-            </div>
-          </ScrollArea>
-
-          {/* Sample data editor */}
-          {isPreviewMode && (
-            <div className="border-t p-2 bg-background shrink-0">
-              <div className="flex items-center gap-2 mb-2">
-                <Label className="text-xs font-medium">Sample Data</Label>
-                <Badge variant="secondary" className="text-[10px]">Preview</Badge>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
-                {(Object.keys(sampleData) as Array<keyof SampleData>).map((key) => (
-                  <div key={key}>
-                    <Label className="text-[10px] text-muted-foreground capitalize">{key}</Label>
-                    <Input
-                      value={sampleData[key]}
-                      onChange={(e) => setSampleData(prev => ({ ...prev, [key]: e.target.value }))}
-                      className="h-7 text-xs"
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+        {/* ZPL Code Floating Panel */}
+        <div className="absolute bottom-3 left-3 z-10">
+          <Collapsible open={showZplCode} onOpenChange={setShowZplCode}>
+            <Card className="shadow-lg w-[300px]">
+              <CollapsibleTrigger asChild>
+                <CardHeader className="py-2 px-3 cursor-pointer hover:bg-muted/50">
+                  <CardTitle className="text-xs font-medium flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <Code className="w-3.5 h-3.5" />
+                      ZPL Code
+                    </span>
+                    {showZplCode ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
+                  </CardTitle>
+                </CardHeader>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent className="p-2 pt-0">
+                  <pre className="text-[10px] bg-muted p-2 rounded overflow-auto max-h-32 font-mono leading-tight">
+                    {generatedZpl}
+                  </pre>
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
         </div>
-
-        {/* Right sidebar - Properties (desktop) */}
-        {rightSidebarOpen && (
-          <div className="hidden lg:block w-60 border-l bg-muted/20 overflow-y-auto p-3 space-y-3 shrink-0">
-            <RightSidebarContent />
-          </div>
-        )}
       </div>
+
+      {/* Sample Data Editor (Preview Mode) */}
+      {isPreviewMode && (
+        <div className="border-t p-2 bg-background shrink-0">
+          <div className="flex items-center gap-2 mb-2">
+            <Label className="text-xs font-medium">Sample Data</Label>
+            <Badge variant="secondary" className="text-[10px]">Preview</Badge>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+            {(Object.keys(sampleData) as Array<keyof SampleData>).map((key) => (
+              <div key={key}>
+                <Label className="text-[10px] text-muted-foreground capitalize">{key}</Label>
+                <Input
+                  value={sampleData[key]}
+                  onChange={(e) => setSampleData(prev => ({ ...prev, [key]: e.target.value }))}
+                  className="h-7 text-xs"
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
