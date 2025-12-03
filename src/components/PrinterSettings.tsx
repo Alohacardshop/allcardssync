@@ -161,8 +161,8 @@ export const PrinterSettings: React.FC = () => {
   // Calibrate: Media and ribbon sensor calibration
   const handleCalibrate = () => sendCommand('~JC', 'Calibrate');
   
-  // Cut: Print blank label with cut command (works on ZD series)
-  const handleCut = () => sendCommand('^XA^FO0,0^FD ^FS^CN1^XZ', 'Cut');
+  // Cut: Set cutter mode and print blank label (auto-cuts)
+  const handleCut = () => sendCommand('^XA^MMC^FO0,0^FD ^FS^XZ', 'Cut');
   
   // Cancel all queued jobs
   const handleCancelJobs = () => sendCommand('~JA', 'Cancel jobs');
