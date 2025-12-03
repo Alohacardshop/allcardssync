@@ -40,6 +40,7 @@ const GradedIntake = React.lazy(() => import("./pages/intake/GradedIntake"));
 const BulkIntake = React.lazy(() => import("./pages/intake/BulkIntake"));
 const ShopifyBackfill = React.lazy(() => import("./pages/Admin/ShopifyBackfill"));
 const EbaySettings = React.lazy(() => import("./pages/EbaySettings"));
+const EbayApp = React.lazy(() => import("./pages/EbayApp"));
 import { GlobalKeyboardHandler } from "./components/GlobalKeyboardHandler";
 import { FloatingActionButton } from "./components/FloatingActionButton";
 import { PerformanceMonitor } from "./components/PerformanceMonitor";
@@ -116,6 +117,13 @@ const App = () => (
                             <Route path="/docs" element={
                               <RequireApp appKey="docs">
                                 <ErrorBoundaryWrapper componentName="Documents"><DocumentsPage /></ErrorBoundaryWrapper>
+                              </RequireApp>
+                            } />
+                            
+                            {/* eBay App */}
+                            <Route path="/ebay" element={
+                              <RequireApp appKey="ebay">
+                                <ErrorBoundaryWrapper componentName="eBay"><EbayApp /></ErrorBoundaryWrapper>
                               </RequireApp>
                             } />
                             

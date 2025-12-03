@@ -3,7 +3,7 @@
  * All users (including admins) are scoped to their assigned location
  */
 
-export type AppKey = 'inventory' | 'barcode' | 'docs' | 'intake' | 'admin';
+export type AppKey = 'inventory' | 'barcode' | 'docs' | 'intake' | 'admin' | 'ebay';
 export type UserRole = 'staff' | 'manager' | 'admin';
 export type LocationRegion = 'hawaii' | 'las_vegas';
 
@@ -11,7 +11,7 @@ export type LocationRegion = 'hawaii' | 'las_vegas';
 const APP_PERMISSIONS: Record<UserRole, AppKey[]> = {
   staff: ['inventory', 'barcode', 'docs', 'intake'],
   manager: ['inventory', 'barcode', 'docs', 'intake'],
-  admin: ['inventory', 'barcode', 'docs', 'intake', 'admin'],
+  admin: ['inventory', 'barcode', 'docs', 'intake', 'admin', 'ebay'],
 };
 
 /**
