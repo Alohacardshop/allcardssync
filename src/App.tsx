@@ -75,8 +75,9 @@ const App = () => (
                     <>
                       <NavigationBar />
                       <AuthGuard>
-                        <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><LoadingSpinner size="lg" /></div>}>
-                          <Routes>
+                        <main className="pt-20">
+                          <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><LoadingSpinner size="lg" /></div>}>
+                            <Routes>
                             {/* Dashboard Home */}
                             <Route path="/" element={<ErrorBoundaryWrapper componentName="DashboardHome"><DashboardHome /></ErrorBoundaryWrapper>} />
                             
@@ -146,8 +147,9 @@ const App = () => (
                             
                             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                             <Route path="*" element={<NotFound />} />
-                          </Routes>
-                        </Suspense>
+                            </Routes>
+                          </Suspense>
+                        </main>
                       </AuthGuard>
                     </>
                   } />

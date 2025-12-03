@@ -9,7 +9,7 @@ import { LabelEditorEmbed } from "@/features/barcode/components/LabelEditorEmbed
 export default function BarcodePrinting() {
   return (
     <div className="container mx-auto p-6 space-y-6">
-      <section className="mt-20 mb-6">
+      <section className="mb-6">
         <h1 className="text-2xl font-bold flex items-center gap-2">
           <Printer className="h-6 w-6" />
           Barcode Printing
