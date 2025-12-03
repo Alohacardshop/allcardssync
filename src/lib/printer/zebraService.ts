@@ -4,7 +4,7 @@
  */
 
 // Use 127.0.0.1 for better compatibility with HTTPS pages
-const BRIDGE_URL = 'http://127.0.0.1:3001';
+const BRIDGE_URL = 'http://127.0.0.1:17777';
 const STORAGE_KEY = 'zebra-printer-config';
 const DEFAULT_PORT = 9100;
 
