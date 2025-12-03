@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { CheckSquare, Printer, RotateCcw, Upload, Scissors, Trash2, Loader2, Package, DollarSign } from 'lucide-react';
+import { CheckSquare, Printer, RotateCcw, Upload, Scissors, Trash2, Loader2, Package, ShoppingBag } from 'lucide-react';
 
 interface BulkActionsToolbarProps {
   selectedCount: number;
@@ -21,6 +21,7 @@ interface BulkActionsToolbarProps {
   onSendCutCommand: () => void;
   onDeleteSelected: () => void;
   onCheckEbayPrices?: () => void;
+  onBulkToggleEbay?: (enable: boolean) => void;
 }
 
 export const BulkActionsToolbar = React.memo(({
@@ -41,7 +42,8 @@ export const BulkActionsToolbar = React.memo(({
   onResyncSelected,
   onSendCutCommand,
   onDeleteSelected,
-  onCheckEbayPrices
+  onCheckEbayPrices,
+  onBulkToggleEbay
 }: BulkActionsToolbarProps) => {
   return (
     <div className="flex items-center justify-between">
@@ -158,6 +160,28 @@ export const BulkActionsToolbar = React.memo(({
               )}
               {bulkSyncing ? 'Resyncing...' : 'Resync Selected'}
             </Button>
+
+            {onBulkToggleEbay && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onBulkToggleEbay(true)}
+                  className="text-blue-600 border-blue-300 hover:bg-blue-50"
+                >
+                  <ShoppingBag className="h-4 w-4 mr-2" />
+                  Add to eBay
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onBulkToggleEbay(false)}
+                >
+                  <ShoppingBag className="h-4 w-4 mr-2" />
+                  Remove from eBay
+                </Button>
+              </>
+            )}
           </>
         )}
 
