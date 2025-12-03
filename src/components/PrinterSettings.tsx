@@ -5,9 +5,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Printer, Wifi, WifiOff, RefreshCw, Check, AlertCircle, MapPin, Info, Server, Terminal, Download } from 'lucide-react';
+import { Printer, Wifi, WifiOff, RefreshCw, Check, AlertCircle, MapPin, Info, Server, Download, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import { usePrinter, type PrinterConfig } from '@/hooks/usePrinter';
+import { zebraService } from '@/lib/printer/zebraService';
 import { useStore } from '@/contexts/StoreContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { checkBridgeStatus, type BridgeStatus } from '@/lib/printer/zebraService';
@@ -23,6 +24,7 @@ export const PrinterSettings: React.FC = () => {
   const [editPort, setEditPort] = useState('9100');
   const [editName, setEditName] = useState('');
   const [isTesting, setIsTesting] = useState(false);
+  const [isPrinting, setIsPrinting] = useState(false);
   const [bridgeStatus, setBridgeStatus] = useState<BridgeStatus | null>(null);
   const [isCheckingBridge, setIsCheckingBridge] = useState(true);
 
@@ -94,6 +96,41 @@ export const PrinterSettings: React.FC = () => {
       await refreshStatus();
     } else {
       toast.error('Connection failed. Verify IP address and ensure printer is powered on.');
+    }
+  };
+
+  const handleTestPrint = async () => {
+    if (!bridgeStatus?.connected) {
+      toast.error('Local bridge not running. Start the bridge first.');
+      return;
+    }
+    
+    if (!printer?.ip) {
+      toast.error('Save printer settings first');
+      return;
+    }
+
+    setIsPrinting(true);
+    
+    // Simple test label ZPL - 2" x 1" label
+    const testZpl = `^XA
+^CF0,30
+^FO50,20^FDTEST PRINT^FS
+^CF0,20
+^FO50,60^FD${printer.name || 'Zebra Printer'}^FS
+^FO50,85^FD${printer.ip}:${printer.port}^FS
+^FO50,110^FD${new Date().toLocaleString()}^FS
+^BY2,2,50
+^FO50,140^BC^FDTEST123^FS
+^XZ`;
+
+    const result = await zebraService.print(testZpl, printer.ip, printer.port);
+    setIsPrinting(false);
+
+    if (result.success) {
+      toast.success('Test label sent to printer!');
+    } else {
+      toast.error(`Print failed: ${result.error || 'Unknown error'}`);
     }
   };
 
@@ -262,10 +299,20 @@ export const PrinterSettings: React.FC = () => {
             Test Connection
           </Button>
           {printer?.ip && bridgeStatus?.connected && (
-            <Button variant="ghost" onClick={refreshStatus} disabled={isLoading}>
-              <RefreshCw className="w-4 h-4 mr-2" />
-              Refresh Status
-            </Button>
+            <>
+              <Button 
+                variant="secondary" 
+                onClick={handleTestPrint} 
+                disabled={isLoading || isPrinting}
+              >
+                <FileText className={`w-4 h-4 mr-2 ${isPrinting ? 'animate-pulse' : ''}`} />
+                {isPrinting ? 'Printing...' : 'Test Print'}
+              </Button>
+              <Button variant="ghost" onClick={refreshStatus} disabled={isLoading}>
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Refresh Status
+              </Button>
+            </>
           )}
         </div>
 
