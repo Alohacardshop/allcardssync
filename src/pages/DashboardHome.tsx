@@ -10,7 +10,8 @@ import {
   FileText, 
   Settings, 
   ShoppingCart,
-  MapPin
+  MapPin,
+  Store
 } from 'lucide-react';
 
 interface AppTile {
@@ -54,6 +55,14 @@ const APP_TILES: AppTile[] = [
     icon: FileText,
     href: '/docs',
     color: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
+  },
+  {
+    key: 'ebay',
+    title: 'eBay',
+    description: 'Manage eBay listings, sync queue, and settings',
+    icon: Store,
+    href: '/ebay',
+    color: 'bg-orange-500/10 text-orange-500 border-orange-500/20',
   },
   {
     key: 'admin',
