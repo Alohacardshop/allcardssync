@@ -203,6 +203,7 @@ export async function printToSystemPrinter(zpl: string, printerName: string, cop
 // Test connection to network printer via local bridge
 // Uses a minimal ZPL command (~HI = host identification) to verify connectivity
 export async function testConnection(ip: string, port: number = DEFAULT_PORT): Promise<boolean> {
+  console.log(`[Printer] Testing connection to ${ip}:${port}...`);
   try {
     const response = await fetch(`${BRIDGE_URL}/rawtcp?ip=${encodeURIComponent(ip)}&port=${port}`, {
       method: 'POST',
@@ -212,8 +213,10 @@ export async function testConnection(ip: string, port: number = DEFAULT_PORT): P
     });
 
     const data = await response.json();
+    console.log('[Printer] Test response:', data);
     return data.success === true;
-  } catch {
+  } catch (error) {
+    console.error('[Printer] Test connection error:', error);
     return false;
   }
 }
