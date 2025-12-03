@@ -155,8 +155,8 @@ export const PrinterSettings: React.FC = () => {
     }
   };
 
-  // Feed: Use form feed control command
-  const handleFeedLabel = () => sendCommand('^XA^XZ', 'Feed');
+  // Feed: Print minimal blank label to advance (works in all modes)
+  const handleFeedLabel = () => sendCommand('^XA^FO0,0^FD ^FS^XZ', 'Feed');
   
   // Calibrate: Media and ribbon sensor calibration
   const handleCalibrate = () => sendCommand('~JC', 'Calibrate');
