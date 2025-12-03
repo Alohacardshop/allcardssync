@@ -23,6 +23,8 @@ export interface LabelLayout {
   heightDots: number; // 203 for 1" at 203dpi
   dpi: 203 | 300;
   fields: LabelField[];
+  labelTopOffset?: number; // ^LT offset in dots (negative = up, positive = down)
+  labelLeftOffset?: number; // ^LS offset in dots (negative = left, positive = right)
   createdAt: string;
   updatedAt: string;
 }
@@ -71,6 +73,8 @@ export const DEFAULT_LABEL_LAYOUT: LabelLayout = {
   widthDots: 406,
   heightDots: 203,
   dpi: 203,
+  labelTopOffset: 0,
+  labelLeftOffset: 0,
   fields: [
     {
       id: 'field-title',

@@ -28,6 +28,8 @@ import {
   Layers,
   X,
   Settings2,
+  MoveVertical,
+  MoveHorizontal,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { LabelCanvasEnhanced } from './LabelCanvasEnhanced';
@@ -562,7 +564,7 @@ export const LabelEditorEmbed: React.FC = () => {
         </ScrollArea>
 
         {/* Floating Field Palette */}
-        <div className="absolute top-3 left-3 z-10">
+        <div className="absolute top-3 left-3 z-10 space-y-2">
           <Collapsible open={showFieldPalette} onOpenChange={setShowFieldPalette}>
             <Card className="shadow-lg border-2 w-[180px]">
               <CollapsibleTrigger asChild>
@@ -588,6 +590,47 @@ export const LabelEditorEmbed: React.FC = () => {
               </CollapsibleContent>
             </Card>
           </Collapsible>
+
+          {/* Label Offset Settings */}
+          <Card className="shadow-lg border-2 w-[180px]">
+            <CardHeader className="py-2 px-3">
+              <CardTitle className="text-xs font-medium flex items-center gap-1.5">
+                <Settings2 className="w-3.5 h-3.5" />
+                Label Offset
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-2 pt-0 space-y-2">
+              <div className="flex items-center gap-2">
+                <MoveVertical className="w-3.5 h-3.5 text-muted-foreground" />
+                <Label className="text-[10px] w-8">Top</Label>
+                <Input
+                  type="number"
+                  value={layout.labelTopOffset || 0}
+                  onChange={(e) => setLayout(prev => ({ ...prev, labelTopOffset: parseInt(e.target.value) || 0 }))}
+                  className="h-6 text-xs w-16"
+                  min={-120}
+                  max={120}
+                />
+                <span className="text-[10px] text-muted-foreground">dots</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <MoveHorizontal className="w-3.5 h-3.5 text-muted-foreground" />
+                <Label className="text-[10px] w-8">Left</Label>
+                <Input
+                  type="number"
+                  value={layout.labelLeftOffset || 0}
+                  onChange={(e) => setLayout(prev => ({ ...prev, labelLeftOffset: parseInt(e.target.value) || 0 }))}
+                  className="h-6 text-xs w-16"
+                  min={-120}
+                  max={120}
+                />
+                <span className="text-[10px] text-muted-foreground">dots</span>
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                Negative = up/left. ~8 dots = 1mm
+              </p>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Slide-in Properties Panel (only shows when field selected) */}
