@@ -161,8 +161,8 @@ export const PrinterSettings: React.FC = () => {
   // Calibrate: Media and ribbon sensor calibration
   const handleCalibrate = () => sendCommand('~JC', 'Calibrate');
   
-  // Cut: Direct cut test command for Zebra printers with cutter
-  const handleCut = () => sendCommand('~CT', 'Cut');
+  // Cut: Print blank label with cut command (works on ZD series)
+  const handleCut = () => sendCommand('^XA^FO0,0^FD ^FS^CN1^XZ', 'Cut');
   
   // Cancel all queued jobs
   const handleCancelJobs = () => sendCommand('~JA', 'Cancel jobs');
