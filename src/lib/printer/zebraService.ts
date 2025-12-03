@@ -3,7 +3,8 @@
  * Uses rollo-local-bridge on localhost:17777 for all printer operations
  */
 
-const BRIDGE_URL = 'http://localhost:3001';
+// Use 127.0.0.1 for better compatibility with HTTPS pages
+const BRIDGE_URL = 'http://127.0.0.1:3001';
 const STORAGE_KEY = 'zebra-printer-config';
 const DEFAULT_PORT = 9100;
 
