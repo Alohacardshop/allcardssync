@@ -1317,6 +1317,7 @@ export type Database = {
           created_at: string | null
           darkness: number | null
           description: string | null
+          field_mappings: Json | null
           id: string
           is_active: boolean | null
           match_category: string | null
@@ -1335,6 +1336,7 @@ export type Database = {
           created_at?: string | null
           darkness?: number | null
           description?: string | null
+          field_mappings?: Json | null
           id?: string
           is_active?: boolean | null
           match_category?: string | null
@@ -1353,6 +1355,7 @@ export type Database = {
           created_at?: string | null
           darkness?: number | null
           description?: string | null
+          field_mappings?: Json | null
           id?: string
           is_active?: boolean | null
           match_category?: string | null
