@@ -116,6 +116,16 @@ function applyLetterSpacing(text: string, spacing: number): string {
 }
 
 /**
+ * Apply spacing specifically for price fields (always space out numbers)
+ */
+function formatPriceWithSpacing(text: string): string {
+  // Don't apply to template placeholders
+  if (text.includes('{{')) return text;
+  // Add single space between each character for price readability
+  return text.split('').join(' ');
+}
+
+/**
  * Generate text field ZPL using same Canvas-based fitting as preview
  */
 function generateTextZpl(field: LabelField, text: string, isTitle: boolean = false): string[] {
@@ -140,6 +150,15 @@ function generateTextZpl(field: LabelField, text: string, isTitle: boolean = fal
   
   const letterSpacing = field.letterSpacing || 0;
   
+  // Apply formatting based on field type
+  const formatText = (t: string) => {
+    // Price field always gets spacing for better readability
+    if (field.fieldKey === 'price') {
+      return formatPriceWithSpacing(t);
+    }
+    return applyLetterSpacing(t, letterSpacing);
+  };
+  
   lines.push(`^FO${field.x},${field.y}`);
   lines.push(`^A0N,${clampedFontSize},${fontWidth}`);
   
@@ -150,18 +169,18 @@ function generateTextZpl(field: LabelField, text: string, isTitle: boolean = fal
     lines.push(`^FB${field.width},2,0,${justification}`);
     // Use line break if text was split, otherwise let printer wrap as needed
     if (result.isTwoLine && result.lines.length === 2) {
-      const line1 = applyLetterSpacing(result.lines[0], letterSpacing);
-      const line2 = applyLetterSpacing(result.lines[1], letterSpacing);
+      const line1 = formatText(result.lines[0]);
+      const line2 = formatText(result.lines[1]);
       lines.push(`^FD${escapeZplText(line1 + '\\&' + line2)}^FS`);
     } else {
-      lines.push(`^FD${escapeZplText(applyLetterSpacing(text, letterSpacing))}^FS`);
+      lines.push(`^FD${escapeZplText(formatText(text))}^FS`);
     }
   } else {
     // Non-title fields: single line only
     if (field.alignment !== 'left') {
       lines.push(`^FB${field.width},1,0,${justification}`);
     }
-    lines.push(`^FD${escapeZplText(applyLetterSpacing(text, letterSpacing))}^FS`);
+    lines.push(`^FD${escapeZplText(formatText(text))}^FS`);
   }
   
   return lines;

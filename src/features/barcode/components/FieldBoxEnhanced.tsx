@@ -192,7 +192,8 @@ export const FieldBoxEnhanced: React.FC<FieldBoxEnhancedProps> = ({
             )}
             style={{ 
               fontSize: `${Math.max(10, fontSize)}px`,
-              letterSpacing: field.letterSpacing ? `${field.letterSpacing * 0.1}em` : undefined
+              // Price field always gets extra spacing, otherwise use field setting
+              letterSpacing: field.fieldKey === 'price' ? '0.15em' : (field.letterSpacing ? `${field.letterSpacing * 0.1}em` : undefined)
             }}
           >
             {lines.map((line, i) => (
