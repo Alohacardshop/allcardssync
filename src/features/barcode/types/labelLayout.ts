@@ -42,14 +42,14 @@ export interface SampleData {
 }
 
 export const DEFAULT_SAMPLE_DATA: SampleData = {
-  title: 'Pikachu VMAX Rainbow Rare',
-  sku: 'PKM-VV-188',
-  price: '$124.99',
-  condition: 'Lightly Played',
-  barcode: 'PKM-VV-188',
-  set: 'Vivid Voltage',
-  cardNumber: '#188/185',
-  year: '2020',
+  title: 'Base Set Charizard #004/102',
+  sku: '2999654',
+  price: '$350.00',
+  condition: 'Moderately Played - Foil',
+  barcode: '2999654',
+  set: 'Base Set',
+  cardNumber: '#004/102',
+  year: '1999',
   vendor: 'Pokemon TCG',
 };
 
