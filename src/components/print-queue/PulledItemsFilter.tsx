@@ -38,6 +38,12 @@ export default function PulledItemsFilter() {
   const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [dateFilter, setDateFilter] = useState<'today' | 'yesterday' | '7days' | '30days' | null>(null);
 
+  // Store/Location filter state
+  const [filterStore, setFilterStore] = useState<string>('all');
+  const [filterLocation, setFilterLocation] = useState<string>('all');
+  const [availableStores, setAvailableStores] = useState<string[]>([]);
+  const [availableLocations, setAvailableLocations] = useState<{ gid: string; name: string }[]>([]);
+
   // Shopify pull state
   const [showPullDialog, setShowPullDialog] = useState(false);
   const [pullSectionOpen, setPullSectionOpen] = useState(true);
@@ -65,7 +71,7 @@ export default function PulledItemsFilter() {
   useEffect(() => {
     filterItems();
     setSelectedItems(new Set());
-  }, [searchTerm, selectedIncludeTags, selectedExcludeTags, dateFilter, allItems]);
+  }, [searchTerm, selectedIncludeTags, selectedExcludeTags, dateFilter, filterStore, filterLocation, allItems]);
 
   const fetchTemplates = async () => {
     try {
@@ -119,15 +125,33 @@ export default function PulledItemsFilter() {
       
       // Extract all unique tags
       const tagsSet = new Set<string>();
+      const storesSet = new Set<string>();
+      const locationsMap = new Map<string, string>();
+      
       (data || []).forEach(item => {
         const itemTags = [
           ...((item.shopify_snapshot as any)?.tags || []),
           ...((item.source_payload as any)?.tags || []),
         ];
         itemTags.forEach((tag: string) => tagsSet.add(tag));
+        
+        // Collect stores
+        if (item.store_key) {
+          storesSet.add(item.store_key);
+        }
+        
+        // Collect locations
+        if (item.shopify_location_gid) {
+          const locName = (item.shopify_snapshot as any)?.location_name || item.shopify_location_gid;
+          locationsMap.set(item.shopify_location_gid, locName);
+        }
       });
       
       setAvailableTags(Array.from(tagsSet).sort());
+      setAvailableStores(Array.from(storesSet).sort());
+      setAvailableLocations(
+        Array.from(locationsMap.entries()).map(([gid, name]) => ({ gid, name }))
+      );
       filterItems();
     } catch (error) {
       console.error('Failed to fetch items:', error);
@@ -139,6 +163,16 @@ export default function PulledItemsFilter() {
 
   const filterItems = () => {
     let filtered = [...allItems];
+
+    // Store filter
+    if (filterStore && filterStore !== 'all') {
+      filtered = filtered.filter(item => item.store_key === filterStore);
+    }
+
+    // Location filter
+    if (filterLocation && filterLocation !== 'all') {
+      filtered = filtered.filter(item => item.shopify_location_gid === filterLocation);
+    }
 
     // Search filter
     if (searchTerm) {
@@ -402,6 +436,43 @@ export default function PulledItemsFilter() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Store and Location Filters */}
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label>Store</Label>
+              <Select value={filterStore} onValueChange={setFilterStore}>
+                <SelectTrigger>
+                  <SelectValue placeholder="All Stores" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Stores</SelectItem>
+                  {availableStores.map((store) => (
+                    <SelectItem key={store} value={store}>
+                      {store === 'hawaii' ? 'Hawaii' : store === 'las_vegas' ? 'Las Vegas' : store}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Location</Label>
+              <Select value={filterLocation} onValueChange={setFilterLocation}>
+                <SelectTrigger>
+                  <SelectValue placeholder="All Locations" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Locations</SelectItem>
+                  {availableLocations.map((loc) => (
+                    <SelectItem key={loc.gid} value={loc.gid}>
+                      {loc.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
           <div className="grid gap-4 md:grid-cols-4">
             <div className="space-y-2">
               <Label htmlFor="search">Search</Label>
