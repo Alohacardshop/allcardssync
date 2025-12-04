@@ -500,7 +500,7 @@ export default function PulledItemsFilter() {
         // Build variables for template
         const vars = {
           CARDNAME: item.subject || item.brand_title || '',
-          SETNAME: item.category || '',
+          SETNAME: item.sub_category || '', // Use sub_category (e.g. "Pokemon") not category (e.g. "other")
           CARDNUMBER: item.card_number || '',
           CONDITION: item.variant || '', // Full condition text, template handles wrapping
           PRICE: item.price ? `$${Number(item.price).toFixed(2)}` : '',
@@ -584,7 +584,7 @@ export default function PulledItemsFilter() {
     // Build variables for template
     const vars = {
       CARDNAME: item.subject || item.brand_title || '',
-      SETNAME: item.category || '',
+      SETNAME: item.sub_category || '', // Use sub_category (e.g. "Pokemon") not category (e.g. "other")
       CARDNUMBER: item.card_number || '',
       CONDITION: item.variant || '',
       PRICE: item.price ? `$${Number(item.price).toFixed(2)}` : '',
@@ -679,7 +679,7 @@ export default function PulledItemsFilter() {
       for (const item of batchItems) {
         const vars = {
           CARDNAME: item.subject || item.brand_title || '',
-          SETNAME: item.category || '',
+          SETNAME: item.sub_category || '', // Use sub_category not category
           CARDNUMBER: item.card_number || '',
           CONDITION: item.variant || '', // Full condition text, template handles wrapping
           PRICE: item.price ? `$${Number(item.price).toFixed(2)}` : '',
