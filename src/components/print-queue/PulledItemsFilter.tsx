@@ -499,7 +499,7 @@ export default function PulledItemsFilter() {
           CARDNAME: item.subject || item.brand_title || '',
           SETNAME: item.category || '',
           CARDNUMBER: item.card_number || '',
-          CONDITION: abbreviateGrade(item.variant),
+          CONDITION: item.variant || '', // Full condition text, template handles wrapping
           PRICE: item.price ? `$${Number(item.price).toFixed(2)}` : '',
           SKU: item.sku || '',
           BARCODE: item.sku || '',
@@ -621,7 +621,7 @@ export default function PulledItemsFilter() {
           CARDNAME: item.subject || item.brand_title || '',
           SETNAME: item.category || '',
           CARDNUMBER: item.card_number || '',
-          CONDITION: abbreviateGrade(item.variant),
+          CONDITION: item.variant || '', // Full condition text, template handles wrapping
           PRICE: item.price ? `$${Number(item.price).toFixed(2)}` : '',
           SKU: item.sku || '',
           BARCODE: item.sku || '',
