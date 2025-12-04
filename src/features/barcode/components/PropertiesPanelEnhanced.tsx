@@ -241,6 +241,21 @@ export const PropertiesPanelEnhanced: React.FC<PropertiesPanelEnhancedProps> = (
                 className="w-full"
               />
             </div>
+
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Letter Spacing</Label>
+                <span className="text-[10px] text-muted-foreground font-mono">{field.letterSpacing || 0}</span>
+              </div>
+              <Slider
+                value={[field.letterSpacing || 0]}
+                onValueChange={([value]) => handleChange('letterSpacing', value)}
+                min={0}
+                max={5}
+                step={1}
+                className="w-full"
+              />
+            </div>
           </>
         )}
 

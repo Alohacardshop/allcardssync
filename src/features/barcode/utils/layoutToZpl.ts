@@ -104,6 +104,15 @@ export function generateZplTemplate(layout: LabelLayout): string {
 }
 
 /**
+ * Apply letter spacing to text by inserting spaces between characters
+ */
+function applyLetterSpacing(text: string, spacing: number): string {
+  if (!spacing || spacing <= 0) return text;
+  const spacer = ' '.repeat(spacing);
+  return text.split('').join(spacer);
+}
+
+/**
  * Generate text field ZPL using same Canvas-based fitting as preview
  */
 function generateTextZpl(field: LabelField, text: string, isTitle: boolean = false): string[] {
@@ -126,6 +135,8 @@ function generateTextZpl(field: LabelField, text: string, isTitle: boolean = fal
   const clampedFontSize = Math.max(field.minFontSize, Math.min(fontSizeDots, field.maxFontSize));
   const fontWidth = Math.floor(clampedFontSize * CHAR_W_RATIO);
   
+  const letterSpacing = field.letterSpacing || 0;
+  
   lines.push(`^FO${field.x},${field.y}`);
   lines.push(`^A0N,${clampedFontSize},${fontWidth}`);
   
@@ -136,16 +147,18 @@ function generateTextZpl(field: LabelField, text: string, isTitle: boolean = fal
     lines.push(`^FB${field.width},2,0,${justification}`);
     // Use line break if text was split, otherwise let printer wrap as needed
     if (result.isTwoLine && result.lines.length === 2) {
-      lines.push(`^FD${escapeZplText(result.lines[0] + '\\&' + result.lines[1])}^FS`);
+      const line1 = applyLetterSpacing(result.lines[0], letterSpacing);
+      const line2 = applyLetterSpacing(result.lines[1], letterSpacing);
+      lines.push(`^FD${escapeZplText(line1 + '\\&' + line2)}^FS`);
     } else {
-      lines.push(`^FD${escapeZplText(text)}^FS`);
+      lines.push(`^FD${escapeZplText(applyLetterSpacing(text, letterSpacing))}^FS`);
     }
   } else {
     // Non-title fields: single line only
     if (field.alignment !== 'left') {
       lines.push(`^FB${field.width},1,0,${justification}`);
     }
-    lines.push(`^FD${escapeZplText(text)}^FS`);
+    lines.push(`^FD${escapeZplText(applyLetterSpacing(text, letterSpacing))}^FS`);
   }
   
   return lines;

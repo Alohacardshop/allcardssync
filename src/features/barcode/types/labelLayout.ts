@@ -12,6 +12,7 @@ export interface LabelField {
   alignment: 'left' | 'center' | 'right';
   maxFontSize: number; // dots (ZPL font height)
   minFontSize: number; // dots
+  letterSpacing?: number; // extra spacing between characters (0-5)
   enabled: boolean;
 }
 
