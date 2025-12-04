@@ -105,9 +105,12 @@ export function generateZplTemplate(layout: LabelLayout): string {
 
 /**
  * Apply letter spacing to text by inserting spaces between characters
+ * Skip if text contains template placeholders (e.g., {{PRICE}})
  */
 function applyLetterSpacing(text: string, spacing: number): string {
   if (!spacing || spacing <= 0) return text;
+  // Don't apply to template placeholders - they need to stay intact for replacement
+  if (text.includes('{{')) return text;
   const spacer = ' '.repeat(spacing);
   return text.split('').join(spacer);
 }
