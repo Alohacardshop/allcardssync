@@ -42,6 +42,8 @@ export default function PulledItemsFilter() {
   const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [dateFilter, setDateFilter] = useState<'today' | 'yesterday' | '7days' | '30days' | null>(null);
   const [typeFilter, setTypeFilter] = useState<'all' | 'raw' | 'graded'>('all');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [availableCategories, setAvailableCategories] = useState<string[]>([]);
 
   // Store/Location filter state
   const [filterStore, setFilterStore] = useState<string>('all');
@@ -90,7 +92,7 @@ export default function PulledItemsFilter() {
   useEffect(() => {
     filterItems();
     setSelectedItems(new Set());
-  }, [searchTerm, selectedIncludeTags, selectedExcludeTags, dateFilter, filterStore, filterLocation, typeFilter, allItems]);
+  }, [searchTerm, selectedIncludeTags, selectedExcludeTags, dateFilter, filterStore, filterLocation, typeFilter, categoryFilter, allItems]);
 
   // Update location names when cache is populated
   useEffect(() => {
@@ -186,6 +188,7 @@ export default function PulledItemsFilter() {
       const tagsSet = new Set<string>();
       const storesSet = new Set<string>();
       const locationsMap = new Map<string, string>();
+      const categoriesSet = new Set<string>();
       
       (data || []).forEach(item => {
         const itemTags = [
@@ -194,10 +197,10 @@ export default function PulledItemsFilter() {
         ];
         itemTags.forEach((tag: string) => tagsSet.add(tag));
         
-        // Add category fields as filterable tags
-        if (item.main_category) tagsSet.add(item.main_category);
-        if (item.category) tagsSet.add(item.category);
-        if (item.sub_category) tagsSet.add(item.sub_category);
+        // Collect main categories for dedicated filter
+        if (item.main_category) {
+          categoriesSet.add(item.main_category);
+        }
         
         // Collect stores
         if (item.store_key) {
@@ -212,6 +215,7 @@ export default function PulledItemsFilter() {
       });
       
       setAvailableTags(Array.from(tagsSet).sort());
+      setAvailableCategories(Array.from(categoriesSet).sort());
       setAvailableStores(Array.from(storesSet).sort());
       setAvailableLocations(
         Array.from(locationsMap.entries()).map(([gid, name]) => ({ gid, name }))
@@ -234,6 +238,13 @@ export default function PulledItemsFilter() {
         const itemType = item.type?.toLowerCase() || 'raw';
         return itemType === typeFilter;
       });
+    }
+
+    // Category filter (tcg, sports, etc.)
+    if (categoryFilter !== 'all') {
+      filtered = filtered.filter(item => 
+        item.main_category?.toLowerCase() === categoryFilter.toLowerCase()
+      );
     }
 
     // Store filter
@@ -288,16 +299,12 @@ export default function PulledItemsFilter() {
       });
     }
 
-    // Tag filters - exact matching, AND logic for includes (includes category fields)
+    // Tag filters - exact matching, AND logic for includes
     if (selectedIncludeTags.length > 0 || selectedExcludeTags.length > 0) {
       filtered = filtered.filter(item => {
         const itemTags = [
           ...((item.shopify_snapshot as any)?.tags || []),
           ...((item.source_payload as any)?.tags || []),
-          // Include category fields as pseudo-tags for filtering
-          item.main_category,
-          item.category,
-          item.sub_category,
         ].filter(Boolean).map((t: string) => t.toLowerCase().trim());
 
         // Check exclude tags - exclude if ANY match exactly
@@ -652,8 +659,8 @@ export default function PulledItemsFilter() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Store, Location, and Type Filters */}
-          <div className="grid gap-4 md:grid-cols-3">
+          {/* Store, Location, Type, and Category Filters */}
+          <div className="grid gap-4 md:grid-cols-4">
             <div className="space-y-2">
               <Label>Store</Label>
               <Select value={filterStore} onValueChange={setFilterStore}>
@@ -698,6 +705,23 @@ export default function PulledItemsFilter() {
                   <SelectItem value="all">All Types</SelectItem>
                   <SelectItem value="raw">Raw Only</SelectItem>
                   <SelectItem value="graded">Graded Only</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Category</Label>
+              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="All Categories" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Categories</SelectItem>
+                  {availableCategories.map(cat => (
+                    <SelectItem key={cat} value={cat}>
+                      {cat.toUpperCase()}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
