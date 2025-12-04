@@ -127,18 +127,17 @@ function generateTextZpl(field: LabelField, text: string, isTitle: boolean = fal
   const fontWidth = Math.floor(clampedFontSize * CHAR_W_RATIO);
   
   lines.push(`^FO${field.x},${field.y}`);
+  lines.push(`^A0N,${clampedFontSize},${fontWidth}`);
   
-  // Handle two-line output for titles
+  // Handle two-line output for titles/condition
   if (result.isTwoLine && result.lines.length === 2) {
     lines.push(`^FB${field.width},2,0,${justification}`);
-    lines.push(`^A0N,${clampedFontSize},${fontWidth}`);
     lines.push(`^FD${escapeZplText(result.lines[0] + '\\&' + result.lines[1])}^FS`);
   } else {
     // Single line
     if (field.alignment !== 'left') {
       lines.push(`^FB${field.width},1,0,${justification}`);
     }
-    lines.push(`^A0N,${clampedFontSize},${fontWidth}`);
     lines.push(`^FD${escapeZplText(text)}^FS`);
   }
   
