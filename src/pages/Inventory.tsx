@@ -230,6 +230,7 @@ const Inventory = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'out-of-stock' | 'sold' | 'deleted' | 'errors'>('active');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'raw' | 'graded'>('all');
   const [printStatusFilter, setPrintStatusFilter] = useState<'all' | 'printed' | 'not-printed'>('all');
   const [showSoldItems, setShowSoldItems] = useState(false);
   const [batchFilter, setBatchFilter] = useState<'all' | 'in_batch' | 'removed_from_batch' | 'current_batch'>(() => {
@@ -349,6 +350,7 @@ const Inventory = () => {
     statusFilter,
     batchFilter,
     printStatusFilter,
+    typeFilter,
     comicsSubCategory: null,
     searchTerm: debouncedSearchTerm,
     autoRefreshEnabled,
@@ -2335,6 +2337,17 @@ const Inventory = () => {
                       <SelectItem value="current_batch">Current Batch {currentBatch?.items?.[0]?.lot_number && `(${currentBatch.items[0].lot_number})`}</SelectItem>
                       <SelectItem value="in_batch">In Any Batch</SelectItem>
                       <SelectItem value="removed_from_batch">Removed from Batch</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  <Select value={typeFilter} onValueChange={(value: any) => setTypeFilter(value)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Item type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Types</SelectItem>
+                      <SelectItem value="raw">Raw Only</SelectItem>
+                      <SelectItem value="graded">Graded Only</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

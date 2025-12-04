@@ -8,6 +8,7 @@ export interface InventoryFilters {
   statusFilter: 'all' | 'active' | 'out-of-stock' | 'sold' | 'deleted' | 'errors';
   batchFilter: 'all' | 'in_batch' | 'removed_from_batch' | 'current_batch';
   printStatusFilter?: 'all' | 'printed' | 'not-printed';
+  typeFilter?: 'all' | 'raw' | 'graded';
   comicsSubCategory?: string | null;
   searchTerm?: string;
   autoRefreshEnabled?: boolean;
@@ -26,6 +27,7 @@ export function useInventoryListQuery(filters: InventoryFilters) {
       filters.statusFilter,
       filters.batchFilter,
       filters.printStatusFilter,
+      filters.typeFilter,
       filters.comicsSubCategory,
       filters.searchTerm,
       filters.currentBatchLotId,
@@ -38,6 +40,7 @@ export function useInventoryListQuery(filters: InventoryFilters) {
         statusFilter,
         batchFilter,
         printStatusFilter = 'all',
+        typeFilter = 'all',
         comicsSubCategory,
         searchTerm,
       } = filters;
@@ -74,15 +77,26 @@ export function useInventoryListQuery(filters: InventoryFilters) {
         .eq('store_key', storeKey)
         .eq('shopify_location_gid', locationGid);
 
-      // Apply tab-based filtering
-      if (activeTab === 'raw') {
-        query = query.eq('main_category', 'tcg').eq('type', 'Raw');
-      } else if (activeTab === 'graded') {
-        query = query.eq('type', 'Graded').or('main_category.is.null,main_category.eq.tcg');
-      } else if (activeTab === 'raw_comics') {
-        query = query.eq('main_category', 'comics').eq('type', 'Raw');
-      } else if (activeTab === 'graded_comics') {
-        query = query.eq('main_category', 'comics').eq('type', 'Graded');
+      // Apply type filter (overrides tab-based type filtering when set)
+      if (typeFilter !== 'all') {
+        query = query.eq('type', typeFilter === 'raw' ? 'Raw' : 'Graded');
+        // Still apply category from tab
+        if (activeTab === 'raw_comics' || activeTab === 'graded_comics') {
+          query = query.eq('main_category', 'comics');
+        } else {
+          query = query.or('main_category.is.null,main_category.eq.tcg');
+        }
+      } else {
+        // Apply tab-based filtering
+        if (activeTab === 'raw') {
+          query = query.eq('main_category', 'tcg').eq('type', 'Raw');
+        } else if (activeTab === 'graded') {
+          query = query.eq('type', 'Graded').or('main_category.is.null,main_category.eq.tcg');
+        } else if (activeTab === 'raw_comics') {
+          query = query.eq('main_category', 'comics').eq('type', 'Raw');
+        } else if (activeTab === 'graded_comics') {
+          query = query.eq('main_category', 'comics').eq('type', 'Graded');
+        }
       }
 
       // Apply status filter
