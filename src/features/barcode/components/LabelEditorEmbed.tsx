@@ -594,11 +594,13 @@ export const LabelEditorEmbed: React.FC = () => {
               </CollapsibleTrigger>
               <CollapsibleContent>
                 <CardContent className="p-2 pt-0">
-                  <FieldPalette
-                    layout={layout}
-                    onToggleField={handleToggleField}
-                    onAddField={handleAddField}
-                  />
+                  <ScrollArea className="max-h-[280px]">
+                    <FieldPalette
+                      layout={layout}
+                      onToggleField={handleToggleField}
+                      onAddField={handleAddField}
+                    />
+                  </ScrollArea>
                 </CardContent>
               </CollapsibleContent>
             </Card>
