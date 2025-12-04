@@ -18,8 +18,8 @@ type LabelField = typeof LABEL_FIELDS[number];
 
 // Shopify/intake_items source fields available for mapping
 const SOURCE_FIELDS = [
-  { value: 'brand_title', label: 'Brand Title (Product Name)' },
-  { value: 'subject', label: 'Subject (Card Name)' },
+  { value: 'brand_title', label: 'Brand Title (Full: "2022 POKEMON SWORD & SHIELD...")' },
+  { value: 'subject', label: 'Subject (Short: "FA/GIRATINA V")' },
   { value: 'sku', label: 'SKU' },
   { value: 'price', label: 'Price' },
   { value: 'grade', label: 'Grade/Condition' },
@@ -27,9 +27,26 @@ const SOURCE_FIELDS = [
   { value: 'year', label: 'Year' },
   { value: 'vendor', label: 'Vendor' },
   { value: 'category', label: 'Category' },
+  { value: 'type', label: 'Type' },
   { value: 'variant', label: 'Variant' },
   { value: 'lot_number', label: 'Lot Number' },
 ];
+
+// Example Pokemon raw product for live preview
+const EXAMPLE_PRODUCT: Record<string, string> = {
+  brand_title: '2022 POKEMON SWORD & SHIELD LOST ORIGIN FA/GIRATINA V #186 PSA 10',
+  subject: 'FA/GIRATINA V',
+  sku: '97678908',
+  price: '2200.00',
+  grade: '10',
+  card_number: '186',
+  year: '2022',
+  vendor: 'Josh',
+  category: 'graded',
+  type: 'Graded',
+  variant: '',
+  lot_number: 'LOT-001',
+};
 
 // Default condition abbreviations
 const DEFAULT_CONDITION_ABBREVS: Record<string, string> = {
@@ -412,6 +429,35 @@ export default function PrintProfileManager() {
                 
                 <div className="pt-2 text-xs text-muted-foreground">
                   <strong>Condition abbreviations:</strong> Near Mint→NM, Lightly Played→LP, Moderately Played→MP, Heavily Played→HP, Damaged→DMG
+                  <br /><strong>PSA Grades:</strong> 10→PSA 10, 9→PSA 9, etc.
+                </div>
+                
+                {/* Live Preview */}
+                <div className="mt-4 p-3 bg-muted/50 rounded-lg border">
+                  <p className="text-xs font-semibold mb-2">Live Preview (Pokemon PSA 10 Example):</p>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                    {LABEL_FIELDS.map(labelField => {
+                      const mapping = editingProfile.field_mappings?.[labelField];
+                      if (!mapping?.source) return null;
+                      let value = EXAMPLE_PRODUCT[mapping.source] || '';
+                      
+                      // Apply formatting
+                      if (mapping.format === 'currency' && value) {
+                        value = `$${parseFloat(value).toFixed(2)}`;
+                      }
+                      if (mapping.abbreviate && value) {
+                        const gradeAbbrevs: Record<string, string> = { '10': 'PSA 10', '9': 'PSA 9', '8': 'PSA 8', '7': 'PSA 7' };
+                        value = gradeAbbrevs[value] || DEFAULT_CONDITION_ABBREVS[value] || value;
+                      }
+                      
+                      return (
+                        <div key={labelField} className="flex justify-between py-0.5">
+                          <span className="text-muted-foreground capitalize">{labelField}:</span>
+                          <span className="font-mono text-foreground truncate max-w-[180px]" title={value}>{value || '—'}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </CollapsibleContent>
             </Collapsible>
