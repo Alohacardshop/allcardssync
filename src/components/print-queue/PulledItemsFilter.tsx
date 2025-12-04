@@ -49,9 +49,18 @@ export default function PulledItemsFilter() {
   const [isPrinting, setIsPrinting] = useState(false);
 
   useEffect(() => {
-    fetchAllItems();
     fetchTemplates();
   }, []);
+
+  useEffect(() => {
+    if (assignedStore) {
+      fetchAllItems();
+    } else {
+      setAllItems([]);
+      setItems([]);
+      setLoading(false);
+    }
+  }, [assignedStore, selectedLocation]);
 
   useEffect(() => {
     filterItems();
@@ -81,14 +90,28 @@ export default function PulledItemsFilter() {
   };
 
   const fetchAllItems = async () => {
+    if (!assignedStore) {
+      setAllItems([]);
+      setItems([]);
+      return;
+    }
+
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('intake_items')
         .select('*')
+        .eq('store_key', assignedStore)
         .is('printed_at', null)
         .is('deleted_at', null)
         .order('created_at', { ascending: false });
+
+      // Also filter by location if set
+      if (selectedLocation) {
+        query = query.eq('shopify_location_gid', selectedLocation);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
 
