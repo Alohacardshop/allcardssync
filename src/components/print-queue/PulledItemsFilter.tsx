@@ -10,12 +10,14 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Search, Filter, ChevronDown, X, Printer, Download, RefreshCw, Loader2 } from 'lucide-react';
+import { Search, Filter, ChevronDown, X, Printer, Download, RefreshCw, Loader2, Eye, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { useStore } from '@/contexts/StoreContext';
 import { ShopifyPullDialog } from '@/components/barcode-printing/ShopifyPullDialog';
+import { ShopifySyncDetailsDialog } from '@/components/ShopifySyncDetailsDialog';
 import { printQueue } from '@/lib/print/queueInstance';
 import { zplFromTemplateString } from '@/lib/labels/zpl';
+import { getLocationByStoreKey } from '@/config/locations';
 
 interface SavedTemplate {
   id: string;
@@ -54,6 +56,9 @@ export default function PulledItemsFilter() {
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
   const [copies, setCopies] = useState(1);
   const [isPrinting, setIsPrinting] = useState(false);
+
+  // Detail dialog state
+  const [detailItem, setDetailItem] = useState<any | null>(null);
 
   useEffect(() => {
     fetchTemplates();
@@ -423,6 +428,14 @@ export default function PulledItemsFilter() {
 
   const canPull = assignedStore && selectedLocation;
 
+  const getShopifyAdminUrl = (item: any) => {
+    if (!item.shopify_product_id || !item.store_key) return null;
+    const config = getLocationByStoreKey(item.store_key);
+    if (!config) return null;
+    const storeSlug = config.shopDomain.replace('.myshopify.com', '');
+    return `https://admin.shopify.com/store/${storeSlug}/products/${item.shopify_product_id}`;
+  };
+
   return (
     <div className="space-y-4 pb-24">
       {/* Pull from Shopify Section */}
@@ -728,9 +741,39 @@ export default function PulledItemsFilter() {
                       ))}
                     </div>
                   </div>
-                  <div className="text-right">
+                  <div className="text-right space-y-2">
                     <div className="font-medium">${item.price}</div>
                     <div className="text-sm text-muted-foreground">{item.variant}</div>
+                    <div className="flex gap-1 justify-end mt-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDetailItem(item);
+                        }}
+                        title="View Details"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                      {getShopifyAdminUrl(item) && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          asChild
+                          title="View in Shopify"
+                        >
+                          <a
+                            href={getShopifyAdminUrl(item)!}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                          </a>
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -808,6 +851,18 @@ export default function PulledItemsFilter() {
           storeKey={assignedStore}
           locationGid={selectedLocation}
           onSuccess={handlePullSuccess}
+        />
+      )}
+
+      {/* Item Detail Dialog */}
+      {detailItem && (
+        <ShopifySyncDetailsDialog
+          open={!!detailItem}
+          onOpenChange={(open) => !open && setDetailItem(null)}
+          row={detailItem}
+          selectedStoreKey={assignedStore}
+          selectedLocationGid={selectedLocation}
+          onRefresh={fetchAllItems}
         />
       )}
     </div>
