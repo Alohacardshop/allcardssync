@@ -61,6 +61,8 @@ const DEFAULT_CONDITION_ABBREVS: Record<string, string> = {
 
 interface FieldMapping {
   source: string;
+  source2?: string; // Secondary source for title field (combines with separator)
+  separator?: string; // Separator between source and source2 (default: " - ")
   format?: 'currency' | 'uppercase' | 'lowercase';
   abbreviate?: boolean;
   abbreviations?: Record<string, string>;
@@ -375,7 +377,7 @@ export default function PrintProfileManager() {
                 {LABEL_FIELDS.map((labelField) => {
                   const mapping = editingProfile.field_mappings?.[labelField] || { source: '' };
                   return (
-                    <div key={labelField} className="flex items-center gap-3 p-2 rounded border bg-muted/30">
+                    <div key={labelField} className="flex items-center gap-3 p-2 rounded border bg-muted/30 flex-wrap">
                       <span className="w-24 text-sm font-medium capitalize">{labelField}</span>
                       <span className="text-muted-foreground">←</span>
                       <Select
@@ -399,6 +401,47 @@ export default function PrintProfileManager() {
                           ))}
                         </SelectContent>
                       </Select>
+                      
+                      {/* Title field gets a second source dropdown */}
+                      {labelField === 'title' && (
+                        <>
+                          <Input
+                            className="w-16 text-center"
+                            value={mapping.separator ?? ' - '}
+                            onChange={(e) => {
+                              const newMappings = {
+                                ...editingProfile.field_mappings,
+                                [labelField]: { ...mapping, separator: e.target.value },
+                              };
+                              setEditingProfile({ ...editingProfile, field_mappings: newMappings });
+                            }}
+                            placeholder="sep"
+                            title="Separator between fields"
+                          />
+                          <Select
+                            value={mapping.source2 || '_none'}
+                            onValueChange={(value) => {
+                              const newMappings = {
+                                ...editingProfile.field_mappings,
+                                [labelField]: { ...mapping, source2: value === '_none' ? undefined : value },
+                              };
+                              setEditingProfile({ ...editingProfile, field_mappings: newMappings });
+                            }}
+                          >
+                            <SelectTrigger className="w-[200px]">
+                              <SelectValue placeholder="+ Second field (optional)" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="_none">None</SelectItem>
+                              {SOURCE_FIELDS.map((sf) => (
+                                <SelectItem key={sf.value} value={sf.value}>
+                                  {sf.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </>
+                      )}
                       
                       {labelField === 'condition' && (
                         <div className="flex items-center gap-2 ml-2">
@@ -440,6 +483,14 @@ export default function PrintProfileManager() {
                       const mapping = editingProfile.field_mappings?.[labelField];
                       if (!mapping?.source) return null;
                       let value = EXAMPLE_PRODUCT[mapping.source] || '';
+                      
+                      // Combine with second source for title
+                      if (labelField === 'title' && mapping.source2) {
+                        const value2 = EXAMPLE_PRODUCT[mapping.source2] || '';
+                        if (value2) {
+                          value = value + (mapping.separator ?? ' - ') + value2;
+                        }
+                      }
                       
                       // Apply formatting
                       if (mapping.format === 'currency' && value) {
