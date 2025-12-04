@@ -182,7 +182,7 @@ export default function PulledItemsFilter() {
 
       setAllItems(data || []);
       
-      // Extract all unique tags
+      // Extract all unique tags (including category fields as pseudo-tags)
       const tagsSet = new Set<string>();
       const storesSet = new Set<string>();
       const locationsMap = new Map<string, string>();
@@ -193,6 +193,11 @@ export default function PulledItemsFilter() {
           ...((item.source_payload as any)?.tags || []),
         ];
         itemTags.forEach((tag: string) => tagsSet.add(tag));
+        
+        // Add category fields as filterable tags
+        if (item.main_category) tagsSet.add(item.main_category);
+        if (item.category) tagsSet.add(item.category);
+        if (item.sub_category) tagsSet.add(item.sub_category);
         
         // Collect stores
         if (item.store_key) {
@@ -283,13 +288,17 @@ export default function PulledItemsFilter() {
       });
     }
 
-    // Tag filters - exact matching, AND logic for includes
+    // Tag filters - exact matching, AND logic for includes (includes category fields)
     if (selectedIncludeTags.length > 0 || selectedExcludeTags.length > 0) {
       filtered = filtered.filter(item => {
         const itemTags = [
           ...((item.shopify_snapshot as any)?.tags || []),
           ...((item.source_payload as any)?.tags || []),
-        ].map((t: string) => t.toLowerCase().trim());
+          // Include category fields as pseudo-tags for filtering
+          item.main_category,
+          item.category,
+          item.sub_category,
+        ].filter(Boolean).map((t: string) => t.toLowerCase().trim());
 
         // Check exclude tags - exclude if ANY match exactly
         if (selectedExcludeTags.length > 0) {
