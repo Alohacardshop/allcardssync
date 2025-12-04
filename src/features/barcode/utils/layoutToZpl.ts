@@ -51,8 +51,9 @@ export function generateZplFromLayout(
       // Generate barcode
       lines.push(...generateBarcodeZpl(field, value));
     } else {
-      // Generate text field - pass isTitle flag for smart two-line handling
-      lines.push(...generateTextZpl(field, value, field.fieldKey === 'title'));
+      // Generate text field - enable two-line handling for title and condition
+      const allowTwoLines = field.fieldKey === 'title' || field.fieldKey === 'condition';
+      lines.push(...generateTextZpl(field, value, allowTwoLines));
     }
   }
 
@@ -90,7 +91,9 @@ export function generateZplTemplate(layout: LabelLayout): string {
     if (field.fieldKey === 'barcode') {
       lines.push(...generateBarcodeZpl(field, placeholder));
     } else {
-      lines.push(...generateTextZpl(field, placeholder, field.fieldKey === 'title'));
+      // Enable two-line handling for title and condition
+      const allowTwoLines = field.fieldKey === 'title' || field.fieldKey === 'condition';
+      lines.push(...generateTextZpl(field, placeholder, allowTwoLines));
     }
   }
 

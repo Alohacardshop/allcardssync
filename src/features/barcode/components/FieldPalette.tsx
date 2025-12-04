@@ -42,7 +42,7 @@ const DEFAULT_FIELD_CONFIG: Record<FieldKey, Partial<LabelField>> = {
   title: { width: 260, height: 40, maxFontSize: 28, minFontSize: 14, alignment: 'left' },
   sku: { width: 150, height: 24, maxFontSize: 18, minFontSize: 12, alignment: 'left' },
   price: { width: 118, height: 45, maxFontSize: 36, minFontSize: 20, alignment: 'right' },
-  condition: { width: 60, height: 28, maxFontSize: 22, minFontSize: 14, alignment: 'center' },
+  condition: { width: 152, height: 50, maxFontSize: 24, minFontSize: 10, alignment: 'center' },
   barcode: { width: 260, height: 70, maxFontSize: 50, minFontSize: 30, alignment: 'center' },
   set: { width: 150, height: 24, maxFontSize: 16, minFontSize: 10, alignment: 'left' },
   cardNumber: { width: 80, height: 24, maxFontSize: 16, minFontSize: 10, alignment: 'left' },
