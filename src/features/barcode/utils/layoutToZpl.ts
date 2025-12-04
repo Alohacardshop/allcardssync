@@ -177,7 +177,7 @@ function generateBarcodeZpl(field: LabelField, data: string): string[] {
   // Calculate module width for barcode to fit
   const barcodeData = data.replace(/[{}]/g, ''); // Remove placeholder braces for estimation
   const moduleWidth = Math.max(2, Math.min(4, Math.floor(field.width / (barcodeData.length * 11 + 35))));
-  const barcodeHeight = Math.min(field.height - 20, 60); // Leave room for human-readable text
+  const barcodeHeight = field.height - 4; // Use nearly full height (no human-readable text)
   
   // Center the barcode in the field
   const estimatedBarcodeWidth = estimateCode128WidthDots(barcodeData.length, moduleWidth);
