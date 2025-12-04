@@ -129,12 +129,19 @@ function generateTextZpl(field: LabelField, text: string, isTitle: boolean = fal
   lines.push(`^FO${field.x},${field.y}`);
   lines.push(`^A0N,${clampedFontSize},${fontWidth}`);
   
-  // Handle two-line output for titles/condition
-  if (result.isTwoLine && result.lines.length === 2) {
+  // For title/condition fields (isTitle=true), ALWAYS use 2-line field block
+  // This ensures actual data at print time has room to wrap, even though
+  // placeholder text may have fit on 1 line during template generation
+  if (isTitle) {
     lines.push(`^FB${field.width},2,0,${justification}`);
-    lines.push(`^FD${escapeZplText(result.lines[0] + '\\&' + result.lines[1])}^FS`);
+    // Use line break if text was split, otherwise let printer wrap as needed
+    if (result.isTwoLine && result.lines.length === 2) {
+      lines.push(`^FD${escapeZplText(result.lines[0] + '\\&' + result.lines[1])}^FS`);
+    } else {
+      lines.push(`^FD${escapeZplText(text)}^FS`);
+    }
   } else {
-    // Single line
+    // Non-title fields: single line only
     if (field.alignment !== 'left') {
       lines.push(`^FB${field.width},1,0,${justification}`);
     }
