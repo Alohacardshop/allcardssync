@@ -59,16 +59,16 @@ export const PropertiesPanelEnhanced: React.FC<PropertiesPanelEnhancedProps> = (
     onUpdateField(field.id, { [key]: value });
   };
 
-  // Calculate text fitting preview - use title-specific function for title fields (allows 2-line split)
+  // Calculate text fitting preview - use title-specific function for title/condition fields (allows 2-line split)
   const sampleValue = sampleData[field.fieldKey] || '';
   const scale = 2; // Preview scale
-  const isTitle = field.fieldKey === 'title';
+  const allowTwoLines = field.fieldKey === 'title' || field.fieldKey === 'condition';
   const contentWidth = dotsToPixels(field.width, scale) - 8;
   const contentHeight = dotsToPixels(field.height, scale) - 16;
   const maxFont = dotsToPixels(field.maxFontSize, scale) * 0.6;
   const minFont = dotsToPixels(field.minFontSize, scale) * 0.6;
   
-  const { fontSize, lines, isTwoLine } = isTitle
+  const { fontSize, lines, isTwoLine } = allowTwoLines
     ? calculateTitleFontSize(sampleValue, contentWidth, contentHeight, maxFont, minFont)
     : calculateOptimalFontSize(sampleValue, contentWidth, maxFont, minFont);
   

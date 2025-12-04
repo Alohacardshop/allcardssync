@@ -53,9 +53,9 @@ export const FieldBoxEnhanced: React.FC<FieldBoxEnhancedProps> = ({
 
   const sampleValue = sampleData[field.fieldKey] || '';
   const isBarcode = field.fieldKey === 'barcode';
-  const isTitle = field.fieldKey === 'title';
+  const allowTwoLines = field.fieldKey === 'title' || field.fieldKey === 'condition';
   
-  // Calculate font size - use title-specific function for title field (allows 2 lines)
+  // Calculate font size - use title-specific function for title/condition fields (allows 2 lines)
   const contentWidth = pixelWidth - 8;
   const contentHeight = pixelHeight - 16; // Account for padding and label
   
@@ -75,7 +75,7 @@ export const FieldBoxEnhanced: React.FC<FieldBoxEnhancedProps> = ({
   const maxFont = dotsToPixels(field.maxFontSize, scale) * FONT_CALIBRATION_FACTOR;
   const minFont = dotsToPixels(field.minFontSize, scale) * FONT_CALIBRATION_FACTOR;
   
-  const { fontSize, lines, isTwoLine } = isTitle
+  const { fontSize, lines, isTwoLine } = allowTwoLines
     ? calculateTitleFontSize(sampleValue, contentWidth, contentHeight, maxFont, minFont)
     : calculateOptimalFontSize(sampleValue, contentWidth, maxFont, minFont);
 
