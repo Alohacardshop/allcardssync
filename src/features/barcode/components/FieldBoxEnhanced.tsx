@@ -168,8 +168,8 @@ export const FieldBoxEnhanced: React.FC<FieldBoxEnhancedProps> = ({
         )}
         
         {isBarcode ? (
-          <div className="flex flex-col items-center justify-center h-full pt-2">
-            <div className="flex gap-[1px] h-[55%] items-end">
+          <div className="flex items-center justify-center h-full">
+            <div className="flex gap-[1px] h-[85%] items-end">
               {[...Array(Math.min(24, Math.floor(pixelWidth / 8)))].map((_, i) => (
                 <div
                   key={i}
@@ -181,9 +181,6 @@ export const FieldBoxEnhanced: React.FC<FieldBoxEnhancedProps> = ({
                 />
               ))}
             </div>
-            <span className="text-[10px] font-mono mt-1 truncate max-w-full px-1">
-              {sampleValue}
-            </span>
           </div>
         ) : (
           <div
