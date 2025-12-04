@@ -123,7 +123,8 @@ export const LabelEditorEmbed: React.FC = () => {
 
       const defaultTemplate = templates.find(t => t.is_default);
       if (defaultTemplate) {
-        setLayout(defaultTemplate.layout);
+        // Merge with defaults to ensure new fields (like offsets) have values
+        setLayout({ ...DEFAULT_LABEL_LAYOUT, ...defaultTemplate.layout, id: defaultTemplate.id });
         setTemplateName(defaultTemplate.name);
         setSelectedTemplateId(defaultTemplate.id);
       }
@@ -137,7 +138,12 @@ export const LabelEditorEmbed: React.FC = () => {
   const handleLoadTemplate = (templateId: string) => {
     const template = savedTemplates.find(t => t.id === templateId);
     if (template) {
-      setLayout({ ...template.layout, id: template.id });
+      // Merge with defaults to ensure new fields (like offsets) have values
+      setLayout({ 
+        ...DEFAULT_LABEL_LAYOUT,
+        ...template.layout, 
+        id: template.id,
+      });
       setTemplateName(template.name);
       setSelectedTemplateId(templateId);
       setSelectedFieldId(null);
