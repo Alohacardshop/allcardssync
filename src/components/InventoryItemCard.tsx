@@ -174,9 +174,6 @@ export const InventoryItemCard = memo(({
   };
 
   const getPrintStatusBadge = (item: any) => {
-    const itemType = item.type?.toLowerCase() || 'raw';
-    if (itemType !== 'raw') return null;
-    
     if (item.printed_at) {
       return (
         <Badge variant="default" className="bg-green-100 text-green-800 border-green-300">
