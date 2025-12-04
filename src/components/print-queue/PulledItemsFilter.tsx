@@ -139,7 +139,14 @@ export default function PulledItemsFilter() {
   };
 
   const fetchAllItems = async () => {
+    console.log('[PulledItemsFilter] fetchAllItems called:', {
+      assignedStore,
+      selectedLocation,
+      timestamp: new Date().toISOString()
+    });
+
     if (!assignedStore) {
+      console.log('[PulledItemsFilter] No assignedStore, clearing items');
       setAllItems([]);
       setItems([]);
       return;
@@ -160,7 +167,20 @@ export default function PulledItemsFilter() {
         query = query.eq('shopify_location_gid', selectedLocation);
       }
 
+      console.log('[PulledItemsFilter] Query filters:', {
+        store_key: assignedStore,
+        shopify_location_gid: selectedLocation || 'NOT FILTERED',
+        printed_at: 'NULL',
+        deleted_at: 'NULL'
+      });
+
       const { data, error } = await query;
+
+      console.log('[PulledItemsFilter] Query result:', {
+        count: data?.length || 0,
+        error: error?.message || null,
+        firstItem: data?.[0] ? { id: data[0].id, sku: data[0].sku, store_key: data[0].store_key } : null
+      });
 
       if (error) throw error;
 
@@ -197,7 +217,7 @@ export default function PulledItemsFilter() {
       );
       filterItems();
     } catch (error) {
-      console.error('Failed to fetch items:', error);
+      console.error('[PulledItemsFilter] Failed to fetch items:', error);
       toast.error('Failed to load items');
     } finally {
       setLoading(false);
@@ -480,6 +500,9 @@ export default function PulledItemsFilter() {
             <div className="flex items-center gap-2">
               <Filter className="h-5 w-5" />
               Filter Items
+              <span className="text-xs font-normal text-muted-foreground ml-2">
+                [Debug: store={assignedStore || 'NONE'} | location={selectedLocation || 'NONE'} | items={allItems.length}]
+              </span>
             </div>
             <Button variant="ghost" size="sm" onClick={fetchAllItems} disabled={loading}>
               <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
