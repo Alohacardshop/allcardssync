@@ -7,8 +7,51 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, Save, Trash2, GripVertical } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import type { Json } from '@/integrations/supabase/types';
+import { Plus, Save, Trash2, GripVertical, ChevronDown, Link2 } from 'lucide-react';
 import { toast } from 'sonner';
+
+// Label fields that can be mapped
+const LABEL_FIELDS = ['title', 'sku', 'price', 'condition', 'barcode', 'set', 'cardNumber', 'year', 'vendor'] as const;
+type LabelField = typeof LABEL_FIELDS[number];
+
+// Shopify/intake_items source fields available for mapping
+const SOURCE_FIELDS = [
+  { value: 'brand_title', label: 'Brand Title (Product Name)' },
+  { value: 'subject', label: 'Subject (Card Name)' },
+  { value: 'sku', label: 'SKU' },
+  { value: 'price', label: 'Price' },
+  { value: 'grade', label: 'Grade/Condition' },
+  { value: 'card_number', label: 'Card Number' },
+  { value: 'year', label: 'Year' },
+  { value: 'vendor', label: 'Vendor' },
+  { value: 'category', label: 'Category' },
+  { value: 'variant', label: 'Variant' },
+  { value: 'lot_number', label: 'Lot Number' },
+];
+
+// Default condition abbreviations
+const DEFAULT_CONDITION_ABBREVS: Record<string, string> = {
+  'Near Mint': 'NM',
+  'Lightly Played': 'LP',
+  'Moderately Played': 'MP',
+  'Heavily Played': 'HP',
+  'Damaged': 'DMG',
+  'Near Mint Foil': 'NM-F',
+  'Lightly Played Foil': 'LP-F',
+};
+
+interface FieldMapping {
+  source: string;
+  format?: 'currency' | 'uppercase' | 'lowercase';
+  abbreviate?: boolean;
+  abbreviations?: Record<string, string>;
+}
+
+interface FieldMappings {
+  [key: string]: FieldMapping;
+}
 
 interface PrintProfile {
   id: string;
@@ -25,6 +68,7 @@ interface PrintProfile {
   darkness?: number;
   add_tags?: string[];
   remove_tags?: string[];
+  field_mappings?: FieldMappings;
   created_at: string;
   updated_at: string;
 }
@@ -49,7 +93,12 @@ export default function PrintProfileManager() {
         .order('priority', { ascending: true });
 
       if (error) throw error;
-      setProfiles(data || []);
+      // Cast field_mappings from Json to FieldMappings
+      const typedProfiles = (data || []).map(p => ({
+        ...p,
+        field_mappings: p.field_mappings as unknown as FieldMappings | undefined,
+      }));
+      setProfiles(typedProfiles);
     } catch (error) {
       console.error('Failed to fetch profiles:', error);
       toast.error('Failed to load print profiles');
@@ -78,14 +127,20 @@ export default function PrintProfileManager() {
       return;
     }
 
+    // Prepare payload with proper type casting for Supabase
+    const payload = {
+      ...editingProfile,
+      field_mappings: editingProfile.field_mappings as unknown as Json,
+    };
+
     try {
       if (editingProfile.id) {
         const { error } = await supabase
           .from('print_profiles')
           .update({
-            ...editingProfile,
+            ...payload,
             updated_at: new Date().toISOString(),
-          })
+          } as any)
           .eq('id', editingProfile.id);
 
         if (error) throw error;
@@ -94,10 +149,10 @@ export default function PrintProfileManager() {
         const { error } = await supabase
           .from('print_profiles')
           .insert([{
-            ...editingProfile,
+            ...payload,
             name: editingProfile.name!,
             priority: profiles.length,
-          }]);
+          } as any]);
 
         if (error) throw error;
         toast.success('Profile created');
@@ -284,6 +339,82 @@ export default function PrintProfileManager() {
                 />
               </div>
             </div>
+
+            {/* Field Mappings Section */}
+            <Collapsible>
+              <CollapsibleTrigger asChild>
+                <Button variant="outline" className="w-full justify-between">
+                  <span className="flex items-center gap-2">
+                    <Link2 className="h-4 w-4" />
+                    Field Mappings (Shopify → Label)
+                  </span>
+                  <ChevronDown className="h-4 w-4" />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="pt-4 space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  Map Shopify product fields to label fields. Condition can be abbreviated (Near Mint → NM).
+                </p>
+                {LABEL_FIELDS.map((labelField) => {
+                  const mapping = editingProfile.field_mappings?.[labelField] || { source: '' };
+                  return (
+                    <div key={labelField} className="flex items-center gap-3 p-2 rounded border bg-muted/30">
+                      <span className="w-24 text-sm font-medium capitalize">{labelField}</span>
+                      <span className="text-muted-foreground">←</span>
+                      <Select
+                        value={mapping.source || ''}
+                        onValueChange={(value) => {
+                          const newMappings = {
+                            ...editingProfile.field_mappings,
+                            [labelField]: { ...mapping, source: value },
+                          };
+                          setEditingProfile({ ...editingProfile, field_mappings: newMappings });
+                        }}
+                      >
+                        <SelectTrigger className="w-[200px]">
+                          <SelectValue placeholder="Select source field" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {SOURCE_FIELDS.map((sf) => (
+                            <SelectItem key={sf.value} value={sf.value}>
+                              {sf.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      
+                      {labelField === 'condition' && (
+                        <div className="flex items-center gap-2 ml-2">
+                          <Switch
+                            checked={mapping.abbreviate ?? true}
+                            onCheckedChange={(checked) => {
+                              const newMappings = {
+                                ...editingProfile.field_mappings,
+                                [labelField]: { 
+                                  ...mapping, 
+                                  abbreviate: checked,
+                                  abbreviations: checked ? DEFAULT_CONDITION_ABBREVS : undefined,
+                                },
+                              };
+                              setEditingProfile({ ...editingProfile, field_mappings: newMappings });
+                            }}
+                          />
+                          <span className="text-xs text-muted-foreground">Abbreviate</span>
+                        </div>
+                      )}
+                      
+                      {labelField === 'price' && (
+                        <span className="text-xs text-muted-foreground ml-2">Format: $X.XX</span>
+                      )}
+                    </div>
+                  );
+                })}
+                
+                <div className="pt-2 text-xs text-muted-foreground">
+                  <strong>Condition abbreviations:</strong> Near Mint→NM, Lightly Played→LP, Moderately Played→MP, Heavily Played→HP, Damaged→DMG
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
 
             <div className="flex items-center space-x-2">
               <Switch
