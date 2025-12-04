@@ -9,8 +9,12 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import type { Json } from '@/integrations/supabase/types';
-import { Plus, Save, Trash2, GripVertical, ChevronDown, Link2 } from 'lucide-react';
+import { Plus, Save, Trash2, GripVertical, ChevronDown, Link2, Printer } from 'lucide-react';
 import { toast } from 'sonner';
+import { usePrinter } from '@/hooks/usePrinter';
+import { applyFieldMappings, type FieldMappings as ApplyFieldMappings } from '@/lib/labels/applyFieldMappings';
+import { zplFromElements } from '@/lib/labels/zpl';
+import type { LabelLayout } from '@/lib/labels/types';
 
 // Label fields that can be mapped
 const LABEL_FIELDS = ['title', 'sku', 'price', 'condition', 'barcode', 'set', 'cardNumber', 'year', 'vendor'] as const;
@@ -97,6 +101,9 @@ export default function PrintProfileManager() {
   const [templates, setTemplates] = useState<any[]>([]);
   const [editingProfile, setEditingProfile] = useState<Partial<PrintProfile> | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isPrinting, setIsPrinting] = useState(false);
+  
+  const { printer, print } = usePrinter();
 
   useEffect(() => {
     fetchProfiles();
@@ -215,6 +222,81 @@ export default function PrintProfileManager() {
     } catch (error) {
       console.error('Failed to update priority:', error);
       toast.error('Failed to update priority');
+    }
+  };
+
+  const handlePrintTest = async () => {
+    if (!editingProfile?.template_id) {
+      toast.error('Select a template first');
+      return;
+    }
+    if (!printer) {
+      toast.error('No printer configured. Go to Printer Settings tab.');
+      return;
+    }
+
+    setIsPrinting(true);
+    try {
+      // Get the template
+      const template = templates.find(t => t.id === editingProfile.template_id);
+      if (!template) {
+        toast.error('Template not found');
+        return;
+      }
+
+      // Fetch full template with canvas data
+      const { data: fullTemplate, error } = await supabase
+        .from('label_templates')
+        .select('*')
+        .eq('id', editingProfile.template_id)
+        .single();
+
+      if (error || !fullTemplate?.canvas) {
+        toast.error('Failed to load template');
+        return;
+      }
+
+      // Apply field mappings to example product
+      const mappings = editingProfile.field_mappings as ApplyFieldMappings | undefined;
+      const labelData = applyFieldMappings(EXAMPLE_PRODUCT, mappings);
+
+      // Get ZPL from template - handle both raw ZPL and element-based templates
+      const canvas = fullTemplate.canvas as Record<string, unknown>;
+      let zpl: string;
+      
+      if (canvas?.zplLabel && typeof canvas.zplLabel === 'string') {
+        // Template uses raw ZPL with {{FIELD}} placeholders
+        zpl = canvas.zplLabel
+          .replace(/\{\{CONDITION\}\}/g, labelData.condition || '')
+          .replace(/\{\{PRICE\}\}/g, labelData.price || '')
+          .replace(/\{\{BARCODE\}\}/g, labelData.barcode || '')
+          .replace(/\{\{SKU\}\}/g, labelData.sku || '')
+          .replace(/\{\{SETNAME\}\}/g, labelData.set || '')
+          .replace(/\{\{CARDNAME\}\}/g, labelData.title || '')
+          .replace(/\{\{CARDNUMBER\}\}/g, labelData.cardNumber || '')
+          .replace(/\{\{YEAR\}\}/g, labelData.year || '')
+          .replace(/\{\{VENDOR\}\}/g, labelData.vendor || '');
+      } else if (canvas?.elements && Array.isArray(canvas.elements)) {
+        // Element-based template - use zplFromElements
+        const layout = canvas as unknown as LabelLayout;
+        zpl = zplFromElements(layout);
+      } else {
+        toast.error('Unsupported template format');
+        return;
+      }
+      
+      // Print
+      const result = await print(zpl, 1);
+      if (result.success) {
+        toast.success('Test label printed!');
+      } else {
+        toast.error(result.error || 'Print failed');
+      }
+    } catch (err) {
+      console.error('Print test failed:', err);
+      toast.error('Failed to print test label');
+    } finally {
+      setIsPrinting(false);
     }
   };
 
@@ -525,6 +607,14 @@ export default function PrintProfileManager() {
               <Button onClick={handleSaveProfile}>
                 <Save className="h-4 w-4 mr-2" />
                 Save Profile
+              </Button>
+              <Button 
+                variant="secondary" 
+                onClick={handlePrintTest}
+                disabled={isPrinting || !editingProfile.template_id}
+              >
+                <Printer className="h-4 w-4 mr-2" />
+                {isPrinting ? 'Printing...' : 'Print Test Label'}
               </Button>
               <Button variant="outline" onClick={() => setEditingProfile(null)}>
                 Cancel
