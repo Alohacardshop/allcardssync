@@ -274,28 +274,28 @@ export default function PulledItemsFilter() {
       });
     }
 
-    // Tag filters
+    // Tag filters - exact matching, AND logic for includes
     if (selectedIncludeTags.length > 0 || selectedExcludeTags.length > 0) {
       filtered = filtered.filter(item => {
         const itemTags = [
           ...((item.shopify_snapshot as any)?.tags || []),
           ...((item.source_payload as any)?.tags || []),
-        ].map((t: string) => t.toLowerCase());
+        ].map((t: string) => t.toLowerCase().trim());
 
-        // Check exclude tags
+        // Check exclude tags - exclude if ANY match exactly
         if (selectedExcludeTags.length > 0) {
           const hasExcluded = selectedExcludeTags.some(tag => 
-            itemTags.some(itemTag => itemTag.includes(tag.toLowerCase()))
+            itemTags.includes(tag.toLowerCase().trim())
           );
           if (hasExcluded) return false;
         }
 
-        // Check include tags
+        // Check include tags - must have ALL selected tags (AND logic)
         if (selectedIncludeTags.length > 0) {
-          const hasIncluded = selectedIncludeTags.some(tag => 
-            itemTags.some(itemTag => itemTag.includes(tag.toLowerCase()))
+          const hasAllIncluded = selectedIncludeTags.every(tag => 
+            itemTags.includes(tag.toLowerCase().trim())
           );
-          if (!hasIncluded) return false;
+          if (!hasAllIncluded) return false;
         }
 
         return true;
