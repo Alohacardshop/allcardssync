@@ -190,7 +190,10 @@ export const FieldBoxEnhanced: React.FC<FieldBoxEnhancedProps> = ({
               field.alignment === 'right' && 'text-right',
               field.alignment === 'left' && 'text-left'
             )}
-            style={{ fontSize: `${Math.max(10, fontSize)}px` }}
+            style={{ 
+              fontSize: `${Math.max(10, fontSize)}px`,
+              letterSpacing: field.letterSpacing ? `${field.letterSpacing * 0.1}em` : undefined
+            }}
           >
             {lines.map((line, i) => (
               <div key={i} className="truncate px-0.5">
