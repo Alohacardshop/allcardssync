@@ -10,7 +10,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Search, Filter, ChevronDown, X, Printer, Download, RefreshCw, Loader2, Eye, ExternalLink, Check, Package, RotateCcw, Copy } from 'lucide-react';
+import { Search, Filter, ChevronDown, X, Printer, Download, RefreshCw, Loader2, Eye, ExternalLink, Check, Package, RotateCcw } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { BatchSelectorDialog } from '@/components/BatchSelectorDialog';
 import { toast } from 'sonner';
@@ -74,9 +74,6 @@ export default function PulledItemsFilter() {
 
   // Mark as unprinted loading state
   const [isMarkingUnprinted, setIsMarkingUnprinted] = useState(false);
-
-  // Test mode - skip marking as printed
-  const [markAsPrinted, setMarkAsPrinted] = useState(true);
 
   useEffect(() => {
     fetchTemplates();
@@ -519,19 +516,17 @@ export default function PulledItemsFilter() {
         printedCount++;
       }
 
-      // Update printed_at timestamps (skip if testing)
-      if (markAsPrinted) {
-        const { error: updateError } = await supabase
-          .from('intake_items')
-          .update({ printed_at: new Date().toISOString() })
-          .in('id', itemIds);
+      // Update printed_at timestamps
+      const { error: updateError } = await supabase
+        .from('intake_items')
+        .update({ printed_at: new Date().toISOString() })
+        .in('id', itemIds);
 
-        if (updateError) {
-          console.error('Failed to update printed_at:', updateError);
-        }
+      if (updateError) {
+        console.error('Failed to update printed_at:', updateError);
       }
 
-      toast.success(`Queued ${printedCount} label${printedCount > 1 ? 's' : ''} for printing${!markAsPrinted ? ' (test mode)' : ''}`);
+      toast.success(`Queued ${printedCount} label${printedCount > 1 ? 's' : ''} for printing`);
       
       // Clear selection and refresh items
       setSelectedItems(new Set());
@@ -575,55 +570,6 @@ export default function PulledItemsFilter() {
     } finally {
       setIsMarkingUnprinted(false);
     }
-  };
-
-  // Copy ZPL to clipboard for testing in Labelary
-  const handleCopyZpl = () => {
-    if (selectedItems.size === 0) {
-      toast.error('No items selected');
-      return;
-    }
-    if (!selectedTemplateId) {
-      toast.error('Please select a label template first');
-      return;
-    }
-
-    const template = templates.find(t => t.id === selectedTemplateId);
-    if (!template) {
-      toast.error('Template not found');
-      return;
-    }
-
-    const zplBody = template.canvas?.zplLabel;
-    if (!zplBody) {
-      toast.error('Template has no ZPL body');
-      return;
-    }
-
-    // Get first selected item
-    const firstItemId = Array.from(selectedItems)[0];
-    const item = items.find(i => i.id === firstItemId);
-    if (!item) {
-      toast.error('Item not found');
-      return;
-    }
-
-    const vars = {
-      CARDNAME: item.subject || item.brand_title || '',
-      SETNAME: item.category || '',
-      CARDNUMBER: item.card_number || '',
-      CONDITION: abbreviateGrade(item.variant),
-      PRICE: item.price ? `$${Number(item.price).toFixed(2)}` : '',
-      SKU: item.sku || '',
-      BARCODE: item.sku || '',
-      VENDOR: item.vendor || '',
-      YEAR: item.year || '',
-      CATEGORY: item.main_category || '',
-    };
-
-    const zpl = zplFromTemplateString(zplBody, vars);
-    navigator.clipboard.writeText(zpl);
-    toast.success('ZPL copied! Paste into labelary.com/viewer.html');
   };
 
   // Handle batch printing
@@ -1165,16 +1111,6 @@ export default function PulledItemsFilter() {
                     className="w-20"
                   />
                 </div>
-                <div className="flex items-center space-x-2">
-                  <Switch
-                    id="mark-printed"
-                    checked={markAsPrinted}
-                    onCheckedChange={setMarkAsPrinted}
-                  />
-                  <Label htmlFor="mark-printed" className="text-xs cursor-pointer">
-                    Mark as printed
-                  </Label>
-                </div>
               </div>
               <div className="flex items-center gap-3">
                 <span className="text-sm text-muted-foreground">
@@ -1200,15 +1136,7 @@ export default function PulledItemsFilter() {
                     Mark Unprinted
                   </Button>
                 )}
-                <Button 
-                  variant="outline"
-                  onClick={handleCopyZpl}
-                  disabled={!selectedTemplateId}
-                >
-                  <Copy className="h-4 w-4 mr-2" />
-                  Copy ZPL
-                </Button>
-                <Button 
+                <Button
                   onClick={handlePrintSelected}
                   disabled={isPrinting || !selectedTemplateId}
                 >
