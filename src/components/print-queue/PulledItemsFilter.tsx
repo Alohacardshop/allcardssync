@@ -438,14 +438,30 @@ export default function PulledItemsFilter() {
   // Abbreviate grade/condition for labels
   const abbreviateGrade = (variant?: string): string => {
     if (!variant) return '';
-    const map: Record<string, string> = {
-      'Near Mint': 'NM',
-      'Lightly Played': 'LP',
-      'Moderately Played': 'MP',
-      'Heavily Played': 'HP',
-      'Damaged': 'DMG',
-    };
-    return map[variant] || variant;
+    
+    // Handle compound conditions like "Lightly Played - Foil"
+    let result = variant;
+    const conditionMap: [RegExp, string][] = [
+      [/\bNear Mint\b/gi, 'NM'],
+      [/\bLightly Played\b/gi, 'LP'],
+      [/\bModerately Played\b/gi, 'MP'],
+      [/\bHeavily Played\b/gi, 'HP'],
+      [/\bDamaged\b/gi, 'DMG'],
+      [/\bFoil\b/gi, 'F'],
+      [/\bHolo\b/gi, 'H'],
+      [/\bReverse Holo\b/gi, 'RH'],
+      [/\bUnlimited\b/gi, 'UNL'],
+      [/\b1st Edition\b/gi, '1E'],
+    ];
+    
+    for (const [pattern, abbrev] of conditionMap) {
+      result = result.replace(pattern, abbrev);
+    }
+    
+    // Clean up separators
+    result = result.replace(/\s*-\s*/g, '-').replace(/\s+/g, ' ').trim();
+    
+    return result;
   };
 
   const handlePrintSelected = async () => {
