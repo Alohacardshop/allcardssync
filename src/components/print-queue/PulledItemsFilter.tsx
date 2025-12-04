@@ -34,6 +34,7 @@ export default function PulledItemsFilter() {
   // Items state
   const [items, setItems] = useState<any[]>([]);
   const [allItems, setAllItems] = useState<any[]>([]);
+  const [totalCount, setTotalCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedIncludeTags, setSelectedIncludeTags] = useState<string[]>([]);
@@ -232,9 +233,33 @@ export default function PulledItemsFilter() {
         console.log('[fetchAllItems] Applied category filter:', categoryFilter);
       }
 
-      const { data, error } = await query;
+      // Apply explicit limit to prevent default 1000-row truncation
+      const { data, error } = await query.limit(5000);
       
       console.log('[fetchAllItems] Query returned', data?.length || 0, 'items');
+
+      // Get total count for display (in case there are more than 5000)
+      let countQuery = supabase
+        .from('intake_items')
+        .select('*', { count: 'exact', head: true })
+        .eq('store_key', assignedStore)
+        .is('deleted_at', null);
+
+      if (!showPrintedItems) {
+        countQuery = countQuery.is('printed_at', null);
+      }
+      if (selectedLocation) {
+        countQuery = countQuery.eq('shopify_location_gid', selectedLocation);
+      }
+      if (typeFilter !== 'all') {
+        countQuery = countQuery.ilike('type', typeFilter);
+      }
+      if (categoryFilter !== 'all') {
+        countQuery = countQuery.or(`main_category.ilike.${categoryFilter},category.ilike.${categoryFilter},sub_category.ilike.${categoryFilter}`);
+      }
+
+      const { count } = await countQuery;
+      setTotalCount(count);
 
       if (error) throw error;
 
@@ -930,7 +955,16 @@ export default function PulledItemsFilter() {
           <div className="flex items-center justify-between pt-2">
             <div className="flex items-center gap-4">
               <div className="text-sm text-muted-foreground">
-                {loading ? 'Loading...' : `Showing ${items.length} of ${allItems.length} item(s)`}
+                {loading ? 'Loading...' : (
+                  <>
+                    Showing {items.length} of {allItems.length} item(s)
+                    {totalCount !== null && totalCount > allItems.length && (
+                      <span className="text-amber-600 ml-1">
+                        ({totalCount.toLocaleString()} total - showing first 5,000)
+                      </span>
+                    )}
+                  </>
+                )}
               </div>
               {items.length > 0 && (
                 <div className="flex items-center space-x-2">
