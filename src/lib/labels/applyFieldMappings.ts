@@ -4,6 +4,8 @@ import type { SampleData } from '@/features/barcode/types/labelLayout';
 
 export interface FieldMapping {
   source: string;
+  source2?: string; // Secondary source (for title - combines with separator)
+  separator?: string; // Separator between source and source2 (default: " - ")
   format?: 'currency' | 'uppercase' | 'lowercase';
   abbreviate?: boolean;
   abbreviations?: Record<string, string>;
@@ -87,6 +89,16 @@ export function applyFieldMappings(
     
     const sourceValue = item[mapping.source];
     let value = sourceValue != null ? String(sourceValue) : '';
+    
+    // Combine with secondary source (used for title field)
+    if (mapping.source2) {
+      const sourceValue2 = item[mapping.source2];
+      const value2 = sourceValue2 != null ? String(sourceValue2) : '';
+      if (value2) {
+        const separator = mapping.separator ?? ' - ';
+        value = value ? value + separator + value2 : value2;
+      }
+    }
 
     // Apply format transformations
     if (mapping.format === 'currency' && value) {
