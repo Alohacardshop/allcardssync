@@ -2687,6 +2687,12 @@ export type Database = {
       }
       generate_lot_number: { Args: never; Returns: string }
       get_decrypted_secret: { Args: { secret_name: string }; Returns: string }
+      get_distinct_categories: {
+        Args: { location_gid_in?: string; store_key_in: string }
+        Returns: {
+          category_value: string
+        }[]
+      }
       get_game_catalog_stats: {
         Args: never
         Returns: {

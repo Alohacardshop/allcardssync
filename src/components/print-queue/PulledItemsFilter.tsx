@@ -160,31 +160,24 @@ export default function PulledItemsFilter() {
     }
   };
 
-  // Fetch available categories for dropdown (separate from main data fetch)
+  // Fetch available categories for dropdown using efficient RPC function
   const fetchAvailableCategories = async () => {
     if (!assignedStore) return;
     
     try {
-      let query = supabase
-        .from('intake_items')
-        .select('main_category, category, sub_category')
-        .eq('store_key', assignedStore)
-        .is('deleted_at', null);
+      const { data, error } = await supabase.rpc('get_distinct_categories', {
+        store_key_in: assignedStore,
+        location_gid_in: selectedLocation || null
+      });
 
-      if (selectedLocation) {
-        query = query.eq('shopify_location_gid', selectedLocation);
-      }
-
-      const { data, error } = await query;
       if (error) throw error;
 
-      const categoriesSet = new Set<string>();
-      (data || []).forEach(item => {
-        if (item.main_category) categoriesSet.add(item.main_category.toLowerCase());
-        if (item.category) categoriesSet.add(item.category.toLowerCase());
-        if (item.sub_category) categoriesSet.add(item.sub_category.toLowerCase());
-      });
-      setAvailableCategories(Array.from(categoriesSet).sort());
+      const categories = (data || [])
+        .map((row: { category_value: string }) => row.category_value)
+        .filter(Boolean);
+      
+      setAvailableCategories(categories);
+      console.log('[fetchAvailableCategories] Found categories:', categories);
     } catch (error) {
       console.error('Failed to fetch categories:', error);
     }
@@ -198,6 +191,16 @@ export default function PulledItemsFilter() {
     }
 
     setLoading(true);
+    
+    // Log current filter state for debugging
+    console.log('[fetchAllItems] Fetching with filters:', {
+      assignedStore,
+      selectedLocation,
+      showPrintedItems,
+      typeFilter,
+      categoryFilter
+    });
+    
     try {
       let query = supabase
         .from('intake_items')
@@ -219,15 +222,19 @@ export default function PulledItemsFilter() {
       // SERVER-SIDE: Apply type filter at DB level to get all matching items
       if (typeFilter !== 'all') {
         query = query.ilike('type', typeFilter);
+        console.log('[fetchAllItems] Applied type filter:', typeFilter);
       }
 
       // SERVER-SIDE: Apply category filter at DB level
       if (categoryFilter !== 'all') {
         // Use OR filter for main_category, category, or sub_category
         query = query.or(`main_category.ilike.${categoryFilter},category.ilike.${categoryFilter},sub_category.ilike.${categoryFilter}`);
+        console.log('[fetchAllItems] Applied category filter:', categoryFilter);
       }
 
       const { data, error } = await query;
+      
+      console.log('[fetchAllItems] Query returned', data?.length || 0, 'items');
 
       if (error) throw error;
 
