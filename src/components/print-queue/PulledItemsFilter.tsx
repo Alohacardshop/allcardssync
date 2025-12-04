@@ -10,7 +10,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Search, Filter, ChevronDown, X, Printer, Download, RefreshCw, Loader2, Eye, ExternalLink } from 'lucide-react';
+import { Search, Filter, ChevronDown, X, Printer, Download, RefreshCw, Loader2, Eye, ExternalLink, Check } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
 import { useStore } from '@/contexts/StoreContext';
 import { ShopifyPullDialog } from '@/components/barcode-printing/ShopifyPullDialog';
@@ -60,6 +61,9 @@ export default function PulledItemsFilter() {
   // Detail dialog state
   const [detailItem, setDetailItem] = useState<any | null>(null);
 
+  // Show printed items toggle
+  const [showPrintedItems, setShowPrintedItems] = useState(false);
+
   useEffect(() => {
     fetchTemplates();
     fetchLocationNames();
@@ -73,7 +77,7 @@ export default function PulledItemsFilter() {
       setItems([]);
       setLoading(false);
     }
-  }, [assignedStore, selectedLocation]);
+  }, [assignedStore, selectedLocation, showPrintedItems]);
 
   useEffect(() => {
     filterItems();
@@ -139,14 +143,7 @@ export default function PulledItemsFilter() {
   };
 
   const fetchAllItems = async () => {
-    console.log('[PulledItemsFilter] fetchAllItems called:', {
-      assignedStore,
-      selectedLocation,
-      timestamp: new Date().toISOString()
-    });
-
     if (!assignedStore) {
-      console.log('[PulledItemsFilter] No assignedStore, clearing items');
       setAllItems([]);
       setItems([]);
       return;
@@ -158,29 +155,20 @@ export default function PulledItemsFilter() {
         .from('intake_items')
         .select('*')
         .eq('store_key', assignedStore)
-        .is('printed_at', null)
         .is('deleted_at', null)
         .order('created_at', { ascending: false });
+
+      // Only filter for unprinted if toggle is OFF
+      if (!showPrintedItems) {
+        query = query.is('printed_at', null);
+      }
 
       // Also filter by location if set
       if (selectedLocation) {
         query = query.eq('shopify_location_gid', selectedLocation);
       }
 
-      console.log('[PulledItemsFilter] Query filters:', {
-        store_key: assignedStore,
-        shopify_location_gid: selectedLocation || 'NOT FILTERED',
-        printed_at: 'NULL',
-        deleted_at: 'NULL'
-      });
-
       const { data, error } = await query;
-
-      console.log('[PulledItemsFilter] Query result:', {
-        count: data?.length || 0,
-        error: error?.message || null,
-        firstItem: data?.[0] ? { id: data[0].id, sku: data[0].sku, store_key: data[0].store_key } : null
-      });
 
       if (error) throw error;
 
@@ -217,7 +205,7 @@ export default function PulledItemsFilter() {
       );
       filterItems();
     } catch (error) {
-      console.error('[PulledItemsFilter] Failed to fetch items:', error);
+      console.error('Failed to fetch items:', error);
       toast.error('Failed to load items');
     } finally {
       setLoading(false);
@@ -500,13 +488,22 @@ export default function PulledItemsFilter() {
             <div className="flex items-center gap-2">
               <Filter className="h-5 w-5" />
               Filter Items
-              <span className="text-xs font-normal text-muted-foreground ml-2">
-                [Debug: store={assignedStore || 'NONE'} | location={selectedLocation || 'NONE'} | items={allItems.length}]
-              </span>
             </div>
-            <Button variant="ghost" size="sm" onClick={fetchAllItems} disabled={loading}>
-              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            </Button>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="show-printed"
+                  checked={showPrintedItems}
+                  onCheckedChange={setShowPrintedItems}
+                />
+                <Label htmlFor="show-printed" className="text-sm font-normal cursor-pointer">
+                  Show Printed
+                </Label>
+              </div>
+              <Button variant="ghost" size="sm" onClick={fetchAllItems} disabled={loading}>
+                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              </Button>
+            </div>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -767,6 +764,12 @@ export default function PulledItemsFilter() {
                   <div className="text-right space-y-2">
                     <div className="font-medium">${item.price}</div>
                     <div className="text-sm text-muted-foreground">{item.variant}</div>
+                    {item.printed_at && (
+                      <Badge variant="secondary" className="text-xs">
+                        <Check className="h-3 w-3 mr-1" />
+                        Printed
+                      </Badge>
+                    )}
                     <div className="flex gap-1 justify-end mt-2">
                       <Button
                         variant="ghost"
