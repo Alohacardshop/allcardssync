@@ -133,22 +133,17 @@ export function calculateOptimalFontSize(
     };
   }
   
-  // For title (allowTwoLines=true), compare single vs two line options
+  // For title/condition (allowTwoLines=true), ALWAYS use two lines if possible
   const twoLineResult = getBestTwoLineSplit(trimmedText, boxWidth, boxHeight, maxFontSize, minFontSize, fontFamily);
   
-  // Use 2 lines if it results in a larger or equal font size
-  if (twoLineResult.lines.length === 2 && twoLineResult.fontSize >= singleLineFontSize) {
+  // Always prefer 2 lines when allowed and text can be split
+  if (twoLineResult.lines.length === 2 && twoLineResult.fontSize >= minFontSize) {
     return { fontSize: twoLineResult.fontSize, lines: twoLineResult.lines, isTwoLine: true };
   }
   
-  // Otherwise use single line
+  // Fallback to single line if 2-line split doesn't work
   if (singleLineFontSize >= minFontSize) {
     return { fontSize: singleLineFontSize, lines: [trimmedText], isTwoLine: false };
-  }
-  
-  // Fallback: try 2 lines even if smaller font
-  if (twoLineResult.fontSize >= minFontSize) {
-    return { fontSize: twoLineResult.fontSize, lines: twoLineResult.lines, isTwoLine: true };
   }
   
   // Last resort: truncate
