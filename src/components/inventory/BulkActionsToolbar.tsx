@@ -1,26 +1,20 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { CheckSquare, Printer, RotateCcw, Upload, Scissors, Trash2, Loader2, Package, ShoppingBag } from 'lucide-react';
+import { CheckSquare, RotateCcw, Upload, Trash2, Loader2, ShoppingBag } from 'lucide-react';
 
 interface BulkActionsToolbarProps {
   selectedCount: number;
   totalCount: number;
   isAdmin: boolean;
   statusFilter: string;
-  bulkPrinting: boolean;
   bulkRetrying: boolean;
   bulkSyncing: boolean;
   onSelectAll: () => void;
   onClearSelection: () => void;
-  onBulkPrintRaw: () => void;
-  onPrintBatches: () => void;
-  onReprintSelected: () => void;
   onBulkRetrySync: () => void;
   onSyncSelected: () => void;
   onResyncSelected: () => void;
-  onSendCutCommand: () => void;
   onDeleteSelected: () => void;
-  onCheckEbayPrices?: () => void;
   onBulkToggleEbay?: (enable: boolean) => void;
 }
 
@@ -29,20 +23,14 @@ export const BulkActionsToolbar = React.memo(({
   totalCount,
   isAdmin,
   statusFilter,
-  bulkPrinting,
   bulkRetrying,
   bulkSyncing,
   onSelectAll,
   onClearSelection,
-  onBulkPrintRaw,
-  onPrintBatches,
-  onReprintSelected,
   onBulkRetrySync,
   onSyncSelected,
   onResyncSelected,
-  onSendCutCommand,
   onDeleteSelected,
-  onCheckEbayPrices,
   onBulkToggleEbay
 }: BulkActionsToolbarProps) => {
   return (
@@ -75,46 +63,6 @@ export const BulkActionsToolbar = React.memo(({
       </div>
 
       <div className="flex items-center space-x-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onBulkPrintRaw}
-          disabled={bulkPrinting}
-        >
-          {bulkPrinting ? (
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-          ) : (
-            <Printer className="h-4 w-4 mr-2" />
-          )}
-          {bulkPrinting ? 'Printing...' : 'Print All Unprinted Raw'}
-        </Button>
-
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onPrintBatches}
-          disabled={bulkPrinting}
-        >
-          <Package className="h-4 w-4 mr-2" />
-          Print by Batch
-        </Button>
-
-        {selectedCount > 0 && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onReprintSelected}
-            disabled={bulkPrinting}
-          >
-            {bulkPrinting ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <Printer className="h-4 w-4 mr-2" />
-            )}
-            {bulkPrinting ? 'Reprinting...' : `Reprint Selected (${selectedCount})`}
-          </Button>
-        )}
-
         {statusFilter === 'errors' && selectedCount > 0 && (
           <Button
             variant="outline"
@@ -185,16 +133,6 @@ export const BulkActionsToolbar = React.memo(({
           </>
         )}
 
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onSendCutCommand}
-          title="Send cut command to printer"
-        >
-          <Scissors className="h-4 w-4 mr-2" />
-          Cut
-        </Button>
-
         {isAdmin && selectedCount > 0 && (
           <Button
             variant="destructive"
@@ -214,7 +152,6 @@ export const BulkActionsToolbar = React.memo(({
     prevProps.selectedCount === nextProps.selectedCount &&
     prevProps.totalCount === nextProps.totalCount &&
     prevProps.statusFilter === nextProps.statusFilter &&
-    prevProps.bulkPrinting === nextProps.bulkPrinting &&
     prevProps.bulkRetrying === nextProps.bulkRetrying &&
     prevProps.bulkSyncing === nextProps.bulkSyncing
   );

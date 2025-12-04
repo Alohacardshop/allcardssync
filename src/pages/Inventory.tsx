@@ -1,24 +1,15 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, Upload, Search, CheckSquare, Square, Trash2, Printer, Scissors, RotateCcw, AlertCircle, RefreshCw, Download } from 'lucide-react';
+import { Loader2, Search, AlertCircle, RefreshCw, Download } from 'lucide-react';
 import { logger } from '@/lib/logger';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
-import { cn } from '@/lib/utils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useStore } from '@/contexts/StoreContext';
-import { usePrinter } from '@/hooks/usePrinter';
-import { getTemplate, loadOrgTemplate } from '@/lib/labels/templateStore';
-import { zplFromElements, zplFromTemplateString } from '@/lib/labels/zpl';
-import { sendZplToPrinter } from '@/lib/labels/print';
-import { printQueue } from '@/lib/print/queueInstance';
-import type { JobVars, ZPLElement } from '@/lib/labels/types';
-import { zebraService } from '@/lib/printer/zebraService';
-import { getDirectPrinterConfig } from '@/hooks/usePrinter';
 import { sendGradedToShopify, sendRawToShopify } from '@/hooks/useShopifySend';
 import { useBatchSendToShopify } from '@/hooks/useBatchSendToShopify';
 import { useShopifyResync } from '@/hooks/useShopifyResync';
@@ -31,18 +22,13 @@ import { ShopifyRemovalDialog } from '@/components/ShopifyRemovalDialog';
 import { ShopifySyncDetailsDialog } from '@/components/ShopifySyncDetailsDialog';
 import { InventoryDeleteDialog } from '@/components/InventoryDeleteDialog';
 import { ConfirmationDialog } from '@/components/ConfirmationDialog';
-import { useCutterSettings } from '@/hooks/useCutterSettings';
-import { CutterSettingsPanel } from '@/components/CutterSettingsPanel';
 import { RefreshControls } from '@/components/RefreshControls';
 import { BulkActionsToolbar } from '@/components/inventory/BulkActionsToolbar';
 import { AuthStatusDebug } from '@/components/AuthStatusDebug';
 import { useInventoryListQuery } from '@/hooks/useInventoryListQuery';
-import { useInventoryItemDetail } from '@/hooks/useInventoryItemDetail';
 import { Progress } from '@/components/ui/progress';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCurrentBatch } from '@/hooks/useCurrentBatch';
-import { BatchSelectorDialog } from '@/components/BatchSelectorDialog';
-import { abbreviateGrade } from '@/lib/labelData';
 
 // Lazy load heavy components for faster initial render
 const InventoryAnalytics = lazy(() => import('@/components/InventoryAnalytics').then(m => ({ default: m.InventoryAnalytics })));
@@ -56,13 +42,11 @@ const VirtualInventoryList = React.memo(({
   expandedItems,
   isAdmin,
   syncingRowId,
-  printingItem,
   onToggleSelection,
   onToggleExpanded,
   onSync,
   onRetrySync,
   onResync,
-  onPrint,
   onRemove,
   onDelete,
   onSyncDetails,
@@ -76,13 +60,11 @@ const VirtualInventoryList = React.memo(({
   expandedItems: Set<string>;
   isAdmin: boolean;
   syncingRowId: string | null;
-  printingItem: string | null;
   onToggleSelection: (id: string) => void;
   onToggleExpanded: (id: string) => void;
   onSync: (item: any) => void;
   onRetrySync: (item: any) => void;
   onResync: (item: any) => void;
-  onPrint: (item: any) => void;
   onRemove: (item: any) => void;
   onDelete?: (item: any) => void;
   onSyncDetails: (item: any) => void;
@@ -174,13 +156,11 @@ const VirtualInventoryList = React.memo(({
                 isExpanded={expandedItems.has(item.id)}
                 isAdmin={isAdmin}
                 syncingRowId={syncingRowId}
-                printingItem={printingItem}
                 onToggleSelection={onToggleSelection}
                 onToggleExpanded={onToggleExpanded}
                 onSync={onSync}
                 onRetrySync={onRetrySync}
                 onResync={onResync}
-                onPrint={onPrint}
                 onRemove={onRemove}
                 onDelete={onDelete}
                 onSyncDetails={onSyncDetails}
@@ -250,8 +230,6 @@ const Inventory = () => {
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [syncingAll, setSyncingAll] = useState(false);
   const [syncingRowId, setSyncingRowId] = useState<string | null>(null);
-  const [printingItem, setPrintingItem] = useState<string | null>(null);
-  const [bulkPrinting, setBulkPrinting] = useState(false);
   const [bulkRetrying, setBulkRetrying] = useState(false);
   const [bulkSyncing, setBulkSyncing] = useState(false);
   const [showDebug, setShowDebug] = useState<boolean>(false);
@@ -263,19 +241,14 @@ const Inventory = () => {
   const [showRemovalDialog, setShowRemovalDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showResyncConfirm, setShowResyncConfirm] = useState(false);
-  const [showBatchSelector, setShowBatchSelector] = useState(false);
   const [selectedItemForRemoval, setSelectedItemForRemoval] = useState<any>(null);
   const [selectedItemsForDeletion, setSelectedItemsForDeletion] = useState<any[]>([]);
   const [syncDetailsRow, setSyncDetailsRow] = useState<any>(null);
-  const [showPrinterDialog, setShowPrinterDialog] = useState(false);
-  const [printData, setPrintData] = useState<{ blob: Blob; item: any } | null>(null);
   const [removingFromShopify, setRemovingFromShopify] = useState(false);
   const [deletingItems, setDeletingItems] = useState(false);
   
-  const { print: printZPL, config: selectedPrinter } = usePrinter();
   const { assignedStore, selectedLocation } = useStore();
   const { sendChunkedBatchToShopify, isSending: isBatchSending, progress } = useBatchSendToShopify();
-  const { settings: cutterSettings } = useCutterSettings();
   const { resyncAll, resyncSelected, isResyncing } = useShopifyResync();
   const { bulkToggleEbay } = useEbayListing();
   const queryClient = useQueryClient();
@@ -889,1063 +862,6 @@ const Inventory = () => {
     }
   }, [filteredItems, selectedItems, refetch]);
 
-  const handlePrint = useCallback(async (item: any) => {
-    const itemType = item.type?.toLowerCase() || 'raw';
-    
-    // Check if item has printable data (SKU for raw, cert number for graded)
-    const hasPrintableData = item.sku || item.psa_cert || item.cgc_cert;
-    if (!hasPrintableData) {
-      toast.error('No SKU or certificate number available for printing');
-      return;
-    }
-
-    // Optimistically update printed_at timestamp
-    const { previousData } = createOptimisticUpdate(
-      [item.id],
-      () => ({ printed_at: new Date().toISOString() })
-    );
-
-    try {
-      setPrintingItem(item.id);
-      
-      // Helper function to truncate text for labels
-      const truncateForLabel = (text: string, maxLength: number = 70): string => {
-        if (text.length <= maxLength) return text;
-        return text.substring(0, maxLength - 3) + '...';
-      };
-
-      // Generate proper title for raw card - strip card number if present
-      const generateTitle = (item: any) => {
-        let name = item.subject || 'Raw Card';
-        // Remove card number suffix if present (e.g., "Card Name - 123/456" -> "Card Name")
-        if (item.card_number && name.includes(` - ${item.card_number}`)) {
-          name = name.replace(` - ${item.card_number}`, '').trim();
-        }
-        return name;
-      };
-
-      // Load the default template (prioritize ZPL Studio templates, then fallback to raw_card_2x1)
-      let tpl = null;
-      
-      // First try to find a default ZPL Studio template
-      try {
-        const { data: zplTemplates } = await supabase
-          .from('label_templates')
-          .select('*')
-          .eq('template_type', 'raw')
-          .eq('is_default', true)
-          .limit(1);
-          
-          if (zplTemplates && zplTemplates.length > 0) {
-          const zplTemplate = zplTemplates[0];
-          tpl = {
-            id: zplTemplate.id,
-            name: zplTemplate.name,
-            format: 'zpl_studio' as const,
-            zpl: typeof (zplTemplate.canvas as any)?.zplLabel === 'string' 
-              ? (zplTemplate.canvas as any).zplLabel 
-              : '^XA^FO50,50^A0N,30,30^FD{{CARDNAME}}^FS^FO50,100^A0N,20,20^FD{{CONDITION}}^FS^FO50,150^BY2^BCN,60,Y,N,N^FD{{BARCODE}}^FS^XZ',
-            scope: 'org'
-          };
-            logger.info('ZPL Studio template selected', { templateName: tpl.name });
-          }
-      } catch (error) {
-        logger.warn('Failed to load ZPL Studio template, falling back', error as Error);
-      }
-      
-      // Fallback to regular template system if no ZPL Studio template found
-      if (!tpl || !tpl.zpl) {
-        tpl = await getTemplate('raw_card_2x1');
-      }
-      
-      if (!tpl) {
-        toast.error('No label template available. Please contact administrator.');
-        setPrintingItem(null);
-        return;
-      }
-
-      // Debug: Log the item data being processed
-      logger.info('Printing item data', {
-        itemId: item.id,
-        sku: item.sku,
-        subject: item.subject
-      });
-
-      // Prepare variables for template substitution
-      const vars: JobVars = {
-        CARDNAME: generateTitle(item),
-        SETNAME: item.brand_title || '',
-        CARDNUMBER: item.card_number || '',
-        CONDITION: item.condition || 'NM',
-        PRICE: item.price ? `$${item.price.toFixed(2)}` : '$0.00',
-        SKU: item.sku || '',
-        BARCODE: item.psa_cert || item.cgc_cert || item.sku || item.id?.slice(-8) || 'NO-SKU',
-      };
-
-      logger.info('Template variables generated', { templateFormat: tpl.format });
-
-      let zpl = '';
-      
-      // Handle different template formats
-      if (tpl.format === 'zpl_studio' && tpl.zpl) {
-        logger.info('Processing ZPL Studio template');
-        zpl = tpl.zpl;
-        
-        // Replace ZPL Studio variables with item data
-        zpl = zpl
-          .replace(/{{CARDNAME}}/g, vars.CARDNAME || 'Unknown Card')
-          .replace(/{{SETNAME}}/g, vars.SETNAME || '')
-          .replace(/{{CARDNUMBER}}/g, vars.CARDNUMBER || '')
-          .replace(/{{CONDITION}}/g, vars.CONDITION || 'NM')
-          .replace(/{{PRICE}}/g, vars.PRICE || '$0.00')
-          .replace(/{{SKU}}/g, vars.SKU || '')
-          .replace(/{{BARCODE}}/g, vars.BARCODE || '');
-          
-        logger.info('Generated ZPL from ZPL Studio template');
-      } else if (tpl.format === 'elements' && tpl.layout) {
-        logger.info('Processing elements template');
-        const filled = {
-          ...tpl.layout,
-          elements: tpl.layout.elements.map((el: ZPLElement) => {
-            
-            if (el.type === 'text') {
-              let updatedElement = { ...el };
-              let wasUpdated = false;
-              
-              // Map to correct element IDs from template
-              if (el.id === 'cardinfo') {
-                updatedElement.text = vars.CARDNAME ?? el.text;
-                wasUpdated = true;
-              } else if (el.id === 'condition') {
-                updatedElement.text = vars.CONDITION ?? el.text;
-                wasUpdated = true;
-              } else if (el.id === 'price') {
-                updatedElement.text = vars.PRICE ?? el.text;
-                wasUpdated = true;
-              } else if (el.id === 'sku') {
-                updatedElement.text = vars.SKU ?? el.text;
-                wasUpdated = true;
-              } 
-              // Legacy fallbacks for older templates
-              else if (el.id === 'cardname') {
-                updatedElement.text = vars.CARDNAME ?? el.text;
-                wasUpdated = true;
-              } else if (el.id === 'setname') {
-                updatedElement.text = vars.SETNAME ?? el.text;
-                wasUpdated = true;
-              } else if (el.id === 'cardnumber') {
-                updatedElement.text = vars.CARDNUMBER ?? el.text;
-                wasUpdated = true;
-              }
-              
-              return updatedElement;
-            } else if (el.type === 'barcode' && el.id === 'barcode') {
-              const updatedElement = { ...el, data: vars.BARCODE ?? el.data };
-              return updatedElement;
-            }
-            
-            return el;
-          }),
-        };
-        zpl = zplFromElements(filled);
-        logger.info('Generated ZPL from elements');
-      } else if (tpl.format === 'zpl' && tpl.zpl) {
-        logger.info('Processing ZPL string template');
-        zpl = zplFromTemplateString(tpl.zpl, vars);
-        logger.info('Generated ZPL from string template');
-      } else {
-        logger.error('Invalid template format', new Error('Invalid template format'), { format: tpl.format, hasLayout: !!tpl.layout, hasZpl: !!tpl.zpl });
-        throw new Error('Invalid template format');
-      }
-
-      // Use the new print queue system with ensurePQ1
-      const { sanitizeLabel } = await import('@/lib/print/sanitizeZpl');
-      const safeZpl = sanitizeLabel(zpl);
-      
-      logger.info('Queueing label for printing', {
-        template: 'inventory_item',
-        qty: item.quantity || 1,
-        itemId: item.id
-      });
-      
-      await printQueue.enqueueSafe({ 
-        zpl: safeZpl, 
-        qty: item.quantity || 1, 
-        usePQ: true 
-      });
-      
-      toast.success('Label queued for printing!');
-      
-      // Update the printed_at timestamp
-      await supabase
-        .from('intake_items')
-        .update({ printed_at: new Date().toISOString() })
-        .eq('id', item.id);
-        
-      refetch();
-    } catch (error) {
-      logger.error('Print error', error as Error, { itemId: item.id });
-      rollbackOptimisticUpdate(previousData);
-      toast.error('Failed to print label: ' + (error as Error).message);
-    } finally {
-      setPrintingItem(null);
-    }
-  }, [refetch, createOptimisticUpdate, rollbackOptimisticUpdate]);
-
-  // Helper function to fill template elements with data
-  const fillElements = (layout: any, vars: JobVars) => {
-    const copy = structuredClone(layout);
-    copy.elements = copy.elements.map((el: any) => {
-      if (el.type === 'text') {
-        if (el.id === 'cardname') el.text = vars.CARDNAME ?? el.text;
-        if (el.id === 'condition') el.text = vars.CONDITION ?? el.text;
-        if (el.id === 'price') el.text = vars.PRICE ?? el.text;
-        if (el.id === 'sku') el.text = vars.SKU ?? el.text;
-        if (el.id === 'desc') el.text = `${vars.CARDNAME} • Set • #001`;
-      }
-      if (el.type === 'barcode' && el.id === 'barcode') {
-        el.data = vars.BARCODE ?? el.data;
-      }
-      return el;
-    });
-    return copy;
-  };
-
-  const handlePrintWithPrinter = useCallback(async (printerId: number) => {
-    if (!printData) return;
-    
-    const item = printData.item;
-    const itemType = item.type?.toLowerCase() || 'raw';
-    
-    // Only allow printing for Raw items
-    if (itemType !== 'raw') {
-      toast.error('Printing is only available for Raw cards');
-      setPrintData(null);
-      return;
-    }
-    
-    setPrintingItem(item.id);
-    try {
-      if (!selectedPrinter) {
-        toast.error('No printer selected');
-        return;
-      }
-
-      // Helper function to truncate text for labels
-      const truncateForLabel = (text: string, maxLength: number = 70): string => {
-        if (text.length <= maxLength) return text;
-        return text.substring(0, maxLength - 3) + '...';
-      };
-
-      // Generate proper title for raw card - strip card number if present
-      const generateTitle = (item: any) => {
-        let name = item.subject || 'Raw Card';
-        // Remove card number suffix if present (e.g., "Card Name - 123/456" -> "Card Name")
-        if (item.card_number && name.includes(` - ${item.card_number}`)) {
-          name = name.replace(` - ${item.card_number}`, '').trim();
-        }
-        return name;
-      };
-
-      // Load template and generate ZPL using unified system (prioritize ZPL Studio templates)
-      let template = null;
-      
-      // First try to find a default ZPL Studio template
-      try {
-        const { data: zplTemplates } = await supabase
-          .from('label_templates')
-          .select('*')
-          .eq('template_type', 'raw')
-          .eq('is_default', true)
-          .limit(1);
-          
-        if (zplTemplates && zplTemplates.length > 0) {
-          const zplTemplate = zplTemplates[0];
-          template = {
-            id: zplTemplate.id,
-            name: zplTemplate.name,
-            format: 'zpl_studio' as const,
-            zpl: typeof (zplTemplate.canvas as any)?.zplLabel === 'string' 
-              ? (zplTemplate.canvas as any).zplLabel 
-              : '^XA^FO50,50^A0N,30,30^FD{{CARDNAME}}^FS^FO50,100^A0N,20,20^FD{{CONDITION}}^FS^FO50,150^BY2^BCN,60,Y,N,N^FD{{BARCODE}}^FS^XZ',
-            scope: 'org'
-          };
-        }
-      } catch (error) {
-          console.warn('🖨️ Failed to load ZPL Studio template, falling back:', error);
-        }
-        
-        // Fallback to regular template system
-        if (!template || !template.zpl) {
-          template = await getTemplate('raw_card_2x1');
-        }
-        
-        const vars: JobVars = {
-          CARDNAME: generateTitle(item),
-          CONDITION: item.condition || 'NM',
-          PRICE: item.price ? `$${item.price.toFixed(2)}` : '$0.00',
-          SKU: item.sku || '',
-          BARCODE: item.sku || item.id?.slice(-8) || 'NO-SKU',
-        };
-
-        const prefs = JSON.parse(localStorage.getItem('zebra-printer-config') || '{}');
-
-        let zpl: string;
-        
-        if (template.format === 'zpl_studio' && template.zpl) {
-          logger.info('Processing ZPL Studio template for printer');
-        zpl = template.zpl;
-        
-        // Replace ZPL Studio variables with item data
-        zpl = zpl
-          .replace(/{{CARDNAME}}/g, vars.CARDNAME || 'Unknown Card')
-          .replace(/{{SETNAME}}/g, vars.SETNAME || '')
-          .replace(/{{CARDNUMBER}}/g, vars.CARDNUMBER || '')
-          .replace(/{{CONDITION}}/g, vars.CONDITION || 'NM')
-          .replace(/{{PRICE}}/g, vars.PRICE || '$0.00')
-          .replace(/{{SKU}}/g, vars.SKU || '')
-          .replace(/{{BARCODE}}/g, vars.BARCODE || '');
-      } else if (template.format === 'elements' && template.layout) {
-        const filledLayout = fillElements(template.layout, vars);
-        zpl = zplFromElements(filledLayout, prefs, cutterSettings);
-      } else if (template.format === 'zpl' && template.zpl) {
-        zpl = zplFromTemplateString(template.zpl, vars);
-      } else {
-        throw new Error('No valid template found');
-      }
-
-      logger.info('Print with printer: Item details', {
-        itemId: item.id,
-        quantity: item.quantity,
-        sku: item.sku
-      });
-
-      // Convert to queue-compatible format - let print queue handle quantity
-      const safeZpl = zpl.replace(/\^XZ\s*$/, "").concat("\n^XZ");
-      const qty = item.quantity || 1;
-      printQueue.enqueue({ zpl: safeZpl, qty, usePQ: true });
-
-      await supabase
-        .from('intake_items')
-        .update({ printed_at: new Date().toISOString() })
-        .eq('id', item.id);
-
-      toast.success('Raw card label printed successfully');
-      refetch();
-    } catch (error) {
-      logger.error('Print error', error as Error, { itemId: item.id });
-      toast.error('Failed to print label');
-    } finally {
-      setPrintingItem(null);
-      setPrintData(null);
-    }
-  }, [printData, selectedPrinter, refetch, fillElements]);
-
-  const handleSendCutCommand = useCallback(async () => {
-    try {
-      const printerConfig = await getDirectPrinterConfig();
-      if (!printerConfig) {
-        toast.error('No printer configured. Please set up printer IP in Settings.');
-        return;
-      }
-
-      // Use the specified immediate cut command
-      const cutZpl = '^XA^MMC^CN1^MCY^XZ';
-      
-      logger.info('Sending cut command to printer', { cutZpl });
-      
-      const result = await zebraService.print(cutZpl, printerConfig.ip, printerConfig.port);
-      
-      if (result.success) {
-        toast.success('Cut command sent successfully');
-      } else {
-        throw new Error(result.error || 'Cut command failed');
-      }
-      
-    } catch (error) {
-      logger.error('Cut command error', error as Error);
-      toast.error(`Failed to send cut command: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }, []);
-
-  const handleBulkPrintRaw = useCallback(async () => {
-    if (bulkPrinting) {
-      return;
-    }
-    
-    setBulkPrinting(true);
-    
-    try {
-      // Pre-flight check: Ensure printer is configured
-      const printerConfig = await getDirectPrinterConfig();
-      
-      if (!printerConfig) {
-        toast.error('No printer configured. Please configure printer in Settings.');
-        return;
-      }
-      
-      // Query database directly for ALL unprinted raw items (ignore UI filters/pagination)
-      const query = supabase
-        .from('intake_items')
-        .select('*')
-        .is('printed_at', null)
-        .is('deleted_at', null)
-        .order('created_at', { ascending: true });  // Consistent chronological order
-      
-      // Add store/location filtering if assigned
-      if (assignedStore) {
-        query.eq('store_key', assignedStore);
-      }
-      if (selectedLocation) {
-        query.eq('shopify_location_gid', selectedLocation);
-      }
-      
-      const { data: allItems, error: fetchError } = await query;
-      
-      if (fetchError) {
-        toast.error(`Failed to fetch items: ${fetchError.message}`);
-        return;
-      }
-      
-      // Filter for raw items only (case-insensitive)
-      const unprintedRawItems = (allItems || []).filter(item => {
-        const itemType = item.type?.toLowerCase() || 'raw';
-        return itemType === 'raw';
-      });
-
-      if (unprintedRawItems.length === 0) {
-        toast.info('No unprinted raw cards found in current store/location');
-        return;
-      }
-
-      // Show confirmation dialog with count
-      const confirmed = window.confirm(
-        `Print ${unprintedRawItems.length} unprinted raw card labels?\n\nThis will print ALL unprinted raw cards, not just those visible on the current page.`
-      );
-      
-      if (!confirmed) {
-        return;
-      }
-
-      logger.info('Bulk print: Processing unprinted raw items', { count: unprintedRawItems.length });
-
-      // Helper function to truncate text for labels
-      const truncateForLabel = (text: string, maxLength: number = 70): string => {
-        if (text.length <= maxLength) return text;
-        return text.substring(0, maxLength - 3) + '...';
-      };
-
-      // Generate proper title for raw card - strip card number if present
-      const generateTitle = (item: any) => {
-        let name = item.subject || 'Raw Card';
-        // Remove card number suffix if present (e.g., "Card Name - 123/456" -> "Card Name")
-        if (item.card_number && name.includes(` - ${item.card_number}`)) {
-          name = name.replace(` - ${item.card_number}`, '').trim();
-        }
-        return name;
-      };
-
-      // Load template (prioritize ZPL Studio templates, then fallback to raw_card_2x1) - SAME AS SINGLE PRINT
-      let tpl = null;
-      
-      // First try to find a default ZPL Studio template
-      try {
-        const { data: zplTemplates } = await supabase
-          .from('label_templates')
-          .select('*')
-          .eq('template_type', 'raw')
-          .eq('is_default', true)
-          .limit(1);
-          
-        if (zplTemplates && zplTemplates.length > 0) {
-          const zplTemplate = zplTemplates[0];
-          tpl = {
-            id: zplTemplate.id,
-            name: zplTemplate.name,
-            format: 'zpl_studio' as const,
-            zpl: typeof (zplTemplate.canvas as any)?.zplLabel === 'string' 
-              ? (zplTemplate.canvas as any).zplLabel 
-              : '^XA^FO50,50^A0N,30,30^FD{{CARDNAME}}^FS^FO50,100^A0N,20,20^FD{{CONDITION}}^FS^FO50,150^BY2^BCN,60,Y,N,N^FD{{BARCODE}}^FS^XZ',
-            scope: 'org'
-          };
-          logger.info('Bulk print: Using ZPL Studio template', { templateName: tpl.name });
-        }
-      } catch (error) {
-        logger.warn('Bulk print: Failed to load ZPL Studio template, falling back', error as Error);
-      }
-      
-      // Fallback to regular template system if no ZPL Studio template found
-      if (!tpl || !tpl.zpl) {
-        tpl = await getTemplate('raw_card_2x1');
-      }
-      
-      if (!tpl) {
-        toast.error('No label template available. Please contact administrator.');
-        setBulkPrinting(false);
-        return;
-      }
-
-      console.log('[handleBulkPrintRaw] Loaded template:', {
-        format: tpl.format,
-        hasLayout: !!tpl.layout,
-        hasZpl: !!tpl.zpl,
-        elementCount: tpl.layout?.elements?.length
-      });
-      
-      const { sanitizeLabel } = await import('@/lib/print/sanitizeZpl');
-      let successCount = 0;
-      const errors: string[] = [];
-
-      // Process each item individually using the SAME logic as single print
-      for (const item of unprintedRawItems) {
-        try {
-          const vars: JobVars = {
-            CARDNAME: generateTitle(item),
-            SETNAME: item.brand_title || '',
-            CARDNUMBER: item.card_number || '',
-            CONDITION: item?.variant ?? 'NM',
-            PRICE: item?.price != null ? `$${Number(item.price).toFixed(2)}` : '$0.00',
-            SKU: item?.sku ?? '',
-            BARCODE: item?.sku ?? item?.id?.slice(-8) ?? 'NO-SKU',
-          };
-          
-          console.log(`[handleBulkPrintRaw] Generating label for SKU ${item.sku}`);
-
-          const prefs = JSON.parse(localStorage.getItem('zebra-printer-config') || '{}');
-
-          let zpl = '';
-          
-          // Handle different template formats - SAME AS SINGLE PRINT
-          if (tpl.format === 'zpl_studio' && tpl.zpl) {
-            console.log('[handleBulkPrintRaw] Processing ZPL Studio template...');
-            zpl = tpl.zpl;
-            
-            // Replace ZPL Studio variables with item data
-            zpl = zpl
-              .replace(/{{CARDNAME}}/g, vars.CARDNAME || 'Unknown Card')
-              .replace(/{{SETNAME}}/g, vars.SETNAME || '')
-              .replace(/{{CARDNUMBER}}/g, vars.CARDNUMBER || '')
-              .replace(/{{CONDITION}}/g, vars.CONDITION || 'NM')
-              .replace(/{{PRICE}}/g, vars.PRICE || '$0.00')
-              .replace(/{{SKU}}/g, vars.SKU || '')
-              .replace(/{{BARCODE}}/g, vars.BARCODE || '');
-              
-          } else if (tpl.format === 'elements' && tpl.layout) {
-            console.log('[handleBulkPrintRaw] Processing elements template...');
-            const filled = {
-              ...tpl.layout,
-              elements: tpl.layout.elements.map((el: ZPLElement) => {
-                if (el.type === 'text') {
-                  let updatedElement = { ...el };
-                  
-                  // Map to correct element IDs from template (including legacy fallbacks)
-                  if (el.id === 'cardinfo') {
-                    updatedElement.text = vars.CARDNAME ?? el.text;
-                  } else if (el.id === 'condition') {
-                    updatedElement.text = vars.CONDITION ?? el.text;
-                  } else if (el.id === 'price') {
-                    updatedElement.text = vars.PRICE ?? el.text;
-                  } else if (el.id === 'sku') {
-                    updatedElement.text = vars.SKU ?? el.text;
-                  } 
-                  // Legacy fallbacks for older templates
-                  else if (el.id === 'cardname') {
-                    updatedElement.text = vars.CARDNAME ?? el.text;
-                  } else if (el.id === 'setname') {
-                    updatedElement.text = vars.SETNAME ?? el.text;
-                  } else if (el.id === 'cardnumber') {
-                    updatedElement.text = vars.CARDNUMBER ?? el.text;
-                  } else if (el.id === 'desc') {
-                    updatedElement.text = vars.CARDNAME ?? el.text;
-                  }
-                  
-                  return updatedElement;
-                } else if (el.type === 'barcode' && el.id === 'barcode') {
-                  return { ...el, data: vars.BARCODE ?? el.data };
-                }
-                return el;
-              }),
-            };
-            zpl = zplFromElements(filled, prefs, cutterSettings);
-          } else if (tpl.format === 'zpl' && tpl.zpl) {
-            console.log('[handleBulkPrintRaw] Processing ZPL string template...');
-            zpl = zplFromTemplateString(tpl.zpl, vars);
-          } else {
-            throw new Error(`Invalid template format: ${tpl.format}`);
-          }
-
-          if (!zpl || zpl.trim().length === 0) {
-            throw new Error('Generated ZPL is empty');
-          }
-
-          // Use proper ZPL sanitization - SAME AS SINGLE PRINT
-          const safeZpl = sanitizeLabel(zpl);
-          const qty = item.quantity || 1;
-          
-          // Use enqueueSafe individually - SAME AS SINGLE PRINT
-          await printQueue.enqueueSafe({ 
-            zpl: safeZpl, 
-            qty, 
-            usePQ: true 
-          });
-          
-          successCount++;
-          console.log(`[handleBulkPrintRaw] Queued label for ${item.sku} (qty: ${qty})`);
-        } catch (error) {
-          const errorMsg = error instanceof Error ? error.message : String(error);
-          console.error(`Failed to generate ZPL for ${item.sku}:`, error);
-          errors.push(`${item.sku}: ${errorMsg}`);
-        }
-      }
-
-      if (successCount > 0) {
-        // Mark items as printed FIRST to prevent re-queuing
-        const printedItemIds = unprintedRawItems.map(item => item.id);
-        const { error: updateError } = await supabase
-          .from('intake_items')
-          .update({ printed_at: new Date().toISOString() })
-          .in('id', printedItemIds);
-        
-        if (updateError) {
-          console.error('[handleBulkPrintRaw] Failed to update items:', updateError);
-        }
-        
-        console.log(`[handleBulkPrintRaw] Marked ${printedItemIds.length} items as printed`);
-        
-        toast.success(`Queued ${successCount} raw card labels for printing`);
-        
-        // Refresh after a short delay to ensure DB update is visible
-        setTimeout(() => {
-          refetch();
-        }, 500);
-      } else {
-        console.error('[handleBulkPrintRaw] Failed to generate labels. Errors:', errors);
-        toast.error(
-          'Failed to generate any labels for printing',
-          {
-            description: errors.length > 0 ? `First error: ${errors[0]}` : 'Check console for details'
-          }
-        );
-      }
-      
-    } catch (error) {
-      toast.error(`Failed to queue bulk print: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      setBulkPrinting(false);
-    }
-  }, [items, refetch, cutterSettings, assignedStore, selectedLocation]);
-
-  const handleCutOnly = useCallback(async () => {
-    try {
-      const cutZpl = "^XA^MMC^PW420^LL203^XZ";
-      printQueue.enqueue({ zpl: cutZpl, qty: 1, usePQ: true });
-      toast.success('Cut command sent successfully');
-    } catch (error) {
-      console.error('Cut command error:', error);
-      toast.error(`Failed to send cut command: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }, []);
-
-  const handlePrintBatches = useCallback(async (batchIds: string[], includeAlreadyPrinted: boolean = false) => {
-    if (batchIds.length === 0) {
-      toast.info('No batches selected');
-      return;
-    }
-
-    setBulkPrinting(true);
-    
-    try {
-      // Fetch items from selected batches
-      let query = supabase
-        .from('intake_items')
-        .select('*')
-        .in('lot_id', batchIds)
-        .is('deleted_at', null)
-        .not('removed_from_batch_at', 'is', null);
-
-      // Only filter by printed_at if we're not including already printed items
-      if (!includeAlreadyPrinted) {
-        query = query.is('printed_at', null);
-      }
-
-      const { data: batchItems, error: fetchError } = await query.order('created_at', { ascending: true });
-
-      if (fetchError) {
-        toast.error(`Failed to fetch batch items: ${fetchError.message}`);
-        return;
-      }
-
-      if (!batchItems || batchItems.length === 0) {
-        toast.info(includeAlreadyPrinted 
-          ? 'No items found in selected batches' 
-          : 'No unprinted items found in selected batches');
-        return;
-      }
-
-      // Show confirmation
-      const confirmed = window.confirm(
-        includeAlreadyPrinted
-          ? `Print/Reprint ${batchItems.length} label${batchItems.length !== 1 ? 's' : ''} from ${batchIds.length} ${batchIds.length === 1 ? 'batch' : 'batches'}?`
-          : `Print ${batchItems.length} unprinted label${batchItems.length !== 1 ? 's' : ''} from ${batchIds.length} ${batchIds.length === 1 ? 'batch' : 'batches'}?`
-      );
-
-      if (!confirmed) {
-        return;
-      }
-
-      logger.info('Batch print: Processing items', { 
-        batchCount: batchIds.length, 
-        itemCount: batchItems.length 
-      });
-
-      // Helper function to truncate text for labels
-      const truncateForLabel = (text: string, maxLength: number = 70): string => {
-        if (text.length <= maxLength) return text;
-        return text.substring(0, maxLength - 3) + '...';
-      };
-
-      // Generate proper title for card
-      const generateTitle = (item: any) => {
-        let name = item.subject || 'Card';
-        if (item.card_number && name.includes(` - ${item.card_number}`)) {
-          name = name.replace(` - ${item.card_number}`, '').trim();
-        }
-        return name;
-      };
-
-      // Load template
-      let tpl = null;
-      
-      try {
-        const { data: zplTemplates } = await supabase
-          .from('label_templates')
-          .select('*')
-          .eq('template_type', 'raw')
-          .eq('is_default', true)
-          .limit(1);
-          
-        if (zplTemplates && zplTemplates.length > 0) {
-          const zplTemplate = zplTemplates[0];
-          tpl = {
-            id: zplTemplate.id,
-            name: zplTemplate.name,
-            format: 'zpl_studio' as const,
-            zpl: typeof (zplTemplate.canvas as any)?.zplLabel === 'string' 
-              ? (zplTemplate.canvas as any).zplLabel 
-              : '^XA^FO50,50^A0N,30,30^FD{{CARDNAME}}^FS^FO50,100^A0N,20,20^FD{{CONDITION}}^FS^FO50,150^BY2^BCN,60,Y,N,N^FD{{BARCODE}}^FS^XZ',
-            scope: 'org'
-          };
-        }
-      } catch (error) {
-        logger.warn('Batch print: Failed to load ZPL Studio template', error as Error);
-      }
-      
-      if (!tpl || !tpl.zpl) {
-        tpl = await getTemplate('raw_card_2x1');
-      }
-      
-      if (!tpl) {
-        toast.error('No label template available');
-        setBulkPrinting(false);
-        return;
-      }
-
-      const { sanitizeLabel } = await import('@/lib/print/sanitizeZpl');
-      let successCount = 0;
-      const errors: string[] = [];
-
-      for (const item of batchItems) {
-        try {
-          const title = generateTitle(item);
-          const subtitle = [item.brand_title, item.card_number].filter(Boolean).join(' ');
-          
-          // Don't show condition for graded cards, only for raw cards
-          let condition = '';
-          if (item.type === 'Raw') {
-            // Try to get condition from TCGPlayer catalog data first
-            const catalogSnapshot = item.catalog_snapshot as { condition?: string } | null;
-            const tcgCondition = catalogSnapshot?.condition;
-            if (tcgCondition) {
-              condition = abbreviateGrade(tcgCondition);
-            } else if (item.variant) {
-              // Fallback: parse from variant (e.g., "Near Mint - Foil" → "Near Mint")
-              const variantCondition = item.variant.split(' - ')[0];
-              condition = abbreviateGrade(variantCondition);
-            }
-          }
-
-          const vars: JobVars = {
-            CARDNAME: truncateForLabel(title, 40),
-            PRICE: item.price ? `$${parseFloat(item.price.toString()).toFixed(2)}` : '',
-            BARCODE: item.sku || '',
-            CONDITION: condition,
-          };
-
-          let zpl: string;
-          if (tpl.format === 'zpl_studio' && tpl.zpl) {
-            const { zplFromTemplateString } = await import('@/lib/labels/zpl');
-            zpl = zplFromTemplateString(tpl.zpl, vars);
-          } else {
-            throw new Error('Only ZPL Studio templates are supported');
-          }
-
-          if (!zpl || zpl.trim().length === 0) {
-            throw new Error('Generated ZPL is empty');
-          }
-
-          const safeZpl = sanitizeLabel(zpl);
-          const qty = item.quantity || 1;
-          
-          await printQueue.enqueueSafe({ 
-            zpl: safeZpl, 
-            qty, 
-            usePQ: true 
-          });
-          
-          successCount++;
-        } catch (error) {
-          const errorMsg = error instanceof Error ? error.message : String(error);
-          console.error(`Failed to generate ZPL for ${item.sku}:`, error);
-          errors.push(`${item.sku}: ${errorMsg}`);
-        }
-      }
-
-      if (successCount > 0) {
-        // Mark items as printed
-        const printedItemIds = batchItems.map(item => item.id);
-        const { error: updateError } = await supabase
-          .from('intake_items')
-          .update({ printed_at: new Date().toISOString() })
-          .in('id', printedItemIds);
-        
-        if (updateError) {
-          console.error('Batch print: Failed to update items:', updateError);
-        }
-        
-        toast.success(`Queued ${successCount} labels from ${batchIds.length} ${batchIds.length === 1 ? 'batch' : 'batches'}`);
-        
-        // Refresh
-        setTimeout(() => {
-          refetch();
-        }, 500);
-      } else {
-        toast.error('Failed to generate any labels');
-      }
-
-      if (errors.length > 0) {
-        console.error('Batch print errors:', errors);
-      }
-    } catch (error) {
-      logger.error('Batch print error', error as Error);
-      toast.error(`Print error: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      setBulkPrinting(false);
-    }
-  }, [refetch]);
-
-  const handleReprintSelected = useCallback(async () => {
-    if (selectedItems.size === 0) {
-      toast.info('No items selected for reprinting');
-      return;
-    }
-
-    setBulkPrinting(true);
-    let successCount = 0;
-    let failCount = 0;
-
-    try {
-      // Preserve selection order
-      const selectionOrder = Array.from(selectedItems);
-      
-      // Fetch fresh data from database to get ALL original information
-      const { data: freshItems, error: fetchError } = await supabase
-        .from('intake_items')
-        .select('*')
-        .in('id', selectionOrder);
-
-      if (fetchError) {
-        console.error('Failed to fetch items:', fetchError);
-        toast.error('Failed to load item data from database');
-        setBulkPrinting(false);
-        return;
-      }
-
-      if (!freshItems || freshItems.length === 0) {
-        toast.info('No items found to reprint');
-        setBulkPrinting(false);
-        return;
-      }
-
-      // Create a map for fast lookup
-      const itemsMap = new Map(freshItems.map(item => [item.id, item]));
-      
-      // Sort items to match original selection order and filter for raw items only
-      const selectedRawItems = selectionOrder
-        .map(id => itemsMap.get(id))
-        .filter(item => {
-          if (!item) return false;
-          const itemType = item.type?.toLowerCase() || 'raw';
-          return itemType === 'raw' && !item.deleted_at;
-        });
-
-      if (selectedRawItems.length === 0) {
-        toast.info('No raw cards selected for reprinting');
-        setBulkPrinting(false);
-        return;
-      }
-
-      console.log(`🖨️ Reprint: Processing ${selectedRawItems.length} items with full database info`);
-
-      // Load template once
-      let tpl = null;
-      
-      try {
-        const { data: zplTemplates } = await supabase
-          .from('label_templates')
-          .select('*')
-          .eq('template_type', 'raw')
-          .eq('is_default', true)
-          .limit(1);
-          
-        if (zplTemplates && zplTemplates.length > 0) {
-          const zplTemplate = zplTemplates[0];
-          tpl = {
-            id: zplTemplate.id,
-            name: zplTemplate.name,
-            format: 'zpl_studio' as const,
-            zpl: typeof (zplTemplate.canvas as any)?.zplLabel === 'string' 
-              ? (zplTemplate.canvas as any).zplLabel 
-              : '^XA^FO50,50^A0N,30,30^FD{{CARDNAME}}^FS^FO50,100^A0N,20,20^FD{{CONDITION}}^FS^FO50,150^BY2^BCN,60,Y,N,N^FD{{BARCODE}}^FS^XZ',
-            scope: 'org'
-          };
-        }
-      } catch (error) {
-        console.warn('Failed to load ZPL Studio template:', error);
-      }
-      
-      if (!tpl || !tpl.zpl) {
-        tpl = await getTemplate('raw_card_2x1');
-      }
-      
-      if (!tpl) {
-        toast.error('No label template available');
-        setBulkPrinting(false);
-        return;
-      }
-
-      // Process each item using its ORIGINAL database data
-      for (const item of selectedRawItems) {
-        try {
-          console.log(`🖨️ Reprinting item:`, {
-            sku: item.sku,
-            subject: item.subject,
-            brand_title: item.brand_title,
-            card_number: item.card_number,
-            grade: item.grade,
-            vendor: item.vendor,
-            price: item.price
-          });
-
-          // Use original subject - strip card number if present
-          let cardName = item.subject || 'Raw Card';
-          if (item.card_number && cardName.includes(` - ${item.card_number}`)) {
-            cardName = cardName.replace(` - ${item.card_number}`, '').trim();
-          }
-
-          // Build vars from database fields (including vendor)
-          const vars: JobVars = {
-            CARDNAME: cardName,
-            SETNAME: item.brand_title || '',
-            CARDNUMBER: item.card_number || '',
-            CONDITION: item.grade || 'NM',
-            PRICE: item.price ? `$${item.price.toFixed(2)}` : '$0.00',
-            SKU: item.sku || '',
-            BARCODE: item.sku || item.id?.slice(-8) || 'NO-SKU',
-            VENDOR: item.vendor || '',
-            YEAR: item.year || '',
-            CATEGORY: item.category || ''
-          };
-
-          let zpl = '';
-          
-          // Generate ZPL based on template format
-          if (tpl.format === 'zpl_studio' && tpl.zpl) {
-            zpl = tpl.zpl
-              .replace(/{{CARDNAME}}/g, vars.CARDNAME || 'Unknown Card')
-              .replace(/{{SETNAME}}/g, vars.SETNAME || '')
-              .replace(/{{CARDNUMBER}}/g, vars.CARDNUMBER || '')
-              .replace(/{{CONDITION}}/g, vars.CONDITION || 'NM')
-              .replace(/{{PRICE}}/g, vars.PRICE || '$0.00')
-              .replace(/{{SKU}}/g, vars.SKU || '')
-              .replace(/{{BARCODE}}/g, vars.BARCODE || '')
-              .replace(/{{VENDOR}}/g, vars.VENDOR || '')
-              .replace(/{{YEAR}}/g, vars.YEAR || '')
-              .replace(/{{CATEGORY}}/g, vars.CATEGORY || '');
-          } else if (tpl.format === 'elements' && tpl.layout) {
-            const filled = {
-              ...tpl.layout,
-              elements: tpl.layout.elements.map((el: ZPLElement) => {
-                if (el.type === 'text') {
-                  const updates: Record<string, string> = {
-                    'cardinfo': vars.CARDNAME,
-                    'cardname': vars.CARDNAME,
-                    'condition': vars.CONDITION,
-                    'price': vars.PRICE,
-                    'sku': vars.SKU,
-                    'setname': vars.SETNAME,
-                    'cardnumber': vars.CARDNUMBER,
-                    'vendor': vars.VENDOR,
-                    'year': vars.YEAR,
-                    'category': vars.CATEGORY
-                  };
-                  if (el.id && updates[el.id]) {
-                    return { ...el, text: updates[el.id] };
-                  }
-                  return el;
-                } else if (el.type === 'barcode' && el.id === 'barcode') {
-                  return { ...el, data: vars.BARCODE };
-                }
-                return el;
-              }),
-            };
-            zpl = zplFromElements(filled);
-          } else if (tpl.format === 'zpl' && tpl.zpl) {
-            zpl = zplFromTemplateString(tpl.zpl, vars);
-          } else {
-            throw new Error('Invalid template format');
-          }
-
-          const { sanitizeLabel } = await import('@/lib/print/sanitizeZpl');
-          const safeZpl = sanitizeLabel(zpl);
-          
-          await printQueue.enqueueSafe({ 
-            zpl: safeZpl, 
-            qty: 1, 
-            usePQ: true 
-          });
-
-          successCount++;
-        } catch (err) {
-          console.error(`Failed to reprint ${item.sku}:`, err);
-          failCount++;
-        }
-      }
-
-      if (successCount > 0) {
-        toast.success(`${successCount} label${successCount > 1 ? 's' : ''} queued for reprinting`);
-      }
-      if (failCount > 0) {
-        toast.error(`${failCount} label${failCount > 1 ? 's' : ''} failed to queue`);
-      }
-      
-      setSelectedItems(new Set());
-    } catch (error) {
-      console.error('Reprint error:', error);
-      toast.error('Failed to reprint selected items');
-    } finally {
-      setBulkPrinting(false);
-    }
-  }, [selectedItems]);
 
   const selectAllVisible = useCallback(() => {
     const allVisibleIds = new Set(filteredItems.map(item => item.id));
@@ -2358,18 +1274,13 @@ const Inventory = () => {
                   totalCount={filteredItems.length}
                   isAdmin={isAdmin}
                   statusFilter={statusFilter}
-                  bulkPrinting={bulkPrinting}
                   bulkRetrying={bulkRetrying}
                   bulkSyncing={bulkSyncing}
                   onSelectAll={selectAllVisible}
                   onClearSelection={clearSelection}
-                  onBulkPrintRaw={handleBulkPrintRaw}
-                  onPrintBatches={() => setShowBatchSelector(true)}
-                  onReprintSelected={handleReprintSelected}
                   onBulkRetrySync={handleBulkRetrySync}
                   onSyncSelected={handleSyncSelected}
                   onResyncSelected={handleResyncSelected}
-                  onSendCutCommand={handleSendCutCommand}
                   onDeleteSelected={() => {
                     const selectedItemsArray = filteredItems.filter(item => selectedItems.has(item.id));
                     setSelectedItemsForDeletion(selectedItemsArray);
@@ -2424,13 +1335,11 @@ const Inventory = () => {
               expandedItems={expandedItems}
               isAdmin={isAdmin}
               syncingRowId={syncingRowId}
-              printingItem={printingItem}
               onToggleSelection={handleToggleSelection}
               onToggleExpanded={handleToggleExpanded}
               onSync={handleSync}
               onRetrySync={handleRetrySync}
               onResync={handleResync}
-              onPrint={handlePrint}
               onRemove={(item) => {
                 setSelectedItemForRemoval(item);
                 setShowRemovalDialog(true);
@@ -2452,31 +1361,6 @@ const Inventory = () => {
             <Suspense fallback={<div className="flex items-center justify-center p-8"><Loader2 className="h-6 w-6 animate-spin" /></div>}>
               <InventoryAnalytics />
             </Suspense>
-          </TabsContent>
-          
-          <TabsContent value="settings">
-            <div className="grid gap-6 md:grid-cols-2">
-              <CutterSettingsPanel />
-              
-              <Card>
-                <CardHeader>
-                  <CardTitle>Quick Actions</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <Button
-                    variant="outline"
-                    onClick={handleSendCutCommand}
-                    className="w-full"
-                  >
-                    <Scissors className="h-4 w-4 mr-2" />
-                    Send Cut Command Now
-                  </Button>
-                  <p className="text-sm text-muted-foreground">
-                    Sends an immediate cut command (^XA^MMC^CN1^MCY^XZ) to trigger the cutter without printing a label.
-                  </p>
-                </CardContent>
-              </Card>
-            </div>
           </TabsContent>
         </Tabs>
 
@@ -2531,16 +1415,6 @@ const Inventory = () => {
             onRefresh={refetch}
           />
         )}
-
-        {/* Printer dialog removed - use Settings page to configure printer */}
-
-        <BatchSelectorDialog
-          open={showBatchSelector}
-          onOpenChange={setShowBatchSelector}
-          storeKey={assignedStore || ''}
-          locationGid={selectedLocation || ''}
-          onPrintBatches={handlePrintBatches}
-        />
 
         {expandedItems.size > 0 && (
           <div className="space-y-4">

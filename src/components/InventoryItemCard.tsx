@@ -64,13 +64,11 @@ interface InventoryItemCardProps {
   isExpanded: boolean;
   isAdmin: boolean;
   syncingRowId: string | null;
-  printingItem: string | null;
   onToggleSelection: (itemId: string) => void;
   onToggleExpanded: (itemId: string) => void;
   onSync: (item: InventoryItem) => void;
   onRetrySync: (item: InventoryItem) => void;
   onResync: (item: InventoryItem) => void;
-  onPrint: (item: InventoryItem) => void;
   onRemove: (item: InventoryItem) => void;
   onDelete?: (item: InventoryItem) => void;
   onSyncDetails: (item: InventoryItem) => void;
@@ -82,13 +80,11 @@ export const InventoryItemCard = memo(({
   isExpanded,
   isAdmin,
   syncingRowId,
-  printingItem,
   onToggleSelection,
   onToggleExpanded,
   onSync,
   onRetrySync,
   onResync,
-  onPrint,
   onRemove,
   onDelete,
   onSyncDetails
@@ -349,23 +345,6 @@ export const InventoryItemCard = memo(({
             </Button>
           )}
           
-          {/* Only show print button for Raw items */}
-          {(item.type?.toLowerCase() || 'raw') === 'raw' && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onPrint(item)}
-              disabled={printingItem === item.id}
-            >
-              {printingItem === item.id ? (
-                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-              ) : (
-                <Printer className="h-3 w-3 mr-1" />
-              )}
-              Print Label
-            </Button>
-          )}
-          
           {item.shopify_product_id && (
             <Button
               variant="outline"
@@ -440,8 +419,7 @@ export const InventoryItemCard = memo(({
     prevProps.item.ebay_listing_id === nextProps.item.ebay_listing_id &&
     prevProps.isSelected === nextProps.isSelected &&
     prevProps.isExpanded === nextProps.isExpanded &&
-    prevProps.syncingRowId === nextProps.syncingRowId &&
-    prevProps.printingItem === nextProps.printingItem
+    prevProps.syncingRowId === nextProps.syncingRowId
   );
 });
 
