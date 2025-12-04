@@ -1,7 +1,12 @@
 // Convert label layout to ZPL code
 
 import type { LabelLayout, LabelField, SampleData, FieldKey } from '../types/labelLayout';
-import { CHAR_W_RATIO, fitFontSingleLine, estimateCode128WidthDots } from '@/lib/zplFit';
+import { CHAR_W_RATIO, estimateCode128WidthDots } from '@/lib/zplFit';
+import { calculateOptimalFontSize, calculateTitleFontSize } from './textFitting';
+
+// Same calibration factor used in preview (FieldBoxEnhanced.tsx)
+const FONT_CALIBRATION_FACTOR = 0.65;
+const PREVIEW_SCALE = 2;
 
 interface ZplGeneratorOptions {
   dpi?: 203 | 300;
@@ -96,72 +101,41 @@ export function generateZplTemplate(layout: LabelLayout): string {
 }
 
 /**
- * Generate text field ZPL using same smart fitting as preview
+ * Generate text field ZPL using same Canvas-based fitting as preview
  */
 function generateTextZpl(field: LabelField, text: string, isTitle: boolean = false): string[] {
   const lines: string[] = [];
   const justification = field.alignment === 'center' ? 'C' : field.alignment === 'right' ? 'R' : 'L';
   
-  // For title fields, try to maximize font using two lines if beneficial
-  if (isTitle && text.includes(' ')) {
-    // First check single-line fit
-    const singleLineFontSize = fitFontSingleLine(text, field.width, field.maxFontSize, field.minFontSize);
-    
-    // Check if two lines would allow a larger font
-    const words = text.split(' ');
-    let bestTwoLineFont = 0;
-    let bestSplitIndex = -1;
-    
-    // Try each possible split point
-    for (let i = 1; i < words.length; i++) {
-      const line1 = words.slice(0, i).join(' ');
-      const line2 = words.slice(i).join(' ');
-      const longerLine = line1.length > line2.length ? line1 : line2;
-      
-      // Font that fits the longer line
-      const fontForWidth = fitFontSingleLine(longerLine, field.width, field.maxFontSize, field.minFontSize);
-      // Font constrained by height (2 lines with ~1.2 line height)
-      const fontForHeight = Math.floor(field.height / 2.4);
-      const twoLineFont = Math.min(fontForWidth, fontForHeight, field.maxFontSize);
-      
-      if (twoLineFont > bestTwoLineFont) {
-        bestTwoLineFont = twoLineFont;
-        bestSplitIndex = i;
-      }
-    }
-    
-    lines.push(`^FO${field.x},${field.y}`);
-    
-    // Use two lines if it gives us a bigger font
-    if (bestTwoLineFont > singleLineFontSize && bestSplitIndex > 0) {
-      const line1 = words.slice(0, bestSplitIndex).join(' ');
-      const line2 = words.slice(bestSplitIndex).join(' ');
-      const fontSizeDots = Math.max(field.minFontSize, Math.min(bestTwoLineFont, field.maxFontSize));
-      const fontWidth = Math.floor(fontSizeDots * CHAR_W_RATIO);
-      
-      lines.push(`^FB${field.width},2,0,${justification}`);
-      lines.push(`^A0N,${fontSizeDots},${fontWidth}`);
-      lines.push(`^FD${escapeZplText(line1 + '\\&' + line2)}^FS`);
-    } else {
-      // Single line is better or equal
-      const fontSizeDots = Math.max(field.minFontSize, Math.min(singleLineFontSize, field.maxFontSize));
-      const fontWidth = Math.floor(fontSizeDots * CHAR_W_RATIO);
-      
-      if (field.alignment !== 'left') {
-        lines.push(`^FB${field.width},1,0,${justification}`);
-      }
-      lines.push(`^A0N,${fontSizeDots},${fontWidth}`);
-      lines.push(`^FD${escapeZplText(text)}^FS`);
-    }
+  // Convert dots to screen pixels (same as preview does)
+  const pixelWidth = field.width * PREVIEW_SCALE;
+  const pixelHeight = field.height * PREVIEW_SCALE;
+  const maxFontPixels = field.maxFontSize * PREVIEW_SCALE * FONT_CALIBRATION_FACTOR;
+  const minFontPixels = field.minFontSize * PREVIEW_SCALE * FONT_CALIBRATION_FACTOR;
+  
+  // Use the same Canvas-based calculation as the preview
+  const result = isTitle
+    ? calculateTitleFontSize(text, pixelWidth, pixelHeight, maxFontPixels, minFontPixels)
+    : calculateOptimalFontSize(text, pixelWidth, maxFontPixels, minFontPixels);
+  
+  // Convert pixel font size back to ZPL dots
+  const fontSizeDots = Math.round(result.fontSize / PREVIEW_SCALE / FONT_CALIBRATION_FACTOR);
+  const clampedFontSize = Math.max(field.minFontSize, Math.min(fontSizeDots, field.maxFontSize));
+  const fontWidth = Math.floor(clampedFontSize * CHAR_W_RATIO);
+  
+  lines.push(`^FO${field.x},${field.y}`);
+  
+  // Handle two-line output for titles
+  if (result.isTwoLine && result.lines.length === 2) {
+    lines.push(`^FB${field.width},2,0,${justification}`);
+    lines.push(`^A0N,${clampedFontSize},${fontWidth}`);
+    lines.push(`^FD${escapeZplText(result.lines[0] + '\\&' + result.lines[1])}^FS`);
   } else {
-    // Non-title fields: maximize font for single line
-    const fontSize = fitFontSingleLine(text, field.width, field.maxFontSize, field.minFontSize);
-    
-    lines.push(`^FO${field.x},${field.y}`);
+    // Single line
     if (field.alignment !== 'left') {
       lines.push(`^FB${field.width},1,0,${justification}`);
     }
-    lines.push(`^A0N,${fontSize},${Math.floor(fontSize * CHAR_W_RATIO)}`);
+    lines.push(`^A0N,${clampedFontSize},${fontWidth}`);
     lines.push(`^FD${escapeZplText(text)}^FS`);
   }
   
