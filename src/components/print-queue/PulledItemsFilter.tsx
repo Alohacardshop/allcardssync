@@ -75,6 +75,9 @@ export default function PulledItemsFilter() {
   // Mark as unprinted loading state
   const [isMarkingUnprinted, setIsMarkingUnprinted] = useState(false);
 
+  // Test mode - skip marking as printed
+  const [markAsPrinted, setMarkAsPrinted] = useState(true);
+
   useEffect(() => {
     fetchTemplates();
     fetchLocationNames();
@@ -500,17 +503,19 @@ export default function PulledItemsFilter() {
         printedCount++;
       }
 
-      // Update printed_at timestamps
-      const { error: updateError } = await supabase
-        .from('intake_items')
-        .update({ printed_at: new Date().toISOString() })
-        .in('id', itemIds);
+      // Update printed_at timestamps (skip if testing)
+      if (markAsPrinted) {
+        const { error: updateError } = await supabase
+          .from('intake_items')
+          .update({ printed_at: new Date().toISOString() })
+          .in('id', itemIds);
 
-      if (updateError) {
-        console.error('Failed to update printed_at:', updateError);
+        if (updateError) {
+          console.error('Failed to update printed_at:', updateError);
+        }
       }
 
-      toast.success(`Queued ${printedCount} label${printedCount > 1 ? 's' : ''} for printing`);
+      toast.success(`Queued ${printedCount} label${printedCount > 1 ? 's' : ''} for printing${!markAsPrinted ? ' (test mode)' : ''}`);
       
       // Clear selection and refresh items
       setSelectedItems(new Set());
@@ -1143,6 +1148,16 @@ export default function PulledItemsFilter() {
                     onChange={(e) => setCopies(Math.max(1, parseInt(e.target.value) || 1))}
                     className="w-20"
                   />
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="mark-printed"
+                    checked={markAsPrinted}
+                    onCheckedChange={setMarkAsPrinted}
+                  />
+                  <Label htmlFor="mark-printed" className="text-xs cursor-pointer">
+                    Mark as printed
+                  </Label>
                 </div>
               </div>
               <div className="flex items-center gap-3">
