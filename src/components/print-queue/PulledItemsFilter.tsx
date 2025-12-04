@@ -41,6 +41,7 @@ export default function PulledItemsFilter() {
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [dateFilter, setDateFilter] = useState<'today' | 'yesterday' | '7days' | '30days' | null>(null);
+  const [typeFilter, setTypeFilter] = useState<'all' | 'raw' | 'graded'>('all');
 
   // Store/Location filter state
   const [filterStore, setFilterStore] = useState<string>('all');
@@ -89,7 +90,7 @@ export default function PulledItemsFilter() {
   useEffect(() => {
     filterItems();
     setSelectedItems(new Set());
-  }, [searchTerm, selectedIncludeTags, selectedExcludeTags, dateFilter, filterStore, filterLocation, allItems]);
+  }, [searchTerm, selectedIncludeTags, selectedExcludeTags, dateFilter, filterStore, filterLocation, typeFilter, allItems]);
 
   // Update location names when cache is populated
   useEffect(() => {
@@ -221,6 +222,14 @@ export default function PulledItemsFilter() {
 
   const filterItems = () => {
     let filtered = [...allItems];
+
+    // Type filter (raw/graded)
+    if (typeFilter !== 'all') {
+      filtered = filtered.filter(item => {
+        const itemType = item.type?.toLowerCase() || 'raw';
+        return itemType === typeFilter;
+      });
+    }
 
     // Store filter
     if (filterStore && filterStore !== 'all') {
@@ -634,8 +643,8 @@ export default function PulledItemsFilter() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Store and Location Filters */}
-          <div className="grid gap-4 md:grid-cols-2">
+          {/* Store, Location, and Type Filters */}
+          <div className="grid gap-4 md:grid-cols-3">
             <div className="space-y-2">
               <Label>Store</Label>
               <Select value={filterStore} onValueChange={setFilterStore}>
@@ -666,6 +675,20 @@ export default function PulledItemsFilter() {
                       {loc.name}
                     </SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Item Type</Label>
+              <Select value={typeFilter} onValueChange={(v: 'all' | 'raw' | 'graded') => setTypeFilter(v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="All Types" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Types</SelectItem>
+                  <SelectItem value="raw">Raw Only</SelectItem>
+                  <SelectItem value="graded">Graded Only</SelectItem>
                 </SelectContent>
               </Select>
             </div>
