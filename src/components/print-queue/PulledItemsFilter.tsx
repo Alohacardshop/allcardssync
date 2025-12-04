@@ -10,8 +10,9 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Search, Filter, ChevronDown, X, Printer, Download, RefreshCw, Loader2, Eye, ExternalLink, Check } from 'lucide-react';
+import { Search, Filter, ChevronDown, X, Printer, Download, RefreshCw, Loader2, Eye, ExternalLink, Check, Package, RotateCcw } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
+import { BatchSelectorDialog } from '@/components/BatchSelectorDialog';
 import { toast } from 'sonner';
 import { useStore } from '@/contexts/StoreContext';
 import { ShopifyPullDialog } from '@/components/barcode-printing/ShopifyPullDialog';
@@ -63,6 +64,12 @@ export default function PulledItemsFilter() {
 
   // Show printed items toggle
   const [showPrintedItems, setShowPrintedItems] = useState(false);
+
+  // Batch selector dialog
+  const [showBatchSelector, setShowBatchSelector] = useState(false);
+
+  // Mark as unprinted loading state
+  const [isMarkingUnprinted, setIsMarkingUnprinted] = useState(false);
 
   useEffect(() => {
     fetchTemplates();
@@ -434,6 +441,116 @@ export default function PulledItemsFilter() {
     fetchAllItems();
   };
 
+  // Mark selected items as unprinted
+  const handleMarkAsUnprinted = async () => {
+    if (selectedItems.size === 0) {
+      toast.error('No items selected');
+      return;
+    }
+
+    setIsMarkingUnprinted(true);
+    try {
+      const itemIds = Array.from(selectedItems);
+      const { error } = await supabase
+        .from('intake_items')
+        .update({ printed_at: null })
+        .in('id', itemIds);
+
+      if (error) throw error;
+
+      toast.success(`Marked ${itemIds.length} item${itemIds.length > 1 ? 's' : ''} as unprinted`);
+      setSelectedItems(new Set());
+      fetchAllItems();
+    } catch (error) {
+      console.error('Failed to mark as unprinted:', error);
+      toast.error('Failed to mark items as unprinted');
+    } finally {
+      setIsMarkingUnprinted(false);
+    }
+  };
+
+  // Handle batch printing
+  const handlePrintBatches = async (batchIds: string[], includeAlreadyPrinted: boolean) => {
+    if (!selectedTemplateId) {
+      toast.error('Please select a label template first');
+      return;
+    }
+
+    const template = templates.find(t => t.id === selectedTemplateId);
+    if (!template) {
+      toast.error('Template not found');
+      return;
+    }
+
+    const zplBody = template.canvas?.zplLabel;
+    if (!zplBody) {
+      toast.error('Template has no ZPL body');
+      return;
+    }
+
+    setIsPrinting(true);
+    try {
+      // Fetch items from selected batches
+      let query = supabase
+        .from('intake_items')
+        .select('*')
+        .in('lot_id', batchIds)
+        .is('deleted_at', null);
+
+      if (!includeAlreadyPrinted) {
+        query = query.is('printed_at', null);
+      }
+
+      const { data: batchItems, error } = await query;
+
+      if (error) throw error;
+
+      if (!batchItems || batchItems.length === 0) {
+        toast.info('No items to print in selected batches');
+        return;
+      }
+
+      let printedCount = 0;
+      const itemIds: string[] = [];
+
+      for (const item of batchItems) {
+        const vars = {
+          CARDNAME: item.subject || item.brand_title || '',
+          SETNAME: item.category || '',
+          CARDNUMBER: item.card_number || '',
+          CONDITION: abbreviateGrade(item.variant),
+          PRICE: item.price ? `$${Number(item.price).toFixed(2)}` : '',
+          SKU: item.sku || '',
+          BARCODE: item.sku || '',
+          VENDOR: item.vendor || '',
+          YEAR: item.year || '',
+          CATEGORY: item.main_category || '',
+        };
+
+        const zpl = zplFromTemplateString(zplBody, vars);
+        await printQueue.enqueueSafe({ zpl, qty: copies, usePQ: true });
+        printedCount++;
+        itemIds.push(item.id);
+      }
+
+      // Update printed_at timestamps
+      if (itemIds.length > 0) {
+        await supabase
+          .from('intake_items')
+          .update({ printed_at: new Date().toISOString() })
+          .in('id', itemIds);
+      }
+
+      toast.success(`Queued ${printedCount} label${printedCount > 1 ? 's' : ''} from ${batchIds.length} batch${batchIds.length > 1 ? 'es' : ''}`);
+      fetchAllItems();
+    } catch (error) {
+      console.error('Batch print error:', error);
+      toast.error('Failed to print batch labels');
+    } finally {
+      setIsPrinting(false);
+    }
+  };
+
   const canPull = assignedStore && selectedLocation;
 
   const getShopifyAdminUrl = (item: any) => {
@@ -468,13 +585,23 @@ export default function PulledItemsFilter() {
                     ? 'Pull products from your Shopify store to print labels.'
                     : 'Select a store and location in the top bar to pull products.'}
                 </p>
-                <Button
-                  onClick={() => setShowPullDialog(true)}
-                  disabled={!canPull}
-                >
-                  <Download className="h-4 w-4 mr-2" />
-                  Pull Products
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowBatchSelector(true)}
+                    disabled={!canPull}
+                  >
+                    <Package className="h-4 w-4 mr-2" />
+                    Print by Batch
+                  </Button>
+                  <Button
+                    onClick={() => setShowPullDialog(true)}
+                    disabled={!canPull}
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Pull Products
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </CollapsibleContent>
@@ -852,6 +979,20 @@ export default function PulledItemsFilter() {
                 >
                   Clear
                 </Button>
+                {showPrintedItems && items.some(i => selectedItems.has(i.id) && i.printed_at) && (
+                  <Button 
+                    variant="outline"
+                    onClick={handleMarkAsUnprinted}
+                    disabled={isMarkingUnprinted}
+                  >
+                    {isMarkingUnprinted ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <RotateCcw className="h-4 w-4 mr-2" />
+                    )}
+                    Mark Unprinted
+                  </Button>
+                )}
                 <Button 
                   onClick={handlePrintSelected}
                   disabled={isPrinting || !selectedTemplateId}
@@ -889,6 +1030,17 @@ export default function PulledItemsFilter() {
           selectedStoreKey={assignedStore}
           selectedLocationGid={selectedLocation}
           onRefresh={fetchAllItems}
+        />
+      )}
+
+      {/* Batch Selector Dialog */}
+      {assignedStore && selectedLocation && (
+        <BatchSelectorDialog
+          open={showBatchSelector}
+          onOpenChange={setShowBatchSelector}
+          storeKey={assignedStore}
+          locationGid={selectedLocation}
+          onPrintBatches={handlePrintBatches}
         />
       )}
     </div>
