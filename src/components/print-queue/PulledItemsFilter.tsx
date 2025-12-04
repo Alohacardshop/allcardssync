@@ -197,9 +197,15 @@ export default function PulledItemsFilter() {
         ];
         itemTags.forEach((tag: string) => tagsSet.add(tag));
         
-        // Collect main categories for dedicated filter
+        // Collect all category fields for dedicated filter
         if (item.main_category) {
-          categoriesSet.add(item.main_category);
+          categoriesSet.add(item.main_category.toLowerCase());
+        }
+        if (item.category) {
+          categoriesSet.add(item.category.toLowerCase());
+        }
+        if (item.sub_category) {
+          categoriesSet.add(item.sub_category.toLowerCase());
         }
         
         // Collect stores
@@ -240,11 +246,14 @@ export default function PulledItemsFilter() {
       });
     }
 
-    // Category filter (tcg, sports, etc.)
+    // Category filter - checks main_category, category, and sub_category
     if (categoryFilter !== 'all') {
-      filtered = filtered.filter(item => 
-        item.main_category?.toLowerCase() === categoryFilter.toLowerCase()
-      );
+      filtered = filtered.filter(item => {
+        const catLower = categoryFilter.toLowerCase();
+        return item.main_category?.toLowerCase() === catLower ||
+               item.category?.toLowerCase() === catLower ||
+               item.sub_category?.toLowerCase() === catLower;
+      });
     }
 
     // Store filter
@@ -719,7 +728,7 @@ export default function PulledItemsFilter() {
                   <SelectItem value="all">All Categories</SelectItem>
                   {availableCategories.map(cat => (
                     <SelectItem key={cat} value={cat}>
-                      {cat.toUpperCase()}
+                      {cat.charAt(0).toUpperCase() + cat.slice(1)}
                     </SelectItem>
                   ))}
                 </SelectContent>
