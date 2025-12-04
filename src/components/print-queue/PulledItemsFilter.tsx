@@ -79,6 +79,14 @@ export default function PulledItemsFilter() {
     fetchLocationNames();
   }, []);
 
+  // Fetch available categories once on mount (for dropdown options)
+  useEffect(() => {
+    if (assignedStore) {
+      fetchAvailableCategories();
+    }
+  }, [assignedStore, selectedLocation]);
+
+  // Refetch items when server-side filters change
   useEffect(() => {
     if (assignedStore) {
       fetchAllItems();
@@ -87,12 +95,12 @@ export default function PulledItemsFilter() {
       setItems([]);
       setLoading(false);
     }
-  }, [assignedStore, selectedLocation, showPrintedItems]);
+  }, [assignedStore, selectedLocation, showPrintedItems, typeFilter, categoryFilter]);
 
   useEffect(() => {
     filterItems();
     setSelectedItems(new Set());
-  }, [searchTerm, selectedIncludeTags, selectedExcludeTags, dateFilter, filterStore, filterLocation, typeFilter, categoryFilter, allItems]);
+  }, [searchTerm, selectedIncludeTags, selectedExcludeTags, dateFilter, filterStore, filterLocation, allItems]);
 
   // Update location names when cache is populated
   useEffect(() => {
@@ -152,6 +160,36 @@ export default function PulledItemsFilter() {
     }
   };
 
+  // Fetch available categories for dropdown (separate from main data fetch)
+  const fetchAvailableCategories = async () => {
+    if (!assignedStore) return;
+    
+    try {
+      let query = supabase
+        .from('intake_items')
+        .select('main_category, category, sub_category')
+        .eq('store_key', assignedStore)
+        .is('deleted_at', null);
+
+      if (selectedLocation) {
+        query = query.eq('shopify_location_gid', selectedLocation);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      const categoriesSet = new Set<string>();
+      (data || []).forEach(item => {
+        if (item.main_category) categoriesSet.add(item.main_category.toLowerCase());
+        if (item.category) categoriesSet.add(item.category.toLowerCase());
+        if (item.sub_category) categoriesSet.add(item.sub_category.toLowerCase());
+      });
+      setAvailableCategories(Array.from(categoriesSet).sort());
+    } catch (error) {
+      console.error('Failed to fetch categories:', error);
+    }
+  };
+
   const fetchAllItems = async () => {
     if (!assignedStore) {
       setAllItems([]);
@@ -178,17 +216,27 @@ export default function PulledItemsFilter() {
         query = query.eq('shopify_location_gid', selectedLocation);
       }
 
+      // SERVER-SIDE: Apply type filter at DB level to get all matching items
+      if (typeFilter !== 'all') {
+        query = query.ilike('type', typeFilter);
+      }
+
+      // SERVER-SIDE: Apply category filter at DB level
+      if (categoryFilter !== 'all') {
+        // Use OR filter for main_category, category, or sub_category
+        query = query.or(`main_category.ilike.${categoryFilter},category.ilike.${categoryFilter},sub_category.ilike.${categoryFilter}`);
+      }
+
       const { data, error } = await query;
 
       if (error) throw error;
 
       setAllItems(data || []);
       
-      // Extract all unique tags (including category fields as pseudo-tags)
+      // Extract all unique tags
       const tagsSet = new Set<string>();
       const storesSet = new Set<string>();
       const locationsMap = new Map<string, string>();
-      const categoriesSet = new Set<string>();
       
       (data || []).forEach(item => {
         const itemTags = [
@@ -196,17 +244,6 @@ export default function PulledItemsFilter() {
           ...((item.source_payload as any)?.tags || []),
         ];
         itemTags.forEach((tag: string) => tagsSet.add(tag));
-        
-        // Collect all category fields for dedicated filter
-        if (item.main_category) {
-          categoriesSet.add(item.main_category.toLowerCase());
-        }
-        if (item.category) {
-          categoriesSet.add(item.category.toLowerCase());
-        }
-        if (item.sub_category) {
-          categoriesSet.add(item.sub_category.toLowerCase());
-        }
         
         // Collect stores
         if (item.store_key) {
@@ -221,7 +258,6 @@ export default function PulledItemsFilter() {
       });
       
       setAvailableTags(Array.from(tagsSet).sort());
-      setAvailableCategories(Array.from(categoriesSet).sort());
       setAvailableStores(Array.from(storesSet).sort());
       setAvailableLocations(
         Array.from(locationsMap.entries()).map(([gid, name]) => ({ gid, name }))
@@ -238,23 +274,8 @@ export default function PulledItemsFilter() {
   const filterItems = () => {
     let filtered = [...allItems];
 
-    // Type filter (raw/graded)
-    if (typeFilter !== 'all') {
-      filtered = filtered.filter(item => {
-        const itemType = item.type?.toLowerCase() || 'raw';
-        return itemType === typeFilter;
-      });
-    }
-
-    // Category filter - checks main_category, category, and sub_category
-    if (categoryFilter !== 'all') {
-      filtered = filtered.filter(item => {
-        const catLower = categoryFilter.toLowerCase();
-        return item.main_category?.toLowerCase() === catLower ||
-               item.category?.toLowerCase() === catLower ||
-               item.sub_category?.toLowerCase() === catLower;
-      });
-    }
+    // NOTE: Type and category filters are now applied server-side in fetchAllItems
+    // for better performance with large datasets (avoids 1000 row limit issues)
 
     // Store filter
     if (filterStore && filterStore !== 'all') {
