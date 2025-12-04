@@ -43,6 +43,7 @@ export default function PulledItemsFilter() {
   const [filterLocation, setFilterLocation] = useState<string>('all');
   const [availableStores, setAvailableStores] = useState<string[]>([]);
   const [availableLocations, setAvailableLocations] = useState<{ gid: string; name: string }[]>([]);
+  const [locationNameCache, setLocationNameCache] = useState<Record<string, string>>({});
 
   // Shopify pull state
   const [showPullDialog, setShowPullDialog] = useState(false);
@@ -56,6 +57,7 @@ export default function PulledItemsFilter() {
 
   useEffect(() => {
     fetchTemplates();
+    fetchLocationNames();
   }, []);
 
   useEffect(() => {
@@ -72,6 +74,22 @@ export default function PulledItemsFilter() {
     filterItems();
     setSelectedItems(new Set());
   }, [searchTerm, selectedIncludeTags, selectedExcludeTags, dateFilter, filterStore, filterLocation, allItems]);
+
+  // Update location names when cache is populated
+  useEffect(() => {
+    if (Object.keys(locationNameCache).length > 0 && allItems.length > 0) {
+      const locationsMap = new Map<string, string>();
+      allItems.forEach(item => {
+        if (item.shopify_location_gid) {
+          const locName = locationNameCache[item.shopify_location_gid] || item.shopify_location_gid;
+          locationsMap.set(item.shopify_location_gid, locName);
+        }
+      });
+      setAvailableLocations(
+        Array.from(locationsMap.entries()).map(([gid, name]) => ({ gid, name }))
+      );
+    }
+  }, [locationNameCache, allItems]);
 
   const fetchTemplates = async () => {
     try {
@@ -92,6 +110,26 @@ export default function PulledItemsFilter() {
       }
     } catch (error) {
       console.error('Failed to load templates:', error);
+    }
+  };
+
+  const fetchLocationNames = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('shopify_location_cache')
+        .select('location_gid, location_name');
+
+      if (error) throw error;
+
+      const cache: Record<string, string> = {};
+      (data || []).forEach(loc => {
+        if (loc.location_gid && loc.location_name) {
+          cache[loc.location_gid] = loc.location_name;
+        }
+      });
+      setLocationNameCache(cache);
+    } catch (error) {
+      console.error('Failed to load location names:', error);
     }
   };
 
@@ -140,9 +178,9 @@ export default function PulledItemsFilter() {
           storesSet.add(item.store_key);
         }
         
-        // Collect locations
+        // Collect locations - use location name cache
         if (item.shopify_location_gid) {
-          const locName = (item.shopify_snapshot as any)?.location_name || item.shopify_location_gid;
+          const locName = locationNameCache[item.shopify_location_gid] || item.shopify_location_gid;
           locationsMap.set(item.shopify_location_gid, locName);
         }
       });
