@@ -8,13 +8,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import type { Json } from '@/integrations/supabase/types';
-import { Plus, Save, Trash2, GripVertical, ChevronDown, Link2, Printer } from 'lucide-react';
+import { Plus, Save, Trash2, GripVertical, ChevronDown, Link2, Eye, Copy, Printer } from 'lucide-react';
 import { toast } from 'sonner';
 import { usePrinter } from '@/hooks/usePrinter';
 import { applyFieldMappings, type FieldMappings as ApplyFieldMappings } from '@/lib/labels/applyFieldMappings';
 import { zplFromElements } from '@/lib/labels/zpl';
 import type { LabelLayout } from '@/lib/labels/types';
+import { ZPLPreviewCanvas } from '@/components/label-preview/ZPLPreviewCanvas';
 
 // Label fields that can be mapped
 const LABEL_FIELDS = ['title', 'sku', 'price', 'condition', 'barcode', 'set', 'cardNumber', 'year', 'vendor'] as const;
@@ -102,6 +105,10 @@ export default function PrintProfileManager() {
   const [editingProfile, setEditingProfile] = useState<Partial<PrintProfile> | null>(null);
   const [loading, setLoading] = useState(true);
   const [isPrinting, setIsPrinting] = useState(false);
+  
+  // Preview mode state
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewZpl, setPreviewZpl] = useState('');
   
   const { printer, print } = usePrinter();
 
@@ -225,13 +232,9 @@ export default function PrintProfileManager() {
     }
   };
 
-  const handlePrintTest = async () => {
+  const handlePreviewTest = async () => {
     if (!editingProfile?.template_id) {
       toast.error('Select a template first');
-      return;
-    }
-    if (!printer) {
-      toast.error('No printer configured. Go to Printer Settings tab.');
       return;
     }
 
@@ -285,18 +288,34 @@ export default function PrintProfileManager() {
         return;
       }
       
-      // Print
-      const result = await print(zpl, 1);
-      if (result.success) {
-        toast.success('Test label printed!');
-      } else {
-        toast.error(result.error || 'Print failed');
-      }
+      // Show preview instead of printing
+      setPreviewZpl(zpl);
+      setPreviewOpen(true);
+      toast.success('Preview generated!');
     } catch (err) {
-      console.error('Print test failed:', err);
-      toast.error('Failed to print test label');
+      console.error('Preview generation failed:', err);
+      toast.error('Failed to generate preview');
     } finally {
       setIsPrinting(false);
+    }
+  };
+
+  const copyZpl = () => {
+    navigator.clipboard.writeText(previewZpl);
+    toast.success('ZPL copied to clipboard');
+  };
+
+  const handleActualPrint = async () => {
+    if (!printer) {
+      toast.error('No printer configured');
+      return;
+    }
+    const result = await print(previewZpl, 1);
+    if (result.success) {
+      toast.success('Label printed!');
+      setPreviewOpen(false);
+    } else {
+      toast.error(result.error || 'Print failed');
     }
   };
 
@@ -610,11 +629,11 @@ export default function PrintProfileManager() {
               </Button>
               <Button 
                 variant="secondary" 
-                onClick={handlePrintTest}
+                onClick={handlePreviewTest}
                 disabled={isPrinting || !editingProfile.template_id}
               >
-                <Printer className="h-4 w-4 mr-2" />
-                {isPrinting ? 'Printing...' : 'Print Test Label'}
+                <Eye className="h-4 w-4 mr-2" />
+                {isPrinting ? 'Generating...' : 'Preview Test Label'}
               </Button>
               <Button variant="outline" onClick={() => setEditingProfile(null)}>
                 Cancel
@@ -704,6 +723,44 @@ export default function PrintProfileManager() {
           ))
         )}
       </div>
+
+      {/* Preview Dialog */}
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Eye className="h-5 w-5" />
+              Label Preview (Debug Mode)
+            </DialogTitle>
+          </DialogHeader>
+          
+          {/* Visual Preview */}
+          <div className="border rounded-lg p-4 bg-muted/30">
+            <ZPLPreviewCanvas zpl={previewZpl} variables={{}} />
+          </div>
+          
+          {/* Raw ZPL Code */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-medium">Raw ZPL Code</Label>
+              <Button variant="ghost" size="sm" onClick={copyZpl}>
+                <Copy className="h-4 w-4 mr-1" /> Copy
+              </Button>
+            </div>
+            <ScrollArea className="h-48 rounded border bg-muted/50 p-3">
+              <pre className="font-mono text-xs whitespace-pre-wrap break-all">{previewZpl}</pre>
+            </ScrollArea>
+          </div>
+          
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setPreviewOpen(false)}>Close</Button>
+            <Button onClick={handleActualPrint} disabled={!printer}>
+              <Printer className="h-4 w-4 mr-2" />
+              Print This Label
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
