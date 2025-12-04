@@ -121,12 +121,19 @@ export const LabelEditorEmbed: React.FC = () => {
 
       setSavedTemplates(templates);
 
+      // Always load default template on mount
       const defaultTemplate = templates.find(t => t.is_default);
       if (defaultTemplate) {
         // Merge with defaults to ensure new fields (like offsets) have values
         setLayout({ ...DEFAULT_LABEL_LAYOUT, ...defaultTemplate.layout, id: defaultTemplate.id });
         setTemplateName(defaultTemplate.name);
         setSelectedTemplateId(defaultTemplate.id);
+      } else if (templates.length > 0) {
+        // If no default set, use the most recently updated template
+        const mostRecent = templates[0];
+        setLayout({ ...DEFAULT_LABEL_LAYOUT, ...mostRecent.layout, id: mostRecent.id });
+        setTemplateName(mostRecent.name);
+        setSelectedTemplateId(mostRecent.id);
       }
     } catch (error) {
       console.error('Failed to load templates:', error);
