@@ -3,6 +3,13 @@
 import type { LabelLayout, LabelField, SampleData, FieldKey } from '../types/labelLayout';
 import { CHAR_W_RATIO, estimateCode128WidthDots } from '@/lib/zplFit';
 import { calculateOptimalFontSize, calculateTitleFontSize } from './textFitting';
+import { 
+  formatPriceWithSpacing, 
+  formatTitle, 
+  formatCondition, 
+  applyLetterSpacing,
+  escapeZplText as escapeZplTextShared 
+} from '@/lib/labels/zplFormatters';
 
 // Same calibration factor used in preview (FieldBoxEnhanced.tsx)
 const FONT_CALIBRATION_FACTOR = 0.65;
@@ -101,28 +108,6 @@ export function generateZplTemplate(layout: LabelLayout): string {
   lines.push('^XZ');
 
   return lines.join('\n');
-}
-
-/**
- * Apply letter spacing to text by inserting spaces between characters
- * Skip if text contains template placeholders (e.g., {{PRICE}})
- */
-function applyLetterSpacing(text: string, spacing: number): string {
-  if (!spacing || spacing <= 0) return text;
-  // Don't apply to template placeholders - they need to stay intact for replacement
-  if (text.includes('{{')) return text;
-  const spacer = ' '.repeat(spacing);
-  return text.split('').join(spacer);
-}
-
-/**
- * Apply spacing specifically for price fields (always space out numbers)
- */
-function formatPriceWithSpacing(text: string): string {
-  // Don't apply to template placeholders
-  if (text.includes('{{')) return text;
-  // Add single space between each character for price readability
-  return text.split('').join(' ');
 }
 
 /**
@@ -241,24 +226,24 @@ function fieldKeyToPlaceholder(fieldKey: FieldKey): string {
 
 /**
  * Escape special ZPL characters using proper ZPL hex codes
+ * Uses shared helper for consistency
  */
 function escapeZplText(text: string): string {
-  return text
-    .replace(/\^/g, '^5E')
-    .replace(/~/g, '^7E');
+  return escapeZplTextShared(text);
 }
 
 /**
  * Fill ZPL template with actual data
+ * Uses shared formatters for consistent output across all ZPL generation paths
  */
 export function fillZplTemplate(template: string, data: SampleData, options: { copies?: number; speed?: number; darkness?: number } = {}): string {
   let filled = template;
   
-  // Replace field placeholders
-  filled = filled.replace(/{{CARDNAME}}/g, data.title || '');
+  // Replace field placeholders using shared formatters
+  filled = filled.replace(/{{CARDNAME}}/g, formatTitle(data.title || ''));
   filled = filled.replace(/{{SKU}}/g, data.sku || '');
   filled = filled.replace(/{{PRICE}}/g, formatPriceWithSpacing(data.price || ''));
-  filled = filled.replace(/{{CONDITION}}/g, data.condition || '');
+  filled = filled.replace(/{{CONDITION}}/g, formatCondition(data.condition || ''));
   filled = filled.replace(/{{BARCODE}}/g, data.barcode || data.sku || '');
   filled = filled.replace(/{{SETNAME}}/g, data.set || '');
   filled = filled.replace(/{{CARDNUMBER}}/g, data.cardNumber || '');

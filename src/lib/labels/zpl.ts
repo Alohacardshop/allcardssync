@@ -5,6 +5,7 @@
 
 import type { LabelLayout, ZPLElement, JobVars, PrinterPrefs } from './types';
 import { generateCutterCommands, type CutterSettings } from '@/hooks/useCutterSettings';
+import { formatPriceWithSpacing, formatTitle, formatCondition, safe } from './zplFormatters';
 
 // ============= ZPL Text Escaping (Proper ZPL Spec) =============
 
@@ -25,7 +26,6 @@ export function unescapeZpl(text: string): string {
 
 // Simple escape for basic use (strips control chars)
 const simpleEscape = (s?: string) => (s ?? '').replace(/\^/g, ' ').replace(/~/g, ' ');
-const safe = (s?: string) => s ?? '';
 
 // ============= Font Size Calculation =============
 
@@ -136,11 +136,11 @@ export function zplFromElements(
 
 export function zplFromTemplateString(zpl: string, v: JobVars): string {
   return zpl
-    .replace(/\{\{CARDNAME\}\}/g, safe(v.CARDNAME))
+    .replace(/\{\{CARDNAME\}\}/g, formatTitle(safe(v.CARDNAME)))
     .replace(/\{\{SETNAME\}\}/g, safe(v.SETNAME))
     .replace(/\{\{CARDNUMBER\}\}/g, safe(v.CARDNUMBER))
-    .replace(/\{\{CONDITION\}\}/g, safe(v.CONDITION))
-    .replace(/\{\{PRICE\}\}/g, safe(v.PRICE))
+    .replace(/\{\{CONDITION\}\}/g, formatCondition(safe(v.CONDITION)))
+    .replace(/\{\{PRICE\}\}/g, formatPriceWithSpacing(safe(v.PRICE)))
     .replace(/\{\{SKU\}\}/g, safe(v.SKU))
     .replace(/\{\{BARCODE\}\}/g, safe(v.BARCODE))
     .replace(/\{\{VENDOR\}\}/g, safe(v.VENDOR))
