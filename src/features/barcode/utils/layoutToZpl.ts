@@ -256,7 +256,7 @@ export function fillZplTemplate(template: string, data: SampleData, options: { c
   // Replace field placeholders
   filled = filled.replace(/{{CARDNAME}}/g, data.title || '');
   filled = filled.replace(/{{SKU}}/g, data.sku || '');
-  filled = filled.replace(/{{PRICE}}/g, data.price || '');
+  filled = filled.replace(/{{PRICE}}/g, formatPriceWithSpacing(data.price || ''));
   filled = filled.replace(/{{CONDITION}}/g, data.condition || '');
   filled = filled.replace(/{{BARCODE}}/g, data.barcode || data.sku || '');
   filled = filled.replace(/{{SETNAME}}/g, data.set || '');
