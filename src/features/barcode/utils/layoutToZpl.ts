@@ -153,7 +153,8 @@ function generateTextZpl(field: LabelField, text: string, isTitle: boolean = fal
   // Apply formatting based on field type or content
   const formatText = (t: string) => {
     // Price field gets spacing - check by fieldKey OR by content (starts with $)
-    if (field.fieldKey === 'price' || /^\$[\d,.]+$/.test(t.trim())) {
+    const looksLikePrice = t.trim().startsWith('$');
+    if (field.fieldKey === 'price' || looksLikePrice) {
       return formatPriceWithSpacing(t);
     }
     return applyLetterSpacing(t, letterSpacing);
