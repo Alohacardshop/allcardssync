@@ -150,10 +150,10 @@ function generateTextZpl(field: LabelField, text: string, isTitle: boolean = fal
   
   const letterSpacing = field.letterSpacing || 0;
   
-  // Apply formatting based on field type
+  // Apply formatting based on field type or content
   const formatText = (t: string) => {
-    // Price field always gets spacing for better readability
-    if (field.fieldKey === 'price') {
+    // Price field gets spacing - check by fieldKey OR by content (starts with $)
+    if (field.fieldKey === 'price' || /^\$[\d,.]+$/.test(t.trim())) {
       return formatPriceWithSpacing(t);
     }
     return applyLetterSpacing(t, letterSpacing);
