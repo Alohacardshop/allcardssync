@@ -90,7 +90,7 @@ export function SetupWizard({ open, onComplete }: SetupWizardProps) {
       }
       
       // Then test the printer connection
-      const printerConnected = await testConnection(printerIP, 9100);
+      const printerConnected = await testConnection();
       
       if (printerConnected) {
         setPrinterTestResult('success');
