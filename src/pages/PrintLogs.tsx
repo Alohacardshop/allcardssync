@@ -138,12 +138,12 @@ export default function PrintLogs() {
       try {
         // Use saved printer config for reprinting
         const savedConfig = zebraService.getConfig();
-        if (!savedConfig?.ip) {
+        if (!savedConfig?.name) {
           throw new Error('No printer configured. Please set up printer in Settings.');
         }
         
         // Send to printer
-        await zebraService.print(job.payload, savedConfig.ip, savedConfig.port);
+        await zebraService.print(job.payload, savedConfig.name);
         
         // Update new job status
         await (supabase as any)

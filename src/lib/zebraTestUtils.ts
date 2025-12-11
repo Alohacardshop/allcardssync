@@ -2,15 +2,11 @@
 import { zebraService } from './printer/zebraService';
 import { simpleTestLabel, generateSampleZPL, testPattern } from './zplSamples';
 
-export async function testDirectPrinting(
-  host: string, 
-  port: number = 9100, 
-  testLabel: string = simpleTestLabel
-) {
-  console.log(`🖨️ Testing direct ZPL printing to ${host}:${port}`);
+export async function testDirectPrinting(printerName: string, testLabel: string = simpleTestLabel) {
+  console.log(`🖨️ Testing direct ZPL printing to ${printerName}`);
   
   try {
-    const result = await zebraService.print(testLabel, host, port);
+    const result = await zebraService.print(testLabel, printerName);
     
     if (result.success) {
       console.log('✅ Print successful:', result.message);
@@ -25,37 +21,31 @@ export async function testDirectPrinting(
   }
 }
 
-export async function testPrinterConnection(host: string, port: number = 9100) {
-  console.log(`🔍 Testing connection to ${host}:${port}`);
+export async function testPrinterConnection() {
+  console.log(`🔍 Testing QZ Tray connection`);
   
   try {
-    const isConnected = await zebraService.testConnection(host, port);
-    
-    if (isConnected) {
-      console.log('✅ Printer is reachable');
-      return true;
-    } else {
-      console.log('❌ Printer is not reachable');
-      return false;
-    }
+    const isConnected = await zebraService.testConnection();
+    console.log(isConnected ? '✅ QZ Tray is connected' : '❌ QZ Tray not connected');
+    return isConnected;
   } catch (error) {
     console.error('❌ Connection test failed:', error);
     return false;
   }
 }
 
-export async function runPrinterTests(host: string, port: number = 9100) {
-  console.log(`🧪 Running full test suite for ${host}:${port}`);
+export async function runPrinterTests(printerName: string) {
+  console.log(`🧪 Running full test suite for ${printerName}`);
   
-  const connectionTest = await testPrinterConnection(host, port);
+  const connectionTest = await testPrinterConnection();
   if (!connectionTest) {
     console.log('Skipping print tests due to connection failure');
     return false;
   }
   
-  const simpleTest = await testDirectPrinting(host, port, simpleTestLabel);
-  const generatedTest = await testDirectPrinting(host, port, generateSampleZPL());
-  const patternTest = await testDirectPrinting(host, port, testPattern);
+  const simpleTest = await testDirectPrinting(printerName, simpleTestLabel);
+  const generatedTest = await testDirectPrinting(printerName, generateSampleZPL());
+  const patternTest = await testDirectPrinting(printerName, testPattern);
   
   const allPassed = simpleTest && generatedTest && patternTest;
   console.log(allPassed ? '✅ All tests passed!' : '❌ Some tests failed');

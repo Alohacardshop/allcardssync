@@ -39,6 +39,7 @@ const PendingNotifications = React.lazy(() => import("./pages/PendingNotificatio
 const GradedIntake = React.lazy(() => import("./pages/intake/GradedIntake"));
 const BulkIntake = React.lazy(() => import("./pages/intake/BulkIntake"));
 const ShopifyBackfill = React.lazy(() => import("./pages/Admin/ShopifyBackfill"));
+const QzTrayTestPage = React.lazy(() => import("./pages/QzTrayTestPage"));
 
 const EbayApp = React.lazy(() => import("./pages/EbayApp"));
 import { GlobalKeyboardHandler } from "./components/GlobalKeyboardHandler";
@@ -139,6 +140,7 @@ const App = () => (
                             {/* Other Pages */}
                             <Route path="/dashboard" element={<ErrorBoundaryWrapper componentName="Dashboard"><DashboardPage /></ErrorBoundaryWrapper>} />
                             <Route path="/test-hardware" element={<TestHardwarePage />} />
+                            <Route path="/qz-tray-test" element={<QzTrayTestPage />} />
                             
                             {/* Legacy routes - redirect */}
                             <Route path="/labels" element={<Navigate to="/barcode-printing" replace />} />

@@ -1,6 +1,5 @@
 import { PrintQueue } from "./printQueue";
 import { zebraService } from "@/lib/printer/zebraService";
-import { getDirectPrinterConfig } from "@/hooks/usePrinter";
 import { logger } from "@/lib/logger";
 
 // ZD410: tiny throwaway label in cutter mode to fire ONE cut at end of batch, then revert to tear-off.
@@ -13,48 +12,46 @@ const ZD410_END_CUT_TAIL = `^XA
 ^MMT
 ^XZ`;
 
-// Direct TCP transport function via local bridge (localhost:17777)
-async function directTcpTransport(payload: string): Promise<void> {
+// QZ Tray transport function
+async function qzTrayTransport(payload: string): Promise<void> {
   try {
-    logger.debug('Direct TCP transport starting', { 
+    logger.debug('QZ Tray transport starting', { 
       payloadLength: payload.length,
       firstChars: payload.substring(0, 50)
     }, 'print-transport');
 
     // Get printer configuration
-    const config = await getDirectPrinterConfig();
+    const config = zebraService.getConfig();
     
-    if (!config) {
-      const error = 'No printer configured. Please configure printer IP in Settings.';
+    if (!config?.name) {
+      const error = 'No printer configured. Please select a printer in Settings.';
       logger.error('Printer config missing', new Error(error), undefined, 'print-transport');
       throw new Error(error);
     }
 
-    logger.info('Sending print job via TCP', { 
-      printerIp: config.ip, 
-      printerPort: config.port,
+    logger.info('Sending print job via QZ Tray', { 
       printerName: config.name,
       payloadSize: payload.length 
     }, 'print-transport');
 
-    // Send ZPL directly via TCP
-    const result = await zebraService.print(payload, config.ip, config.port);
+    // Send ZPL via QZ Tray
+    const result = await zebraService.print(payload, config.name);
     
     if (!result.success) {
       throw new Error(result.error || 'Print failed');
     }
 
-    logger.info('Print job sent successfully via TCP', { 
-      printerIp: config.ip,
+    logger.info('Print job sent successfully via QZ Tray', { 
+      printerName: config.name,
       message: result.message
     }, 'print-transport');
   } catch (error) {
-    logger.error('Queue: Direct TCP transport error', error instanceof Error ? error : new Error(String(error)), undefined, 'print-transport');
+    logger.error('Queue: QZ Tray transport error', error instanceof Error ? error : new Error(String(error)), undefined, 'print-transport');
     throw error;
   }
 }
 
-export const printQueue = new PrintQueue(directTcpTransport, {
+export const printQueue = new PrintQueue(qzTrayTransport, {
   flushMs: 500,
   batchMax: 120,
   cutMode: "end-of-batch",

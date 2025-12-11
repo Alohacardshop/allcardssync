@@ -66,7 +66,7 @@ export const PrinterSettings: React.FC = () => {
     
     // Test connection after save
     setIsTesting(true);
-    const connected = await testConnection(config.ip, config.port);
+    const connected = await testConnection();
     setIsTesting(false);
     
     if (connected) {
@@ -88,7 +88,7 @@ export const PrinterSettings: React.FC = () => {
     }
     
     setIsTesting(true);
-    const connected = await testConnection(editIp.trim(), parseInt(editPort) || 9100);
+    const connected = await testConnection();
     setIsTesting(false);
     
     if (connected) {
@@ -126,7 +126,7 @@ export const PrinterSettings: React.FC = () => {
 ^FO50,140^BC^FDTEST123^FS
 ^XZ`;
 
-    const result = await zebraService.print(testZpl, printer.ip, printer.port);
+    const result = await zebraService.print(testZpl, printer.name);
     setIsPrinting(false);
 
     if (result.success) {
@@ -147,7 +147,7 @@ export const PrinterSettings: React.FC = () => {
     }
 
     console.log(`[Printer] Sending ${description} command:`, command);
-    const result = await zebraService.print(command, printer.ip, printer.port);
+    const result = await zebraService.print(command, printer.name);
     console.log(`[Printer] ${description} result:`, result);
     
     if (result.success) {

@@ -106,15 +106,15 @@ const BarcodeLabel = ({ value, label, className, showPrintButton = true, quantit
 
     const zpl = elementsToZpl(layout);
     const config = await getDirectPrinterConfig();
-    if (!config) {
+    if (!config?.name) {
       toast.error('No printer configured. Go to Settings to configure printer.');
       return;
     }
-    const result = await zebraService.print(zpl, config.ip, config.port);
+    const result = await zebraService.print(zpl, config.name);
 
     if (result.success) {
       toast.success('Barcode label printed!', {
-        description: `Sent to ${config.ip} @ ${dpi} DPI`
+        description: `Sent to ${config.name} @ ${dpi} DPI`
       });
     } else {
       toast.error('Print failed', {
@@ -140,14 +140,14 @@ const BarcodeLabel = ({ value, label, className, showPrintButton = true, quantit
         copies: opts.copies ?? 1
       });
       const config = await getDirectPrinterConfig();
-      if (!config) {
+      if (!config?.name) {
         throw new Error('No printer configured. Go to Settings to configure printer.');
       }
-      const res = await zebraService.print(zpl, config.ip, config.port);
+      const res = await zebraService.print(zpl, config.name);
       
       if (res?.success) {
         toast.success('Thirds label printed!', {
-          description: `Sent to ${config.ip} @ ${opts.dpi} DPI`
+          description: `Sent to ${config.name} @ ${opts.dpi} DPI`
         });
       } else {
         throw new Error(res?.error || 'Failed to print');

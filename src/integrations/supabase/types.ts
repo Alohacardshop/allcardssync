@@ -2789,15 +2789,15 @@ export type Database = {
       }
       set_user_default_location:
         | {
+            Args: { _location_gid: string; _store_key: string }
+            Returns: undefined
+          }
+        | {
             Args: {
               _location_gid: string
               _store_key: string
               _user_id: string
             }
-            Returns: undefined
-          }
-        | {
-            Args: { _location_gid: string; _store_key: string }
             Returns: undefined
           }
       show_limit: { Args: never; Returns: number }

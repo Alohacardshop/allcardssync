@@ -1,18 +1,23 @@
 /**
- * Zebra Printer Service - Local Bridge Only
- * Uses rollo-local-bridge on localhost:17777 for all printer operations
+ * Zebra Printer Service - QZ Tray Integration
+ * Uses QZ Tray for all printer operations
  */
 
-// Use 127.0.0.1 for better compatibility with HTTPS pages
-const BRIDGE_URL = 'http://127.0.0.1:17777';
+import {
+  connectQzTray,
+  isConnected as qzIsConnected,
+  listPrinters as qzListPrinters,
+  printZpl as qzPrintZpl,
+  testConnection as qzTestConnection,
+} from '@/lib/qzTray';
+
 const STORAGE_KEY = 'zebra-printer-config';
-const DEFAULT_PORT = 9100;
 
 // Types
 export interface PrinterConfig {
-  ip: string;
-  port: number;
-  name: string;
+  name: string;        // Printer name (from QZ Tray)
+  ip?: string;         // Legacy: IP address (kept for backwards compatibility)
+  port?: number;       // Legacy: Port (kept for backwards compatibility)
 }
 
 export interface PrintResult {
@@ -26,8 +31,6 @@ export interface PrinterStatus {
   paused: boolean;
   headOpen: boolean;
   mediaOut: boolean;
-  ipAddr?: string;
-  ssid?: string;
   raw: string;
 }
 
@@ -63,198 +66,147 @@ export function clearConfig(): void {
   localStorage.removeItem(STORAGE_KEY);
 }
 
-// Check if local bridge is running
+// Check if QZ Tray is connected
 export async function checkBridgeStatus(): Promise<BridgeStatus> {
-  console.log('[Bridge] Checking status...');
+  console.log('[QZ Tray] Checking status...');
   
-  // Try multiple endpoints - older EXE versions may not have /status
-  const endpoints = [
-    `${BRIDGE_URL}/status`,
-    BRIDGE_URL,
-    `${BRIDGE_URL}/`
-  ];
-  
-  for (const url of endpoints) {
-    try {
-      console.log('[Bridge] Trying:', url);
-      const response = await fetch(url, {
-        method: 'GET',
-        signal: AbortSignal.timeout(3000)
-      });
-      
-      console.log('[Bridge] Response from', url, ':', response.status);
-      
-      if (response.ok) {
-        try {
-          const data = await response.json();
-          console.log('[Bridge] Connected successfully:', data);
-          return { connected: true, version: data.version || 'unknown' };
-        } catch {
-          // Response wasn't JSON but connection worked
-          console.log('[Bridge] Connected (non-JSON response)');
-          return { connected: true, version: 'unknown' };
-        }
-      }
-    } catch (error) {
-      console.log('[Bridge] Error for', url, ':', error);
-      // Continue to next endpoint
+  try {
+    const connected = qzIsConnected();
+    
+    if (connected) {
+      console.log('[QZ Tray] Already connected');
+      return { connected: true, version: '2.x' };
     }
+
+    // Try to connect
+    const canConnect = await qzTestConnection();
+    
+    if (canConnect) {
+      console.log('[QZ Tray] Connected successfully');
+      return { connected: true, version: '2.x' };
+    }
+    
+    return { connected: false, error: 'QZ Tray not running. Install from https://qz.io/download/' };
+  } catch (error) {
+    console.error('[QZ Tray] Status check error:', error);
+    return { 
+      connected: false, 
+      error: error instanceof Error ? error.message : 'QZ Tray not reachable' 
+    };
   }
-  
-  console.log('[Bridge] All endpoints failed');
-  return { connected: false, error: 'Bridge not running or not reachable' };
 }
 
-// Get system/USB printers via local bridge
+// Get available printers via QZ Tray
 export async function getSystemPrinters(): Promise<SystemPrinter[]> {
   try {
-    const response = await fetch(`${BRIDGE_URL}/system-printers`, {
-      method: 'GET',
-      signal: AbortSignal.timeout(5000)
-    });
-    
-    if (response.ok) {
-      const data = await response.json();
-      return data.printers || [];
+    // Ensure connected
+    if (!qzIsConnected()) {
+      await connectQzTray();
     }
+
+    const printers = await qzListPrinters();
     
-    return [];
-  } catch {
+    return printers.map((name) => ({
+      name,
+      status: 'available',
+    }));
+  } catch (error) {
+    console.error('[QZ Tray] Error listing printers:', error);
     return [];
   }
 }
 
-// Core printing function via local bridge
-export async function print(zpl: string, ip?: string, port?: number): Promise<PrintResult> {
+// Core printing function via QZ Tray
+export async function print(zpl: string, printerName?: string): Promise<PrintResult> {
   const config = getConfig();
-  const targetIp = ip || config?.ip;
-  const targetPort = port || config?.port || DEFAULT_PORT;
+  const targetPrinter = printerName || config?.name;
   
-  if (!targetIp) {
+  if (!targetPrinter) {
     return { 
       success: false, 
-      error: 'No printer configured. Please set up printer IP in Settings.' 
+      error: 'No printer configured. Please select a printer in Settings.' 
     };
   }
 
   try {
-    const response = await fetch(`${BRIDGE_URL}/rawtcp?ip=${encodeURIComponent(targetIp)}&port=${targetPort}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: zpl,
-      signal: AbortSignal.timeout(10000)
-    });
+    // Ensure connected
+    if (!qzIsConnected()) {
+      await connectQzTray();
+    }
 
-    const data = await response.json();
+    await qzPrintZpl(targetPrinter, zpl);
     
-    if (data.success) {
-      return { success: true, message: data.message || `Sent to ${targetIp}:${targetPort}` };
-    }
-    
-    return { success: false, error: data.error || 'Print failed' };
+    return { success: true, message: `Sent to ${targetPrinter}` };
   } catch (error) {
-    if (error instanceof Error && error.name === 'TimeoutError') {
-      return { success: false, error: 'Print timeout - check printer connection' };
+    console.error('[QZ Tray] Print error:', error);
+    
+    if (error instanceof Error) {
+      if (error.message.includes('Unable to connect') || error.message.includes('not loaded')) {
+        return { 
+          success: false, 
+          error: 'QZ Tray not running. Please install from https://qz.io/download/' 
+        };
+      }
+      return { success: false, error: error.message };
     }
-    if (error instanceof Error && error.message.includes('Failed to fetch')) {
-      return { 
-        success: false, 
-        error: 'Local print bridge not running. Start ZebraPrintBridge.exe on this computer.' 
-      };
-    }
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Unknown error' 
-    };
+    
+    return { success: false, error: 'Print failed' };
   }
 }
 
-// Print to system/USB printer via local bridge
+// Print to specific printer (alias for consistency)
 export async function printToSystemPrinter(zpl: string, printerName: string, copies: number = 1): Promise<PrintResult> {
-  try {
-    const response = await fetch(`${BRIDGE_URL}/system-print`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ printerName, zplData: zpl, copies }),
-      signal: AbortSignal.timeout(10000)
-    });
-
-    const data = await response.json();
-    
-    if (data.success) {
-      return { success: true, message: data.message };
-    }
-    
-    return { success: false, error: data.error || 'Print failed' };
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('Failed to fetch')) {
-      return { 
-        success: false, 
-        error: 'Local print bridge not running. Start ZebraPrintBridge.exe on this computer.' 
-      };
-    }
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Unknown error' 
-    };
+  // For multiple copies, add ZPL quantity command
+  let printData = zpl;
+  if (copies > 1) {
+    // Insert ^PQ command before ^XZ
+    printData = zpl.replace(/\^XZ/gi, `^PQ${copies}^XZ`);
   }
+  
+  return print(printData, printerName);
 }
 
-// Test connection to network printer via local bridge
-// Uses a minimal ZPL command (~HI = host identification) to verify connectivity
-export async function testConnection(ip: string, port: number = DEFAULT_PORT): Promise<boolean> {
-  console.log(`[Printer] Testing connection to ${ip}:${port}...`);
+// Test if we can connect to QZ Tray
+export async function testConnection(): Promise<boolean> {
+  console.log('[QZ Tray] Testing connection...');
   try {
-    const response = await fetch(`${BRIDGE_URL}/rawtcp?ip=${encodeURIComponent(ip)}&port=${port}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: '~HI', // Host identification query - minimal, safe command
-      signal: AbortSignal.timeout(5000)
-    });
-
-    const data = await response.json();
-    console.log('[Printer] Test response:', data);
-    return data.success === true;
+    return await qzTestConnection();
   } catch (error) {
-    console.error('[Printer] Test connection error:', error);
+    console.error('[QZ Tray] Test connection error:', error);
     return false;
   }
 }
 
-// Ping test via local bridge
-export async function pingPrinter(ip: string): Promise<{ success: boolean; latency?: number; error?: string }> {
+// Ping test - just checks QZ Tray connection
+export async function pingPrinter(): Promise<{ success: boolean; latency?: number; error?: string }> {
+  const start = Date.now();
   try {
-    const response = await fetch(`${BRIDGE_URL}/ping?ip=${encodeURIComponent(ip)}`, {
-      method: 'GET',
-      signal: AbortSignal.timeout(5000)
-    });
-
-    const data = await response.json();
+    const connected = await qzTestConnection();
+    const latency = Date.now() - start;
+    
     return {
-      success: data.success,
-      latency: data.latency,
-      error: data.error
+      success: connected,
+      latency,
+      error: connected ? undefined : 'QZ Tray not connected',
     };
   } catch (error) {
     return { 
       success: false, 
-      error: error instanceof Error ? error.message : 'Ping failed' 
+      error: error instanceof Error ? error.message : 'Connection failed' 
     };
   }
 }
 
-// Query printer status (sends ~HS command and parses response)
-// Note: This requires the printer to respond, which may not work via simple TCP
-export async function queryStatus(ip: string, port: number = DEFAULT_PORT): Promise<PrinterStatus> {
-  // For now, just check if we can connect
-  const connected = await testConnection(ip, port);
+// Query printer status (simplified for QZ Tray)
+export async function queryStatus(): Promise<PrinterStatus> {
+  const connected = qzIsConnected();
   
   return {
     ready: connected,
     paused: false,
     headOpen: false,
     mediaOut: false,
-    raw: connected ? 'Connected' : 'Not connected'
+    raw: connected ? 'QZ Tray Connected' : 'QZ Tray Not Connected',
   };
 }
 
@@ -275,8 +227,8 @@ export async function syncConfigToDatabase(
         location_gid: locationGid,
         store_key: storeKey || null,
         printer_type: 'label',
-        printer_ip: config.ip,
-        printer_port: config.port,
+        printer_ip: config.ip || null,
+        printer_port: config.port || 9100,
         printer_name: config.name,
       }, { onConflict: 'user_id,printer_type' });
   } catch (error) {
@@ -301,11 +253,11 @@ export async function loadConfigFromDatabase(
 
     const { data } = await query.maybeSingle();
 
-    if (data?.printer_ip) {
+    if (data?.printer_name) {
       return {
-        ip: data.printer_ip,
-        port: data.printer_port || DEFAULT_PORT,
-        name: data.printer_name || `Printer (${data.printer_ip})`
+        name: data.printer_name,
+        ip: data.printer_ip || undefined,
+        port: data.printer_port || undefined,
       };
     }
     return null;
