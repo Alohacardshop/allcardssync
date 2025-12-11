@@ -1,89 +1,59 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Printer, Wifi, WifiOff, RefreshCw, Check, AlertCircle, MapPin, Info, Server, Download, FileText, Scissors, Target, MoveDown, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
-import { usePrinter, type PrinterConfig } from '@/hooks/usePrinter';
+import { usePrinter } from '@/hooks/usePrinter';
 import { zebraService } from '@/lib/printer/zebraService';
 import { useStore } from '@/contexts/StoreContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { checkBridgeStatus, type BridgeStatus } from '@/lib/printer/zebraService';
+import { useQzTray } from '@/hooks/useQzTray';
+import { PrinterSelect } from '@/components/PrinterSelect';
 
 export const PrinterSettings: React.FC = () => {
-  const { printer, status, isLoading, isConnected, saveConfig, testConnection, refreshStatus } = usePrinter();
+  const { printer, status, isLoading, saveConfig, testConnection, refreshStatus } = usePrinter();
   const { selectedLocation, availableLocations } = useStore();
   const { user } = useAuth();
+  const { 
+    isConnected: qzConnected, 
+    isConnecting, 
+    printers, 
+    zebraPrinters,
+    isLoadingPrinters,
+    connect, 
+    refreshPrinters,
+    selectedPrinter,
+    setSelectedPrinter
+  } = useQzTray();
   
   const currentLocationName = availableLocations.find(l => l.gid === selectedLocation)?.name || 'Unknown Location';
   
-  const [editIp, setEditIp] = useState('');
-  const [editPort, setEditPort] = useState('9100');
-  const [editName, setEditName] = useState('');
   const [isTesting, setIsTesting] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
-  const [bridgeStatus, setBridgeStatus] = useState<BridgeStatus | null>(null);
-  const [isCheckingBridge, setIsCheckingBridge] = useState(true);
 
-  // Check bridge status on mount
+  // Sync selected printer from saved config
   useEffect(() => {
-    checkBridge();
-  }, []);
-
-  const checkBridge = async () => {
-    setIsCheckingBridge(true);
-    const status = await checkBridgeStatus();
-    setBridgeStatus(status);
-    setIsCheckingBridge(false);
-  };
-
-  // Sync form state when printer config loads
-  useEffect(() => {
-    if (printer) {
-      setEditIp(printer.ip);
-      setEditPort(String(printer.port));
-      setEditName(printer.name);
+    if (printer?.name && !selectedPrinter) {
+      setSelectedPrinter(printer.name);
     }
-  }, [printer]);
+  }, [printer, selectedPrinter, setSelectedPrinter]);
 
   const handleSave = async () => {
-    if (!editIp.trim()) {
-      toast.error('Please enter a printer IP address');
+    if (!selectedPrinter) {
+      toast.error('Please select a printer');
       return;
     }
     
-    const config: PrinterConfig = {
-      ip: editIp.trim(),
-      port: parseInt(editPort) || 9100,
-      name: editName.trim() || `Zebra Printer (${editIp.trim()})`
-    };
-    
-    await saveConfig(config);
+    await saveConfig({ name: selectedPrinter });
     toast.success('Printer settings saved');
-    
-    // Test connection after save
-    setIsTesting(true);
-    const connected = await testConnection();
-    setIsTesting(false);
-    
-    if (connected) {
-      toast.success('Printer connected successfully');
-    } else {
-      toast.warning('Printer saved but connection test failed. Check the IP is correct and printer is on.');
-    }
   };
 
   const handleTestConnection = async () => {
-    if (!bridgeStatus?.connected) {
-      toast.error('Local bridge not running. Start the bridge first.');
-      return;
-    }
-    
-    if (!editIp.trim()) {
-      toast.error('Please enter an IP address first');
+    if (!qzConnected) {
+      toast.error('QZ Tray not connected. Click Connect first.');
       return;
     }
     
@@ -95,38 +65,36 @@ export const PrinterSettings: React.FC = () => {
       toast.success('Connection successful!');
       await refreshStatus();
     } else {
-      toast.error('Connection failed. Verify IP address and ensure printer is powered on.');
+      toast.error('Connection test failed.');
     }
   };
 
   const handleTestPrint = async () => {
-    if (!bridgeStatus?.connected) {
-      toast.error('Local bridge not running. Start the bridge first.');
+    if (!qzConnected) {
+      toast.error('QZ Tray not connected. Click Connect first.');
       return;
     }
     
-    if (!printer?.ip) {
-      toast.error('Save printer settings first');
+    if (!selectedPrinter) {
+      toast.error('Select a printer first');
       return;
     }
 
     setIsPrinting(true);
     
     // Simple test label ZPL - 2" x 1" label
-    // ^LT-10 shifts content up slightly
     const testZpl = `^XA
 ^LT-10
 ^CF0,30
 ^FO50,20^FDTEST PRINT^FS
 ^CF0,20
-^FO50,60^FD${printer.name || 'Zebra Printer'}^FS
-^FO50,85^FD${printer.ip}:${printer.port}^FS
+^FO50,60^FD${selectedPrinter}^FS
 ^FO50,110^FD${new Date().toLocaleString()}^FS
 ^BY2,2,50
 ^FO50,140^BC^FDTEST123^FS
 ^XZ`;
 
-    const result = await zebraService.print(testZpl, printer.name);
+    const result = await zebraService.print(testZpl, selectedPrinter);
     setIsPrinting(false);
 
     if (result.success) {
@@ -137,17 +105,17 @@ export const PrinterSettings: React.FC = () => {
   };
 
   const sendCommand = async (command: string, description: string) => {
-    if (!bridgeStatus?.connected) {
-      toast.error('Local bridge not running');
+    if (!qzConnected) {
+      toast.error('QZ Tray not connected');
       return;
     }
-    if (!printer?.ip) {
-      toast.error('Save printer settings first');
+    if (!selectedPrinter) {
+      toast.error('Select a printer first');
       return;
     }
 
     console.log(`[Printer] Sending ${description} command:`, command);
-    const result = await zebraService.print(command, printer.name);
+    const result = await zebraService.print(command, selectedPrinter);
     console.log(`[Printer] ${description} result:`, result);
     
     if (result.success) {
@@ -183,69 +151,81 @@ export const PrinterSettings: React.FC = () => {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Bridge Status */}
+        {/* QZ Tray Status */}
         <div className="flex items-center gap-3 p-3 rounded-lg bg-muted border">
-          <Server className={`w-5 h-5 ${bridgeStatus?.connected ? 'text-green-500' : 'text-destructive'}`} />
+          <Server className={`w-5 h-5 ${qzConnected ? 'text-green-500' : 'text-destructive'}`} />
           <div className="flex-1">
-            <div className="font-medium">Local Print Bridge</div>
+            <div className="font-medium">QZ Tray</div>
             <div className="text-sm text-muted-foreground">
-              {isCheckingBridge ? 'Checking...' : bridgeStatus?.connected 
-                ? `Running on localhost:17777 (v${bridgeStatus.version})` 
-                : 'Not running'}
+              {isConnecting ? 'Connecting...' : qzConnected 
+                ? 'Connected to local print service' 
+                : 'Not connected'}
             </div>
           </div>
-          <Badge variant={bridgeStatus?.connected ? 'default' : 'destructive'}>
-            {isCheckingBridge ? 'Checking' : bridgeStatus?.connected ? 'Online' : 'Offline'}
+          <Badge variant={qzConnected ? 'default' : 'destructive'}>
+            {isConnecting ? 'Connecting' : qzConnected ? 'Online' : 'Offline'}
           </Badge>
-          <Button variant="ghost" size="sm" onClick={checkBridge} disabled={isCheckingBridge}>
-            <RefreshCw className={`w-4 h-4 ${isCheckingBridge ? 'animate-spin' : ''}`} />
-          </Button>
+          {!qzConnected && (
+            <Button variant="default" size="sm" onClick={connect} disabled={isConnecting}>
+              Connect
+            </Button>
+          )}
         </div>
 
-        {/* Bridge Not Running Warning */}
-        {!isCheckingBridge && !bridgeStatus?.connected && (
+        {/* QZ Tray Not Connected Warning */}
+        {!isConnecting && !qzConnected && (
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              <strong>Local Print Bridge Required</strong>
+              <strong>QZ Tray Required</strong>
               <p className="mt-2 text-sm">
-                The local print bridge must be running on this computer to print labels.
+                QZ Tray must be installed and running on this computer to print labels.
               </p>
               <div className="mt-3 flex flex-col gap-2">
                 <a 
-                  href="https://drive.google.com/uc?export=download&id=1oH3cfm7oTiEwkUTbCbXW-MtofBPBSL_Z" 
+                  href="https://qz.io/download/" 
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-2 px-3 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90 w-fit"
                 >
                   <Download className="w-4 h-4" />
-                  Download ZebraPrintBridge.exe
+                  Download QZ Tray
                 </a>
                 <p className="text-xs text-muted-foreground">
-                  Download and run the bridge on your computer. Keep it running while printing.
+                  Install QZ Tray, run it, then click "Connect" above. Approve the trust dialog when prompted.
                 </p>
               </div>
             </AlertDescription>
           </Alert>
         )}
 
-        {/* Printer Connection Status */}
-        <div className="flex items-center gap-3 p-3 rounded-lg bg-muted">
-          {isConnected ? (
-            <Wifi className="w-5 h-5 text-green-500" />
-          ) : (
-            <WifiOff className="w-5 h-5 text-muted-foreground" />
-          )}
-          <div className="flex-1">
-            <div className="font-medium">{printer?.name || 'No Printer Configured'}</div>
-            <div className="text-sm text-muted-foreground">
-              {printer?.ip ? `${printer.ip}:${printer.port}` : 'Enter printer IP below'}
+        {/* Printer Selection */}
+        {qzConnected && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <Printer className="w-5 h-5 text-muted-foreground" />
+              <div className="flex-1">
+                <Label>Select Printer</Label>
+                <PrinterSelect
+                  value={selectedPrinter || ''}
+                  onChange={setSelectedPrinter}
+                  printers={printers}
+                  zebraPrinters={zebraPrinters}
+                  isLoading={isLoadingPrinters}
+                  onRefresh={refreshPrinters}
+                  filterZebra={false}
+                  showRefreshButton
+                  placeholder="Select a printer..."
+                />
+              </div>
             </div>
+            {zebraPrinters.length > 0 && (
+              <p className="text-xs text-muted-foreground ml-8">
+                Zebra printers detected: {zebraPrinters.join(', ')}
+              </p>
+            )}
           </div>
-          <Badge variant={isConnected ? 'default' : 'secondary'}>
-            {isConnected ? 'Connected' : 'Disconnected'}
-          </Badge>
-        </div>
+        )}
 
         {/* Printer Status Details */}
         {status && printer?.ip && (
@@ -269,90 +249,58 @@ export const PrinterSettings: React.FC = () => {
           </div>
         )}
 
-        {/* How to find printer IP */}
+        {/* How QZ Tray works */}
         <Alert>
           <Info className="h-4 w-4" />
           <AlertDescription>
-            <strong>How to find your printer's IP address:</strong>
+            <strong>How QZ Tray works:</strong>
             <ul className="mt-2 ml-4 list-disc text-sm space-y-1">
-              <li><strong>Zebra ZD410/ZD420:</strong> Settings → Network → Wired/Wireless → IP Address</li>
-              <li><strong>Zebra ZT230/ZT410:</strong> Press Menu → Network → IP Address</li>
-              <li><strong>Print config label:</strong> Hold feed button for 2 seconds, IP is on the label</li>
-              <li><strong>Router admin:</strong> Check connected devices in your router's admin panel</li>
+              <li>QZ Tray runs on your computer and connects to local/network printers</li>
+              <li>Both USB and network printers are supported</li>
+              <li>Select your printer from the dropdown above</li>
+              <li>Zebra printers are auto-detected and highlighted</li>
             </ul>
           </AlertDescription>
         </Alert>
 
-        {/* Configuration Form */}
-        <div className="space-y-4">
-          <div className="grid grid-cols-3 gap-3">
-            <div className="col-span-2">
-              <Label htmlFor="ip">IP Address *</Label>
-              <Input
-                id="ip"
-                value={editIp}
-                onChange={(e) => setEditIp(e.target.value)}
-                placeholder="e.g., 192.168.1.70"
-              />
-            </div>
-            <div>
-              <Label htmlFor="port">Port</Label>
-              <Input
-                id="port"
-                value={editPort}
-                onChange={(e) => setEditPort(e.target.value)}
-                placeholder="9100"
-              />
-            </div>
-          </div>
-          
-          <div>
-            <Label htmlFor="name">Printer Name (optional)</Label>
-            <Input
-              id="name"
-              value={editName}
-              onChange={(e) => setEditName(e.target.value)}
-              placeholder="e.g., Label Printer - Front Counter"
-            />
-          </div>
-        </div>
-
         {/* Actions */}
-        <div className="flex flex-wrap gap-2">
-          <Button 
-            onClick={handleSave} 
-            disabled={isLoading || isTesting || !editIp.trim() || !bridgeStatus?.connected}
-          >
-            Save Settings
-          </Button>
-          <Button 
-            variant="outline" 
-            onClick={handleTestConnection} 
-            disabled={isLoading || isTesting || !editIp.trim() || !bridgeStatus?.connected}
-          >
-            <RefreshCw className={`w-4 h-4 mr-2 ${isTesting ? 'animate-spin' : ''}`} />
-            Test Connection
-          </Button>
-          {printer?.ip && bridgeStatus?.connected && (
-            <>
-              <Button 
-                variant="secondary" 
-                onClick={handleTestPrint} 
-                disabled={isLoading || isPrinting}
-              >
-                <FileText className={`w-4 h-4 mr-2 ${isPrinting ? 'animate-pulse' : ''}`} />
-                {isPrinting ? 'Printing...' : 'Test Print'}
-              </Button>
-              <Button variant="ghost" onClick={refreshStatus} disabled={isLoading}>
-                <RefreshCw className="w-4 h-4 mr-2" />
-                Refresh Status
-              </Button>
-            </>
-          )}
-        </div>
+        {qzConnected && (
+          <div className="flex flex-wrap gap-2">
+            <Button 
+              onClick={handleSave} 
+              disabled={isLoading || isTesting || !selectedPrinter}
+            >
+              Save Settings
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={handleTestConnection} 
+              disabled={isLoading || isTesting || !selectedPrinter}
+            >
+              <RefreshCw className={`w-4 h-4 mr-2 ${isTesting ? 'animate-spin' : ''}`} />
+              Test Connection
+            </Button>
+            {selectedPrinter && (
+              <>
+                <Button 
+                  variant="secondary" 
+                  onClick={handleTestPrint} 
+                  disabled={isLoading || isPrinting}
+                >
+                  <FileText className={`w-4 h-4 mr-2 ${isPrinting ? 'animate-pulse' : ''}`} />
+                  {isPrinting ? 'Printing...' : 'Test Print'}
+                </Button>
+                <Button variant="ghost" onClick={refreshStatus} disabled={isLoading}>
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Refresh Status
+                </Button>
+              </>
+            )}
+          </div>
+        )}
 
         {/* Printer Utilities */}
-        {printer?.ip && bridgeStatus?.connected && (
+        {selectedPrinter && qzConnected && (
           <div className="space-y-2">
             <Label className="text-sm text-muted-foreground">Printer Utilities</Label>
             <div className="flex flex-wrap gap-2">
@@ -381,7 +329,7 @@ export const PrinterSettings: React.FC = () => {
 
         {/* Info note */}
         <p className="text-xs text-muted-foreground">
-          Printing uses the local bridge running on this computer. The printer must be on the same network.
+          QZ Tray connects to printers installed on this computer. Both USB and network printers are supported.
         </p>
       </CardContent>
     </Card>
