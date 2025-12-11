@@ -181,19 +181,20 @@ export const PrinterSettings: React.FC = () => {
               <p className="mt-2 text-sm">
                 QZ Tray must be installed and running on this computer to print labels.
               </p>
-              <div className="mt-3 flex flex-col gap-2">
-                <a 
-                  href="https://qz.io/download/" 
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 px-3 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90 w-fit"
-                >
-                  <Download className="w-4 h-4" />
-                  Download QZ Tray
-                </a>
-                <p className="text-xs text-muted-foreground">
-                  Install QZ Tray, run it, then click "Connect" above. Approve the trust dialog when prompted.
-                </p>
+              <div className="mt-3 flex flex-col gap-3">
+                <div className="flex items-center gap-2">
+                  <Download className="w-4 h-4 text-primary" />
+                  <span className="text-sm font-medium">Download from:</span>
+                  <code className="px-2 py-1 bg-muted rounded text-xs select-all cursor-text">
+                    https://qz.io/download/
+                  </code>
+                </div>
+                <ol className="text-xs text-muted-foreground list-decimal list-inside space-y-1">
+                  <li>Copy the URL above and open it in a new browser tab</li>
+                  <li>Download and install QZ Tray for your operating system</li>
+                  <li>Run QZ Tray (it runs in your system tray)</li>
+                  <li>Click "Connect" above and approve the trust dialog</li>
+                </ol>
               </div>
             </AlertDescription>
           </Alert>
