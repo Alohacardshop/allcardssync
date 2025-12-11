@@ -3,52 +3,8 @@
  * Provides functions to connect to QZ Tray, list printers, and send raw ZPL
  */
 
-// QZ Tray types
-declare const qz: {
-  websocket: {
-    connect: () => Promise<void>;
-    disconnect: () => Promise<void>;
-    isActive: () => boolean;
-  };
-  printers: {
-    find: (query?: string) => Promise<string[]>;
-    getDefault: () => Promise<string>;
-  };
-  configs: {
-    create: (printer: string, options?: QzConfigOptions) => QzConfig;
-  };
-  print: (config: QzConfig, data: (string | QzPrintData)[]) => Promise<void>;
-};
-
-interface QzConfigOptions {
-  colorType?: 'color' | 'grayscale' | 'blackwhite';
-  copies?: number;
-  density?: number;
-  duplex?: boolean;
-  interpolation?: 'bicubic' | 'bilinear' | 'nearest-neighbor';
-  jobName?: string;
-  margins?: number | { top?: number; right?: number; bottom?: number; left?: number };
-  orientation?: 'portrait' | 'landscape' | 'reverse-portrait' | 'reverse-landscape';
-  paperThickness?: number;
-  printerTray?: string;
-  rasterize?: boolean;
-  rotation?: number;
-  scaleContent?: boolean;
-  size?: { width?: number; height?: number };
-  units?: 'in' | 'cm' | 'mm';
-}
-
-interface QzConfig {
-  printer: string;
-}
-
-interface QzPrintData {
-  type: 'raw' | 'file' | 'image' | 'html' | 'pdf' | 'pixel';
-  format?: 'plain' | 'base64' | 'hex' | 'file' | 'image' | 'command';
-  flavor?: 'plain' | 'base64' | 'hex' | 'file';
-  data: string;
-  options?: Record<string, unknown>;
-}
+// Import qz-tray - CommonJS module
+import qz from 'qz-tray';
 
 // Connection state
 let isConnecting = false;
@@ -58,7 +14,7 @@ let isConnecting = false;
  */
 export function isConnected(): boolean {
   try {
-    return typeof qz !== 'undefined' && qz.websocket.isActive();
+    return qz.websocket.isActive();
   } catch {
     return false;
   }
@@ -82,10 +38,6 @@ export async function connectQzTray(): Promise<void> {
   try {
     isConnecting = true;
     console.log('[QZ Tray] Connecting...');
-    
-    if (typeof qz === 'undefined') {
-      throw new Error('QZ Tray library not loaded. Please ensure qz-tray is installed.');
-    }
 
     await qz.websocket.connect();
     console.log('[QZ Tray] Connected successfully');
@@ -93,7 +45,7 @@ export async function connectQzTray(): Promise<void> {
     console.error('[QZ Tray] Connection failed:', error);
     
     if (error instanceof Error) {
-      if (error.message.includes('Unable to connect')) {
+      if (error.message.includes('Unable to connect') || error.message.includes('CLOSED')) {
         throw new Error(
           'Cannot connect to QZ Tray. Please ensure QZ Tray is installed and running. ' +
           'Download from: https://qz.io/download/'
@@ -138,7 +90,7 @@ export async function listPrinters(): Promise<string[]> {
   try {
     const printers = await qz.printers.find();
     console.log('[QZ Tray] Found printers:', printers);
-    return printers;
+    return Array.isArray(printers) ? printers : [printers];
   } catch (error) {
     console.error('[QZ Tray] Error listing printers:', error);
     throw new Error('Failed to list printers');
@@ -197,14 +149,12 @@ export async function printZpl(printerName: string, zpl: string): Promise<void> 
     const config = qz.configs.create(printerName);
     
     // Send raw ZPL data
-    await qz.print(config, [
-      {
-        type: 'raw',
-        format: 'plain',
-        flavor: 'plain',
-        data: zpl,
-      },
-    ]);
+    await qz.print(config, [{
+      type: 'raw',
+      format: 'plain',
+      flavor: 'plain',
+      data: zpl,
+    }]);
     
     console.log(`[QZ Tray] Print job sent to ${printerName}`);
   } catch (error) {
@@ -224,6 +174,7 @@ export async function printZpl(printerName: string, zpl: string): Promise<void> 
  */
 export async function testConnection(): Promise<boolean> {
   try {
+    if (isConnected()) return true;
     await connectQzTray();
     return isConnected();
   } catch {
