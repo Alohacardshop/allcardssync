@@ -1,20 +1,39 @@
 /**
  * QZ Tray Utility Library
  * Provides functions to connect to QZ Tray, list printers, and send raw ZPL
+ * 
+ * Uses dynamic import to avoid React bundling issues
  */
 
-// Import qz-tray - CommonJS module
-import qz from 'qz-tray';
+// QZ Tray instance - loaded lazily
+let qz: typeof import('qz-tray').default | null = null;
+let qzLoadPromise: Promise<typeof import('qz-tray').default> | null = null;
 
 // Connection state
 let isConnecting = false;
+
+/**
+ * Lazily load the qz-tray module
+ */
+async function getQz(): Promise<typeof import('qz-tray').default> {
+  if (qz) return qz;
+  
+  if (!qzLoadPromise) {
+    qzLoadPromise = import('qz-tray').then((module) => {
+      qz = module.default;
+      return qz;
+    });
+  }
+  
+  return qzLoadPromise;
+}
 
 /**
  * Check if QZ Tray is connected
  */
 export function isConnected(): boolean {
   try {
-    return qz.websocket.isActive();
+    return qz?.websocket?.isActive() ?? false;
   } catch {
     return false;
   }
@@ -39,7 +58,8 @@ export async function connectQzTray(): Promise<void> {
     isConnecting = true;
     console.log('[QZ Tray] Connecting...');
 
-    await qz.websocket.connect();
+    const qzInstance = await getQz();
+    await qzInstance.websocket.connect();
     console.log('[QZ Tray] Connected successfully');
   } catch (error) {
     console.error('[QZ Tray] Connection failed:', error);
@@ -70,7 +90,8 @@ export async function disconnectQzTray(): Promise<void> {
   }
 
   try {
-    await qz.websocket.disconnect();
+    const qzInstance = await getQz();
+    await qzInstance.websocket.disconnect();
     console.log('[QZ Tray] Disconnected');
   } catch (error) {
     console.error('[QZ Tray] Disconnect error:', error);
@@ -88,7 +109,8 @@ export async function listPrinters(): Promise<string[]> {
   }
 
   try {
-    const printers = await qz.printers.find();
+    const qzInstance = await getQz();
+    const printers = await qzInstance.printers.find();
     console.log('[QZ Tray] Found printers:', printers);
     return Array.isArray(printers) ? printers : [printers];
   } catch (error) {
@@ -118,7 +140,8 @@ export async function getDefaultPrinter(): Promise<string> {
   }
 
   try {
-    return await qz.printers.getDefault();
+    const qzInstance = await getQz();
+    return await qzInstance.printers.getDefault();
   } catch (error) {
     console.error('[QZ Tray] Error getting default printer:', error);
     throw new Error('Failed to get default printer');
@@ -146,10 +169,11 @@ export async function printZpl(printerName: string, zpl: string): Promise<void> 
   try {
     console.log(`[QZ Tray] Printing to ${printerName}...`);
     
-    const config = qz.configs.create(printerName);
+    const qzInstance = await getQz();
+    const config = qzInstance.configs.create(printerName);
     
     // Send raw ZPL data
-    await qz.print(config, [{
+    await qzInstance.print(config, [{
       type: 'raw',
       format: 'plain',
       flavor: 'plain',
