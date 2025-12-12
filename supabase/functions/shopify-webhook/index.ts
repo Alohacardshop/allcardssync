@@ -52,7 +52,10 @@ serve(async (req) => {
     let hmacSecret: string | null = null;
     
     if (storeKey) {
-      const secretKey = `SHOPIFY_${storeKey.toUpperCase()}_WEBHOOK_SECRET`;
+      // Normalize store key: remove '_store' suffix if present and uppercase
+      // e.g., 'hawaii_store' -> 'HAWAII', 'las_vegas' -> 'LAS_VEGAS'
+      const normalizedKey = storeKey.replace(/_store$/i, '').toUpperCase();
+      const secretKey = `SHOPIFY_${normalizedKey}_WEBHOOK_SECRET`;
       const { data: secretData } = await supabase
         .from('system_settings')
         .select('key_value')
@@ -60,7 +63,7 @@ serve(async (req) => {
         .single();
       
       hmacSecret = secretData?.key_value || null;
-      console.log(`[SECURITY] Looking up webhook secret for store: ${storeKey}, found: ${!!hmacSecret}`);
+      console.log(`[SECURITY] Looking up webhook secret for store: ${storeKey} (normalized: ${normalizedKey}), found: ${!!hmacSecret}`);
     } else {
       console.warn('[SECURITY] Could not determine store key from domain:', shopifyDomain);
     }
