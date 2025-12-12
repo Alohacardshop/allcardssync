@@ -958,8 +958,6 @@ export type Database = {
           dpi: number | null
           has_cutter: boolean | null
           id: string
-          printer_ip: string | null
-          printer_port: number | null
           speed: number | null
           updated_at: string
           workstation_id: string
@@ -972,8 +970,6 @@ export type Database = {
           dpi?: number | null
           has_cutter?: boolean | null
           id?: string
-          printer_ip?: string | null
-          printer_port?: number | null
           speed?: number | null
           updated_at?: string
           workstation_id: string
@@ -986,8 +982,6 @@ export type Database = {
           dpi?: number | null
           has_cutter?: boolean | null
           id?: string
-          printer_ip?: string | null
-          printer_port?: number | null
           speed?: number | null
           updated_at?: string
           workstation_id?: string
@@ -1380,42 +1374,27 @@ export type Database = {
       }
       printer_settings: {
         Row: {
-          bridge_port: number | null
           created_at: string | null
           id: string
-          printer_ip: string | null
           printer_name: string | null
-          printer_port: number | null
-          selected_printer_id: number | null
           selected_printer_name: string | null
           updated_at: string | null
-          use_printnode: boolean | null
           workstation_id: string
         }
         Insert: {
-          bridge_port?: number | null
           created_at?: string | null
           id?: string
-          printer_ip?: string | null
           printer_name?: string | null
-          printer_port?: number | null
-          selected_printer_id?: number | null
           selected_printer_name?: string | null
           updated_at?: string | null
-          use_printnode?: boolean | null
           workstation_id: string
         }
         Update: {
-          bridge_port?: number | null
           created_at?: string | null
           id?: string
-          printer_ip?: string | null
           printer_name?: string | null
-          printer_port?: number | null
-          selected_printer_id?: number | null
           selected_printer_name?: string | null
           updated_at?: string | null
-          use_printnode?: boolean | null
           workstation_id?: string
         }
         Relationships: []
@@ -2100,10 +2079,7 @@ export type Database = {
           created_at: string
           id: string
           location_gid: string | null
-          printer_id: string | null
-          printer_ip: string | null
           printer_name: string | null
-          printer_port: number | null
           printer_type: string
           store_key: string | null
           updated_at: string
@@ -2113,10 +2089,7 @@ export type Database = {
           created_at?: string
           id?: string
           location_gid?: string | null
-          printer_id?: string | null
-          printer_ip?: string | null
           printer_name?: string | null
-          printer_port?: number | null
           printer_type: string
           store_key?: string | null
           updated_at?: string
@@ -2126,10 +2099,7 @@ export type Database = {
           created_at?: string
           id?: string
           location_gid?: string | null
-          printer_id?: string | null
-          printer_ip?: string | null
           printer_name?: string | null
-          printer_port?: number | null
           printer_type?: string
           store_key?: string | null
           updated_at?: string

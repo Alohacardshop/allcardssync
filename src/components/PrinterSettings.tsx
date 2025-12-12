@@ -229,7 +229,7 @@ export const PrinterSettings: React.FC = () => {
         )}
 
         {/* Printer Status Details */}
-        {status && printer?.ip && (
+        {status && printer?.name && (
           <div className="grid grid-cols-2 gap-2 text-sm">
             <div className="flex items-center gap-2">
               {status.ready ? <Check className="w-4 h-4 text-green-500" /> : <AlertCircle className="w-4 h-4 text-amber-500" />}
