@@ -175,7 +175,7 @@ export async function printZpl(printerName: string, zpl: string): Promise<void> 
     // Send raw ZPL data
     await qzInstance.print(config, [{
       type: 'raw',
-      format: 'plain',
+      format: 'command',
       flavor: 'plain',
       data: zpl,
     }]);
