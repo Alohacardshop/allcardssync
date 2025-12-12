@@ -150,11 +150,12 @@ verify_jwt = false
 [functions.shopify-poll-ebay-orders]
 verify_jwt = false
 
+# Discord notification functions (requires admin role)
 [functions.flush-pending-notifications]
-verify_jwt = false
+verify_jwt = true
 
 [functions.reset-notifications]
-verify_jwt = false
+verify_jwt = true
 
 # Card Show Tool functions
 [functions.card-show-credentials]
