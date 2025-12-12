@@ -63,35 +63,21 @@ export const useBatchHealthCheck = ({ storeKey, locationGid, userId }: HealthChe
         logger.logError('Failed to check orphaned items', orphanErr);
       }
 
-      // 2. Find lots with no items (orphaned lots)
-      const { data: lotsWithNoItems, error: lotsErr } = await supabase
-        .rpc('get_orphaned_lots', { 
-          store_key_in: storeKey, 
-          location_gid_in: locationGid 
-        });
-
-      // If RPC doesn't exist, fall back to simpler query
-      let orphanedLots: { id: string; lot_number: string; created_at: string }[] = [];
-      if (lotsErr) {
-        logger.logWarn('get_orphaned_lots RPC not available, using fallback', lotsErr);
-        // Simple fallback - just get active lots for this user
-        const { data: activeLots } = await supabase
-          .from('intake_lots')
-          .select('id, lot_number, created_at, total_items')
-          .eq('store_key', storeKey)
-          .eq('shopify_location_gid', locationGid)
-          .eq('created_by', userId)
-          .eq('status', 'active')
-          .order('created_at', { ascending: false })
-          .limit(5);
-        
-        // Filter to lots with 0 items
-        orphanedLots = (activeLots || [])
-          .filter(lot => lot.total_items === 0)
-          .map(lot => ({ id: lot.id, lot_number: lot.lot_number, created_at: lot.created_at }));
-      } else {
-        orphanedLots = lotsWithNoItems || [];
-      }
+      // 2. Find lots with no items (orphaned lots) - using direct query
+      const { data: activeLots } = await supabase
+        .from('intake_lots')
+        .select('id, lot_number, created_at, total_items')
+        .eq('store_key', storeKey)
+        .eq('shopify_location_gid', locationGid)
+        .eq('created_by', userId)
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(5);
+      
+      // Filter to lots with 0 items
+      const orphanedLots = (activeLots || [])
+        .filter(lot => lot.total_items === 0)
+        .map(lot => ({ id: lot.id, lot_number: lot.lot_number, created_at: lot.created_at }));
 
       // 3. Count total items that should be visible but aren't
       const { count: recentInvisibleCount } = await supabase
@@ -126,7 +112,7 @@ export const useBatchHealthCheck = ({ storeKey, locationGid, userId }: HealthChe
       return healthReport;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
-      logger.logError('Health check failed', { error: message });
+      logger.logError('Health check failed', { errorMessage: message });
       setError(message);
       return null;
     } finally {
