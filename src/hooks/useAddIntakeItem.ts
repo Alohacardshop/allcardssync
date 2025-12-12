@@ -50,15 +50,23 @@ export const useAddIntakeItem = () => {
       });
 
       // Check for duplicate SKU before attempting insert
+      // Query must match uniq_store_sku_location constraint: (store_key, sku, shopify_location_gid)
       if (params.sku_in && params.store_key_in) {
-        const { data: existing, error: queryError } = await supabase
+        let duplicateQuery = supabase
           .from('intake_items')
           .select('id, quantity, sku, removed_from_batch_at, lot_id')
           .eq('sku', params.sku_in)
           .eq('store_key', params.store_key_in)
-          .eq('type', 'Raw')
-          .is('deleted_at', null)
-          .maybeSingle();
+          .is('deleted_at', null);
+        
+        // Handle NULL vs non-NULL location to match constraint behavior
+        if (params.shopify_location_gid_in) {
+          duplicateQuery = duplicateQuery.eq('shopify_location_gid', params.shopify_location_gid_in);
+        } else {
+          duplicateQuery = duplicateQuery.is('shopify_location_gid', null);
+        }
+        
+        const { data: existing, error: queryError } = await duplicateQuery.maybeSingle();
 
         if (queryError) {
           logger.logError('Failed to check for duplicate SKU', queryError);
@@ -128,15 +136,22 @@ export const useAddIntakeItem = () => {
         if (isDuplicateKeyError && params.sku_in && params.store_key_in) {
           logger.logInfo('Duplicate key constraint detected, updating existing item', { sku: params.sku_in });
           
-          // Query for the existing item
-          const { data: existing, error: queryError } = await supabase
+          // Query for the existing item - must match uniq_store_sku_location constraint
+          let fallbackQuery = supabase
             .from('intake_items')
             .select('id, quantity, sku, removed_from_batch_at, lot_id')
             .eq('sku', params.sku_in)
             .eq('store_key', params.store_key_in)
-            .eq('type', 'Raw')
-            .is('deleted_at', null)
-            .maybeSingle();
+            .is('deleted_at', null);
+          
+          // Handle NULL vs non-NULL location to match constraint behavior
+          if (params.shopify_location_gid_in) {
+            fallbackQuery = fallbackQuery.eq('shopify_location_gid', params.shopify_location_gid_in);
+          } else {
+            fallbackQuery = fallbackQuery.is('shopify_location_gid', null);
+          }
+          
+          const { data: existing, error: queryError } = await fallbackQuery.maybeSingle();
 
           if (queryError) {
             logger.logError('Failed to query for duplicate item', queryError);
