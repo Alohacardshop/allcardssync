@@ -11,6 +11,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { AuthGuard } from "@/components/AuthGuard";
 import { AdminGuard } from "@/components/AdminGuard";
 import { StoreProvider } from "@/contexts/StoreContext";
+import { PrintQueueProvider } from "@/contexts/PrintQueueContext";
 import { NavigationBar } from "@/components/NavigationBar";
 import { GlobalLoading } from "@/components/GlobalLoading";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
@@ -61,6 +62,7 @@ const App = () => (
         <TooltipProvider>
           <AuthProvider>
               <StoreProvider>
+              <PrintQueueProvider>
               <Toaster />
               <Sonner />
               <GlobalLoading />
@@ -166,6 +168,7 @@ const App = () => (
               <RecoveryMode />
               <PrintQueueStatus />
             </BrowserRouter>
+            </PrintQueueProvider>
           </StoreProvider>
       </AuthProvider>
     </TooltipProvider>
