@@ -122,7 +122,8 @@ export const useAddIntakeItem = () => {
       if (error) {
         // Check if this is a duplicate key constraint violation (race condition)
         const isDuplicateKeyError = error.message?.includes('duplicate key') || 
-                                     error.message?.includes('uniq_active_sku_per_store');
+                                     error.message?.includes('uniq_active_sku_per_store') ||
+                                     error.message?.includes('uniq_store_sku_location');
         
         if (isDuplicateKeyError && params.sku_in && params.store_key_in) {
           logger.logInfo('Duplicate key constraint detected, updating existing item', { sku: params.sku_in });
