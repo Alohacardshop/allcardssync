@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -10,7 +10,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Search, Filter, ChevronDown, X, Printer, Download, RefreshCw, Loader2, Eye, ExternalLink, Check, Package, RotateCcw, Copy } from 'lucide-react';
+import { Search, Filter, ChevronDown, X, Printer, Download, RefreshCw, Loader2, Eye, ExternalLink, Check, Package, RotateCcw, Copy, Wrench } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { BatchSelectorDialog } from '@/components/BatchSelectorDialog';
 import { toast } from 'sonner';
@@ -22,6 +22,9 @@ import { zplFromTemplateString } from '@/lib/labels/zpl';
 import { getLocationByStoreKey } from '@/config/locations';
 import { PrinterStatusBadge } from './PrinterStatusBadge';
 import { PrintProgressDialog, PrintProgressItem } from './PrintProgressDialog';
+import { ActiveFiltersBar } from './ActiveFiltersBar';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+
 interface SavedTemplate {
   id: string;
   name: string;
@@ -39,7 +42,7 @@ export default function PulledItemsFilter() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedIncludeTags, setSelectedIncludeTags] = useState<string[]>([]);
-  const [selectedExcludeTags, setSelectedExcludeTags] = useState<string[]>(['printed']);
+  const [selectedExcludeTags, setSelectedExcludeTags] = useState<string[]>([]); // Removed default 'printed' - handled by showPrintedItems toggle
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [dateFilter, setDateFilter] = useState<'today' | 'yesterday' | '7days' | '30days' | null>(null);
@@ -47,11 +50,7 @@ export default function PulledItemsFilter() {
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [availableCategories, setAvailableCategories] = useState<string[]>([]);
 
-  // Store/Location filter state
-  const [filterStore, setFilterStore] = useState<string>('all');
-  const [filterLocation, setFilterLocation] = useState<string>('all');
-  const [availableStores, setAvailableStores] = useState<string[]>([]);
-  const [availableLocations, setAvailableLocations] = useState<{ gid: string; name: string }[]>([]);
+  // Location name cache for display
   const [locationNameCache, setLocationNameCache] = useState<Record<string, string>>({});
 
   // Shopify pull state
@@ -109,23 +108,7 @@ export default function PulledItemsFilter() {
   useEffect(() => {
     filterItems();
     setSelectedItems(new Set());
-  }, [searchTerm, selectedIncludeTags, selectedExcludeTags, dateFilter, filterStore, filterLocation, allItems]);
-
-  // Update location names when cache is populated
-  useEffect(() => {
-    if (Object.keys(locationNameCache).length > 0 && allItems.length > 0) {
-      const locationsMap = new Map<string, string>();
-      allItems.forEach(item => {
-        if (item.shopify_location_gid) {
-          const locName = locationNameCache[item.shopify_location_gid] || item.shopify_location_gid;
-          locationsMap.set(item.shopify_location_gid, locName);
-        }
-      });
-      setAvailableLocations(
-        Array.from(locationsMap.entries()).map(([gid, name]) => ({ gid, name }))
-      );
-    }
-  }, [locationNameCache, allItems]);
+  }, [searchTerm, selectedIncludeTags, selectedExcludeTags, dateFilter, allItems]);
 
   const fetchTemplates = async () => {
     try {
@@ -275,8 +258,6 @@ export default function PulledItemsFilter() {
       
       // Extract all unique tags
       const tagsSet = new Set<string>();
-      const storesSet = new Set<string>();
-      const locationsMap = new Map<string, string>();
       
       (data || []).forEach(item => {
         const itemTags = [
@@ -284,24 +265,9 @@ export default function PulledItemsFilter() {
           ...((item.source_payload as any)?.tags || []),
         ];
         itemTags.forEach((tag: string) => tagsSet.add(tag));
-        
-        // Collect stores
-        if (item.store_key) {
-          storesSet.add(item.store_key);
-        }
-        
-        // Collect locations - use location name cache
-        if (item.shopify_location_gid) {
-          const locName = locationNameCache[item.shopify_location_gid] || item.shopify_location_gid;
-          locationsMap.set(item.shopify_location_gid, locName);
-        }
       });
       
       setAvailableTags(Array.from(tagsSet).sort());
-      setAvailableStores(Array.from(storesSet).sort());
-      setAvailableLocations(
-        Array.from(locationsMap.entries()).map(([gid, name]) => ({ gid, name }))
-      );
       filterItems();
     } catch (error) {
       console.error('Failed to fetch items:', error);
@@ -314,18 +280,9 @@ export default function PulledItemsFilter() {
   const filterItems = () => {
     let filtered = [...allItems];
 
-    // NOTE: Type and category filters are now applied server-side in fetchAllItems
+    // NOTE: Store and location are now handled by global context (StoreContext)
+    // Type and category filters are applied server-side in fetchAllItems
     // for better performance with large datasets (avoids 1000 row limit issues)
-
-    // Store filter
-    if (filterStore && filterStore !== 'all') {
-      filtered = filtered.filter(item => item.store_key === filterStore);
-    }
-
-    // Location filter
-    if (filterLocation && filterLocation !== 'all') {
-      filtered = filtered.filter(item => item.shopify_location_gid === filterLocation);
-    }
 
     // Search filter
     if (searchTerm) {
@@ -431,6 +388,105 @@ export default function PulledItemsFilter() {
     setSelectedExcludeTags(prev => 
       prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
     );
+  };
+
+  // Build active filters list for display
+  const activeFilters = useMemo(() => {
+    const filters: Array<{ key: string; label: string; value: string; displayValue: string }> = [];
+    
+    if (typeFilter !== 'all') {
+      filters.push({
+        key: 'type',
+        label: 'Type',
+        value: typeFilter,
+        displayValue: typeFilter === 'raw' ? 'Raw' : 'Graded'
+      });
+    }
+    
+    if (categoryFilter !== 'all') {
+      filters.push({
+        key: 'category',
+        label: 'Category',
+        value: categoryFilter,
+        displayValue: categoryFilter.charAt(0).toUpperCase() + categoryFilter.slice(1)
+      });
+    }
+    
+    if (searchTerm) {
+      filters.push({
+        key: 'search',
+        label: 'Search',
+        value: searchTerm,
+        displayValue: `"${searchTerm}"`
+      });
+    }
+    
+    if (dateFilter) {
+      const dateLabels: Record<string, string> = {
+        today: 'Today',
+        yesterday: 'Yesterday',
+        '7days': 'Last 7 Days',
+        '30days': 'Last 30 Days'
+      };
+      filters.push({
+        key: 'date',
+        label: 'Date',
+        value: dateFilter,
+        displayValue: dateLabels[dateFilter]
+      });
+    }
+    
+    selectedIncludeTags.forEach(tag => {
+      filters.push({
+        key: 'includeTag',
+        label: 'Include',
+        value: tag,
+        displayValue: tag
+      });
+    });
+    
+    selectedExcludeTags.forEach(tag => {
+      filters.push({
+        key: 'excludeTag',
+        label: 'Exclude',
+        value: tag,
+        displayValue: tag
+      });
+    });
+    
+    return filters;
+  }, [typeFilter, categoryFilter, searchTerm, dateFilter, selectedIncludeTags, selectedExcludeTags]);
+
+  const handleRemoveFilter = (key: string, value?: string) => {
+    switch (key) {
+      case 'type':
+        setTypeFilter('all');
+        break;
+      case 'category':
+        setCategoryFilter('all');
+        break;
+      case 'search':
+        setSearchTerm('');
+        break;
+      case 'date':
+        setDateFilter(null);
+        break;
+      case 'includeTag':
+        if (value) setSelectedIncludeTags(prev => prev.filter(t => t !== value));
+        break;
+      case 'excludeTag':
+        if (value) setSelectedExcludeTags(prev => prev.filter(t => t !== value));
+        break;
+    }
+  };
+
+  const handleClearAllFilters = () => {
+    setTypeFilter('all');
+    setCategoryFilter('all');
+    setSearchTerm('');
+    setDateFilter(null);
+    setSelectedIncludeTags([]);
+    setSelectedExcludeTags([]);
   };
 
   const getTags = (item: any): string[] => {
@@ -861,16 +917,26 @@ export default function PulledItemsFilter() {
               Filter Items
             </div>
             <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <Switch
-                  id="show-printed"
-                  checked={showPrintedItems}
-                  onCheckedChange={setShowPrintedItems}
-                />
-                <Label htmlFor="show-printed" className="text-sm font-normal cursor-pointer">
-                  Show Printed
-                </Label>
-              </div>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        id="show-printed"
+                        checked={showPrintedItems}
+                        onCheckedChange={setShowPrintedItems}
+                      />
+                      <Label htmlFor="show-printed" className="text-sm font-normal cursor-pointer">
+                        Include Printed
+                      </Label>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Items are marked as printed after printing.</p>
+                    <p className="text-xs text-muted-foreground">Turn on to reprint labels.</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
               <Button variant="ghost" size="sm" onClick={fetchAllItems} disabled={loading}>
                 <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
               </Button>
@@ -878,42 +944,8 @@ export default function PulledItemsFilter() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Store, Location, Type, and Category Filters */}
-          <div className="grid gap-4 md:grid-cols-4">
-            <div className="space-y-2">
-              <Label>Store</Label>
-              <Select value={filterStore} onValueChange={setFilterStore}>
-                <SelectTrigger>
-                  <SelectValue placeholder="All Stores" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Stores</SelectItem>
-                  {availableStores.map((store) => (
-                    <SelectItem key={store} value={store}>
-                      {store === 'hawaii' ? 'Hawaii' : store === 'las_vegas' ? 'Las Vegas' : store}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Location</Label>
-              <Select value={filterLocation} onValueChange={setFilterLocation}>
-                <SelectTrigger>
-                  <SelectValue placeholder="All Locations" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Locations</SelectItem>
-                  {availableLocations.map((loc) => (
-                    <SelectItem key={loc.gid} value={loc.gid}>
-                      {loc.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
+          {/* Type and Category Filters - Store/Location are now global */}
+          <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label>Item Type</Label>
               <Select value={typeFilter} onValueChange={(v: 'all' | 'raw' | 'graded') => setTypeFilter(v)}>
@@ -1109,6 +1141,14 @@ export default function PulledItemsFilter() {
             </div>
           </div>
 
+          {/* Active Filters Summary */}
+          <ActiveFiltersBar 
+            filters={activeFilters}
+            onRemoveFilter={handleRemoveFilter}
+            onClearAll={handleClearAllFilters}
+          />
+
+          {/* Results summary and Select All */}
           <div className="flex items-center justify-between pt-2">
             <div className="flex items-center gap-4">
               <div className="text-sm text-muted-foreground">
@@ -1259,46 +1299,20 @@ export default function PulledItemsFilter() {
                   {selectedItems.size} item{selectedItems.size > 1 ? 's' : ''} selected
                 </span>
                 <Button 
-                  variant="outline" 
+                  variant="ghost"
+                  size="sm"
                   onClick={() => setSelectedItems(new Set())}
                 >
-                  Clear
+                  Clear Selection
                 </Button>
-                <Button 
-                  variant="outline"
-                  onClick={handleCopyZpl}
-                  disabled={!selectedTemplateId}
-                >
-                  <Copy className="h-4 w-4 mr-2" />
-                  Copy ZPL
-                </Button>
-                <div className="flex items-center gap-2 px-3 py-1.5 border rounded-md bg-muted/50">
-                  <Switch
-                    id="mark-printed"
-                    checked={markAsPrinted}
-                    onCheckedChange={setMarkAsPrinted}
-                  />
-                  <Label htmlFor="mark-printed" className="text-xs cursor-pointer">
-                    Mark as printed
-                  </Label>
-                </div>
-                {showPrintedItems && items.some(i => selectedItems.has(i.id) && i.printed_at) && (
-                  <Button 
-                    variant="outline"
-                    onClick={handleMarkAsUnprinted}
-                    disabled={isMarkingUnprinted}
-                  >
-                    {isMarkingUnprinted ? (
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    ) : (
-                      <RotateCcw className="h-4 w-4 mr-2" />
-                    )}
-                    Mark Unprinted
-                  </Button>
-                )}
+              </div>
+              
+              {/* Primary Print Action */}
+              <div className="flex items-center gap-3">
                 <Button
                   onClick={handlePrintSelected}
                   disabled={isPrinting || !selectedTemplateId}
+                  size="lg"
                 >
                   {isPrinting ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -1307,6 +1321,55 @@ export default function PulledItemsFilter() {
                   )}
                   Print Selected ({selectedItems.size})
                 </Button>
+                
+                {/* Test Mode Controls - Popover based */}
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" size="sm" className="gap-1">
+                      <Wrench className="h-4 w-4" />
+                      Test Mode
+                      <ChevronDown className="h-3 w-3" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[200px] p-3" align="end" side="top">
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <Label htmlFor="mark-printed-toggle" className="text-xs">Mark as printed</Label>
+                        <Switch
+                          id="mark-printed-toggle"
+                          checked={markAsPrinted}
+                          onCheckedChange={setMarkAsPrinted}
+                        />
+                      </div>
+                      <Button 
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        onClick={handleCopyZpl}
+                        disabled={!selectedTemplateId}
+                      >
+                        <Copy className="h-4 w-4 mr-2" />
+                        Copy ZPL
+                      </Button>
+                      {showPrintedItems && items.some(i => selectedItems.has(i.id) && i.printed_at) && (
+                        <Button 
+                          variant="outline"
+                          size="sm"
+                          className="w-full"
+                          onClick={handleMarkAsUnprinted}
+                          disabled={isMarkingUnprinted}
+                        >
+                          {isMarkingUnprinted ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          ) : (
+                            <RotateCcw className="h-4 w-4 mr-2" />
+                          )}
+                          Mark Unprinted
+                        </Button>
+                      )}
+                    </div>
+                  </PopoverContent>
+                </Popover>
               </div>
             </div>
           </div>
