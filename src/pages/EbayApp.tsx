@@ -11,10 +11,11 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { 
   ExternalLink, CheckCircle, AlertCircle, Loader2, Settings, Link2, RefreshCw,
-  ShoppingCart, Clock, Package 
+  ShoppingCart, Clock, Package, ArrowRightLeft
 } from 'lucide-react';
 import { EbaySyncQueueMonitor } from '@/components/admin/EbaySyncQueueMonitor';
 import { EbayBulkListing } from '@/components/admin/EbayBulkListing';
+import { Link } from 'react-router-dom';
 
 interface EbayStoreConfig {
   id: string;
@@ -278,12 +279,20 @@ export default function EbayApp() {
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <ShoppingCart className="h-6 w-6" />
-            eBay Integration
-          </h1>
-          <p className="text-muted-foreground">Manage eBay connection, listings, and sync queue</p>
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold flex items-center gap-2">
+              <ShoppingCart className="h-6 w-6" />
+              eBay Integration
+            </h1>
+            <p className="text-muted-foreground">Manage eBay connection, listings, and sync queue</p>
+          </div>
+          <Link to="/ebay/sync">
+            <Button variant="outline" className="flex items-center gap-2">
+              <ArrowRightLeft className="h-4 w-4" />
+              Inventory Sync Dashboard
+            </Button>
+          </Link>
         </div>
 
         <Tabs defaultValue="settings" className="space-y-6">

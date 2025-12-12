@@ -43,6 +43,7 @@ const ShopifyBackfill = React.lazy(() => import("./pages/Admin/ShopifyBackfill")
 const QzTrayTestPage = React.lazy(() => import("./pages/QzTrayTestPage"));
 
 const EbayApp = React.lazy(() => import("./pages/EbayApp"));
+const EbaySyncDashboard = React.lazy(() => import("./pages/EbaySyncDashboard"));
 import { GlobalKeyboardHandler } from "./components/GlobalKeyboardHandler";
 import { FloatingActionButton } from "./components/FloatingActionButton";
 import { PerformanceMonitor } from "./components/PerformanceMonitor";
@@ -128,6 +129,11 @@ const App = () => (
                             <Route path="/ebay" element={
                               <RequireApp appKey="ebay">
                                 <ErrorBoundaryWrapper componentName="eBay"><EbayApp /></ErrorBoundaryWrapper>
+                              </RequireApp>
+                            } />
+                            <Route path="/ebay/sync" element={
+                              <RequireApp appKey="ebay">
+                                <ErrorBoundaryWrapper componentName="eBaySyncDashboard"><EbaySyncDashboard /></ErrorBoundaryWrapper>
                               </RequireApp>
                             } />
                             
