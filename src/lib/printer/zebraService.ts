@@ -15,9 +15,7 @@ const STORAGE_KEY = 'zebra-printer-config';
 
 // Types
 export interface PrinterConfig {
-  name: string;        // Printer name (from QZ Tray)
-  ip?: string;         // Legacy: IP address (kept for backwards compatibility)
-  port?: number;       // Legacy: Port (kept for backwards compatibility)
+  name: string;  // Printer name from QZ Tray
 }
 
 export interface PrintResult {
@@ -227,8 +225,6 @@ export async function syncConfigToDatabase(
         location_gid: locationGid,
         store_key: storeKey || null,
         printer_type: 'label',
-        printer_ip: config.ip || null,
-        printer_port: config.port || 9100,
         printer_name: config.name,
       }, { onConflict: 'user_id,printer_type' });
   } catch (error) {
@@ -243,7 +239,7 @@ export async function loadConfigFromDatabase(
   try {
     let query = supabase
       .from('user_printer_preferences')
-      .select('printer_ip, printer_port, printer_name')
+      .select('printer_name')
       .eq('user_id', userId)
       .eq('printer_type', 'label');
     
@@ -254,11 +250,7 @@ export async function loadConfigFromDatabase(
     const { data } = await query.maybeSingle();
 
     if (data?.printer_name) {
-      return {
-        name: data.printer_name,
-        ip: data.printer_ip || undefined,
-        port: data.printer_port || undefined,
-      };
+      return { name: data.printer_name };
     }
     return null;
   } catch {

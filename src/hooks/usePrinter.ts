@@ -15,8 +15,6 @@ export type PrintJobResult = PrintResult;
 
 export interface PrinterConfig {
   name: string;
-  ip?: string;
-  port?: number;
 }
 
 const STORAGE_KEY = 'zebra-printer-config';
@@ -34,7 +32,7 @@ export function usePrinter() {
     try {
       let query = supabase
         .from('user_printer_preferences')
-        .select('printer_ip, printer_port, printer_name')
+        .select('printer_name')
         .eq('user_id', user.id)
         .eq('printer_type', 'label');
       
@@ -47,11 +45,7 @@ export function usePrinter() {
       const { data } = await query.maybeSingle();
 
       if (data?.printer_name) {
-        const config = {
-          name: data.printer_name,
-          ip: data.printer_ip || undefined,
-          port: data.printer_port || undefined,
-        };
+        const config = { name: data.printer_name };
         setPrinter(config);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
         return;
@@ -95,8 +89,6 @@ export function usePrinter() {
           location_gid: selectedLocation || null,
           store_key: assignedStore || null,
           printer_type: 'label',
-          printer_ip: config.ip || null,
-          printer_port: config.port || 9100,
           printer_name: config.name,
         });
     } catch (error) {
