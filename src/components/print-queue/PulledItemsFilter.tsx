@@ -10,7 +10,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Search, Filter, ChevronDown, X, Printer, Download, RefreshCw, Loader2, Eye, ExternalLink, Check, Package, RotateCcw, Copy, Wrench } from 'lucide-react';
+import { Search, Filter, ChevronDown, X, Printer, Download, RefreshCw, Loader2, Eye, ExternalLink, Check, Package, RotateCcw, Wrench } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { BatchSelectorDialog } from '@/components/BatchSelectorDialog';
 import { toast } from 'sonner';
@@ -685,62 +685,6 @@ export default function PulledItemsFilter() {
     setShowPullDialog(false);
     fetchAllItems();
   };
-
-  // Copy ZPL for first selected item to clipboard
-  const handleCopyZpl = () => {
-    if (selectedItems.size === 0) {
-      toast.error('No items selected');
-      return;
-    }
-
-    if (!selectedTemplateId) {
-      toast.error('Please select a label template');
-      return;
-    }
-
-    const template = templates.find(t => t.id === selectedTemplateId);
-    if (!template) {
-      toast.error('Template not found');
-      return;
-    }
-
-    const zplBody = template.canvas?.zplLabel;
-    if (!zplBody) {
-      toast.error('Template has no ZPL body');
-      return;
-    }
-
-    // Get first selected item
-    const firstItemId = Array.from(selectedItems)[0];
-    const item = items.find(i => i.id === firstItemId);
-    if (!item) {
-      toast.error('Item not found');
-      return;
-    }
-
-    // Build variables for template
-    const vars = {
-      CARDNAME: item.subject || item.brand_title || '',
-      SETNAME: item.sub_category || '', // Use sub_category (e.g. "Pokemon") not category (e.g. "other")
-      CARDNUMBER: item.card_number || '',
-      CONDITION: item.variant || '',
-      PRICE: item.price ? `$${Number(item.price).toFixed(2)}` : '',
-      SKU: item.sku || '',
-      BARCODE: item.sku || '',
-      VENDOR: item.vendor || '',
-      YEAR: item.year || '',
-      CATEGORY: item.main_category || '',
-    };
-
-    const zpl = zplFromTemplateString(zplBody, vars);
-    
-    navigator.clipboard.writeText(zpl).then(() => {
-      toast.success('ZPL copied! Paste into labelary.com/viewer.html to preview');
-    }).catch(() => {
-      toast.error('Failed to copy to clipboard');
-    });
-  };
-
   // Mark selected items as unprinted
   const handleMarkAsUnprinted = async () => {
     if (selectedItems.size === 0) {
@@ -1341,16 +1285,6 @@ export default function PulledItemsFilter() {
                           onCheckedChange={setMarkAsPrinted}
                         />
                       </div>
-                      <Button 
-                        variant="outline"
-                        size="sm"
-                        className="w-full"
-                        onClick={handleCopyZpl}
-                        disabled={!selectedTemplateId}
-                      >
-                        <Copy className="h-4 w-4 mr-2" />
-                        Copy ZPL
-                      </Button>
                       {showPrintedItems && items.some(i => selectedItems.has(i.id) && i.printed_at) && (
                         <Button 
                           variant="outline"
