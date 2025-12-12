@@ -14,11 +14,11 @@ This document outlines the stability improvements and idempotent Shopify push sy
 - Provides visual feedback for all background operations
 - Located in `src/components/GlobalLoading.tsx`
 
-### ✅ Unified Print Bridge
-- Consolidated `rollo-local-bridge` and `local-print-bridge` into single utility
-- Consistent interface for both Zebra (ZPL) and Rollo (TSPL) printers  
-- Configuration-based printer type selection
-- See `README-PrintBridge.md` for detailed setup
+### ✅ QZ Tray Printing
+- Uses QZ Tray for professional local printing via WebSocket
+- Named printer selection (no IP configuration needed)
+- Supports both USB and network Zebra printers
+- See `README-QzTray.md` for detailed setup
 
 ### ✅ Auth Gate Hook
 - Extracted Promise.race-based auth timeout logic into reusable `useAuthGate()` hook
