@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { checkBridgeStatus } from '@/lib/printer/zebraService';
+import { isConnected as isQzConnected } from '@/lib/qzTray';
 
 interface CheckItem {
   id: string;
@@ -60,9 +60,9 @@ export function PreflightChecklist({ open, onClose, onComplete }: PreflightCheck
       icon: ShoppingCart
     },
     {
-      id: 'print-bridge',
-      name: 'Print Bridge',
-      description: 'Check local print bridge service (port 17777)',
+      id: 'qz-tray',
+      name: 'QZ Tray Connection',
+      description: 'Check QZ Tray printer service',
       status: 'pending',
       icon: Printer
     },
@@ -167,24 +167,22 @@ export function PreflightChecklist({ open, onClose, onComplete }: PreflightCheck
     }
   };
 
-  const checkPrintBridge = async () => {
-    updateCheck('print-bridge', { status: 'running' });
+  const checkQzTray = async () => {
+    updateCheck('qz-tray', { status: 'running' });
     
     try {
-      const result = await checkBridgeStatus();
-      
-      if (result.connected) {
-        updateCheck('print-bridge', { status: 'success' });
+      if (isQzConnected()) {
+        updateCheck('qz-tray', { status: 'success' });
       } else {
-        updateCheck('print-bridge', { 
-          status: 'error', 
-          error: result.error || 'Print bridge not running on port 17777' 
+        updateCheck('qz-tray', { 
+          status: 'error',
+          error: 'QZ Tray is not running. Please start QZ Tray application.' 
         });
       }
     } catch (error) {
-      updateCheck('print-bridge', { 
+      updateCheck('qz-tray', { 
         status: 'error', 
-        error: 'Print bridge not accessible' 
+        error: 'QZ Tray not accessible' 
       });
     }
   };
@@ -255,7 +253,7 @@ export function PreflightChecklist({ open, onClose, onComplete }: PreflightCheck
       checkEnvironmentVariables,
       checkDatabase,
       checkShopify,
-      checkPrintBridge,
+      checkQzTray,
       checkNetwork,
       checkSystemHealth
     ];

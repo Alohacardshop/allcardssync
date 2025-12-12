@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
@@ -18,8 +17,9 @@ import {
   ArrowLeft
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { checkBridgeStatus, testConnection } from '@/lib/printer/zebraService';
 import { supabase } from '@/integrations/supabase/client';
+import { useQzTray } from '@/hooks/useQzTray';
+import { PrinterSelect } from '@/components/PrinterSelect';
 
 interface SetupStep {
   id: string;
@@ -35,16 +35,17 @@ interface SetupWizardProps {
 
 export function SetupWizard({ open, onComplete }: SetupWizardProps) {
   const [currentStep, setCurrentStep] = useState(0);
-  const [printerIP, setPrinterIP] = useState('192.168.1.70');
+  const [selectedPrinter, setSelectedPrinter] = useState<string>('');
   const [shopifyTestResult, setShopifyTestResult] = useState<'pending' | 'success' | 'error'>('pending');
   const [printerTestResult, setPrinterTestResult] = useState<'pending' | 'success' | 'error'>('pending');
   const { toast } = useToast();
+  const { isConnected, printers, isLoadingPrinters, printZpl } = useQzTray();
 
   const [steps, setSteps] = useState<SetupStep[]>([
     {
       id: 'printer',
       title: 'Printer Setup',
-      description: 'Test printer connection and configure settings',
+      description: 'Select and test your label printer via QZ Tray',
       completed: false
     },
     {
@@ -76,49 +77,46 @@ export function SetupWizard({ open, onComplete }: SetupWizardProps) {
   const testPrinterConnection = async () => {
     setPrinterTestResult('pending');
     try {
-      // First check if the local bridge is running
-      const bridgeStatus = await checkBridgeStatus();
-      
-      if (!bridgeStatus.connected) {
+      if (!isConnected) {
         setPrinterTestResult('error');
         toast({ 
-          title: "Bridge Not Running", 
-          description: "Local print bridge not found on port 17777",
+          title: "QZ Tray Not Running", 
+          description: "Please start QZ Tray application and refresh the page",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      if (!selectedPrinter) {
+        setPrinterTestResult('error');
+        toast({ 
+          title: "No Printer Selected", 
+          description: "Please select a printer from the dropdown",
           variant: "destructive"
         });
         return;
       }
       
-      // Then test the printer connection
-      const printerConnected = await testConnection();
+      // Send test print with simple ZPL
+      const testZpl = '^XA^FO50,50^A0N,30,30^FDQZ Tray Test^FS^XZ';
+      await printZpl(selectedPrinter, testZpl);
       
-      if (printerConnected) {
-        setPrinterTestResult('success');
-        updateStepCompletion('printer', true);
-        toast({ 
-          title: "Printer Connected", 
-          description: "Printer test successful" 
-        });
-        
-        // Save printer settings
-        localStorage.setItem('printerSettings', JSON.stringify({
-          ip: printerIP,
-          port: 9100,
-          name: 'Default Printer'
-        }));
-      } else {
-        setPrinterTestResult('error');
-        toast({ 
-          title: "Printer Test Failed", 
-          description: "Could not connect to printer at " + printerIP,
-          variant: "destructive"
-        });
-      }
+      setPrinterTestResult('success');
+      updateStepCompletion('printer', true);
+      toast({ 
+        title: "Printer Test Sent", 
+        description: `Test label sent to ${selectedPrinter}` 
+      });
+      
+      // Save printer settings
+      localStorage.setItem('printerSettings', JSON.stringify({
+        name: selectedPrinter
+      }));
     } catch (error) {
       setPrinterTestResult('error');
       toast({ 
-        title: "Printer Test Error", 
-        description: "Unable to test printer connection",
+        title: "Printer Test Failed", 
+        description: error instanceof Error ? error.message : "Unable to test printer connection",
         variant: "destructive"
       });
     }
@@ -228,27 +226,39 @@ export function SetupWizard({ open, onComplete }: SetupWizardProps) {
                 Printer Connection Test
               </CardTitle>
               <CardDescription>
-                Configure and test your label printer connection via local bridge (port 17777)
+                Select and test your label printer via QZ Tray
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="printer-ip">Printer IP Address</Label>
-                <Input
-                  id="printer-ip"
-                  value={printerIP}
-                  onChange={(e) => setPrinterIP(e.target.value)}
-                  placeholder="192.168.1.70"
-                />
-              </div>
-              
-              <Button 
-                onClick={testPrinterConnection}
-                disabled={printerTestResult === 'pending'}
-                className="w-full"
-              >
-                {printerTestResult === 'pending' ? 'Testing...' : 'Test Printer Connection'}
-              </Button>
+              {!isConnected ? (
+                <Alert className="border-yellow-200 bg-yellow-50">
+                  <AlertDescription>
+                    QZ Tray is not running. Please start the QZ Tray application and refresh this page.
+                  </AlertDescription>
+                </Alert>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    <Label>Select Printer</Label>
+                    <PrinterSelect
+                      value={selectedPrinter}
+                      onChange={setSelectedPrinter}
+                      printers={printers}
+                      isLoading={isLoadingPrinters}
+                      placeholder="Choose a printer..."
+                      showRefreshButton={false}
+                    />
+                  </div>
+                  
+                  <Button 
+                    onClick={testPrinterConnection}
+                    disabled={!selectedPrinter || printerTestResult === 'pending'}
+                    className="w-full"
+                  >
+                    {printerTestResult === 'pending' ? 'Testing...' : 'Test Printer Connection'}
+                  </Button>
+                </>
+              )}
               
               {printerTestResult !== 'pending' && (
                 <Alert className={printerTestResult === 'error' ? 'border-red-200' : 'border-green-200'}>
@@ -258,8 +268,8 @@ export function SetupWizard({ open, onComplete }: SetupWizardProps) {
                   }
                   <AlertDescription>
                     {printerTestResult === 'success' ? 
-                      'Printer connection successful!' : 
-                      'Failed to connect to printer. Check IP address and ensure print bridge is running.'
+                      'Printer test sent successfully!' : 
+                      'Failed to connect to printer. Ensure QZ Tray is running and printer is available.'
                     }
                   </AlertDescription>
                 </Alert>

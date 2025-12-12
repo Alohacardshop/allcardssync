@@ -1,4 +1,5 @@
 // ZPL Utility Commands for Zebra Printers
+// Uses QZ Tray for printing utility commands
 
 // Configuration and status commands
 export const ZPL_COMMANDS = {
@@ -55,11 +56,9 @@ export const ZPL_COMMANDS = {
 ^XZ`
 };
 
-// Utility functions for printer diagnostics
+// Utility functions for printer diagnostics via QZ Tray
 export interface PrinterUtilityOptions {
-  ip: string;
-  port?: number;
-  timeoutMs?: number;
+  printerName: string;
 }
 
 export class ZPLUtilities {
@@ -70,36 +69,22 @@ export class ZPLUtilities {
     options: PrinterUtilityOptions
   ): Promise<{ success: boolean; message?: string; error?: string }> {
     try {
-      // Get bridge URL from environment or use default
-      const bridgeUrl = import.meta.env.VITE_LOCAL_BRIDGE_URL || 'http://127.0.0.1:17777';
-      const bridgePort = import.meta.env.VITE_DEFAULT_PRINTER_PORT || '9100';
+      // Dynamically import QZ Tray to avoid circular dependencies
+      const { isConnected, printZpl } = await import('@/lib/qzTray');
       
-      const response = await fetch(`${bridgeUrl}/rawtcp?ip=${options.ip}&port=${options.port || bridgePort}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'text/plain',
-        },
-        body: command,
-        signal: AbortSignal.timeout(options.timeoutMs || 10000)
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-      
-      const result = await response.json();
-      
-      if (result.success) {
-        return {
-          success: true,
-          message: `${description} sent successfully`
-        };
-      } else {
+      if (!isConnected()) {
         return {
           success: false,
-          error: result.error || `${description} failed`
+          error: 'QZ Tray is not connected. Please ensure QZ Tray is running.'
         };
       }
+      
+      await printZpl(options.printerName, command);
+      
+      return {
+        success: true,
+        message: `${description} sent successfully`
+      };
     } catch (error) {
       return {
         success: false,
