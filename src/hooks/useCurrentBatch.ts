@@ -33,10 +33,12 @@ export const useCurrentBatch = ({ storeKey, locationGid, userId }: CurrentBatchP
   const fetchBatchItems = async (): Promise<CurrentBatchData> => {
     if (!storeKey || !locationGid || !userId) {
       logger.logDebug('Missing context for batch fetch', { storeKey, locationGid, userId });
+      console.log('[useCurrentBatch] ⚠️ Missing required context:', { storeKey, locationGid, userId });
       return { items: [], counts: { activeItems: 0, totalItems: 0 } };
     }
 
     logger.logDebug('Fetching current batch', { storeKey, locationGid, userId });
+    console.log('[useCurrentBatch] 🔍 Starting batch fetch:', { storeKey, locationGid, userId });
 
     // Get active lot
     const { data: lot, error: lotError } = await supabase
@@ -60,6 +62,7 @@ export const useCurrentBatch = ({ storeKey, locationGid, userId }: CurrentBatchP
 
     if (lot) {
       logger.logInfo('Active lot found', { lotId: lot.id, lotNumber: lot.lot_number });
+      console.log('[useCurrentBatch] ✅ Active lot found:', { lotId: lot.id, lotNumber: lot.lot_number, totalItems: lot.total_items });
 
       // Get items from lot
       const { data: items, error: itemsError } = await supabase
@@ -77,6 +80,9 @@ export const useCurrentBatch = ({ storeKey, locationGid, userId }: CurrentBatchP
       }
 
       lotItems = items || [];
+      console.log('[useCurrentBatch] 📦 Lot items fetched:', lotItems.length);
+    } else {
+      console.log('[useCurrentBatch] ⚠️ No active lot found for user');
     }
 
     // Also fetch recent orphaned items (created in last 24h without lot_id)
@@ -123,6 +129,15 @@ export const useCurrentBatch = ({ storeKey, locationGid, userId }: CurrentBatchP
       lotItems: lotItems.length, 
       orphanedItems: orphanedItems?.length || 0,
       totalActive: activeCount 
+    });
+
+    console.log('[useCurrentBatch] 📊 Final batch summary:', {
+      lotItems: lotItems.length,
+      orphanedItems: orphanedItems?.length || 0,
+      combined: allItems.length,
+      displayed: Math.min(allItems.length, 20),
+      hasActiveLot: !!lot,
+      lotId: lot?.id
     });
 
     return {
