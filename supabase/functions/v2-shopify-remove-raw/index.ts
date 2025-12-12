@@ -1,5 +1,6 @@
 import { corsHeaders } from '../_shared/cors.ts'
 import { logRemovalOutcome, type RemovalOutcome } from '../_shared/shopify-removal-logger.ts'
+import { requireAuth, requireRole } from '../_shared/auth.ts'
 
 interface RemoveRawArgs {
   item_id?: string
@@ -16,6 +17,9 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Authenticate user and check role
+    const user = await requireAuth(req)
+    await requireRole(user.id, ['admin', 'staff'])
     const args: RemoveRawArgs = await req.json()
     const { item_id, itemId, sku, certNumber, quantity = 1, force_db_cleanup = false } = args
     
