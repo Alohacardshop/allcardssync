@@ -161,6 +161,78 @@ export type Database = {
         }
         Relationships: []
       }
+      ebay_inventory_aggregate: {
+        Row: {
+          created_at: string
+          ebay_quantity: number | null
+          id: string
+          last_synced_to_ebay_at: string | null
+          location_quantities: Json | null
+          needs_sync: boolean | null
+          sku: string
+          store_key: string
+          total_quantity: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          ebay_quantity?: number | null
+          id?: string
+          last_synced_to_ebay_at?: string | null
+          location_quantities?: Json | null
+          needs_sync?: boolean | null
+          sku: string
+          store_key: string
+          total_quantity?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          ebay_quantity?: number | null
+          id?: string
+          last_synced_to_ebay_at?: string | null
+          location_quantities?: Json | null
+          needs_sync?: boolean | null
+          sku?: string
+          store_key?: string
+          total_quantity?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      ebay_location_priority: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean | null
+          location_name: string | null
+          priority: number
+          shopify_location_gid: string
+          store_key: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          location_name?: string | null
+          priority?: number
+          shopify_location_gid: string
+          store_key: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          location_name?: string | null
+          priority?: number
+          shopify_location_gid?: string
+          store_key?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       ebay_payment_policies: {
         Row: {
           created_at: string
@@ -261,6 +333,7 @@ export type Database = {
           default_return_policy_id: string | null
           default_shipping_policy_id: string | null
           description_template: string | null
+          dry_run_mode: boolean | null
           ebay_user_id: string | null
           environment: string
           id: string
@@ -269,6 +342,8 @@ export type Database = {
           marketplace_id: string
           oauth_connected_at: string | null
           store_key: string
+          sync_enabled: boolean | null
+          sync_mode: string | null
           title_template: string | null
           updated_at: string
         }
@@ -281,6 +356,7 @@ export type Database = {
           default_return_policy_id?: string | null
           default_shipping_policy_id?: string | null
           description_template?: string | null
+          dry_run_mode?: boolean | null
           ebay_user_id?: string | null
           environment?: string
           id?: string
@@ -289,6 +365,8 @@ export type Database = {
           marketplace_id?: string
           oauth_connected_at?: string | null
           store_key: string
+          sync_enabled?: boolean | null
+          sync_mode?: string | null
           title_template?: string | null
           updated_at?: string
         }
@@ -301,6 +379,7 @@ export type Database = {
           default_return_policy_id?: string | null
           default_shipping_policy_id?: string | null
           description_template?: string | null
+          dry_run_mode?: boolean | null
           ebay_user_id?: string | null
           environment?: string
           id?: string
@@ -309,8 +388,55 @@ export type Database = {
           marketplace_id?: string
           oauth_connected_at?: string | null
           store_key?: string
+          sync_enabled?: boolean | null
+          sync_mode?: string | null
           title_template?: string | null
           updated_at?: string
+        }
+        Relationships: []
+      }
+      ebay_sync_log: {
+        Row: {
+          after_state: Json | null
+          before_state: Json | null
+          created_at: string
+          created_by: string | null
+          dry_run: boolean | null
+          ebay_response: Json | null
+          error_message: string | null
+          id: string
+          operation: string
+          sku: string | null
+          store_key: string
+          success: boolean | null
+        }
+        Insert: {
+          after_state?: Json | null
+          before_state?: Json | null
+          created_at?: string
+          created_by?: string | null
+          dry_run?: boolean | null
+          ebay_response?: Json | null
+          error_message?: string | null
+          id?: string
+          operation: string
+          sku?: string | null
+          store_key: string
+          success?: boolean | null
+        }
+        Update: {
+          after_state?: Json | null
+          before_state?: Json | null
+          created_at?: string
+          created_by?: string | null
+          dry_run?: boolean | null
+          ebay_response?: Json | null
+          error_message?: string | null
+          id?: string
+          operation?: string
+          sku?: string | null
+          store_key?: string
+          success?: boolean | null
         }
         Relationships: []
       }
@@ -2646,6 +2772,15 @@ export type Database = {
         Returns: Json
       }
       debug_user_auth: { Args: { _user_id?: string }; Returns: Json }
+      decrement_inventory_waterfall: {
+        Args: {
+          p_dry_run?: boolean
+          p_qty_to_remove: number
+          p_sku: string
+          p_store_key: string
+        }
+        Returns: Json
+      }
       force_new_lot: {
         Args: { _location_gid: string; _reason?: string; _store_key: string }
         Returns: {
@@ -2737,6 +2872,10 @@ export type Database = {
       queue_shopify_sync: {
         Args: { item_id: string; sync_action?: string }
         Returns: string
+      }
+      recalculate_ebay_aggregate: {
+        Args: { p_sku: string; p_store_key: string }
+        Returns: Json
       }
       release_shopify_processor_lock: { Args: never; Returns: boolean }
       restore_intake_item: {
