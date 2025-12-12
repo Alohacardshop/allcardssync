@@ -112,7 +112,7 @@ export const useBatchHealthCheck = ({ storeKey, locationGid, userId }: HealthChe
       return healthReport;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
-      logger.logError('Health check failed', { errorMessage: message });
+      logger.logWarn('Health check failed', { message });
       setError(message);
       return null;
     } finally {
