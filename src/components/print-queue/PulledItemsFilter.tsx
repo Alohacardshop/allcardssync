@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -20,7 +20,8 @@ import { ShopifySyncDetailsDialog } from '@/components/ShopifySyncDetailsDialog'
 import { printQueue } from '@/lib/print/queueInstance';
 import { zplFromTemplateString } from '@/lib/labels/zpl';
 import { getLocationByStoreKey } from '@/config/locations';
-
+import { PrinterStatusBadge } from './PrinterStatusBadge';
+import { PrintProgressDialog, PrintProgressItem } from './PrintProgressDialog';
 interface SavedTemplate {
   id: string;
   name: string;
@@ -77,6 +78,10 @@ export default function PulledItemsFilter() {
 
   // Testing mode - don't mark as printed when disabled
   const [markAsPrinted, setMarkAsPrinted] = useState(false);
+
+  // Print progress dialog state
+  const [showProgressDialog, setShowProgressDialog] = useState(false);
+  const [printProgressItems, setPrintProgressItems] = useState<PrintProgressItem[]>([]);
 
   useEffect(() => {
     fetchTemplates();
@@ -464,6 +469,76 @@ export default function PulledItemsFilter() {
     return result;
   };
 
+  // Get the ZPL template body for reuse
+  const getZplTemplate = useCallback(() => {
+    const template = templates.find(t => t.id === selectedTemplateId);
+    return template?.canvas?.zplLabel || null;
+  }, [templates, selectedTemplateId]);
+
+  // Print a single item - used by progress dialog
+  const handlePrintSingleItem = useCallback(async (progressItem: PrintProgressItem): Promise<boolean> => {
+    const item = items.find(i => i.id === progressItem.id);
+    if (!item) return false;
+
+    const zplBody = getZplTemplate();
+    if (!zplBody) return false;
+
+    try {
+      const vars = {
+        CARDNAME: item.subject || item.brand_title || '',
+        SETNAME: item.sub_category || '',
+        CARDNUMBER: item.card_number || '',
+        CONDITION: item.variant || '',
+        PRICE: item.price ? `$${Number(item.price).toFixed(2)}` : '',
+        SKU: item.sku || '',
+        BARCODE: item.sku || '',
+        VENDOR: item.vendor || '',
+        YEAR: item.year || '',
+        CATEGORY: item.main_category || '',
+      };
+
+      const zpl = zplFromTemplateString(zplBody, vars);
+      await printQueue.enqueueSafe({ zpl, qty: copies, usePQ: true });
+      return true;
+    } catch (error) {
+      console.error('Print single item error:', error);
+      return false;
+    }
+  }, [items, getZplTemplate, copies]);
+
+  // Handle completion from progress dialog
+  const handlePrintComplete = useCallback(async (results: { success: number; failed: number }) => {
+    const itemIds = printProgressItems.map(i => i.id);
+    
+    // Update printed_at timestamps only if markAsPrinted is enabled
+    if (markAsPrinted && results.success > 0) {
+      const successIds = itemIds.slice(0, results.success);
+      const { error: updateError } = await supabase
+        .from('intake_items')
+        .update({ printed_at: new Date().toISOString() })
+        .in('id', successIds);
+
+      if (updateError) {
+        console.error('Failed to update printed_at:', updateError);
+      }
+    }
+
+    const modeText = markAsPrinted ? '' : ' (test mode)';
+    if (results.failed > 0) {
+      toast.warning(`Printed ${results.success} labels, ${results.failed} failed${modeText}`);
+    } else {
+      toast.success(`Queued ${results.success} labels for printing${modeText}`);
+    }
+    
+    // Clear selection and refresh items
+    setSelectedItems(new Set());
+    fetchAllItems();
+  }, [markAsPrinted, printProgressItems, fetchAllItems]);
+
+  const handlePrintCancel = useCallback(() => {
+    setIsPrinting(false);
+  }, []);
+
   const handlePrintSelected = async () => {
     if (selectedItems.size === 0) {
       toast.error('No items selected');
@@ -475,7 +550,6 @@ export default function PulledItemsFilter() {
       return;
     }
 
-    // Get template
     const template = templates.find(t => t.id === selectedTemplateId);
     if (!template) {
       toast.error('Template not found');
@@ -488,60 +562,67 @@ export default function PulledItemsFilter() {
       return;
     }
 
-    setIsPrinting(true);
-    let printedCount = 0;
-    const itemIds = Array.from(selectedItems);
+    // For small batches (≤5), print directly without progress dialog
+    if (selectedItems.size <= 5) {
+      setIsPrinting(true);
+      let printedCount = 0;
+      const itemIds = Array.from(selectedItems);
 
-    try {
-      for (const itemId of itemIds) {
-        const item = items.find(i => i.id === itemId);
-        if (!item) continue;
+      try {
+        for (const itemId of itemIds) {
+          const item = items.find(i => i.id === itemId);
+          if (!item) continue;
 
-        // Build variables for template
-        const vars = {
-          CARDNAME: item.subject || item.brand_title || '',
-          SETNAME: item.sub_category || '', // Use sub_category (e.g. "Pokemon") not category (e.g. "other")
-          CARDNUMBER: item.card_number || '',
-          CONDITION: item.variant || '', // Full condition text, template handles wrapping
-          PRICE: item.price ? `$${Number(item.price).toFixed(2)}` : '',
-          SKU: item.sku || '',
-          BARCODE: item.sku || '',
-          VENDOR: item.vendor || '',
-          YEAR: item.year || '',
-          CATEGORY: item.main_category || '',
-        };
+          const vars = {
+            CARDNAME: item.subject || item.brand_title || '',
+            SETNAME: item.sub_category || '',
+            CARDNUMBER: item.card_number || '',
+            CONDITION: item.variant || '',
+            PRICE: item.price ? `$${Number(item.price).toFixed(2)}` : '',
+            SKU: item.sku || '',
+            BARCODE: item.sku || '',
+            VENDOR: item.vendor || '',
+            YEAR: item.year || '',
+            CATEGORY: item.main_category || '',
+          };
 
-        // Generate ZPL
-        const zpl = zplFromTemplateString(zplBody, vars);
-
-        // Queue for printing
-        await printQueue.enqueueSafe({ zpl, qty: copies, usePQ: true });
-        printedCount++;
-      }
-
-      // Update printed_at timestamps only if markAsPrinted is enabled
-      if (markAsPrinted) {
-        const { error: updateError } = await supabase
-          .from('intake_items')
-          .update({ printed_at: new Date().toISOString() })
-          .in('id', itemIds);
-
-        if (updateError) {
-          console.error('Failed to update printed_at:', updateError);
+          const zpl = zplFromTemplateString(zplBody, vars);
+          await printQueue.enqueueSafe({ zpl, qty: copies, usePQ: true });
+          printedCount++;
         }
-      }
 
-      toast.success(`Queued ${printedCount} label${printedCount > 1 ? 's' : ''} for printing${!markAsPrinted ? ' (test mode)' : ''}`);
-      
-      // Clear selection and refresh items
-      setSelectedItems(new Set());
-      fetchAllItems();
-    } catch (error) {
-      console.error('Print error:', error);
-      toast.error('Failed to print labels');
-    } finally {
-      setIsPrinting(false);
+        if (markAsPrinted) {
+          await supabase
+            .from('intake_items')
+            .update({ printed_at: new Date().toISOString() })
+            .in('id', itemIds);
+        }
+
+        toast.success(`Queued ${printedCount} label${printedCount > 1 ? 's' : ''} for printing${!markAsPrinted ? ' (test mode)' : ''}`);
+        setSelectedItems(new Set());
+        fetchAllItems();
+      } catch (error) {
+        console.error('Print error:', error);
+        toast.error('Failed to print labels');
+      } finally {
+        setIsPrinting(false);
+      }
+      return;
     }
+
+    // For larger batches, use progress dialog
+    const progressItems: PrintProgressItem[] = Array.from(selectedItems).map(itemId => {
+      const item = items.find(i => i.id === itemId);
+      return {
+        id: itemId,
+        label: item?.subject || item?.brand_title || 'Unknown',
+        sku: item?.sku,
+      };
+    });
+
+    setPrintProgressItems(progressItems);
+    setIsPrinting(true);
+    setShowProgressDialog(true);
   };
 
   const handlePullSuccess = () => {
@@ -1173,6 +1254,7 @@ export default function PulledItemsFilter() {
                 </div>
               </div>
               <div className="flex items-center gap-3">
+                <PrinterStatusBadge />
                 <span className="text-sm text-muted-foreground">
                   {selectedItems.size} item{selectedItems.size > 1 ? 's' : ''} selected
                 </span>
@@ -1264,6 +1346,19 @@ export default function PulledItemsFilter() {
           onPrintBatches={handlePrintBatches}
         />
       )}
+
+      {/* Print Progress Dialog */}
+      <PrintProgressDialog
+        open={showProgressDialog}
+        onOpenChange={(open) => {
+          setShowProgressDialog(open);
+          if (!open) setIsPrinting(false);
+        }}
+        items={printProgressItems}
+        onPrintItem={handlePrintSingleItem}
+        onComplete={handlePrintComplete}
+        onCancel={handlePrintCancel}
+      />
     </div>
   );
 }

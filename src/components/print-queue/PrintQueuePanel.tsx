@@ -5,10 +5,10 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Play, Pause, SkipForward, Trash2, Search, RefreshCw } from 'lucide-react';
+import { Play, Trash2, Search, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { usePrintQueue } from '@/hooks/usePrintQueue';
-
+import { DeadLetterQueuePanel } from './DeadLetterQueuePanel';
 interface PrintJob {
   id: string;
   status: string;
@@ -142,6 +142,8 @@ export default function PrintQueuePanel() {
         </Button>
       </div>
 
+      {/* Dead Letter Queue - Failed Jobs */}
+      <DeadLetterQueuePanel />
 
       <div className="grid gap-4">
         <Card>
