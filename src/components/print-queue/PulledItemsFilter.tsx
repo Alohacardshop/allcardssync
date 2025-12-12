@@ -176,8 +176,8 @@ export default function PulledItemsFilter() {
 
       if (error) throw error;
 
-      const categories = (data || [])
-        .map((row: { category_value: string }) => row.category_value)
+      const categories = ((data as { category_value: string }[] | null) || [])
+        .map((row) => row.category_value)
         .filter(Boolean);
       
       setAvailableCategories(categories);
