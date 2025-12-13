@@ -3,42 +3,59 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
 // Use environment variables with fallbacks for Lovable compatibility
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://dmpoandoydaqxhzdjnmk.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRtcG9hbmRveWRhcXhoemRqbm1rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ0MDU5NDMsImV4cCI6MjA2OTk4MTk0M30.WoHlHO_Z4_ogeO5nt4I29j11aq09RMBtNug8a5rStgk";
+const SUPABASE_URL = "https://dmpoandoydaqxhzdjnmk.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRtcG9hbmRveWRhcXhoemRqbm1rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ0MDU5NDMsImV4cCI6MjA2OTk4MTk0M30.WoHlHO_Z4_ogeO5nt4I29j11aq09RMBtNug8a5rStgk";
 
-// HMR-safe singleton pattern using globalThis to survive Vite hot reloads
-const SUPABASE_CLIENT_KEY = Symbol.for('supabase-client');
-const TCG_CLIENT_KEY = Symbol.for('tcg-supabase-client');
-const TCG_LJY_CLIENT_KEY = Symbol.for('tcg-ljy-client');
+// TCG Database Connection
+const TCG_URL = "https://dhyvufggodqkcjbrjhxk.supabase.co";
+const TCG_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRoeXZ1Zmdnb2Rxa2NqYnJqaHhrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY1MDIyOTcsImV4cCI6MjA3MjA3ODI5N30.0GncadcSHVbthqyubXLiBflm44sFEz_izfF5uF-xEvs";
 
-type GlobalWithClients = typeof globalThis & {
-  [SUPABASE_CLIENT_KEY]?: SupabaseClient<Database>;
-  [TCG_CLIENT_KEY]?: SupabaseClient;
-  [TCG_LJY_CLIENT_KEY]?: SupabaseClient;
-};
+// External TCG database (read-only)
+const EXTERNAL_URL = 'https://ljywcyhnpzqgpowwrpre.supabase.co';
+const EXTERNAL_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxqeXdjeWhucHpxZ3Bvd3dycHJlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTcwOTI2ODIsImV4cCI6MjA3MjY2ODY4Mn0.Hq0zKaJaWhNR4WLnqM4-UelgRFEPEFi_sk6p7CzqSEA';
 
-const globalWithClients = globalThis as GlobalWithClients;
+// Window-based singleton keys to prevent multiple GoTrueClient instances
+const SUPABASE_KEY = '__lovable_supabase__';
+const TCG_KEY = '__lovable_tcg_supabase__';
+const TCG_LJY_KEY = '__lovable_tcg_ljy__';
 
-// Import the supabase client like this:
-// import { supabase } from "@/integrations/supabase/client";
+// Extend Window interface
+declare global {
+  interface Window {
+    [SUPABASE_KEY]?: SupabaseClient<Database>;
+    [TCG_KEY]?: SupabaseClient;
+    [TCG_LJY_KEY]?: SupabaseClient;
+  }
+}
 
-export const supabase: SupabaseClient<Database> = globalWithClients[SUPABASE_CLIENT_KEY] ?? (
-  globalWithClients[SUPABASE_CLIENT_KEY] = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+// Create singleton instances using window object for HMR safety
+function getSupabaseClient(): SupabaseClient<Database> {
+  if (typeof window !== 'undefined' && window[SUPABASE_KEY]) {
+    return window[SUPABASE_KEY];
+  }
+  
+  const client = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
     auth: {
-      storage: localStorage,
+      storage: typeof window !== 'undefined' ? localStorage : undefined,
       storageKey: 'lovable-auth',
       persistSession: true,
       autoRefreshToken: true,
     }
-  })
-);
+  });
+  
+  if (typeof window !== 'undefined') {
+    window[SUPABASE_KEY] = client;
+  }
+  
+  return client;
+}
 
-// TCG Database Connection (configurable via environment)
-const TCG_URL = import.meta.env.VITE_TCG_URL || "https://dhyvufggodqkcjbrjhxk.supabase.co";
-const TCG_ANON_KEY = import.meta.env.VITE_TCG_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRoeXZ1Zmdnb2Rxa2NqYnJqaHhrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY1MDIyOTcsImV4cCI6MjA3MjA3ODI5N30.0GncadcSHVbthqyubXLiBflm44sFEz_izfF5uF-xEvs";
-
-export const tcgSupabase: SupabaseClient = globalWithClients[TCG_CLIENT_KEY] ?? (
-  globalWithClients[TCG_CLIENT_KEY] = createClient(TCG_URL, TCG_ANON_KEY, {
+function getTcgSupabaseClient(): SupabaseClient {
+  if (typeof window !== 'undefined' && window[TCG_KEY]) {
+    return window[TCG_KEY];
+  }
+  
+  const client = createClient(TCG_URL, TCG_ANON_KEY, {
     auth: {
       persistSession: false,
       storage: undefined,
@@ -48,15 +65,21 @@ export const tcgSupabase: SupabaseClient = globalWithClients[TCG_CLIENT_KEY] ?? 
     db: {
       schema: 'public'
     }
-  })
-);
+  });
+  
+  if (typeof window !== 'undefined') {
+    window[TCG_KEY] = client;
+  }
+  
+  return client;
+}
 
-// External TCG database (read-only) - configurable via environment
-const EXTERNAL_URL = import.meta.env.VITE_EXTERNAL_TCG_URL || 'https://ljywcyhnpzqgpowwrpre.supabase.co';
-const EXTERNAL_ANON_KEY = import.meta.env.VITE_EXTERNAL_TCG_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxqeXdjeWhucHpxZ3Bvd3dycHJlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTcwOTI2ODIsImV4cCI6MjA3MjY2ODY4Mn0.Hq0zKaJaWhNR4WLnqM4-UelgRFEPEFi_sk6p7CzqSEA';
-
-export const tcgLjyClient: SupabaseClient = globalWithClients[TCG_LJY_CLIENT_KEY] ?? (
-  globalWithClients[TCG_LJY_CLIENT_KEY] = createClient(EXTERNAL_URL, EXTERNAL_ANON_KEY, {
+function getTcgLjyClient(): SupabaseClient {
+  if (typeof window !== 'undefined' && window[TCG_LJY_KEY]) {
+    return window[TCG_LJY_KEY];
+  }
+  
+  const client = createClient(EXTERNAL_URL, EXTERNAL_ANON_KEY, {
     auth: {
       persistSession: false,
       storage: undefined,
@@ -66,8 +89,20 @@ export const tcgLjyClient: SupabaseClient = globalWithClients[TCG_LJY_CLIENT_KEY
     db: {
       schema: 'public'
     }
-  })
-);
+  });
+  
+  if (typeof window !== 'undefined') {
+    window[TCG_LJY_KEY] = client;
+  }
+  
+  return client;
+}
+
+// Import the supabase client like this:
+// import { supabase } from "@/integrations/supabase/client";
+export const supabase: SupabaseClient<Database> = getSupabaseClient();
+export const tcgSupabase: SupabaseClient = getTcgSupabaseClient();
+export const tcgLjyClient: SupabaseClient = getTcgLjyClient();
 
 // TCG Database Types
 export interface Game {

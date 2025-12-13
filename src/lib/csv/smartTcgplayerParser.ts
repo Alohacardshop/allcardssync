@@ -452,6 +452,21 @@ export function parseSmartTcgplayerCsv(csvText: string): SmartParseResult {
   for (let i = dataStartRow; i < allRows.length; i++) {
     const row = allRows[i];
     
+    // Skip rows with insufficient data (likely footer/metadata rows)
+    const nonEmptyCount = row.filter(cell => cell && cell.trim()).length;
+    if (nonEmptyCount < 4) {
+      skippedRows++;
+      continue; // Silently skip sparse rows
+    }
+    
+    // Skip TCGPlayer footer content
+    const rowText = row.join(' ').toLowerCase();
+    if (rowText.includes('total:') || rowText.includes('prices from') || 
+        rowText.includes('market price on') || rowText.includes('tcgplayer.com')) {
+      skippedRows++;
+      continue; // Silently skip footer rows
+    }
+    
     try {
       const normalized: Partial<NormalizedCard> = {};
       
@@ -484,7 +499,7 @@ export function parseSmartTcgplayerCsv(csvText: string): SmartParseResult {
         }
       }
       
-      // Validate required fields
+      // Validate required fields - only report as error if row looked like data
       const missingRequired: string[] = [];
       if (!normalized.id) missingRequired.push('ID');
       if (!normalized.line) missingRequired.push('Product Line');
@@ -492,12 +507,16 @@ export function parseSmartTcgplayerCsv(csvText: string): SmartParseResult {
       if (!normalized.name) missingRequired.push('Name');
       
       if (missingRequired.length > 0) {
-        errors.push({
-          row: i + 1,
-          reason: `Missing required fields: ${missingRequired.join(', ')}`,
-          data: row,
-          confidence: confidence
-        });
+        // Only add error if at least one required field was present (looks like intended data)
+        const hasAnyRequiredField = normalized.id || normalized.line || normalized.set || normalized.name;
+        if (hasAnyRequiredField) {
+          errors.push({
+            row: i + 1,
+            reason: `Missing required fields: ${missingRequired.join(', ')}`,
+            data: row,
+            confidence: confidence
+          });
+        }
         skippedRows++;
         continue;
       }
