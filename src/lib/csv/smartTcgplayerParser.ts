@@ -276,6 +276,42 @@ function detectPositionalMapping(rows: string[][]): { mappings: FieldMapping[]; 
 }
 
 /**
+ * Find the actual header row in TCGPlayer CSVs
+ * TCGPlayer exports often have 9+ metadata rows before the actual headers
+ */
+function findHeaderRow(rows: string[][]): number {
+  // Look for a row that contains typical TCGPlayer header fields
+  const headerIndicators = [
+    /tcgplayer\s*id/i,
+    /product\s*line/i,
+    /set\s*name/i,
+    /product\s*name/i,
+    /tcg\s*market\s*price/i,
+    /total\s*quantity/i
+  ];
+  
+  for (let i = 0; i < Math.min(rows.length, 15); i++) {
+    const row = rows[i];
+    if (!row || row.length < 4) continue;
+    
+    // Count how many header indicators match this row
+    let matches = 0;
+    for (const indicator of headerIndicators) {
+      if (row.some(cell => indicator.test(cell || ''))) {
+        matches++;
+      }
+    }
+    
+    // If 3+ header indicators match, this is likely the header row
+    if (matches >= 3) {
+      return i;
+    }
+  }
+  
+  return 0; // Default to first row
+}
+
+/**
  * Smart TCGPlayer CSV parser with enhanced format detection
  */
 export function parseSmartTcgplayerCsv(csvText: string): SmartParseResult {
@@ -331,23 +367,30 @@ export function parseSmartTcgplayerCsv(csvText: string): SmartParseResult {
   let dataStartRow = 0;
   const suggestions: string[] = [];
 
+  // Find the actual header row (TCGPlayer exports have metadata rows before headers)
+  const headerRowIndex = findHeaderRow(allRows);
+  const headerRow = allRows[headerRowIndex];
+  
   // Try header-based detection first
-  const firstRow = allRows[0];
-  const headerMappings = fuzzyMatchHeaders(firstRow);
+  const headerMappings = fuzzyMatchHeaders(headerRow);
   
   if (headerMappings.length >= 4) { // Need at least 4 recognized fields for header-based
     mappings = headerMappings;
     schema = headerMappings.length >= 8 ? 'full' : 'short';
     confidence = headerMappings.reduce((sum, m) => sum + m.confidence, 0) / headerMappings.length * 100;
-    dataStartRow = 1;
+    dataStartRow = headerRowIndex + 1; // Data starts after the header row
+    
+    if (headerRowIndex > 0) {
+      suggestions.push(`Skipped ${headerRowIndex} metadata rows before headers`);
+    }
   } else {
     // Try positional detection (treat first row as data)
-    const positionalResult = detectPositionalMapping(allRows);
+    const positionalResult = detectPositionalMapping(allRows.slice(headerRowIndex));
     if (positionalResult.confidence > 0.5) {
       mappings = positionalResult.mappings;
       schema = 'positional';
       confidence = positionalResult.confidence * 100;
-      dataStartRow = 0;
+      dataStartRow = headerRowIndex;
       
       if (positionalResult.schemaName) {
         suggestions.push(`Detected ${positionalResult.schemaName} format`);
