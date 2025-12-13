@@ -45,7 +45,7 @@ export default function PulledItemsFilter() {
   const [selectedExcludeTags, setSelectedExcludeTags] = useState<string[]>([]);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [availableTags, setAvailableTags] = useState<string[]>([]);
-  const [dateFilter, setDateFilter] = useState<DateFilterType>('today');
+  const [dateFilter, setDateFilter] = useState<DateFilterType>(null);
   const [typeFilter, setTypeFilter] = useState<TypeFilterType>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [availableCategories, setAvailableCategories] = useState<string[]>([]);
