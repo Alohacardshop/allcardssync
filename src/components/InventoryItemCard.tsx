@@ -1,8 +1,9 @@
-import React, { memo } from 'react';
+import React, { memo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Trash2, Package, Calendar, DollarSign, Eye, EyeOff, FileText, Tag, Printer, ExternalLink, RotateCcw, Loader2, CheckSquare, Square, CheckCircle, ShoppingBag } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Trash2, Package, Calendar, DollarSign, Eye, EyeOff, FileText, Tag, Printer, ExternalLink, RotateCcw, Loader2, CheckSquare, Square, CheckCircle, ShoppingBag, Pencil, Check, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 import { EbayPriceComparison } from '@/components/inventory/EbayPriceComparison';
@@ -91,6 +92,45 @@ export const InventoryItemCard = memo(({
 }: InventoryItemCardProps) => {
   const queryClient = useQueryClient();
   const { toggleListOnEbay, isToggling } = useEbayListing();
+  
+  // Inline quantity editing state
+  const [isEditingQty, setIsEditingQty] = useState(false);
+  const [editQty, setEditQty] = useState(item.quantity.toString());
+  const [isSavingQty, setIsSavingQty] = useState(false);
+
+  const handleSaveQuantity = async () => {
+    const newQty = parseInt(editQty, 10);
+    if (isNaN(newQty) || newQty < 0) {
+      toast.error('Please enter a valid quantity');
+      return;
+    }
+    
+    setIsSavingQty(true);
+    try {
+      const { error } = await supabase
+        .from('intake_items')
+        .update({ quantity: newQty })
+        .eq('id', item.id);
+      
+      if (error) throw error;
+      
+      toast.success(`Quantity updated to ${newQty}`);
+      setIsEditingQty(false);
+      
+      // Invalidate queries to refresh the data
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory-list'] });
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update quantity');
+    } finally {
+      setIsSavingQty(false);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditQty(item.quantity.toString());
+    setIsEditingQty(false);
+  };
 
   // Prefetch item details on hover for instant expansion
   const handleMouseEnter = () => {
@@ -266,7 +306,64 @@ export const InventoryItemCard = memo(({
           </div>
           <div className="flex items-center space-x-1">
             <Package className="h-3 w-3 text-muted-foreground" />
-            <span>Qty: {item.quantity}</span>
+            {isEditingQty ? (
+              <div className="flex items-center space-x-1">
+                <Input
+                  type="number"
+                  value={editQty}
+                  onChange={(e) => setEditQty(e.target.value)}
+                  className="h-6 w-16 text-xs px-1"
+                  min={0}
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleSaveQuantity();
+                    if (e.key === 'Escape') handleCancelEdit();
+                  }}
+                />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-5 w-5 p-0"
+                  onClick={handleSaveQuantity}
+                  disabled={isSavingQty}
+                >
+                  {isSavingQty ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Check className="h-3 w-3 text-green-600" />
+                  )}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-5 w-5 p-0"
+                  onClick={handleCancelEdit}
+                  disabled={isSavingQty}
+                >
+                  <X className="h-3 w-3 text-red-600" />
+                </Button>
+              </div>
+            ) : (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      className="flex items-center space-x-1 hover:bg-muted rounded px-1 -ml-1 cursor-pointer"
+                      onClick={() => {
+                        setEditQty(item.quantity.toString());
+                        setIsEditingQty(true);
+                      }}
+                    >
+                      <span>Qty: {item.quantity}</span>
+                      <Pencil className="h-3 w-3 text-muted-foreground opacity-50" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Click to edit quantity</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
           </div>
           <div className="flex items-center space-x-1">
             <Calendar className="h-3 w-3 text-muted-foreground" />
@@ -412,6 +509,7 @@ export const InventoryItemCard = memo(({
     prevProps.item.id === nextProps.item.id &&
     prevProps.item.sku === nextProps.item.sku &&
     prevProps.item.price === nextProps.item.price &&
+    prevProps.item.quantity === nextProps.item.quantity &&
     prevProps.item.shopify_sync_status === nextProps.item.shopify_sync_status &&
     prevProps.item.printed_at === nextProps.item.printed_at &&
     prevProps.item.list_on_ebay === nextProps.item.list_on_ebay &&
