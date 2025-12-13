@@ -7,19 +7,22 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { 
   ExternalLink, CheckCircle, AlertCircle, Loader2, Settings, Link2, RefreshCw,
-  ShoppingCart, Clock, Package, ArrowRightLeft
+  ShoppingCart, Clock, Package, ArrowRightLeft, MapPin
 } from 'lucide-react';
 import { EbaySyncQueueMonitor } from '@/components/admin/EbaySyncQueueMonitor';
 import { EbayBulkListing } from '@/components/admin/EbayBulkListing';
 import { Link } from 'react-router-dom';
+import { useStore } from '@/contexts/StoreContext';
 
 interface EbayStoreConfig {
   id: string;
   store_key: string;
+  location_key: string | null;
   environment: 'sandbox' | 'production';
   marketplace_id: string;
   ebay_user_id: string | null;
@@ -45,6 +48,7 @@ interface EbayPolicy {
 }
 
 export default function EbayApp() {
+  const { assignedStore, assignedStoreName, isAdmin } = useStore();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [connecting, setConnecting] = useState(false);
@@ -60,8 +64,10 @@ export default function EbayApp() {
   const [policiesLastSynced, setPoliciesLastSynced] = useState<string | null>(null);
 
   useEffect(() => {
-    loadConfigs();
-  }, []);
+    if (assignedStore) {
+      loadConfigs();
+    }
+  }, [assignedStore]);
 
   useEffect(() => {
     if (selectedConfig?.store_key) {
@@ -72,10 +78,18 @@ export default function EbayApp() {
   const loadConfigs = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      // Build query - filter by user's location unless admin
+      let query = supabase
         .from('ebay_store_config')
         .select('*')
         .order('created_at', { ascending: false });
+      
+      // Non-admins only see configs for their assigned store
+      if (!isAdmin && assignedStore) {
+        query = query.eq('location_key', assignedStore);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
       
@@ -85,8 +99,11 @@ export default function EbayApp() {
       }));
       
       setConfigs(typedData);
-      if (typedData.length > 0 && !selectedConfig) {
-        setSelectedConfig(typedData[0]);
+      
+      // Auto-select config matching user's location
+      if (typedData.length > 0) {
+        const matchingConfig = typedData.find(c => c.location_key === assignedStore);
+        setSelectedConfig(matchingConfig || typedData[0]);
       }
     } catch (error: any) {
       toast.error('Failed to load eBay configurations: ' + error.message);
@@ -173,9 +190,12 @@ export default function EbayApp() {
         .from('ebay_store_config')
         .insert({
           store_key: newStoreKey.trim(),
+          location_key: assignedStore, // Link to user's location
           environment: 'sandbox',
           marketplace_id: 'EBAY_US',
-          is_active: true
+          is_active: false, // Start inactive for safety
+          sync_enabled: false,
+          dry_run_mode: true
         })
         .select()
         .single();
@@ -190,7 +210,7 @@ export default function EbayApp() {
       setConfigs([typedData, ...configs]);
       setSelectedConfig(typedData);
       setNewStoreKey('');
-      toast.success('eBay store configuration created');
+      toast.success('eBay store configuration created (sandbox mode)');
     } catch (error: any) {
       toast.error('Failed to create configuration: ' + error.message);
     }
@@ -285,7 +305,15 @@ export default function EbayApp() {
               <ShoppingCart className="h-6 w-6" />
               eBay Integration
             </h1>
-            <p className="text-muted-foreground">Manage eBay connection, listings, and sync queue</p>
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <span>Manage eBay connection, listings, and sync queue</span>
+              {assignedStoreName && (
+                <Badge variant="outline" className="flex items-center gap-1">
+                  <MapPin className="h-3 w-3" />
+                  {assignedStoreName}
+                </Badge>
+              )}
+            </div>
           </div>
           <Link to="/ebay/sync">
             <Button variant="outline" className="flex items-center gap-2">

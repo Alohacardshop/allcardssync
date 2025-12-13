@@ -12,10 +12,12 @@ import { EbayLocationPriority } from '@/components/admin/EbayLocationPriority';
 import { EbayAggregatePreview } from '@/components/admin/EbayAggregatePreview';
 import { EbaySyncControls } from '@/components/admin/EbaySyncControls';
 import { EbaySyncLog } from '@/components/admin/EbaySyncLog';
+import { useStore } from '@/contexts/StoreContext';
 
 interface EbayStoreConfig {
   id: string;
   store_key: string;
+  location_key: string | null;
   environment: 'sandbox' | 'production';
   sync_enabled: boolean;
   dry_run_mode: boolean;
@@ -23,21 +25,32 @@ interface EbayStoreConfig {
 }
 
 export default function EbaySyncDashboard() {
+  const { assignedStore, assignedStoreName, isAdmin } = useStore();
   const [loading, setLoading] = useState(true);
   const [configs, setConfigs] = useState<EbayStoreConfig[]>([]);
   const [selectedConfig, setSelectedConfig] = useState<EbayStoreConfig | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
-    loadConfigs();
-  }, []);
+    if (assignedStore) {
+      loadConfigs();
+    }
+  }, [assignedStore]);
 
   const loadConfigs = async () => {
     try {
-      const { data, error } = await supabase
+      // Build query - filter by user's location unless admin
+      let query = supabase
         .from('ebay_store_config')
-        .select('id, store_key, environment, sync_enabled, dry_run_mode, sync_mode')
+        .select('id, store_key, location_key, environment, sync_enabled, dry_run_mode, sync_mode')
         .order('created_at', { ascending: false });
+      
+      // Non-admins only see configs for their assigned store
+      if (!isAdmin && assignedStore) {
+        query = query.eq('location_key', assignedStore);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
 
@@ -50,8 +63,11 @@ export default function EbaySyncDashboard() {
       }));
 
       setConfigs(typedData);
-      if (typedData.length > 0 && !selectedConfig) {
-        setSelectedConfig(typedData[0]);
+      
+      // Auto-select config matching user's location
+      if (typedData.length > 0) {
+        const matchingConfig = typedData.find(c => c.location_key === assignedStore);
+        setSelectedConfig(matchingConfig || typedData[0]);
       }
     } catch (error: any) {
       toast.error('Failed to load configurations: ' + error.message);
@@ -108,9 +124,15 @@ export default function EbaySyncDashboard() {
             <ArrowRightLeft className="h-6 w-6" />
             eBay Inventory Sync
           </h1>
-          <p className="text-muted-foreground">
-            Multi-location inventory aggregation and waterfall fulfillment
-          </p>
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <span>Multi-location inventory aggregation and waterfall fulfillment</span>
+            {assignedStoreName && (
+              <Badge variant="outline" className="flex items-center gap-1">
+                <MapPin className="h-3 w-3" />
+                {assignedStoreName}
+              </Badge>
+            )}
+          </div>
         </div>
 
         {/* Store Selector */}
