@@ -289,7 +289,7 @@ export function FilterPanel({
 
         {/* Quick Date Filters */}
         <div className="space-y-2">
-          <Label>Date Added to Shopify</Label>
+          <Label>Date Added</Label>
           <div className="flex flex-wrap gap-2">
             <Button
               variant={dateFilter === 'today' ? 'default' : 'outline'}
