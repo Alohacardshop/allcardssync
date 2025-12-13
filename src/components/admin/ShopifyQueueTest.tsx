@@ -46,7 +46,7 @@ export default function ShopifyQueueTest() {
           card_number_in: `TEST-${i}`,
           price_in: 19.99 + i,
           sku_in: `TEST-QUEUE-${Date.now()}-${i}`
-        })
+        } as any)
 
         if (error) {
           addResult({ step: 'Creating test items', status: 'error', message: `Failed to create item ${i}: ${error.message}` })
