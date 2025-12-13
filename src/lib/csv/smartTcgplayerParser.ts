@@ -25,19 +25,18 @@ export interface FieldMapping {
   detectionMethod: 'header' | 'position' | 'content' | 'manual';
 }
 
-// Enhanced header aliases with fuzzy matching support
+// Header patterns for field detection - ONLY header text patterns, no content patterns
 const HEADER_PATTERNS = {
   id: [
-    /^tcg\s*player?\s*id$/i,
+    /^tcgplayer\s*id$/i,      // "TCGplayer Id" (most common)
+    /^tcg\s*player\s*id$/i,   // "TCG Player Id"
     /^product\s*id$/i,
     /^id$/i,
-    /^\d+$/, // Pure numeric column
   ],
   line: [
     /^product\s*line$/i,
     /^game$/i,
     /^system$/i,
-    /pokemon|magic|yugioh|dragon\s*ball/i,
   ],
   set: [
     /^set\s*name$/i,
@@ -54,33 +53,27 @@ const HEADER_PATTERNS = {
     /^number$/i,
     /^card\s*number$/i,
     /^collector\s*number$/i,
-    /^\d+\/\d+$/, // Pattern like "138/185"
   ],
   rarity: [
     /^rarity$/i,
-    /common|uncommon|rare|mythic|legendary/i,
   ],
   condition: [
     /^condition$/i,
-    /near\s*mint|lightly\s*played|moderately\s*played|heavily\s*played|damaged/i,
   ],
   marketPrice: [
     /^tcg\s*market\s*price$/i,
     /^market\s*price$/i,
     /^price$/i,
-    /^\$?\d+\.?\d*$/, // Currency pattern
   ],
   quantity: [
     /^total\s*quantity$/i,
     /^quantity$/i,
     /^qty$/i,
-    /^\d+$/, // Numeric pattern
   ],
   photoUrl: [
     /^photo\s*url$/i,
     /^image\s*url$/i,
     /^url$/i,
-    /^https?:\/\/.*\.(jpg|jpeg|png|gif|webp)$/i, // URL pattern
   ],
 };
 
