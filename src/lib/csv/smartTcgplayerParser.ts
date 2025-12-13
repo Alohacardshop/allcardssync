@@ -101,9 +101,9 @@ const POSITIONAL_SCHEMAS = [
       9: 'directLow',
       10: 'lowWithShipping',
       11: 'lowPrice',
-      12: 'marketplacePrice',
-      13: 'quantity',
-      14: 'addQuantity',
+      12: 'quantity',        // Fixed: Total Quantity is column 12
+      13: 'addQuantity',     // Fixed: Add to Quantity is column 13
+      14: 'marketplacePrice', // Fixed: TCG Marketplace Price is column 14
       15: 'photoUrl'
     }
   },
@@ -118,7 +118,8 @@ const POSITIONAL_SCHEMAS = [
       6: 'rarity',
       7: 'condition',
       8: 'marketPrice',
-      13: 'quantity',
+      12: 'quantity',        // Fixed: match v1 schema
+      13: 'addQuantity',     // Fixed: match v1 schema
       15: 'photoUrl'
     }
   }
@@ -459,6 +460,12 @@ export function parseSmartTcgplayerCsv(csvText: string): SmartParseResult {
       }
 
       // Create complete normalized card with defaults
+      // Quantity fallback: use addQuantity if quantity is 0/empty, default to 1
+      let finalQuantity = normalized.quantity;
+      if (!finalQuantity || finalQuantity === 0) {
+        finalQuantity = normalized.addQuantity || 1;
+      }
+
       const card: NormalizedCard = {
         id: normalized.id!,
         line: normalized.line!,
@@ -473,7 +480,7 @@ export function parseSmartTcgplayerCsv(csvText: string): SmartParseResult {
         lowWithShipping: normalized.lowWithShipping || null,
         lowPrice: normalized.lowPrice || null,
         marketplacePrice: normalized.marketplacePrice || null,
-        quantity: normalized.quantity || 1,
+        quantity: finalQuantity,
         addQuantity: normalized.addQuantity || null,
         photoUrl: normalized.photoUrl || null
       };
