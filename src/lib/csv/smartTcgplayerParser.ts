@@ -181,7 +181,8 @@ function fuzzyMatchHeaders(headers: string[]): FieldMapping[] {
   const mappings: FieldMapping[] = [];
   
   for (let i = 0; i < headers.length; i++) {
-    const header = headers[i].trim();
+    // Normalize whitespace: replace non-breaking spaces and collapse multiple spaces
+    const header = (headers[i] || '').replace(/\u00A0/g, ' ').replace(/\s+/g, ' ').trim();
     let bestMatch: { field: keyof NormalizedCard | null; confidence: number } = { field: null, confidence: 0 };
     
     // Try exact pattern matches first
@@ -290,7 +291,11 @@ function findHeaderRow(rows: string[][]): number {
     // Count how many header indicators match this row
     let matches = 0;
     for (const indicator of headerIndicators) {
-      if (row.some(cell => indicator.test(cell || ''))) {
+      // Normalize whitespace before testing
+      if (row.some(cell => {
+        const normalized = (cell || '').replace(/\u00A0/g, ' ').replace(/\s+/g, ' ').trim();
+        return indicator.test(normalized);
+      })) {
         matches++;
       }
     }
@@ -364,8 +369,20 @@ export function parseSmartTcgplayerCsv(csvText: string): SmartParseResult {
   const headerRowIndex = findHeaderRow(allRows);
   const headerRow = allRows[headerRowIndex];
   
+  // Debug logging
+  console.log('[CSV Parser] Total rows:', allRows.length);
+  console.log('[CSV Parser] Header row index:', headerRowIndex);
+  console.log('[CSV Parser] Header row:', headerRow);
+  
   // Try header-based detection first
   const headerMappings = fuzzyMatchHeaders(headerRow);
+  
+  console.log('[CSV Parser] Header mappings:', headerMappings.map(m => ({
+    index: m.sourceIndex,
+    header: headerRow[m.sourceIndex],
+    field: m.targetField,
+    confidence: m.confidence
+  })));
   
   if (headerMappings.length >= 4) { // Need at least 4 recognized fields for header-based
     mappings = headerMappings;
