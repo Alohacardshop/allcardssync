@@ -26,6 +26,7 @@ export interface FieldMapping {
 }
 
 // Header patterns for field detection - ONLY header text patterns, no content patterns
+// IMPORTANT: "title" is separate from "name" to avoid empty Title column overwriting valid Product Name
 const HEADER_PATTERNS = {
   id: [
     /^tcgplayer\s*id$/i,      // "TCGplayer Id" (most common)
@@ -44,10 +45,12 @@ const HEADER_PATTERNS = {
     /^set$/i,
   ],
   name: [
-    /^product\s*name$/i,
+    /^product\s*name$/i,      // "Product Name" - primary name field
     /^card\s*name$/i,
-    /^title$/i,
     /^name$/i,
+  ],
+  title: [
+    /^title$/i,               // "Title" - separate field, often empty in TCGPlayer exports
   ],
   number: [
     /^number$/i,
@@ -65,10 +68,29 @@ const HEADER_PATTERNS = {
     /^market\s*price$/i,
     /^price$/i,
   ],
+  directLow: [
+    /^tcg\s*direct\s*low$/i,
+    /^direct\s*low$/i,
+  ],
+  lowWithShipping: [
+    /^tcg\s*low\s*price\s*with\s*shipping$/i,
+    /^low\s*with\s*shipping$/i,
+  ],
+  lowPrice: [
+    /^tcg\s*low\s*price$/i,
+    /^low\s*price$/i,
+  ],
   quantity: [
     /^total\s*quantity$/i,
     /^quantity$/i,
     /^qty$/i,
+  ],
+  addQuantity: [
+    /^add\s*to\s*quantity$/i,
+  ],
+  marketplacePrice: [
+    /^tcg\s*marketplace\s*price$/i,
+    /^marketplace\s*price$/i,
   ],
   photoUrl: [
     /^photo\s*url$/i,
@@ -459,33 +481,44 @@ export function parseSmartTcgplayerCsv(csvText: string): SmartParseResult {
   const errors: SmartParseError[] = [];
   let skippedRows = 0;
 
+  console.log('[CSV Parser] Starting data parsing from row', dataStartRow, 'to', allRows.length - 1);
+
   for (let i = dataStartRow; i < allRows.length; i++) {
     const row = allRows[i];
     
     // Skip rows with insufficient data (likely footer/metadata rows)
     const nonEmptyCount = row.filter(cell => cell && cell.trim()).length;
     if (nonEmptyCount < 4) {
+      console.log('[CSV Parser] SKIP row', i, '- insufficient data:', nonEmptyCount, 'cells');
       skippedRows++;
-      continue; // Silently skip sparse rows
+      continue;
     }
     
     // Skip TCGPlayer footer content
     const rowText = row.join(' ').toLowerCase();
     if (rowText.includes('total:') || rowText.includes('prices from') || 
         rowText.includes('market price on') || rowText.includes('tcgplayer.com')) {
+      console.log('[CSV Parser] SKIP row', i, '- footer content');
       skippedRows++;
-      continue; // Silently skip footer rows
+      continue;
     }
     
     try {
       const normalized: Partial<NormalizedCard> = {};
       
-      // Apply mappings
+      // Apply mappings - IMPORTANT: don't overwrite non-empty values with empty ones
       for (const mapping of mappings) {
         if (mapping.sourceIndex >= row.length) continue;
         
         const value = row[mapping.sourceIndex]?.trim() || '';
-        if (!value) continue;
+        if (!value) continue; // Skip empty values
+        
+        // Safeguard: don't overwrite existing non-empty value
+        const existingValue = (normalized as any)[mapping.targetField];
+        if (existingValue && existingValue !== '') {
+          console.log('[CSV Parser] Row', i, '- preserving', mapping.targetField, '=', existingValue, '(skipping empty/later value)');
+          continue;
+        }
         
         switch (mapping.targetField) {
           case 'marketPrice':
@@ -509,6 +542,7 @@ export function parseSmartTcgplayerCsv(csvText: string): SmartParseResult {
         }
       }
       
+      console.log('[CSV Parser] Row', i, 'normalized:', { id: normalized.id, name: normalized.name, set: normalized.set, line: normalized.line });
       // Validate required fields - only report as error if row looked like data
       const missingRequired: string[] = [];
       if (!normalized.id) missingRequired.push('ID');
@@ -569,6 +603,13 @@ export function parseSmartTcgplayerCsv(csvText: string): SmartParseResult {
       skippedRows++;
     }
   }
+
+  console.log('[CSV Parser] FINAL RESULTS:', {
+    parsed: results.length,
+    errors: errors.length,
+    skipped: skippedRows,
+    totalDataRows: allRows.length - dataStartRow
+  });
 
   return {
     data: results,
