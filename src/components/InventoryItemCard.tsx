@@ -107,6 +107,7 @@ export const InventoryItemCard = memo(({
     
     setIsSavingQty(true);
     try {
+      // First update the database
       const { error } = await supabase
         .from('intake_items')
         .update({ quantity: newQty })
@@ -114,7 +115,29 @@ export const InventoryItemCard = memo(({
       
       if (error) throw error;
       
-      toast.success(`Quantity updated to ${newQty}`);
+      // If item is synced to Shopify, also update Shopify inventory
+      if (item.shopify_product_id && item.shopify_inventory_item_id) {
+        try {
+          const { data, error: syncError } = await supabase.functions.invoke('v2-shopify-set-inventory', {
+            body: { item_id: item.id, quantity: newQty }
+          });
+          
+          if (syncError) {
+            console.error('Shopify sync error:', syncError);
+            toast.warning(`Quantity updated locally, but Shopify sync failed: ${syncError.message}`);
+          } else if (data?.synced_to_shopify) {
+            toast.success(`Quantity updated to ${newQty} (synced to Shopify)`);
+          } else {
+            toast.success(`Quantity updated to ${newQty}`);
+          }
+        } catch (syncErr: any) {
+          console.error('Shopify sync error:', syncErr);
+          toast.warning(`Quantity updated locally, but Shopify sync failed`);
+        }
+      } else {
+        toast.success(`Quantity updated to ${newQty}`);
+      }
+      
       setIsEditingQty(false);
       
       // Invalidate queries to refresh the data
