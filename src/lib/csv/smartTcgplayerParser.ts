@@ -494,10 +494,13 @@ export function parseSmartTcgplayerCsv(csvText: string): SmartParseResult {
       continue;
     }
     
-    // Skip TCGPlayer footer content
+    // Skip TCGPlayer footer content - be specific to avoid matching URLs
     const rowText = row.join(' ').toLowerCase();
-    if (rowText.includes('total:') || rowText.includes('prices from') || 
-        rowText.includes('market price on') || rowText.includes('tcgplayer.com')) {
+    // Only skip if it's actual footer text, not URLs containing "tcgplayer.com"
+    const isFooter = (rowText.includes('total:') && !rowText.includes('http')) || 
+                     rowText.includes('prices from tcgplayer') || 
+                     rowText.includes('market price on');
+    if (isFooter) {
       console.log('[CSV Parser] SKIP row', i, '- footer content');
       skippedRows++;
       continue;
