@@ -45,7 +45,7 @@ export default function PulledItemsFilter() {
   const [selectedExcludeTags, setSelectedExcludeTags] = useState<string[]>([]);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [availableTags, setAvailableTags] = useState<string[]>([]);
-  const [dateFilter, setDateFilter] = useState<DateFilterType>(null);
+  const [dateFilter, setDateFilter] = useState<DateFilterType>('today');
   const [typeFilter, setTypeFilter] = useState<TypeFilterType>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [availableCategories, setAvailableCategories] = useState<string[]>([]);
@@ -245,9 +245,9 @@ export default function PulledItemsFilter() {
 
     if (dateFilter) {
       filtered = filtered.filter(item => {
-        if (!item.pushed_at) return false;
+        if (!item.created_at) return false;
         
-        const pushedDate = new Date(item.pushed_at);
+        const createdDate = new Date(item.created_at);
         const now = new Date();
         const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         const yesterday = new Date(today);
@@ -255,19 +255,19 @@ export default function PulledItemsFilter() {
         
         switch (dateFilter) {
           case 'today':
-            return pushedDate >= today;
+            return createdDate >= today;
           case 'yesterday':
             const tomorrowStart = new Date(today);
             tomorrowStart.setDate(tomorrowStart.getDate() + 1);
-            return pushedDate >= yesterday && pushedDate < tomorrowStart;
+            return createdDate >= yesterday && createdDate < tomorrowStart;
           case '7days':
             const sevenDaysAgo = new Date(today);
             sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-            return pushedDate >= sevenDaysAgo;
+            return createdDate >= sevenDaysAgo;
           case '30days':
             const thirtyDaysAgo = new Date(today);
             thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-            return pushedDate >= thirtyDaysAgo;
+            return createdDate >= thirtyDaysAgo;
           default:
             return true;
         }
