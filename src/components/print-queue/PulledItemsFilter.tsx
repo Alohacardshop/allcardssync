@@ -75,6 +75,9 @@ export default function PulledItemsFilter() {
   // Testing mode - don't mark as printed when disabled
   const [markAsPrinted, setMarkAsPrinted] = useState(false);
 
+  // Shift+select: track last selected index for range selection
+  const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
+
   // Print progress dialog state
   const [showProgressDialog, setShowProgressDialog] = useState(false);
   const [printProgressItems, setPrintProgressItems] = useState<PrintProgressItem[]>([]);
@@ -105,6 +108,7 @@ export default function PulledItemsFilter() {
   useEffect(() => {
     filterItems();
     setSelectedItems(new Set());
+    setLastSelectedIndex(null);
   }, [searchTerm, selectedIncludeTags, selectedExcludeTags, dateFilter, allItems]);
 
   const fetchTemplates = async () => {
@@ -310,14 +314,28 @@ export default function PulledItemsFilter() {
     }
   };
 
-  const handleSelectItem = (itemId: string, checked: boolean) => {
+  const handleSelectItem = (itemId: string, checked: boolean, index: number, isShiftKey: boolean) => {
     const newSelected = new Set(selectedItems);
-    if (checked) {
-      newSelected.add(itemId);
+    
+    if (isShiftKey && lastSelectedIndex !== null && checked) {
+      // Shift+click: select range from last selected to current
+      const start = Math.min(lastSelectedIndex, index);
+      const end = Math.max(lastSelectedIndex, index);
+      
+      for (let i = start; i <= end; i++) {
+        newSelected.add(items[i].id);
+      }
     } else {
-      newSelected.delete(itemId);
+      // Normal click: toggle single item
+      if (checked) {
+        newSelected.add(itemId);
+      } else {
+        newSelected.delete(itemId);
+      }
     }
+    
     setSelectedItems(newSelected);
+    setLastSelectedIndex(index);
   };
 
   const isAllSelected = items.length > 0 && selectedItems.size === items.length;
@@ -806,12 +824,13 @@ export default function PulledItemsFilter() {
 
       {/* Items List - Using Extracted ItemCard Component */}
       <div className="grid gap-4">
-        {items.map((item) => (
+        {items.map((item, index) => (
           <ItemCard
             key={item.id}
             item={item}
+            index={index}
             isSelected={selectedItems.has(item.id)}
-            onSelect={(checked) => handleSelectItem(item.id, checked)}
+            onSelect={(checked, isShiftKey) => handleSelectItem(item.id, checked, index, isShiftKey)}
             onViewDetails={() => setDetailItem(item)}
             getShopifyAdminUrl={getShopifyAdminUrl}
           />

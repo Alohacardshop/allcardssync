@@ -19,14 +19,16 @@ interface ItemCardProps {
     shopify_snapshot?: { tags?: string[] };
     source_payload?: { tags?: string[] };
   };
+  index: number;
   isSelected: boolean;
-  onSelect: (checked: boolean) => void;
+  onSelect: (checked: boolean, isShiftKey: boolean) => void;
   onViewDetails: () => void;
   getShopifyAdminUrl: (item: any) => string | null;
 }
 
 export function ItemCard({
   item,
+  index,
   isSelected,
   onSelect,
   onViewDetails,
@@ -45,7 +47,10 @@ export function ItemCard({
         <div className="flex items-start gap-3">
           <Checkbox
             checked={isSelected}
-            onCheckedChange={(checked) => onSelect(checked as boolean)}
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelect(!isSelected, e.shiftKey);
+            }}
             className="mt-1"
           />
           <div className="flex-1 flex items-start justify-between">
