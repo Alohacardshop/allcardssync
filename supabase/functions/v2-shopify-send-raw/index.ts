@@ -2,6 +2,46 @@ import { corsHeaders } from '../_shared/cors.ts'
 import { requireAuth, requireRole, requireStoreAccess } from '../_shared/auth.ts'
 import { SendRawSchema, SendRawInput } from '../_shared/validation.ts'
 
+// Helper function to fetch image and convert to base64 for Shopify upload
+async function fetchImageAsBase64(imageUrl: string): Promise<{ attachment: string; filename: string } | null> {
+  try {
+    console.log('DEBUG: Fetching image from:', imageUrl)
+    const response = await fetch(imageUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; ShopifySync/1.0)'
+      }
+    })
+    
+    if (!response.ok) {
+      console.warn(`Failed to fetch image: ${response.status} ${response.statusText}`)
+      return null
+    }
+    
+    const contentType = response.headers.get('content-type') || 'image/jpeg'
+    const arrayBuffer = await response.arrayBuffer()
+    const uint8Array = new Uint8Array(arrayBuffer)
+    
+    // Convert to base64
+    let binary = ''
+    for (let i = 0; i < uint8Array.length; i++) {
+      binary += String.fromCharCode(uint8Array[i])
+    }
+    const base64 = btoa(binary)
+    
+    // Determine file extension from content type
+    let extension = 'jpg'
+    if (contentType.includes('png')) extension = 'png'
+    else if (contentType.includes('gif')) extension = 'gif'
+    else if (contentType.includes('webp')) extension = 'webp'
+    
+    console.log('DEBUG: Successfully fetched image, size:', uint8Array.length, 'bytes')
+    return { attachment: base64, filename: `product.${extension}` }
+  } catch (error) {
+    console.warn('Failed to fetch image for base64 encoding:', error)
+    return null
+  }
+}
+
 // Helper function to generate barcode for raw cards
 // Priority: Certificate number (if graded) > TCGPlayer ID > SKU
 function generateBarcodeForRawCard(item: any): string {
@@ -109,8 +149,11 @@ Deno.serve(async (req) => {
     description += `\n\nRaw ${brandTitle} ${subject}`
     if (cardNumber) description += ` #${cardNumber}`
     if (condition) description += ` - ${condition} Condition`
-
-    // Check for existing products with the same SKU first
+    
+    // Add sample image disclaimer if image is present
+    if (imageUrl) {
+      description += `\n\n<p><em>⚠️ NOTE: Product image is for reference only and may not represent the exact item. The card you receive will be in the stated condition but actual appearance may vary.</em></p>`
+    }
     const existingResponse = await fetch(`https://${domain}/admin/api/2024-07/products.json?fields=id,variants&limit=250`, {
       method: 'GET',
       headers: {
@@ -370,6 +413,12 @@ Deno.serve(async (req) => {
       purchaseLocation ? `Purchased: ${purchaseLocation}` : null
     ].filter(Boolean))];
 
+    // Fetch image and convert to base64 for Shopify upload (avoids hotlink blocking)
+    let imageData: { attachment: string; filename: string } | null = null
+    if (imageUrl) {
+      imageData = await fetchImageAsBase64(imageUrl)
+    }
+
     // Prepare Shopify product data (without metafields - will add them separately)
     const productData = {
       product: {
@@ -391,10 +440,14 @@ Deno.serve(async (req) => {
           weight: intakeItem.product_weight || 3,
           weight_unit: 'oz'
         }],
-        images: imageUrl ? [{
+        images: imageData ? [{
+          attachment: imageData.attachment,
+          filename: imageData.filename,
+          alt: title
+        }] : (imageUrl ? [{
           src: imageUrl,
           alt: title
-        }] : []
+        }] : [])
       }
     }
 
