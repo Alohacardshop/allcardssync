@@ -152,6 +152,7 @@ Deno.serve(async (req) => {
     if (psaUrl) description += `\n\n${gradingCompany} Certificate: ${psaUrl}`
 
     // Check if this is a comic
+    const isComic = intakeItem.main_category === 'comics' || 
                     intakeItem.catalog_snapshot?.type === 'graded_comic'
 
     // Check if product already exists in Shopify
