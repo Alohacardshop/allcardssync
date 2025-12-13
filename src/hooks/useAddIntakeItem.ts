@@ -125,7 +125,7 @@ export const useAddIntakeItem = () => {
         }
       }
 
-      const { data, error } = await supabase.rpc('create_raw_intake_item', params);
+      const { data, error } = await supabase.rpc('create_raw_intake_item', params as any);
 
       if (error) {
         // Check if this is a duplicate key constraint violation (race condition)
