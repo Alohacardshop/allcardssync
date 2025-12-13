@@ -64,7 +64,8 @@ export const useCurrentBatch = ({ storeKey, locationGid, userId }: CurrentBatchP
       logger.logInfo('Active lot found', { lotId: lot.id, lotNumber: lot.lot_number });
       console.log('[useCurrentBatch] ✅ Active lot found:', { lotId: lot.id, lotNumber: lot.lot_number, totalItems: lot.total_items });
 
-      // Get items from lot
+      // Get items from lot - filter by lot ownership (lot.created_by), not item.created_by
+      // This ensures all items in the user's active lot are visible regardless of who originally created the item
       const { data: items, error: itemsError } = await supabase
         .from('intake_items')
         .select('*')
