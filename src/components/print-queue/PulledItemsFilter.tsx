@@ -103,13 +103,13 @@ export default function PulledItemsFilter() {
       setItems([]);
       setLoading(false);
     }
-  }, [assignedStore, selectedLocation, showPrintedItems, typeFilter, categoryFilter, dateFilter]);
+  }, [assignedStore, selectedLocation, showPrintedItems, typeFilter, categoryFilter, dateFilter, selectedIncludeTags, selectedExcludeTags]);
 
   useEffect(() => {
     filterItems();
     setSelectedItems(new Set());
     setLastSelectedIndex(null);
-  }, [searchTerm, selectedIncludeTags, selectedExcludeTags, allItems]);
+  }, [searchTerm, allItems]);
 
   const fetchTemplates = async () => {
     try {
@@ -224,6 +224,23 @@ export default function PulledItemsFilter() {
         }
       }
 
+      // Apply tag filters at database level using JSONB containment
+      // Tags are stored in shopify_snapshot->'tags' as an array
+      if (selectedIncludeTags.length > 0) {
+        // Each include tag must be present - use AND logic with contains
+        for (const tag of selectedIncludeTags) {
+          query = query.contains('shopify_snapshot', { tags: [tag] });
+        }
+      }
+
+      if (selectedExcludeTags.length > 0) {
+        // Exclude items that have any of the excluded tags
+        // Use NOT contains for each excluded tag
+        for (const tag of selectedExcludeTags) {
+          query = query.not('shopify_snapshot', 'cs', JSON.stringify({ tags: [tag] }));
+        }
+      }
+
       const { data, error } = await query.limit(QUERY_LIMIT);
 
       // Get total count with same filters
@@ -252,6 +269,18 @@ export default function PulledItemsFilter() {
           const todayForCount = new Date();
           todayForCount.setHours(0, 0, 0, 0);
           countQuery = countQuery.lt('created_at', todayForCount.toISOString());
+        }
+      }
+
+      // Apply tag filters to count query
+      if (selectedIncludeTags.length > 0) {
+        for (const tag of selectedIncludeTags) {
+          countQuery = countQuery.contains('shopify_snapshot', { tags: [tag] });
+        }
+      }
+      if (selectedExcludeTags.length > 0) {
+        for (const tag of selectedExcludeTags) {
+          countQuery = countQuery.not('shopify_snapshot', 'cs', JSON.stringify({ tags: [tag] }));
         }
       }
 
@@ -294,32 +323,7 @@ export default function PulledItemsFilter() {
       );
     }
 
-    // Note: Date filtering is now applied at the database level in fetchAllItems
-
-    if (selectedIncludeTags.length > 0 || selectedExcludeTags.length > 0) {
-      filtered = filtered.filter(item => {
-        const itemTags = [
-          ...((item.shopify_snapshot as any)?.tags || []),
-          ...((item.source_payload as any)?.tags || []),
-        ].filter(Boolean).map((t: string) => t.toLowerCase().trim());
-
-        if (selectedExcludeTags.length > 0) {
-          const hasExcluded = selectedExcludeTags.some(tag => 
-            itemTags.includes(tag.toLowerCase().trim())
-          );
-          if (hasExcluded) return false;
-        }
-
-        if (selectedIncludeTags.length > 0) {
-          const hasAllIncluded = selectedIncludeTags.every(tag => 
-            itemTags.includes(tag.toLowerCase().trim())
-          );
-          if (!hasAllIncluded) return false;
-        }
-
-        return true;
-      });
-    }
+    // Note: Date and tag filtering are now applied at the database level in fetchAllItems
 
     setItems(filtered);
   };
