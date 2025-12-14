@@ -73,7 +73,7 @@ export default function PulledItemsFilter() {
   const [isMarkingUnprinted, setIsMarkingUnprinted] = useState(false);
 
   // Testing mode - don't mark as printed when disabled
-  const [markAsPrinted, setMarkAsPrinted] = useState(false);
+  const [markAsPrinted, setMarkAsPrinted] = useState(true);
 
   // Shift+select: track last selected index for range selection
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
