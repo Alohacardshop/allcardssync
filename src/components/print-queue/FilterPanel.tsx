@@ -117,11 +117,14 @@ export function FilterPanel({
                     <Label htmlFor="show-printed" className="text-sm font-normal cursor-pointer">
                       Include Printed
                     </Label>
+                    {!showPrintedItems && (
+                      <span className="text-xs text-amber-500">(hiding printed items)</span>
+                    )}
                   </div>
                 </TooltipTrigger>
                 <TooltipContent>
                   <p>Items are marked as printed after printing.</p>
-                  <p className="text-xs text-muted-foreground">Turn on to reprint labels.</p>
+                  <p className="text-xs text-muted-foreground">Turn on to see ALL items including already printed ones.</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
