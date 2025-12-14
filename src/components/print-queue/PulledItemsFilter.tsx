@@ -730,7 +730,7 @@ export default function PulledItemsFilter() {
         itemIds.push(item.id);
       }
 
-      if (itemIds.length > 0) {
+      if (markAsPrinted && itemIds.length > 0) {
         await supabase
           .from('intake_items')
           .update({ printed_at: new Date().toISOString() })
