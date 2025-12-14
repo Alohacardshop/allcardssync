@@ -23,28 +23,34 @@ export function useBatchesList({ storeKey, locationGid }: UseBatchesListProps) {
       if (!lots || lots.length === 0) return [];
 
       // Get unprinted counts for each lot
+      // Items that have been synced (removed_from_batch_at IS NOT NULL) but not yet printed
       const lotIds = lots.map(lot => lot.id);
       const { data: itemCounts, error: countsError } = await supabase
         .from('intake_items')
         .select('lot_id')
         .in('lot_id', lotIds)
         .is('deleted_at', null)
-        .not('removed_from_batch_at', 'is', null)
         .is('printed_at', null);
 
       if (countsError) throw countsError;
 
       // Count items per lot
       const unprintedCounts = (itemCounts || []).reduce((acc, item) => {
-        acc[item.lot_id] = (acc[item.lot_id] || 0) + 1;
+        if (item.lot_id) {
+          acc[item.lot_id] = (acc[item.lot_id] || 0) + 1;
+        }
         return acc;
       }, {} as Record<string, number>);
 
-      // Merge counts with lots
-      return lots.map(lot => ({
-        ...lot,
-        unprinted_count: unprintedCounts[lot.id] || 0,
-      }));
+      // Merge counts with lots and filter to only show batches with items
+      const batchesWithItems = lots
+        .map(lot => ({
+          ...lot,
+          unprinted_count: unprintedCounts[lot.id] || 0,
+        }))
+        .filter(lot => lot.unprinted_count > 0 || (lot.total_items && lot.total_items > 0));
+
+      return batchesWithItems;
     },
     enabled: Boolean(storeKey && locationGid),
     staleTime: 60000, // 1 minute
