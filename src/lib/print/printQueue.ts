@@ -143,9 +143,25 @@ export class PrintQueue {
 
   private withQty(zpl: string, qty: number, usePQ: boolean) {
     if (qty <= 1) return zpl;
-    return usePQ
-      ? zpl.replace(/\^PQ(\d+)(?=[^\^]*\^XZ\b)/, `^PQ${qty}`)
-      : Array.from({ length: qty }, () => zpl).join("\n");
+    if (!usePQ) {
+      // Repeat the ZPL for each copy
+      return Array.from({ length: qty }, () => zpl).join("\n");
+    }
+    
+    // Use ^PQ command for copies - first try to replace existing ^PQ
+    const existingPQ = zpl.match(/\^PQ\d+/);
+    if (existingPQ) {
+      return zpl.replace(/\^PQ\d+[,\d\w]*/, `^PQ${qty}`);
+    }
+    
+    // No existing ^PQ, inject before ^XZ
+    const xzIndex = zpl.lastIndexOf('^XZ');
+    if (xzIndex === -1) {
+      // No ^XZ found, just append
+      return zpl + `\n^PQ${qty}`;
+    }
+    
+    return zpl.substring(0, xzIndex) + `^PQ${qty}\n^XZ`;
   }
 
   private async sendWithRetry(payload: string, batchItems: QueueItem[]): Promise<void> {
