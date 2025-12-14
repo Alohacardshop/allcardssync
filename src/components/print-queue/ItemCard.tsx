@@ -56,13 +56,12 @@ export function ItemCard({
           <div className="flex-1 flex items-start justify-between">
             <div className="space-y-1">
               <div className="font-medium">
-                {item.subject || item.brand_title || 'Untitled'}
+                {item.subject && item.brand_title 
+                  ? `${item.brand_title} - ${item.subject}`
+                  : item.subject || item.brand_title || 'Untitled'}
               </div>
-              {item.subject && item.brand_title && (
-                <div className="text-xs text-muted-foreground">{item.brand_title}</div>
-              )}
               <div className="text-sm text-muted-foreground">
-                SKU: {item.sku} • {item.main_category}
+                SKU: {item.sku} {item.main_category && `• ${item.main_category}`}
               </div>
               {tags.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-2">
