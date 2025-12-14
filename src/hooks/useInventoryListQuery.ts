@@ -105,11 +105,14 @@ export function useInventoryListQuery(filters: InventoryFilters) {
       } else if (statusFilter === 'out-of-stock') {
         query = query.is('deleted_at', null).eq('quantity', 0);
       } else if (statusFilter === 'sold') {
-        query = query.not('sold_at', 'is', null);
+        query = query.is('deleted_at', null).not('sold_at', 'is', null);
       } else if (statusFilter === 'deleted') {
         query = query.not('deleted_at', 'is', null);
       } else if (statusFilter === 'errors') {
-        query = query.eq('shopify_sync_status', 'error');
+        query = query.is('deleted_at', null).eq('shopify_sync_status', 'error');
+      } else if (statusFilter === 'all') {
+        // "All" should still exclude deleted items by default
+        query = query.is('deleted_at', null);
       }
 
       // Apply batch filter
