@@ -492,8 +492,8 @@ export default function PulledItemsFilter() {
 
     try {
       const vars = {
-        CARDNAME: item.subject || item.brand_title || '',
-        SETNAME: item.sub_category || '',
+        CARDNAME: item.subject || '',
+        SETNAME: item.brand_title || '',
         CARDNUMBER: item.card_number || '',
         CONDITION: item.variant || '',
         PRICE: item.price ? `$${Number(item.price).toFixed(2)}` : '',
@@ -585,8 +585,8 @@ export default function PulledItemsFilter() {
           if (!item) continue;
 
           const vars = {
-            CARDNAME: item.subject || item.brand_title || '',
-            SETNAME: item.sub_category || '',
+            CARDNAME: item.subject || '',
+            SETNAME: item.brand_title || '',
             CARDNUMBER: item.card_number || '',
             CONDITION: item.variant || '',
             PRICE: item.price ? `$${Number(item.price).toFixed(2)}` : '',
@@ -712,8 +712,8 @@ export default function PulledItemsFilter() {
 
       for (const item of batchItems) {
         const vars = {
-          CARDNAME: item.subject || item.brand_title || '',
-          SETNAME: item.sub_category || '',
+          CARDNAME: item.subject || '',
+          SETNAME: item.brand_title || '',
           CARDNUMBER: item.card_number || '',
           CONDITION: item.variant || '',
           PRICE: item.price ? `$${Number(item.price).toFixed(2)}` : '',
