@@ -103,13 +103,13 @@ export default function PulledItemsFilter() {
       setItems([]);
       setLoading(false);
     }
-  }, [assignedStore, selectedLocation, showPrintedItems, typeFilter, categoryFilter]);
+  }, [assignedStore, selectedLocation, showPrintedItems, typeFilter, categoryFilter, dateFilter]);
 
   useEffect(() => {
     filterItems();
     setSelectedItems(new Set());
     setLastSelectedIndex(null);
-  }, [searchTerm, selectedIncludeTags, selectedExcludeTags, dateFilter, allItems]);
+  }, [searchTerm, selectedIncludeTags, selectedExcludeTags, allItems]);
 
   const fetchTemplates = async () => {
     try {
@@ -153,6 +153,31 @@ export default function PulledItemsFilter() {
     }
   };
 
+  const getDateFilterDate = (filter: DateFilterType): Date | null => {
+    if (!filter) return null;
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    
+    switch (filter) {
+      case 'today':
+        return today;
+      case 'yesterday':
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        return yesterday;
+      case '7days':
+        const sevenDaysAgo = new Date(today);
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        return sevenDaysAgo;
+      case '30days':
+        const thirtyDaysAgo = new Date(today);
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        return thirtyDaysAgo;
+      default:
+        return null;
+    }
+  };
+
   const fetchAllItems = async () => {
     if (!assignedStore) {
       setAllItems([]);
@@ -186,9 +211,22 @@ export default function PulledItemsFilter() {
         query = query.or(`main_category.ilike.${categoryFilter},category.ilike.${categoryFilter},sub_category.ilike.${categoryFilter}`);
       }
 
+      // Apply date filter at database level
+      const dateFilterDate = getDateFilterDate(dateFilter);
+      if (dateFilterDate) {
+        query = query.gte('created_at', dateFilterDate.toISOString());
+        
+        // For "yesterday" filter, also add upper bound
+        if (dateFilter === 'yesterday') {
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          query = query.lt('created_at', today.toISOString());
+        }
+      }
+
       const { data, error } = await query.limit(QUERY_LIMIT);
 
-      // Get total count
+      // Get total count with same filters
       let countQuery = supabase
         .from('intake_items')
         .select('*', { count: 'exact', head: true })
@@ -206,6 +244,15 @@ export default function PulledItemsFilter() {
       }
       if (categoryFilter !== 'all') {
         countQuery = countQuery.or(`main_category.ilike.${categoryFilter},category.ilike.${categoryFilter},sub_category.ilike.${categoryFilter}`);
+      }
+      // Apply date filter to count query as well
+      if (dateFilterDate) {
+        countQuery = countQuery.gte('created_at', dateFilterDate.toISOString());
+        if (dateFilter === 'yesterday') {
+          const todayForCount = new Date();
+          todayForCount.setHours(0, 0, 0, 0);
+          countQuery = countQuery.lt('created_at', todayForCount.toISOString());
+        }
       }
 
       const { count } = await countQuery;
@@ -247,36 +294,7 @@ export default function PulledItemsFilter() {
       );
     }
 
-    if (dateFilter) {
-      filtered = filtered.filter(item => {
-        if (!item.created_at) return false;
-        
-        const createdDate = new Date(item.created_at);
-        const now = new Date();
-        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        const yesterday = new Date(today);
-        yesterday.setDate(yesterday.getDate() - 1);
-        
-        switch (dateFilter) {
-          case 'today':
-            return createdDate >= today;
-          case 'yesterday':
-            const tomorrowStart = new Date(today);
-            tomorrowStart.setDate(tomorrowStart.getDate() + 1);
-            return createdDate >= yesterday && createdDate < tomorrowStart;
-          case '7days':
-            const sevenDaysAgo = new Date(today);
-            sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-            return createdDate >= sevenDaysAgo;
-          case '30days':
-            const thirtyDaysAgo = new Date(today);
-            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-            return createdDate >= thirtyDaysAgo;
-          default:
-            return true;
-        }
-      });
-    }
+    // Note: Date filtering is now applied at the database level in fetchAllItems
 
     if (selectedIncludeTags.length > 0 || selectedExcludeTags.length > 0) {
       filtered = filtered.filter(item => {
