@@ -395,6 +395,9 @@ export const InventoryItemCard = memo(({
           <div className="flex items-center space-x-1">
             <Tag className="h-3 w-3 text-muted-foreground" />
             <span>{item.type || 'Raw'}</span>
+            {item.variant && (
+              <span className="text-muted-foreground">• {item.variant}</span>
+            )}
           </div>
         </div>
 
