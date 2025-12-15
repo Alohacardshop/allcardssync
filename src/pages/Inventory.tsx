@@ -210,7 +210,7 @@ const Inventory = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'out-of-stock' | 'sold' | 'deleted' | 'errors'>('active');
-  const [typeFilter, setTypeFilter] = useState<'all' | 'raw' | 'graded'>('all');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'raw' | 'graded' | 'sealed'>('all');
   const [printStatusFilter, setPrintStatusFilter] = useState<'all' | 'printed' | 'not-printed'>('all');
   const [showSoldItems, setShowSoldItems] = useState(false);
   const [batchFilter, setBatchFilter] = useState<'all' | 'in_batch' | 'removed_from_batch' | 'current_batch'>(() => {
@@ -1264,6 +1264,7 @@ const Inventory = () => {
                       <SelectItem value="all">All Types</SelectItem>
                       <SelectItem value="raw">Raw Only</SelectItem>
                       <SelectItem value="graded">Graded Only</SelectItem>
+                      <SelectItem value="sealed">📦 Sealed Only</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
