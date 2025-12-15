@@ -318,14 +318,32 @@ export const InventoryItemCard = memo(({
       
       <CardContent className="pt-0 space-y-3">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
-          <div className="flex items-center space-x-1">
+          <div className="flex items-center space-x-1 flex-wrap gap-y-1">
             <DollarSign className="h-3 w-3 text-muted-foreground" />
             <span>${parseFloat(String(item.price || 0)).toFixed(2)}</span>
-            <EbayPriceComparison
-              currentPrice={item.price || 0}
-              ebayData={item.ebay_price_check || undefined}
-              onCheck={handleCheckEbayPrice}
-            />
+            {item.ebay_price_check ? (
+              <span className="flex items-center space-x-1 text-blue-600">
+                <span className="text-muted-foreground">|</span>
+                <span className="font-medium">
+                  eBay: ${Number(item.ebay_price_check.ebay_average || 0).toFixed(2)}
+                </span>
+                <span className={
+                  Number(item.ebay_price_check.difference_percent || 0) > 0 
+                    ? "text-green-600" 
+                    : "text-red-600"
+                }>
+                  ({Number(item.ebay_price_check.difference_percent || 0) > 0 ? '+' : ''}
+                  {Number(item.ebay_price_check.difference_percent || 0).toFixed(0)}%)
+                </span>
+              </span>
+            ) : (
+              <button
+                onClick={handleCheckEbayPrice}
+                className="text-blue-500 hover:text-blue-700 hover:underline"
+              >
+                Check eBay
+              </button>
+            )}
           </div>
           <div className="flex items-center space-x-1">
             <Package className="h-3 w-3 text-muted-foreground" />
