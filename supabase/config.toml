@@ -193,3 +193,7 @@ verify_jwt = false
 [functions.ebay-sync-policies]
 verify_jwt = true
 
+# eBay sealed product nightly price check (cron job - no JWT)
+[functions.ebay-sealed-price-check]
+verify_jwt = false
+

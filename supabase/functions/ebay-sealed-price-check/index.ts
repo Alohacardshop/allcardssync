@@ -6,11 +6,10 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// In-memory token cache (reused across function invocations)
+// In-memory token cache
 let cachedToken: { token: string; expiresAt: number } | null = null;
 
 async function getEbayOAuthToken(clientId: string, clientSecret: string): Promise<string> {
-  // Check if we have a valid cached token
   if (cachedToken && cachedToken.expiresAt > Date.now()) {
     console.log('[eBay OAuth] Using cached token');
     return cachedToken.token;
@@ -36,31 +35,13 @@ async function getEbayOAuthToken(clientId: string, clientSecret: string): Promis
   
   const data = await response.json();
   
-  // Cache token (tokens typically expire after 2 hours)
-  // Set expiry 5 minutes before actual expiry for safety
   cachedToken = {
     token: data.access_token,
     expiresAt: Date.now() + ((data.expires_in - 300) * 1000)
   };
   
-  console.log('[eBay OAuth] New token cached, expires in', data.expires_in, 'seconds');
+  console.log('[eBay OAuth] New token cached');
   return data.access_token;
-}
-
-interface EbayPriceCheckRequest {
-  searchQuery: string;
-  itemId: string;
-  currentPrice: number;
-}
-
-interface EbayPriceCheckResponse {
-  ebayAverage: number;
-  priceCount: number;
-  pricesUsed: number[];
-  rawPrices: number[];
-  outliersRemoved: number[];
-  currentPrice: number;
-  differencePercent: number;
 }
 
 function removeOutliers(prices: number[]): {
@@ -68,25 +49,25 @@ function removeOutliers(prices: number[]): {
   used: number[];
   outliers: number[];
 } {
+  if (prices.length === 0) {
+    return { average: 0, used: [], outliers: [] };
+  }
+  
   if (prices.length <= 3) {
     const average = prices.reduce((a, b) => a + b, 0) / prices.length;
     return { average, used: prices, outliers: [] };
   }
 
-  // Calculate initial average
   const initialAvg = prices.reduce((a, b) => a + b, 0) / prices.length;
-
-  // Remove outliers (±30%)
   const threshold = initialAvg * 0.30;
+  
   const filtered = prices.filter(p =>
     p >= (initialAvg - threshold) &&
     p <= (initialAvg + threshold)
   );
 
-  // Keep at least 3 prices
   const usedPrices = filtered.length >= 3 ? filtered : prices.slice(0, 3);
   const outliers = prices.filter(p => !usedPrices.includes(p));
-
   const finalAvg = usedPrices.reduce((a, b) => a + b, 0) / usedPrices.length;
 
   return { average: finalAvg, used: usedPrices, outliers };
@@ -123,7 +104,6 @@ async function fetchEbaySoldListings(searchQuery: string, oauthToken: string): P
 
   const data = await response.json();
   
-  // Extract sold prices from response
   const searchResult = data.findCompletedItemsResponse?.[0]?.searchResult?.[0];
   if (!searchResult || searchResult['@count'] === '0') {
     return [];
@@ -145,6 +125,119 @@ async function fetchEbaySoldListings(searchQuery: string, oauthToken: string): P
   return prices;
 }
 
+// Generate search query for sealed products - prioritize barcode/UPC
+function generateSealedSearchQuery(item: any): string {
+  // If SKU looks like a barcode (10-14 digits), use it directly
+  if (item.sku && /^\d{10,14}$/.test(item.sku)) {
+    return item.sku;
+  }
+  
+  // Fall back to product name
+  const parts: string[] = [];
+  if (item.brand_title) parts.push(item.brand_title);
+  if (item.subject) parts.push(item.subject);
+  
+  return parts.join(' ').trim();
+}
+
+async function processItems(supabase: any, oauthToken: string) {
+  console.log('[Sealed Price Check] Starting batch processing');
+  
+  // Query sealed items with quantity > 1
+  const { data: items, error } = await supabase
+    .from('intake_items')
+    .select('id, sku, brand_title, subject, price, shopify_snapshot')
+    .gt('quantity', 1)
+    .is('deleted_at', null)
+    .limit(500);
+
+  if (error) {
+    console.error('[Sealed Price Check] Query error:', error);
+    throw error;
+  }
+
+  // Filter for sealed items (check tags in shopify_snapshot)
+  const sealedItems = (items || []).filter((item: any) => {
+    const tags = item.shopify_snapshot?.tags || '';
+    return tags.toLowerCase().includes('sealed');
+  });
+
+  console.log(`[Sealed Price Check] Found ${sealedItems.length} sealed items with quantity > 1`);
+
+  let processed = 0;
+  let errors = 0;
+  const results: any[] = [];
+
+  for (const item of sealedItems) {
+    try {
+      const searchQuery = generateSealedSearchQuery(item);
+      
+      if (!searchQuery) {
+        console.log(`[Sealed Price Check] Skipping item ${item.id} - no search query`);
+        continue;
+      }
+
+      console.log(`[Sealed Price Check] Checking item ${item.id}: "${searchQuery}"`);
+      
+      const rawPrices = await fetchEbaySoldListings(searchQuery, oauthToken);
+      
+      if (rawPrices.length === 0) {
+        console.log(`[Sealed Price Check] No sales found for item ${item.id}`);
+        continue;
+      }
+
+      const { average, used, outliers } = removeOutliers(rawPrices);
+      const currentPrice = item.price || 0;
+      const differencePercent = currentPrice > 0 
+        ? ((currentPrice - average) / average) * 100 
+        : 0;
+
+      // Update the database
+      await supabase
+        .from('intake_items')
+        .update({
+          ebay_price_check: {
+            checked_at: new Date().toISOString(),
+            ebay_average: Math.round(average * 100) / 100,
+            price_count: used.length,
+            current_price: currentPrice,
+            difference_percent: Math.round(differencePercent * 100) / 100,
+            raw_prices: rawPrices,
+            outliers_removed: outliers,
+            prices_used: used,
+            search_query: searchQuery,
+          },
+        })
+        .eq('id', item.id);
+
+      processed++;
+      results.push({
+        itemId: item.id,
+        searchQuery,
+        ebayAverage: Math.round(average * 100) / 100,
+        currentPrice,
+        differencePercent: Math.round(differencePercent * 100) / 100,
+      });
+
+      // Rate limiting: 1 second between requests
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+    } catch (err) {
+      console.error(`[Sealed Price Check] Error processing item ${item.id}:`, err);
+      errors++;
+    }
+  }
+
+  console.log(`[Sealed Price Check] Completed: ${processed} processed, ${errors} errors`);
+  
+  return {
+    totalFound: sealedItems.length,
+    processed,
+    errors,
+    results,
+  };
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -153,81 +246,43 @@ serve(async (req) => {
   try {
     const clientId = Deno.env.get('EBAY_CLIENT_ID');
     const clientSecret = Deno.env.get('EBAY_CLIENT_SECRET');
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     
     if (!clientId || !clientSecret) {
       throw new Error('EBAY_CLIENT_ID and EBAY_CLIENT_SECRET must be configured');
     }
 
-    const { searchQuery, itemId, currentPrice }: EbayPriceCheckRequest = await req.json();
-
-    console.log(`[eBay Price Check] Checking prices for: ${searchQuery}`);
-
-    // Get OAuth token (cached or fresh)
+    const supabase = createClient(supabaseUrl, supabaseKey);
     const oauthToken = await getEbayOAuthToken(clientId, clientSecret);
 
-    // Fetch sold listings from eBay using OAuth
-    const rawPrices = await fetchEbaySoldListings(searchQuery, oauthToken);
+    console.log('[Sealed Price Check] Starting nightly sealed product price check');
 
-    if (rawPrices.length === 0) {
+    // Run processing in background
+    const processPromise = processItems(supabase, oauthToken);
+    
+    // Use waitUntil if available (Supabase Edge Runtime)
+    if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime.waitUntil) {
+      EdgeRuntime.waitUntil(processPromise);
+      
       return new Response(
         JSON.stringify({ 
-          error: 'No sold listings found on eBay',
-          searchQuery 
+          status: 'started',
+          message: 'Sealed price check started in background' 
         }),
-        { 
-          status: 404, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Remove outliers and calculate average
-    const { average, used, outliers } = removeOutliers(rawPrices);
-
-    // Calculate difference percentage
-    const differencePercent = currentPrice > 0 
-      ? ((currentPrice - average) / average) * 100 
-      : 0;
-
-    const result: EbayPriceCheckResponse = {
-      ebayAverage: Math.round(average * 100) / 100,
-      priceCount: used.length,
-      pricesUsed: used,
-      rawPrices,
-      outliersRemoved: outliers,
-      currentPrice,
-      differencePercent: Math.round(differencePercent * 100) / 100,
-    };
-
-    // Update the database with the result
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
-    await supabase
-      .from('intake_items')
-      .update({
-        ebay_price_check: {
-          checked_at: new Date().toISOString(),
-          ebay_average: result.ebayAverage,
-          price_count: result.priceCount,
-          current_price: result.currentPrice,
-          difference_percent: result.differencePercent,
-          raw_prices: result.rawPrices,
-          outliers_removed: result.outliersRemoved,
-          prices_used: result.pricesUsed,
-          search_query: searchQuery,
-        },
-      })
-      .eq('id', itemId);
-
-    console.log(`[eBay Price Check] Updated item ${itemId} with eBay data`);
-
+    // Fallback: wait for completion
+    const result = await processPromise;
+    
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
+    
   } catch (error) {
-    console.error('[eBay Price Check] Error:', error);
+    console.error('[Sealed Price Check] Error:', error);
     return new Response(
       JSON.stringify({ error: error.message }),
       {
