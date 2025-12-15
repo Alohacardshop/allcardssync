@@ -4,11 +4,11 @@ import { supabase } from '@/integrations/supabase/client';
 export interface InventoryFilters {
   storeKey: string;
   locationGid: string;
-  activeTab: 'raw' | 'graded' | 'raw_comics' | 'graded_comics';
+  activeTab: 'raw' | 'graded' | 'raw_comics' | 'graded_comics' | 'sealed';
   statusFilter: 'all' | 'active' | 'out-of-stock' | 'sold' | 'deleted' | 'errors';
   batchFilter: 'all' | 'in_batch' | 'removed_from_batch' | 'current_batch';
   printStatusFilter?: 'all' | 'printed' | 'not-printed';
-  typeFilter?: 'all' | 'raw' | 'graded' | 'sealed';
+  typeFilter?: 'all' | 'raw' | 'graded';
   comicsSubCategory?: string | null;
   searchTerm?: string;
   autoRefreshEnabled?: boolean;
@@ -79,15 +79,12 @@ export function useInventoryListQuery(filters: InventoryFilters) {
         .eq('shopify_location_gid', locationGid);
 
       // Apply type filter (overrides tab-based type filtering when set)
-      if (typeFilter === 'sealed') {
-        // Sealed products: filter by shopify_snapshot tags containing 'sealed'
-        query = query.ilike('shopify_snapshot->>tags', '%sealed%');
-      } else if (typeFilter !== 'all') {
+      if (typeFilter !== 'all') {
         query = query.eq('type', typeFilter === 'raw' ? 'Raw' : 'Graded');
         // Still apply category from tab
         if (activeTab === 'raw_comics' || activeTab === 'graded_comics') {
           query = query.eq('main_category', 'comics');
-        } else {
+        } else if (activeTab !== 'sealed') {
           query = query.or('main_category.is.null,main_category.eq.tcg');
         }
       } else {
@@ -96,6 +93,9 @@ export function useInventoryListQuery(filters: InventoryFilters) {
           query = query.eq('main_category', 'tcg').eq('type', 'Raw');
         } else if (activeTab === 'graded') {
           query = query.eq('type', 'Graded').or('main_category.is.null,main_category.eq.tcg');
+        } else if (activeTab === 'sealed') {
+          // Sealed products: filter by shopify_snapshot tags containing 'sealed'
+          query = query.ilike('shopify_snapshot->>tags', '%sealed%');
         } else if (activeTab === 'raw_comics') {
           query = query.eq('main_category', 'comics').eq('type', 'Raw');
         } else if (activeTab === 'graded_comics') {
