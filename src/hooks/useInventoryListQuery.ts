@@ -8,7 +8,7 @@ export interface InventoryFilters {
   statusFilter: 'all' | 'active' | 'out-of-stock' | 'sold' | 'deleted' | 'errors';
   batchFilter: 'all' | 'in_batch' | 'removed_from_batch' | 'current_batch';
   printStatusFilter?: 'all' | 'printed' | 'not-printed';
-  typeFilter?: 'all' | 'raw' | 'graded';
+  typeFilter?: 'all' | 'raw' | 'graded' | 'sealed';
   comicsSubCategory?: string | null;
   searchTerm?: string;
   autoRefreshEnabled?: boolean;
@@ -69,7 +69,8 @@ export function useInventoryListQuery(filters: InventoryFilters) {
           deleted_at,
           sold_at,
           card_number,
-          ebay_price_check
+          ebay_price_check,
+          shopify_snapshot
         `,
           { count: 'exact' }
         )
@@ -78,7 +79,10 @@ export function useInventoryListQuery(filters: InventoryFilters) {
         .eq('shopify_location_gid', locationGid);
 
       // Apply type filter (overrides tab-based type filtering when set)
-      if (typeFilter !== 'all') {
+      if (typeFilter === 'sealed') {
+        // Sealed products: filter by shopify_snapshot tags containing 'sealed'
+        query = query.ilike('shopify_snapshot->>tags', '%sealed%');
+      } else if (typeFilter !== 'all') {
         query = query.eq('type', typeFilter === 'raw' ? 'Raw' : 'Graded');
         // Still apply category from tab
         if (activeTab === 'raw_comics' || activeTab === 'graded_comics') {
