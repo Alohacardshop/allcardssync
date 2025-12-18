@@ -53,13 +53,15 @@ export const CONDITION_ABBREVIATIONS: Record<string, string> = {
 };
 
 // Default field mappings
+// brand_title = set name (e.g., "Destined Rivals")
+// subject = card name (e.g., "Mega Charizard X ex")
 export const DEFAULT_FIELD_MAPPINGS: FieldMappings = {
-  title: { source: 'brand_title' },
+  title: { source: 'subject' },  // Card name goes to title
   sku: { source: 'sku' },
   price: { source: 'price', format: 'currency' },
   condition: { source: 'grade', abbreviate: true },
   barcode: { source: 'sku' },
-  set: { source: 'subject' },
+  set: { source: 'brand_title' },  // Set name from brand_title
   cardNumber: { source: 'card_number' },
   year: { source: 'year' },
   vendor: { source: 'vendor' },
