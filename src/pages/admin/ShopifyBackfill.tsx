@@ -1,11 +1,14 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2 } from "lucide-react";
+import { Loader2, ArrowLeft } from "lucide-react";
+import { PageHeader } from "@/components/layout/PageHeader";
 
 export default function ShopifyBackfill() {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<Record<string, any>>({});
 
@@ -36,10 +39,20 @@ export default function ShopifyBackfill() {
   };
 
   return (
-    <div className="container mx-auto p-6 max-w-4xl">
-      <h1 className="text-3xl font-bold mb-6">Shopify Inventory Backfill</h1>
+    <div className="container mx-auto px-4 py-6 max-w-4xl">
+      <PageHeader
+        title="Shopify Inventory Backfill"
+        description="Pull all products from Shopify with valid SKUs and inventory quantity > 0"
+        showEcosystem
+        actions={
+          <Button variant="ghost" size="sm" onClick={() => navigate('/admin')}>
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Admin
+          </Button>
+        }
+      />
       
-      <Alert className="mb-6">
+      <Alert className="mb-6 mt-6">
         <AlertDescription>
           This will pull ALL products from Shopify that have valid SKUs and inventory quantity {">"} 0.
           Products without locations or 0 quantity will be skipped.

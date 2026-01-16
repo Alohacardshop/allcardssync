@@ -10,8 +10,10 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { Trash2, Plus, Send } from 'lucide-react';
+import { Trash2, Plus, Send, ArrowLeft } from 'lucide-react';
 import { AdminGuard } from '@/components/AdminGuard';
+import { PageHeader } from '@/components/layout/PageHeader';
+import { LoadingState } from '@/components/ui/LoadingState';
 
 interface DiscordChannel {
   name: string;
@@ -239,28 +241,26 @@ export default function DiscordNotifications() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading configuration...</p>
-        </div>
-      </div>
+      <AdminGuard>
+        <LoadingState message="Loading configuration..." />
+      </AdminGuard>
     );
   }
 
   return (
     <AdminGuard>
-      <div className="min-h-screen bg-background pt-16">
-        <div className="container mx-auto py-8 px-4 max-w-4xl">
-          <div className="mb-8">
-            <Button variant="ghost" onClick={() => navigate('/admin')}>
-              ← Back to Admin
+      <div className="container mx-auto px-4 py-6 max-w-4xl">
+        <PageHeader
+          title="Discord Notifications"
+          description="Configure Discord alerts for eBay orders with business-hours logic"
+          showEcosystem
+          actions={
+            <Button variant="ghost" size="sm" onClick={() => navigate('/admin')}>
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Admin
             </Button>
-            <h1 className="text-3xl font-bold mt-4">Discord Notifications (eBay Orders)</h1>
-            <p className="text-muted-foreground mt-2">
-              Configure Discord alerts for eBay orders with business-hours logic
-            </p>
-          </div>
+          }
+        />
 
           <div className="space-y-6">
             {/* Discord Webhooks */}
@@ -457,15 +457,14 @@ export default function DiscordNotifications() {
               </CardContent>
             </Card>
 
-            {/* Actions */}
-            <div className="flex gap-4">
-              <Button onClick={saveConfig} disabled={saving}>
-                {saving ? 'Saving...' : 'Save Configuration'}
-              </Button>
-              <Button variant="outline" onClick={() => navigate('/admin')}>
-                Cancel
-              </Button>
-            </div>
+          {/* Actions */}
+          <div className="flex gap-4">
+            <Button onClick={saveConfig} disabled={saving}>
+              {saving ? 'Saving...' : 'Save Configuration'}
+            </Button>
+            <Button variant="outline" onClick={() => navigate('/admin')}>
+              Cancel
+            </Button>
           </div>
         </div>
       </div>

@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { ShoppingCart, Award, FileEdit, ArrowRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -10,6 +9,7 @@ import { SystemHealthCard } from "@/components/SystemHealthCard";
 import { RefreshSectionButton } from "@/components/RefreshButton";
 import { LiveModeToggle, useLiveMode } from "@/components/LiveModeToggle";
 import { useQuery } from "@tanstack/react-query";
+import { PageHeader } from "@/components/layout/PageHeader";
 
 // Interface for stats
 interface SystemStats {
@@ -46,32 +46,27 @@ export default function DashboardPage() {
 
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <h1 className="text-2xl font-bold">Dashboard</h1>
-              <Badge variant="outline">{new Date().toLocaleDateString()}</Badge>
-              <LiveModeToggle
-                onToggle={toggleLive}
-                storageKey="dashboard-live-mode"
-                label="Live"
-                description=""
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <RefreshSectionButton 
-                queryKeyPrefix="dashboard" 
-                label="Refresh" 
-                size="sm"
-              />
-            </div>
+    <div className="container mx-auto px-4 py-6">
+      <PageHeader
+        title="Dashboard"
+        description={new Date().toLocaleDateString()}
+        showEcosystem
+        actions={
+          <div className="flex items-center gap-2">
+            <LiveModeToggle
+              onToggle={toggleLive}
+              storageKey="dashboard-live-mode"
+              label="Live"
+              description=""
+            />
+            <RefreshSectionButton 
+              queryKeyPrefix="dashboard" 
+              label="Refresh" 
+              size="sm"
+            />
           </div>
-        </div>
-      </header>
-
-      <main className="container mx-auto px-4 py-8">
+        }
+      />
         {/* System Stats */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 mb-6">
           <Card>
@@ -129,9 +124,8 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Current Batch */}
-        <CurrentBatchPanel />
-      </main>
+      {/* Current Batch */}
+      <CurrentBatchPanel />
     </div>
   );
 }

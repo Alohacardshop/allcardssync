@@ -17,8 +17,10 @@ import {
   TestTube,
   FileText,
   Code,
-  Trash2
+  Trash2,
+  ArrowLeft
 } from "lucide-react";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { zplPriceBarcodeThirds2x1, type ThirdsLabelData } from "@/lib/templates/priceBarcodeThirds2x1";
 import { printQueue } from '@/lib/print/queueInstance';
 import { sanitizeLabel } from '@/lib/print/sanitizeZpl';
@@ -386,11 +388,18 @@ export default function LabelStudio() {
   };
 
   return (
-    <div className="container mx-auto p-6">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold">Label Studio - Code Only</h1>
-        <p className="text-muted-foreground">Manage ZPL label templates with code</p>
-      </div>
+    <div className="container mx-auto px-4 py-6">
+      <PageHeader
+        title="Label Studio"
+        description="Manage ZPL label templates with code"
+        showEcosystem
+        actions={
+          <Button variant="ghost" size="sm" onClick={() => window.history.back()}>
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back
+          </Button>
+        }
+      />
 
       <Tabs defaultValue="templates" className="space-y-4">
         <TabsList>
