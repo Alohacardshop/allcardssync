@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { KeyboardShortcutsHelp } from './KeyboardShortcutsHelp';
 import { useToast } from '@/hooks/use-toast';
@@ -7,6 +7,8 @@ export function GlobalKeyboardHandler() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [showHelp, setShowHelp] = useState(false);
+  const navTimeoutRef = useRef<number | null>(null);
+  const navListenerRef = useRef<((e: KeyboardEvent) => void) | null>(null);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -101,6 +103,16 @@ export function GlobalKeyboardHandler() {
 
       // Navigation shortcuts (G + key)
       if (event.key === 'g' || event.key === 'G') {
+        // Clean up any existing listener/timeout
+        if (navListenerRef.current) {
+          document.removeEventListener('keydown', navListenerRef.current);
+          navListenerRef.current = null;
+        }
+        if (navTimeoutRef.current) {
+          clearTimeout(navTimeoutRef.current);
+          navTimeoutRef.current = null;
+        }
+
         // Set a flag to listen for the next key
         const handleNavKey = (navEvent: KeyboardEvent) => {
           switch (navEvent.key.toLowerCase()) {
@@ -121,13 +133,25 @@ export function GlobalKeyboardHandler() {
               toast({ title: "Navigation", description: "Navigated to Barcode Printing" });
               break;
           }
+          // Clean up after navigation key pressed
           document.removeEventListener('keydown', handleNavKey);
+          navListenerRef.current = null;
+          if (navTimeoutRef.current) {
+            clearTimeout(navTimeoutRef.current);
+            navTimeoutRef.current = null;
+          }
         };
 
-        // Listen for next key for 2 seconds
+        navListenerRef.current = handleNavKey;
         document.addEventListener('keydown', handleNavKey);
-        setTimeout(() => {
-          document.removeEventListener('keydown', handleNavKey);
+
+        // Listen for next key for 2 seconds
+        navTimeoutRef.current = window.setTimeout(() => {
+          if (navListenerRef.current) {
+            document.removeEventListener('keydown', navListenerRef.current);
+            navListenerRef.current = null;
+          }
+          navTimeoutRef.current = null;
         }, 2000);
       }
     };
@@ -157,6 +181,13 @@ export function GlobalKeyboardHandler() {
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
       document.removeEventListener('keydown', handleTabNavigation);
+      // Clean up navigation timeout and listener on unmount
+      if (navTimeoutRef.current) {
+        clearTimeout(navTimeoutRef.current);
+      }
+      if (navListenerRef.current) {
+        document.removeEventListener('keydown', navListenerRef.current);
+      }
     };
   }, [navigate, toast, showHelp]);
 
