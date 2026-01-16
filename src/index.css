@@ -70,12 +70,36 @@ All colors MUST be HSL.
     --mythic: 14 91% 43%;
     --special: 262 83% 58%;
 
+    /* ========================================
+       ECOSYSTEM THEMING - Hawaii & Las Vegas
+       ======================================== */
+    
+    /* Hawaii Ecosystem - Tropical Teal/Coral */
+    --ecosystem-hawaii: 174 72% 40%;
+    --ecosystem-hawaii-foreground: 0 0% 100%;
+    --ecosystem-hawaii-accent: 16 85% 57%;
+    --ecosystem-hawaii-muted: 174 40% 90%;
+    --ecosystem-hawaii-gradient-start: 174 72% 40%;
+    --ecosystem-hawaii-gradient-end: 186 76% 48%;
+    
+    /* Las Vegas Ecosystem - Gold/Purple */
+    --ecosystem-vegas: 45 93% 47%;
+    --ecosystem-vegas-foreground: 0 0% 10%;
+    --ecosystem-vegas-accent: 270 70% 55%;
+    --ecosystem-vegas-muted: 45 60% 92%;
+    --ecosystem-vegas-gradient-start: 45 93% 47%;
+    --ecosystem-vegas-gradient-end: 38 95% 52%;
+
     /* Extended Design Tokens */
     --gradient-primary: linear-gradient(135deg, hsl(var(--primary) / 0.8) 0%, hsl(var(--accent) / 0.6) 100%);
     --gradient-secondary: linear-gradient(135deg, hsl(var(--muted) / 0.8) 0%, hsl(var(--muted) / 0.4) 100%);
     --gradient-success: linear-gradient(135deg, hsl(var(--success) / 0.8) 0%, hsl(var(--success) / 0.6) 100%);
     --gradient-warning: linear-gradient(135deg, hsl(var(--warning) / 0.8) 0%, hsl(var(--warning) / 0.6) 100%);
     --gradient-destructive: linear-gradient(135deg, hsl(var(--destructive) / 0.8) 0%, hsl(var(--destructive) / 0.6) 100%);
+    
+    /* Ecosystem Gradients */
+    --gradient-hawaii: linear-gradient(135deg, hsl(var(--ecosystem-hawaii-gradient-start)) 0%, hsl(var(--ecosystem-hawaii-gradient-end)) 100%);
+    --gradient-vegas: linear-gradient(135deg, hsl(var(--ecosystem-vegas-gradient-start)) 0%, hsl(var(--ecosystem-vegas-gradient-end)) 100%);
 
     --shadow-elegant: 0 12px 32px -12px hsl(var(--primary) / 0.35);
     --shadow-card: 0 4px 6px -1px hsl(var(--foreground) / 0.1), 0 2px 4px -1px hsl(var(--foreground) / 0.06);
@@ -107,7 +131,6 @@ All colors MUST be HSL.
     --space-10: 2.5rem;    /* 40px */
     --space-12: 3rem;      /* 48px */
     --space-16: 4rem;      /* 64px */
-
   }
 
   .dark {
@@ -171,12 +194,26 @@ All colors MUST be HSL.
     --mythic: 14 91% 43%;
     --special: 262 83% 58%;
 
+    /* Ecosystem Theming - Dark Mode */
+    --ecosystem-hawaii: 174 65% 45%;
+    --ecosystem-hawaii-foreground: 0 0% 100%;
+    --ecosystem-hawaii-accent: 16 80% 60%;
+    --ecosystem-hawaii-muted: 174 30% 20%;
+    
+    --ecosystem-vegas: 45 85% 50%;
+    --ecosystem-vegas-foreground: 0 0% 10%;
+    --ecosystem-vegas-accent: 270 65% 60%;
+    --ecosystem-vegas-muted: 45 40% 18%;
+
     /* Dark mode gradients */
     --gradient-primary: linear-gradient(135deg, hsl(var(--primary) / 0.6) 0%, hsl(var(--accent) / 0.4) 100%);
     --gradient-secondary: linear-gradient(135deg, hsl(var(--muted) / 0.6) 0%, hsl(var(--muted) / 0.3) 100%);
     --gradient-success: linear-gradient(135deg, hsl(var(--success) / 0.6) 0%, hsl(var(--success) / 0.4) 100%);
     --gradient-warning: linear-gradient(135deg, hsl(var(--warning) / 0.6) 0%, hsl(var(--warning) / 0.4) 100%);
     --gradient-destructive: linear-gradient(135deg, hsl(var(--destructive) / 0.6) 0%, hsl(var(--destructive) / 0.4) 100%);
+    
+    --gradient-hawaii: linear-gradient(135deg, hsl(var(--ecosystem-hawaii) / 0.8) 0%, hsl(174 70% 55%) 100%);
+    --gradient-vegas: linear-gradient(135deg, hsl(var(--ecosystem-vegas) / 0.8) 0%, hsl(45 90% 55%) 100%);
 
     --shadow-card: 0 4px 6px -1px hsl(var(--foreground) / 0.2), 0 2px 4px -1px hsl(var(--foreground) / 0.1);
     --shadow-hover: 0 10px 15px -3px hsl(var(--foreground) / 0.2), 0 4px 6px -2px hsl(var(--foreground) / 0.1);

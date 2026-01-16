@@ -1,16 +1,17 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { logger } from "@/lib/logger";
 import { useAuth } from "@/contexts/AuthContext";
+import { Palmtree, Sparkles, Loader2 } from "lucide-react";
 
-const ROLE_TIMEOUT_MS = 5000; // Reduced from 8s to 5s
-const AUTH_CHANGE_GUARD_MS = 4000; // Reduced from 6s to 4s
+const ROLE_TIMEOUT_MS = 5000;
+const AUTH_CHANGE_GUARD_MS = 4000;
 
 function useSEO(opts: { title: string; description?: string; canonical?: string }) {
   useEffect(() => {
@@ -40,7 +41,6 @@ export default function Auth() {
   const navigate = useNavigate();
   const { refetchRoles } = useAuth();
 
-  // ✅ never start in loading
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -48,7 +48,6 @@ export default function Auth() {
   const [roleError, setRoleError] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
 
-  // Re-entrancy and cancellation
   const mountedRef = useRef(true);
   const subRef = useRef<ReturnType<typeof supabase.auth.onAuthStateChange>["data"]["subscription"] | null>(null);
   const guardTimerRef = useRef<number | null>(null);
@@ -75,7 +74,6 @@ export default function Auth() {
     logger.info('Auth page mounted');
     setMounted(true);
 
-    // Single subscription, StrictMode-safe
     if (!subRef.current) {
       subRef.current = supabase.auth.onAuthStateChange(async (event, session) => {
         logger.info('Auth state change', { event, email: session?.user?.email });
@@ -94,7 +92,6 @@ export default function Auth() {
       }).data.subscription;
     }
 
-    // Check existing session but don't block UI
     (async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
@@ -111,7 +108,6 @@ export default function Auth() {
       }
     })();
 
-    // Cleanup
     return () => {
       mountedRef.current = false;
       clearGuardTimer();
@@ -126,10 +122,10 @@ export default function Auth() {
 
   async function handleSignIn(e: React.FormEvent) {
     e.preventDefault();
-    if (loading) return; // guard double submit
+    if (loading) return;
     clearGuardTimer();
     clearRoleTimer();
-    cancelRoleCheckRef.current?.(); // cancel any in-flight role checks
+    cancelRoleCheckRef.current?.();
 
     setLoading(true);
     setRoleError(null);
@@ -140,7 +136,6 @@ export default function Auth() {
       logger.info('Sign in successful', { email });
       toast.success("Signed in successfully!");
 
-      // If auth event doesn't arrive, unlock UI
       guardTimerRef.current = window.setTimeout(() => {
         if (!mountedRef.current) return;
         setLoading(false);
@@ -154,19 +149,16 @@ export default function Auth() {
   }
 
   async function verifyAccessThenNavigate(userId: string, attemptId: string) {
-    // Ignore stale attempts
     if (currentAttemptId.current !== attemptId) return;
 
     setLoading(true);
     setRoleError(null);
     verificationInFlightRef.current = true;
 
-    // Build a cancelable promise around the role RPC
     let canceled = false;
     cancelRoleCheckRef.current = () => { canceled = true; };
 
     try {
-      // Preload roles into AuthContext cache
       logger.info('Preloading roles into cache', { userId });
       await refetchRoles();
       
@@ -214,41 +206,133 @@ export default function Auth() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b">
-        <div className="container mx-auto px-6 py-8 flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-foreground">Aloha Inventory Login</h1>
-          <Link to="/"><Button variant="secondary">Back</Button></Link>
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30 flex flex-col">
+      {/* Decorative Background Elements */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-[hsl(var(--ecosystem-hawaii)/0.1)] rounded-full blur-3xl" />
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-[hsl(var(--ecosystem-vegas)/0.1)] rounded-full blur-3xl" />
+      </div>
+
+      {/* Header */}
+      <header className="relative z-10 border-b bg-background/80 backdrop-blur-sm">
+        <div className="container mx-auto px-6 py-4 flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <div className="p-2 rounded-lg bg-primary/10">
+              <Palmtree className="h-5 w-5 text-primary" />
+            </div>
+            <span className="text-xl font-semibold tracking-tight">Aloha Inventory</span>
+          </div>
         </div>
       </header>
-      <main className="container mx-auto px-6 py-12 max-w-md">
-        <Card className="shadow-aloha">
-          <CardHeader>
-            <CardTitle>{mode === 'signin' ? 'Sign In' : 'Create an account'}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={mode === 'signin' ? handleSignIn : handleSignUp} className="space-y-4">
-              <div>
-                <Label htmlFor="email">Email</Label>
-                <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-              </div>
-              <div>
-                <Label htmlFor="password">Password</Label>
-                <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
-              </div>
-              {roleError && (
-                <p className="text-sm text-muted-foreground">{roleError}</p>
-              )}
-              <div className="flex items-center gap-2">
-                <Button type="submit" disabled={loading}>{loading ? 'Please wait…' : (mode === 'signin' ? 'Sign In' : 'Sign Up')}</Button>
-                <Button type="button" variant="outline" onClick={() => setMode(mode === 'signin' ? 'signup' : 'signin')}>
-                  {mode === 'signin' ? 'Create account' : 'Have an account? Sign in'}
+
+      {/* Main Content */}
+      <main className="relative z-10 flex-1 flex items-center justify-center p-6">
+        <div className="w-full max-w-md space-y-6">
+          {/* Welcome Text */}
+          <div className="text-center space-y-2">
+            <h1 className="text-3xl font-bold tracking-tight">
+              {mode === 'signin' ? 'Welcome back' : 'Create your account'}
+            </h1>
+            <p className="text-muted-foreground">
+              {mode === 'signin' 
+                ? 'Sign in to access your inventory dashboard' 
+                : 'Get started with Aloha Inventory'}
+            </p>
+          </div>
+
+          {/* Auth Card */}
+          <Card className="shadow-lg border-border/50 bg-card/80 backdrop-blur-sm">
+            <CardHeader className="space-y-1 pb-4">
+              <CardTitle className="text-xl">
+                {mode === 'signin' ? 'Sign In' : 'Sign Up'}
+              </CardTitle>
+              <CardDescription>
+                {mode === 'signin' 
+                  ? 'Enter your credentials to continue' 
+                  : 'Fill in your details to create an account'}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={mode === 'signin' ? handleSignIn : handleSignUp} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input 
+                    id="email" 
+                    type="email" 
+                    placeholder="you@example.com"
+                    value={email} 
+                    onChange={(e) => setEmail(e.target.value)} 
+                    required 
+                    className="h-11"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="password">Password</Label>
+                  <Input 
+                    id="password" 
+                    type="password" 
+                    placeholder="••••••••"
+                    value={password} 
+                    onChange={(e) => setPassword(e.target.value)} 
+                    required 
+                    className="h-11"
+                  />
+                </div>
+                
+                {roleError && (
+                  <p className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-md">
+                    {roleError}
+                  </p>
+                )}
+
+                <Button 
+                  type="submit" 
+                  disabled={loading} 
+                  className="w-full h-11 font-medium"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Please wait...
+                    </>
+                  ) : (
+                    mode === 'signin' ? 'Sign In' : 'Create Account'
+                  )}
+                </Button>
+              </form>
+
+              <div className="mt-6 pt-4 border-t">
+                <Button 
+                  type="button" 
+                  variant="ghost" 
+                  className="w-full text-muted-foreground"
+                  onClick={() => setMode(mode === 'signin' ? 'signup' : 'signin')}
+                >
+                  {mode === 'signin' 
+                    ? "Don't have an account? Sign up" 
+                    : 'Already have an account? Sign in'}
                 </Button>
               </div>
-            </form>
-            <p className="text-xs text-muted-foreground mt-4">Access is restricted to authorized staff. After signup, an admin must grant the Staff role.</p>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+
+          {/* Footer Notice */}
+          <p className="text-xs text-center text-muted-foreground px-4">
+            Access is restricted to authorized staff. After signup, an admin must grant the Staff role.
+          </p>
+
+          {/* Ecosystem Indicators */}
+          <div className="flex items-center justify-center gap-4 pt-4">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <div className="w-3 h-3 rounded-full bg-[hsl(var(--ecosystem-hawaii))]" />
+              <span>Hawaii</span>
+            </div>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <div className="w-3 h-3 rounded-full bg-[hsl(var(--ecosystem-vegas))]" />
+              <span>Las Vegas</span>
+            </div>
+          </div>
+        </div>
       </main>
     </div>
   );

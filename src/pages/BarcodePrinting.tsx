@@ -9,6 +9,7 @@ import PrintQueuePanel from "@/components/print-queue/PrintQueuePanel";
 import { PrinterSettings } from "@/components/PrinterSettings";
 import { LabelEditorEmbed } from "@/features/barcode/components/LabelEditorEmbed";
 import { usePrintQueueContext } from "@/contexts/PrintQueueContext";
+import { PageHeader } from "@/components/layout/PageHeader";
 
 export default function BarcodePrinting() {
   const { getDeadLetterQueue } = usePrintQueueContext();
@@ -26,15 +27,11 @@ export default function BarcodePrinting() {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
-      <section className="mb-6">
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <Printer className="h-6 w-6" />
-          Barcode Printing
-        </h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Pull products from Shopify, filter, and print labels
-        </p>
-      </section>
+      <PageHeader 
+        title="Barcode Printing"
+        description="Pull products from Shopify, filter, and print labels"
+        showEcosystem
+      />
 
       <Tabs defaultValue="filter" className="w-full">
         <TabsList className="grid w-full grid-cols-6">
