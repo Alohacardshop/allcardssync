@@ -21,6 +21,7 @@ import {
   XCircle,
   Loader2,
 } from 'lucide-react';
+import { PageHeader } from '@/components/layout/PageHeader';
 
 const SAMPLE_ZPL = `^XA
 ^FO50,50^ADN,36,20^FDTest Label from Aloha^FS
@@ -84,13 +85,13 @@ export default function QzTrayTestPage() {
   };
 
   return (
-    <div className="container mx-auto py-8 px-4 max-w-4xl">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">QZ Tray Test Page</h1>
-        <p className="text-muted-foreground">
-          Test and debug QZ Tray printing functionality
-        </p>
-      </div>
+    <div className="min-h-screen bg-background">
+      <main className="container mx-auto py-8 px-4 max-w-4xl">
+        <PageHeader
+          title="QZ Tray Test"
+          description="Test and debug QZ Tray printing functionality"
+          showEcosystem
+        />
 
       {/* Connection Status Card */}
       <Card className="mb-6">
@@ -293,6 +294,7 @@ export default function QzTrayTestPage() {
           )}
         </CardContent>
       </Card>
+      </main>
     </div>
   );
 }

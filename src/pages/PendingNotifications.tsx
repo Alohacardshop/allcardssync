@@ -5,6 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Loader2 } from "lucide-react";
 import { format } from "date-fns";
+import { PageHeader } from "@/components/layout/PageHeader";
 
 interface PendingNotification {
   id: number;
@@ -44,14 +45,20 @@ export default function PendingNotifications() {
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Pending Discord Notifications</CardTitle>
-          <CardDescription>
-            Orders queued to be sent at 9:00 AM HST (19:00 UTC)
-          </CardDescription>
-        </CardHeader>
+    <div className="min-h-screen bg-background">
+      <main className="container mx-auto p-6 space-y-6">
+        <PageHeader
+          title="Pending Notifications"
+          description="Discord notifications queued to be sent at 9:00 AM HST"
+          showEcosystem
+        />
+        <Card>
+          <CardHeader>
+            <CardTitle>Pending Discord Notifications</CardTitle>
+            <CardDescription>
+              Orders queued to be sent at 9:00 AM HST (19:00 UTC)
+            </CardDescription>
+          </CardHeader>
         <CardContent>
           {!notifications || notifications.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
@@ -97,6 +104,7 @@ export default function PendingNotifications() {
           )}
         </CardContent>
       </Card>
+      </main>
     </div>
   );
 }

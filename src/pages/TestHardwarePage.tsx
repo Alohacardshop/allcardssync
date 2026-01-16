@@ -22,6 +22,7 @@ import { PrinterSettings } from "@/components/PrinterSettings";
 import { CutterSettings, CutterConfig } from "@/components/CutterSettings";
 import { logger } from '@/lib/logger';
 import TemplateEditor from "@/components/admin/TemplateEditor";
+import { PageHeader } from "@/components/layout/PageHeader";
 
 interface TestResult {
   status: 'idle' | 'running' | 'success' | 'error';
@@ -192,19 +193,13 @@ export default function TestHardwarePage() {
   };
 
   return (
-      <div className="min-h-screen bg-background">
-        <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-50">
-          <div className="container mx-auto px-4 py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <h1 className="text-2xl font-bold">Hardware Testing</h1>
-                <Badge variant="outline">Diagnostics</Badge>
-              </div>
-            </div>
-          </div>
-        </header>
-
+    <div className="min-h-screen bg-background">
       <main className="container mx-auto px-4 py-8">
+        <PageHeader
+          title="Hardware Testing"
+          description="Configure printers, test barcode scanners, and verify connectivity"
+          showEcosystem
+        />
         {/* Printer Setup Section */}
         <Card className="mb-6">
           <CardHeader>

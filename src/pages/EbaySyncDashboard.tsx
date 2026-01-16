@@ -13,6 +13,7 @@ import { EbayAggregatePreview } from '@/components/admin/EbayAggregatePreview';
 import { EbaySyncControls } from '@/components/admin/EbaySyncControls';
 import { EbaySyncLog } from '@/components/admin/EbaySyncLog';
 import { useStore } from '@/contexts/StoreContext';
+import { PageHeader } from '@/components/layout/PageHeader';
 
 interface EbayStoreConfig {
   id: string;
@@ -118,22 +119,11 @@ export default function EbaySyncDashboard() {
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <ArrowRightLeft className="h-6 w-6" />
-            eBay Inventory Sync
-          </h1>
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <span>Multi-location inventory aggregation and waterfall fulfillment</span>
-            {assignedStoreName && (
-              <Badge variant="outline" className="flex items-center gap-1">
-                <MapPin className="h-3 w-3" />
-                {assignedStoreName}
-              </Badge>
-            )}
-          </div>
-        </div>
+        <PageHeader
+          title="eBay Inventory Sync"
+          description="Multi-location inventory aggregation and waterfall fulfillment"
+          showEcosystem
+        />
 
         {/* Store Selector */}
         <Card className="mb-6">

@@ -9,21 +9,17 @@ import { RefreshCw, Upload, AlertTriangle } from 'lucide-react';
 import { ShopifyRetryPanel } from '@/components/ShopifyRetryPanel';
 import { SystemHealthCard } from '@/components/SystemHealthCard';
 import { RealTimeSyncMonitor } from '@/components/shopify/RealTimeSyncMonitor';
+import { PageHeader } from '@/components/layout/PageHeader';
 
 export default function ShopifySync() {
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <h1 className="text-2xl font-bold">Shopify Sync</h1>
-            </div>
-          </div>
-        </div>
-      </header>
-
       <main className="container mx-auto px-4 py-8">
+        <PageHeader
+          title="Shopify Sync"
+          description="Manage and monitor Shopify product synchronization"
+          showEcosystem
+        />
         <div className="space-y-6">
           {/* System Health Overview */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

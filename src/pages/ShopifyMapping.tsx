@@ -15,6 +15,7 @@ import { useStore } from "@/contexts/StoreContext";
 import { buildTitleFromParts } from "@/lib/labelData";
 import { AlertTriangle, CheckCircle, Clock, ExternalLink, RefreshCw, Edit3, MapPin, Settings } from "lucide-react";
 import { logger } from '@/lib/logger';
+import { PageHeader } from "@/components/layout/PageHeader";
 
 
 function useSEO(opts: { title: string; description?: string; canonical?: string }) {
@@ -292,33 +293,12 @@ export default function ShopifyMapping() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b">
-        <div className="container mx-auto px-6 py-4">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h1 className="text-2xl font-bold text-foreground">Shopify Product Mapping</h1>
-              <p className="text-muted-foreground mt-1">Map intake items to Shopify products and manage inventory sync.</p>
-            </div>
-          </div>
-          
-          {/* Store Info */}
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <Settings className="h-4 w-4" />
-              <Label>Current Store:</Label>
-            </div>
-            <Badge variant="outline">{assignedStore || "No store selected"}</Badge>
-            {availableLocations.length > 0 && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <MapPin className="h-4 w-4" />
-                <span>{availableLocations.length} location{availableLocations.length !== 1 ? 's' : ''} available</span>
-              </div>
-            )}
-          </div>
-        </div>
-      </header>
-
       <main className="container mx-auto px-6 py-6">
+        <PageHeader
+          title="Shopify Product Mapping"
+          description="Map intake items to Shopify products and manage inventory sync"
+          showEcosystem
+        />
         {/* Stats Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           <Card>
