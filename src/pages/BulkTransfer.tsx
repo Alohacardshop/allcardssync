@@ -15,9 +15,8 @@ export default function BulkTransfer() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <main className="container mx-auto p-6 space-y-6">
-        <PageHeader
+    <div className="space-y-6">
+      <PageHeader
           title="Bulk Location Transfer"
           description="Scan barcodes to transfer items between locations"
           showEcosystem
@@ -63,7 +62,6 @@ export default function BulkTransfer() {
             </Card>
           </TabsContent>
         </Tabs>
-      </main>
     </div>
   );
 }

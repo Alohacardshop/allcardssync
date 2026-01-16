@@ -85,9 +85,8 @@ export default function QzTrayTestPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <main className="container mx-auto py-8 px-4 max-w-4xl">
-        <PageHeader
+    <div className="space-y-6 max-w-4xl mx-auto">
+      <PageHeader
           title="QZ Tray Test"
           description="Test and debug QZ Tray printing functionality"
           showEcosystem
@@ -294,7 +293,6 @@ export default function QzTrayTestPage() {
           )}
         </CardContent>
       </Card>
-      </main>
-    </div>
+      </div>
   );
 }

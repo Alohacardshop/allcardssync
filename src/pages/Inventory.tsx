@@ -1090,16 +1090,13 @@ const Inventory = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background pt-16">
-      
+    <div className="space-y-6">
       {/* Loading indicator for background refetches */}
       {isFetching && !isLoading && (
         <div className="fixed top-0 left-0 right-0 z-50">
           <Progress className="h-1 rounded-none" />
         </div>
       )}
-      
-      <div className="container mx-auto p-6 space-y-6">
         <PageHeader 
           title="Inventory Management" 
           description="View, search, and manage your inventory items"
@@ -1403,7 +1400,6 @@ const Inventory = () => {
           </div>
         )}
       </div>
-    </div>
   );
 };
 

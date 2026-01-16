@@ -193,9 +193,8 @@ export default function TestHardwarePage() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <main className="container mx-auto px-4 py-8">
-        <PageHeader
+    <div className="space-y-6">
+      <PageHeader
           title="Hardware Testing"
           description="Configure printers, test barcode scanners, and verify connectivity"
           showEcosystem
@@ -386,7 +385,6 @@ export default function TestHardwarePage() {
             Run All Tests
           </Button>
         </div>
-      </main>
-    </div>
+      </div>
   );
 }

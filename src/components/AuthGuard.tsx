@@ -27,7 +27,7 @@ export function AuthGuard({ children }: AuthGuardProps) {
   if (!isAuthorized) {
     logger.warn('AuthGuard: Access denied - insufficient permissions', { userId: user.id }, 'auth');
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="flex items-center justify-center flex-1">
         <div className="text-center max-w-md mx-auto p-6">
           <h1 className="text-2xl font-bold text-foreground mb-4">Access Restricted</h1>
           <p className="text-muted-foreground mb-6">
