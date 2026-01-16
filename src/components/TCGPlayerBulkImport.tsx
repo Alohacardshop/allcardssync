@@ -129,22 +129,6 @@ export const TCGPlayerBulkImport = ({ onBatchAdd }: TCGPlayerBulkImportProps) =>
   const [subCategory, setSubCategory] = useState('');
   const [purchaseLocationId, setPurchaseLocationId] = useState('');
 
-  // DEBUG: Log context values whenever they change
-  React.useEffect(() => {
-    console.log('🔍 TCGPlayerBulkImport Context Values:', {
-      assignedStore,
-      selectedLocation,
-      subCategory,
-      itemsCount: items.length,
-      buttonShouldBeDisabled: !subCategory || !assignedStore || !selectedLocation,
-      individualChecks: {
-        hasSubCategory: !!subCategory,
-        hasAssignedStore: !!assignedStore,
-        hasSelectedLocation: !!selectedLocation
-      }
-    });
-  }, [assignedStore, selectedLocation, subCategory, items.length]);
-
   // Handle CSV parsing results
   const handleCsvParsed = (cards: NormalizedCard[]) => {
     const tcgItems: TCGPlayerItem[] = cards.map(card => ({
