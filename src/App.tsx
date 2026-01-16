@@ -12,12 +12,12 @@ import { AuthGuard } from "@/components/AuthGuard";
 import { AdminGuard } from "@/components/AdminGuard";
 import { StoreProvider } from "@/contexts/StoreContext";
 import { PrintQueueProvider } from "@/contexts/PrintQueueContext";
-import { NavigationBar } from "@/components/NavigationBar";
+import { AppShell } from "@/components/layout/AppShell";
 import { GlobalLoading } from "@/components/GlobalLoading";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { FontPreloader } from "@/components/fonts/FontPreloader";
 import { RequireApp } from "@/components/RequireApp";
-import { DashboardLayout } from "@/layouts/DashboardLayout";
+
 // Lazy load heavy routes
 const DashboardHome = React.lazy(() => import("./pages/DashboardHome"));
 const Index = React.lazy(() => import("./pages/Index"));
@@ -76,12 +76,10 @@ const App = () => (
                   
                   {/* Protected routes */}
                   <Route path="/*" element={
-                    <>
-                      <NavigationBar />
-                      <AuthGuard>
-                        <main className="pt-20">
-                          <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><LoadingSpinner size="lg" /></div>}>
-                            <Routes>
+                    <AuthGuard>
+                      <AppShell>
+                        <Suspense fallback={<div className="flex items-center justify-center min-h-[50vh]"><LoadingSpinner size="lg" /></div>}>
+                          <Routes>
                             {/* Dashboard Home */}
                             <Route path="/" element={<ErrorBoundaryWrapper componentName="DashboardHome"><DashboardHome /></ErrorBoundaryWrapper>} />
                             
@@ -152,11 +150,10 @@ const App = () => (
                             
                             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                             <Route path="*" element={<NotFound />} />
-                            </Routes>
-                          </Suspense>
-                        </main>
-                      </AuthGuard>
-                    </>
+                          </Routes>
+                        </Suspense>
+                      </AppShell>
+                    </AuthGuard>
                   } />
                 </Routes>
               </Suspense>
