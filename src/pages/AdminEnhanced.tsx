@@ -5,6 +5,7 @@ import { RealTimeSyncMonitor } from "@/components/shopify/RealTimeSyncMonitor"
 import { InventoryAnalytics } from "@/components/analytics/InventoryAnalytics"
 import { KeyboardShortcuts, useKeyboardShortcuts } from "@/components/interactions/KeyboardShortcuts"
 import { ErrorBoundaryWithRecovery } from "@/components/error-boundary/ErrorBoundaryWithRecovery"
+import { PageHeader } from "@/components/layout/PageHeader"
 import { SyncMonitor } from "@/components/catalog/SyncMonitor"
 import { 
   Activity, 
@@ -66,25 +67,12 @@ const AdminEnhanced = () => {
 
   return (
     <ErrorBoundaryWithRecovery>
-      <div className="min-h-screen bg-background pb-16 md:pb-0">
-        {/* Header removed - NavigationBar is now global */}
-        <header className="border-b bg-card/50">
-          <div className="container mx-auto px-4 py-3">
-          </div>
-        </header>
-
-        {/* Mobile Bottom Navigation removed */}
-
-        <div className="container mx-auto px-4 py-6">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h1 className="text-3xl font-bold">Admin Dashboard</h1>
-              <p className="text-muted-foreground">
-                System administration and monitoring
-              </p>
-            </div>
-            
+      <div className="container mx-auto px-4 py-6">
+        <PageHeader
+          title="Admin Dashboard"
+          description="System administration and monitoring"
+          showEcosystem
+          actions={
             <button
               onClick={() => setShowHelp(true)}
               className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
@@ -92,7 +80,8 @@ const AdminEnhanced = () => {
               <HelpCircle className="h-4 w-4" />
               Help (?)
             </button>
-          </div>
+          }
+        />
 
           {/* Admin Tabs */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
@@ -379,7 +368,6 @@ const AdminEnhanced = () => {
               </Card>
             </TabsContent>
           </Tabs>
-        </div>
 
         {/* Keyboard Shortcuts Dialog */}
         <KeyboardShortcuts open={showHelp} onOpenChange={setShowHelp} />

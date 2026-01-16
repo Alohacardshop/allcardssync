@@ -3,7 +3,9 @@ import { supabase } from "@/integrations/supabase/client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Loader2, Plus, Filter } from "lucide-react"
+import { Plus, Filter } from "lucide-react"
+import { LoadingState } from "@/components/ui/LoadingState"
+import { PageHeader } from "@/components/layout/PageHeader"
 import { toast } from "sonner"
 import { MobileSearchFilters } from "@/components/mobile/MobileSearchFilters"
 import { logger } from '@/lib/logger';
@@ -206,45 +208,22 @@ const MobileInventory = () => {
   })
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-background pb-16 pt-16">
-        <header className="border-b bg-card/50">
-          <div className="container mx-auto px-4 py-3">
-          </div>
-        </header>
-        
-        <div className="flex items-center justify-center min-h-[50vh]">
-          <Loader2 className="h-8 w-8 animate-spin" />
-        </div>
-      </div>
-    )
+    return <LoadingState message="Loading inventory..." />
   }
 
   return (
-    <div className="min-h-screen bg-background pb-16">
-      {/* Header removed - NavigationBar is now global */}
-      <header className="border-b bg-card/50">
-        <div className="container mx-auto px-4 py-3">
-        </div>
-      </header>
-
-        {/* Mobile Bottom Navigation removed */}
-
-      <div className="container mx-auto px-4 py-6 space-y-6">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold">Inventory</h1>
-            <p className="text-muted-foreground">
-              {filteredItems.length} of {transformedItems.length} items
-            </p>
-          </div>
-          
+    <div className="container mx-auto px-4 py-6 space-y-6">
+      <PageHeader
+        title="Inventory"
+        description={`${filteredItems.length} of ${transformedItems.length} items`}
+        showEcosystem
+        actions={
           <Button className="w-full sm:w-auto">
             <Plus className="h-4 w-4 mr-2" />
             Add Item
           </Button>
-        </div>
+        }
+      />
 
         {/* Search and Filters */}
         <MobileSearchFilters
@@ -299,7 +278,6 @@ const MobileInventory = () => {
             </Button>
           </Card>
         )}
-      </div>
     </div>
   )
 }

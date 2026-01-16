@@ -144,7 +144,7 @@ const App = () => (
                             <Route path="/admin/ebay-settings" element={<Navigate to="/ebay" replace />} />
                             
                             {/* Other Pages */}
-                            <Route path="/dashboard" element={<ErrorBoundaryWrapper componentName="Dashboard"><DashboardPage /></ErrorBoundaryWrapper>} />
+                            <Route path="/dashboard" element={<Navigate to="/" replace />} />
                             <Route path="/test-hardware" element={<TestHardwarePage />} />
                             <Route path="/qz-tray-test" element={<QzTrayTestPage />} />
                             
