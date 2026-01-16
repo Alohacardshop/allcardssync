@@ -2377,26 +2377,38 @@ export type Database = {
       webhook_events: {
         Row: {
           created_at: string | null
+          error_message: string | null
           event_type: string
           id: string
+          last_retry_at: string | null
           payload: Json
           processed_at: string | null
+          retry_count: number | null
+          status: string | null
           webhook_id: string
         }
         Insert: {
           created_at?: string | null
+          error_message?: string | null
           event_type: string
           id?: string
+          last_retry_at?: string | null
           payload: Json
           processed_at?: string | null
+          retry_count?: number | null
+          status?: string | null
           webhook_id: string
         }
         Update: {
           created_at?: string | null
+          error_message?: string | null
           event_type?: string
           id?: string
+          last_retry_at?: string | null
           payload?: Json
           processed_at?: string | null
+          retry_count?: number | null
+          status?: string | null
           webhook_id?: string
         }
         Relationships: []
@@ -2855,6 +2867,19 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      get_webhook_health_stats: {
+        Args: never
+        Returns: {
+          avg_processing_time_seconds: number
+          failed_count: number
+          last_24h_failed: number
+          last_24h_total: number
+          pending_count: number
+          processed_count: number
+          success_rate: number
+          total_count: number
+        }[]
       }
       has_role: {
         Args: {
