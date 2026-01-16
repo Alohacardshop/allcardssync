@@ -5,7 +5,6 @@ import { SendRawSchema, SendRawInput } from '../_shared/validation.ts'
 // Helper function to fetch image and convert to base64 for Shopify upload
 async function fetchImageAsBase64(imageUrl: string): Promise<{ attachment: string; filename: string } | null> {
   try {
-    console.log('DEBUG: Fetching image from:', imageUrl)
     const response = await fetch(imageUrl, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (compatible; ShopifySync/1.0)'
@@ -34,7 +33,6 @@ async function fetchImageAsBase64(imageUrl: string): Promise<{ attachment: strin
     else if (contentType.includes('gif')) extension = 'gif'
     else if (contentType.includes('webp')) extension = 'webp'
     
-    console.log('DEBUG: Successfully fetched image, size:', uint8Array.length, 'bytes')
     return { attachment: base64, filename: `product.${extension}` }
   } catch (error) {
     console.warn('Failed to fetch image for base64 encoding:', error)
@@ -274,8 +272,6 @@ Deno.serve(async (req) => {
     const existingVariantId = intakeItem.shopify_variant_id
     const isUpdate = !!(existingProductId && existingVariantId)
 
-    console.log('DEBUG: Sync operation type:', isUpdate ? 'UPDATE' : 'CREATE')
-    console.log('DEBUG: Existing Shopify IDs:', { existingProductId, existingVariantId })
 
     // Build comprehensive metafields array
     const metafields = [
@@ -455,7 +451,7 @@ Deno.serve(async (req) => {
 
     if (isUpdate) {
       // UPDATE existing product
-      console.log('DEBUG: Updating existing Shopify product:', existingProductId)
+      
       
       const updateResponse = await fetch(`https://${domain}/admin/api/2024-07/products/${existingProductId}.json`, {
         method: 'PUT',
