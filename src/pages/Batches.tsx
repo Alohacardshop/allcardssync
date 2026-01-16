@@ -246,9 +246,8 @@ export default function Batches() {
   const stats = getTotalStats();
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container mx-auto px-6 py-6">
-        <PageHeader
+    <div className="space-y-6">
+      <PageHeader
           title="Batches"
           description="View and manage intake batches and their items"
           showEcosystem
@@ -426,7 +425,6 @@ export default function Batches() {
             )}
           </CardContent>
         </Card>
-      </div>
 
       {/* Lot Details Modal */}
       <Dialog open={!!selectedLot} onOpenChange={() => setSelectedLot(null)}>

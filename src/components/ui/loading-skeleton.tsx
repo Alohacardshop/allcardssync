@@ -165,12 +165,15 @@ export function ListItemLoadingSkeleton({ items = 5 }: { items?: number }) {
   )
 }
 
-// Page loading skeleton (full page)
+// Page loading skeleton (works within AppShell)
 export function PageLoadingSkeleton() {
   return (
-    <div className="min-h-screen bg-background">
-      {/* Navigation */}
-      <NavigationLoadingSkeleton />
+    <div className="space-y-6">
+      {/* Header skeleton */}
+      <div className="space-y-2">
+        <LoadingSkeleton className="h-8 w-1/3" />
+        <LoadingSkeleton className="h-4 w-1/2" />
+      </div>
       
       {/* Content */}
       <div className="container mx-auto px-4 py-6 space-y-6">

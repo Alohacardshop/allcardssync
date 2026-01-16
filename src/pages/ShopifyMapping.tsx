@@ -292,9 +292,8 @@ export default function ShopifyMapping() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <main className="container mx-auto px-6 py-6">
-        <PageHeader
+    <div className="space-y-6">
+      <PageHeader
           title="Shopify Product Mapping"
           description="Map intake items to Shopify products and manage inventory sync"
           showEcosystem
@@ -558,7 +557,6 @@ export default function ShopifyMapping() {
             </div>
           </CardContent>
         </Card>
-      </main>
-    </div>
+      </div>
   );
 }

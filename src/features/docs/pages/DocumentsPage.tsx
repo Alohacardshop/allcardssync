@@ -16,28 +16,24 @@ export default function DocumentsPage() {
   const visibleDocuments = filterDocumentsByLocation(DOCUMENTS, assignedRegion);
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="border-b border-border bg-card">
-        <div className="container mx-auto px-4 py-6">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" asChild>
-              <Link to="/">
-                <ArrowLeft className="h-5 w-5" />
-              </Link>
-            </Button>
-            <PageHeader
-              title="Documents"
-              description="Handbooks, procedures, and policies"
-              showEcosystem
-              className="mb-0"
-            />
-          </div>
-        </div>
+    <div className="space-y-6">
+      {/* Header with back button */}
+      <div className="flex items-center gap-4">
+        <Button variant="ghost" size="icon" asChild>
+          <Link to="/">
+            <ArrowLeft className="h-5 w-5" />
+          </Link>
+        </Button>
+        <PageHeader
+          title="Documents"
+          description="Handbooks, procedures, and policies"
+          showEcosystem
+          className="mb-0"
+        />
       </div>
 
       {/* Content */}
-      <div className="container mx-auto px-4 py-6">
+      <div>
         {selectedDocument ? (
           <DocumentViewer 
             document={selectedDocument} 

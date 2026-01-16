@@ -9,9 +9,8 @@ import { PageHeader } from "@/components/layout/PageHeader";
 const BulkImport = () => {
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container mx-auto p-6 space-y-8">
-        <PageHeader
+    <div className="space-y-8">
+      <PageHeader
           title="Bulk Import"
           description="Import large quantities of cards from CSV files"
           showEcosystem
@@ -46,7 +45,6 @@ const BulkImport = () => {
           </Card>
         </div>
       </div>
-    </div>
   );
 };
 
