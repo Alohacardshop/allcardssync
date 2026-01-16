@@ -172,62 +172,144 @@ async function shopifyRequest(credentials: ShopifyCredentials, endpoint: string,
   }
 }
 
-async function findExistingProduct(credentials: ShopifyCredentials, sku: string, title?: string) {
+// Check local cache first for faster lookups
+async function checkProductCache(supabase: any, sku: string, storeKey: string): Promise<{ shopify_product_id: string; shopify_variant_id: string; shopify_inventory_item_id: string } | null> {
+  const { data, error } = await supabase
+    .from('shopify_product_cache')
+    .select('shopify_product_id, shopify_variant_id, shopify_inventory_item_id')
+    .eq('sku', sku)
+    .eq('store_key', storeKey)
+    .gt('expires_at', new Date().toISOString())
+    .maybeSingle()
+  
+  if (error || !data) return null
+  return data
+}
+
+// Update product cache
+async function updateProductCache(supabase: any, sku: string, storeKey: string, productId: string, variantId: string, inventoryItemId: string): Promise<void> {
+  await supabase
+    .from('shopify_product_cache')
+    .upsert({
+      sku,
+      store_key: storeKey,
+      shopify_product_id: productId,
+      shopify_variant_id: variantId,
+      shopify_inventory_item_id: inventoryItemId,
+      cached_at: new Date().toISOString(),
+      expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+    }, { onConflict: 'sku,store_key' })
+}
+
+// Optimized product lookup using GraphQL for single-call SKU search
+async function findExistingProduct(credentials: ShopifyCredentials, sku: string, title?: string, supabase?: any, storeKey?: string) {
   console.log(`🔍 Searching for existing product with SKU: ${sku}`)
   
-  // Method 1: Search by SKU in variants (most reliable)
+  // Phase 2 optimization: Check local cache first
+  if (supabase && storeKey) {
+    const cached = await checkProductCache(supabase, sku, storeKey)
+    if (cached) {
+      console.log(`✅ Found in cache: product ${cached.shopify_product_id}, variant ${cached.shopify_variant_id}`)
+      return { 
+        product: { id: cached.shopify_product_id }, 
+        variant: { id: cached.shopify_variant_id, inventory_item_id: cached.shopify_inventory_item_id },
+        fromCache: true
+      }
+    }
+  }
+  
+  // Optimized: Use GraphQL for efficient single-call SKU lookup
   try {
-    const products = await shopifyRequest(credentials, `products.json?limit=250&fields=id,title,variants`)
-    if (products.products) {
-      for (const product of products.products) {
-        const variant = product.variants?.find((v: any) => v.sku === sku)
-        if (variant) {
-          console.log(`✅ Found existing product by SKU: ${product.id}, variant: ${variant.id}`)
-          return { product, variant }
+    const graphqlQuery = `
+      query findProductBySKU($query: String!) {
+        productVariants(first: 1, query: $query) {
+          edges {
+            node {
+              id
+              sku
+              inventoryItem {
+                id
+              }
+              product {
+                id
+                title
+                handle
+              }
+            }
+          }
+        }
+      }
+    `
+    
+    const graphqlUrl = `https://${credentials.domain}/admin/api/2024-10/graphql.json`
+    await rateLimitDelay()
+    
+    const response = await fetch(graphqlUrl, {
+      method: 'POST',
+      headers: {
+        'X-Shopify-Access-Token': credentials.access_token,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        query: graphqlQuery,
+        variables: { query: `sku:${sku}` }
+      })
+    })
+    
+    if (response.ok) {
+      const result = await response.json()
+      const edges = result?.data?.productVariants?.edges
+      
+      if (edges && edges.length > 0) {
+        const node = edges[0].node
+        const productGid = node.product.id
+        const variantGid = node.id
+        const inventoryItemGid = node.inventoryItem?.id
+        
+        // Extract numeric IDs from GIDs
+        const productId = productGid.split('/').pop()
+        const variantId = variantGid.split('/').pop()
+        const inventoryItemId = inventoryItemGid?.split('/').pop()
+        
+        console.log(`✅ Found existing product via GraphQL: ${productId}, variant: ${variantId}`)
+        
+        // Cache the result
+        if (supabase && storeKey && inventoryItemId) {
+          await updateProductCache(supabase, sku, storeKey, productId, variantId, inventoryItemId)
+        }
+        
+        return { 
+          product: { id: productId, title: node.product.title, handle: node.product.handle }, 
+          variant: { id: variantId, sku: node.sku, inventory_item_id: inventoryItemId }
         }
       }
     }
   } catch (error) {
-    console.log(`⚠️ SKU search failed: ${error}`)
+    console.log(`⚠️ GraphQL SKU search failed, falling back to REST: ${error}`)
   }
   
-  // Method 2: Try to find by handle (SKU converted to handle format)
+  // Fallback: REST API search by handle (single call)
   const handle = sku.toLowerCase().replace(/[^a-z0-9]/g, '-')
   try {
     const products = await shopifyRequest(credentials, `products.json?limit=1&fields=id,title,variants&handle=${handle}`)
     if (products.products && products.products.length > 0) {
       const product = products.products[0]
-      const variant = product.variants[0] // Use first variant for existing product
+      const variant = product.variants[0]
       console.log(`✅ Found existing product by handle: ${product.id}, variant: ${variant.id}`)
+      
+      // Cache the result
+      if (supabase && storeKey && variant.inventory_item_id) {
+        await updateProductCache(supabase, sku, storeKey, product.id.toString(), variant.id.toString(), variant.inventory_item_id.toString())
+      }
+      
       return { product, variant }
     }
   } catch (error) {
     console.log(`⚠️ Handle search failed: ${error}`)
   }
 
-  // Method 3: For graded cards, try to find by barcode (PSA/CGC cert)
-  if (title && (title.includes('PSA') || title.includes('CGC'))) {
-    const certMatch = title.match(/(?:PSA|CGC)\s+(\d+)/i)
-    const certNumber = certMatch?.[1]
-    if (certNumber) {
-      try {
-        const products = await shopifyRequest(credentials, `products.json?limit=250&fields=id,title,variants`)
-        if (products.products) {
-          for (const product of products.products) {
-            const variant = product.variants?.find((v: any) => v.barcode === certNumber)
-            if (variant) {
-              console.log(`✅ Found existing graded product by cert: ${product.id}, variant: ${variant.id}`)
-              return { product, variant }
-            }
-          }
-        }
-      } catch (error) {
-        console.log(`⚠️ Cert search failed: ${error}`)
-      }
-    }
-  }
-
-  console.log(`❌ No existing product found for SKU: ${sku}`)
+  // Debug log instead of warning for expected "not found" case
+  console.log(`ℹ️ No existing product found for SKU: ${sku} (will create new)`)
   return { product: null, variant: null }
 }
 
@@ -606,23 +688,25 @@ async function processQueueItem(supabase: any, queueItem: SyncQueueItem) {
         // Item already has Shopify IDs, just update inventory
         console.log(`🔄 Updating existing item: ${shopifyProductId}/${shopifyVariantId}`)
       } else {
-        // Find or create product/variant
-        const existing = await findExistingProduct(credentials, item.sku, `${item.brand_title} ${item.subject} ${item.card_number}`.trim())
+        // Find or create product/variant (Phase 2: pass supabase and storeKey for caching)
+        const existing = await findExistingProduct(credentials, item.sku, `${item.brand_title} ${item.subject} ${item.card_number}`.trim(), supabase, item.store_key)
         
         if (existing.variant) {
-          // Product already exists - update variant price and inventory
+          // Product already exists - update variant price and inventory (skip if from cache)
           console.log(`🔄 Updating existing product: ${existing.product.id}, variant: ${existing.variant.id}`)
           
-          // Update variant if needed
-          await shopifyRequest(credentials, `variants/${existing.variant.id}.json`, {
-            method: 'PUT',
-            body: JSON.stringify({
-              variant: {
-                price: item.price.toString(),
-                cost: item.cost ? item.cost.toString() : undefined,
-              }
+          // Only update variant if not from cache (cache entries already up-to-date)
+          if (!existing.fromCache) {
+            await shopifyRequest(credentials, `variants/${existing.variant.id}.json`, {
+              method: 'PUT',
+              body: JSON.stringify({
+                variant: {
+                  price: item.price.toString(),
+                  cost: item.cost ? item.cost.toString() : undefined,
+                }
+              })
             })
-          })
+          }
           
           product = existing.product
           variant = existing.variant
@@ -631,7 +715,7 @@ async function processQueueItem(supabase: any, queueItem: SyncQueueItem) {
           console.log('⏳ No existing found, waiting 2s and rechecking to prevent duplicates...')
           await sleep(2000) // Give Shopify time to index any recently created products
           
-          const recheck = await findExistingProduct(credentials, item.sku, `${item.brand_title} ${item.subject} ${item.card_number}`.trim())
+          const recheck = await findExistingProduct(credentials, item.sku, `${item.brand_title} ${item.subject} ${item.card_number}`.trim(), supabase, item.store_key)
           if (recheck.variant) {
             console.log('✅ Found on recheck! Using existing product instead of creating duplicate')
             product = recheck.product
@@ -727,6 +811,37 @@ async function processQueueItem(supabase: any, queueItem: SyncQueueItem) {
       console.log(`🔄 Will retry queue item ${queueItem.id} in ${Math.floor(retryDelayMs / 1000)} seconds (${errorType})`)
     } else {
       console.log(`💀 Queue item ${queueItem.id} failed permanently after ${queueItem.retry_count} retries (${errorType})`)
+      
+      // Phase 1: Move to dead letter queue
+      try {
+        // Get item snapshot for debugging
+        const { data: itemData } = await supabase
+          .from('intake_items')
+          .select('*')
+          .eq('id', queueItem.inventory_item_id)
+          .maybeSingle()
+        
+        await supabase
+          .from('shopify_dead_letter_queue')
+          .insert({
+            original_queue_id: queueItem.id,
+            inventory_item_id: queueItem.inventory_item_id,
+            action: queueItem.action,
+            error_message: error.message,
+            error_type: errorType,
+            retry_count: queueItem.retry_count + 1,
+            item_snapshot: itemData || null,
+            failure_context: {
+              max_retries: queueItem.max_retries,
+              final_error: error.message,
+              failed_at: new Date().toISOString()
+            }
+          })
+        
+        console.log(`📬 Moved to dead letter queue: ${queueItem.id}`)
+      } catch (dlqError) {
+        console.error(`Failed to add to dead letter queue:`, dlqError)
+      }
     }
   }
 }

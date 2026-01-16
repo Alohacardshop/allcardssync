@@ -1798,6 +1798,54 @@ export type Database = {
           },
         ]
       }
+      shopify_dead_letter_queue: {
+        Row: {
+          action: string
+          archived_at: string | null
+          created_at: string | null
+          error_message: string | null
+          error_type: string | null
+          failure_context: Json | null
+          id: string
+          inventory_item_id: string
+          item_snapshot: Json | null
+          original_queue_id: string
+          resolution_notes: string | null
+          resolved_at: string | null
+          retry_count: number | null
+        }
+        Insert: {
+          action: string
+          archived_at?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          error_type?: string | null
+          failure_context?: Json | null
+          id?: string
+          inventory_item_id: string
+          item_snapshot?: Json | null
+          original_queue_id: string
+          resolution_notes?: string | null
+          resolved_at?: string | null
+          retry_count?: number | null
+        }
+        Update: {
+          action?: string
+          archived_at?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          error_type?: string | null
+          failure_context?: Json | null
+          id?: string
+          inventory_item_id?: string
+          item_snapshot?: Json | null
+          original_queue_id?: string
+          resolution_notes?: string | null
+          resolved_at?: string | null
+          retry_count?: number | null
+        }
+        Relationships: []
+      }
       shopify_location_cache: {
         Row: {
           cached_at: string
@@ -1862,6 +1910,39 @@ export type Database = {
             referencedColumns: ["key"]
           },
         ]
+      }
+      shopify_product_cache: {
+        Row: {
+          cached_at: string | null
+          expires_at: string | null
+          id: string
+          shopify_inventory_item_id: string | null
+          shopify_product_id: string | null
+          shopify_variant_id: string | null
+          sku: string
+          store_key: string
+        }
+        Insert: {
+          cached_at?: string | null
+          expires_at?: string | null
+          id?: string
+          shopify_inventory_item_id?: string | null
+          shopify_product_id?: string | null
+          shopify_variant_id?: string | null
+          sku: string
+          store_key: string
+        }
+        Update: {
+          cached_at?: string | null
+          expires_at?: string | null
+          id?: string
+          shopify_inventory_item_id?: string | null
+          shopify_product_id?: string | null
+          shopify_variant_id?: string | null
+          sku?: string
+          store_key?: string
+        }
+        Relationships: []
       }
       shopify_stores: {
         Row: {
@@ -2415,6 +2496,16 @@ export type Database = {
       }
     }
     Views: {
+      dead_letter_failure_analysis: {
+        Row: {
+          error_type: string | null
+          failure_count: number | null
+          first_failure: string | null
+          last_failure: string | null
+          unresolved_count: number | null
+        }
+        Relationships: []
+      }
       stale_lot_items: {
         Row: {
           age: unknown
@@ -2867,6 +2958,19 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      get_sync_queue_metrics: {
+        Args: { hours_back?: number }
+        Returns: {
+          avg_processing_time_ms: number
+          by_action: Json
+          by_hour: Json
+          items_per_hour: number
+          max_processing_time_ms: number
+          success_rate: number
+          total_failed: number
+          total_processed: number
+        }[]
       }
       get_webhook_health_stats: {
         Args: never
