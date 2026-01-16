@@ -227,9 +227,6 @@ export default function Auth() {
             <CardTitle>{mode === 'signin' ? 'Sign In' : 'Create an account'}</CardTitle>
           </CardHeader>
           <CardContent>
-            {mounted && (
-              <p data-testid="auth-debug" className="text-xs text-muted-foreground mb-2">Auth mounted</p>
-            )}
             <form onSubmit={mode === 'signin' ? handleSignIn : handleSignUp} className="space-y-4">
               <div>
                 <Label htmlFor="email">Email</Label>

@@ -150,11 +150,6 @@ const App = () => (
                             <Route path="/test-hardware" element={<TestHardwarePage />} />
                             <Route path="/qz-tray-test" element={<QzTrayTestPage />} />
                             
-                            {/* Legacy routes - redirect */}
-                            <Route path="/labels" element={<Navigate to="/barcode-printing" replace />} />
-                            <Route path="/print-logs" element={<Navigate to="/barcode-printing" replace />} />
-                            <Route path="/admin/label-studio" element={<Navigate to="/barcode-printing" replace />} />
-                            
                             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                             <Route path="*" element={<NotFound />} />
                             </Routes>

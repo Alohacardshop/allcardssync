@@ -1,6 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.7';
 import { corsHeaders } from '../_shared/cors.ts';
-import { logInfo, logError } from '../_shared/log.ts';
+import { log } from '../_lib/log.ts';
 import { resolveShopifyConfigForStore } from '../_shared/resolveShopifyConfig.ts';
 
 interface ImportResult {
@@ -79,7 +79,7 @@ Deno.serve(async (req) => {
       throw new Error('dry_run must be a boolean');
     }
 
-    logInfo('shopify-import', { store_key, location_id, collection_id, limit, dry_run });
+    log.info('shopify-import', { store_key, location_id, collection_id, limit, dry_run });
 
     // Get Shopify config
     const shopifyConfig = await resolveShopifyConfigForStore(supabase, store_key);
@@ -146,7 +146,7 @@ Deno.serve(async (req) => {
       }
     }`;
 
-    logInfo('shopify-import-graphql', { 
+    log.info('shopify-import-graphql', { 
       query: queryFilter || 'no filter', 
       limit: safeLimit,
       has_location_filter: !!location_id 
@@ -167,7 +167,7 @@ Deno.serve(async (req) => {
 
     if (!response.ok) {
       const errorText = await response.text();
-      logError('shopify-api-error', { 
+      log.error('shopify-api-error', { 
         status: response.status, 
         statusText: response.statusText,
         error: errorText 
@@ -178,7 +178,7 @@ Deno.serve(async (req) => {
     const data = await response.json();
     
     if (data.errors) {
-      logError('shopify-graphql-errors', { errors: data.errors });
+      log.error('shopify-graphql-errors', { errors: data.errors });
       throw new Error(`GraphQL errors: ${JSON.stringify(data.errors)}`);
     }
 
@@ -200,7 +200,7 @@ Deno.serve(async (req) => {
     // Process each product with safety checks
     for (const edge of products) {
       if (!edge || !edge.node) {
-        logError('invalid-product-edge', { edge });
+        log.error('invalid-product-edge', { edge });
         continue;
       }
 
@@ -208,13 +208,13 @@ Deno.serve(async (req) => {
       
       // Validate required product fields
       if (!product.id || !product.title) {
-        logError('invalid-product-data', { product_id: product?.id });
+        log.error('invalid-product-data', { product_id: product?.id });
         result.errors++;
         continue;
       }
 
       if (!product.variants || !product.variants.edges) {
-        logError('product-missing-variants', { product_id: product.id });
+        log.error('product-missing-variants', { product_id: product.id });
         continue;
       }
 
@@ -229,7 +229,7 @@ Deno.serve(async (req) => {
         
         // Validate required variant fields
         if (!variant.sku || !variant.id) {
-          logInfo('variant-missing-required-fields', { 
+          log.info('variant-missing-required-fields', { 
             product_id: product.id,
             variant_id: variant?.id,
             has_sku: !!variant?.sku 
@@ -239,7 +239,7 @@ Deno.serve(async (req) => {
 
         // Validate SKU format (basic sanitization)
         if (variant.sku.length > 255 || !/^[\w\-\.]+$/.test(variant.sku)) {
-          logError('invalid-sku-format', { 
+          log.error('invalid-sku-format', { 
             sku: variant.sku,
             product_id: product.id 
           });
@@ -249,7 +249,7 @@ Deno.serve(async (req) => {
 
         // Validate inventory item exists
         if (!variant.inventoryItem || !variant.inventoryItem.id) {
-          logError('variant-missing-inventory-item', { 
+          log.error('variant-missing-inventory-item', { 
             sku: variant.sku,
             variant_id: variant.id 
           });
@@ -285,7 +285,7 @@ Deno.serve(async (req) => {
             .maybeSingle();
 
           if (checkError) {
-            logError('check-existing-error', { sku: variant.sku, error: checkError });
+            log.error('check-existing-error', { sku: variant.sku, error: checkError });
             result.errors++;
             continue;
           }
@@ -308,7 +308,7 @@ Deno.serve(async (req) => {
               if (!product.id.startsWith('gid://shopify/Product/') ||
                   !variant.id.startsWith('gid://shopify/ProductVariant/') ||
                   !variant.inventoryItem.id.startsWith('gid://shopify/InventoryItem/')) {
-                logError('invalid-shopify-id-format', {
+                log.error('invalid-shopify-id-format', {
                   product_id: product.id,
                   variant_id: variant.id,
                   inventory_item_id: variant.inventoryItem.id
@@ -337,7 +337,7 @@ Deno.serve(async (req) => {
                 .eq('id', existing.id);
 
               if (updateError) {
-                logError('update-item-error', { id: existing.id, error: updateError });
+                log.error('update-item-error', { id: existing.id, error: updateError });
                 result.errors++;
                 result.items.push({
                   product_id: product.id,
@@ -353,7 +353,7 @@ Deno.serve(async (req) => {
                   sku: variant.sku,
                   status: 'linked',
                 });
-                logInfo('item-linked', { 
+                log.info('item-linked', { 
                   item_id: existing.id, 
                   sku: variant.sku,
                   product_id: product.id 
@@ -361,7 +361,7 @@ Deno.serve(async (req) => {
               }
             } else {
               // No matching item in database - log for review
-              logInfo('unmatched-shopify-item', {
+              log.info('unmatched-shopify-item', {
                 product_id: product.id,
                 sku: variant.sku,
                 title: product.title,
@@ -386,7 +386,7 @@ Deno.serve(async (req) => {
             }
           }
         } catch (error) {
-          logError('process-variant-error', { 
+          log.error('process-variant-error', { 
             sku: variant.sku, 
             error: error instanceof Error ? error.message : String(error),
             stack: error instanceof Error ? error.stack : undefined
@@ -416,7 +416,7 @@ Deno.serve(async (req) => {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     const errorStack = error instanceof Error ? error.stack : undefined;
     
-    logError('shopify-import-error', { 
+    log.error('shopify-import-error', { 
       error: errorMessage,
       stack: errorStack,
       type: error?.constructor?.name 

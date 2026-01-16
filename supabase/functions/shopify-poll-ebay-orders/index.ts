@@ -1,6 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { resolveShopifyConfig } from '../_shared/resolveShopifyConfig.ts';
-import { log } from '../_shared/log.ts';
+import { log } from '../_lib/log.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',

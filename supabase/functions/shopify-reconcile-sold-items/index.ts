@@ -1,7 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 import { resolveShopifyConfig } from '../_shared/resolveShopifyConfig.ts';
 import { fetchWithRetry } from '../_shared/http.ts';
-import { log } from '../_shared/log.ts';
+import { log } from '../_lib/log.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',

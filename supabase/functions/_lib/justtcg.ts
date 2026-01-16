@@ -1,7 +1,7 @@
 // JustTCG API utilities - shared between edge functions
 import { fetchWithRetry } from "../_shared/http.ts";
 
-export { logStructured } from "../_shared/log.ts";
+export { slog as logStructured } from "./log.ts";
 
 // Configuration
 const JUSTTCG_BASE = "https://api.justtcg.com/v2";
