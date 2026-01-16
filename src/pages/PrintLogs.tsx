@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { zebraService } from "@/lib/printer/zebraService";
 import { logger } from '@/lib/logger';
+import { PageHeader } from "@/components/layout/PageHeader";
 
 interface PrintJob {
   id: string;
@@ -235,16 +236,14 @@ export default function PrintLogs() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b">
-        <div className="container mx-auto px-6 py-4 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Print Logs</h1>
-            <p className="text-muted-foreground mt-1">View and manage print job history and status.</p>
-          </div>
-        </div>
-      </header>
+      <div className="container mx-auto px-6 py-6">
+        <PageHeader 
+          title="Print Logs"
+          description="View and manage print job history and status"
+          showEcosystem
+        />
 
-      <main className="container mx-auto px-6 py-6">
+        <main className="space-y-6">
           {/* Filters */}
           <div className="flex gap-4 mb-6 flex-wrap">
             <div className="flex items-center gap-2">
@@ -440,7 +439,8 @@ export default function PrintLogs() {
             )}
           </DialogContent>
         </Dialog>
-      </main>
+        </main>
+      </div>
     </div>
   );
 }

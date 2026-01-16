@@ -24,6 +24,7 @@ import { InventoryDeleteDialog } from '@/components/InventoryDeleteDialog';
 import { ConfirmationDialog } from '@/components/ConfirmationDialog';
 import { RefreshControls } from '@/components/RefreshControls';
 import { BulkActionsToolbar } from '@/components/inventory/BulkActionsToolbar';
+import { PageHeader } from '@/components/layout/PageHeader';
 
 import { useInventoryListQuery } from '@/hooks/useInventoryListQuery';
 import { Progress } from '@/components/ui/progress';
@@ -1099,14 +1100,16 @@ const Inventory = () => {
       )}
       
       <div className="container mx-auto p-6 space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-3xl font-bold">Inventory Management</h1>
-          <div className="flex items-center space-x-2">
+        <PageHeader 
+          title="Inventory Management" 
+          description="View, search, and manage your inventory items"
+          showEcosystem
+          actions={
             <Suspense fallback={<div className="h-8" />}>
               <QueueStatusIndicator />
             </Suspense>
-          </div>
-        </div>
+          }
+        />
 
         <Tabs defaultValue="inventory" className="w-full">
           <TabsList className="grid w-full grid-cols-3">
