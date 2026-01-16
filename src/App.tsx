@@ -39,7 +39,7 @@ const DiscordNotifications = React.lazy(() => import("./pages/admin/DiscordNotif
 const PendingNotifications = React.lazy(() => import("./pages/PendingNotifications"));
 const GradedIntake = React.lazy(() => import("./pages/intake/GradedIntake"));
 const BulkIntake = React.lazy(() => import("./pages/intake/BulkIntake"));
-const ShopifyBackfill = React.lazy(() => import("./pages/Admin/ShopifyBackfill"));
+const ShopifyBackfill = React.lazy(() => import("./pages/admin/ShopifyBackfill"));
 const QzTrayTestPage = React.lazy(() => import("./pages/QzTrayTestPage"));
 
 const EbayApp = React.lazy(() => import("./pages/EbayApp"));
