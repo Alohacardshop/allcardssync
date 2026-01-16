@@ -29,7 +29,7 @@ export function DefaultTemplateGuard({
           variant: "destructive",
         });
       }
-      navigate('/admin/label-studio');
+      navigate('/barcode-printing');
     };
 
     if (showInline) {

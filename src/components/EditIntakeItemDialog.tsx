@@ -12,7 +12,6 @@ export type IntakeItemDetails = {
   year?: string;
   brandTitle?: string;
   subject?: string;
-  category?: string;
   variant?: string;
   condition?: string;
   cardNumber?: string;
@@ -131,10 +130,6 @@ function EditIntakeItemDialog({ open, item, onOpenChange, onSave, isAdmin = fals
           <div>
             <Label htmlFor="subject">Subject</Label>
             <Input id="subject" value={form.subject || ""} onChange={(e) => handleChange("subject", e.target.value)} />
-          </div>
-          <div>
-            <Label htmlFor="category">Category (Legacy)</Label>
-            <Input id="category" value={form.category || ""} onChange={(e) => handleChange("category", e.target.value)} />
           </div>
           <div>
             <Label htmlFor="variant">Variant</Label>

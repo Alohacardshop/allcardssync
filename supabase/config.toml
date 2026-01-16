@@ -58,9 +58,6 @@ verify_jwt = true
 [functions.shopify-test-webhook]
 verify_jwt = true
 
-[functions.v2-shopify-send]
-verify_jwt = true
-
 [functions.v2-shopify-send-graded]
 verify_jwt = true
 
@@ -68,10 +65,6 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.admin-relink-graded-by-cert]
-verify_jwt = true
-
-# JustTCG refresh variants (requires admin role)
-[functions.justtcg-refresh-variants]
 verify_jwt = true
 
 # Shopify removal functions (public - called by database triggers)
@@ -83,10 +76,6 @@ verify_jwt = false
 
 # Bulk location transfer (requires staff/admin role)
 [functions.bulk-location-transfer]
-verify_jwt = true
-
-# Shopify inventory reconciliation (requires staff/admin role)
-[functions.shopify-reconcile-inventory]
 verify_jwt = true
 
 # Shopify sold items reconciliation - syncs actual inventory from Shopify (requires staff/admin role)
@@ -110,10 +99,6 @@ verify_jwt = true
 [functions.user-assignment-admin]
 verify_jwt = true
 
-# Catalog management functions
-[functions.catalog-sync-justtcg]
-verify_jwt = true
-
 # PSA lookups
 [functions.psa-lookup]
 verify_jwt = true
@@ -128,13 +113,7 @@ verify_jwt = true
 [functions.shopify-resolve-conflict]
 verify_jwt = true
 
-[functions.shopify-validate-sync]
-verify_jwt = true
-
 [functions.shopify-create-metafield-definitions]
-verify_jwt = true
-
-[functions.v2-shopify-reduce-raw]
 verify_jwt = true
 
 [functions.v2-shopify-set-inventory]
@@ -152,13 +131,6 @@ verify_jwt = false
 
 [functions.shopify-poll-ebay-orders]
 verify_jwt = false
-
-# Discord notification functions (requires admin role)
-[functions.flush-pending-notifications]
-verify_jwt = true
-
-[functions.reset-notifications]
-verify_jwt = true
 
 # Card Show Tool functions
 [functions.card-show-credentials]
@@ -196,4 +168,3 @@ verify_jwt = true
 # eBay sealed product nightly price check (cron job - no JWT)
 [functions.ebay-sealed-price-check]
 verify_jwt = false
-

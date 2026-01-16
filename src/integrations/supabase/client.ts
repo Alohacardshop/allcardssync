@@ -139,8 +139,6 @@ export interface Variant {
   card_id: string;
   condition: string;
   printing: string;
-  price_cents: number;
-  market_price_cents?: number;
 }
 
 export interface SearchResult {
@@ -196,8 +194,6 @@ export interface PricingResponse {
   }>
 }
 
-// Legacy interface for compatibility
-export interface PricingData extends PricingResponse {}
 
 // Type definitions for external database
 export interface ExternalGame {
