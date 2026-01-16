@@ -8,6 +8,8 @@ import { ShopifyConfig } from "./ShopifyConfig";
 import { ShopifyMetafieldSetup } from "./ShopifyMetafieldSetup";
 import { ShopifyWebhookStatus } from "./ShopifyWebhookStatus";
 import { WebhookMonitor } from "./WebhookMonitor";
+import { WebhookSecretsManager } from "./WebhookSecretsManager";
+import { WebhookHealthDashboard } from "./WebhookHealthDashboard";
 import { ShopifyReconciliation } from "./ShopifyReconciliation";
 import { ShopifyInventoryImport } from "./ShopifyInventoryImport";
 import { InventorySyncSettings } from "./InventorySyncSettings";
@@ -43,6 +45,8 @@ export function StoreManagementTabs() {
 
       {/* Webhooks Tab */}
       <TabsContent value="webhooks" className="space-y-6">
+        <WebhookHealthDashboard />
+        <WebhookSecretsManager />
         <ShopifyWebhookStatus />
         <WebhookMonitor />
       </TabsContent>
