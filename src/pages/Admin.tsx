@@ -182,12 +182,12 @@ export default function Admin() {
               <div className="flex items-center justify-between">
                 {!sidebarCollapsed && (
                   <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-primary text-primary-foreground">
+                    <div className="p-2 rounded-lg bg-gradient-to-br from-primary to-accent text-primary-foreground">
                       <Settings className="w-5 h-5" />
                     </div>
                     <div>
-                      <h1 className="text-lg font-bold">Admin</h1>
-                      <p className="text-xs text-muted-foreground">Portal</p>
+                      <h1 className="text-lg font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">Admin</h1>
+                      <p className="text-xs text-muted-foreground">Control Center</p>
                     </div>
                   </div>
                 )}
@@ -195,7 +195,7 @@ export default function Admin() {
                   variant="ghost"
                   size="icon"
                   onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-                  className="ml-auto"
+                  className="ml-auto hover:bg-primary/10"
                 >
                   <Menu className="w-4 h-4" />
                 </Button>

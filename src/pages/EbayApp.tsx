@@ -18,6 +18,7 @@ import { EbaySyncQueueMonitor } from '@/components/admin/EbaySyncQueueMonitor';
 import { EbayBulkListing } from '@/components/admin/EbayBulkListing';
 import { Link } from 'react-router-dom';
 import { useStore } from '@/contexts/StoreContext';
+import { PageHeader } from '@/components/layout/PageHeader';
 
 interface EbayStoreConfig {
   id: string;
@@ -299,29 +300,19 @@ export default function EbayApp() {
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8">
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
-              <ShoppingCart className="h-6 w-6" />
-              eBay Integration
-            </h1>
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <span>Manage eBay connection, listings, and sync queue</span>
-              {assignedStoreName && (
-                <Badge variant="outline" className="flex items-center gap-1">
-                  <MapPin className="h-3 w-3" />
-                  {assignedStoreName}
-                </Badge>
-              )}
-            </div>
-          </div>
-          <Link to="/ebay/sync">
-            <Button variant="outline" className="flex items-center gap-2">
-              <ArrowRightLeft className="h-4 w-4" />
-              Inventory Sync Dashboard
-            </Button>
-          </Link>
-        </div>
+        <PageHeader
+          title="eBay Integration"
+          description="Manage eBay connection, listings, and sync queue"
+          showEcosystem
+          actions={
+            <Link to="/ebay/sync">
+              <Button variant="outline" className="flex items-center gap-2">
+                <ArrowRightLeft className="h-4 w-4" />
+                Inventory Sync Dashboard
+              </Button>
+            </Link>
+          }
+        />
 
         <Tabs defaultValue="settings" className="space-y-6">
           <TabsList className="grid w-full grid-cols-3 lg:w-auto lg:inline-grid">

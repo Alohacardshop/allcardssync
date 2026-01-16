@@ -5,6 +5,7 @@ import { TransferHistoryLog } from "@/components/TransferHistoryLog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Package, History } from "lucide-react";
+import { PageHeader } from "@/components/layout/PageHeader";
 
 export default function BulkTransfer() {
   const [refreshHistory, setRefreshHistory] = useState(0);
@@ -14,17 +15,13 @@ export default function BulkTransfer() {
   };
 
   return (
-    <div className="min-h-screen bg-background pt-16">
-      
+    <div className="min-h-screen bg-background">
       <main className="container mx-auto p-6 space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold">Bulk Location Transfer</h1>
-            <p className="text-muted-foreground">
-              Scan barcodes to transfer items between locations
-            </p>
-          </div>
-        </div>
+        <PageHeader
+          title="Bulk Location Transfer"
+          description="Scan barcodes to transfer items between locations"
+          showEcosystem
+        />
 
         <Tabs defaultValue="transfer" className="space-y-4">
           <TabsList>

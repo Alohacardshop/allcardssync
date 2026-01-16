@@ -23,6 +23,7 @@ import { useStore } from "@/contexts/StoreContext";
 import { Search, Package, DollarSign, Calendar, Eye, History, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { logger } from "@/lib/logger";
+import { PageHeader } from "@/components/layout/PageHeader";
 
 interface IntakeLot {
   id: string;
@@ -246,18 +247,12 @@ export default function Batches() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b bg-card">
-        <div className="container mx-auto px-6 py-4 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Batches</h1>
-            <p className="text-muted-foreground mt-1">View and manage intake batches and their items</p>
-          </div>
-        </div>
-      </header>
-
-
       <div className="container mx-auto px-6 py-6">
+        <PageHeader
+          title="Batches"
+          description="View and manage intake batches and their items"
+          showEcosystem
+        />
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           <Card>
