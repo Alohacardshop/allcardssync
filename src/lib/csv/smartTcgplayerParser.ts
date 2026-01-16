@@ -391,20 +391,9 @@ export function parseSmartTcgplayerCsv(csvText: string): SmartParseResult {
   const headerRowIndex = findHeaderRow(allRows);
   const headerRow = allRows[headerRowIndex];
   
-  // Debug logging
-  console.log('[CSV Parser] Total rows:', allRows.length);
-  console.log('[CSV Parser] Header row index:', headerRowIndex);
-  console.log('[CSV Parser] Header row:', headerRow);
   
   // Try header-based detection first
   const headerMappings = fuzzyMatchHeaders(headerRow);
-  
-  console.log('[CSV Parser] Header mappings:', headerMappings.map(m => ({
-    index: m.sourceIndex,
-    header: headerRow[m.sourceIndex],
-    field: m.targetField,
-    confidence: m.confidence
-  })));
   
   if (headerMappings.length >= 4) { // Need at least 4 recognized fields for header-based
     mappings = headerMappings;
@@ -481,7 +470,7 @@ export function parseSmartTcgplayerCsv(csvText: string): SmartParseResult {
   const errors: SmartParseError[] = [];
   let skippedRows = 0;
 
-  console.log('[CSV Parser] Starting data parsing from row', dataStartRow, 'to', allRows.length - 1);
+  
 
   for (let i = dataStartRow; i < allRows.length; i++) {
     const row = allRows[i];
@@ -489,7 +478,6 @@ export function parseSmartTcgplayerCsv(csvText: string): SmartParseResult {
     // Skip rows with insufficient data (likely footer/metadata rows)
     const nonEmptyCount = row.filter(cell => cell && cell.trim()).length;
     if (nonEmptyCount < 4) {
-      console.log('[CSV Parser] SKIP row', i, '- insufficient data:', nonEmptyCount, 'cells');
       skippedRows++;
       continue;
     }

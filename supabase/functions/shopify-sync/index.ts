@@ -256,18 +256,6 @@ async function createShopifyProduct(credentials: ShopifyCredentials, item: Inven
       variant = ''
     }
     
-    // Debug logging
-    console.log('DEBUG: Graded card title data:', {
-      year: year,
-      brand_title: item.brand_title,
-      subject: item.subject,
-      cardNumber: cardNumber,
-      variant: variant,
-      grade: item.grade,
-      itemYear: item.year,
-      catalogSnapshot: (item as any).catalog_snapshot
-    })
-    
     const parts = []
     if (year) parts.push(year)
     if (item.brand_title) parts.push(item.brand_title)
@@ -277,7 +265,6 @@ async function createShopifyProduct(credentials: ShopifyCredentials, item: Inven
     if (item.grade) parts.push(`PSA ${item.grade}`)
     
     title = parts.filter(Boolean).join(' ').replace(/\s+/g, ' ').trim()
-    console.log('DEBUG: Final graded card title:', title)
     
     // Get PSA cert number for description
     const psaCertNumber = (item as any).psa_cert || (item as any).catalog_snapshot?.certNumber || (item as any).catalog_snapshot?.psa_cert || item.sku
@@ -354,15 +341,12 @@ async function createShopifyProduct(credentials: ShopifyCredentials, item: Inven
   if (uniqueImageUrls.length === 0) {
     const defaultImageUrl = 'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_large.png'
     uniqueImageUrls.push(defaultImageUrl)
-    console.log('DEBUG: No images found, using default placeholder image')
   }
   
   const images = [...uniqueImageUrls].reverse().map((url, index) => ({
     src: url,
     alt: `${title} - Image ${index + 1}`
   }))
-  
-  console.log('DEBUG: Final images for product:', uniqueImageUrls)
   
   const handle = item.sku.toLowerCase().replace(/[^a-z0-9]/g, '-')
   

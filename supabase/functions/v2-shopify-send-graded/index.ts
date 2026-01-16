@@ -104,24 +104,6 @@ Deno.serve(async (req) => {
       ? intakeItem.purchase_location[0]?.name 
       : intakeItem.purchase_location?.name
 
-    // Debug logging
-    console.log('DEBUG: Title construction data:', {
-      itemTitle: item.title,
-      year,
-      brandTitle,
-      subject,
-      grade,
-      cardNumber,
-      variant,
-      category,
-      intakeItemData: {
-        year: intakeItem.year,
-        grade: intakeItem.grade,
-        catalogYear: intakeItem.catalog_snapshot?.year,
-        psaYear: intakeItem.psa_snapshot?.year
-      }
-    })
-
     let title = item.title
     if (!title) {
       const parts = []
@@ -134,10 +116,6 @@ Deno.serve(async (req) => {
       if (grade) parts.push(`${gradingCompany} ${grade}`)
       
       title = parts.filter(Boolean).join(' ')
-      console.log('DEBUG: Constructed title parts:', parts)
-      console.log('DEBUG: Final constructed title:', title)
-    } else {
-      console.log('DEBUG: Using provided title:', title)
     }
 
     // Create product description with PSA cert number
@@ -159,9 +137,6 @@ Deno.serve(async (req) => {
     const existingProductId = intakeItem.shopify_product_id
     const existingVariantId = intakeItem.shopify_variant_id
     const isUpdate = !!(existingProductId && existingVariantId)
-
-    console.log('DEBUG: Sync operation type:', isUpdate ? 'UPDATE' : 'CREATE')
-    console.log('DEBUG: Existing Shopify IDs:', { existingProductId, existingVariantId })
 
     // Build comprehensive metafields array
     const metafields = [
@@ -378,14 +353,10 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log('DEBUG: Sending to Shopify:', JSON.stringify(productData, null, 2))
-
     let product, variant
 
     if (isUpdate) {
       // UPDATE existing product
-      console.log('DEBUG: Updating existing Shopify product:', existingProductId)
-      
       const updateResponse = await fetch(`https://${domain}/admin/api/2024-07/products/${existingProductId}.json`, {
         method: 'PUT',
         headers: {
@@ -431,8 +402,6 @@ Deno.serve(async (req) => {
 
     } else {
       // CREATE new product
-      console.log('DEBUG: Creating new Shopify product')
-      
       const createResponse = await fetch(`https://${domain}/admin/api/2024-07/products.json`, {
         method: 'POST',
         headers: {
@@ -474,7 +443,6 @@ Deno.serve(async (req) => {
     }
 
     // Now create metafields separately after product creation
-    console.log('DEBUG: Creating metafields for product:', product.id)
     
     // Add tags as a list metafield (not JSON string)
     metafields.push({
