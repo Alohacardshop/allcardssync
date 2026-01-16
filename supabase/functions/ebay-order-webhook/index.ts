@@ -134,7 +134,7 @@ serve(async (req) => {
       }
 
       try {
-        // Find the inventory item by eBay listing ID or SKU
+        // First, find the item to get store_key and actual SKU
         let query = supabase
           .from('intake_items')
           .select('id, sku, quantity, shopify_product_id, shopify_variant_id, store_key, shopify_location_gid')
@@ -160,53 +160,134 @@ serve(async (req) => {
         }
 
         const item = items[0]
-        const newQuantity = Math.max(0, (item.quantity || 1) - quantity)
+        const itemSku = item.sku || sku
+        const storeKey = item.store_key
 
-        // Update the item - mark as sold if quantity reaches 0
-        const updateData: Record<string, any> = {
-          quantity: newQuantity,
-          updated_at: new Date().toISOString(),
-          updated_by: 'ebay_webhook'
-        }
+        // Check if this store has location priorities configured (multi-location like Hawaii)
+        const { data: locationPriorities } = await supabase
+          .from('ebay_location_priority')
+          .select('id')
+          .eq('store_key', storeKey)
+          .eq('is_active', true)
+          .limit(1)
 
-        // If fully sold, update sold fields
-        if (newQuantity === 0) {
-          updateData.sold_at = new Date().toISOString()
-          updateData.sold_channel = 'ebay'
-          updateData.sold_order_id = orderId
-          updateData.sold_price = parseFloat(lineItem.lineItemCost.value)
-          updateData.sold_currency = lineItem.lineItemCost.currency
-        }
+        const hasMultiLocation = locationPriorities && locationPriorities.length > 0
 
-        const { error: updateError } = await supabase
-          .from('intake_items')
-          .update(updateData)
-          .eq('id', item.id)
-
-        if (updateError) {
-          console.error(`[eBay Webhook] Error updating item ${item.id}:`, updateError)
-          errors.push(`Update error for ${item.sku}: ${updateError.message}`)
-          continue
-        }
-
-        console.log(`[eBay Webhook] Updated item ${item.sku}: quantity ${item.quantity} -> ${newQuantity}`)
-        processedItems.push(item.sku || item.id)
-
-        // If item has Shopify sync, queue inventory update
-        if (item.shopify_product_id && item.shopify_variant_id && newQuantity === 0) {
-          console.log(`[eBay Webhook] Queueing Shopify inventory update for ${item.sku}`)
+        if (hasMultiLocation && itemSku) {
+          // Use waterfall deduction for multi-location stores (Hawaii)
+          console.log(`[eBay Webhook] Using waterfall deduction for ${itemSku} at ${storeKey}`)
           
-          // Add to Shopify sync queue to update inventory
-          await supabase
-            .from('shopify_sync_queue')
-            .insert({
-              inventory_item_id: item.id,
-              action: 'update',
-              status: 'queued',
-              retry_count: 0,
-              max_retries: 3,
-              updated_by: 'ebay_webhook'
+          const { data: waterfallResult, error: waterfallError } = await supabase
+            .rpc('decrement_inventory_waterfall', {
+              p_sku: itemSku,
+              p_store_key: storeKey,
+              p_qty_to_remove: quantity,
+              p_dry_run: false
             })
+
+          if (waterfallError) {
+            console.error(`[eBay Webhook] Waterfall deduction error:`, waterfallError)
+            errors.push(`Waterfall error for ${itemSku}: ${waterfallError.message}`)
+            continue
+          }
+
+          console.log(`[eBay Webhook] Waterfall result:`, JSON.stringify(waterfallResult))
+
+          // Check if we fulfilled the full quantity
+          const remainingQty = waterfallResult?.remaining || 0
+          if (remainingQty > 0) {
+            console.warn(`[eBay Webhook] Could not fulfill full quantity. Remaining: ${remainingQty}`)
+            errors.push(`Partial fulfillment for ${itemSku}: ${remainingQty} units unfulfilled`)
+          }
+
+          // Update sold info on affected items
+          const decrements = waterfallResult?.decrements || []
+          for (const dec of decrements) {
+            // Check if item quantity is now 0 to mark as sold
+            const { data: updatedItem } = await supabase
+              .from('intake_items')
+              .select('quantity, shopify_product_id, shopify_variant_id')
+              .eq('id', dec.item_id)
+              .single()
+
+            if (updatedItem && updatedItem.quantity === 0) {
+              await supabase
+                .from('intake_items')
+                .update({
+                  sold_at: new Date().toISOString(),
+                  sold_channel: 'ebay',
+                  sold_order_id: orderId,
+                  sold_price: parseFloat(lineItem.lineItemCost.value),
+                  sold_currency: lineItem.lineItemCost.currency,
+                  updated_by: 'ebay_webhook'
+                })
+                .eq('id', dec.item_id)
+
+              // Queue Shopify sync for sold items
+              if (updatedItem.shopify_product_id && updatedItem.shopify_variant_id) {
+                await supabase
+                  .from('shopify_sync_queue')
+                  .insert({
+                    inventory_item_id: dec.item_id,
+                    action: 'update',
+                    status: 'queued',
+                    retry_count: 0,
+                    max_retries: 3,
+                    updated_by: 'ebay_webhook'
+                  })
+              }
+            }
+          }
+
+          processedItems.push(`${itemSku} (waterfall: ${decrements.length} locations)`)
+
+        } else {
+          // Single location store - use simple deduction (Las Vegas)
+          const newQuantity = Math.max(0, (item.quantity || 1) - quantity)
+
+          const updateData: Record<string, any> = {
+            quantity: newQuantity,
+            updated_at: new Date().toISOString(),
+            updated_by: 'ebay_webhook'
+          }
+
+          if (newQuantity === 0) {
+            updateData.sold_at = new Date().toISOString()
+            updateData.sold_channel = 'ebay'
+            updateData.sold_order_id = orderId
+            updateData.sold_price = parseFloat(lineItem.lineItemCost.value)
+            updateData.sold_currency = lineItem.lineItemCost.currency
+          }
+
+          const { error: updateError } = await supabase
+            .from('intake_items')
+            .update(updateData)
+            .eq('id', item.id)
+
+          if (updateError) {
+            console.error(`[eBay Webhook] Error updating item ${item.id}:`, updateError)
+            errors.push(`Update error for ${item.sku}: ${updateError.message}`)
+            continue
+          }
+
+          console.log(`[eBay Webhook] Updated item ${item.sku}: quantity ${item.quantity} -> ${newQuantity}`)
+          processedItems.push(item.sku || item.id)
+
+          // Queue Shopify sync if fully sold
+          if (item.shopify_product_id && item.shopify_variant_id && newQuantity === 0) {
+            console.log(`[eBay Webhook] Queueing Shopify inventory update for ${item.sku}`)
+            
+            await supabase
+              .from('shopify_sync_queue')
+              .insert({
+                inventory_item_id: item.id,
+                action: 'update',
+                status: 'queued',
+                retry_count: 0,
+                max_retries: 3,
+                updated_by: 'ebay_webhook'
+              })
+          }
         }
 
       } catch (itemError: any) {
