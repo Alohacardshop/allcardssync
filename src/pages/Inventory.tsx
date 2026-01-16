@@ -24,7 +24,7 @@ import { InventoryDeleteDialog } from '@/components/InventoryDeleteDialog';
 import { ConfirmationDialog } from '@/components/ConfirmationDialog';
 import { RefreshControls } from '@/components/RefreshControls';
 import { BulkActionsToolbar } from '@/components/inventory/BulkActionsToolbar';
-import { AuthStatusDebug } from '@/components/AuthStatusDebug';
+
 import { useInventoryListQuery } from '@/hooks/useInventoryListQuery';
 import { Progress } from '@/components/ui/progress';
 import { useQueryClient } from '@tanstack/react-query';
@@ -232,7 +232,7 @@ const Inventory = () => {
   const [syncingRowId, setSyncingRowId] = useState<string | null>(null);
   const [bulkRetrying, setBulkRetrying] = useState(false);
   const [bulkSyncing, setBulkSyncing] = useState(false);
-  const [showDebug, setShowDebug] = useState<boolean>(false);
+  
 
   // Auth and error states
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
@@ -1069,22 +1069,6 @@ const Inventory = () => {
     return (
       <div className="min-h-screen bg-background pt-16">
         <div className="container mx-auto p-6">
-          {/* Auth Debug Panel (only in development) */}
-          {process.env.NODE_ENV === 'development' && (
-            <div className="flex justify-end mb-4">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowDebug(!showDebug)}
-                className="text-xs"
-              >
-                {showDebug ? 'Hide' : 'Show'} Debug
-              </Button>
-            </div>
-          )}
-          
-          <AuthStatusDebug visible={showDebug} />
-          
           <InventorySkeleton
             snapshot={snapshot}
             onRetry={() => {
@@ -1118,25 +1102,11 @@ const Inventory = () => {
         <div className="flex items-center justify-between">
           <h1 className="text-3xl font-bold">Inventory Management</h1>
           <div className="flex items-center space-x-2">
-            {/* Debug Toggle (development only) */}
-            {process.env.NODE_ENV === 'development' && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowDebug(!showDebug)}
-                className="text-xs"
-              >
-                {showDebug ? 'Hide' : 'Show'} Debug
-              </Button>
-            )}
             <Suspense fallback={<div className="h-8" />}>
               <QueueStatusIndicator />
             </Suspense>
           </div>
         </div>
-
-        {/* Auth Debug Panel */}
-        <AuthStatusDebug visible={showDebug} />
 
         <Tabs defaultValue="inventory" className="w-full">
           <TabsList className="grid w-full grid-cols-3">

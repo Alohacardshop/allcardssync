@@ -10,7 +10,7 @@ import { toast } from "@/hooks/use-toast";
 import EditIntakeItemDialog from "./EditIntakeItemDialog";
 import { useStore } from "@/contexts/StoreContext";
 import { logStoreContext, validateCompleteStoreContext } from "@/utils/storeValidation";
-import { StoreContextDebug } from "./StoreContextDebug";
+
 import { useBatchSendToShopify } from '@/hooks/useBatchSendToShopify';
 import { useBatchAutoProcessSettings } from '@/hooks/useBatchAutoProcessSettings';
 import { BatchConfigDialog } from '@/components/BatchConfigDialog';
@@ -634,7 +634,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
             year: editingItem.year || (editingItem.catalog_snapshot?.year) || '',
             brandTitle: editingItem.brand_title || (editingItem.catalog_snapshot?.set) || '',
             subject: editingItem.subject || (editingItem.catalog_snapshot?.name) || '',
-            category: editingItem.category,
+            
             variant: editingItem.variant || 
                     (editingItem.catalog_snapshot?.foil ? 'Foil' : '') || 
                     (editingItem.catalog_snapshot?.varietyPedigree) || '',
@@ -675,7 +675,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
                   year: values.year,
                   brand_title: values.brandTitle,
                   subject: values.subject,
-                  category: values.category,
+                  
                   variant: values.variant,
                   card_number: values.cardNumber,
                   grade: values.grade,
