@@ -116,6 +116,56 @@ export type Database = {
         }
         Relationships: []
       }
+      ebay_category_mappings: {
+        Row: {
+          brand_match: string[] | null
+          category_id: string
+          category_name: string
+          created_at: string | null
+          default_template_id: string | null
+          id: string
+          is_active: boolean | null
+          keyword_pattern: string | null
+          main_category: string | null
+          priority: number | null
+          store_key: string
+        }
+        Insert: {
+          brand_match?: string[] | null
+          category_id: string
+          category_name: string
+          created_at?: string | null
+          default_template_id?: string | null
+          id?: string
+          is_active?: boolean | null
+          keyword_pattern?: string | null
+          main_category?: string | null
+          priority?: number | null
+          store_key: string
+        }
+        Update: {
+          brand_match?: string[] | null
+          category_id?: string
+          category_name?: string
+          created_at?: string | null
+          default_template_id?: string | null
+          id?: string
+          is_active?: boolean | null
+          keyword_pattern?: string | null
+          main_category?: string | null
+          priority?: number | null
+          store_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ebay_category_mappings_default_template_id_fkey"
+            columns: ["default_template_id"]
+            isOneToOne: false
+            referencedRelation: "ebay_listing_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ebay_fulfillment_policies: {
         Row: {
           created_at: string
@@ -197,6 +247,63 @@ export type Database = {
           store_key?: string
           total_quantity?: number
           updated_at?: string
+        }
+        Relationships: []
+      }
+      ebay_listing_templates: {
+        Row: {
+          aspects_mapping: Json | null
+          category_id: string
+          category_name: string | null
+          condition_id: string
+          created_at: string | null
+          default_grader: string | null
+          description: string | null
+          description_template: string | null
+          id: string
+          is_active: boolean | null
+          is_default: boolean | null
+          is_graded: boolean | null
+          name: string
+          store_key: string
+          title_template: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          aspects_mapping?: Json | null
+          category_id: string
+          category_name?: string | null
+          condition_id?: string
+          created_at?: string | null
+          default_grader?: string | null
+          description?: string | null
+          description_template?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_default?: boolean | null
+          is_graded?: boolean | null
+          name: string
+          store_key: string
+          title_template?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          aspects_mapping?: Json | null
+          category_id?: string
+          category_name?: string | null
+          condition_id?: string
+          created_at?: string | null
+          default_grader?: string | null
+          description?: string | null
+          description_template?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_default?: boolean | null
+          is_graded?: boolean | null
+          name?: string
+          store_key?: string
+          title_template?: string | null
+          updated_at?: string | null
         }
         Relationships: []
       }

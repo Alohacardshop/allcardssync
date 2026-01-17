@@ -5,10 +5,16 @@ import {
   createOrUpdateInventoryItem,
   createOffer,
   publishOffer,
-  mapConditionToEbay,
   type EbayInventoryItem,
   type EbayOffer,
 } from '../_shared/ebayApi.ts'
+import {
+  EBAY_CONDITION_IDS,
+  buildGradedConditionDescriptors,
+  detectCategoryFromBrand,
+  getEbayCategoryId,
+  buildTradingCardAspects,
+} from '../_shared/ebayConditions.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -18,6 +24,19 @@ const corsHeaders = {
 interface CreateListingRequest {
   intake_item_id: string
   store_key: string
+  template_id?: string // Optional: use specific template
+}
+
+interface ListingTemplate {
+  id: string
+  category_id: string
+  category_name: string | null
+  condition_id: string
+  is_graded: boolean
+  title_template: string | null
+  description_template: string | null
+  default_grader: string | null
+  aspects_mapping: Record<string, any>
 }
 
 serve(async (req) => {
@@ -30,7 +49,7 @@ serve(async (req) => {
   const supabase = createClient(supabaseUrl, supabaseKey)
 
   try {
-    const { intake_item_id, store_key }: CreateListingRequest = await req.json()
+    const { intake_item_id, store_key, template_id }: CreateListingRequest = await req.json()
 
     if (!intake_item_id || !store_key) {
       return new Response(
@@ -77,27 +96,85 @@ serve(async (req) => {
       )
     }
 
+    // Get listing template
+    let template: ListingTemplate | null = null
+    
+    if (template_id) {
+      // Use specified template
+      const { data: templateData } = await supabase
+        .from('ebay_listing_templates')
+        .select('*')
+        .eq('id', template_id)
+        .single()
+      template = templateData
+    } else {
+      // Auto-detect template based on category mappings
+      const detectedCategory = detectCategoryFromBrand(item.brand_title) || item.main_category
+      const isGraded = !!item.grade
+      
+      // Find matching template
+      const { data: templates } = await supabase
+        .from('ebay_listing_templates')
+        .select('*')
+        .eq('store_key', store_key)
+        .eq('is_graded', isGraded)
+        .eq('is_active', true)
+        .order('is_default', { ascending: false })
+      
+      if (templates && templates.length > 0) {
+        // Try to find a template for the detected category
+        template = templates.find(t => {
+          if (detectedCategory === 'tcg' && t.category_id === '183454') return true
+          if (detectedCategory === 'sports' && t.category_id === '261328') return true
+          if (detectedCategory === 'comics' && (t.category_id === '63' || t.category_id === '259061')) return true
+          return false
+        }) || templates[0] // Fallback to first/default
+      }
+    }
+
+    console.log(`[ebay-create-listing] Using template: ${template?.id || 'none'}, isGraded: ${!!item.grade}`)
+
     // Get valid access token
     const accessToken = await getValidAccessToken(supabase, store_key, environment)
 
     // Build eBay SKU (use existing SKU or generate)
     const ebaySku = item.sku || `INV-${item.id.substring(0, 8)}`
 
+    // Determine condition and category
+    const isGraded = !!item.grade
+    const conditionId = template?.condition_id || (isGraded ? EBAY_CONDITION_IDS.GRADED : EBAY_CONDITION_IDS.UNGRADED)
+    const categoryId = template?.category_id || 
+      getEbayCategoryId(detectCategoryFromBrand(item.brand_title) || item.main_category as any, isGraded)
+
     // Build title from item data
-    const title = buildTitle(item, storeConfig.title_template)
+    const title = buildTitle(item, template?.title_template || storeConfig.title_template)
 
     // Build description
-    const description = buildDescription(item, storeConfig.description_template)
+    const description = buildDescription(item, template?.description_template || storeConfig.description_template)
 
-    // Create inventory item
-    const inventoryItem: EbayInventoryItem = {
+    // Build aspects for trading cards
+    const aspects = buildTradingCardAspects(item)
+
+    // Build condition descriptors for graded items
+    let conditionDescriptors: any[] | undefined
+    if (isGraded) {
+      conditionDescriptors = buildGradedConditionDescriptors(
+        item.grading_company || template?.default_grader || 'PSA',
+        item.grade,
+        item.psa_cert || item.cgc_cert
+      )
+    }
+
+    // Create inventory item with condition descriptors
+    const inventoryItem: EbayInventoryItem & { conditionDescriptors?: any[] } = {
       sku: ebaySku,
       product: {
         title: title.substring(0, 80), // eBay title limit
         description: description,
+        aspects: aspects,
         imageUrls: item.image_urls || [],
       },
-      condition: mapConditionToEbay(item.grade ? 'excellent' : 'new'),
+      condition: conditionId,
       availability: {
         shipToLocationAvailability: {
           quantity: item.quantity || 1,
@@ -105,7 +182,14 @@ serve(async (req) => {
       },
     }
 
-    console.log(`[ebay-create-listing] Creating inventory item SKU=${ebaySku}`)
+    // Add condition descriptors for graded items
+    if (conditionDescriptors && conditionDescriptors.length > 0) {
+      inventoryItem.conditionDescriptors = conditionDescriptors
+    }
+
+    console.log(`[ebay-create-listing] Creating inventory item SKU=${ebaySku} condition=${conditionId} category=${categoryId}`)
+    console.log(`[ebay-create-listing] Condition descriptors:`, JSON.stringify(conditionDescriptors))
+    
     const inventoryResult = await createOrUpdateInventoryItem(accessToken, environment, inventoryItem)
     
     if (!inventoryResult.success) {
@@ -130,7 +214,7 @@ serve(async (req) => {
         paymentPolicyId: storeConfig.default_payment_policy_id || '',
         returnPolicyId: storeConfig.default_return_policy_id || '',
       },
-      categoryId: storeConfig.default_category_id || '183454', // Default: Trading Cards
+      categoryId: categoryId,
       merchantLocationKey: storeConfig.location_key || undefined,
     }
 
@@ -163,6 +247,11 @@ serve(async (req) => {
       offer_id: offerResult.offerId,
       listing_id: publishResult.listingId,
       listing_url: listingUrl,
+      template_id: template?.id,
+      category_id: categoryId,
+      condition_id: conditionId,
+      condition_descriptors: conditionDescriptors,
+      aspects: aspects,
     }
 
     await supabase
@@ -189,6 +278,9 @@ serve(async (req) => {
         offer_id: offerResult.offerId,
         sku: ebaySku,
         listing_url: listingUrl,
+        template_used: template?.id,
+        category_id: categoryId,
+        condition_id: conditionId,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
@@ -221,11 +313,16 @@ serve(async (req) => {
 function buildTitle(item: any, template?: string | null): string {
   if (template) {
     return template
-      .replace('{subject}', item.subject || '')
-      .replace('{brand}', item.brand_title || '')
-      .replace('{year}', item.year || '')
-      .replace('{grade}', item.grade || '')
-      .replace('{card_number}', item.card_number || '')
+      .replace(/{subject}/g, item.subject || '')
+      .replace(/{brand_title}/g, item.brand_title || '')
+      .replace(/{brand}/g, item.brand_title || '')
+      .replace(/{year}/g, item.year || '')
+      .replace(/{grade}/g, item.grade || '')
+      .replace(/{grading_company}/g, item.grading_company || '')
+      .replace(/{card_number}/g, item.card_number || '')
+      .replace(/{variant}/g, item.variant || '')
+      .replace(/{psa_cert}/g, item.psa_cert || '')
+      .replace(/\s+/g, ' ')
       .trim()
   }
 
@@ -234,7 +331,11 @@ function buildTitle(item: any, template?: string | null): string {
   if (item.brand_title) parts.push(item.brand_title)
   if (item.subject) parts.push(item.subject)
   if (item.card_number) parts.push(`#${item.card_number}`)
-  if (item.grade) parts.push(`PSA ${item.grade}`)
+  if (item.grade && item.grading_company) {
+    parts.push(`${item.grading_company} ${item.grade}`)
+  } else if (item.grade) {
+    parts.push(`PSA ${item.grade}`)
+  }
   
   return parts.join(' ') || 'Trading Card'
 }
@@ -242,12 +343,17 @@ function buildTitle(item: any, template?: string | null): string {
 function buildDescription(item: any, template?: string | null): string {
   if (template) {
     return template
-      .replace('{subject}', item.subject || '')
-      .replace('{brand}', item.brand_title || '')
-      .replace('{year}', item.year || '')
-      .replace('{grade}', item.grade || '')
-      .replace('{card_number}', item.card_number || '')
-      .replace('{sku}', item.sku || '')
+      .replace(/{subject}/g, item.subject || '')
+      .replace(/{brand_title}/g, item.brand_title || '')
+      .replace(/{brand}/g, item.brand_title || '')
+      .replace(/{year}/g, item.year || '')
+      .replace(/{grade}/g, item.grade || '')
+      .replace(/{grading_company}/g, item.grading_company || '')
+      .replace(/{card_number}/g, item.card_number || '')
+      .replace(/{variant}/g, item.variant || '')
+      .replace(/{sku}/g, item.sku || '')
+      .replace(/{psa_cert}/g, item.psa_cert || '')
+      .replace(/{cgc_cert}/g, item.cgc_cert || '')
       .trim()
   }
 
@@ -257,8 +363,13 @@ function buildDescription(item: any, template?: string | null): string {
   if (item.brand_title) lines.push(`<p><strong>Brand:</strong> ${item.brand_title}</p>`)
   if (item.year) lines.push(`<p><strong>Year:</strong> ${item.year}</p>`)
   if (item.card_number) lines.push(`<p><strong>Card #:</strong> ${item.card_number}</p>`)
-  if (item.grade) lines.push(`<p><strong>Grade:</strong> PSA ${item.grade}</p>`)
+  if (item.variant) lines.push(`<p><strong>Variant:</strong> ${item.variant}</p>`)
+  if (item.grade) {
+    const grader = item.grading_company || 'PSA'
+    lines.push(`<p><strong>Grade:</strong> ${grader} ${item.grade}</p>`)
+  }
   if (item.psa_cert) lines.push(`<p><strong>PSA Cert:</strong> ${item.psa_cert}</p>`)
+  if (item.cgc_cert) lines.push(`<p><strong>CGC Cert:</strong> ${item.cgc_cert}</p>`)
   
   return lines.join('\n')
 }
