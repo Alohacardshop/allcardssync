@@ -16,9 +16,11 @@ import {
 } from 'lucide-react';
 import { EbaySyncQueueMonitor } from '@/components/admin/EbaySyncQueueMonitor';
 import { EbayBulkListing } from '@/components/admin/EbayBulkListing';
+import { EbayTemplateManager } from '@/components/admin/EbayTemplateManager';
 import { Link } from 'react-router-dom';
 import { useStore } from '@/contexts/StoreContext';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { FileText } from 'lucide-react';
 
 interface EbayStoreConfig {
   id: string;
@@ -315,10 +317,14 @@ export default function EbayApp() {
         />
 
         <Tabs defaultValue="settings" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3 lg:w-auto lg:inline-grid">
+          <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-grid">
             <TabsTrigger value="settings" className="flex items-center gap-2">
               <Settings className="h-4 w-4" />
               Settings
+            </TabsTrigger>
+            <TabsTrigger value="templates" className="flex items-center gap-2">
+              <FileText className="h-4 w-4" />
+              Templates
             </TabsTrigger>
             <TabsTrigger value="bulk" className="flex items-center gap-2">
               <Package className="h-4 w-4" />
@@ -329,6 +335,19 @@ export default function EbayApp() {
               Sync Queue
             </TabsTrigger>
           </TabsList>
+
+          {/* Templates Tab */}
+          <TabsContent value="templates">
+            {selectedConfig ? (
+              <EbayTemplateManager storeKey={selectedConfig.store_key} />
+            ) : (
+              <Card>
+                <CardContent className="py-8 text-center text-muted-foreground">
+                  Please select or create an eBay store configuration first.
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
 
           {/* Settings Tab */}
           <TabsContent value="settings" className="space-y-6">

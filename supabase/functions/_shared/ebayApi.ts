@@ -24,6 +24,11 @@ export interface EbayInventoryItem {
   }
   condition: string
   conditionDescription?: string
+  conditionDescriptors?: Array<{
+    name: string
+    values?: string[]
+    additionalInfo?: string
+  }>
   availability: {
     shipToLocationAvailability: {
       quantity: number
