@@ -53,6 +53,8 @@ serve(async (req) => {
     const ruName = Deno.env.get('EBAY_RUNAME')
     const supabaseUrl = Deno.env.get('SUPABASE_URL')
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+    // App origin for fallback redirect (e.g., https://alohacardshop.lovable.app)
+    const appOrigin = Deno.env.get('APP_ORIGIN') || 'https://alohacardshop.lovable.app'
 
     if (!clientId || !clientSecret || !ruName) {
       console.error('Missing eBay credentials')
@@ -175,7 +177,7 @@ serve(async (req) => {
     console.log(`eBay OAuth completed successfully for store: ${store_key}`)
 
     return new Response(
-      generateHtmlResponse(true, `Successfully connected eBay account for ${store_key}!`, store_key),
+      generateHtmlResponse(true, `Successfully connected eBay account for ${store_key}!`, store_key, appOrigin),
       { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
     )
 
@@ -188,10 +190,15 @@ serve(async (req) => {
   }
 })
 
-function generateHtmlResponse(success: boolean, message: string, storeKey: string): string {
+function generateHtmlResponse(success: boolean, message: string, storeKey: string, appOrigin?: string): string {
   const bgColor = success ? '#10b981' : '#ef4444'
   // Use HTML entities for proper encoding
   const icon = success ? '&#10003;' : '&#10007;'
+  
+  // Build redirect URL for fallback (when opener is not available)
+  const fallbackUrl = appOrigin && success 
+    ? `${appOrigin}/ebay?connected=1&store=${encodeURIComponent(storeKey)}`
+    : null;
   
   return `
 <!DOCTYPE html>
@@ -254,36 +261,68 @@ function generateHtmlResponse(success: boolean, message: string, storeKey: strin
     </button>
   </div>
   <script>
-    function closeWindow() {
-      // Send message to opener before closing
-      sendMessageAndClose();
-    }
-
-    function sendMessageAndClose() {
+    (function() {
       const storeId = "${storeKey}";
       const wasSuccess = ${success};
+      const fallbackUrl = ${fallbackUrl ? `"${fallbackUrl}"` : 'null'};
+      let messageSent = false;
       
-      // Try to send postMessage to opener
-      if (window.opener && !window.opener.closed) {
-        try {
-          window.opener.postMessage({ 
-            type: "EBAY_CONNECTED", 
-            storeId: storeId,
-            success: wasSuccess,
-            message: "${message.replace(/"/g, '\\"')}"
-          }, "*");
-          console.log('postMessage sent to opener');
-        } catch (e) {
-          console.error('Failed to send postMessage:', e);
+      function sendMessage() {
+        if (messageSent) return;
+        
+        // Try to send postMessage to opener
+        if (window.opener && !window.opener.closed) {
+          try {
+            window.opener.postMessage({ 
+              type: "EBAY_CONNECTED", 
+              storeId: storeId,
+              success: wasSuccess,
+              message: "${message.replace(/"/g, '\\"')}"
+            }, "*");
+            console.log('postMessage sent to opener');
+            messageSent = true;
+            return true;
+          } catch (e) {
+            console.error('Failed to send postMessage:', e);
+          }
+        } else {
+          console.log('No opener available, window.opener:', window.opener);
         }
+        return false;
+      }
+
+      function closeWindow() {
+        sendMessage();
+        
+        // If we have a fallback URL and message wasn't sent, redirect instead
+        if (!messageSent && fallbackUrl && wasSuccess) {
+          console.log('Redirecting to fallback URL:', fallbackUrl);
+          window.location.href = fallbackUrl;
+          return;
+        }
+        
+        // Close window after a brief delay to ensure message is sent
+        setTimeout(() => window.close(), 100);
       }
       
-      // Close window after a brief delay to ensure message is sent
-      setTimeout(() => window.close(), 100);
-    }
+      // Make closeWindow available globally for the button
+      window.closeWindow = closeWindow;
 
-    // Auto-send message and close after 3 seconds if successful
-    ${success ? 'setTimeout(sendMessageAndClose, 3000);' : ''}
+      // Auto-send message immediately when page loads
+      sendMessage();
+      
+      // Auto-close after 3 seconds if successful
+      ${success ? `
+      setTimeout(() => {
+        if (!messageSent && fallbackUrl) {
+          console.log('Auto-redirecting to fallback URL:', fallbackUrl);
+          window.location.href = fallbackUrl;
+        } else {
+          window.close();
+        }
+      }, 3000);
+      ` : ''}
+    })();
   </script>
 </body>
 </html>
