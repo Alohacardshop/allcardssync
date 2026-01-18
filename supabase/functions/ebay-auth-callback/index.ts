@@ -14,15 +14,15 @@ serve(async (req) => {
     if (error) {
       console.error('eBay OAuth error:', error, errorDescription)
       return new Response(
-        generateHtmlResponse(false, `eBay authorization failed: ${errorDescription || error}`),
-        { headers: { 'Content-Type': 'text/html' } }
+        generateHtmlResponse(false, `eBay authorization failed: ${errorDescription || error}`, ''),
+        { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
       )
     }
 
     if (!code || !state) {
       return new Response(
-        generateHtmlResponse(false, 'Missing code or state parameter'),
-        { headers: { 'Content-Type': 'text/html' } }
+        generateHtmlResponse(false, 'Missing code or state parameter', ''),
+        { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
       )
     }
 
@@ -32,8 +32,8 @@ serve(async (req) => {
       stateData = JSON.parse(atob(state))
     } catch {
       return new Response(
-        generateHtmlResponse(false, 'Invalid state parameter'),
-        { headers: { 'Content-Type': 'text/html' } }
+        generateHtmlResponse(false, 'Invalid state parameter', ''),
+        { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
       )
     }
 
@@ -42,32 +42,53 @@ serve(async (req) => {
     // Validate timestamp (15 minute expiry)
     if (Date.now() - stateData.timestamp > 15 * 60 * 1000) {
       return new Response(
-        generateHtmlResponse(false, 'Authorization request expired. Please try again.'),
-        { headers: { 'Content-Type': 'text/html' } }
+        generateHtmlResponse(false, 'Authorization request expired. Please try again.', store_key),
+        { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
       )
     }
 
     // Get eBay credentials
-    const clientId = Deno.env.get('EBAY_CLIENT_ID')!
-    const clientSecret = Deno.env.get('EBAY_CLIENT_SECRET')!
-    const ruName = Deno.env.get('EBAY_RUNAME')!
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    const clientId = Deno.env.get('EBAY_CLIENT_ID')
+    const clientSecret = Deno.env.get('EBAY_CLIENT_SECRET')
+    const ruName = Deno.env.get('EBAY_RUNAME')
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+
+    if (!clientId || !clientSecret || !ruName) {
+      console.error('Missing eBay credentials')
+      return new Response(
+        generateHtmlResponse(false, 'Server configuration error: Missing eBay credentials', store_key),
+        { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+      )
+    }
+
+    if (!supabaseUrl || !supabaseKey) {
+      console.error('Missing Supabase credentials')
+      return new Response(
+        generateHtmlResponse(false, 'Server configuration error: Missing database credentials', store_key),
+        { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+      )
+    }
     
     // Use the RuName as redirect_uri for token exchange (must match what was used in auth request)
     const redirectUri = ruName
 
-    // Initialize Supabase
+    // Initialize Supabase with service role key
     const supabase = createClient(supabaseUrl, supabaseKey)
 
     // Get store config for environment
-    const { data: storeConfig } = await supabase
+    const { data: storeConfig, error: storeConfigError } = await supabase
       .from('ebay_store_config')
       .select('environment')
       .eq('store_key', store_key)
       .maybeSingle()
 
+    if (storeConfigError) {
+      console.error('Failed to fetch store config:', storeConfigError)
+    }
+
     const environment = (storeConfig?.environment || 'sandbox') as 'sandbox' | 'production'
+    console.log(`Processing OAuth callback for store: ${store_key}, environment: ${environment}`)
 
     const config: EbayConfig = {
       clientId,
@@ -76,15 +97,26 @@ serve(async (req) => {
       environment,
     }
 
-    // Exchange code for tokens
-    const tokens = await exchangeCodeForTokens(config, code)
+    // Exchange code for tokens - with explicit error handling
+    let tokens
+    try {
+      console.log(`Exchanging authorization code for tokens...`)
+      tokens = await exchangeCodeForTokens(config, code)
+      console.log(`Token exchange successful for store: ${store_key}`)
+    } catch (tokenError: any) {
+      console.error('Token exchange failed:', tokenError)
+      return new Response(
+        generateHtmlResponse(false, `Token exchange failed: ${tokenError.message}`, store_key),
+        { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+      )
+    }
 
     // Calculate token expiry times
     const now = new Date()
     const accessTokenExpiry = new Date(now.getTime() + tokens.expires_in * 1000)
     const refreshTokenExpiry = new Date(now.getTime() + tokens.refresh_token_expires_in * 1000)
 
-    // Store tokens encrypted in system_settings
+    // Store tokens in system_settings
     const tokenData = {
       access_token: tokens.access_token,
       refresh_token: tokens.refresh_token,
@@ -93,8 +125,9 @@ serve(async (req) => {
       token_type: tokens.token_type,
     }
 
-    // Upsert token to system_settings (encrypted)
-    await supabase
+    // Upsert token to system_settings - CHECK FOR ERRORS
+    console.log(`Saving tokens to system_settings for key: EBAY_TOKENS_${store_key}`)
+    const { error: tokenSaveError } = await supabase
       .from('system_settings')
       .upsert({
         key_name: `EBAY_TOKENS_${store_key}`,
@@ -107,8 +140,18 @@ serve(async (req) => {
         onConflict: 'key_name'
       })
 
-    // Update store config with connection timestamp
-    await supabase
+    if (tokenSaveError) {
+      console.error('Failed to save tokens to system_settings:', tokenSaveError)
+      return new Response(
+        generateHtmlResponse(false, `Failed to save tokens: ${tokenSaveError.message}`, store_key),
+        { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+      )
+    }
+    console.log(`Tokens saved successfully to system_settings`)
+
+    // Update store config with connection timestamp - CHECK FOR ERRORS
+    console.log(`Updating ebay_store_config for store: ${store_key}`)
+    const { error: configUpdateError } = await supabase
       .from('ebay_store_config')
       .upsert({
         store_key,
@@ -120,30 +163,41 @@ serve(async (req) => {
         onConflict: 'store_key'
       })
 
-    console.log(`eBay OAuth successful for store: ${store_key}`)
+    if (configUpdateError) {
+      console.error('Failed to update ebay_store_config:', configUpdateError)
+      return new Response(
+        generateHtmlResponse(false, `Failed to update store config: ${configUpdateError.message}`, store_key),
+        { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+      )
+    }
+    console.log(`Store config updated successfully`)
+
+    console.log(`eBay OAuth completed successfully for store: ${store_key}`)
 
     return new Response(
-      generateHtmlResponse(true, `Successfully connected eBay account for ${store_key}!`),
-      { headers: { 'Content-Type': 'text/html' } }
+      generateHtmlResponse(true, `Successfully connected eBay account for ${store_key}!`, store_key),
+      { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
     )
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('eBay callback error:', error)
     return new Response(
-      generateHtmlResponse(false, `Connection failed: ${error.message}`),
-      { headers: { 'Content-Type': 'text/html' } }
+      generateHtmlResponse(false, `Connection failed: ${error.message}`, ''),
+      { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
     )
   }
 })
 
-function generateHtmlResponse(success: boolean, message: string): string {
+function generateHtmlResponse(success: boolean, message: string, storeKey: string): string {
   const bgColor = success ? '#10b981' : '#ef4444'
-  const icon = success ? '✓' : '✗'
+  // Use HTML entities for proper encoding
+  const icon = success ? '&#10003;' : '&#10007;'
   
   return `
 <!DOCTYPE html>
 <html>
 <head>
+  <meta charset="UTF-8" />
   <title>eBay Connection ${success ? 'Successful' : 'Failed'}</title>
   <style>
     body {
@@ -195,13 +249,41 @@ function generateHtmlResponse(success: boolean, message: string): string {
     <div class="icon">${icon}</div>
     <h1>${success ? 'Connection Successful!' : 'Connection Failed'}</h1>
     <p>${message}</p>
-    <button class="close-btn" onclick="window.close(); window.opener?.location.reload();">
+    <button class="close-btn" onclick="closeWindow()">
       Close Window
     </button>
   </div>
   <script>
-    // Auto-close after 5 seconds if successful
-    ${success ? 'setTimeout(() => { window.close(); window.opener?.location.reload(); }, 5000);' : ''}
+    function closeWindow() {
+      // Send message to opener before closing
+      sendMessageAndClose();
+    }
+
+    function sendMessageAndClose() {
+      const storeId = "${storeKey}";
+      const wasSuccess = ${success};
+      
+      // Try to send postMessage to opener
+      if (window.opener && !window.opener.closed) {
+        try {
+          window.opener.postMessage({ 
+            type: "EBAY_CONNECTED", 
+            storeId: storeId,
+            success: wasSuccess,
+            message: "${message.replace(/"/g, '\\"')}"
+          }, "*");
+          console.log('postMessage sent to opener');
+        } catch (e) {
+          console.error('Failed to send postMessage:', e);
+        }
+      }
+      
+      // Close window after a brief delay to ensure message is sent
+      setTimeout(() => window.close(), 100);
+    }
+
+    // Auto-send message and close after 3 seconds if successful
+    ${success ? 'setTimeout(sendMessageAndClose, 3000);' : ''}
   </script>
 </body>
 </html>

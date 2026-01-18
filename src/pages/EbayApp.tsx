@@ -103,8 +103,20 @@ export default function EbayApp() {
       
       setConfigs(typedData);
       
-      // Auto-select config matching user's location
-      if (typedData.length > 0) {
+      // Update selectedConfig if it exists in the new data (preserves selection after refresh)
+      if (selectedConfig) {
+        const updatedConfig = typedData.find(c => c.id === selectedConfig.id);
+        if (updatedConfig) {
+          setSelectedConfig(updatedConfig);
+        } else if (typedData.length > 0) {
+          // Config was deleted, select another
+          const matchingConfig = typedData.find(c => c.location_key === assignedStore);
+          setSelectedConfig(matchingConfig || typedData[0]);
+        } else {
+          setSelectedConfig(null);
+        }
+      } else if (typedData.length > 0) {
+        // First load - auto-select config matching user's location
         const matchingConfig = typedData.find(c => c.location_key === assignedStore);
         setSelectedConfig(matchingConfig || typedData[0]);
       }
@@ -254,9 +266,11 @@ export default function EbayApp() {
     if (!selectedConfig) return;
 
     setConnecting(true);
+    const currentStoreKey = selectedConfig.store_key;
+    
     try {
       const { data, error } = await supabase.functions.invoke('ebay-auth-init', {
-        body: { store_key: selectedConfig.store_key }
+        body: { store_key: currentStoreKey }
       });
 
       if (error) throw error;
@@ -264,17 +278,45 @@ export default function EbayApp() {
 
       const authWindow = window.open(data.auth_url, 'ebay_auth', 'width=600,height=700');
       
+      // Listen for postMessage from the OAuth callback popup
+      const messageHandler = async (event: MessageEvent) => {
+        // Check if this is our eBay connection message
+        if (event.data?.type === 'EBAY_CONNECTED' && event.data?.storeId === currentStoreKey) {
+          console.log('Received EBAY_CONNECTED message:', event.data);
+          window.removeEventListener('message', messageHandler);
+          clearInterval(pollTimer);
+          clearTimeout(timeoutId);
+          
+          if (event.data.success) {
+            toast.success('eBay account connected successfully!');
+          } else {
+            toast.error(event.data.message || 'eBay connection failed');
+          }
+          
+          // Refresh configs and update selectedConfig
+          await loadConfigs();
+          setConnecting(false);
+        }
+      };
+      
+      window.addEventListener('message', messageHandler);
+      
+      // Fallback: poll for window close (in case postMessage fails)
       const pollTimer = setInterval(() => {
         if (authWindow?.closed) {
           clearInterval(pollTimer);
-          setConnecting(false);
+          window.removeEventListener('message', messageHandler);
+          // Don't show toast here - let the postMessage handler do it if it worked
+          // Just refresh configs as a fallback
           loadConfigs();
-          toast.success('eBay connection process completed. Check status below.');
+          setConnecting(false);
         }
       }, 1000);
 
-      setTimeout(() => {
+      // Timeout after 5 minutes
+      const timeoutId = setTimeout(() => {
         clearInterval(pollTimer);
+        window.removeEventListener('message', messageHandler);
         setConnecting(false);
       }, 300000);
 
