@@ -41,6 +41,7 @@ const GradedIntake = React.lazy(() => import("./pages/intake/GradedIntake"));
 const BulkIntake = React.lazy(() => import("./pages/intake/BulkIntake"));
 const ShopifyBackfill = React.lazy(() => import("./pages/admin/ShopifyBackfill"));
 const QzTrayTestPage = React.lazy(() => import("./pages/QzTrayTestPage"));
+const Privacy = React.lazy(() => import("./pages/Privacy"));
 
 const EbayApp = React.lazy(() => import("./pages/EbayApp"));
 const EbaySyncDashboard = React.lazy(() => import("./pages/EbaySyncDashboard"));
@@ -71,8 +72,9 @@ const App = () => (
               <BrowserRouter>
               <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><LoadingSpinner size="lg" /></div>}>
                 <Routes>
-                  {/* Auth route - accessible without authentication */}
+                  {/* Public routes - accessible without authentication */}
                   <Route path="/auth" element={<Auth />} />
+                  <Route path="/privacy" element={<Privacy />} />
                   
                   {/* Protected routes */}
                   <Route path="/*" element={
