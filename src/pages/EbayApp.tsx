@@ -66,6 +66,45 @@ export default function EbayApp() {
   const [returnPolicies, setReturnPolicies] = useState<EbayPolicy[]>([]);
   const [policiesLastSynced, setPoliciesLastSynced] = useState<string | null>(null);
 
+  // Check for OAuth redirect fallback (query params)
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const connected = urlParams.get('connected');
+    const storeId = urlParams.get('store');
+    
+    if (connected === '1' && storeId) {
+      console.log('eBay OAuth redirect fallback detected:', { connected, storeId });
+      // Clear the query params from URL
+      window.history.replaceState({}, '', window.location.pathname);
+      toast.success('eBay account connected successfully!');
+      loadConfigs(true, storeId);
+    }
+  }, []);
+
+  // Global message listener for OAuth popup communication
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      console.log('EBAY postMessage received:', event.origin, event.data);
+      
+      if (event.data?.type !== 'EBAY_CONNECTED') return;
+      
+      const storeId = event.data?.storeId;
+      console.log('Processing EBAY_CONNECTED for store:', storeId);
+      
+      if (event.data.success) {
+        toast.success('eBay account connected successfully!');
+        loadConfigs(true, storeId);
+      } else {
+        toast.error(event.data.message || 'eBay connection failed');
+      }
+      
+      setConnecting(false);
+    };
+
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, []);
+
   useEffect(() => {
     if (assignedStore) {
       loadConfigs();
@@ -78,7 +117,7 @@ export default function EbayApp() {
     }
   }, [selectedConfig?.store_key]);
 
-  const loadConfigs = async () => {
+  const loadConfigs = async (forceRefresh = false, storeKeyToSelect?: string) => {
     setLoading(true);
     try {
       // Build query - filter by user's location unless admin
@@ -103,10 +142,21 @@ export default function EbayApp() {
       
       setConfigs(typedData);
       
+      // If a specific store key was requested (e.g., after OAuth), select it
+      if (storeKeyToSelect) {
+        const targetConfig = typedData.find(c => c.store_key === storeKeyToSelect);
+        if (targetConfig) {
+          console.log('Selecting config after OAuth:', targetConfig.store_key, 'connected_at:', targetConfig.oauth_connected_at);
+          setSelectedConfig(targetConfig);
+          return;
+        }
+      }
+      
       // Update selectedConfig if it exists in the new data (preserves selection after refresh)
       if (selectedConfig) {
         const updatedConfig = typedData.find(c => c.id === selectedConfig.id);
         if (updatedConfig) {
+          console.log('Updating existing selectedConfig:', updatedConfig.store_key, 'connected_at:', updatedConfig.oauth_connected_at);
           setSelectedConfig(updatedConfig);
         } else if (typedData.length > 0) {
           // Config was deleted, select another
@@ -276,47 +326,24 @@ export default function EbayApp() {
       if (error) throw error;
       if (!data.auth_url) throw new Error('No auth URL returned');
 
+      // IMPORTANT: Do NOT use noopener/noreferrer - it kills window.opener
       const authWindow = window.open(data.auth_url, 'ebay_auth', 'width=600,height=700');
+      console.log('Opened eBay auth window for store:', currentStoreKey);
       
-      // Listen for postMessage from the OAuth callback popup
-      const messageHandler = async (event: MessageEvent) => {
-        // Check if this is our eBay connection message
-        if (event.data?.type === 'EBAY_CONNECTED' && event.data?.storeId === currentStoreKey) {
-          console.log('Received EBAY_CONNECTED message:', event.data);
-          window.removeEventListener('message', messageHandler);
-          clearInterval(pollTimer);
-          clearTimeout(timeoutId);
-          
-          if (event.data.success) {
-            toast.success('eBay account connected successfully!');
-          } else {
-            toast.error(event.data.message || 'eBay connection failed');
-          }
-          
-          // Refresh configs and update selectedConfig
-          await loadConfigs();
-          setConnecting(false);
-        }
-      };
-      
-      window.addEventListener('message', messageHandler);
-      
-      // Fallback: poll for window close (in case postMessage fails)
+      // Fallback: poll for window close (message handler is global now)
       const pollTimer = setInterval(() => {
         if (authWindow?.closed) {
           clearInterval(pollTimer);
-          window.removeEventListener('message', messageHandler);
-          // Don't show toast here - let the postMessage handler do it if it worked
-          // Just refresh configs as a fallback
-          loadConfigs();
+          console.log('eBay auth window closed, refreshing configs...');
+          // Refresh configs as a fallback if postMessage didn't work
+          loadConfigs(true, currentStoreKey);
           setConnecting(false);
         }
       }, 1000);
 
       // Timeout after 5 minutes
-      const timeoutId = setTimeout(() => {
+      setTimeout(() => {
         clearInterval(pollTimer);
-        window.removeEventListener('message', messageHandler);
         setConnecting(false);
       }, 300000);
 
