@@ -504,21 +504,6 @@ export default function EbayApp() {
                     </Select>
                   </div>
 
-                  <Separator />
-
-                  <div className="space-y-2">
-                    <Label className="text-sm text-muted-foreground">Add Another Store</Label>
-                    <div className="flex gap-2">
-                      <Input
-                        placeholder="New store key (e.g., 'secondary')"
-                        value={newStoreKey}
-                        onChange={(e) => setNewStoreKey(e.target.value)}
-                      />
-                      <Button onClick={createConfig} disabled={!newStoreKey.trim()} variant="outline">
-                        Create New
-                      </Button>
-                    </div>
-                  </div>
                 </CardContent>
               </Card>
             )}
@@ -585,18 +570,9 @@ export default function EbayApp() {
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label>Environment</Label>
-                        <Select
-                          value={selectedConfig.environment}
-                          onValueChange={(v) => updateConfig({ environment: v as 'sandbox' | 'production' })}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="sandbox">Sandbox (Testing)</SelectItem>
-                            <SelectItem value="production">Production (Live)</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        <div className="flex items-center h-10 px-3 rounded-md border bg-muted text-sm">
+                          Production (Live)
+                        </div>
                       </div>
 
                       <div className="space-y-2">
