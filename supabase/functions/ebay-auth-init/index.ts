@@ -25,7 +25,8 @@ serve(async (req) => {
     // Get eBay credentials from environment
     const clientId = Deno.env.get('EBAY_CLIENT_ID')
     const clientSecret = Deno.env.get('EBAY_CLIENT_SECRET')
-    const redirectUri = Deno.env.get('EBAY_REDIRECT_URI')
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
     if (!clientId || !clientSecret) {
       return new Response(
@@ -34,16 +35,10 @@ serve(async (req) => {
       )
     }
 
-    if (!redirectUri) {
-      return new Response(
-        JSON.stringify({ error: 'EBAY_REDIRECT_URI not configured. Please add this secret.' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
+    // Derive redirect URI from Supabase URL automatically - no separate secret needed
+    const redirectUri = `${supabaseUrl}/functions/v1/ebay-auth-callback`
 
     // Initialize Supabase client
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseKey)
 
     // Get or create store config to determine environment
