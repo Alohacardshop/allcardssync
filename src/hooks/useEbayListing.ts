@@ -108,12 +108,40 @@ export function useEbayListing() {
     }
   };
 
+  const updateEbayInventory = async (
+    items: Array<{ sku: string; quantity: number; price?: number }>,
+    storeKey: string
+  ) => {
+    try {
+      const { data, error } = await supabase.functions.invoke('ebay-update-inventory', {
+        body: { items, store_key: storeKey }
+      });
+
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error || 'Failed to update inventory');
+
+      if (data.succeeded > 0) {
+        toast.success(`Updated ${data.succeeded} item(s) on eBay`);
+      }
+      if (data.failed > 0) {
+        toast.error(`Failed to update ${data.failed} item(s)`);
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['inventory-list'] });
+      return data;
+    } catch (error: any) {
+      toast.error('Failed to update eBay inventory: ' + error.message);
+      throw error;
+    }
+  };
+
   return {
     isCreating,
     isToggling,
     toggleListOnEbay,
     createEbayListing,
     bulkToggleEbay,
-    queueForEbaySync
+    queueForEbaySync,
+    updateEbayInventory
   };
 }
