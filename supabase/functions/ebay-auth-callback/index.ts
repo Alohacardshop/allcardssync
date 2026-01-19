@@ -10,21 +10,32 @@ serve(async (req) => {
     const error = url.searchParams.get('error')
     const errorDescription = url.searchParams.get('error_description')
 
-    // Handle OAuth errors
-    // Handle OAuth errors
+    // Default app origin for redirects
+    let appOrigin = 'https://alohacardshop.lovable.app'
+    let storeKey = ''
+
+    // Try to decode state early to get origin and store_key
+    if (state) {
+      try {
+        const stateData = JSON.parse(atob(state))
+        appOrigin = stateData.origin || Deno.env.get('APP_ORIGIN') || appOrigin
+        storeKey = stateData.store_key || ''
+      } catch {
+        // State decode failed, use defaults
+      }
+    }
+
+    // Handle OAuth errors - redirect with error flag
     if (error) {
       console.error('eBay OAuth error:', error, errorDescription)
-      return new Response(
-        generateHtmlResponse(false, `eBay authorization failed: ${errorDescription || error}`, '', 'https://alohacardshop.lovable.app'),
-        { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
-      )
+      const errMsg = errorDescription || error
+      const redirectUrl = `${appOrigin}/ebay?connected=0&store=${encodeURIComponent(storeKey)}&error=${encodeURIComponent(errMsg)}`
+      return Response.redirect(redirectUrl, 302)
     }
 
     if (!code || !state) {
-      return new Response(
-        generateHtmlResponse(false, 'Missing code or state parameter', '', 'https://alohacardshop.lovable.app'),
-        { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
-      )
+      const redirectUrl = `${appOrigin}/ebay?connected=0&store=${encodeURIComponent(storeKey)}&error=${encodeURIComponent('Missing code or state parameter')}`
+      return Response.redirect(redirectUrl, 302)
     }
 
     // Decode state to get store_key and origin
@@ -32,22 +43,18 @@ serve(async (req) => {
     try {
       stateData = JSON.parse(atob(state))
     } catch {
-      return new Response(
-        generateHtmlResponse(false, 'Invalid state parameter', '', ''),
-        { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
-      )
+      const redirectUrl = `${appOrigin}/ebay?connected=0&store=&error=${encodeURIComponent('Invalid state parameter')}`
+      return Response.redirect(redirectUrl, 302)
     }
 
     const { store_key } = stateData
     // Use origin from state (passed from frontend) or fallback to env/default
-    const appOrigin = stateData.origin || Deno.env.get('APP_ORIGIN') || 'https://alohacardshop.lovable.app'
+    appOrigin = stateData.origin || Deno.env.get('APP_ORIGIN') || 'https://alohacardshop.lovable.app'
 
     // Validate timestamp (15 minute expiry)
     if (Date.now() - stateData.timestamp > 15 * 60 * 1000) {
-      return new Response(
-        generateHtmlResponse(false, 'Authorization request expired. Please try again.', store_key, appOrigin),
-        { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
-      )
+      const redirectUrl = `${appOrigin}/ebay?connected=0&store=${encodeURIComponent(store_key)}&error=${encodeURIComponent('Authorization request expired. Please try again.')}`
+      return Response.redirect(redirectUrl, 302)
     }
 
     // Get eBay credentials
@@ -59,18 +66,14 @@ serve(async (req) => {
 
     if (!clientId || !clientSecret || !ruName) {
       console.error('Missing eBay credentials')
-      return new Response(
-        generateHtmlResponse(false, 'Server configuration error: Missing eBay credentials', store_key, appOrigin),
-        { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
-      )
+      const redirectUrl = `${appOrigin}/ebay?connected=0&store=${encodeURIComponent(store_key)}&error=${encodeURIComponent('Server configuration error: Missing eBay credentials')}`
+      return Response.redirect(redirectUrl, 302)
     }
 
     if (!supabaseUrl || !supabaseKey) {
       console.error('Missing Supabase credentials')
-      return new Response(
-        generateHtmlResponse(false, 'Server configuration error: Missing database credentials', store_key, appOrigin),
-        { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
-      )
+      const redirectUrl = `${appOrigin}/ebay?connected=0&store=${encodeURIComponent(store_key)}&error=${encodeURIComponent('Server configuration error: Missing database credentials')}`
+      return Response.redirect(redirectUrl, 302)
     }
     
     // Use the RuName as redirect_uri for token exchange (must match what was used in auth request)
@@ -108,10 +111,8 @@ serve(async (req) => {
       console.log(`Token exchange successful for store: ${store_key}`)
     } catch (tokenError: any) {
       console.error('Token exchange failed:', tokenError)
-      return new Response(
-        generateHtmlResponse(false, `Token exchange failed: ${tokenError.message}`, store_key, appOrigin),
-        { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
-      )
+      const redirectUrl = `${appOrigin}/ebay?connected=0&store=${encodeURIComponent(store_key)}&error=${encodeURIComponent(`Token exchange failed: ${tokenError.message}`)}`
+      return Response.redirect(redirectUrl, 302)
     }
 
     // Calculate token expiry times
@@ -145,10 +146,8 @@ serve(async (req) => {
 
     if (tokenSaveError) {
       console.error('Failed to save tokens to system_settings:', tokenSaveError)
-      return new Response(
-        generateHtmlResponse(false, `Failed to save tokens: ${tokenSaveError.message}`, store_key, appOrigin),
-        { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
-      )
+      const redirectUrl = `${appOrigin}/ebay?connected=0&store=${encodeURIComponent(store_key)}&error=${encodeURIComponent(`Failed to save tokens: ${tokenSaveError.message}`)}`
+      return Response.redirect(redirectUrl, 302)
     }
     console.log(`Tokens saved successfully to system_settings`)
 
@@ -168,146 +167,23 @@ serve(async (req) => {
 
     if (configUpdateError) {
       console.error('Failed to update ebay_store_config:', configUpdateError)
-      return new Response(
-        generateHtmlResponse(false, `Failed to update store config: ${configUpdateError.message}`, store_key, appOrigin),
-        { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
-      )
+      const redirectUrl = `${appOrigin}/ebay?connected=0&store=${encodeURIComponent(store_key)}&error=${encodeURIComponent(`Failed to update store config: ${configUpdateError.message}`)}`
+      return Response.redirect(redirectUrl, 302)
     }
     console.log(`Store config updated successfully`)
 
     console.log(`eBay OAuth completed successfully for store: ${store_key}`)
 
-    return new Response(
-      generateHtmlResponse(true, `Successfully connected eBay account for ${store_key}!`, store_key, appOrigin),
-      { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
-    )
+    // SUCCESS: Redirect back to app with success flag
+    const redirectUrl = `${appOrigin}/ebay?connected=1&store=${encodeURIComponent(store_key)}`
+    return Response.redirect(redirectUrl, 302)
 
   } catch (error: any) {
     console.error('eBay callback error:', error)
-    return new Response(
-      generateHtmlResponse(false, `Connection failed: ${error.message}`, '', 'https://alohacardshop.lovable.app'),
-      { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
-    )
+    const redirectUrl = `https://alohacardshop.lovable.app/ebay?connected=0&store=&error=${encodeURIComponent(`Connection failed: ${error.message}`)}`
+    return Response.redirect(redirectUrl, 302)
   }
 })
-
-function generateHtmlResponse(success: boolean, message: string, storeKey: string, appOrigin: string): string {
-  const bgColor = success ? '#10b981' : '#ef4444'
-  // Use HTML entities for proper encoding
-  const icon = success ? '&#10003;' : '&#10007;'
-  
-  // Build redirect URL for fallback
-  const fallbackUrl = success 
-    ? `${appOrigin}/ebay?connected=1&store=${encodeURIComponent(storeKey)}`
-    : appOrigin;
-  
-  return `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8" />
-  <title>eBay Connection ${success ? 'Successful' : 'Failed'}</title>
-  <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      min-height: 100vh;
-      margin: 0;
-      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-      color: white;
-    }
-    .container {
-      text-align: center;
-      padding: 2rem;
-      background: rgba(255,255,255,0.1);
-      border-radius: 1rem;
-      backdrop-filter: blur(10px);
-      max-width: 400px;
-    }
-    .icon {
-      width: 80px;
-      height: 80px;
-      border-radius: 50%;
-      background: ${bgColor};
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 40px;
-      margin: 0 auto 1.5rem;
-    }
-    h1 { margin: 0 0 1rem; font-size: 1.5rem; }
-    p { margin: 0 0 1.5rem; opacity: 0.9; }
-    .close-btn {
-      background: white;
-      color: #1a1a2e;
-      border: none;
-      padding: 0.75rem 2rem;
-      border-radius: 0.5rem;
-      font-size: 1rem;
-      cursor: pointer;
-      font-weight: 500;
-    }
-    .close-btn:hover { opacity: 0.9; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="icon">${icon}</div>
-    <h1>${success ? 'Connection Successful!' : 'Connection Failed'}</h1>
-    <p>${message}</p>
-    <button class="close-btn" onclick="closeWindow()">
-      Close Window
-    </button>
-  </div>
-  <script>
-    (function () {
-      const storeId = "${storeKey}";
-      const wasSuccess = ${success};
-      const appOrigin = "${appOrigin}";
-      const fallbackUrl = "${fallbackUrl}";
-
-      let sent = false;
-      
-      // Try to send postMessage to opener
-      try {
-        if (window.opener && !window.opener.closed) {
-          window.opener.postMessage({ 
-            type: "EBAY_CONNECTED", 
-            storeId: storeId,
-            success: wasSuccess,
-            message: "${message.replace(/"/g, '\\"')}"
-          }, "*");
-          console.log('postMessage sent to opener');
-          sent = true;
-        }
-      } catch (e) {
-        console.error('Failed to send postMessage:', e);
-      }
-
-      // ALWAYS fall back to redirect after short delay (covers cases where listener isn't mounted)
-      // If postMessage was sent, wait 500ms to let it process; otherwise redirect immediately
-      setTimeout(() => {
-        try {
-          if (wasSuccess) {
-            console.log('Redirecting to:', fallbackUrl);
-            window.location.href = fallbackUrl;
-          } else {
-            window.close();
-          }
-        } catch (e) {
-          window.close();
-        }
-      }, sent ? 500 : 0);
-
-      function closeWindow() {
-        if (wasSuccess) {
-          window.location.href = fallbackUrl;
-        } else {
-          window.close();
-        }
-      }
       
       // Make closeWindow available globally for the button
       window.closeWindow = closeWindow;
