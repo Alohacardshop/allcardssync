@@ -184,12 +184,3 @@ serve(async (req) => {
     return Response.redirect(redirectUrl, 302)
   }
 })
-      
-      // Make closeWindow available globally for the button
-      window.closeWindow = closeWindow;
-    })();
-  </script>
-</body>
-</html>
-`
-}
