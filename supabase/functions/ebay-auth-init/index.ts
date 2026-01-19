@@ -13,7 +13,7 @@ serve(async (req) => {
   }
 
   try {
-    const { store_key } = await req.json()
+    const { store_key, origin } = await req.json()
     
     if (!store_key) {
       return new Response(
@@ -51,11 +51,12 @@ serve(async (req) => {
 
     const environment = (storeConfig?.environment || 'sandbox') as 'sandbox' | 'production'
 
-    // Create state token with store_key for callback
+    // Create state token with store_key and origin for callback
     const state = btoa(JSON.stringify({ 
       store_key, 
       timestamp: Date.now(),
-      nonce: crypto.randomUUID()
+      nonce: crypto.randomUUID(),
+      origin: origin || 'https://alohacardshop.lovable.app'
     }))
 
     const config: EbayConfig = {
