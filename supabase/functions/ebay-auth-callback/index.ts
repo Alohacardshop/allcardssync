@@ -11,38 +11,41 @@ serve(async (req) => {
     const errorDescription = url.searchParams.get('error_description')
 
     // Handle OAuth errors
+    // Handle OAuth errors
     if (error) {
       console.error('eBay OAuth error:', error, errorDescription)
       return new Response(
-        generateHtmlResponse(false, `eBay authorization failed: ${errorDescription || error}`, ''),
+        generateHtmlResponse(false, `eBay authorization failed: ${errorDescription || error}`, '', 'https://alohacardshop.lovable.app'),
         { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
       )
     }
 
     if (!code || !state) {
       return new Response(
-        generateHtmlResponse(false, 'Missing code or state parameter', ''),
+        generateHtmlResponse(false, 'Missing code or state parameter', '', 'https://alohacardshop.lovable.app'),
         { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
       )
     }
 
-    // Decode state to get store_key
-    let stateData: { store_key: string; timestamp: number; nonce: string }
+    // Decode state to get store_key and origin
+    let stateData: { store_key: string; timestamp: number; nonce: string; origin?: string }
     try {
       stateData = JSON.parse(atob(state))
     } catch {
       return new Response(
-        generateHtmlResponse(false, 'Invalid state parameter', ''),
+        generateHtmlResponse(false, 'Invalid state parameter', '', ''),
         { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
       )
     }
 
     const { store_key } = stateData
+    // Use origin from state (passed from frontend) or fallback to env/default
+    const appOrigin = stateData.origin || Deno.env.get('APP_ORIGIN') || 'https://alohacardshop.lovable.app'
 
     // Validate timestamp (15 minute expiry)
     if (Date.now() - stateData.timestamp > 15 * 60 * 1000) {
       return new Response(
-        generateHtmlResponse(false, 'Authorization request expired. Please try again.', store_key),
+        generateHtmlResponse(false, 'Authorization request expired. Please try again.', store_key, appOrigin),
         { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
       )
     }
@@ -53,13 +56,11 @@ serve(async (req) => {
     const ruName = Deno.env.get('EBAY_RUNAME')
     const supabaseUrl = Deno.env.get('SUPABASE_URL')
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-    // App origin for fallback redirect (e.g., https://alohacardshop.lovable.app)
-    const appOrigin = Deno.env.get('APP_ORIGIN') || 'https://alohacardshop.lovable.app'
 
     if (!clientId || !clientSecret || !ruName) {
       console.error('Missing eBay credentials')
       return new Response(
-        generateHtmlResponse(false, 'Server configuration error: Missing eBay credentials', store_key),
+        generateHtmlResponse(false, 'Server configuration error: Missing eBay credentials', store_key, appOrigin),
         { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
       )
     }
@@ -67,7 +68,7 @@ serve(async (req) => {
     if (!supabaseUrl || !supabaseKey) {
       console.error('Missing Supabase credentials')
       return new Response(
-        generateHtmlResponse(false, 'Server configuration error: Missing database credentials', store_key),
+        generateHtmlResponse(false, 'Server configuration error: Missing database credentials', store_key, appOrigin),
         { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
       )
     }
@@ -108,7 +109,7 @@ serve(async (req) => {
     } catch (tokenError: any) {
       console.error('Token exchange failed:', tokenError)
       return new Response(
-        generateHtmlResponse(false, `Token exchange failed: ${tokenError.message}`, store_key),
+        generateHtmlResponse(false, `Token exchange failed: ${tokenError.message}`, store_key, appOrigin),
         { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
       )
     }
@@ -145,7 +146,7 @@ serve(async (req) => {
     if (tokenSaveError) {
       console.error('Failed to save tokens to system_settings:', tokenSaveError)
       return new Response(
-        generateHtmlResponse(false, `Failed to save tokens: ${tokenSaveError.message}`, store_key),
+        generateHtmlResponse(false, `Failed to save tokens: ${tokenSaveError.message}`, store_key, appOrigin),
         { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
       )
     }
@@ -168,7 +169,7 @@ serve(async (req) => {
     if (configUpdateError) {
       console.error('Failed to update ebay_store_config:', configUpdateError)
       return new Response(
-        generateHtmlResponse(false, `Failed to update store config: ${configUpdateError.message}`, store_key),
+        generateHtmlResponse(false, `Failed to update store config: ${configUpdateError.message}`, store_key, appOrigin),
         { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
       )
     }
@@ -184,21 +185,21 @@ serve(async (req) => {
   } catch (error: any) {
     console.error('eBay callback error:', error)
     return new Response(
-      generateHtmlResponse(false, `Connection failed: ${error.message}`, ''),
+      generateHtmlResponse(false, `Connection failed: ${error.message}`, '', 'https://alohacardshop.lovable.app'),
       { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
     )
   }
 })
 
-function generateHtmlResponse(success: boolean, message: string, storeKey: string, appOrigin?: string): string {
+function generateHtmlResponse(success: boolean, message: string, storeKey: string, appOrigin: string): string {
   const bgColor = success ? '#10b981' : '#ef4444'
   // Use HTML entities for proper encoding
   const icon = success ? '&#10003;' : '&#10007;'
   
-  // Build redirect URL for fallback (when opener is not available)
-  const fallbackUrl = appOrigin && success 
+  // Build redirect URL for fallback
+  const fallbackUrl = success 
     ? `${appOrigin}/ebay?connected=1&store=${encodeURIComponent(storeKey)}`
-    : null;
+    : appOrigin;
   
   return `
 <!DOCTYPE html>
@@ -261,67 +262,55 @@ function generateHtmlResponse(success: boolean, message: string, storeKey: strin
     </button>
   </div>
   <script>
-    (function() {
+    (function () {
       const storeId = "${storeKey}";
       const wasSuccess = ${success};
-      const fallbackUrl = ${fallbackUrl ? `"${fallbackUrl}"` : 'null'};
-      let messageSent = false;
+      const appOrigin = "${appOrigin}";
+      const fallbackUrl = "${fallbackUrl}";
+
+      let sent = false;
       
-      function sendMessage() {
-        if (messageSent) return;
-        
-        // Try to send postMessage to opener
+      // Try to send postMessage to opener
+      try {
         if (window.opener && !window.opener.closed) {
-          try {
-            window.opener.postMessage({ 
-              type: "EBAY_CONNECTED", 
-              storeId: storeId,
-              success: wasSuccess,
-              message: "${message.replace(/"/g, '\\"')}"
-            }, "*");
-            console.log('postMessage sent to opener');
-            messageSent = true;
-            return true;
-          } catch (e) {
-            console.error('Failed to send postMessage:', e);
-          }
-        } else {
-          console.log('No opener available, window.opener:', window.opener);
+          window.opener.postMessage({ 
+            type: "EBAY_CONNECTED", 
+            storeId: storeId,
+            success: wasSuccess,
+            message: "${message.replace(/"/g, '\\"')}"
+          }, "*");
+          console.log('postMessage sent to opener');
+          sent = true;
         }
-        return false;
+      } catch (e) {
+        console.error('Failed to send postMessage:', e);
       }
+
+      // ALWAYS fall back to redirect after short delay (covers cases where listener isn't mounted)
+      // If postMessage was sent, wait 500ms to let it process; otherwise redirect immediately
+      setTimeout(() => {
+        try {
+          if (wasSuccess) {
+            console.log('Redirecting to:', fallbackUrl);
+            window.location.href = fallbackUrl;
+          } else {
+            window.close();
+          }
+        } catch (e) {
+          window.close();
+        }
+      }, sent ? 500 : 0);
 
       function closeWindow() {
-        sendMessage();
-        
-        // If we have a fallback URL and message wasn't sent, redirect instead
-        if (!messageSent && fallbackUrl && wasSuccess) {
-          console.log('Redirecting to fallback URL:', fallbackUrl);
-          window.location.href = fallbackUrl;
-          return;
-        }
-        
-        // Close window after a brief delay to ensure message is sent
-        setTimeout(() => window.close(), 100);
-      }
-      
-      // Make closeWindow available globally for the button
-      window.closeWindow = closeWindow;
-
-      // Auto-send message immediately when page loads
-      sendMessage();
-      
-      // Auto-close after 3 seconds if successful
-      ${success ? `
-      setTimeout(() => {
-        if (!messageSent && fallbackUrl) {
-          console.log('Auto-redirecting to fallback URL:', fallbackUrl);
+        if (wasSuccess) {
           window.location.href = fallbackUrl;
         } else {
           window.close();
         }
-      }, 3000);
-      ` : ''}
+      }
+      
+      // Make closeWindow available globally for the button
+      window.closeWindow = closeWindow;
     })();
   </script>
 </body>

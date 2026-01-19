@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,7 +17,7 @@ import {
 import { EbaySyncQueueMonitor } from '@/components/admin/EbaySyncQueueMonitor';
 import { EbayBulkListing } from '@/components/admin/EbayBulkListing';
 import { EbayTemplateManager } from '@/components/admin/EbayTemplateManager';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useStore } from '@/contexts/StoreContext';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { FileText } from 'lucide-react';
@@ -52,6 +52,7 @@ interface EbayPolicy {
 
 export default function EbayApp() {
   const { assignedStore, assignedStoreName, isAdmin } = useStore();
+  const location = useLocation();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [connecting, setConnecting] = useState(false);
@@ -60,31 +61,68 @@ export default function EbayApp() {
   const [selectedConfig, setSelectedConfig] = useState<EbayStoreConfig | null>(null);
   const [newStoreKey, setNewStoreKey] = useState('');
   
+  // Ref to track latest configs for async operations
+  const configsRef = useRef<EbayStoreConfig[]>([]);
+  
+  // Keep ref in sync with state
+  useEffect(() => {
+    configsRef.current = configs;
+  }, [configs]);
+  
   // Policy states
   const [fulfillmentPolicies, setFulfillmentPolicies] = useState<EbayPolicy[]>([]);
   const [paymentPolicies, setPaymentPolicies] = useState<EbayPolicy[]>([]);
   const [returnPolicies, setReturnPolicies] = useState<EbayPolicy[]>([]);
   const [policiesLastSynced, setPoliciesLastSynced] = useState<string | null>(null);
 
-  // Check for OAuth redirect fallback (query params)
+  // Derive connection status from configs array (not selectedConfig which can be stale)
+  const selectedKey = selectedConfig?.store_key;
+  const selectedFromList = configs.find(c => c.store_key === selectedKey);
+  const isConnected = Boolean(selectedFromList?.oauth_connected_at);
+
+  // Retry function to poll until connection is verified in DB
+  const refreshUntilConnected = useCallback(async (storeKey: string, attempts = 8): Promise<boolean> => {
+    for (let i = 0; i < attempts; i++) {
+      await loadConfigs(true, storeKey);
+      
+      const latest = configsRef.current?.find(c => c.store_key === storeKey);
+      if (latest?.oauth_connected_at) {
+        console.log('Connection verified after', i + 1, 'attempts');
+        return true;
+      }
+      
+      await new Promise(r => setTimeout(r, 1000));
+    }
+    return false;
+  }, []);
+
+  // Check for OAuth redirect fallback (query params) - use useLocation for SPA compatibility
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
+    const urlParams = new URLSearchParams(location.search);
     const connected = urlParams.get('connected');
     const storeId = urlParams.get('store');
     
     if (connected === '1' && storeId) {
-      console.log('eBay OAuth redirect fallback detected:', { connected, storeId });
+      console.log('OAuth redirect detected:', { storeId });
       // Clear the query params from URL
-      window.history.replaceState({}, '', window.location.pathname);
-      toast.success('eBay account connected successfully!');
-      loadConfigs(true, storeId);
+      window.history.replaceState({}, '', location.pathname);
+      
+      // Wait for context to be ready before loading
+      if (isAdmin || assignedStore) {
+        toast.success('eBay account connected!');
+        loadConfigs(true, storeId);
+      }
     }
-  }, []);
+  }, [location.search, location.pathname, assignedStore, isAdmin]);
 
   // Global message listener for OAuth popup communication
   useEffect(() => {
-    const handler = (event: MessageEvent) => {
-      console.log('EBAY postMessage received:', event.origin, event.data);
+    const handler = async (event: MessageEvent) => {
+      console.log('EBAY postMessage received:', {
+        origin: event.origin,
+        data: event.data,
+        hasOpener: !!window.opener
+      });
       
       if (event.data?.type !== 'EBAY_CONNECTED') return;
       
@@ -93,7 +131,10 @@ export default function EbayApp() {
       
       if (event.data.success) {
         toast.success('eBay account connected successfully!');
-        loadConfigs(true, storeId);
+        const ok = await refreshUntilConnected(storeId);
+        if (!ok) {
+          toast.info('Connected on backend - click Refresh Status if UI does not update');
+        }
       } else {
         toast.error(event.data.message || 'eBay connection failed');
       }
@@ -103,7 +144,7 @@ export default function EbayApp() {
 
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
-  }, []);
+  }, [refreshUntilConnected]);
 
   useEffect(() => {
     if (assignedStore) {
@@ -320,7 +361,10 @@ export default function EbayApp() {
     
     try {
       const { data, error } = await supabase.functions.invoke('ebay-auth-init', {
-        body: { store_key: currentStoreKey }
+        body: { 
+          store_key: currentStoreKey,
+          origin: window.location.origin 
+        }
       });
 
       if (error) throw error;
@@ -330,13 +374,16 @@ export default function EbayApp() {
       const authWindow = window.open(data.auth_url, 'ebay_auth', 'width=600,height=700');
       console.log('Opened eBay auth window for store:', currentStoreKey);
       
-      // Fallback: poll for window close (message handler is global now)
-      const pollTimer = setInterval(() => {
+      // Fallback: poll for window close with retry-until-connected logic
+      const pollTimer = setInterval(async () => {
         if (authWindow?.closed) {
           clearInterval(pollTimer);
-          console.log('eBay auth window closed, refreshing configs...');
-          // Refresh configs as a fallback if postMessage didn't work
-          loadConfigs(true, currentStoreKey);
+          console.log('Auth window closed, polling for connection...');
+          
+          const ok = await refreshUntilConnected(currentStoreKey);
+          if (!ok) {
+            toast.info('Connected on backend - click Refresh Status if UI does not update');
+          }
           setConnecting(false);
         }
       }, 1000);
@@ -435,13 +482,13 @@ export default function EbayApp() {
                       <div className="h-px w-8 bg-border" />
                       <div className="flex items-center gap-2">
                         <div className={`h-8 w-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                          selectedConfig.oauth_connected_at 
+                          isConnected 
                             ? 'bg-primary text-primary-foreground' 
                             : 'bg-muted text-muted-foreground'
                         }`}>
-                          {selectedConfig.oauth_connected_at ? <CheckCircle className="h-5 w-5" /> : '2'}
+                          {isConnected ? <CheckCircle className="h-5 w-5" /> : '2'}
                         </div>
-                        <span className={`text-sm ${selectedConfig.oauth_connected_at ? 'font-medium' : 'text-muted-foreground'}`}>
+                        <span className={`text-sm ${isConnected ? 'font-medium' : 'text-muted-foreground'}`}>
                           2. eBay Connected
                         </span>
                       </div>
@@ -590,16 +637,16 @@ export default function EbayApp() {
                   <CardContent className="space-y-4">
                     <div className="flex items-center justify-between p-4 border rounded-lg">
                       <div className="flex items-center gap-3">
-                        {selectedConfig.oauth_connected_at ? (
+                        {isConnected ? (
                           <>
                             <CheckCircle className="h-6 w-6 text-green-500" />
                             <div>
                               <p className="font-medium">Connected to eBay</p>
                               <p className="text-sm text-muted-foreground">
-                                User: {selectedConfig.ebay_user_id || 'Unknown'}
+                                User: {selectedFromList?.ebay_user_id || 'Unknown'}
                               </p>
                               <p className="text-xs text-muted-foreground">
-                                Connected: {new Date(selectedConfig.oauth_connected_at).toLocaleDateString()}
+                                Connected: {selectedFromList?.oauth_connected_at ? new Date(selectedFromList.oauth_connected_at).toLocaleDateString() : ''}
                               </p>
                             </div>
                           </>
@@ -615,25 +662,36 @@ export default function EbayApp() {
                           </>
                         )}
                       </div>
-                      <Button 
-                        onClick={connectEbay} 
-                        disabled={connecting}
-                        variant={selectedConfig.oauth_connected_at ? 'outline' : 'default'}
-                      >
-                        {connecting ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Connecting...
-                          </>
-                        ) : selectedConfig.oauth_connected_at ? (
-                          'Reconnect'
-                        ) : (
-                          <>
-                            Connect eBay Account
-                            <ExternalLink className="h-4 w-4 ml-2" />
-                          </>
-                        )}
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Button 
+                          variant="outline"
+                          size="sm"
+                          onClick={() => loadConfigs(true, selectedConfig?.store_key)}
+                          disabled={loading}
+                        >
+                          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                          Refresh Status
+                        </Button>
+                        <Button 
+                          onClick={connectEbay} 
+                          disabled={connecting}
+                          variant={isConnected ? 'outline' : 'default'}
+                        >
+                          {connecting ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              Connecting...
+                            </>
+                          ) : isConnected ? (
+                            'Reconnect'
+                          ) : (
+                            <>
+                              Connect eBay Account
+                              <ExternalLink className="h-4 w-4 ml-2" />
+                            </>
+                          )}
+                        </Button>
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
@@ -689,7 +747,7 @@ export default function EbayApp() {
                       <Button 
                         variant="outline" 
                         onClick={syncPolicies}
-                        disabled={syncingPolicies || !selectedConfig.oauth_connected_at}
+                        disabled={syncingPolicies || !isConnected}
                       >
                         {syncingPolicies ? (
                           <>
@@ -711,7 +769,7 @@ export default function EbayApp() {
                     )}
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    {!selectedConfig.oauth_connected_at ? (
+                    {!isConnected ? (
                       <p className="text-sm text-muted-foreground text-center py-4">
                         Connect your eBay account to sync and select business policies
                       </p>
