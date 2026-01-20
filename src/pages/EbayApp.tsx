@@ -360,6 +360,8 @@ export default function EbayApp() {
     const currentStoreKey = selectedConfig.store_key;
     
     try {
+      console.log('Initiating eBay OAuth for store:', currentStoreKey);
+      
       const { data, error } = await supabase.functions.invoke('ebay-auth-init', {
         body: { 
           store_key: currentStoreKey,
@@ -367,8 +369,27 @@ export default function EbayApp() {
         }
       });
 
-      if (error) throw error;
-      if (!data.auth_url) throw new Error('No auth URL returned');
+      console.log('ebay-auth-init response:', { data, error });
+
+      if (error) {
+        console.error('eBay auth init error:', error);
+        throw error;
+      }
+      
+      if (!data.auth_url) {
+        console.error('No auth_url in response:', data);
+        throw new Error('No auth URL returned');
+      }
+
+      console.log('Opening eBay auth URL:', data.auth_url);
+      
+      // Verify it's actually an eBay URL
+      if (!data.auth_url.includes('ebay.com')) {
+        console.error('WARNING: auth_url does not contain ebay.com!', data.auth_url);
+        toast.error('Invalid auth URL returned - not an eBay URL');
+        setConnecting(false);
+        return;
+      }
 
       // IMPORTANT: Do NOT use noopener/noreferrer - it kills window.opener
       const authWindow = window.open(data.auth_url, 'ebay_auth', 'width=600,height=700');
@@ -395,6 +416,7 @@ export default function EbayApp() {
       }, 300000);
 
     } catch (error: any) {
+      console.error('connectEbay error:', error);
       toast.error('Failed to start eBay connection: ' + error.message);
       setConnecting(false);
     }

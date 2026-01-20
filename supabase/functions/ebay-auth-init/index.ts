@@ -67,6 +67,11 @@ serve(async (req) => {
     }
 
     const authUrl = buildAuthorizationUrl(config, state)
+    
+    console.log('Generated eBay auth URL:', authUrl)
+    console.log('Environment:', environment)
+    console.log('Client ID prefix:', clientId?.substring(0, 15) + '...')
+    console.log('RuName:', ruName)
 
     return new Response(
       JSON.stringify({ 
