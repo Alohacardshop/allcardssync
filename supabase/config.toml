@@ -176,3 +176,7 @@ verify_jwt = true
 # eBay inventory updates (requires authentication)
 [functions.ebay-update-inventory]
 verify_jwt = true
+
+# eBay policy management (create/update/delete)
+[functions.ebay-manage-policy]
+verify_jwt = true
