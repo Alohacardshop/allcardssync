@@ -12,7 +12,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { 
   ExternalLink, CheckCircle, AlertCircle, Loader2, Settings, Link2, RefreshCw,
-  ShoppingCart, Clock, Package, ArrowRightLeft, MapPin
+  ShoppingCart, Clock, Package, ArrowRightLeft, MapPin, Trash2, Shield
 } from 'lucide-react';
 import { EbaySyncQueueMonitor } from '@/components/admin/EbaySyncQueueMonitor';
 import { EbayBulkListing } from '@/components/admin/EbayBulkListing';
@@ -21,6 +21,57 @@ import { Link, useLocation } from 'react-router-dom';
 import { useStore } from '@/contexts/StoreContext';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { FileText } from 'lucide-react';
+import { DeleteConfirmationDialog } from '@/components/ConfirmationDialog';
+
+// Token health status helper
+interface TokenHealth {
+  status: 'valid' | 'expiring' | 'expired' | 'unknown';
+  label: string;
+  color: string;
+  expiresAt?: Date;
+  refreshExpiresAt?: Date;
+}
+
+const getTokenHealth = (tokenData: any): TokenHealth => {
+  if (!tokenData) {
+    return { status: 'unknown', label: 'Unknown', color: 'text-muted-foreground' };
+  }
+
+  const now = new Date();
+  const accessExpiry = tokenData.access_token_expires_at ? new Date(tokenData.access_token_expires_at) : null;
+  const refreshExpiry = tokenData.refresh_token_expires_at ? new Date(tokenData.refresh_token_expires_at) : null;
+
+  // Check if refresh token is expired (critical)
+  if (refreshExpiry && refreshExpiry < now) {
+    return { 
+      status: 'expired', 
+      label: 'Session Expired - Reconnect Required', 
+      color: 'text-destructive',
+      expiresAt: accessExpiry || undefined,
+      refreshExpiresAt: refreshExpiry
+    };
+  }
+
+  // Check if refresh token expires within 7 days
+  const sevenDays = 7 * 24 * 60 * 60 * 1000;
+  if (refreshExpiry && (refreshExpiry.getTime() - now.getTime()) < sevenDays) {
+    return { 
+      status: 'expiring', 
+      label: 'Reconnect Soon', 
+      color: 'text-yellow-600',
+      expiresAt: accessExpiry || undefined,
+      refreshExpiresAt: refreshExpiry
+    };
+  }
+
+  return { 
+    status: 'valid', 
+    label: 'Connected', 
+    color: 'text-green-600',
+    expiresAt: accessExpiry || undefined,
+    refreshExpiresAt: refreshExpiry
+  };
+};
 
 interface EbayStoreConfig {
   id: string;
@@ -57,10 +108,13 @@ export default function EbayApp() {
   const [saving, setSaving] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [syncingPolicies, setSyncingPolicies] = useState(false);
   const [configs, setConfigs] = useState<EbayStoreConfig[]>([]);
   const [selectedConfig, setSelectedConfig] = useState<EbayStoreConfig | null>(null);
   const [newStoreKey, setNewStoreKey] = useState('');
+  const [tokenHealth, setTokenHealth] = useState<TokenHealth | null>(null);
   
   // Ref to track latest configs for async operations
   const configsRef = useRef<EbayStoreConfig[]>([]);
@@ -156,8 +210,32 @@ export default function EbayApp() {
   useEffect(() => {
     if (selectedConfig?.store_key) {
       loadPolicies(selectedConfig.store_key);
+      loadTokenHealth(selectedConfig.store_key);
+    } else {
+      setTokenHealth(null);
     }
   }, [selectedConfig?.store_key]);
+
+  const loadTokenHealth = async (storeKey: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('system_settings')
+        .select('key_value')
+        .eq('key_name', `EBAY_TOKENS_${storeKey}`)
+        .maybeSingle();
+
+      if (error || !data) {
+        setTokenHealth(null);
+        return;
+      }
+
+      const tokenData = JSON.parse(data.key_value);
+      setTokenHealth(getTokenHealth(tokenData));
+    } catch (e) {
+      console.error('Failed to load token health:', e);
+      setTokenHealth(null);
+    }
+  };
 
   const loadConfigs = async (forceRefresh = false, storeKeyToSelect?: string) => {
     setLoading(true);
@@ -450,6 +528,39 @@ export default function EbayApp() {
     }
   };
 
+  const deleteConfig = async () => {
+    if (!selectedConfig) return;
+    
+    setDeleting(true);
+    try {
+      // Delete related data first
+      await Promise.all([
+        supabase.from('ebay_fulfillment_policies').delete().eq('store_key', selectedConfig.store_key),
+        supabase.from('ebay_payment_policies').delete().eq('store_key', selectedConfig.store_key),
+        supabase.from('ebay_return_policies').delete().eq('store_key', selectedConfig.store_key),
+        supabase.from('system_settings').delete().eq('key_name', `EBAY_TOKENS_${selectedConfig.store_key}`),
+      ]);
+
+      // Delete the config
+      const { error } = await supabase
+        .from('ebay_store_config')
+        .delete()
+        .eq('id', selectedConfig.id);
+
+      if (error) throw error;
+
+      toast.success(`Deleted configuration: ${selectedConfig.store_key}`);
+      setDeleteDialogOpen(false);
+      setSelectedConfig(null);
+      await loadConfigs();
+    } catch (error: any) {
+      console.error('Delete error:', error);
+      toast.error('Failed to delete configuration: ' + error.message);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const updateConfig = (updates: Partial<EbayStoreConfig>) => {
     if (!selectedConfig) return;
     setSelectedConfig({ ...selectedConfig, ...updates });
@@ -647,29 +758,41 @@ export default function EbayApp() {
                   <CardDescription>Select or create an eBay store configuration</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>Select Store</Label>
-                    <Select
-                      value={selectedConfig?.id || ''}
-                      onValueChange={(id) => {
-                        const config = configs.find(c => c.id === id);
-                        setSelectedConfig(config || null);
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a store configuration" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {configs.map((config) => (
-                          <SelectItem key={config.id} value={config.id}>
-                            {config.store_key} ({config.environment})
-                            {config.oauth_connected_at && ' ✓'}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                  <div className="flex items-center gap-4">
+                    <div className="flex-1 space-y-2">
+                      <Label>Select Store</Label>
+                      <Select
+                        value={selectedConfig?.id || ''}
+                        onValueChange={(id) => {
+                          const config = configs.find(c => c.id === id);
+                          setSelectedConfig(config || null);
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a store configuration" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {configs.map((config) => (
+                            <SelectItem key={config.id} value={config.id}>
+                              {config.store_key} ({config.environment})
+                              {config.oauth_connected_at && ' ✓'}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {selectedConfig && isAdmin && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-destructive hover:bg-destructive/10 mt-6"
+                        onClick={() => setDeleteDialogOpen(true)}
+                        title="Delete this configuration"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
                   </div>
-
                 </CardContent>
               </Card>
             )}
@@ -689,14 +812,25 @@ export default function EbayApp() {
                       <div className="flex items-center gap-3">
                         {isConnected ? (
                           <>
-                            <CheckCircle className="h-6 w-6 text-green-500" />
+                            <CheckCircle className={`h-6 w-6 ${tokenHealth?.status === 'expired' ? 'text-destructive' : tokenHealth?.status === 'expiring' ? 'text-yellow-500' : 'text-green-500'}`} />
                             <div>
-                              <p className="font-medium">Connected to eBay</p>
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium">Connected to eBay</p>
+                                {tokenHealth && (
+                                  <Badge variant={tokenHealth.status === 'expired' ? 'destructive' : tokenHealth.status === 'expiring' ? 'secondary' : 'default'} className="text-xs">
+                                    <Shield className="h-3 w-3 mr-1" />
+                                    {tokenHealth.label}
+                                  </Badge>
+                                )}
+                              </div>
                               <p className="text-sm text-muted-foreground">
-                                User: {selectedFromList?.ebay_user_id || 'Unknown'}
+                                Account: {selectedFromList?.ebay_user_id || 'Loading...'}
                               </p>
                               <p className="text-xs text-muted-foreground">
                                 Connected: {selectedFromList?.oauth_connected_at ? new Date(selectedFromList.oauth_connected_at).toLocaleDateString() : ''}
+                                {tokenHealth?.refreshExpiresAt && (
+                                  <> · Session expires: {tokenHealth.refreshExpiresAt.toLocaleDateString()}</>
+                                )}
                               </p>
                             </div>
                           </>
@@ -985,6 +1119,16 @@ export default function EbayApp() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Delete Configuration Dialog */}
+      <DeleteConfirmationDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        onConfirm={deleteConfig}
+        title={`Delete "${selectedConfig?.store_key}" configuration?`}
+        description="This will permanently delete this eBay store configuration, disconnect the eBay account, and remove all synced policies. This action cannot be undone."
+        loading={deleting}
+      />
     </div>
   );
 }

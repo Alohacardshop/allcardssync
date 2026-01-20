@@ -168,3 +168,11 @@ verify_jwt = true
 # eBay sealed product nightly price check (cron job - no JWT)
 [functions.ebay-sealed-price-check]
 verify_jwt = false
+
+# eBay disconnect (requires authentication)
+[functions.ebay-disconnect]
+verify_jwt = true
+
+# eBay inventory updates (requires authentication)
+[functions.ebay-update-inventory]
+verify_jwt = true

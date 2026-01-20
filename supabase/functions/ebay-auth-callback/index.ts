@@ -2,6 +2,33 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { exchangeCodeForTokens, type EbayConfig } from '../_shared/ebayAuth.ts'
 
+// Fetch eBay user identity after OAuth
+async function fetchEbayUserId(accessToken: string, environment: 'sandbox' | 'production'): Promise<string | null> {
+  const baseUrl = environment === 'production' 
+    ? 'https://apiz.ebay.com' 
+    : 'https://apiz.sandbox.ebay.com'
+  
+  try {
+    const response = await fetch(`${baseUrl}/commerce/identity/v1/user`, {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+    })
+    
+    if (!response.ok) {
+      console.warn('Failed to fetch eBay user identity:', response.status)
+      return null
+    }
+    
+    const data = await response.json()
+    return data.username || null
+  } catch (error) {
+    console.warn('Error fetching eBay user identity:', error)
+    return null
+  }
+}
+
 serve(async (req) => {
   try {
     const url = new URL(req.url)
@@ -149,7 +176,12 @@ serve(async (req) => {
     }
     console.log(`Tokens saved successfully to system_settings`)
 
-    // Update store config with connection timestamp - CHECK FOR ERRORS
+    // Fetch eBay user identity
+    console.log(`Fetching eBay user identity...`)
+    const ebayUserId = await fetchEbayUserId(tokens.access_token, environment)
+    console.log(`eBay user ID: ${ebayUserId || 'unknown'}`)
+
+    // Update store config with connection timestamp and user ID - CHECK FOR ERRORS
     console.log(`Updating ebay_store_config for store: ${store_key}`)
     const { error: configUpdateError } = await supabase
       .from('ebay_store_config')
@@ -158,6 +190,7 @@ serve(async (req) => {
         environment,
         oauth_connected_at: now.toISOString(),
         is_active: true,
+        ebay_user_id: ebayUserId,
         updated_at: now.toISOString(),
       }, {
         onConflict: 'store_key'
