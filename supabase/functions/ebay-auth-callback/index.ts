@@ -10,15 +10,14 @@ serve(async (req) => {
     const error = url.searchParams.get('error')
     const errorDescription = url.searchParams.get('error_description')
 
-    // Default app origin for redirects
-    let appOrigin = 'https://alohacardshop.lovable.app'
+    // ALWAYS use published domain - preview has session partitioning issues
+    const appOrigin = 'https://alohacardshop.lovable.app'
     let storeKey = ''
 
-    // Try to decode state early to get origin and store_key
+    // Try to decode state early to get store_key
     if (state) {
       try {
         const stateData = JSON.parse(atob(state))
-        appOrigin = stateData.origin || Deno.env.get('APP_ORIGIN') || appOrigin
         storeKey = stateData.store_key || ''
       } catch {
         // State decode failed, use defaults
@@ -48,8 +47,7 @@ serve(async (req) => {
     }
 
     const { store_key } = stateData
-    // Use origin from state (passed from frontend) or fallback to env/default
-    appOrigin = stateData.origin || Deno.env.get('APP_ORIGIN') || 'https://alohacardshop.lovable.app'
+    // appOrigin is always the published domain (set above)
 
     // Validate timestamp (15 minute expiry)
     if (Date.now() - stateData.timestamp > 15 * 60 * 1000) {

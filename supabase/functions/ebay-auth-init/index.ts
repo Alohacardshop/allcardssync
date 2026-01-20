@@ -51,12 +51,11 @@ serve(async (req) => {
 
     const environment = (storeConfig?.environment || 'sandbox') as 'sandbox' | 'production'
 
-    // Create state token with store_key and origin for callback
+    // Create state token with store_key for callback (origin no longer needed - always uses published domain)
     const state = btoa(JSON.stringify({ 
       store_key, 
       timestamp: Date.now(),
-      nonce: crypto.randomUUID(),
-      origin: origin || 'https://alohacardshop.lovable.app'
+      nonce: crypto.randomUUID()
     }))
 
     const config: EbayConfig = {
