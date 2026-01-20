@@ -56,6 +56,7 @@ export default function EbayApp() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [connecting, setConnecting] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
   const [syncingPolicies, setSyncingPolicies] = useState(false);
   const [configs, setConfigs] = useState<EbayStoreConfig[]>([]);
   const [selectedConfig, setSelectedConfig] = useState<EbayStoreConfig | null>(null);
@@ -422,6 +423,33 @@ export default function EbayApp() {
     }
   };
 
+  const disconnectEbay = async () => {
+    if (!selectedConfig) return;
+    
+    const confirmed = window.confirm(
+      `Are you sure you want to disconnect the eBay account for "${selectedConfig.store_key}"? You will need to reconnect to list items.`
+    );
+    
+    if (!confirmed) return;
+    
+    setDisconnecting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('ebay-disconnect', {
+        body: { store_key: selectedConfig.store_key }
+      });
+
+      if (error) throw error;
+      
+      toast.success(`Disconnected eBay account for ${selectedConfig.store_key}`);
+      await loadConfigs(true, selectedConfig.store_key);
+    } catch (error: any) {
+      console.error('Disconnect error:', error);
+      toast.error('Failed to disconnect: ' + error.message);
+    } finally {
+      setDisconnecting(false);
+    }
+  };
+
   const updateConfig = (updates: Partial<EbayStoreConfig>) => {
     if (!selectedConfig) return;
     setSelectedConfig({ ...selectedConfig, ...updates });
@@ -694,6 +722,23 @@ export default function EbayApp() {
                           <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
                           Refresh Status
                         </Button>
+                        {isConnected && (
+                          <Button 
+                            variant="destructive"
+                            size="sm"
+                            onClick={disconnectEbay}
+                            disabled={disconnecting}
+                          >
+                            {disconnecting ? (
+                              <>
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                Disconnecting...
+                              </>
+                            ) : (
+                              'Disconnect'
+                            )}
+                          </Button>
+                        )}
                         <Button 
                           onClick={connectEbay} 
                           disabled={connecting}
