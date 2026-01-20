@@ -17,10 +17,11 @@ import {
 import { EbaySyncQueueMonitor } from '@/components/admin/EbaySyncQueueMonitor';
 import { EbayBulkListing } from '@/components/admin/EbayBulkListing';
 import { EbayTemplateManager } from '@/components/admin/EbayTemplateManager';
+import { EbayPolicyEditor } from '@/components/admin/EbayPolicyEditor';
 import { Link, useLocation } from 'react-router-dom';
 import { useStore } from '@/contexts/StoreContext';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { FileText } from 'lucide-react';
+import { FileText, ClipboardList } from 'lucide-react';
 import { DeleteConfirmationDialog } from '@/components/ConfirmationDialog';
 
 // Token health status helper
@@ -594,10 +595,14 @@ export default function EbayApp() {
         />
 
         <Tabs defaultValue="settings" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-grid">
+          <TabsList className="grid w-full grid-cols-5 lg:w-auto lg:inline-grid">
             <TabsTrigger value="settings" className="flex items-center gap-2">
               <Settings className="h-4 w-4" />
               Settings
+            </TabsTrigger>
+            <TabsTrigger value="policies" className="flex items-center gap-2">
+              <ClipboardList className="h-4 w-4" />
+              Policies
             </TabsTrigger>
             <TabsTrigger value="templates" className="flex items-center gap-2">
               <FileText className="h-4 w-4" />
@@ -935,64 +940,52 @@ export default function EbayApp() {
                   </CardContent>
                 </Card>
 
-                {/* Business Policies */}
+                {/* Default Policies */}
                 <Card>
                   <CardHeader>
                     <div className="flex items-center justify-between">
                       <div>
-                        <CardTitle>Business Policies</CardTitle>
+                        <CardTitle>Default Policies</CardTitle>
                         <CardDescription>
-                          Sync and select your eBay shipping, payment, and return policies
+                          Select default policies for new eBay listings
                         </CardDescription>
                       </div>
-                      <Button 
-                        variant="outline" 
-                        onClick={syncPolicies}
-                        disabled={syncingPolicies || !isConnected}
-                      >
-                        {syncingPolicies ? (
-                          <>
+                      {isConnected && fulfillmentPolicies.length === 0 && (
+                        <Button variant="outline" onClick={syncPolicies} disabled={syncingPolicies}>
+                          {syncingPolicies ? (
                             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Syncing...
-                          </>
-                        ) : (
-                          <>
+                          ) : (
                             <RefreshCw className="h-4 w-4 mr-2" />
-                            Sync Policies
-                          </>
-                        )}
-                      </Button>
+                          )}
+                          Sync from eBay
+                        </Button>
+                      )}
                     </div>
-                    {policiesLastSynced && (
-                      <p className="text-xs text-muted-foreground mt-2">
-                        Last synced: {new Date(policiesLastSynced).toLocaleString()}
-                      </p>
-                    )}
                   </CardHeader>
                   <CardContent className="space-y-4">
                     {!isConnected ? (
                       <p className="text-sm text-muted-foreground text-center py-4">
-                        Connect your eBay account to sync and select business policies
+                        Connect your eBay account first
                       </p>
-                    ) : fulfillmentPolicies.length === 0 && paymentPolicies.length === 0 && returnPolicies.length === 0 ? (
+                    ) : fulfillmentPolicies.length === 0 ? (
                       <p className="text-sm text-muted-foreground text-center py-4">
-                        No policies synced yet. Click "Sync Policies" to load your eBay business policies.
+                        No policies yet. Sync from eBay or go to the <strong>Policies</strong> tab to create new ones.
                       </p>
                     ) : (
-                      <div className="grid grid-cols-1 gap-4">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div className="space-y-2">
-                          <Label>Fulfillment Policy (Shipping)</Label>
+                          <Label>Shipping Policy</Label>
                           <Select
                             value={selectedConfig.default_fulfillment_policy_id || ''}
                             onValueChange={(v) => updateConfig({ default_fulfillment_policy_id: v || null })}
                           >
                             <SelectTrigger>
-                              <SelectValue placeholder="Select a fulfillment policy" />
+                              <SelectValue placeholder="Select policy" />
                             </SelectTrigger>
                             <SelectContent>
                               {fulfillmentPolicies.map((policy) => (
                                 <SelectItem key={policy.policy_id} value={policy.policy_id}>
-                                  {policy.name} {policy.is_default && '(Default)'}
+                                  {policy.name}
                                 </SelectItem>
                               ))}
                             </SelectContent>
@@ -1006,12 +999,12 @@ export default function EbayApp() {
                             onValueChange={(v) => updateConfig({ default_payment_policy_id: v || null })}
                           >
                             <SelectTrigger>
-                              <SelectValue placeholder="Select a payment policy" />
+                              <SelectValue placeholder="Select policy" />
                             </SelectTrigger>
                             <SelectContent>
                               {paymentPolicies.map((policy) => (
                                 <SelectItem key={policy.policy_id} value={policy.policy_id}>
-                                  {policy.name} {policy.is_default && '(Default)'}
+                                  {policy.name}
                                 </SelectItem>
                               ))}
                             </SelectContent>
@@ -1025,12 +1018,12 @@ export default function EbayApp() {
                             onValueChange={(v) => updateConfig({ default_return_policy_id: v || null })}
                           >
                             <SelectTrigger>
-                              <SelectValue placeholder="Select a return policy" />
+                              <SelectValue placeholder="Select policy" />
                             </SelectTrigger>
                             <SelectContent>
                               {returnPolicies.map((policy) => (
                                 <SelectItem key={policy.policy_id} value={policy.policy_id}>
-                                  {policy.name} {policy.is_default && '(Default)'}
+                                  {policy.name}
                                 </SelectItem>
                               ))}
                             </SelectContent>
@@ -1105,6 +1098,24 @@ export default function EbayApp() {
                   </Button>
                 </div>
               </>
+            )}
+          </TabsContent>
+
+          {/* Policies Tab */}
+          <TabsContent value="policies">
+            {selectedConfig ? (
+              <EbayPolicyEditor 
+                storeKey={selectedConfig.store_key}
+                marketplaceId={selectedConfig.marketplace_id}
+                isConnected={isConnected}
+                onPoliciesChanged={() => loadPolicies(selectedConfig.store_key)}
+              />
+            ) : (
+              <Card>
+                <CardContent className="py-8 text-center text-muted-foreground">
+                  Please select or create an eBay store configuration first.
+                </CardContent>
+              </Card>
             )}
           </TabsContent>
 
