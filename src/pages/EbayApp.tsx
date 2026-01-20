@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,7 +12,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { 
   ExternalLink, CheckCircle, AlertCircle, Loader2, Settings, Link2, RefreshCw,
-  ShoppingCart, Clock, Package, ArrowRightLeft, MapPin, Trash2, Shield
+  ShoppingCart, Clock, Package, ArrowRightLeft, Trash2, Shield
 } from 'lucide-react';
 import { EbaySyncQueueMonitor } from '@/components/admin/EbaySyncQueueMonitor';
 import { EbayBulkListing } from '@/components/admin/EbayBulkListing';
