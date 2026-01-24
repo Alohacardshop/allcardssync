@@ -625,6 +625,57 @@ export type Database = {
           },
         ]
       }
+      ebay_sync_rules: {
+        Row: {
+          auto_queue: boolean | null
+          brand_match: string[] | null
+          category_match: string[] | null
+          created_at: string | null
+          graded_only: boolean | null
+          id: string
+          is_active: boolean | null
+          max_price: number | null
+          min_price: number | null
+          name: string
+          priority: number | null
+          rule_type: string
+          store_key: string
+          updated_at: string | null
+        }
+        Insert: {
+          auto_queue?: boolean | null
+          brand_match?: string[] | null
+          category_match?: string[] | null
+          created_at?: string | null
+          graded_only?: boolean | null
+          id?: string
+          is_active?: boolean | null
+          max_price?: number | null
+          min_price?: number | null
+          name: string
+          priority?: number | null
+          rule_type: string
+          store_key: string
+          updated_at?: string | null
+        }
+        Update: {
+          auto_queue?: boolean | null
+          brand_match?: string[] | null
+          category_match?: string[] | null
+          created_at?: string | null
+          graded_only?: boolean | null
+          id?: string
+          is_active?: boolean | null
+          max_price?: number | null
+          min_price?: number | null
+          name?: string
+          priority?: number | null
+          rule_type?: string
+          store_key?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       edge_function_logs: {
         Row: {
           created_at: string
@@ -725,8 +776,10 @@ export type Database = {
           deleted_at: string | null
           deleted_reason: string | null
           ebay_inventory_item_sku: string | null
+          ebay_legacy_import_at: string | null
           ebay_listing_id: string | null
           ebay_listing_url: string | null
+          ebay_managed_externally: boolean | null
           ebay_offer_id: string | null
           ebay_price_check: Json | null
           ebay_sync_error: string | null
@@ -809,8 +862,10 @@ export type Database = {
           deleted_at?: string | null
           deleted_reason?: string | null
           ebay_inventory_item_sku?: string | null
+          ebay_legacy_import_at?: string | null
           ebay_listing_id?: string | null
           ebay_listing_url?: string | null
+          ebay_managed_externally?: boolean | null
           ebay_offer_id?: string | null
           ebay_price_check?: Json | null
           ebay_sync_error?: string | null
@@ -893,8 +948,10 @@ export type Database = {
           deleted_at?: string | null
           deleted_reason?: string | null
           ebay_inventory_item_sku?: string | null
+          ebay_legacy_import_at?: string | null
           ebay_listing_id?: string | null
           ebay_listing_url?: string | null
+          ebay_managed_externally?: boolean | null
           ebay_offer_id?: string | null
           ebay_price_check?: Json | null
           ebay_sync_error?: string | null
@@ -1837,6 +1894,36 @@ export type Database = {
           name?: string
           sort_order?: number
           updated_at?: string
+        }
+        Relationships: []
+      }
+      region_settings: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          id: string
+          region_id: string
+          setting_key: string
+          setting_value: Json
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          region_id: string
+          setting_key: string
+          setting_value?: Json
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          region_id?: string
+          setting_key?: string
+          setting_value?: Json
+          updated_at?: string | null
         }
         Relationships: []
       }

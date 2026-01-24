@@ -18,10 +18,11 @@ import { EbaySyncQueueMonitor } from '@/components/admin/EbaySyncQueueMonitor';
 import { EbayBulkListing } from '@/components/admin/EbayBulkListing';
 import { EbayTemplateManager } from '@/components/admin/EbayTemplateManager';
 import { EbayPolicyEditor } from '@/components/admin/EbayPolicyEditor';
+import { EbaySyncRulesEditor } from '@/components/admin/EbaySyncRulesEditor';
 import { Link, useLocation } from 'react-router-dom';
 import { useStore } from '@/contexts/StoreContext';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { FileText, ClipboardList } from 'lucide-react';
+import { FileText, ClipboardList, Filter } from 'lucide-react';
 import { DeleteConfirmationDialog } from '@/components/ConfirmationDialog';
 
 // Token health status helper
@@ -595,7 +596,7 @@ export default function EbayApp() {
         />
 
         <Tabs defaultValue="settings" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5 lg:w-auto lg:inline-grid">
+          <TabsList className="grid w-full grid-cols-6 lg:w-auto lg:inline-grid">
             <TabsTrigger value="settings" className="flex items-center gap-2">
               <Settings className="h-4 w-4" />
               Settings
@@ -607,6 +608,10 @@ export default function EbayApp() {
             <TabsTrigger value="templates" className="flex items-center gap-2">
               <FileText className="h-4 w-4" />
               Templates
+            </TabsTrigger>
+            <TabsTrigger value="rules" className="flex items-center gap-2">
+              <Filter className="h-4 w-4" />
+              Sync Rules
             </TabsTrigger>
             <TabsTrigger value="bulk" className="flex items-center gap-2">
               <Package className="h-4 w-4" />
@@ -1117,6 +1122,11 @@ export default function EbayApp() {
                 </CardContent>
               </Card>
             )}
+          </TabsContent>
+
+          {/* Sync Rules Tab */}
+          <TabsContent value="rules">
+            <EbaySyncRulesEditor />
           </TabsContent>
 
           {/* Bulk Listing Tab */}

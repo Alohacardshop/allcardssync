@@ -11,7 +11,8 @@ import {
   Command,
   Menu,
   Tag,
-  MapPin
+  MapPin,
+  Globe
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import {
@@ -44,6 +45,7 @@ import { HardwareTabsSection } from "@/components/admin/HardwareTabsSection";
 import { SystemTabsSection } from "@/components/admin/SystemTabsSection";
 import { CategoryManagement } from "@/components/admin/CategoryManagement";
 import { PurchaseLocationsManager } from "@/components/admin/PurchaseLocationsManager";
+import { RegionSettingsEditor } from "@/components/admin/RegionSettingsEditor";
 
 const adminSections = [
   {
@@ -95,6 +97,11 @@ const adminSections = [
     id: 'purchase-locations',
     title: 'Purchase Locations',
     icon: MapPin,
+  },
+  {
+    id: 'region-settings',
+    title: 'Region Settings',
+    icon: Globe,
   },
 ];
 
@@ -164,6 +171,8 @@ export default function Admin() {
         return <CategoryManagement />;
       case 'purchase-locations':
         return <PurchaseLocationsManager />;
+      case 'region-settings':
+        return <RegionSettingsEditor />;
       default:
         return <div>Section not found</div>;
     }
