@@ -18,6 +18,7 @@ type InventoryItem = {
   psa_cert: string | null;
   brand_title: string | null;
   subject: string | null;
+  main_category: string | null;
   price: number | null;
   grade: string | null;
   list_on_ebay: boolean | null;
@@ -27,6 +28,19 @@ type InventoryItem = {
   shopify_sync_status: string | null;
 };
 
+const CATEGORY_OPTIONS = [
+  { value: 'all', label: 'All Categories' },
+  { value: 'pokemon', label: '🎴 Pokemon' },
+  { value: 'magic', label: '🧙 Magic: The Gathering' },
+  { value: 'yugioh', label: '🃏 Yu-Gi-Oh!' },
+  { value: 'baseball', label: '⚾ Baseball' },
+  { value: 'basketball', label: '🏀 Basketball' },
+  { value: 'football', label: '🏈 Football' },
+  { value: 'hockey', label: '🏒 Hockey' },
+  { value: 'soccer', label: '⚽ Soccer' },
+  { value: 'comics', label: '📚 Comics' },
+];
+
 export function EbayBulkListing() {
   const queryClient = useQueryClient();
   const { bulkToggleEbay, queueForEbaySync } = useEbayListing();
@@ -34,14 +48,15 @@ export function EbayBulkListing() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [filterStatus, setFilterStatus] = useState<string>('not_listed');
+  const [filterCategory, setFilterCategory] = useState<string>('all');
   const [isQueueing, setIsQueueing] = useState(false);
 
   const { data: items, isLoading, refetch } = useQuery({
-    queryKey: ['ebay-bulk-listing-items', filterStatus, searchQuery],
+    queryKey: ['ebay-bulk-listing-items', filterStatus, filterCategory, searchQuery],
     queryFn: async () => {
       let query = supabase
         .from('intake_items')
-        .select('id, sku, psa_cert, brand_title, subject, price, grade, list_on_ebay, list_on_shopify, ebay_listing_id, ebay_sync_status, shopify_sync_status')
+        .select('id, sku, psa_cert, brand_title, subject, main_category, price, grade, list_on_ebay, list_on_shopify, ebay_listing_id, ebay_sync_status, shopify_sync_status')
         .is('deleted_at', null)
         .order('created_at', { ascending: false })
         .limit(200);
@@ -55,6 +70,11 @@ export function EbayBulkListing() {
         query = query.eq('list_on_ebay', true);
       } else if (filterStatus === 'not_marked') {
         query = query.or('list_on_ebay.is.null,list_on_ebay.eq.false');
+      }
+
+      // Filter by category
+      if (filterCategory && filterCategory !== 'all') {
+        query = query.or(`main_category.ilike.%${filterCategory}%,brand_title.ilike.%${filterCategory}%`);
       }
 
       // Search
@@ -163,8 +183,8 @@ export function EbayBulkListing() {
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Filters */}
-        <div className="flex gap-4 items-center">
-          <div className="relative flex-1 max-w-sm">
+        <div className="flex flex-wrap gap-4 items-center">
+          <div className="relative flex-1 min-w-[200px] max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search SKU, cert, title..."
@@ -173,6 +193,16 @@ export function EbayBulkListing() {
               className="pl-9"
             />
           </div>
+          <Select value={filterCategory} onValueChange={setFilterCategory}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Category" />
+            </SelectTrigger>
+            <SelectContent>
+              {CATEGORY_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Select value={filterStatus} onValueChange={setFilterStatus}>
             <SelectTrigger className="w-[180px]">
               <SelectValue placeholder="Filter status" />
