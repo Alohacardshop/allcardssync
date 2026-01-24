@@ -37,30 +37,39 @@ export type Database = {
           action: string
           created_at: string | null
           id: string
+          location_gid: string | null
           new_data: Json | null
           old_data: Json | null
           record_id: string | null
+          region_id: string | null
           table_name: string
+          user_email: string | null
           user_id: string | null
         }
         Insert: {
           action: string
           created_at?: string | null
           id?: string
+          location_gid?: string | null
           new_data?: Json | null
           old_data?: Json | null
           record_id?: string | null
+          region_id?: string | null
           table_name: string
+          user_email?: string | null
           user_id?: string | null
         }
         Update: {
           action?: string
           created_at?: string | null
           id?: string
+          location_gid?: string | null
           new_data?: Json | null
           old_data?: Json | null
           record_id?: string | null
+          region_id?: string | null
           table_name?: string
+          user_email?: string | null
           user_id?: string | null
         }
         Relationships: []
@@ -86,6 +95,124 @@ export type Database = {
           id?: number
           name?: string
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      cross_region_transfer_items: {
+        Row: {
+          created_at: string
+          id: string
+          intake_item_id: string | null
+          item_name: string | null
+          notes: string | null
+          quantity: number
+          received_at: string | null
+          received_by: string | null
+          request_id: string
+          sku: string
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          intake_item_id?: string | null
+          item_name?: string | null
+          notes?: string | null
+          quantity?: number
+          received_at?: string | null
+          received_by?: string | null
+          request_id: string
+          sku: string
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          intake_item_id?: string | null
+          item_name?: string | null
+          notes?: string | null
+          quantity?: number
+          received_at?: string | null
+          received_by?: string | null
+          request_id?: string
+          sku?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cross_region_transfer_items_intake_item_id_fkey"
+            columns: ["intake_item_id"]
+            isOneToOne: false
+            referencedRelation: "intake_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cross_region_transfer_items_intake_item_id_fkey"
+            columns: ["intake_item_id"]
+            isOneToOne: false
+            referencedRelation: "stale_lot_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cross_region_transfer_items_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "cross_region_transfer_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cross_region_transfer_requests: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          completed_at: string | null
+          created_at: string
+          created_by: string | null
+          destination_region: string
+          estimated_arrival: string | null
+          id: string
+          notes: string | null
+          priority: string | null
+          source_region: string
+          status: string
+          total_items: number | null
+          tracking_number: string | null
+          updated_at: string
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          destination_region: string
+          estimated_arrival?: string | null
+          id?: string
+          notes?: string | null
+          priority?: string | null
+          source_region: string
+          status?: string
+          total_items?: number | null
+          tracking_number?: string | null
+          updated_at?: string
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          destination_region?: string
+          estimated_arrival?: string | null
+          id?: string
+          notes?: string | null
+          priority?: string | null
+          source_region?: string
+          status?: string
+          total_items?: number | null
+          tracking_number?: string | null
+          updated_at?: string
         }
         Relationships: []
       }
@@ -1953,6 +2080,60 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      scheduled_ebay_listings: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          error_message: string | null
+          id: string
+          intake_item_id: string | null
+          published_at: string | null
+          region_id: string
+          scheduled_time: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          error_message?: string | null
+          id?: string
+          intake_item_id?: string | null
+          published_at?: string | null
+          region_id: string
+          scheduled_time: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          error_message?: string | null
+          id?: string
+          intake_item_id?: string | null
+          published_at?: string | null
+          region_id?: string
+          scheduled_time?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scheduled_ebay_listings_intake_item_id_fkey"
+            columns: ["intake_item_id"]
+            isOneToOne: false
+            referencedRelation: "intake_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scheduled_ebay_listings_intake_item_id_fkey"
+            columns: ["intake_item_id"]
+            isOneToOne: false
+            referencedRelation: "stale_lot_items"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       sets: {
         Row: {

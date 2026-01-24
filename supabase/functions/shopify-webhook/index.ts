@@ -247,6 +247,95 @@ async function handleProductListingRemove(supabase: any, payload: any, shopifyDo
   }
 }
 
+// Check if store is open based on region business hours
+async function isStoreOpenForRegion(supabase: any, regionId: string): Promise<boolean> {
+  try {
+    // Fetch business hours from region_settings
+    const { data: settings } = await supabase
+      .from('region_settings')
+      .select('setting_value')
+      .eq('region_id', regionId)
+      .eq('setting_key', 'operations.business_hours')
+      .single();
+    
+    const businessHours = settings?.setting_value || {
+      start: regionId === 'hawaii' ? 9 : 10,
+      end: regionId === 'hawaii' ? 19 : 20,
+      timezone: regionId === 'hawaii' ? 'Pacific/Honolulu' : 'America/Los_Angeles',
+    };
+
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: businessHours.timezone,
+      hour: 'numeric',
+      hour12: false,
+      weekday: 'short',
+    }).formatToParts(new Date());
+    
+    const hour = parseInt(parts.find((p) => p.type === 'hour')?.value ?? '0', 10);
+    const day = parts.find((p) => p.type === 'weekday')?.value;
+    
+    // Closed on Sundays
+    if (day === 'Sun') return false;
+    
+    return hour >= businessHours.start && hour < businessHours.end;
+  } catch (error) {
+    console.error('Error checking store hours:', error);
+    // Fallback to Hawaii hours
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Pacific/Honolulu',
+      hour: 'numeric',
+      hour12: false,
+    }).formatToParts(new Date());
+    
+    const hour = parseInt(parts.find((p) => p.type === 'hour')?.value ?? '0', 10);
+    return hour >= 9 && hour < 19;
+  }
+}
+
+// Get region-specific Discord configuration
+async function getRegionDiscordConfig(supabase: any, regionId: string) {
+  try {
+    const { data: settings } = await supabase
+      .from('region_settings')
+      .select('setting_key, setting_value')
+      .eq('region_id', regionId)
+      .like('setting_key', 'discord.%');
+    
+    if (!settings || settings.length === 0) {
+      return null;
+    }
+    
+    return {
+      webhookUrl: settings.find((s: any) => s.setting_key === 'discord.webhook_url')?.setting_value,
+      channelName: settings.find((s: any) => s.setting_key === 'discord.channel_name')?.setting_value,
+      roleId: settings.find((s: any) => s.setting_key === 'discord.role_id')?.setting_value,
+      enabled: settings.find((s: any) => s.setting_key === 'discord.enabled')?.setting_value !== false,
+    };
+  } catch (error) {
+    console.error('Error fetching region Discord config:', error);
+    return null;
+  }
+}
+
+// Determine region from order payload (fulfillment location or tags)
+function getOrderRegion(payload: any): string {
+  // Check fulfillment location
+  const fulfillmentLocation = payload.fulfillment_location_name || payload.location_name || '';
+  if (fulfillmentLocation.toLowerCase().includes('vegas') || fulfillmentLocation.toLowerCase().includes('las vegas')) {
+    return 'las_vegas';
+  }
+  
+  // Check tags for region
+  const tags = payload.tags || '';
+  const tagString = typeof tags === 'string' ? tags : tags.join(',');
+  if (tagString.toLowerCase().includes('vegas') || tagString.toLowerCase().includes('las_vegas')) {
+    return 'las_vegas';
+  }
+  
+  // Default to Hawaii
+  return 'hawaii';
+}
+
 function isOpenNowInHawaii(): boolean {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: 'Pacific/Honolulu',
@@ -302,6 +391,18 @@ async function sendDiscordNotification(supabase: any, payload: any) {
       return;
     }
 
+    // Determine region from order
+    const regionId = getOrderRegion(payload);
+    console.log(`Order region detected: ${regionId}`);
+
+    // Try region-specific Discord config first
+    const regionConfig = await getRegionDiscordConfig(supabase, regionId);
+    
+    // Check if store is open for this region
+    const isOpen = await isStoreOpenForRegion(supabase, regionId);
+    console.log(`Business hours check for ${regionId}:`, isOpen ? 'OPEN' : 'CLOSED');
+
+    // Fall back to global app_settings if no region config
     const { data: settings, error: configError } = await supabase
       .from('app_settings')
       .select('key, value')
@@ -313,23 +414,37 @@ async function sendDiscordNotification(supabase: any, payload: any) {
     }
 
     const config = {
-      webhooks: settings?.find((s) => s.key === 'discord.webhooks')?.value || { channels: [], immediate_channel: '', queued_channel: '' },
-      mention: settings?.find((s) => s.key === 'discord.mention')?.value || { enabled: false, role_id: '' },
-      templates: settings?.find((s) => s.key === 'discord.templates')?.value || { immediate: '', queued: '' },
+      webhooks: settings?.find((s: any) => s.key === 'discord.webhooks')?.value || { channels: [], immediate_channel: '', queued_channel: '' },
+      mention: settings?.find((s: any) => s.key === 'discord.mention')?.value || { enabled: false, role_id: '' },
+      templates: settings?.find((s: any) => s.key === 'discord.templates')?.value || { immediate: '', queued: '' },
     };
 
-    const isOpen = isOpenNowInHawaii();
-    console.log('Business hours check:', isOpen ? 'OPEN' : 'CLOSED');
+    // Determine which webhook to use: region-specific or fallback to global
+    let webhookUrl: string | null = null;
+    let roleId = config.mention.role_id;
+    let mentionEnabled = config.mention.enabled;
+
+    if (regionConfig?.enabled && regionConfig.webhookUrl) {
+      webhookUrl = regionConfig.webhookUrl;
+      roleId = regionConfig.roleId || roleId;
+      console.log(`Using region-specific Discord config for ${regionId}`);
+    } else {
+      // Use global config
+      const channelName = isOpen ? config.webhooks.immediate_channel : config.webhooks.queued_channel;
+      const channel = config.webhooks.channels.find((ch: any) => ch.name === channelName);
+      webhookUrl = channel?.webhook_url || null;
+    }
 
     if (isOpen) {
-      const immediateChannel = config.webhooks.channels.find((ch: any) => ch.name === config.webhooks.immediate_channel);
-      
-      if (!immediateChannel || !immediateChannel.webhook_url) {
-        console.warn('No immediate channel webhook configured');
+      if (!webhookUrl) {
+        console.warn('No webhook URL configured for immediate notification');
         return;
       }
 
-      const message = renderMessage(config.templates.immediate, payload, config.mention.role_id, config.mention.enabled);
+      // Add region indicator to message
+      const regionIcon = regionId === 'hawaii' ? '🌺' : '🎰';
+      const regionLabel = regionId === 'hawaii' ? 'Hawaii' : 'Las Vegas';
+      const message = `${regionIcon} **${regionLabel}**\n` + renderMessage(config.templates.immediate, payload, roleId, mentionEnabled);
 
       let barcodeSvg: string | null = null;
       try {
@@ -357,7 +472,7 @@ async function sendDiscordNotification(supabase: any, payload: any) {
         formData.append('files[0]', svgBlob, 'barcode.svg');
       }
 
-      const discordResponse = await fetch(immediateChannel.webhook_url, {
+      const discordResponse = await fetch(webhookUrl, {
         method: 'POST',
         body: formData,
       });
@@ -365,9 +480,12 @@ async function sendDiscordNotification(supabase: any, payload: any) {
       if (!discordResponse.ok) {
         const errorText = await discordResponse.text();
         console.error('Discord API error:', discordResponse.status, errorText);
-        await supabase.from('pending_notifications').insert({ payload });
+        await supabase.from('pending_notifications').insert({ 
+          payload,
+          region_id: regionId 
+        });
       } else {
-        console.log('Sent Discord notification immediately');
+        console.log(`Sent Discord notification immediately to ${regionId} channel`);
       }
     } else {
       const { data: existing } = await supabase
@@ -378,8 +496,11 @@ async function sendDiscordNotification(supabase: any, payload: any) {
         .limit(1);
 
       if (!existing || existing.length === 0) {
-        await supabase.from('pending_notifications').insert({ payload });
-        console.log('Queued Discord notification for next business hours');
+        await supabase.from('pending_notifications').insert({ 
+          payload,
+          region_id: regionId 
+        });
+        console.log(`Queued Discord notification for ${regionId} next business hours`);
       } else {
         console.log('Order already queued');
       }

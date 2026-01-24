@@ -35,6 +35,7 @@ const ShopifyMapping = React.lazy(() => import("./pages/ShopifyMapping"));
 const ShopifySync = React.lazy(() => import("./pages/ShopifySync"));
 const BulkImport = React.lazy(() => import("./pages/BulkImport"));
 const BulkTransfer = React.lazy(() => import("./pages/BulkTransfer"));
+const CrossRegionTransfers = React.lazy(() => import("./pages/CrossRegionTransfers"));
 const DiscordNotifications = React.lazy(() => import("./pages/admin/DiscordNotifications"));
 const PendingNotifications = React.lazy(() => import("./pages/PendingNotifications"));
 const GradedIntake = React.lazy(() => import("./pages/intake/GradedIntake"));
@@ -103,6 +104,7 @@ const App = () => (
                             <Route path="/batches" element={<RequireApp appKey="inventory"><ErrorBoundaryWrapper componentName="Batch Management"><Batches /></ErrorBoundaryWrapper></RequireApp>} />
                             <Route path="/bulk-import" element={<RequireApp appKey="inventory"><BulkImport /></RequireApp>} />
                             <Route path="/bulk-transfer" element={<RequireApp appKey="inventory"><BulkTransfer /></RequireApp>} />
+                            <Route path="/cross-region-transfers" element={<RequireApp appKey="inventory"><CrossRegionTransfers /></RequireApp>} />
                             <Route path="/shopify-mapping" element={<RequireApp appKey="inventory"><ShopifyMapping /></RequireApp>} />
                             <Route path="/shopify-sync" element={<RequireApp appKey="inventory"><ShopifySync /></RequireApp>} />
                             
