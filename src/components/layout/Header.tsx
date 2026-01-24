@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useStore } from '@/contexts/StoreContext';
 import { useEcosystemTheme } from '@/hooks/useEcosystemTheme';
 import { EcosystemBadge } from '@/components/ui/EcosystemBadge';
+import { StoreStatusIndicator } from '@/components/layout/StoreStatusIndicator';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
@@ -14,7 +15,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { LogOut, Settings, User, Sun, Moon, Monitor } from 'lucide-react';
+import { LogOut, Settings, Sun, Moon, Monitor } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useTheme } from '@/components/ui/theme-provider';
 
@@ -72,14 +73,17 @@ export function Header({ className }: HeaderProps) {
         <EcosystemBadge size="sm" variant="pill" className="hidden xs:flex" />
       </div>
 
-      {/* Center: Location (on larger screens) */}
-      {currentLocationName && (
-        <div className="hidden md:flex items-center text-sm text-muted-foreground">
-          <span className="truncate max-w-[200px]">
-            {currentLocationName}
-          </span>
-        </div>
-      )}
+      {/* Center: Location + Store Status (on larger screens) */}
+      <div className="hidden md:flex items-center gap-4">
+        {currentLocationName && (
+          <div className="flex items-center text-sm text-muted-foreground">
+            <span className="truncate max-w-[200px]">
+              {currentLocationName}
+            </span>
+          </div>
+        )}
+        <StoreStatusIndicator compact />
+      </div>
 
       {/* Right: User Menu */}
       <div className="flex items-center gap-2">

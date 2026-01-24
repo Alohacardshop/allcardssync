@@ -1,6 +1,7 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollText, Gauge, FileText, Wrench, Bell } from 'lucide-react';
 import { SystemLogsViewer } from '@/components/admin/SystemLogsViewer';
+import { RegionalAuditLog } from '@/components/admin/RegionalAuditLog';
 import { SKUDuplicateCleanup } from '@/components/admin/SKUDuplicateCleanup';
 import { DuplicateCleanup } from '@/components/admin/DuplicateCleanup';
 import { PreflightIndexCheck } from '@/components/admin/PreflightIndexCheck';
@@ -79,15 +80,7 @@ export function SystemTabsSection() {
       </TabsContent>
 
       <TabsContent value="audit" className="space-y-4">
-        <Card>
-          <CardHeader>
-            <CardTitle>Audit Trail</CardTitle>
-            <CardDescription>User actions and system changes log</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-muted-foreground">Audit trail coming soon...</p>
-          </CardContent>
-        </Card>
+        <RegionalAuditLog />
       </TabsContent>
     </Tabs>
     </div>
