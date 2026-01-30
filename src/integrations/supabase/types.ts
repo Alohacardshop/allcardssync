@@ -1498,6 +1498,53 @@ export type Database = {
         }
         Relationships: []
       }
+      location_drift_flags: {
+        Row: {
+          actual_locations: Json | null
+          card_id: string | null
+          detected_at: string | null
+          drift_type: string
+          expected_location_id: string | null
+          id: string
+          notes: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          sku: string
+        }
+        Insert: {
+          actual_locations?: Json | null
+          card_id?: string | null
+          detected_at?: string | null
+          drift_type: string
+          expected_location_id?: string | null
+          id?: string
+          notes?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          sku: string
+        }
+        Update: {
+          actual_locations?: Json | null
+          card_id?: string | null
+          detected_at?: string | null
+          drift_type?: string
+          expected_location_id?: string | null
+          id?: string
+          notes?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          sku?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "location_drift_flags_card_id_fkey"
+            columns: ["card_id"]
+            isOneToOne: false
+            referencedRelation: "cards"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       location_transfer_items: {
         Row: {
           barcode: string | null
@@ -2113,6 +2160,48 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           name?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      retry_jobs: {
+        Row: {
+          attempts: number | null
+          created_at: string | null
+          id: string
+          job_type: Database["public"]["Enums"]["retry_job_type"]
+          last_error: string | null
+          max_attempts: number | null
+          next_run_at: string | null
+          payload: Json | null
+          sku: string
+          status: Database["public"]["Enums"]["retry_job_status"]
+          updated_at: string | null
+        }
+        Insert: {
+          attempts?: number | null
+          created_at?: string | null
+          id?: string
+          job_type: Database["public"]["Enums"]["retry_job_type"]
+          last_error?: string | null
+          max_attempts?: number | null
+          next_run_at?: string | null
+          payload?: Json | null
+          sku: string
+          status?: Database["public"]["Enums"]["retry_job_status"]
+          updated_at?: string | null
+        }
+        Update: {
+          attempts?: number | null
+          created_at?: string | null
+          id?: string
+          job_type?: Database["public"]["Enums"]["retry_job_type"]
+          last_error?: string | null
+          max_attempts?: number | null
+          next_run_at?: string | null
+          payload?: Json | null
+          sku?: string
+          status?: Database["public"]["Enums"]["retry_job_status"]
           updated_at?: string | null
         }
         Relationships: []
@@ -3297,6 +3386,28 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      claim_retry_jobs: {
+        Args: { p_limit?: number; p_processor_id?: string }
+        Returns: {
+          attempts: number | null
+          created_at: string | null
+          id: string
+          job_type: Database["public"]["Enums"]["retry_job_type"]
+          last_error: string | null
+          max_attempts: number | null
+          next_run_at: string | null
+          payload: Json | null
+          sku: string
+          status: Database["public"]["Enums"]["retry_job_status"]
+          updated_at: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "retry_jobs"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       cleanup_old_webhook_events: {
         Args: { retention_days?: number }
         Returns: number
@@ -3313,6 +3424,7 @@ export type Database = {
           old_lot_number: string
         }[]
       }
+      complete_retry_job: { Args: { p_job_id: string }; Returns: undefined }
       create_raw_intake_item: {
         Args: {
           brand_title_in?: string
@@ -3353,6 +3465,20 @@ export type Database = {
           p_store_key: string
         }
         Returns: Json
+      }
+      fail_retry_job: {
+        Args: { p_error: string; p_job_id: string }
+        Returns: undefined
+      }
+      flag_location_drift: {
+        Args: {
+          p_actual_locations: Json
+          p_card_id: string
+          p_drift_type: string
+          p_expected_location: string
+          p_sku: string
+        }
+        Returns: string
       }
       force_new_lot: {
         Args: { _location_gid: string; _reason?: string; _store_key: string }
@@ -3468,15 +3594,40 @@ export type Database = {
       }
       is_inventory_sync_enabled: { Args: never; Returns: boolean }
       normalize_game_slug: { Args: { slug_in: string }; Returns: string }
+      queue_ebay_end_listing: {
+        Args: { p_ebay_offer_id: string; p_sku: string }
+        Returns: string
+      }
       queue_shopify_sync: {
         Args: { item_id: string; sync_action?: string }
+        Returns: string
+      }
+      queue_shopify_zero: {
+        Args: {
+          p_inventory_item_id: string
+          p_location_id: string
+          p_sku: string
+          p_store_key: string
+        }
         Returns: string
       }
       recalculate_ebay_aggregate: {
         Args: { p_sku: string; p_store_key: string }
         Returns: Json
       }
+      record_location_enforcement: {
+        Args: {
+          p_desired_location_id: string
+          p_sku: string
+          p_store_key: string
+        }
+        Returns: string
+      }
       release_shopify_processor_lock: { Args: never; Returns: boolean }
+      resolve_location_drift: {
+        Args: { p_flag_id: string; p_notes?: string; p_resolved_by: string }
+        Returns: undefined
+      }
       restore_intake_item: {
         Args: { item_id: string; reason_in?: string }
         Returns: {
@@ -3560,6 +3711,8 @@ export type Database = {
     Enums: {
       app_role: "admin" | "staff" | "manager"
       card_status: "available" | "reserved" | "sold"
+      retry_job_status: "queued" | "running" | "done" | "dead"
+      retry_job_type: "END_EBAY" | "SET_SHOPIFY_ZERO" | "ENFORCE_LOCATION"
       sale_event_status: "received" | "processed" | "ignored" | "failed"
       sale_source: "shopify" | "ebay"
       sync_status: "pending" | "synced" | "error"
@@ -3692,6 +3845,8 @@ export const Constants = {
     Enums: {
       app_role: ["admin", "staff", "manager"],
       card_status: ["available", "reserved", "sold"],
+      retry_job_status: ["queued", "running", "done", "dead"],
+      retry_job_type: ["END_EBAY", "SET_SHOPIFY_ZERO", "ENFORCE_LOCATION"],
       sale_event_status: ["received", "processed", "ignored", "failed"],
       sale_source: ["shopify", "ebay"],
       sync_status: ["pending", "synced", "error"],
