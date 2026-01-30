@@ -74,6 +74,42 @@ export type Database = {
         }
         Relationships: []
       }
+      cards: {
+        Row: {
+          created_at: string
+          current_shopify_location_id: string | null
+          ebay_offer_id: string | null
+          id: string
+          shopify_inventory_item_id: string | null
+          shopify_variant_id: string | null
+          sku: string
+          status: Database["public"]["Enums"]["card_status"]
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          current_shopify_location_id?: string | null
+          ebay_offer_id?: string | null
+          id?: string
+          shopify_inventory_item_id?: string | null
+          shopify_variant_id?: string | null
+          sku: string
+          status?: Database["public"]["Enums"]["card_status"]
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          current_shopify_location_id?: string | null
+          ebay_offer_id?: string | null
+          id?: string
+          shopify_inventory_item_id?: string | null
+          shopify_variant_id?: string | null
+          sku?: string
+          status?: Database["public"]["Enums"]["card_status"]
+          updated_at?: string
+        }
+        Relationships: []
+      }
       categories: {
         Row: {
           created_at: string | null
@@ -2081,6 +2117,39 @@ export type Database = {
         }
         Relationships: []
       }
+      sales_events: {
+        Row: {
+          created_at: string
+          error: string | null
+          id: string
+          processed_at: string | null
+          sku: string
+          source: Database["public"]["Enums"]["sale_source"]
+          source_event_id: string
+          status: Database["public"]["Enums"]["sale_event_status"]
+        }
+        Insert: {
+          created_at?: string
+          error?: string | null
+          id?: string
+          processed_at?: string | null
+          sku: string
+          source: Database["public"]["Enums"]["sale_source"]
+          source_event_id: string
+          status?: Database["public"]["Enums"]["sale_event_status"]
+        }
+        Update: {
+          created_at?: string
+          error?: string | null
+          id?: string
+          processed_at?: string | null
+          sku?: string
+          source?: Database["public"]["Enums"]["sale_source"]
+          source_event_id?: string
+          status?: Database["public"]["Enums"]["sale_event_status"]
+        }
+        Relationships: []
+      }
       scheduled_ebay_listings: {
         Row: {
           created_at: string
@@ -2959,6 +3028,32 @@ export type Database = {
         Returns: number
       }
       atomic_catalog_swap: { Args: { game_name: string }; Returns: undefined }
+      atomic_mark_card_sold: {
+        Args: {
+          p_sku: string
+          p_source: Database["public"]["Enums"]["sale_source"]
+          p_source_event_id: string
+        }
+        Returns: {
+          card_id: string
+          previous_status: Database["public"]["Enums"]["card_status"]
+          result: string
+        }[]
+      }
+      atomic_release_card: {
+        Args: { p_sku: string }
+        Returns: {
+          card_id: string
+          result: string
+        }[]
+      }
+      atomic_reserve_card: {
+        Args: { p_sku: string }
+        Returns: {
+          card_id: string
+          result: string
+        }[]
+      }
       batch_queue_shopify_sync: {
         Args: { item_ids: string[]; sync_action?: string }
         Returns: {
@@ -3464,6 +3559,9 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "staff" | "manager"
+      card_status: "available" | "reserved" | "sold"
+      sale_event_status: "received" | "processed" | "ignored" | "failed"
+      sale_source: "shopify" | "ebay"
       sync_status: "pending" | "synced" | "error"
     }
     CompositeTypes: {
@@ -3593,6 +3691,9 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "staff", "manager"],
+      card_status: ["available", "reserved", "sold"],
+      sale_event_status: ["received", "processed", "ignored", "failed"],
+      sale_source: ["shopify", "ebay"],
       sync_status: ["pending", "synced", "error"],
     },
   },
