@@ -583,28 +583,129 @@ async function handleOrderUpdate(supabase: any, payload: any, shopifyDomain: str
     }
 
     for (const item of items) {
-      // For graded items, set quantity to 0 and record sale
-      if (item.type === 'Graded') {
-        const { error: updateError } = await supabase
-          .from('intake_items')
-          .update({
-            quantity: 0,
-            sold_at: new Date().toISOString(),
-            sold_price: price,
-            sold_order_id: orderId,
-            sold_channel: 'shopify',
-            sold_currency: payload.currency || 'USD',
-            updated_by: 'shopify_webhook'
-          })
-          .eq('id', item.id);
-
-        if (updateError) {
-          console.error('Failed to update sold item:', updateError);
-        } else {
-          console.log(`Marked graded item ${item.id} as sold`);
+      // For graded items (1-of-1), use atomic lock via cards table
+      if (item.type === 'Graded' && sku) {
+        // Try atomic lock via process-card-sale
+        const sourceEventId = `${orderId}_${sku}`;
+        
+        try {
+          const { data: saleResult } = await supabase.rpc('atomic_mark_card_sold', {
+            p_sku: sku,
+            p_source: 'shopify',
+            p_source_event_id: sourceEventId
+          });
+          
+          const result = Array.isArray(saleResult) ? saleResult[0] : saleResult;
+          console.log(`[Atomic Lock] SKU ${sku}: ${result?.result || 'unknown'}`);
+          
+          if (result?.result === 'sold') {
+            // Card was successfully locked - update intake_items
+            const { error: updateError } = await supabase
+              .from('intake_items')
+              .update({
+                quantity: 0,
+                sold_at: new Date().toISOString(),
+                sold_price: price,
+                sold_order_id: orderId,
+                sold_channel: 'shopify',
+                sold_currency: payload.currency || 'USD',
+                updated_by: 'shopify_webhook'
+              })
+              .eq('id', item.id);
+            
+            if (updateError) {
+              console.error('Failed to update sold item:', updateError);
+            } else {
+              console.log(`Marked graded item ${item.id} as sold`);
+            }
+            
+            // End eBay listing if exists
+            const { data: card } = await supabase
+              .from('cards')
+              .select('ebay_offer_id')
+              .eq('sku', sku)
+              .single();
+            
+            if (card?.ebay_offer_id) {
+              console.log(`[Cross-channel] Ending eBay listing for ${sku}`);
+              
+              // Try to end eBay listing immediately
+              try {
+                const ebayResponse = await fetch(
+                  `${Deno.env.get('SUPABASE_URL')}/functions/v1/ebay-update-inventory`,
+                  {
+                    method: 'POST',
+                    headers: {
+                      'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+                      'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                      sku,
+                      quantity: 0,
+                      store_key: storeKey
+                    })
+                  }
+                );
+                
+                if (!ebayResponse.ok) {
+                  console.warn(`[Cross-channel] eBay update failed, queueing for retry`);
+                  await supabase.rpc('queue_ebay_end_listing', {
+                    p_sku: sku,
+                    p_ebay_offer_id: card.ebay_offer_id
+                  });
+                }
+              } catch (ebayError) {
+                console.error('[Cross-channel] eBay error:', ebayError);
+                await supabase.rpc('queue_ebay_end_listing', {
+                  p_sku: sku,
+                  p_ebay_offer_id: card.ebay_offer_id
+                });
+              }
+            }
+          } else if (result?.result === 'already_sold' || result?.result === 'duplicate_event') {
+            console.log(`[Atomic Lock] SKU ${sku} already processed, skipping`);
+          } else if (result?.result === 'not_found') {
+            // Card not in cards table - fall back to legacy behavior
+            console.log(`[Atomic Lock] SKU ${sku} not in cards table, using legacy update`);
+            const { error: updateError } = await supabase
+              .from('intake_items')
+              .update({
+                quantity: 0,
+                sold_at: new Date().toISOString(),
+                sold_price: price,
+                sold_order_id: orderId,
+                sold_channel: 'shopify',
+                sold_currency: payload.currency || 'USD',
+                updated_by: 'shopify_webhook'
+              })
+              .eq('id', item.id);
+            
+            if (updateError) {
+              console.error('Failed to update sold item:', updateError);
+            }
+          }
+        } catch (lockError) {
+          console.error('[Atomic Lock] Error:', lockError);
+          // Fall back to legacy update
+          const { error: updateError } = await supabase
+            .from('intake_items')
+            .update({
+              quantity: 0,
+              sold_at: new Date().toISOString(),
+              sold_price: price,
+              sold_order_id: orderId,
+              sold_channel: 'shopify',
+              sold_currency: payload.currency || 'USD',
+              updated_by: 'shopify_webhook'
+            })
+            .eq('id', item.id);
+          
+          if (updateError) {
+            console.error('Failed to update sold item:', updateError);
+          }
         }
       } else {
-        // For raw items, decrement quantity
+        // For raw items, decrement quantity (legacy behavior)
         const newQuantity = Math.max(0, (item.quantity || 0) - quantity);
         
         const updateData: any = { 

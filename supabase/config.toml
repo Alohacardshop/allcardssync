@@ -180,3 +180,16 @@ verify_jwt = true
 # eBay policy management (create/update/delete)
 [functions.ebay-manage-policy]
 verify_jwt = true
+
+# 1-of-1 Inventory Sync System functions
+[functions.process-card-sale]
+verify_jwt = false
+
+[functions.enforce-single-location-stock]
+verify_jwt = true
+
+[functions.process-retry-jobs]
+verify_jwt = false
+
+[functions.sync-card-locations]
+verify_jwt = false
