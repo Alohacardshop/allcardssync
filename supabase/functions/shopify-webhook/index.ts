@@ -585,6 +585,17 @@ async function handleOrderUpdate(supabase: any, payload: any, shopifyDomain: str
     for (const item of items) {
       // For graded items (1-of-1), use atomic lock via cards table
       if (item.type === 'Graded' && sku) {
+        // RUNTIME GUARD: Ensure card exists before atomic lock
+        // This auto-creates cards for legacy items not yet in the cards table
+        const { data: ensureResult } = await supabase.rpc('ensure_card_exists', {
+          p_sku: sku,
+          p_source: 'shopify_order_webhook'
+        });
+        
+        if (ensureResult && ensureResult.length > 0 && ensureResult[0].was_created) {
+          console.log(`[Shopify Webhook] ⚠️ Auto-created legacy card for SKU ${sku}`);
+        }
+        
         // Try atomic lock via process-card-sale
         const sourceEventId = `${orderId}_${sku}`;
         
