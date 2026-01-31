@@ -139,6 +139,20 @@ function getFulfillmentStatus(payload: any): { text: string; emoji: string } {
   return { text: 'Unfulfilled', emoji: '📋' };
 }
 
+function extractFirstProductImage(payload: any): string | null {
+  const items = payload?.line_items;
+  if (!Array.isArray(items) || items.length === 0) return null;
+  
+  for (const item of items) {
+    // Shopify line items can have image in various places
+    const imageUrl = item?.image?.src || item?.image_url || item?.product_image || item?.image;
+    if (imageUrl && typeof imageUrl === 'string' && imageUrl.startsWith('http')) {
+      return imageUrl;
+    }
+  }
+  return null;
+}
+
 function orderTypeEmoji(orderType: OrderType): string {
   if (orderType === 'ebay') return '🏷️';
   if (orderType === 'pickup') return '🏪';
@@ -167,6 +181,7 @@ function buildOrderEmbed(regionId: string, payload: any, orderType: OrderType) {
   const expectedDate = extractExpectedDate(payload);
   const payment = getPaymentStatus(payload);
   const fulfillment = getFulfillmentStatus(payload);
+  const productImage = extractFirstProductImage(payload);
   
   // Order date
   const createdAt = payload?.created_at 
@@ -206,7 +221,7 @@ function buildOrderEmbed(regionId: string, payload: any, orderType: OrderType) {
   const numericId = String(payload?.id || '').match(/^\d+$/) ? String(payload.id) : null;
   const url = numericId ? `https://${shopDomain}/admin/orders/${numericId}` : undefined;
 
-  return {
+  const embed: any = {
     title: `${icon} ${label} • New ${orderTypeLabel(orderType)}`,
     description,
     color,
@@ -215,6 +230,13 @@ function buildOrderEmbed(regionId: string, payload: any, orderType: OrderType) {
     footer: { text: `Order ID: ${payload?.id || 'N/A'}` },
     timestamp: new Date().toISOString(),
   };
+  
+  // Add product thumbnail if available
+  if (productImage) {
+    embed.thumbnail = { url: productImage };
+  }
+
+  return embed;
 }
 
 /**

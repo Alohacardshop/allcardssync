@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { useAllRegionSettings, RegionSettingRow } from '@/hooks/useRegionSettings';
+import { DiscordTestButton } from './DiscordTestButton';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -481,6 +482,9 @@ export function RegionSettingsEditor() {
                           {renderField(field, region.id)}
                         </div>
                       ))}
+                      <div className="pt-4 border-t">
+                        <DiscordTestButton regionId={region.id} />
+                      </div>
                     </AccordionContent>
                   </AccordionItem>
                 </Accordion>
