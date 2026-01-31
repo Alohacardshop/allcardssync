@@ -55,6 +55,7 @@ serve(async (req) => {
           price,
           quantity,
           psa_cert,
+          grading_company,
           image_urls,
           ebay_inventory_item_sku,
           ebay_offer_id,
@@ -85,6 +86,7 @@ serve(async (req) => {
       processed: 0,
       succeeded: 0,
       failed: 0,
+      skipped_sold: 0,
       errors: [] as { item_id: string; error: string }[],
     }
 
@@ -134,8 +136,99 @@ serve(async (req) => {
       for (const queueItem of storeItems) {
         results.processed++
         const item = queueItem.intake_items as any
+        const isGraded = item.grading_company && item.grading_company !== 'RAW' && item.grading_company !== 'UNGRADED'
 
         try {
+          // =======================================================
+          // CRITICAL INVARIANT: For graded/1-of-1 cards, enforce
+          // quantity based on cards.status, NOT intake_items.quantity
+          // =======================================================
+          let effectiveQuantity = item.quantity ?? 1
+          
+          if (isGraded && item.sku) {
+            const { data: cardRecord, error: cardError } = await supabase
+              .from('cards')
+              .select('status, sku')
+              .eq('sku', item.sku)
+              .maybeSingle()
+
+            if (cardError) {
+              console.warn(`[ebay-sync-processor] Failed to query cards table for SKU ${item.sku}: ${cardError.message}`)
+            }
+
+            if (cardRecord) {
+              if (cardRecord.status === 'sold') {
+                // BLOCKED: Never create/update eBay listing for a sold card
+                console.warn(`[ebay-sync-processor] BLOCKED: Card ${item.sku} is SOLD in cards table. Skipping action=${queueItem.action}`)
+                
+                // Mark queue item as completed (skip gracefully)
+                await supabase
+                  .from('ebay_sync_queue')
+                  .update({
+                    status: 'completed',
+                    completed_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                    error_message: 'Skipped: Card is sold',
+                  })
+                  .eq('id', queueItem.id)
+                
+                results.skipped_sold++
+                continue
+              } else if (cardRecord.status === 'available') {
+                effectiveQuantity = 1
+              } else {
+                // Unknown status, default to 0 for safety
+                effectiveQuantity = 0
+              }
+            } else {
+              // Card not in cards table - try to auto-create via ensure_card_exists
+              const { error: ensureError } = await supabase.rpc('ensure_card_exists', {
+                p_sku: item.sku,
+                p_inventory_item_id: item.shopify_inventory_item_id || null,
+                p_variant_id: item.shopify_variant_id || null,
+                p_ebay_offer_id: item.ebay_offer_id || null,
+                p_location_id: item.shopify_location_gid || null
+              })
+              
+              if (ensureError) {
+                console.warn(`[ebay-sync-processor] Failed to ensure_card_exists for ${item.sku}: ${ensureError.message}`)
+              }
+              
+              // Re-check status after creation
+              const { data: newCard } = await supabase
+                .from('cards')
+                .select('status')
+                .eq('sku', item.sku)
+                .maybeSingle()
+              
+              if (newCard?.status === 'sold') {
+                console.warn(`[ebay-sync-processor] BLOCKED: Newly queried card ${item.sku} is SOLD. Skipping.`)
+                await supabase
+                  .from('ebay_sync_queue')
+                  .update({
+                    status: 'completed',
+                    completed_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                    error_message: 'Skipped: Card is sold',
+                  })
+                  .eq('id', queueItem.id)
+                
+                results.skipped_sold++
+                continue
+              }
+              
+              effectiveQuantity = 1
+            }
+            
+            // Log if intake_items.quantity is suspicious
+            if ((item.quantity ?? 1) > 1) {
+              console.error(`[ebay-sync-processor] INVARIANT VIOLATION: SKU ${item.sku} has intake_items.quantity=${item.quantity} but is graded. Clamping to 1.`)
+            }
+          }
+          
+          // Inject effective quantity into item for downstream use
+          item._effectiveQuantity = effectiveQuantity
+
           // Mark as processing
           await supabase
             .from('ebay_sync_queue')
@@ -217,6 +310,9 @@ async function processCreate(
   const ebaySku = item.sku || `INV-${item.id.substring(0, 8)}`
   const title = buildTitle(item).substring(0, 80)
   const description = buildDescription(item)
+  
+  // Use effective quantity (derived from cards.status for graded items)
+  const quantity = item._effectiveQuantity ?? item.quantity ?? 1
 
   // Create inventory item
   const inventoryResult = await createOrUpdateInventoryItem(accessToken, environment, {
@@ -229,7 +325,7 @@ async function processCreate(
     condition: mapConditionToEbay(item.grade ? 'excellent' : 'new'),
     availability: {
       shipToLocationAvailability: {
-        quantity: item.quantity || 1,
+        quantity,
       },
     },
   })
@@ -244,7 +340,7 @@ async function processCreate(
     marketplaceId: storeConfig.marketplace_id || 'EBAY_US',
     format: 'FIXED_PRICE',
     listingDescription: description,
-    availableQuantity: item.quantity || 1,
+    availableQuantity: quantity,
     pricingSummary: {
       price: {
         value: (item.price || 0).toFixed(2),
@@ -311,6 +407,9 @@ async function processUpdate(
     return { success: false, error: 'No eBay SKU found for update' }
   }
 
+  // Use effective quantity (derived from cards.status for graded items)
+  const quantity = item._effectiveQuantity ?? item.quantity ?? 1
+
   // Update inventory item
   const inventoryResult = await createOrUpdateInventoryItem(accessToken, environment, {
     sku: ebaySku,
@@ -322,7 +421,7 @@ async function processUpdate(
     condition: mapConditionToEbay(item.grade ? 'excellent' : 'new'),
     availability: {
       shipToLocationAvailability: {
-        quantity: item.quantity || 1,
+        quantity,
       },
     },
   })
@@ -337,7 +436,7 @@ async function processUpdate(
       sku: ebaySku,
       marketplaceId: storeConfig.marketplace_id || 'EBAY_US',
       format: 'FIXED_PRICE',
-      availableQuantity: item.quantity || 1,
+      availableQuantity: quantity,
       pricingSummary: {
         price: {
           value: (item.price || 0).toFixed(2),
