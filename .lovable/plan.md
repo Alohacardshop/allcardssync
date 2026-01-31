@@ -1,92 +1,181 @@
 
-# Add Discord Configuration to Region Settings Admin UI
+# Admin Panel UI Redesign
 
-## Problem
-The Region Settings page in Admin (`/admin` → "Region Settings" in sidebar) exists but is missing the Discord configuration fields. The backend is ready to use these settings, but admins have no way to enter the webhook URLs.
+## Problem Analysis
+Based on the screenshot and code review, the current admin panel has several usability issues:
 
-## Solution
-Add a new **"Discord Notifications"** accordion section to the `RegionSettingsEditor` component with fields for:
-- `discord.webhook_url` - The Discord webhook URL (password/sensitive field)
-- `discord.role_id` - Staff role ID for @mentions  
-- `discord.enabled` - Toggle to enable/disable notifications
+1. **Too many sidebar sections** (11 items) - makes navigation overwhelming
+2. **Key settings buried** - Discord webhooks require: Sidebar > Region Settings > Select Region > Discord Accordion
+3. **No "what needs attention" at a glance** - the Overview shows health metrics but not configuration status
+4. **Redundant sections** - Vendors, Categories, Purchase Locations, Region Settings could be grouped
+5. **Settings scattered** - Discord config is in Region Settings, but also mentioned in System section
 
-## Technical Changes
+## Proposed Solution: Reorganized Admin Panel
 
-### File: `src/components/admin/RegionSettingsEditor.tsx`
+### New Sidebar Structure (6 sections instead of 11)
+```text
++---------------------+
+|  OPERATIONS         |
+|  - Overview         |
+|  - Queue            |
+|  - Store            |
++---------------------+
+|  CONFIGURATION      |
+|  - Regions          |  <- Regions with Discord, branding, etc.
+|  - Catalog          |
+|  - Hardware         |
++---------------------+
+|  DATA & SYSTEM      |
+|  - System           |  <- Logs, maintenance, audit
++---------------------+
+```
 
-1. **Add MessageSquare icon import** (line ~24):
-   ```tsx
-   import { MessageSquare } from 'lucide-react';
-   ```
+### Enhanced Overview Dashboard
+Add a **Quick Actions** card and **Configuration Status** panel:
 
-2. **Add Discord settings to SETTING_FIELDS array** (after line 53):
-   ```tsx
-   // Discord
-   { key: 'discord.webhook_url', label: 'Discord Webhook URL', type: 'password', category: 'discord', description: 'Webhook URL for sending order notifications' },
-   { key: 'discord.role_id', label: 'Staff Role ID', type: 'text', category: 'discord', description: 'Discord role ID to mention for new orders (optional)' },
-   { key: 'discord.enabled', label: 'Notifications Enabled', type: 'boolean', category: 'discord', description: 'Enable Discord notifications for this region' },
-   ```
+```text
++--------------------------------------------------+
+| OVERVIEW                                          |
++--------------------------------------------------+
+| [Metrics Bar - Total Inventory, Queue, Last Sync] |
++--------------------------------------------------+
+| Quick Actions           | Configuration Status   |
+| +-------------------+   | +------------------+   |
+| | Configure Discord |   | | HI Discord: [x]  |   |
+| | Register Webhooks |   | | LV Discord: [ ]  |   |
+| | Import Inventory  |   | | Webhooks: 5/9    |   |
+| | View Queue        |   | | eBay: OK         |   |
+| +-------------------+   | +------------------+   |
++--------------------------------------------------+
+| System Health Dashboard   | Recent Activity      |
+| (gauges)                 | (live feed)           |
++--------------------------------------------------+
+```
 
-3. **Update SettingField interface** to support 'password' type and 'discord' category:
-   ```tsx
-   interface SettingField {
-     key: string;
-     label: string;
-     type: 'text' | 'number' | 'boolean' | 'color' | 'json' | 'password';
-     description?: string;
-     category: 'branding' | 'ebay' | 'operations' | 'discord';
-   }
-   ```
+### Consolidated Region Settings Page
+Move Region Settings to be more prominent with a cleaner layout:
 
-4. **Add password field renderer** in `renderField` function:
-   - Similar to text field but with `type="password"` 
-   - Add a show/hide toggle button for visibility
+```text
++-----------------------------------------------+
+| REGIONS                                        |
++-----------------------------------------------+
+| [Hawaii Tab] [Las Vegas Tab]                   |
++-----------------------------------------------+
+| Quick Status Cards (side by side):             |
+| +----------------+ +----------------+          |
+| | Discord        | | eBay          |          |
+| | [x] Enabled    | | [x] Auto Sync |          |
+| | Webhook: Set   | | Min: $5.00    |          |
+| | [Configure]    | | [Configure]   |          |
+| +----------------+ +----------------+          |
+| +----------------+ +----------------+          |
+| | Branding       | | Operations    |          |
+| | Icon: custom   | | Hours: Set    |          |
+| | Color: Set     | | [Configure]   |          |
+| | [Configure]    | |               |          |
+| +----------------+ +----------------+          |
++-----------------------------------------------+
+```
 
-5. **Add Discord accordion section** after the Operations accordion (around line 383):
-   ```tsx
-   <AccordionItem value="discord">
-     <AccordionTrigger className="hover:no-underline">
-       <div className="flex items-center gap-2">
-         <MessageSquare className="h-4 w-4" />
-         Discord Notifications
-       </div>
-     </AccordionTrigger>
-     <AccordionContent className="space-y-4 pt-4">
-       {SETTING_FIELDS.filter(f => f.category === 'discord').map((field) => (
-         <div key={field.key}>
-           {renderField(field, region.id)}
-         </div>
-       ))}
-     </AccordionContent>
-   </AccordionItem>
-   ```
+## Implementation Details
 
-6. **Add 'discord' to defaultValue array** for accordion to be expanded by default:
-   ```tsx
-   <Accordion type="multiple" defaultValue={['branding', 'ebay', 'operations', 'discord']}>
-   ```
+### Phase 1: Reorganize Sidebar Navigation
 
-## Result After Implementation
+**File: `src/pages/Admin.tsx`**
 
-When you go to **Admin → Region Settings**:
-1. Select **Hawaii** or **Las Vegas** tab
-2. Expand the new **"Discord Notifications"** section
-3. Enter your Discord webhook URL
-4. Optionally enter the staff Role ID for @mentions
-5. Toggle "Notifications Enabled" to ON
-6. Click Save on each field
+Consolidate 11 sections into 6 logical groups:
+- Merge "Vendors", "Categories", "Purchase Locations" into a new "Data" sub-section under Catalog
+- Keep "Region Settings" but rename to "Regions" and move up in priority
+- Remove standalone Discord link from System (it's now in Regions)
 
-## Getting Your Discord Webhook URL
+### Phase 2: Add Configuration Status Card
 
-1. Open Discord and go to the channel where you want notifications
-2. Click the gear icon (Edit Channel) → Integrations → Webhooks
-3. Click "New Webhook" or select an existing one
-4. Click "Copy Webhook URL"
-5. Paste it into the Region Settings page
+**File: `src/components/admin/ConfigurationStatus.tsx`** (new)
 
-## Getting Your Discord Role ID
+Create a card that shows at-a-glance what's configured:
+- Discord webhooks per region (configured / not configured)
+- Webhook registration status
+- eBay sync status per region
+- Any missing required settings
 
-1. In Discord, go to Server Settings → Roles
-2. Right-click the role you want to mention → Copy ID
-   - (You must have Developer Mode enabled: User Settings → Advanced → Developer Mode)
-3. Paste the numeric ID into the "Staff Role ID" field
+### Phase 3: Add Quick Actions Card
+
+**File: `src/components/admin/QuickActions.tsx`** (new)
+
+Common actions accessible from Overview:
+- "Configure Discord" - jumps to Region Settings > Discord
+- "Register Webhooks" - triggers webhook registration
+- "Import Inventory" - opens Shopify import
+- "View Queue" - jumps to Queue section
+
+### Phase 4: Simplify Region Settings Layout
+
+**File: `src/components/admin/RegionSettingsEditor.tsx`**
+
+Replace dense accordion layout with a card-based grid:
+- 4 category cards (Discord, eBay, Branding, Operations)
+- Each card shows summary status + "Configure" button
+- Clicking a card opens a focused modal/drawer for that category
+- Cleaner, more scannable layout
+
+### Phase 5: Update Overview to Include Status
+
+**File: `src/pages/Admin.tsx` (renderSectionContent)**
+
+Add ConfigurationStatus and QuickActions to Overview section alongside existing MetricsBar, SystemHealthDashboard, and ActivityFeed.
+
+## New Sidebar Layout
+
+| Current (11 items) | Proposed (7 items) |
+|-------------------|-------------------|
+| Overview | Overview |
+| Store | Store |
+| Catalog | Catalog (includes Database, Vendors, Categories) |
+| Queue | Queue |
+| Users | Users |
+| Hardware | Hardware |
+| System | System (Logs, Maintenance) |
+| Vendors | (merged into Catalog) |
+| Categories | (merged into Catalog) |
+| Purchase Locations | (merged into Catalog) |
+| Region Settings | **Regions** (moved up, more prominent) |
+
+## Files to Create
+1. `src/components/admin/ConfigurationStatus.tsx` - Shows what needs attention
+2. `src/components/admin/QuickActions.tsx` - Common task shortcuts
+3. `src/components/admin/RegionQuickCards.tsx` - New card-based region settings view
+
+## Files to Modify
+1. `src/pages/Admin.tsx` - Reorganize sidebar, update Overview content
+2. `src/components/admin/RegionSettingsEditor.tsx` - Simplify layout with cards
+3. `src/components/admin/CatalogTabsSection.tsx` - Add Vendors/Categories/Locations tabs
+
+## Benefits
+- **Fewer clicks** to reach Discord settings (Overview quick action vs. buried in sidebar)
+- **At-a-glance status** shows what's configured vs. needs attention
+- **Cleaner navigation** with 7 sections instead of 11
+- **Card-based layout** for Region Settings is more scannable than accordions
+- **Quick Actions** for common tasks without deep navigation
+
+## Visual Summary
+
+```text
+BEFORE:                          AFTER:
+Sidebar (11 items)               Sidebar (7 items)
+  Overview                         Overview
+  Store                            Store
+  Catalog                          Catalog (+ Vendors, Categories, Locations)
+  Queue                            Queue
+  Users                            Users
+  Hardware                         Hardware
+  System                           Regions  <- Moved up, renamed
+  Vendors                          System   <- Consolidated
+  Categories
+  Purchase Locations
+  Region Settings   <- Buried
+
+Overview shows:                  Overview shows:
+  MetricsBar                       MetricsBar
+  SystemHealth + Activity          Quick Actions + Config Status
+                                   SystemHealth + Activity
+```
