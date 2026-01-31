@@ -156,7 +156,7 @@ export function RegionSettingsEditor() {
     );
 
     const SavedIndicator = () => (
-      <span className="text-xs text-green-600 dark:text-green-400 font-medium animate-in fade-in">
+      <span className="text-xs text-primary font-medium animate-in fade-in">
         ✓ Saved
       </span>
     );
