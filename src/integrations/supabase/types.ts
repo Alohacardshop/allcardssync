@@ -3466,6 +3466,14 @@ export type Database = {
         }
         Returns: Json
       }
+      ensure_card_exists: {
+        Args: { p_sku: string; p_source?: string }
+        Returns: {
+          card_id: string
+          status: Database["public"]["Enums"]["card_status"]
+          was_created: boolean
+        }[]
+      }
       fail_retry_job: {
         Args: { p_error: string; p_job_id: string }
         Returns: undefined

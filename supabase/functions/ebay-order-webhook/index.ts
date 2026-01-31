@@ -135,8 +135,18 @@ serve(async (req) => {
 
       try {
         // ======== 1-OF-1 ATOMIC LOCK FOR GRADED ITEMS ========
-        // Try atomic lock via cards table first
         if (sku) {
+          // RUNTIME GUARD: Ensure card exists before atomic lock
+          // This auto-creates cards for legacy eBay items not yet in the cards table
+          const { data: ensureResult } = await supabase.rpc('ensure_card_exists', {
+            p_sku: sku,
+            p_source: 'ebay_order_webhook'
+          });
+          
+          if (ensureResult && ensureResult.length > 0 && ensureResult[0].was_created) {
+            console.log(`[eBay Webhook] ⚠️ Auto-created legacy card for SKU ${sku}`);
+          }
+          
           const sourceEventId = `${orderId}_${sku}`;
           
           const { data: saleResult, error: lockError } = await supabase.rpc('atomic_mark_card_sold', {
