@@ -67,6 +67,7 @@ export function RegionSettingsEditor() {
   const [editedValues, setEditedValues] = useState<Record<string, Record<string, any>>>({});
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [visiblePasswords, setVisiblePasswords] = useState<Record<string, boolean>>({});
+  const [savedKeys, setSavedKeys] = useState<Record<string, boolean>>({});
 
   const getCurrentValue = (regionId: string, key: string) => {
     // Check edited values first
@@ -91,7 +92,9 @@ export function RegionSettingsEditor() {
     const value = editedValues[regionId]?.[key];
     if (value === undefined) return;
 
-    setSavingKey(`${regionId}:${key}`);
+    const saveKey = `${regionId}:${key}`;
+    console.log('[RegionSettings] Saving:', { regionId, key, value });
+    setSavingKey(saveKey);
     try {
       await updateRegionSetting.mutateAsync({
         regionId,
@@ -106,8 +109,15 @@ export function RegionSettingsEditor() {
         return { ...prev, [regionId]: regionEdits };
       });
       
+      // Show "Saved" indicator for 2 seconds
+      setSavedKeys(prev => ({ ...prev, [saveKey]: true }));
+      setTimeout(() => {
+        setSavedKeys(prev => ({ ...prev, [saveKey]: false }));
+      }, 2000);
+      
       toast.success('Setting saved');
     } catch (error: any) {
+      console.error('[RegionSettings] Save failed:', { regionId, key, error: error.message });
       toast.error(`Failed to save: ${error.message}`);
     } finally {
       setSavingKey(null);
@@ -121,7 +131,35 @@ export function RegionSettingsEditor() {
   const renderField = (field: SettingField, regionId: string) => {
     const currentValue = getCurrentValue(regionId, field.key);
     const isEdited = hasUnsavedChanges(regionId, field.key);
-    const isSaving = savingKey === `${regionId}:${field.key}`;
+    const saveKey = `${regionId}:${field.key}`;
+    const isSaving = savingKey === saveKey;
+    const justSaved = savedKeys[saveKey];
+
+    const SaveButton = () => (
+      <Button
+        type="button"
+        size="sm"
+        onClick={() => saveValue(regionId, field.key)}
+        onPointerDownCapture={(e) => e.stopPropagation()}
+        disabled={isSaving}
+        className="relative z-50 pointer-events-auto"
+      >
+        {isSaving ? (
+          <Loader2 className="h-3 w-3 animate-spin" />
+        ) : (
+          <>
+            <Save className="h-3 w-3 mr-1" />
+            Save
+          </>
+        )}
+      </Button>
+    );
+
+    const SavedIndicator = () => (
+      <span className="text-xs text-green-600 dark:text-green-400 font-medium animate-in fade-in">
+        ✓ Saved
+      </span>
+    );
 
     switch (field.type) {
       case 'boolean':
@@ -140,15 +178,8 @@ export function RegionSettingsEditor() {
                   setLocalValue(regionId, field.key, checked);
                 }}
               />
-              {isEdited && (
-                <Button
-                  size="sm"
-                  onClick={() => saveValue(regionId, field.key)}
-                  disabled={isSaving}
-                >
-                  {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
-                </Button>
-              )}
+              {justSaved && <SavedIndicator />}
+              {isEdited && <SaveButton />}
             </div>
           </div>
         );
@@ -156,18 +187,12 @@ export function RegionSettingsEditor() {
       case 'number':
         return (
           <div className="p-4 border rounded-lg space-y-2">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <Label htmlFor={`${regionId}-${field.key}`}>{field.label}</Label>
-              {isEdited && (
-                <Button
-                  size="sm"
-                  onClick={() => saveValue(regionId, field.key)}
-                  disabled={isSaving}
-                >
-                  {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3 mr-1" />}
-                  Save
-                </Button>
-              )}
+              <div className="flex items-center gap-2">
+                {justSaved && <SavedIndicator />}
+                {isEdited && <SaveButton />}
+              </div>
             </div>
             {field.description && (
               <p className="text-sm text-muted-foreground">{field.description}</p>
@@ -185,18 +210,12 @@ export function RegionSettingsEditor() {
       case 'color':
         return (
           <div className="p-4 border rounded-lg space-y-2">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <Label htmlFor={`${regionId}-${field.key}`}>{field.label}</Label>
-              {isEdited && (
-                <Button
-                  size="sm"
-                  onClick={() => saveValue(regionId, field.key)}
-                  disabled={isSaving}
-                >
-                  {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3 mr-1" />}
-                  Save
-                </Button>
-              )}
+              <div className="flex items-center gap-2">
+                {justSaved && <SavedIndicator />}
+                {isEdited && <SaveButton />}
+              </div>
             </div>
             {field.description && (
               <p className="text-sm text-muted-foreground">{field.description}</p>
@@ -220,18 +239,12 @@ export function RegionSettingsEditor() {
       case 'json':
         return (
           <div className="p-4 border rounded-lg space-y-2">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <Label htmlFor={`${regionId}-${field.key}`}>{field.label}</Label>
-              {isEdited && (
-                <Button
-                  size="sm"
-                  onClick={() => saveValue(regionId, field.key)}
-                  disabled={isSaving}
-                >
-                  {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3 mr-1" />}
-                  Save
-                </Button>
-              )}
+              <div className="flex items-center gap-2">
+                {justSaved && <SavedIndicator />}
+                {isEdited && <SaveButton />}
+              </div>
             </div>
             {field.description && (
               <p className="text-sm text-muted-foreground">{field.description}</p>
@@ -258,18 +271,12 @@ export function RegionSettingsEditor() {
         const isVisible = visiblePasswords[passwordKey] ?? false;
         return (
           <div className="p-4 border rounded-lg space-y-2">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <Label htmlFor={`${regionId}-${field.key}`}>{field.label}</Label>
-              {isEdited && (
-                <Button
-                  size="sm"
-                  onClick={() => saveValue(regionId, field.key)}
-                  disabled={isSaving}
-                >
-                  {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3 mr-1" />}
-                  Save
-                </Button>
-              )}
+              <div className="flex items-center gap-2">
+                {justSaved && <SavedIndicator />}
+                {isEdited && <SaveButton />}
+              </div>
             </div>
             {field.description && (
               <p className="text-sm text-muted-foreground">{field.description}</p>
@@ -300,22 +307,10 @@ export function RegionSettingsEditor() {
           <div className="p-4 border rounded-lg space-y-2">
             <div className="flex items-center justify-between gap-2">
               <Label htmlFor={`${regionId}-${field.key}`}>{field.label}</Label>
-              {isEdited && (
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    saveValue(regionId, field.key);
-                  }}
-                  disabled={isSaving}
-                  className="relative z-10"
-                >
-                  {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3 mr-1" />}
-                  Save
-                </Button>
-              )}
+              <div className="flex items-center gap-2">
+                {justSaved && <SavedIndicator />}
+                {isEdited && <SaveButton />}
+              </div>
             </div>
             {field.description && (
               <p className="text-sm text-muted-foreground">{field.description}</p>
