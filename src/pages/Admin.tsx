@@ -7,11 +7,8 @@ import {
   Printer,
   LayoutDashboard,
   Package,
-  Building2,
   Command,
   Menu,
-  Tag,
-  MapPin,
   Globe
 } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -35,7 +32,6 @@ import { SystemHealthDashboard } from "@/components/admin/SystemHealthDashboard"
 import { StoreManagementTabs } from "@/components/admin/StoreManagementTabs";
 import { QueueManagementTabs } from "@/components/admin/QueueManagementTabs";
 import { UserAssignmentManager } from "@/components/UserAssignmentManager";
-import { VendorManagement } from "@/components/admin/VendorManagement";
 import { ActivityFeed } from "@/components/admin/ActivityFeed";
 import { AdminCommandPalette } from "@/components/admin/AdminCommandPalette";
 import { MetricsBar } from "@/components/admin/MetricsBar";
@@ -43,10 +39,11 @@ import { EnhancedBreadcrumb } from "@/components/admin/EnhancedBreadcrumb";
 import { CatalogTabsSection } from "@/components/admin/CatalogTabsSection";
 import { HardwareTabsSection } from "@/components/admin/HardwareTabsSection";
 import { SystemTabsSection } from "@/components/admin/SystemTabsSection";
-import { CategoryManagement } from "@/components/admin/CategoryManagement";
-import { PurchaseLocationsManager } from "@/components/admin/PurchaseLocationsManager";
 import { RegionSettingsEditor } from "@/components/admin/RegionSettingsEditor";
+import { QuickActions } from "@/components/admin/QuickActions";
+import { ConfigurationStatus } from "@/components/admin/ConfigurationStatus";
 
+// Consolidated sidebar - 7 sections instead of 11
 const adminSections = [
   {
     id: 'overview',
@@ -79,29 +76,14 @@ const adminSections = [
     icon: Printer,
   },
   {
+    id: 'regions',
+    title: 'Regions',
+    icon: Globe,
+  },
+  {
     id: 'system',
     title: 'System',
     icon: Settings,
-  },
-  {
-    id: 'vendors',
-    title: 'Vendors',
-    icon: Building2,
-  },
-  {
-    id: 'categories',
-    title: 'Categories',
-    icon: Tag,
-  },
-  {
-    id: 'purchase-locations',
-    title: 'Purchase Locations',
-    icon: MapPin,
-  },
-  {
-    id: 'region-settings',
-    title: 'Region Settings',
-    icon: Globe,
   },
 ];
 
@@ -143,6 +125,10 @@ export default function Admin() {
         return (
           <div className="space-y-6">
             <MetricsBar />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <QuickActions onNavigate={setActiveSection} />
+              <ConfigurationStatus />
+            </div>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <div className="lg:col-span-2">
                 <SystemHealthDashboard />
@@ -163,16 +149,10 @@ export default function Admin() {
         return <UserAssignmentManager />;
       case 'hardware':
         return <HardwareTabsSection />;
+      case 'regions':
+        return <RegionSettingsEditor />;
       case 'system':
         return <SystemTabsSection />;
-      case 'vendors':
-        return <VendorManagement />;
-      case 'categories':
-        return <CategoryManagement />;
-      case 'purchase-locations':
-        return <PurchaseLocationsManager />;
-      case 'region-settings':
-        return <RegionSettingsEditor />;
       default:
         return <div>Section not found</div>;
     }
