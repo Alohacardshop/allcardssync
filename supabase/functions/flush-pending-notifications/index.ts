@@ -239,9 +239,68 @@ function buildOrderEmbed(regionId: string, payload: any, orderType: OrderType) {
   return embed;
 }
 
+// Default business hours for Discord notifications
+const DEFAULT_BUSINESS_HOURS = { start: 8, end: 19 };
+
+// Timezone mappings per region
+const REGION_TIMEZONES: Record<string, string> = {
+  hawaii: 'Pacific/Honolulu',
+  vegas: 'America/Los_Angeles',
+};
+
+/**
+ * Check if current time is within business hours for a region
+ */
+async function isWithinBusinessHours(supabase: any, regionId: string): Promise<{ within: boolean; currentHour: number; timezone: string }> {
+  let timezone = REGION_TIMEZONES[regionId] || 'America/Los_Angeles';
+  let start = DEFAULT_BUSINESS_HOURS.start;
+  let end = DEFAULT_BUSINESS_HOURS.end;
+  
+  try {
+    const { data: settings } = await supabase
+      .from('region_settings')
+      .select('setting_key, setting_value')
+      .eq('region_id', regionId)
+      .eq('setting_key', 'operations.business_hours')
+      .single();
+    
+    if (settings?.setting_value) {
+      const hours = settings.setting_value;
+      if (hours.start !== undefined) start = hours.start;
+      if (hours.end !== undefined) end = hours.end;
+      if (hours.timezone) timezone = hours.timezone;
+    }
+  } catch (e) {
+    // Use defaults if fetch fails
+  }
+  
+  // Get current hour in the region's timezone
+  const now = new Date();
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    hour: 'numeric',
+    hour12: false,
+    weekday: 'short',
+  });
+  
+  const parts = formatter.formatToParts(now);
+  const hourPart = parts.find(p => p.type === 'hour');
+  const dayPart = parts.find(p => p.type === 'weekday');
+  const currentHour = parseInt(hourPart?.value ?? '0', 10);
+  const currentDay = dayPart?.value ?? '';
+  
+  // Closed on Sundays
+  if (currentDay === 'Sun') {
+    return { within: false, currentHour, timezone };
+  }
+  
+  const within = currentHour >= start && currentHour < end;
+  return { within, currentHour, timezone };
+}
+
 /**
  * Flush pending Discord notifications by region.
- * This function is called via cron job at 9:00 AM in each region's timezone.
+ * Only sends notifications during business hours (default 8am-7pm).
  */
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -289,9 +348,20 @@ Deno.serve(async (req) => {
 
     const results: Record<string, { sent: number; failed: number }> = {};
 
+    const skippedRegions: string[] = [];
+
     // Process each region
     for (const [regionId, regionNotifications] of Object.entries(byRegion)) {
       console.log(`[flush-pending-notifications] Processing ${regionNotifications.length} notifications for ${regionId}`);
+      
+      // Check business hours for this region
+      const { within, currentHour, timezone } = await isWithinBusinessHours(supabase, regionId);
+      if (!within) {
+        console.log(`[flush-pending-notifications] Outside business hours for ${regionId} (hour: ${currentHour}, tz: ${timezone}), skipping`);
+        skippedRegions.push(regionId);
+        results[regionId] = { sent: 0, failed: 0 };
+        continue;
+      }
       
       // Get region-specific Discord config
       const config = await getRegionDiscordConfig(supabase, regionId);
@@ -363,7 +433,9 @@ Deno.serve(async (req) => {
         success: true, 
         sent: totalSent, 
         failed: totalFailed,
-        byRegion: results 
+        byRegion: results,
+        skippedOutsideHours: skippedRegions.length > 0,
+        skippedRegions,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

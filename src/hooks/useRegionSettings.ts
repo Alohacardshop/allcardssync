@@ -107,7 +107,7 @@ export function useRegionSettings() {
   const ebayDefaultTemplateId = settings?.['ebay.default_template_id'] || null;
   
   const businessHours = settings?.['operations.business_hours'] || {
-    start: 10,
+    start: 8,
     end: 19,
     timezone: regionId === 'hawaii' ? 'Pacific/Honolulu' : 'America/Los_Angeles',
   };

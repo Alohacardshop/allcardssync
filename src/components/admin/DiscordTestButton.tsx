@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Send, Loader2 } from 'lucide-react';
+import { Send, Loader2, Clock } from 'lucide-react';
+import { useRegionalDateTime } from '@/hooks/useRegionalDateTime';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 const TEST_ORDER_PAYLOAD = {
   id: "9999999999999",
@@ -46,8 +48,19 @@ interface DiscordTestButtonProps {
 
 export function DiscordTestButton({ regionId }: DiscordTestButtonProps) {
   const [isSending, setIsSending] = useState(false);
+  const { isStoreOpen, getNextOpenTime, businessHours } = useRegionalDateTime();
+  
+  const storeOpen = isStoreOpen();
+  const startHour = businessHours?.start ?? 8;
+  const endHour = businessHours?.end ?? 19;
+  const formatHour = (h: number) => `${h > 12 ? h - 12 : h}${h >= 12 ? 'pm' : 'am'}`;
 
   const sendTestNotification = async () => {
+    if (!storeOpen) {
+      toast.error(`Notifications only sent during business hours (${formatHour(startHour)}-${formatHour(endHour)})`);
+      return;
+    }
+    
     setIsSending(true);
     try {
       // Insert a test notification into pending_notifications
@@ -75,6 +88,8 @@ export function DiscordTestButton({ regionId }: DiscordTestButtonProps) {
 
       if (data?.sent > 0) {
         toast.success(`Test notification sent to ${regionId} Discord channel!`);
+      } else if (data?.skippedOutsideHours) {
+        toast.warning('Notifications are only sent during business hours (8am-7pm)');
       } else if (data?.failed > 0) {
         toast.error('Notification queued but failed to send - check Discord webhook config');
       } else {
@@ -87,6 +102,32 @@ export function DiscordTestButton({ regionId }: DiscordTestButtonProps) {
       setIsSending(false);
     }
   };
+
+  if (!storeOpen) {
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled
+                className="gap-2 opacity-60"
+              >
+                <Clock className="h-4 w-4" />
+                Store Closed
+              </Button>
+            </div>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>Notifications only sent {formatHour(startHour)}-{formatHour(endHour)}</p>
+            <p className="text-xs text-muted-foreground">Opens {getNextOpenTime()}</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  }
 
   return (
     <Button
