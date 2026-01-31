@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useAllRegionSettings, RegionSettingRow } from '@/hooks/useRegionSettings';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -65,6 +65,8 @@ export function RegionSettingsEditor() {
   const { settingsByRegion, isLoading, updateRegionSetting, refresh } = useAllRegionSettings();
   const [activeRegion, setActiveRegion] = useState('hawaii');
   const [editedValues, setEditedValues] = useState<Record<string, Record<string, any>>>({});
+  // React 18 can batch input + click in one tick; keep a ref so Save always sees latest value.
+  const editedValuesRef = useRef<Record<string, Record<string, any>>>({});
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [visiblePasswords, setVisiblePasswords] = useState<Record<string, boolean>>({});
   const [savedKeys, setSavedKeys] = useState<Record<string, boolean>>({});
@@ -79,6 +81,14 @@ export function RegionSettingsEditor() {
   };
 
   const setLocalValue = (regionId: string, key: string, value: any) => {
+    // Update ref synchronously so Save can read the latest value even if state is still batched.
+    editedValuesRef.current = {
+      ...editedValuesRef.current,
+      [regionId]: {
+        ...(editedValuesRef.current[regionId] || {}),
+        [key]: value,
+      },
+    };
     setEditedValues(prev => ({
       ...prev,
       [regionId]: {
@@ -89,7 +99,7 @@ export function RegionSettingsEditor() {
   };
 
   const saveValue = async (regionId: string, key: string) => {
-    const value = editedValues[regionId]?.[key];
+    const value = editedValuesRef.current?.[regionId]?.[key];
     if (value === undefined) return;
 
     const saveKey = `${regionId}:${key}`;
@@ -108,6 +118,16 @@ export function RegionSettingsEditor() {
         delete regionEdits[key];
         return { ...prev, [regionId]: regionEdits };
       });
+
+      // Clear from ref
+      if (editedValuesRef.current?.[regionId]) {
+        const nextRegionEdits = { ...(editedValuesRef.current[regionId] || {}) };
+        delete nextRegionEdits[key];
+        editedValuesRef.current = {
+          ...editedValuesRef.current,
+          [regionId]: nextRegionEdits,
+        };
+      }
       
       // Show "Saved" indicator for 2 seconds
       setSavedKeys(prev => ({ ...prev, [saveKey]: true }));

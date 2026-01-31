@@ -15,6 +15,103 @@ interface PendingNotification {
   created_at: string;
 }
 
+type OrderType = 'shipping' | 'pickup' | 'ebay';
+
+function safeString(v: unknown, fallback = 'N/A'): string {
+  if (v === null || v === undefined) return fallback;
+  const s = String(v).trim();
+  return s.length ? s : fallback;
+}
+
+function formatMoney(value: unknown): string {
+  if (value === null || value === undefined) return 'N/A';
+  const str = String(value).trim();
+  // If already includes currency/letters, leave as-is (e.g. "80.65 USD").
+  if (/[a-zA-Z]/.test(str)) return str;
+  const num = Number(str);
+  if (!Number.isFinite(num)) return str;
+  return `$${num.toFixed(2)}`;
+}
+
+function extractCustomerName(payload: any): string {
+  return (
+    payload?.customer_name ||
+    payload?.customer?.first_name ||
+    payload?.billing_address?.first_name ||
+    payload?.customer?.name ||
+    payload?.billing_address?.name ||
+    'Customer'
+  );
+}
+
+function extractOrderId(payload: any): string {
+  return safeString(payload?.id || payload?.order_number || payload?.name, 'N/A');
+}
+
+function extractOrderName(payload: any): string {
+  const id = extractOrderId(payload);
+  return safeString(payload?.name, id.startsWith('#') ? id : `#${id}`);
+}
+
+function extractLineItemsSummary(payload: any): string | null {
+  const items = payload?.line_items;
+  if (!Array.isArray(items) || items.length === 0) return null;
+
+  const lines: string[] = [];
+  for (const item of items.slice(0, 6)) {
+    const title = safeString(item?.title || item?.name, 'Item');
+    const qty = Number(item?.quantity ?? 1);
+    const sku = item?.sku ? ` (SKU ${String(item.sku)})` : '';
+    lines.push(`• ${title} x${Number.isFinite(qty) ? qty : 1}${sku}`);
+  }
+
+  const more = items.length > 6 ? `\n… +${items.length - 6} more` : '';
+  const out = lines.join('\n') + more;
+  // Discord field values max 1024 chars.
+  return out.length > 1024 ? out.slice(0, 1021) + '…' : out;
+}
+
+function orderTypeLabel(orderType: OrderType): string {
+  if (orderType === 'ebay') return '🏷️ eBay ORDER';
+  if (orderType === 'pickup') return '📦 PICKUP ORDER';
+  return '🛍️ ONLINE ORDER';
+}
+
+function regionMeta(regionId: string) {
+  return regionId === 'hawaii'
+    ? { icon: '🌺', label: 'Hawaii' }
+    : { icon: '🎰', label: 'Las Vegas' };
+}
+
+function buildOrderEmbed(regionId: string, payload: any, orderType: OrderType) {
+  const { icon, label } = regionMeta(regionId);
+  const orderName = extractOrderName(payload);
+  const orderId = extractOrderId(payload);
+  const customerName = extractCustomerName(payload);
+  const total = formatMoney(payload?.total_price || payload?.current_total_price || payload?.total);
+  const items = extractLineItemsSummary(payload);
+
+  const fields: Array<{ name: string; value: string; inline?: boolean }> = [
+    { name: 'Customer', value: safeString(customerName), inline: true },
+    { name: 'Total', value: safeString(total), inline: true },
+  ];
+  if (items) fields.push({ name: 'Items', value: items, inline: false });
+
+  // Basic Shopify admin link if we have a numeric order id and a known shop domain.
+  const shopDomain = payload?.shop_domain || payload?.source_name;
+  const numericId = String(payload?.id || '').match(/^\d+$/) ? String(payload.id) : null;
+  const url = shopDomain && numericId ? `https://${shopDomain}/admin/orders/${numericId}` : undefined;
+
+  return {
+    title: `${icon} ${label} • ${orderTypeLabel(orderType)}`,
+    description: `**Order:** ${orderName}${orderId && orderName !== orderId ? `\n**Order ID:** ${orderId}` : ''}`,
+    color: 0x5865F2,
+    url,
+    fields,
+    timestamp: new Date().toISOString(),
+  };
+}
+
 /**
  * Flush pending Discord notifications by region.
  * This function is called via cron job at 9:00 AM in each region's timezone.
@@ -80,66 +177,51 @@ Deno.serve(async (req) => {
 
       results[regionId] = { sent: 0, failed: 0 };
 
-      // Send each notification
-      for (const notification of regionNotifications) {
-        try {
-          const payload = notification.payload;
-          const orderType = getOrderType(payload);
-          
-          // Build message with order type badge
-          const regionIcon = regionId === 'hawaii' ? '🌺' : '🎰';
-          const regionLabel = regionId === 'hawaii' ? 'Hawaii' : 'Las Vegas';
-          const orderTypeBadge = orderType === 'ebay' ? '🏷️ **eBay ORDER**' 
-                              : orderType === 'pickup' ? '📦 **PICKUP ORDER**' 
-                              : '🛍️ **ONLINE ORDER**';
-          
-          const orderId = payload.id || payload.order_number || 'N/A';
-          const orderName = payload.name || `#${orderId}`;
-          const customerName = payload.customer?.first_name || payload.billing_address?.first_name || 'Customer';
-          const totalPrice = payload.total_price || payload.current_total_price || 'N/A';
-          
-          let message = `${regionIcon} **${regionLabel}** | ${orderTypeBadge}\n`;
-          message += `📋 **Order:** ${orderName}\n`;
-          message += `👤 **Customer:** ${customerName}\n`;
-          message += `💰 **Total:** $${totalPrice}\n`;
-          
-          // Add role mention if configured
-          if (config.roleId) {
-            message += `\n<@&${config.roleId}> New order needs attention!`;
-          }
+      // Batch notifications into a small number of Discord messages (less spam).
+      // Discord supports up to 10 embeds per message.
+      const batches: PendingNotification[][] = [];
+      for (let i = 0; i < regionNotifications.length; i += 10) {
+        batches.push(regionNotifications.slice(i, i + 10));
+      }
 
-          // Send to Discord
+      for (const batch of batches) {
+        try {
+          const embeds = batch.map((n) => buildOrderEmbed(regionId, n.payload, getOrderType(n.payload)));
+          const mention = config.roleId ? `<@&${config.roleId}>\n` : '';
+          const header = `${mention}Queued orders ready for review (${batch.length})`;
+
           const discordResponse = await fetch(config.webhookUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              content: message,
+              content: header,
+              embeds,
               allowed_mentions: { parse: ['roles'] },
             }),
           });
 
           if (!discordResponse.ok) {
             const errorText = await discordResponse.text();
-            console.error(`[flush-pending-notifications] Discord error for notification ${notification.id}:`, discordResponse.status, errorText);
-            results[regionId].failed++;
+            console.error(`[flush-pending-notifications] Discord error for batch (${batch.length}):`, discordResponse.status, errorText);
+            results[regionId].failed += batch.length;
             continue;
           }
 
-          // Mark as sent
+          // Mark batch as sent
+          const ids = batch.map((n) => n.id);
           await supabase
             .from('pending_notifications')
             .update({ sent: true })
-            .eq('id', notification.id);
+            .in('id', ids);
 
-          results[regionId].sent++;
-          console.log(`[flush-pending-notifications] Sent notification ${notification.id} for order ${orderId}`);
-          
-          // Rate limit: wait 1 second between messages to avoid Discord rate limits
+          results[regionId].sent += batch.length;
+          console.log(`[flush-pending-notifications] Sent batch: ${batch.length} notifications for ${regionId}`);
+
+          // Rate limit: wait 1 second between messages
           await new Promise(resolve => setTimeout(resolve, 1000));
-          
         } catch (error) {
-          console.error(`[flush-pending-notifications] Error sending notification ${notification.id}:`, error);
-          results[regionId].failed++;
+          console.error(`[flush-pending-notifications] Error sending batch for ${regionId}:`, error);
+          results[regionId].failed += batch.length;
         }
       }
     }
