@@ -1,124 +1,92 @@
 
-# Discord Notifications for Online Shopify Orders (Region-Specific)
+# Add Discord Configuration to Region Settings Admin UI
 
-## ✅ IMPLEMENTATION COMPLETE
+## Problem
+The Region Settings page in Admin (`/admin` → "Region Settings" in sidebar) exists but is missing the Discord configuration fields. The backend is ready to use these settings, but admins have no way to enter the webhook URLs.
 
-### Changes Made
+## Solution
+Add a new **"Discord Notifications"** accordion section to the `RegionSettingsEditor` component with fields for:
+- `discord.webhook_url` - The Discord webhook URL (password/sensitive field)
+- `discord.role_id` - Staff role ID for @mentions  
+- `discord.enabled` - Toggle to enable/disable notifications
 
-1. **Database Migration**
-   - Added `region_id` column to `pending_notifications` table (defaults to 'hawaii')
-   - Added index for efficient querying by region and sent status
+## Technical Changes
 
-2. **`shopify-webhook` Edge Function**
-   - Replaced `hasEbayTag()` filter with `isOnlineOrderNeedingFulfillment()` 
-   - Excludes POS orders (`source_name` = 'pos' or 'shopify_pos')
-   - Includes orders with shipping lines, shipping address, pickup tags, or items requiring shipping
-   - Added `getOrderType()` to categorize orders as 'shipping', 'pickup', or 'ebay'
-   - Added `getOrderRegionFromPayload()` for improved region detection using shop domain
-   - Discord messages now include order type badge: 🛍️ ONLINE ORDER, 📦 PICKUP ORDER, 🏷️ eBay ORDER
+### File: `src/components/admin/RegionSettingsEditor.tsx`
 
-3. **`flush-pending-notifications` Edge Function** (NEW)
-   - Groups pending notifications by `region_id`
-   - Fetches region-specific Discord config from `region_settings` table
-   - Sends batched notifications with 1-second delay to avoid rate limits
-   - Marks notifications as sent after successful delivery
+1. **Add MessageSquare icon import** (line ~24):
+   ```tsx
+   import { MessageSquare } from 'lucide-react';
+   ```
 
-4. **`PendingNotifications` Page**
-   - Updated to display region badge (🌺 Hawaii / 🎰 Las Vegas)
-   - Fixed type definitions for new payload structure
+2. **Add Discord settings to SETTING_FIELDS array** (after line 53):
+   ```tsx
+   // Discord
+   { key: 'discord.webhook_url', label: 'Discord Webhook URL', type: 'password', category: 'discord', description: 'Webhook URL for sending order notifications' },
+   { key: 'discord.role_id', label: 'Staff Role ID', type: 'text', category: 'discord', description: 'Discord role ID to mention for new orders (optional)' },
+   { key: 'discord.enabled', label: 'Notifications Enabled', type: 'boolean', category: 'discord', description: 'Enable Discord notifications for this region' },
+   ```
 
----
+3. **Update SettingField interface** to support 'password' type and 'discord' category:
+   ```tsx
+   interface SettingField {
+     key: string;
+     label: string;
+     type: 'text' | 'number' | 'boolean' | 'color' | 'json' | 'password';
+     description?: string;
+     category: 'branding' | 'ebay' | 'operations' | 'discord';
+   }
+   ```
 
-## Configuration Required
+4. **Add password field renderer** in `renderField` function:
+   - Similar to text field but with `type="password"` 
+   - Add a show/hide toggle button for visibility
 
-Before notifications will route correctly, you MUST configure Discord settings in the `region_settings` table:
+5. **Add Discord accordion section** after the Operations accordion (around line 383):
+   ```tsx
+   <AccordionItem value="discord">
+     <AccordionTrigger className="hover:no-underline">
+       <div className="flex items-center gap-2">
+         <MessageSquare className="h-4 w-4" />
+         Discord Notifications
+       </div>
+     </AccordionTrigger>
+     <AccordionContent className="space-y-4 pt-4">
+       {SETTING_FIELDS.filter(f => f.category === 'discord').map((field) => (
+         <div key={field.key}>
+           {renderField(field, region.id)}
+         </div>
+       ))}
+     </AccordionContent>
+   </AccordionItem>
+   ```
 
-### SQL to Insert Discord Settings
+6. **Add 'discord' to defaultValue array** for accordion to be expanded by default:
+   ```tsx
+   <Accordion type="multiple" defaultValue={['branding', 'ebay', 'operations', 'discord']}>
+   ```
 
-```sql
--- Hawaii Discord Config
-INSERT INTO region_settings (region_id, setting_key, setting_value, description)
-VALUES 
-  ('hawaii', 'discord.webhook_url', '"YOUR_HAWAII_WEBHOOK_URL"', 'Discord webhook for Hawaii orders'),
-  ('hawaii', 'discord.role_id', '"YOUR_HAWAII_ROLE_ID"', 'Role ID to mention for Hawaii'),
-  ('hawaii', 'discord.enabled', 'true', 'Enable Discord for Hawaii')
-ON CONFLICT (region_id, setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value;
+## Result After Implementation
 
--- Las Vegas Discord Config
-INSERT INTO region_settings (region_id, setting_key, setting_value, description)
-VALUES 
-  ('las_vegas', 'discord.webhook_url', '"YOUR_VEGAS_WEBHOOK_URL"', 'Discord webhook for Las Vegas orders'),
-  ('las_vegas', 'discord.role_id', '"YOUR_VEGAS_ROLE_ID"', 'Role ID to mention for Las Vegas'),
-  ('las_vegas', 'discord.enabled', 'true', 'Enable Discord for Las Vegas')
-ON CONFLICT (region_id, setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value;
-```
+When you go to **Admin → Region Settings**:
+1. Select **Hawaii** or **Las Vegas** tab
+2. Expand the new **"Discord Notifications"** section
+3. Enter your Discord webhook URL
+4. Optionally enter the staff Role ID for @mentions
+5. Toggle "Notifications Enabled" to ON
+6. Click Save on each field
 
-### Cron Job (Already Scheduled)
+## Getting Your Discord Webhook URL
 
-The flush job runs daily at 9:00 AM HST (19:00 UTC). To reschedule:
+1. Open Discord and go to the channel where you want notifications
+2. Click the gear icon (Edit Channel) → Integrations → Webhooks
+3. Click "New Webhook" or select an existing one
+4. Click "Copy Webhook URL"
+5. Paste it into the Region Settings page
 
-```sql
--- View current schedule
-SELECT * FROM cron.job WHERE jobname LIKE '%discord%';
+## Getting Your Discord Role ID
 
--- Reschedule if needed
-SELECT cron.unschedule('flush-discord-notifications');
-SELECT cron.schedule(
-  'flush-discord-notifications',
-  '0 19 * * *', -- 09:00 HST
-  $$SELECT net.http_post(...)$$
-);
-```
-
----
-
-## Order Eligibility Logic
-
-**Notifications are sent for orders where:**
-- `source_name` is NOT 'pos' or 'shopify_pos'
-- `fulfillment_status` is NOT 'fulfilled'
-- Order has shipping lines, shipping address, pickup tags, or items requiring shipping
-
-**Notifications are NOT sent for:**
-- POS walk-in sales
-- Already fulfilled orders
-- Draft orders (unless processed)
-
----
-
-## Region Detection Priority
-
-1. **Shop domain** from webhook header (most reliable)
-   - `aloha-card-shop.myshopify.com` → Hawaii
-   - `vqvxdi-ar.myshopify.com` → Las Vegas
-
-2. **Fulfillment location name** in order
-   - Contains "hawaii" or "honolulu" → Hawaii
-   - Contains "vegas" or "702" → Las Vegas
-
-3. **Order tags**
-   - Contains "hawaii" → Hawaii
-   - Contains "las_vegas" or "vegas" → Las Vegas
-
-4. **Default**: Hawaii
-
----
-
-## Message Format
-
-Immediate notifications include:
-- Region icon (🌺 or 🎰) and label
-- Order type badge (🛍️ ONLINE ORDER / 📦 PICKUP ORDER / 🏷️ eBay ORDER)
-- Order details from template
-- Staff role mention (if configured and within business hours)
-
-Example:
-```
-🌺 **Hawaii** | 🛍️ **ONLINE ORDER**
-📋 **Order:** #1234
-👤 **Customer:** John
-💰 **Total:** $99.99
-
-@Staff New order needs attention!
-```
-
+1. In Discord, go to Server Settings → Roles
+2. Right-click the role you want to mention → Copy ID
+   - (You must have Developer Mode enabled: User Settings → Advanced → Developer Mode)
+3. Paste the numeric ID into the "Staff Role ID" field
