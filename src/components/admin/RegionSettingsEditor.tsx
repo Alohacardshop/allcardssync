@@ -298,13 +298,19 @@ export function RegionSettingsEditor() {
       default:
         return (
           <div className="p-4 border rounded-lg space-y-2">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <Label htmlFor={`${regionId}-${field.key}`}>{field.label}</Label>
               {isEdited && (
                 <Button
+                  type="button"
                   size="sm"
-                  onClick={() => saveValue(regionId, field.key)}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    saveValue(regionId, field.key);
+                  }}
                   disabled={isSaving}
+                  className="relative z-10"
                 >
                   {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3 mr-1" />}
                   Save
