@@ -145,8 +145,8 @@ serve(async (req) => {
         break;
       
       case 'orders/create':
-        // Send Discord notification for new orders
-        await sendDiscordNotification(supabase, payload);
+        // Send Discord notification for new orders (all online orders, not just eBay)
+        await sendDiscordNotification(supabase, payload, shopifyDomain);
         await handleOrderUpdate(supabase, payload, shopifyDomain);
         break;
       
@@ -361,6 +361,131 @@ function hasEbayTag(tags: any): boolean {
   return false;
 }
 
+/**
+ * Determines if an order is an online order that needs fulfillment (shipping or pickup).
+ * Excludes POS orders as they are handled in-store.
+ */
+function isOnlineOrderNeedingFulfillment(payload: any): boolean {
+  const sourceName = payload.source_name || '';
+  
+  // Skip POS orders - they are handled in-store and don't need notifications
+  if (sourceName === 'pos' || sourceName === 'shopify_pos' || sourceName === 'POS') {
+    return false;
+  }
+  
+  // Check if already fulfilled
+  const fulfillmentStatus = payload.fulfillment_status;
+  if (fulfillmentStatus === 'fulfilled') {
+    return false;
+  }
+  
+  // Check if order has shipping lines (needs to be shipped)
+  const shippingLines = payload.shipping_lines || [];
+  const hasShipping = shippingLines.length > 0;
+  
+  // Check if order has a shipping address (indicates shipping required)
+  const hasShippingAddress = payload.shipping_address != null;
+  
+  // Check for pickup indicators
+  const tags = payload.tags || '';
+  const tagString = typeof tags === 'string' ? tags.toLowerCase() : (tags as any[]).join(',').toLowerCase();
+  const hasPickupTag = tagString.includes('pickup') || tagString.includes('local_pickup') || tagString.includes('store_pickup');
+  
+  // Check fulfillments for pickup method
+  const fulfillments = payload.fulfillments || [];
+  const hasPickupFulfillment = fulfillments.some((f: any) => 
+    f.service === 'local_pickup' || 
+    f.delivery_type === 'pickup' ||
+    (f.name || '').toLowerCase().includes('pickup')
+  );
+  
+  // Check line items for items requiring shipping
+  const lineItems = payload.line_items || [];
+  const hasItemsRequiringShipping = lineItems.some((item: any) => item.requires_shipping !== false);
+  
+  // Order needs notification if it has shipping OR is for pickup
+  return hasShipping || hasShippingAddress || hasPickupTag || hasPickupFulfillment || hasItemsRequiringShipping;
+}
+
+/**
+ * Determines the order type for Discord notification formatting.
+ */
+function getOrderType(payload: any): 'shipping' | 'pickup' | 'ebay' {
+  // Check for eBay tag first (highest priority)
+  if (hasEbayTag(payload.tags)) {
+    return 'ebay';
+  }
+  
+  // Check for pickup indicators
+  const tags = payload.tags || '';
+  const tagString = typeof tags === 'string' ? tags.toLowerCase() : (tags as any[]).join(',').toLowerCase();
+  const hasPickupTag = tagString.includes('pickup') || tagString.includes('local_pickup') || tagString.includes('store_pickup');
+  
+  const fulfillments = payload.fulfillments || [];
+  const hasPickupFulfillment = fulfillments.some((f: any) => 
+    f.service === 'local_pickup' || 
+    f.delivery_type === 'pickup' ||
+    (f.name || '').toLowerCase().includes('pickup')
+  );
+  
+  if (hasPickupTag || hasPickupFulfillment) {
+    return 'pickup';
+  }
+  
+  return 'shipping';
+}
+
+/**
+ * Determines region from order payload using shop domain, fulfillment location, or tags.
+ */
+function getOrderRegionFromPayload(payload: any, shopDomain: string | null): string {
+  // 1. Check shop_domain from webhook header (most reliable)
+  if (shopDomain) {
+    const domain = shopDomain.toLowerCase();
+    if (domain.includes('aloha-card-shop') || domain.includes('hawaii')) {
+      return 'hawaii';
+    }
+    if (domain.includes('vqvxdi-ar') || domain.includes('vegas')) {
+      return 'las_vegas';
+    }
+  }
+  
+  // 2. Check fulfillment location name in order
+  const fulfillmentLocation = payload.fulfillment_location_name || payload.location_name || '';
+  const locationLower = fulfillmentLocation.toLowerCase();
+  if (locationLower.includes('vegas') || locationLower.includes('las vegas') || locationLower.includes('702')) {
+    return 'las_vegas';
+  }
+  if (locationLower.includes('hawaii') || locationLower.includes('honolulu')) {
+    return 'hawaii';
+  }
+  
+  // 3. Check order tags
+  const tags = payload.tags || '';
+  const tagString = typeof tags === 'string' ? tags.toLowerCase() : (tags as any[]).join(',').toLowerCase();
+  if (tagString.includes('las_vegas') || tagString.includes('vegas')) {
+    return 'las_vegas';
+  }
+  if (tagString.includes('hawaii')) {
+    return 'hawaii';
+  }
+  
+  // 4. Check assigned_location_id on line items
+  const lineItems = payload.line_items || [];
+  for (const item of lineItems) {
+    const assignedLocation = item.origin_location?.name || item.location_name || '';
+    if (assignedLocation.toLowerCase().includes('vegas')) {
+      return 'las_vegas';
+    }
+    if (assignedLocation.toLowerCase().includes('hawaii')) {
+      return 'hawaii';
+    }
+  }
+  
+  // 5. Default to Hawaii
+  return 'hawaii';
+}
+
 function renderMessage(template: string, payload: any, roleId: string, mentionEnabled: boolean): string {
   let message = template;
 
@@ -382,18 +507,20 @@ function renderMessage(template: string, payload: any, roleId: string, mentionEn
   return message;
 }
 
-async function sendDiscordNotification(supabase: any, payload: any) {
+async function sendDiscordNotification(supabase: any, payload: any, shopifyDomain: string | null = null) {
   try {
-    console.log('Checking Discord notification for order:', payload.id, payload.tags);
+    console.log('Checking Discord notification for order:', payload.id, 'source:', payload.source_name, 'tags:', payload.tags);
     
-    if (!hasEbayTag(payload.tags)) {
-      console.log('Not an eBay order, skipping Discord notification');
+    // NEW: Check if this is an online order that needs fulfillment (replaces eBay-only filter)
+    if (!isOnlineOrderNeedingFulfillment(payload)) {
+      console.log('Order does not require fulfillment notification (POS or already fulfilled)');
       return;
     }
 
-    // Determine region from order
-    const regionId = getOrderRegion(payload);
-    console.log(`Order region detected: ${regionId}`);
+    // Determine region from order (now uses shop domain for better accuracy)
+    const regionId = getOrderRegionFromPayload(payload, shopifyDomain);
+    const orderType = getOrderType(payload);
+    console.log(`Order region: ${regionId}, type: ${orderType}`);
 
     // Try region-specific Discord config first
     const regionConfig = await getRegionDiscordConfig(supabase, regionId);
@@ -441,10 +568,13 @@ async function sendDiscordNotification(supabase: any, payload: any) {
         return;
       }
 
-      // Add region indicator to message
+      // Add order type badge and region indicator to message
       const regionIcon = regionId === 'hawaii' ? '🌺' : '🎰';
       const regionLabel = regionId === 'hawaii' ? 'Hawaii' : 'Las Vegas';
-      const message = `${regionIcon} **${regionLabel}**\n` + renderMessage(config.templates.immediate, payload, roleId, mentionEnabled);
+      const orderTypeBadge = orderType === 'ebay' ? '🏷️ **eBay ORDER**' 
+                          : orderType === 'pickup' ? '📦 **PICKUP ORDER**' 
+                          : '🛍️ **ONLINE ORDER**';
+      const message = `${regionIcon} **${regionLabel}** | ${orderTypeBadge}\n` + renderMessage(config.templates.immediate, payload, roleId, mentionEnabled);
 
       let barcodeSvg: string | null = null;
       try {

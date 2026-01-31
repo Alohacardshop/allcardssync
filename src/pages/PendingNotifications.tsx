@@ -11,12 +11,18 @@ interface PendingNotification {
   id: number;
   created_at: string;
   sent: boolean;
+  region_id: string | null;
   payload: {
-    id: string;
-    name: string;
-    customer_name: string;
-    total_price: string;
-    created_at: string;
+    id?: string;
+    name?: string;
+    order_number?: string;
+    customer?: { first_name?: string };
+    billing_address?: { first_name?: string };
+    total_price?: string;
+    current_total_price?: string;
+    created_at?: string;
+    tags?: string | string[];
+    [key: string]: unknown;
   };
 }
 
@@ -77,27 +83,40 @@ export default function PendingNotifications() {
                   <TableRow>
                     <TableHead>Order #</TableHead>
                     <TableHead>Customer</TableHead>
+                    <TableHead>Region</TableHead>
                     <TableHead>Total</TableHead>
                     <TableHead>Order Date</TableHead>
                     <TableHead>Queued At</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {notifications.map((notification) => (
-                    <TableRow key={notification.id}>
-                      <TableCell className="font-medium">
-                        {notification.payload.name}
-                      </TableCell>
-                      <TableCell>{notification.payload.customer_name}</TableCell>
-                      <TableCell>{notification.payload.total_price}</TableCell>
-                      <TableCell>
-                        {format(new Date(notification.payload.created_at), "MMM d, yyyy h:mm a")}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {format(new Date(notification.created_at), "MMM d, yyyy h:mm a")}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {notifications.map((notification) => {
+                    const orderName = notification.payload.name || notification.payload.order_number || `#${notification.payload.id}`;
+                    const customerName = notification.payload.customer?.first_name || notification.payload.billing_address?.first_name || 'N/A';
+                    const totalPrice = notification.payload.total_price || notification.payload.current_total_price || 'N/A';
+                    const orderCreatedAt = notification.payload.created_at;
+                    const regionIcon = notification.region_id === 'las_vegas' ? '🎰' : '🌺';
+                    const regionLabel = notification.region_id === 'las_vegas' ? 'Las Vegas' : 'Hawaii';
+                    
+                    return (
+                      <TableRow key={notification.id}>
+                        <TableCell className="font-medium">
+                          {orderName}
+                        </TableCell>
+                        <TableCell>{customerName}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{regionIcon} {regionLabel}</Badge>
+                        </TableCell>
+                        <TableCell>{totalPrice}</TableCell>
+                        <TableCell>
+                          {orderCreatedAt ? format(new Date(orderCreatedAt), "MMM d, yyyy h:mm a") : 'N/A'}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {format(new Date(notification.created_at), "MMM d, yyyy h:mm a")}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
