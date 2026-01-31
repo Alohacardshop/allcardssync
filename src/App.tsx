@@ -43,6 +43,7 @@ const BulkIntake = React.lazy(() => import("./pages/intake/BulkIntake"));
 const ShopifyBackfill = React.lazy(() => import("./pages/admin/ShopifyBackfill"));
 const QzTrayTestPage = React.lazy(() => import("./pages/QzTrayTestPage"));
 const Privacy = React.lazy(() => import("./pages/Privacy"));
+const InventorySyncDashboard = React.lazy(() => import("./pages/admin/InventorySyncDashboard"));
 
 const EbayApp = React.lazy(() => import("./pages/EbayApp"));
 const EbaySyncDashboard = React.lazy(() => import("./pages/EbaySyncDashboard"));
@@ -145,6 +146,7 @@ const App = () => (
                             <Route path="/admin/notifications/discord" element={<AdminGuard><DiscordNotifications /></AdminGuard>} />
                             <Route path="/admin/notifications/pending" element={<AdminGuard><PendingNotifications /></AdminGuard>} />
                             <Route path="/admin/shopify-backfill" element={<AdminGuard><ShopifyBackfill /></AdminGuard>} />
+                            <Route path="/admin/inventory-sync" element={<AdminGuard><InventorySyncDashboard /></AdminGuard>} />
                             <Route path="/admin/ebay-settings" element={<Navigate to="/ebay" replace />} />
                             
                             {/* Other Pages */}
