@@ -841,6 +841,17 @@ async function handleOrderCancellation(supabase: any, payload: any, shopifyDomai
   const storeKey = await getStoreKeyFromDomain(supabase, shopifyDomain);
   if (!storeKey) return;
 
+  // Get Shopify credentials for location restoration
+  const storeKeyUpper = storeKey.toUpperCase().replace(/_STORE$/i, '');
+  const { data: credentials } = await supabase
+    .from('system_settings')
+    .select('key_name, key_value')
+    .in('key_name', [`SHOPIFY_${storeKeyUpper}_STORE_DOMAIN`, `SHOPIFY_${storeKeyUpper}_ACCESS_TOKEN`]);
+
+  const credMap = new Map(credentials?.map((c: any) => [c.key_name, c.key_value]) || []);
+  const domain = credMap.get(`SHOPIFY_${storeKeyUpper}_STORE_DOMAIN`);
+  const token = credMap.get(`SHOPIFY_${storeKeyUpper}_ACCESS_TOKEN`);
+
   for (const lineItem of lineItems) {
     const sku = lineItem.sku;
     const quantity = lineItem.quantity || 0;
@@ -850,7 +861,7 @@ async function handleOrderCancellation(supabase: any, payload: any, shopifyDomai
     // Find items that were sold in this order
     const { data: items, error } = await supabase
       .from('intake_items')
-      .select('id, quantity, type, sold_at')
+      .select('id, quantity, type, sold_at, shopify_inventory_item_id, shopify_location_gid')
       .eq('store_key', storeKey)
       .eq('sku', sku)
       .eq('sold_order_id', orderId);
@@ -877,6 +888,84 @@ async function handleOrderCancellation(supabase: any, payload: any, shopifyDomai
           console.error('Failed to restore graded item:', updateError);
         } else {
           console.log(`Restored graded item ${item.id} from cancellation`);
+        }
+
+        // CRITICAL: Restore cards.status to 'available' for 1-of-1 items
+        const { error: cardError } = await supabase
+          .from('cards')
+          .update({
+            status: 'available',
+            updated_at: new Date().toISOString()
+          })
+          .eq('sku', sku)
+          .eq('status', 'sold');
+
+        if (cardError) {
+          console.error(`Failed to restore card status for SKU ${sku}:`, cardError);
+        } else {
+          console.log(`✓ Restored cards.status to 'available' for SKU ${sku}`);
+        }
+
+        // Re-establish location ownership by setting Shopify inventory back to 1
+        if (domain && token && item.shopify_inventory_item_id && item.shopify_location_gid) {
+          const locationId = item.shopify_location_gid.replace('gid://shopify/Location/', '');
+          
+          try {
+            const shopifyResponse = await fetch(
+              `https://${domain}/admin/api/2024-07/inventory_levels/set.json`,
+              {
+                method: 'POST',
+                headers: {
+                  'X-Shopify-Access-Token': token,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                  location_id: locationId,
+                  inventory_item_id: item.shopify_inventory_item_id,
+                  available: 1
+                })
+              }
+            );
+
+            if (shopifyResponse.ok) {
+              console.log(`✓ Restored Shopify inventory for ${sku} at location ${locationId}`);
+              
+              // Update cards.current_shopify_location_id
+              await supabase
+                .from('cards')
+                .update({ current_shopify_location_id: item.shopify_location_gid })
+                .eq('sku', sku);
+            } else {
+              const errorText = await shopifyResponse.text();
+              console.error(`Failed to restore Shopify inventory: ${errorText}`);
+              
+              // Queue for retry
+              await supabase.from('retry_jobs').insert({
+                job_type: 'ENFORCE_LOCATION',
+                sku,
+                payload: {
+                  desired_location_id: item.shopify_location_gid,
+                  inventory_item_id: item.shopify_inventory_item_id,
+                  store_key: storeKey,
+                  reason: 'order_cancellation'
+                }
+              });
+            }
+          } catch (shopifyError) {
+            console.error('Shopify API error during cancellation restore:', shopifyError);
+            
+            // Queue for retry
+            await supabase.from('retry_jobs').insert({
+              job_type: 'ENFORCE_LOCATION',
+              sku,
+              payload: {
+                desired_location_id: item.shopify_location_gid,
+                inventory_item_id: item.shopify_inventory_item_id,
+                store_key: storeKey,
+                reason: 'order_cancellation'
+              }
+            });
+          }
         }
       } else {
         // For raw items, add back the cancelled quantity
@@ -909,6 +998,17 @@ async function handleRefundCreated(supabase: any, payload: any, shopifyDomain: s
   const storeKey = await getStoreKeyFromDomain(supabase, shopifyDomain);
   if (!storeKey) return;
 
+  // Get Shopify credentials for location restoration
+  const storeKeyUpper = storeKey.toUpperCase().replace(/_STORE$/i, '');
+  const { data: credentials } = await supabase
+    .from('system_settings')
+    .select('key_name, key_value')
+    .in('key_name', [`SHOPIFY_${storeKeyUpper}_STORE_DOMAIN`, `SHOPIFY_${storeKeyUpper}_ACCESS_TOKEN`]);
+
+  const credMap = new Map(credentials?.map((c: any) => [c.key_name, c.key_value]) || []);
+  const domain = credMap.get(`SHOPIFY_${storeKeyUpper}_STORE_DOMAIN`);
+  const token = credMap.get(`SHOPIFY_${storeKeyUpper}_ACCESS_TOKEN`);
+
   for (const refundItem of refundLineItems) {
     const lineItem = refundItem.line_item;
     const sku = lineItem?.sku;
@@ -919,7 +1019,7 @@ async function handleRefundCreated(supabase: any, payload: any, shopifyDomain: s
     // Find items that were sold in this order
     const { data: items, error } = await supabase
       .from('intake_items')
-      .select('id, quantity, type')
+      .select('id, quantity, type, shopify_inventory_item_id, shopify_location_gid')
       .eq('store_key', storeKey)
       .eq('sku', sku)
       .eq('sold_order_id', orderId);
@@ -935,6 +1035,8 @@ async function handleRefundCreated(supabase: any, payload: any, shopifyDomain: s
             quantity: 1,
             sold_at: null,
             sold_price: null,
+            sold_order_id: null,
+            sold_channel: null,
             updated_by: 'shopify_webhook'
           })
           .eq('id', item.id);
@@ -943,6 +1045,84 @@ async function handleRefundCreated(supabase: any, payload: any, shopifyDomain: s
           console.error('Failed to restore refunded graded item:', updateError);
         } else {
           console.log(`Restored graded item ${item.id} from refund`);
+        }
+
+        // CRITICAL: Restore cards.status to 'available' for 1-of-1 items
+        const { error: cardError } = await supabase
+          .from('cards')
+          .update({
+            status: 'available',
+            updated_at: new Date().toISOString()
+          })
+          .eq('sku', sku)
+          .eq('status', 'sold');
+
+        if (cardError) {
+          console.error(`Failed to restore card status for SKU ${sku}:`, cardError);
+        } else {
+          console.log(`✓ Restored cards.status to 'available' for SKU ${sku}`);
+        }
+
+        // Re-establish location ownership by setting Shopify inventory back to 1
+        if (domain && token && item.shopify_inventory_item_id && item.shopify_location_gid) {
+          const locationId = item.shopify_location_gid.replace('gid://shopify/Location/', '');
+          
+          try {
+            const shopifyResponse = await fetch(
+              `https://${domain}/admin/api/2024-07/inventory_levels/set.json`,
+              {
+                method: 'POST',
+                headers: {
+                  'X-Shopify-Access-Token': token,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                  location_id: locationId,
+                  inventory_item_id: item.shopify_inventory_item_id,
+                  available: 1
+                })
+              }
+            );
+
+            if (shopifyResponse.ok) {
+              console.log(`✓ Restored Shopify inventory for ${sku} at location ${locationId}`);
+              
+              // Update cards.current_shopify_location_id
+              await supabase
+                .from('cards')
+                .update({ current_shopify_location_id: item.shopify_location_gid })
+                .eq('sku', sku);
+            } else {
+              const errorText = await shopifyResponse.text();
+              console.error(`Failed to restore Shopify inventory: ${errorText}`);
+              
+              // Queue for retry
+              await supabase.from('retry_jobs').insert({
+                job_type: 'ENFORCE_LOCATION',
+                sku,
+                payload: {
+                  desired_location_id: item.shopify_location_gid,
+                  inventory_item_id: item.shopify_inventory_item_id,
+                  store_key: storeKey,
+                  reason: 'refund'
+                }
+              });
+            }
+          } catch (shopifyError) {
+            console.error('Shopify API error during refund restore:', shopifyError);
+            
+            // Queue for retry
+            await supabase.from('retry_jobs').insert({
+              job_type: 'ENFORCE_LOCATION',
+              sku,
+              payload: {
+                desired_location_id: item.shopify_location_gid,
+                inventory_item_id: item.shopify_inventory_item_id,
+                store_key: storeKey,
+                reason: 'refund'
+              }
+            });
+          }
         }
       } else {
         // For raw items, add back refunded quantity
