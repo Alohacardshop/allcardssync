@@ -74,11 +74,30 @@ const App = () => (
               <BrowserRouter>
               <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><LoadingSpinner size="lg" /></div>}>
                 <Routes>
-                  {/* Public routes - accessible without authentication */}
+              {/* Public routes - accessible without authentication */}
                   <Route path="/auth" element={<Auth />} />
                   <Route path="/privacy" element={<Privacy />} />
                   
-                  {/* Protected routes */}
+                  {/* Admin routes - WITHOUT AppShell (has its own sidebar layout) */}
+                  <Route path="/admin/*" element={
+                    <AuthGuard>
+                      <AdminGuard>
+                        <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><LoadingSpinner size="lg" /></div>}>
+                          <Routes>
+                            <Route path="" element={<Admin />} />
+                            <Route path="catalog" element={<div className="p-8"><CatalogMigrationPlaceholder /></div>} />
+                            <Route path="notifications/discord" element={<DiscordNotifications />} />
+                            <Route path="notifications/pending" element={<PendingNotifications />} />
+                            <Route path="shopify-backfill" element={<ShopifyBackfill />} />
+                            <Route path="inventory-sync" element={<InventorySyncDashboard />} />
+                            <Route path="ebay-settings" element={<Navigate to="/ebay" replace />} />
+                          </Routes>
+                        </Suspense>
+                      </AdminGuard>
+                    </AuthGuard>
+                  } />
+                  
+                  {/* Protected routes with AppShell */}
                   <Route path="/*" element={
                     <AuthGuard>
                       <AppShell>
@@ -140,14 +159,9 @@ const App = () => (
                               </RequireApp>
                             } />
                             
-                            {/* Admin App */}
-                            <Route path="/admin" element={<AdminGuard><Admin /></AdminGuard>} />
-                            <Route path="/admin/catalog" element={<AdminGuard><div className="p-8"><CatalogMigrationPlaceholder /></div></AdminGuard>} />
-                            <Route path="/admin/notifications/discord" element={<AdminGuard><DiscordNotifications /></AdminGuard>} />
-                            <Route path="/admin/notifications/pending" element={<AdminGuard><PendingNotifications /></AdminGuard>} />
-                            <Route path="/admin/shopify-backfill" element={<AdminGuard><ShopifyBackfill /></AdminGuard>} />
-                            <Route path="/admin/inventory-sync" element={<AdminGuard><InventorySyncDashboard /></AdminGuard>} />
-                            <Route path="/admin/ebay-settings" element={<Navigate to="/ebay" replace />} />
+                            {/* Admin routes removed - now handled above outside AppShell */}
+                            
+                            
                             
                             {/* Other Pages */}
                             <Route path="/dashboard" element={<Navigate to="/" replace />} />
