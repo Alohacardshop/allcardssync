@@ -21,6 +21,9 @@ import {
   Save,
   Loader2,
   RefreshCw,
+  MessageSquare,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -32,9 +35,9 @@ const REGIONS = [
 interface SettingField {
   key: string;
   label: string;
-  type: 'text' | 'number' | 'boolean' | 'color' | 'json';
+  type: 'text' | 'number' | 'boolean' | 'color' | 'json' | 'password';
   description?: string;
-  category: 'branding' | 'ebay' | 'operations';
+  category: 'branding' | 'ebay' | 'operations' | 'discord';
 }
 
 const SETTING_FIELDS: SettingField[] = [
@@ -51,6 +54,11 @@ const SETTING_FIELDS: SettingField[] = [
   
   // Operations
   { key: 'operations.business_hours', label: 'Business Hours', type: 'json', category: 'operations', description: 'Operating hours configuration' },
+  
+  // Discord
+  { key: 'discord.webhook_url', label: 'Discord Webhook URL', type: 'password', category: 'discord', description: 'Webhook URL for sending order notifications' },
+  { key: 'discord.role_id', label: 'Staff Role ID', type: 'text', category: 'discord', description: 'Discord role ID to mention for new orders (optional)' },
+  { key: 'discord.enabled', label: 'Notifications Enabled', type: 'boolean', category: 'discord', description: 'Enable Discord notifications for this region' },
 ];
 
 export function RegionSettingsEditor() {
@@ -58,6 +66,7 @@ export function RegionSettingsEditor() {
   const [activeRegion, setActiveRegion] = useState('hawaii');
   const [editedValues, setEditedValues] = useState<Record<string, Record<string, any>>>({});
   const [savingKey, setSavingKey] = useState<string | null>(null);
+  const [visiblePasswords, setVisiblePasswords] = useState<Record<string, boolean>>({});
 
   const getCurrentValue = (regionId: string, key: string) => {
     // Check edited values first
@@ -244,6 +253,48 @@ export function RegionSettingsEditor() {
           </div>
         );
 
+      case 'password':
+        const passwordKey = `${regionId}:${field.key}`;
+        const isVisible = visiblePasswords[passwordKey] ?? false;
+        return (
+          <div className="p-4 border rounded-lg space-y-2">
+            <div className="flex items-center justify-between">
+              <Label htmlFor={`${regionId}-${field.key}`}>{field.label}</Label>
+              {isEdited && (
+                <Button
+                  size="sm"
+                  onClick={() => saveValue(regionId, field.key)}
+                  disabled={isSaving}
+                >
+                  {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3 mr-1" />}
+                  Save
+                </Button>
+              )}
+            </div>
+            {field.description && (
+              <p className="text-sm text-muted-foreground">{field.description}</p>
+            )}
+            <div className="flex gap-2">
+              <Input
+                id={`${regionId}-${field.key}`}
+                type={isVisible ? 'text' : 'password'}
+                value={currentValue ?? ''}
+                onChange={(e) => setLocalValue(regionId, field.key, e.target.value)}
+                className={`flex-1 ${isEdited ? 'border-primary' : ''}`}
+                placeholder="https://discord.com/api/webhooks/..."
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => setVisiblePasswords(prev => ({ ...prev, [passwordKey]: !isVisible }))}
+              >
+                {isVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </Button>
+            </div>
+          </div>
+        );
+
       default:
         return (
           <div className="p-4 border rounded-lg space-y-2">
@@ -347,7 +398,7 @@ export function RegionSettingsEditor() {
                 </Card>
 
                 {/* Settings Accordion */}
-                <Accordion type="multiple" defaultValue={['branding', 'ebay', 'operations']}>
+                <Accordion type="multiple" defaultValue={['branding', 'ebay', 'operations', 'discord']}>
                   <AccordionItem value="branding">
                     <AccordionTrigger className="hover:no-underline">
                       <div className="flex items-center gap-2">
@@ -389,6 +440,22 @@ export function RegionSettingsEditor() {
                     </AccordionTrigger>
                     <AccordionContent className="space-y-4 pt-4">
                       {SETTING_FIELDS.filter(f => f.category === 'operations').map((field) => (
+                        <div key={field.key}>
+                          {renderField(field, region.id)}
+                        </div>
+                      ))}
+                    </AccordionContent>
+                  </AccordionItem>
+
+                  <AccordionItem value="discord">
+                    <AccordionTrigger className="hover:no-underline">
+                      <div className="flex items-center gap-2">
+                        <MessageSquare className="h-4 w-4" />
+                        Discord Notifications
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent className="space-y-4 pt-4">
+                      {SETTING_FIELDS.filter(f => f.category === 'discord').map((field) => (
                         <div key={field.key}>
                           {renderField(field, region.id)}
                         </div>
