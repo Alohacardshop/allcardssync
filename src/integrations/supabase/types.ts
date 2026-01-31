@@ -1695,18 +1695,21 @@ export type Database = {
           created_at: string
           id: number
           payload: Json
+          region_id: string | null
           sent: boolean
         }
         Insert: {
           created_at?: string
           id?: number
           payload: Json
+          region_id?: string | null
           sent?: boolean
         }
         Update: {
           created_at?: string
           id?: number
           payload?: Json
+          region_id?: string | null
           sent?: boolean
         }
         Relationships: []
