@@ -58,56 +58,161 @@ function extractLineItemsSummary(payload: any): string | null {
   if (!Array.isArray(items) || items.length === 0) return null;
 
   const lines: string[] = [];
-  for (const item of items.slice(0, 6)) {
+  for (const item of items.slice(0, 8)) {
     const title = safeString(item?.title || item?.name, 'Item');
     const qty = Number(item?.quantity ?? 1);
-    const sku = item?.sku ? ` (SKU ${String(item.sku)})` : '';
-    lines.push(`• ${title} x${Number.isFinite(qty) ? qty : 1}${sku}`);
+    const price = item?.price ? formatMoney(item.price) : '';
+    const lineTotal = item?.price ? formatMoney(Number(item.price) * qty) : '';
+    const sku = item?.sku ? `\`${String(item.sku)}\`` : '';
+    const variant = item?.variant_title ? `${item.variant_title}` : '';
+    
+    // Format: Title | Variant | SKU | Price × Qty = Total
+    let line = `**${title}**`;
+    if (variant) line += `\n   ${variant}`;
+    if (sku) line += ` • ${sku}`;
+    if (price && qty) line += `\n   ${price} × ${qty} = **${lineTotal}**`;
+    
+    lines.push(line);
   }
 
-  const more = items.length > 6 ? `\n… +${items.length - 6} more` : '';
-  const out = lines.join('\n') + more;
+  const more = items.length > 8 ? `\n\n*… +${items.length - 8} more items*` : '';
+  const out = lines.join('\n\n') + more;
   // Discord field values max 1024 chars.
   return out.length > 1024 ? out.slice(0, 1021) + '…' : out;
 }
 
+function extractPickupLocation(payload: any): string | null {
+  // Check fulfillments for pickup location
+  const fulfillments = payload?.fulfillments || [];
+  for (const f of fulfillments) {
+    if (f?.location?.name) return f.location.name;
+    if (f?.origin_address?.company) return f.origin_address.company;
+  }
+  
+  // Check shipping lines for pickup
+  const shippingLines = payload?.shipping_lines || [];
+  for (const s of shippingLines) {
+    if (s?.title?.toLowerCase().includes('pickup')) {
+      // Extract location from title like "Local Pickup - Ward Ave"
+      const match = s.title.match(/pickup\s*[-–—]\s*(.+)/i);
+      if (match) return match[1].trim();
+    }
+  }
+  
+  // Check tags for location hints
+  const tags = payload?.tags || '';
+  const tagStr = typeof tags === 'string' ? tags : tags.join(',');
+  if (tagStr.toLowerCase().includes('ward')) return 'Ward Ave';
+  if (tagStr.toLowerCase().includes('vegas') || tagStr.toLowerCase().includes('lv')) return 'Las Vegas';
+  
+  return null;
+}
+
+function extractExpectedDate(payload: any): string | null {
+  // Check for expected delivery in fulfillments
+  const fulfillments = payload?.fulfillments || [];
+  for (const f of fulfillments) {
+    if (f?.expected_delivery_at) {
+      return new Date(f.expected_delivery_at).toLocaleDateString('en-US', { 
+        weekday: 'long', 
+        month: 'long', 
+        day: 'numeric' 
+      });
+    }
+  }
+  return null;
+}
+
+function getPaymentStatus(payload: any): { text: string; emoji: string } {
+  const financial = payload?.financial_status?.toLowerCase() || '';
+  if (financial === 'paid') return { text: 'Paid', emoji: '💰' };
+  if (financial === 'pending') return { text: 'Pending', emoji: '⏳' };
+  if (financial === 'refunded') return { text: 'Refunded', emoji: '↩️' };
+  if (financial === 'partially_refunded') return { text: 'Partial Refund', emoji: '↩️' };
+  return { text: 'Unpaid', emoji: '❌' };
+}
+
+function getFulfillmentStatus(payload: any): { text: string; emoji: string } {
+  const status = payload?.fulfillment_status?.toLowerCase() || 'unfulfilled';
+  if (status === 'fulfilled') return { text: 'Fulfilled', emoji: '✅' };
+  if (status === 'partial') return { text: 'Partial', emoji: '📦' };
+  return { text: 'Unfulfilled', emoji: '📋' };
+}
+
+function orderTypeEmoji(orderType: OrderType): string {
+  if (orderType === 'ebay') return '🏷️';
+  if (orderType === 'pickup') return '🏪';
+  return '📦';
+}
+
 function orderTypeLabel(orderType: OrderType): string {
-  if (orderType === 'ebay') return '🏷️ eBay ORDER';
-  if (orderType === 'pickup') return '📦 PICKUP ORDER';
-  return '🛍️ ONLINE ORDER';
+  if (orderType === 'ebay') return 'eBay Order';
+  if (orderType === 'pickup') return 'Store Pickup';
+  return 'Online Order';
 }
 
 function regionMeta(regionId: string) {
   return regionId === 'hawaii'
-    ? { icon: '🌺', label: 'Hawaii' }
-    : { icon: '🎰', label: 'Las Vegas' };
+    ? { icon: '🌺', label: 'Hawaii', color: 0x2DD4BF }  // Teal for Hawaii
+    : { icon: '🎰', label: 'Las Vegas', color: 0xF59E0B };  // Amber for Vegas
 }
 
 function buildOrderEmbed(regionId: string, payload: any, orderType: OrderType) {
-  const { icon, label } = regionMeta(regionId);
+  const { icon, label, color } = regionMeta(regionId);
   const orderName = extractOrderName(payload);
-  const orderId = extractOrderId(payload);
   const customerName = extractCustomerName(payload);
   const total = formatMoney(payload?.total_price || payload?.current_total_price || payload?.total);
   const items = extractLineItemsSummary(payload);
+  const pickupLocation = extractPickupLocation(payload);
+  const expectedDate = extractExpectedDate(payload);
+  const payment = getPaymentStatus(payload);
+  const fulfillment = getFulfillmentStatus(payload);
+  
+  // Order date
+  const createdAt = payload?.created_at 
+    ? new Date(payload.created_at).toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+      })
+    : null;
+
+  // Build description with status badges
+  let description = `## ${orderName}\n`;
+  description += `${payment.emoji} **${payment.text}** • ${fulfillment.emoji} **${fulfillment.text}**\n`;
+  if (createdAt) description += `🕐 ${createdAt}`;
+  
+  // Add pickup/shipping info
+  if (orderType === 'pickup' && pickupLocation) {
+    description += `\n\n🏪 **Pickup at ${pickupLocation}**`;
+    if (expectedDate) description += `\n📅 Expected by ${expectedDate}`;
+  }
 
   const fields: Array<{ name: string; value: string; inline?: boolean }> = [
-    { name: 'Customer', value: safeString(customerName), inline: true },
-    { name: 'Total', value: safeString(total), inline: true },
+    { name: '👤 Customer', value: safeString(customerName), inline: true },
+    { name: '💵 Total', value: safeString(total), inline: true },
+    { name: `${orderTypeEmoji(orderType)} Type`, value: orderTypeLabel(orderType), inline: true },
   ];
-  if (items) fields.push({ name: 'Items', value: items, inline: false });
+  
+  if (items) {
+    fields.push({ name: '📦 Items', value: items, inline: false });
+  }
 
-  // Basic Shopify admin link if we have a numeric order id and a known shop domain.
-  const shopDomain = payload?.shop_domain || payload?.source_name;
+  // Shopify admin link
+  const shopDomain = payload?.shop_domain || 'alohacards-hi.myshopify.com';
   const numericId = String(payload?.id || '').match(/^\d+$/) ? String(payload.id) : null;
-  const url = shopDomain && numericId ? `https://${shopDomain}/admin/orders/${numericId}` : undefined;
+  const url = numericId ? `https://${shopDomain}/admin/orders/${numericId}` : undefined;
 
   return {
-    title: `${icon} ${label} • ${orderTypeLabel(orderType)}`,
-    description: `**Order:** ${orderName}${orderId && orderName !== orderId ? `\n**Order ID:** ${orderId}` : ''}`,
-    color: 0x5865F2,
+    title: `${icon} ${label} • New ${orderTypeLabel(orderType)}`,
+    description,
+    color,
     url,
     fields,
+    footer: { text: `Order ID: ${payload?.id || 'N/A'}` },
     timestamp: new Date().toISOString(),
   };
 }
