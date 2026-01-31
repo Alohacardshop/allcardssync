@@ -86,7 +86,7 @@ export function useRegionalDateTime() {
     // Closed on Sundays
     if (day === 'Sun') return false;
     
-    const start = businessHours?.start ?? 10;
+    const start = businessHours?.start ?? 8;
     const end = businessHours?.end ?? 19;
     
     return hour >= start && hour < end;
@@ -95,7 +95,7 @@ export function useRegionalDateTime() {
   const getNextOpenTime = useCallback(() => {
     const hour = getCurrentHour();
     const day = getCurrentDay();
-    const start = businessHours?.start ?? 10;
+    const start = businessHours?.start ?? 8;
     
     if (day === 'Sun') {
       return `Monday ${start > 12 ? start - 12 : start}${start >= 12 ? 'PM' : 'AM'}`;
@@ -110,6 +110,7 @@ export function useRegionalDateTime() {
 
   return {
     timezone,
+    businessHours,
     formatDateTime,
     formatDate,
     formatTime,
