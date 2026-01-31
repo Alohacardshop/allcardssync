@@ -1,94 +1,72 @@
 
+Goal
+- Make the “Save” button in Region Settings (Staff Role ID / discord.role_id) reliably clickable and actually persist to Supabase.
 
-# Fix Dual Sidebar Overlap on Admin Page
+What we know (from your confirmation + replay)
+- Clicking Save does nothing (no spinner, no toast, no request).
+- Other buttons (like Refresh) are clickable.
+- Session replay indicates an invisible element (opacity 0 with an opacity transition) is sitting on top of the Save button area and intercepting clicks. This strongly points to a UI overlay/popup layer (most commonly Radix Tooltip/Popover/Sheet content) that remains in the DOM while fading out, but still captures pointer events.
 
-## Problem
-The Admin page is currently wrapped inside `AppShell`, which renders the main application sidebar (Home, Intake, Inventory, etc.). But the Admin page also has its own internal sidebar for admin-specific sections (Overview, Store, Catalog, Queue, etc.). This creates two overlapping sidebars where the main app sidebar covers part of the admin sidebar.
+Likely root cause
+- A floating UI layer (very likely Radix Tooltip content) is positioned over the Save button and still has pointer-events enabled even when “closed” (opacity: 0).
+- Because it’s above the Save button, your clicks never reach the button, so no save mutation runs (which matches “no network request” and the DB value staying empty).
 
-## Solution Options
+Implementation plan (safe + robust)
+1) Fix the overlay so it can’t block clicks
+   - Update the shared Tooltip component (src/components/ui/tooltip.tsx) to ensure tooltips never intercept clicks:
+     - Add `pointer-events-none` to `TooltipContent` so even if it’s visible/invisible, it won’t capture clicks.
+     - Keep its z-index as-is (z-50) so it still displays visually above content, but it won’t block interactions.
+   - Why this is the best “root fix”:
+     - It fixes the actual cause (an overlay capturing pointer events), not just this one Save button.
+     - Tooltips typically should not be interactive, so disabling pointer events is correct UX.
 
-### Option A: Hide Main App Navigation on Admin Page (Recommended)
-Use the existing `hideNav` prop on `AppShell` for the Admin route, so only the Admin sidebar shows. The Admin page already has its own "Back to Dashboard" link.
+2) Add a belt-and-suspenders fix to the Save buttons (in case another overlay exists)
+   - In src/components/admin/RegionSettingsEditor.tsx:
+     - Update ALL Save buttons (boolean/number/color/json/password/default) to:
+       - `type="button"` (prevents any form-submit edge cases)
+       - Add `onPointerDownCapture={(e) => { e.stopPropagation(); }}` in addition to the existing click handler
+         - PointerDownCapture fires earlier than click and helps avoid parent/overlay interactions stealing the event.
+       - Increase z-index more aggressively (e.g. `relative z-50`) and add `pointer-events-auto`
+     - Keep the existing `onClick` logic that calls `saveValue(...)`.
 
-**Pros:**
-- Minimal code change (just one line)
-- Admin gets a full-screen dedicated experience
-- No layout conflicts
+3) Add “did the save fire?” instrumentation (temporary but very helpful)
+   - Still in RegionSettingsEditor.tsx:
+     - Inside `saveValue`, add a short `console.log` like:
+       - “Saving region setting”, { regionId, key, value }
+     - Also add a visible inline status next to the Save button for that field:
+       - “Saving…” while `isSaving`
+       - “Saved” for ~2 seconds after success (local state)
+       - “Failed: …” inline on error (in addition to toast)
+   - Why:
+     - If anything ever regresses, we’ll instantly know whether the click event reached React and whether Supabase rejected the write.
 
-**Cons:**
-- User needs to click "Back to Dashboard" to return to main nav
+4) Verify persistence end-to-end
+   - Manual verification steps (you can do immediately after we implement):
+     1. Go to Admin → Regions → Hawaii → Discord Notifications → Staff Role ID
+     2. Paste `852989670496272394`
+     3. Click Save
+     4. Confirm you see a visible “Saved” indicator (not just relying on toast)
+     5. Click Refresh (or reload page)
+     6. Confirm the value is still present
+   - Backend verification (optional but definitive):
+     - Check Supabase table `region_settings` row where:
+       - region_id = hawaii
+       - setting_key = discord.role_id
+     - Confirm `setting_value` is now “852989670496272394” and `updated_at` is current.
 
-### Option B: Remove Admin's Internal Sidebar
-Remove the Admin-specific sidebar and use the main app sidebar instead, switching sections via URL routes.
+Edge cases / follow-ups
+- If you often run the sidebar in “collapsed” icon mode, Radix tooltips will appear frequently; the tooltip pointer-events fix is especially important then.
+- If after tooltip fix the issue persists, we’ll repeat the same “pointer-events-none when closed” approach for any other overlay components we find (Popover, HoverCard, Sheet), but Tooltip is the top suspect given the opacity transition clue.
 
-**Cons:**
-- Major rework
-- Loses the current section-based tab switching
+Files we expect to change
+- src/components/ui/tooltip.tsx
+  - Add `pointer-events-none` to TooltipContent className.
+- src/components/admin/RegionSettingsEditor.tsx
+  - Apply consistent button event handling + higher z-index to all Save buttons.
+  - Add inline “Saved/Failed” feedback and a debug console.log.
 
-## Recommended: Option A
-
-### Technical Changes
-
-**File: `src/App.tsx`**
-
-Change the Admin route from:
-```tsx
-<Route path="/admin" element={<AdminGuard><Admin /></AdminGuard>} />
-```
-
-To use `hideNav`:
-```tsx
-<Route path="/admin" element={
-  <AdminGuard>
-    <AppShell hideNav>
-      <Admin />
-    </AppShell>
-  </AdminGuard>
-} />
-```
-
-Wait - actually looking more closely, the Admin page is inside a `/*` catch-all route that wraps everything in `AppShell`. The fix should be to move Admin outside of the `AppShell` wrapper entirely.
-
-### Corrected Technical Change
-
-**File: `src/App.tsx`**
-
-Move the admin routes BEFORE the catch-all protected route so they render without `AppShell`:
-
-```tsx
-{/* Admin routes - WITHOUT AppShell wrapper (has its own layout) */}
-<Route path="/admin/*" element={
-  <AuthGuard>
-    <AdminGuard>
-      <Suspense fallback={<LoadingSpinner />}>
-        <Routes>
-          <Route path="" element={<Admin />} />
-          <Route path="catalog" element={<CatalogMigrationPlaceholder />} />
-          <Route path="notifications/discord" element={<DiscordNotifications />} />
-          <Route path="notifications/pending" element={<PendingNotifications />} />
-          <Route path="shopify-backfill" element={<ShopifyBackfill />} />
-          <Route path="inventory-sync" element={<InventorySyncDashboard />} />
-        </Routes>
-      </Suspense>
-    </AdminGuard>
-  </AuthGuard>
-} />
-```
-
-This way, Admin pages render without the main `AppShell` (which includes the main sidebar), and only show the Admin-specific sidebar.
-
-### Additional Enhancement
-
-Also update the Admin page to include its own header for consistency:
-
-**File: `src/pages/Admin.tsx`**
-
-Add a minimal header with the logo and "Back to Dashboard" at the top left of the admin area for better navigation context.
-
-## Result After Fix
-
-- Admin page will use its full-width layout with only the admin sidebar
-- No more overlapping sidebars
-- Clean separation between main app navigation and admin navigation
-- "Back to Dashboard" link already exists in admin sidebar footer
+Success criteria
+- Clicking Save always triggers the save mutation (we can see “Saving…” UI state).
+- Supabase `region_settings.discord.role_id` updates and persists after refresh.
+- No other admin buttons regress.
 
