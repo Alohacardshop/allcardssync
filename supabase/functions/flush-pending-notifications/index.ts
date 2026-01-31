@@ -250,6 +250,11 @@ Deno.serve(async (req) => {
   }
 });
 
+// Hard-coded role IDs per region (no DB lookup needed)
+const HARDCODED_ROLE_IDS: Record<string, string> = {
+  hawaii: '852989670496272394',
+};
+
 async function getRegionDiscordConfig(supabase: any, regionId: string): Promise<RegionalDiscordConfig | null> {
   try {
     const { data: settings } = await supabase
@@ -262,10 +267,15 @@ async function getRegionDiscordConfig(supabase: any, regionId: string): Promise<
       return null;
     }
     
+    // Use hard-coded role ID for Hawaii, otherwise fall back to DB
+    const roleId = HARDCODED_ROLE_IDS[regionId] 
+      || settings.find((s: any) => s.setting_key === 'discord.role_id')?.setting_value 
+      || null;
+    
     return {
       webhookUrl: settings.find((s: any) => s.setting_key === 'discord.webhook_url')?.setting_value || null,
       channelName: settings.find((s: any) => s.setting_key === 'discord.channel_name')?.setting_value || null,
-      roleId: settings.find((s: any) => s.setting_key === 'discord.role_id')?.setting_value || null,
+      roleId,
       enabled: settings.find((s: any) => s.setting_key === 'discord.enabled')?.setting_value !== false,
     };
   } catch (error) {

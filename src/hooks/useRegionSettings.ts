@@ -31,6 +31,9 @@ export interface RegionSettings {
     end: number;
     timezone: string;
   };
+  
+  // Discord
+  'discord.role_id'?: string;
 }
 
 /**
@@ -109,6 +112,9 @@ export function useRegionSettings() {
     timezone: regionId === 'hawaii' ? 'Pacific/Honolulu' : 'America/Los_Angeles',
   };
 
+  // Hard-coded Discord role ID for Hawaii
+  const discordRoleId = regionId === 'hawaii' ? '852989670496272394' : (settings?.['discord.role_id'] || null);
+
   return {
     regionId,
     settings,
@@ -126,6 +132,7 @@ export function useRegionSettings() {
     ebayAutoSyncEnabled,
     ebayDefaultTemplateId,
     businessHours,
+    discordRoleId,
     
     // Invalidate cache
     refresh: () => queryClient.invalidateQueries({ queryKey: ['region-settings', regionId] }),
