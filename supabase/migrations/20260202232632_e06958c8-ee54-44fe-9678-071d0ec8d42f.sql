@@ -1,0 +1,2 @@
+-- Drop old function signature to resolve overload ambiguity
+DROP FUNCTION IF EXISTS public.create_raw_intake_item(text, text, integer, text, text, text, text, text, text, numeric, numeric, text, text, jsonb, jsonb, text, text, text);

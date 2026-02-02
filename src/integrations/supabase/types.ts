@@ -3428,62 +3428,34 @@ export type Database = {
         }[]
       }
       complete_retry_job: { Args: { p_job_id: string }; Returns: undefined }
-      create_raw_intake_item:
-        | {
-            Args: {
-              brand_title_in?: string
-              card_number_in?: string
-              catalog_snapshot_in?: Json
-              category_in?: string
-              cost_in?: number
-              grade_in?: string
-              main_category_in?: string
-              price_in?: number
-              pricing_snapshot_in?: Json
-              processing_notes_in?: string
-              quantity_in?: number
-              shopify_location_gid_in: string
-              sku_in?: string
-              source_provider_in?: string
-              store_key_in: string
-              sub_category_in?: string
-              subject_in?: string
-              variant_in?: string
-            }
-            Returns: {
-              created_at: string
-              id: string
-              lot_number: string
-            }[]
-          }
-        | {
-            Args: {
-              brand_title_in?: string
-              card_number_in?: string
-              catalog_snapshot_in?: Json
-              category_in?: string
-              cost_in?: number
-              grade_in?: string
-              main_category_in?: string
-              price_in?: number
-              pricing_snapshot_in?: Json
-              processing_notes_in?: string
-              quantity_in?: number
-              shopify_location_gid_in: string
-              sku_in?: string
-              source_provider_in?: string
-              store_key_in: string
-              sub_category_in?: string
-              subject_in?: string
-              variant_in?: string
-              year_in?: string
-            }
-            Returns: {
-              created_at: string
-              id: string
-              lot_number: string
-            }[]
-          }
+      create_raw_intake_item: {
+        Args: {
+          brand_title_in?: string
+          card_number_in?: string
+          catalog_snapshot_in?: Json
+          category_in?: string
+          cost_in?: number
+          grade_in?: string
+          main_category_in?: string
+          price_in?: number
+          pricing_snapshot_in?: Json
+          processing_notes_in?: string
+          quantity_in?: number
+          shopify_location_gid_in: string
+          sku_in?: string
+          source_provider_in?: string
+          store_key_in: string
+          sub_category_in?: string
+          subject_in?: string
+          variant_in?: string
+          year_in?: string
+        }
+        Returns: {
+          created_at: string
+          id: string
+          lot_number: string
+        }[]
+      }
       debug_eval_intake_access: {
         Args: { _location_gid: string; _store_key: string; _user_id: string }
         Returns: Json
