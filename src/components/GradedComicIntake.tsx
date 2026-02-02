@@ -31,7 +31,6 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
   const [certInput, setCertInput] = useState("");
   const [barcodeInput, setBarcodeInput] = useState("");
   const [fetchState, setFetchState] = useState<'idle' | 'loading' | 'success' | 'empty' | 'error'>('idle');
-  const [submitting, setSubmitting] = useState(false);
   const [cgcData, setCgcData] = useState<CGCCertificateData | null>(null);
   const [psaData, setPsaData] = useState<PSACertificateData | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -55,12 +54,19 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
     return input.replace(/\D+/g, '').slice(0, 12);
   };
 
+  // Auto-populate and auto-fetch when barcode is scanned
   useEffect(() => {
     if (debouncedBarcode && debouncedBarcode !== certInput) {
       const sanitized = sanitizeCertNumber(debouncedBarcode);
       setCertInput(sanitized);
       setFormData(prev => ({ ...prev, certNumber: sanitized }));
       setBarcodeInput("");
+      // Auto-fetch after barcode scan
+      if (sanitized.length >= 6) {
+        setTimeout(() => {
+          handleFetchData();
+        }, 100);
+      }
     }
   }, [debouncedBarcode]);
 
@@ -233,26 +239,26 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
       return;
     }
 
-    if (!formData.certNumber || !formData.grade || !formData.price || !formData.cost) {
-      toast.error("Please fill in all required fields");
+    if (!formData.title || !formData.certNumber || !formData.grade || !formData.price || !formData.cost) {
+      toast.error("Please fill in all required fields (Title, Cert #, Grade, Price, Cost)");
       return;
     }
 
     try {
-      setSubmitting(true);
-
       const catalogSnapshot = gradingService === 'psa' 
         ? {
             ...psaData,
             psa_cert: formData.certNumber,
             grading_company: 'PSA',
-            type: 'psa_comic'
+            type: 'psa_comic',
+            year: formData.year
           }
         : {
             ...cgcData,
             cgc_cert: formData.certNumber,
             grading_company: 'CGC',
-            type: 'cgc_comic'
+            type: 'cgc_comic',
+            year: formData.year
           };
 
       await addItem({
@@ -295,8 +301,6 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
 
     } catch (error: any) {
       logger.logError("Submit error", error instanceof Error ? error : new Error(String(error)), { certNumber: formData.certNumber });
-    } finally {
-      setSubmitting(false);
     }
   };
 
@@ -335,7 +339,7 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
               <div className="flex-1">
                 <Input
                   id="cert-input"
-                  placeholder="Enter CGC certificate number (digits only)"
+                  placeholder={`Enter ${gradingService.toUpperCase()} certificate number (digits only)`}
                   value={certInput}
                   onChange={(e) => {
                     const sanitized = sanitizeCertNumber(e.target.value);
@@ -491,10 +495,10 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
 
           <Button 
             onClick={handleSubmit} 
-            disabled={submitting || fetchState === 'loading'}
+            disabled={isAdding || fetchState === 'loading'}
             className="w-full"
           >
-            {submitting ? (
+            {isAdding ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
                 Adding to Batch...

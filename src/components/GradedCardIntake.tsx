@@ -144,7 +144,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
     return input.replace(/\D+/g, '').slice(0, 12); // Max 12 digits
   };
 
-  // Auto-populate cert number when barcode is scanned/entered
+  // Auto-populate cert number and auto-fetch when barcode is scanned/entered
   useEffect(() => {
     if (debouncedBarcode && debouncedBarcode !== certInput) {
       const sanitized = sanitizeCertNumber(debouncedBarcode);
@@ -152,6 +152,12 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
       setFormData(prev => ({ ...prev, certNumber: sanitized }));
       // Clear barcode input after processing
       setBarcodeInput("");
+      // Auto-fetch after barcode scan
+      if (sanitized.length >= 6) {
+        setTimeout(() => {
+          handleFetchData();
+        }, 100);
+      }
     }
   }, [debouncedBarcode]);
 
