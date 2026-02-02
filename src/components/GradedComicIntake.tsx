@@ -261,15 +261,18 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
             year: formData.year
           };
 
+      const variant = `${gradingService.toUpperCase()} ${formData.grade}`;
+      const titleWithVariant = `${formData.title} ${variant}`.trim();
+
       await addItem({
         store_key_in: assignedStore,
         shopify_location_gid_in: selectedLocation,
         quantity_in: formData.quantity,
         grade_in: formData.grade,
         brand_title_in: formData.publisher,
-        subject_in: formData.title,
+        subject_in: titleWithVariant,
         category_in: formData.publisher || "Comics",
-        variant_in: `${gradingService.toUpperCase()} ${formData.grade}`,
+        variant_in: variant,
         card_number_in: formData.issueNumber,
         price_in: parseFloat(formData.price),
         cost_in: parseFloat(formData.cost),
