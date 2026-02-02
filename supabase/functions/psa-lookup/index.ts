@@ -4,7 +4,6 @@ import { CFG } from "../_lib/config.ts";
 import { corsHeaders } from "../_lib/cors.ts";
 import { log, genRequestId } from "../_lib/log.ts";
 import { canCall, report } from "../_lib/circuit.ts";
-import { fetchJson } from "../_lib/http.ts";
 import { 
   buildResponseHeaders, 
   buildJsonResponse,
@@ -12,6 +11,7 @@ import {
   transformPsaApiResponse,
   cacheCertificateData
 } from "./helpers.ts";
+import { scrapeComicCert } from "./scraper.ts";
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -115,8 +115,29 @@ Deno.serve(async (req) => {
       // Fetch cert data with manual handling for 404
       const certResponse = await fetch(certUrl, { headers: authHeaders });
       
-      if (certResponse.status === 404) {
-        log.info('[psa-lookup] Certificate not found in PSA database', { requestId, cert_number });
+      if (certResponse.status === 404 || (await certResponse.clone().json().catch(() => ({})))?.ServerMessage === "No data found") {
+        // API returned 404 - likely a comic. Try scraping the website
+        log.info('[psa-lookup] API returned 404, trying web scrape for comics', { requestId, cert_number });
+        
+        const scrapedData = await scrapeComicCert(cert_number, requestId);
+        
+        if (scrapedData) {
+          report("psa", true);
+          
+          // Cache the scraped data
+          await cacheCertificateData(supabase, cert_number, scrapedData, requestId);
+          
+          return buildJsonResponse(
+            {
+              ok: true,
+              data: scrapedData,
+              source: 'psa_scrape'
+            },
+            { headers }
+          );
+        }
+        
+        // Scraping also failed
         report("psa", true); // API worked, just no data
         return buildJsonResponse(
           { ok: false, error: 'NOT_FOUND', message: 'Certificate not found in PSA database' },
