@@ -4,15 +4,49 @@ interface ScrapedComicData {
   certNumber: string;
   isValid: boolean;
   grade?: string;
+  gradeLabel?: string;      // Full grade label (e.g., "NM+ 9.6")
+  graderNotes?: string;
   year?: string;
-  brandTitle?: string;  // Publisher for comics
-  subject?: string;     // Comic title
-  cardNumber?: string;  // Issue number
-  varietyPedigree?: string;
+  publicationDate?: string;  // Full date (e.g., "2025-01")
+  brandTitle?: string;       // Publisher for comics
+  subject?: string;          // Comic title/name
+  cardNumber?: string;       // Volume number for comics
+  issueNumber?: string;      // Issue number if available
+  varietyPedigree?: string;  // Variant
   category?: string;
+  language?: string;
+  country?: string;
+  pageQuality?: string;
   imageUrl?: string;
   imageUrls?: string[];
   psaUrl: string;
+}
+
+/**
+ * Extracts field value from HTML using label matching
+ */
+function extractField(html: string, label: string): string | undefined {
+  // Try multiple patterns for different HTML structures
+  const patterns = [
+    // Pattern: <dt>Label</dt><dd>Value</dd>
+    new RegExp(`<dt[^>]*>\\s*${label}\\s*</dt>\\s*<dd[^>]*>([^<]+)</dd>`, 'i'),
+    // Pattern: Label</span><span>Value
+    new RegExp(`${label}</[^>]+>\\s*<[^>]+>([^<]+)`, 'i'),
+    // Pattern: Label</th><td>Value
+    new RegExp(`${label}</th>\\s*<td[^>]*>([^<]+)`, 'i'),
+    // Pattern: aria-label="Label" followed by value
+    new RegExp(`aria-label="${label}"[^>]*>([^<]+)`, 'i'),
+    // Pattern: data-label="Label">Value
+    new RegExp(`data-label="${label}"[^>]*>([^<]+)`, 'i'),
+  ];
+
+  for (const pattern of patterns) {
+    const match = html.match(pattern);
+    if (match && match[1]) {
+      return match[1].trim();
+    }
+  }
+  return undefined;
 }
 
 /**
@@ -56,68 +90,97 @@ export async function scrapeComicCert(certNumber: string, requestId: string): Pr
       return null;
     }
 
-    // Extract data from HTML
+    // Extract all fields from HTML
     const result: ScrapedComicData = {
       certNumber,
       isValid: true,
       psaUrl: url
     };
 
-    // Extract grade (e.g., "NM+ 9.6" or just "9.6")
-    const gradeMatch = html.match(/Item Grade\s*<\/[^>]+>\s*<[^>]+>([^<]+)/i) 
-      || html.match(/Item Grade[\s\S]*?<[^>]+>([A-Z\-\+\s]*\d+\.?\d*)/i)
-      || html.match(/>([A-Z\-\+]+\s+\d+\.?\d*)</);
-    if (gradeMatch) {
+    // Extract Item Grade (e.g., "NM+ 9.6")
+    const gradeLabel = extractField(html, 'Item Grade');
+    if (gradeLabel) {
+      result.gradeLabel = gradeLabel;
       // Extract just the numeric grade
-      const numericMatch = gradeMatch[1].match(/(\d+\.?\d*)/);
-      result.grade = numericMatch ? numericMatch[1] : gradeMatch[1].trim();
+      const numericMatch = gradeLabel.match(/(\d+\.?\d*)/);
+      result.grade = numericMatch ? numericMatch[1] : gradeLabel;
     }
 
-    // Extract comic name/subject
-    const nameMatch = html.match(/Name<\/[^>]+>\s*<[^>]+>([^<]+)/i)
-      || html.match(/<h\d[^>]*>#\d+\s+([^<]+)/i);
-    if (nameMatch) {
-      result.subject = nameMatch[1].trim();
+    // Extract Grader Notes
+    const graderNotes = extractField(html, 'Grader Notes');
+    if (graderNotes) {
+      result.graderNotes = graderNotes;
     }
 
-    // Extract publisher (brand)
-    const publisherMatch = html.match(/Publisher<\/[^>]+>\s*<[^>]+>([^<]+)/i);
-    if (publisherMatch) {
-      result.brandTitle = publisherMatch[1].trim();
+    // Extract Name (comic title)
+    const name = extractField(html, 'Name');
+    if (name) {
+      result.subject = name;
     }
 
-    // Extract publication date/year
-    const dateMatch = html.match(/Publication Date<\/[^>]+>\s*<[^>]+>([^<]+)/i);
-    if (dateMatch) {
-      const yearMatch = dateMatch[1].match(/(\d{4})/);
-      result.year = yearMatch ? yearMatch[1] : dateMatch[1].trim();
+    // Extract Volume Number
+    const volumeNumber = extractField(html, 'Volume Number');
+    if (volumeNumber) {
+      result.cardNumber = volumeNumber;
     }
 
-    // Extract volume number as card number
-    const volumeMatch = html.match(/Volume Number<\/[^>]+>\s*<[^>]+>([^<]+)/i);
-    if (volumeMatch) {
-      result.cardNumber = volumeMatch[1].trim();
+    // Extract Issue Number if present
+    const issueNumber = extractField(html, 'Issue Number');
+    if (issueNumber) {
+      result.issueNumber = issueNumber;
     }
 
-    // Extract variant
-    const variantMatch = html.match(/Variant<\/[^>]+>\s*<[^>]+>([^<]+)/i);
-    if (variantMatch) {
-      result.varietyPedigree = variantMatch[1].trim();
+    // Extract Publication Date (e.g., "2025-01")
+    const pubDate = extractField(html, 'Publication Date');
+    if (pubDate) {
+      result.publicationDate = pubDate;
+      const yearMatch = pubDate.match(/(\d{4})/);
+      result.year = yearMatch ? yearMatch[1] : pubDate;
     }
 
-    // Extract category
-    const categoryMatch = html.match(/Category<\/[^>]+>\s*<[^>]+>([^<]+)/i);
-    if (categoryMatch) {
-      result.category = categoryMatch[1].trim();
+    // Extract Publisher
+    const publisher = extractField(html, 'Publisher');
+    if (publisher) {
+      result.brandTitle = publisher;
+    }
+
+    // Extract Variant
+    const variant = extractField(html, 'Variant');
+    if (variant) {
+      result.varietyPedigree = variant;
+    }
+
+    // Extract Language
+    const language = extractField(html, 'Language');
+    if (language) {
+      result.language = language;
+    }
+
+    // Extract Country
+    const country = extractField(html, 'Country');
+    if (country) {
+      result.country = country;
+    }
+
+    // Extract Page Quality
+    const pageQuality = extractField(html, 'Page Quality');
+    if (pageQuality) {
+      result.pageQuality = pageQuality;
+    }
+
+    // Extract Category
+    const category = extractField(html, 'Category');
+    if (category) {
+      result.category = category;
     }
 
     // Extract images from cloudfront URLs
     const imageUrls: string[] = [];
-    const imageMatches = html.matchAll(/https:\/\/d1htnxwo4o0jhw\.cloudfront\.net\/cert\/\d+\/[^"'\s]+\.jpg/g);
+    const imageMatches = html.matchAll(/https:\/\/d1htnxwo4o0jhw\.cloudfront\.net\/cert\/\d+\/[^"'\s]+\.(?:jpg|png|webp)/gi);
     for (const match of imageMatches) {
-      const url = match[0].replace('/thumbnail/', '/').replace('?', '');
-      if (!imageUrls.includes(url)) {
-        imageUrls.push(url);
+      const imgUrl = match[0].replace('/thumbnail/', '/').split('?')[0];
+      if (!imageUrls.includes(imgUrl)) {
+        imageUrls.push(imgUrl);
       }
     }
     
@@ -131,6 +194,9 @@ export async function scrapeComicCert(certNumber: string, requestId: string): Pr
       certNumber,
       hasGrade: !!result.grade,
       hasSubject: !!result.subject,
+      hasPublisher: !!result.brandTitle,
+      hasVariant: !!result.varietyPedigree,
+      hasGraderNotes: !!result.graderNotes,
       imageCount: imageUrls.length
     });
 
