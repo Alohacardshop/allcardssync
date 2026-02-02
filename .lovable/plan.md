@@ -1,65 +1,89 @@
 
-# Plan: Restrict Discord Notifications to Business Hours (8am - 7pm)
+# Plan: Add Source Platform Indicator to Discord Notifications
 
-## Summary
-Add business hours checking (8am - 7pm) to the Discord test button and the flush-pending-notifications edge function so notifications are only sent during operating hours.
+## Goal
+Add a clear source indicator (eBay or Shopify) to Discord notifications so staff can immediately see where each order came from.
 
-## Changes
+## Current Behavior
+- Notifications show "eBay Order", "Store Pickup", or "Online Order" based on tags
+- No explicit "Source: Shopify" or "Source: eBay" field in the Discord embed
 
-### 1. Update DiscordTestButton Component
-**File:** `src/components/admin/DiscordTestButton.tsx`
+## Proposed Changes
 
-- Import `useRegionalDateTime` hook to check if store is open
-- Add a visual indicator showing current store status
-- Disable the button when outside business hours (8am - 7pm)
-- Show a helpful message explaining when notifications can be sent
+### 1. Update `flush-pending-notifications/index.ts`
 
-**Behavior:**
-- Button is active between 8am - 7pm in the region's timezone
-- When disabled, shows "Store Closed - Available 8am-7pm"
-- Uses the existing `isStoreOpen()` function from `useRegionalDateTime`
+Add a new helper function and field to show order source:
 
-### 2. Update Business Hours Default
-**File:** `src/hooks/useRegionSettings.ts`
-
-- Change the default `start` from `10` to `8` (8am instead of 10am)
-- Keep `end` at `19` (7pm)
-
-This ensures new regions default to 8am-7pm business hours.
-
-### 3. Update Edge Function Business Hours Check
-**File:** `supabase/functions/flush-pending-notifications/index.ts`
-
-- Add a business hours check before sending notifications
-- Check the region's configured business hours from `region_settings`
-- Only process notifications if currently within business hours (8am-7pm) for that region
-- Return early with a message if called outside business hours
-
-**New helper function:**
 ```text
-isWithinBusinessHours(regionId, supabase)
-├─ Fetch region's timezone from settings
-├─ Get current hour in that timezone
-└─ Return true if hour >= 8 AND hour < 19
+Add function: getOrderSource(payload)
+  - Returns { emoji: string, label: string }
+  - Logic:
+    - If source_name === 'eBay' OR tags include 'ebay' OR payment_gateway_names includes 'EBAY'
+      → { emoji: '🏷️', label: 'eBay' }
+    - If source_name === 'web' OR source_name === 'online_store'
+      → { emoji: '🛒', label: 'Shopify Website' }
+    - If source_name === 'shopify_draft_order'
+      → { emoji: '📝', label: 'Draft Order' }
+    - Default
+      → { emoji: '🛍️', label: 'Online' }
 ```
 
-### 4. Update useRegionalDateTime Hook
-**File:** `src/hooks/useRegionalDateTime.ts`
+Update `buildOrderEmbed` function to add a Source field:
+```text
+fields.push({ 
+  name: '🔗 Source', 
+  value: `${sourceEmoji} ${sourceLabel}`, 
+  inline: true 
+});
+```
 
-- Update `isStoreOpen()` to use the configured business hours (which will now default to 8am)
-- Ensure consistency with the edge function logic
+### 2. Update `shopify-webhook/index.ts` (Optional Enhancement)
 
----
+Ensure the immediate notifications (sent during business hours) also include the source indicator in the same format for consistency.
+
+## Visual Result
+
+**Before:**
+```
+🌺 Hawaii • New Online Order
+## #1234
+💰 Paid • 📋 Unfulfilled
+👤 Customer: John    💵 Total: $99.99    📦 Type: Online Order
+```
+
+**After:**
+```
+🌺 Hawaii • New Online Order
+## #1234
+💰 Paid • 📋 Unfulfilled
+👤 Customer: John    💵 Total: $99.99    📦 Type: Online Order
+🔗 Source: 🛒 Shopify Website
+```
+
+For eBay orders:
+```
+🌺 Hawaii • New eBay Order
+## 18-14167-10753
+💰 Paid • 📋 Unfulfilled
+👤 Customer: Thomas    💵 Total: $565.70    🏷️ Type: eBay Order
+🔗 Source: 🏷️ eBay
+```
 
 ## Technical Details
 
-### Business Hours Logic
-- **Start:** 8:00 AM (hour >= 8)
-- **End:** 7:00 PM (hour < 19)
-- **Timezone:** Region-specific (Pacific/Honolulu for Hawaii, America/Los_Angeles for Vegas)
-- **Closed days:** Sundays (existing behavior preserved)
+**Files to modify:**
+1. `supabase/functions/flush-pending-notifications/index.ts` - Add source detection and display
+2. `supabase/functions/shopify-webhook/index.ts` - Match source display for immediate notifications
 
-### UI Changes
-The test button will show:
-- **Open:** Normal "Send Test Notification" button
-- **Closed:** Disabled button with tooltip "Store Closed - Available 8am-7pm"
+**Data available in payload for source detection:**
+- `payload.source_name`: "eBay", "web", "pos", etc.
+- `payload.tags`: may include "ebay"
+- `payload.payment_gateway_names`: ["EBAY"], ["shopify_payments"], etc.
+
+## Testing
+
+After deployment:
+1. Wait for the next flush cycle (runs every 10 minutes)
+2. Or manually trigger flush endpoint to verify formatting
+3. Check that Hawaii pending orders display correct source
+
