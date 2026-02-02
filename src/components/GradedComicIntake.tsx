@@ -268,13 +268,14 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
         grade_in: formData.grade,
         brand_title_in: formData.publisher,
         subject_in: formData.title,
-        category_in: "Comics",
+        category_in: formData.publisher || "Comics",
         variant_in: `${gradingService.toUpperCase()} ${formData.grade}`,
         card_number_in: formData.issueNumber,
         price_in: parseFloat(formData.price),
         cost_in: parseFloat(formData.cost),
         sku_in: formData.certNumber,
         main_category_in: formData.mainCategory,
+        year_in: formData.year || null,
         catalog_snapshot_in: catalogSnapshot
       });
 
