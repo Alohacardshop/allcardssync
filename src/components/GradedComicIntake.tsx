@@ -272,6 +272,7 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
         cost_in: parseFloat(formData.cost),
         sku_in: formData.certNumber,
         main_category_in: formData.mainCategory,
+        grading_company_in: gradingService.toUpperCase(),
         catalog_snapshot_in: catalogSnapshot
       });
 
