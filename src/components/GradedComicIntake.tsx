@@ -17,7 +17,6 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { CGCCertificateData } from "@/types/cgc";
 import type { PSACertificateData } from "@/types/psa";
 import { useAddIntakeItem } from "@/hooks/useAddIntakeItem";
-import { PurchaseLocationSelect } from '@/components/ui/PurchaseLocationSelect';
 
 interface GradedComicIntakeProps {
   onBatchAdd?: () => void;
@@ -49,8 +48,7 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
     price: "",
     cost: "",
     quantity: 1,
-    mainCategory: "comics",
-    purchaseLocationId: ""
+    mainCategory: "comics"
   });
 
   const sanitizeCertNumber = (input: string): string => {
@@ -98,8 +96,7 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
       price: "",
       cost: "",
       quantity: 1,
-      mainCategory: "comics",
-      purchaseLocationId: ""
+      mainCategory: "comics"
     });
   }, [gradingService]);
 
@@ -272,29 +269,8 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
         cost_in: parseFloat(formData.cost),
         sku_in: formData.certNumber,
         main_category_in: formData.mainCategory,
-        grading_company_in: gradingService.toUpperCase(),
         catalog_snapshot_in: catalogSnapshot
       });
-
-      // Update purchase location if selected
-      if (formData.purchaseLocationId) {
-        const { data: items } = await supabase
-          .from('intake_items')
-          .select('id')
-          .eq('store_key', assignedStore)
-          .eq('shopify_location_gid', selectedLocation)
-          .eq('sku', formData.certNumber)
-          .is('removed_from_batch_at', null)
-          .order('created_at', { ascending: false })
-          .limit(1);
-        
-        if (items && items.length > 0) {
-          await supabase
-            .from('intake_items')
-            .update({ purchase_location_id: formData.purchaseLocationId })
-            .eq('id', items[0].id);
-        }
-      }
 
       setCertInput("");
       setBarcodeInput("");
@@ -310,8 +286,7 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
         price: "",
         cost: "",
         quantity: 1,
-        mainCategory: "comics",
-        purchaseLocationId: ""
+        mainCategory: "comics"
       });
       
       if (onBatchAdd) {
@@ -513,12 +488,6 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
             </div>
           </div>
 
-          <div>
-            <PurchaseLocationSelect
-              value={formData.purchaseLocationId}
-              onChange={(value) => updateFormField('purchaseLocationId', value)}
-            />
-          </div>
 
           <Button 
             onClick={handleSubmit} 
