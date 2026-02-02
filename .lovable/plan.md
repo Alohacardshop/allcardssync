@@ -1,106 +1,113 @@
 
 
-## Graded Intake Improvements Plan
+## Graded Comic Intake - Fix Missing Data Issues
 
-After reviewing the entire graded intake system (both cards and comics), I found several issues and opportunities for improvement.
+I've identified several issues causing **variant**, **year**, and **category** not to be saved correctly for graded comics.
 
 ---
 
 ### Issues Found
 
-#### 1. Missing Title Validation in GradedComicIntake
-The comic intake requires a title but doesn't validate it before submission. The validation at line 236 only checks for `certNumber`, `grade`, `price`, and `cost` - missing the `title` field which is marked as required in the UI.
+#### 1. Invalid `year_in` Parameter
+The frontend is sending `year_in` but the database function **does not accept this parameter**. The current RPC function signature is:
+```
+store_key_in, shopify_location_gid_in, quantity_in, brand_title_in, subject_in, 
+category_in, variant_in, card_number_in, grade_in, price_in, cost_in, sku_in, 
+source_provider_in, catalog_snapshot_in, pricing_snapshot_in, processing_notes_in, 
+main_category_in, sub_category_in
+```
+There is no `year_in` - the year should only be stored inside `catalog_snapshot_in`.
 
-#### 2. Barcode Auto-Fetch Not Working
-In both `GradedCardIntake` and `GradedComicIntake`, the barcode scanner populates the cert input but doesn't automatically trigger the fetch. Users have to manually click "Fetch Data" after scanning.
+#### 2. Missing `sub_category_in` for Comics
+`GradedCardIntake` sends `sub_category_in` but `GradedComicIntake` doesn't include it.
 
-#### 3. Placeholder Text Mismatch in GradedComicIntake
-Line 338 shows "Enter CGC certificate number" even when PSA is selected. Should dynamically update based on the selected grading service.
+#### 3. Grading Company Defaults to "PSA"
+The database column `grading_company` defaults to `'PSA'`, and the RPC function doesn't accept a parameter to override it. All database records show `grading_company: 'PSA'` even for CGC comics.
 
-#### 4. Year Field Missing in GradedComicIntake
-The year is stored in `formData.year` but not sent to the database via `addItem()`. The form captures year data from fetched certificates but it's never persisted.
-
-#### 5. Duplicate Success Toast in GradedComicIntake
-The component doesn't show a success toast after adding an item because the `useAddIntakeItem` hook handles the toast - this is actually fine, but there's no visual feedback during the short moment between mutation completing and form resetting.
-
-#### 6. isAdding State Not Used
-In `GradedComicIntake`, `isAdding` from `useAddIntakeItem` hook is imported but not used - the component uses its own `submitting` state instead. This creates redundant state tracking.
+#### 4. Variant is Working
+Variant is correctly being set to `${gradingService.toUpperCase()} ${formData.grade}` (e.g., "CGC 9.8"). Database confirms this is saving correctly.
 
 ---
 
-### Proposed Improvements
+### Proposed Fixes
 
-#### 1. Fix Title Validation for Comics
-Add `title` to the required field validation check.
+#### Fix 1: Remove Invalid `year_in` Parameter
+Remove `year_in` from the `addItem()` call in `GradedComicIntake.tsx` - it's not supported by the database function. Year data is already correctly stored in `catalog_snapshot_in`.
 
-#### 2. Auto-Fetch on Barcode Scan
-After the barcode input populates the cert number, automatically trigger the fetch function.
+#### Fix 2: Remove `year_in` from Hook Interface
+Remove `year_in` from `useAddIntakeItem.ts` interface since the database doesn't support it.
 
-#### 3. Dynamic Placeholder Text
-Update the placeholder to show the correct grading service name based on current selection.
+#### Fix 3: Add `sub_category_in` to Comic Intake
+Add sub-category support to comic intake for consistency with card intake.
 
-#### 4. Add Year to Database Payload
-Include the year field in the `addItem()` call so it gets persisted with the intake item.
-
-#### 5. Use Hook's Loading State
-Replace the local `submitting` state with `isAdding` from the hook for consistency.
-
-#### 6. Add Batch Count Display to GradedComicIntake
-The `GradedCardIntake` shows current batch count but `GradedComicIntake` doesn't have this feature.
+#### Fix 4: Update Database Function to Accept `year_in`
+Create a migration to update `create_raw_intake_item` to accept `year_in` and properly insert it into the `year` column of `intake_items`.
 
 ---
 
 ### Technical Implementation Details
 
 **File: `src/components/GradedComicIntake.tsx`**
+- Remove line 278: `year_in: formData.year || null,`
+- Add: `sub_category_in: 'graded_comics',` for proper categorization
 
-1. **Line 236** - Add title validation:
-```typescript
-// Change from:
-if (!formData.certNumber || !formData.grade || !formData.price || !formData.cost) {
-// Change to:
-if (!formData.title || !formData.certNumber || !formData.grade || !formData.price || !formData.cost) {
+**File: `src/hooks/useAddIntakeItem.ts`**
+- Remove line 23: `year_in?: string | null;` from interface
+
+**File: `supabase/migrations/[new]_add_year_to_intake_rpc.sql`**
+Create a new migration to update the RPC function to:
+1. Accept `year_in text DEFAULT NULL` as a new parameter
+2. Insert `year_in` value into the `year` column
+
+---
+
+### Why Year Isn't Saving
+
+The database **does** have a `year` column, but the RPC function never writes to it. The function would need to be updated to:
+1. Accept `year_in` as a parameter
+2. Include `year` in the INSERT column list
+3. Use `year_in` as the value
+
+---
+
+### Database Migration Required
+
+```sql
+-- Update create_raw_intake_item to support year_in parameter
+CREATE OR REPLACE FUNCTION public.create_raw_intake_item(
+  store_key_in text,
+  shopify_location_gid_in text,
+  quantity_in integer DEFAULT 1,
+  brand_title_in text DEFAULT '',
+  subject_in text DEFAULT '',
+  category_in text DEFAULT '',
+  variant_in text DEFAULT '',
+  card_number_in text DEFAULT '',
+  grade_in text DEFAULT '',
+  price_in numeric DEFAULT 0,
+  cost_in numeric DEFAULT NULL,
+  sku_in text DEFAULT '',
+  source_provider_in text DEFAULT 'manual',
+  catalog_snapshot_in jsonb DEFAULT NULL,
+  pricing_snapshot_in jsonb DEFAULT NULL,
+  processing_notes_in text DEFAULT NULL,
+  main_category_in text DEFAULT NULL,
+  sub_category_in text DEFAULT NULL,
+  year_in text DEFAULT NULL  -- NEW PARAMETER
+)
+...
+-- Then add year to INSERT statement:
+INSERT INTO public.intake_items (
+  ...,
+  year,  -- Add this column
+  ...
+)
+VALUES (
+  ...,
+  year_in,  -- Add this value
+  ...
+)
 ```
-
-2. **Line 58-64** - Add auto-fetch after barcode scan:
-```typescript
-useEffect(() => {
-  if (debouncedBarcode && debouncedBarcode !== certInput) {
-    const sanitized = sanitizeCertNumber(debouncedBarcode);
-    setCertInput(sanitized);
-    setFormData(prev => ({ ...prev, certNumber: sanitized }));
-    setBarcodeInput("");
-    // Trigger fetch after a short delay
-    setTimeout(() => handleFetchData(), 100);
-  }
-}, [debouncedBarcode]);
-```
-
-3. **Line 338** - Fix dynamic placeholder:
-```typescript
-// Change from:
-placeholder="Enter CGC certificate number (digits only)"
-// Change to:
-placeholder={`Enter ${gradingService.toUpperCase()} certificate number (digits only)`}
-```
-
-4. **Line 258-273** - Add year to payload:
-```typescript
-await addItem({
-  // ... existing fields
-  catalog_snapshot_in: {
-    ...catalogSnapshot,
-    year: formData.year  // Add year to snapshot
-  }
-});
-```
-
-5. **Remove `submitting` state** - Use `isAdding` from hook instead:
-   - Remove line 34: `const [submitting, setSubmitting] = useState(false);`
-   - Replace `submitting` with `isAdding` in button disabled state and loading indicator
-   - Remove `setSubmitting(true)` and `setSubmitting(false)` calls
-
-6. **Add batch count display** - Import `useCurrentBatch` and `useAuth` hooks, display badge similar to `GradedCardIntake`
 
 ---
 
@@ -108,6 +115,13 @@ await addItem({
 
 | File | Changes |
 |------|---------|
-| `src/components/GradedComicIntake.tsx` | 6 fixes above |
-| `src/components/GradedCardIntake.tsx` | Add auto-fetch on barcode scan |
+| `src/components/GradedComicIntake.tsx` | Remove `year_in`, add `sub_category_in` |
+| `src/hooks/useAddIntakeItem.ts` | Keep `year_in` in interface for future use |
+| `supabase/migrations/[new].sql` | Update RPC to accept and insert `year_in` |
+
+---
+
+### Summary
+
+The main blocker is that the **database RPC function doesn't support `year_in`**. The frontend changes are quick, but properly persisting year data requires a database migration to update the function signature.
 
