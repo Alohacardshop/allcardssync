@@ -15,7 +15,7 @@ import { SubCategoryCombobox } from '@/components/ui/sub-category-combobox';
 import { detectMainCategory } from '@/utils/categoryMapping';
 import { useLogger } from '@/hooks/useLogger';
 import { useAddIntakeItem } from "@/hooks/useAddIntakeItem";
-import { PurchaseLocationSelect } from '@/components/ui/PurchaseLocationSelect';
+
 
 interface BulkCardIntakeProps {
   onBatchAdd?: (item: any) => void;
@@ -39,7 +39,7 @@ export function BulkCardIntake({ onBatchAdd }: BulkCardIntakeProps) {
   const [accessCheckLoading, setAccessCheckLoading] = useState(false);
   const [mainCategory, setMainCategory] = useState('tcg');
   const [subCategory, setSubCategory] = useState('');
-  const [purchaseLocationId, setPurchaseLocationId] = useState('');
+  
 
   // Auto-detect main category when game changes
   React.useEffect(() => {
@@ -186,13 +186,6 @@ export function BulkCardIntake({ onBatchAdd }: BulkCardIntakeProps) {
         processing_notes_in: `Bulk card entry: ${amount} ${selectedGame} cards at $${totalPrice.toFixed(2)} total ($${(totalPrice / amount).toFixed(2)} each)`
       });
 
-      // Update purchase location if selected
-      if (purchaseLocationId && result.id) {
-        await supabase
-          .from('intake_items')
-          .update({ purchase_location_id: purchaseLocationId })
-          .eq('id', result.id);
-      }
 
       if (onBatchAdd) {
         onBatchAdd(result);
@@ -312,12 +305,6 @@ export function BulkCardIntake({ onBatchAdd }: BulkCardIntakeProps) {
             </div>
           )}
 
-          <div>
-            <PurchaseLocationSelect
-              value={purchaseLocationId}
-              onChange={setPurchaseLocationId}
-            />
-          </div>
 
           {/* Add to Batch Button */}
           <Button
