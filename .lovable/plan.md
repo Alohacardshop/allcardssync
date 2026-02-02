@@ -1,89 +1,148 @@
 
-# Plan: Add Source Platform Indicator to Discord Notifications
+# Plan: Add PSA Support to Graded Comics Intake
 
-## Goal
-Add a clear source indicator (eBay or Shopify) to Discord notifications so staff can immediately see where each order came from.
+## Overview
+Add a PSA/CGC grading service toggle to the Graded Comics Intake component, following the same pattern already working in Graded Card Intake. PSA started grading comics in late 2024, so this enables intake of PSA-graded comics and magazines.
 
-## Current Behavior
-- Notifications show "eBay Order", "Store Pickup", or "Online Order" based on tags
-- No explicit "Source: Shopify" or "Source: eBay" field in the Discord embed
+## Changes Required
 
-## Proposed Changes
+### 1. Update `GradedComicIntake.tsx`
 
-### 1. Update `flush-pending-notifications/index.ts`
+**Add grading service state:**
+```text
+const [gradingService, setGradingService] = useState<'psa' | 'cgc'>('cgc');
+```
 
-Add a new helper function and field to show order source:
+**Add RadioGroup toggle in the UI** (before the certificate input):
+```text
+<RadioGroup value={gradingService} onValueChange={...}>
+  <RadioGroupItem value="psa" /> PSA
+  <RadioGroupItem value="cgc" /> CGC
+</RadioGroup>
+```
+
+**Update the fetch function to call the correct edge function:**
+- If `gradingService === 'psa'`: call `psa-lookup` with `{ cert_number: certNumber }`
+- If `gradingService === 'cgc'`: call `cgc-lookup` with `{ certNumber }` (current behavior)
+
+**Map PSA response fields to comic fields:**
+| PSA Field | Comic Field |
+|-----------|-------------|
+| `subject` | `title` |
+| `brandTitle` | `publisher` |
+| `cardNumber` | `issueNumber` |
+| `year` | `year` |
+| `grade` | `grade` |
+| `varietyPedigree` | (for variants/notes) |
+
+**Update display component conditionally:**
+- Show `PSACertificateDisplay` when `gradingService === 'psa'`
+- Show `CGCCertificateDisplay` when `gradingService === 'cgc'`
+
+**Update catalog snapshot on submit:**
+```text
+catalog_snapshot_in: {
+  ...comicData,
+  [gradingService === 'psa' ? 'psa_cert' : 'cgc_cert']: formData.certNumber,
+  grading_company: gradingService.toUpperCase(),
+  type: gradingService === 'psa' ? 'psa_comic' : 'cgc_comic'
+}
+```
+
+**Reset form data when grading service changes:**
+```text
+useEffect(() => {
+  setComicData(null);
+  setFetchState('idle');
+  setError(null);
+  setCertInput("");
+}, [gradingService]);
+```
+
+### 2. Update UI Labels
+
+Update dynamic labels based on selected service:
+- Card title: "Graded Comics Intake (PSA)" or "Graded Comics Intake (CGC)"
+- Certificate input label: "PSA Certificate Number" or "CGC Certificate Number"
+
+### 3. Add Required Imports
 
 ```text
-Add function: getOrderSource(payload)
-  - Returns { emoji: string, label: string }
-  - Logic:
-    - If source_name === 'eBay' OR tags include 'ebay' OR payment_gateway_names includes 'EBAY'
-      → { emoji: '🏷️', label: 'eBay' }
-    - If source_name === 'web' OR source_name === 'online_store'
-      → { emoji: '🛒', label: 'Shopify Website' }
-    - If source_name === 'shopify_draft_order'
-      → { emoji: '📝', label: 'Draft Order' }
-    - Default
-      → { emoji: '🛍️', label: 'Online' }
-```
-
-Update `buildOrderEmbed` function to add a Source field:
-```text
-fields.push({ 
-  name: '🔗 Source', 
-  value: `${sourceEmoji} ${sourceLabel}`, 
-  inline: true 
-});
-```
-
-### 2. Update `shopify-webhook/index.ts` (Optional Enhancement)
-
-Ensure the immediate notifications (sent during business hours) also include the source indicator in the same format for consistency.
-
-## Visual Result
-
-**Before:**
-```
-🌺 Hawaii • New Online Order
-## #1234
-💰 Paid • 📋 Unfulfilled
-👤 Customer: John    💵 Total: $99.99    📦 Type: Online Order
-```
-
-**After:**
-```
-🌺 Hawaii • New Online Order
-## #1234
-💰 Paid • 📋 Unfulfilled
-👤 Customer: John    💵 Total: $99.99    📦 Type: Online Order
-🔗 Source: 🛒 Shopify Website
-```
-
-For eBay orders:
-```
-🌺 Hawaii • New eBay Order
-## 18-14167-10753
-💰 Paid • 📋 Unfulfilled
-👤 Customer: Thomas    💵 Total: $565.70    🏷️ Type: eBay Order
-🔗 Source: 🏷️ eBay
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { PSACertificateDisplay } from "@/components/PSACertificateDisplay";
+import type { PSACertificateData } from "@/types/psa";
 ```
 
 ## Technical Details
 
-**Files to modify:**
-1. `supabase/functions/flush-pending-notifications/index.ts` - Add source detection and display
-2. `supabase/functions/shopify-webhook/index.ts` - Match source display for immediate notifications
+### PSA API Response for Comics
 
-**Data available in payload for source detection:**
-- `payload.source_name`: "eBay", "web", "pos", etc.
-- `payload.tags`: may include "ebay"
-- `payload.payment_gateway_names`: ["EBAY"], ["shopify_payments"], etc.
+PSA returns the same structure for comics as cards:
+- `certNumber`: Certificate number
+- `grade`: Numeric grade (1-10)
+- `brandTitle`: Publisher/Brand (e.g., "Marvel Comics")
+- `subject`: Comic title (e.g., "Amazing Spider-Man")
+- `cardNumber`: Issue number (e.g., "129")
+- `category`: Will show "COMICS" or "MAGAZINES"
+- `year`: Publication year
+- `varietyPedigree`: Variant information
+- `imageUrl`/`imageUrls`: Slab images
 
-## Testing
+### Field Mapping Logic
 
-After deployment:
-1. Wait for the next flush cycle (runs every 10 minutes)
-2. Or manually trigger flush endpoint to verify formatting
-3. Check that Hawaii pending orders display correct source
+```text
+// When gradingService === 'psa'
+setFormData(prev => ({
+  ...prev,
+  title: psaData.subject || "",           // Subject = Comic title
+  publisher: psaData.brandTitle || "",     // Brand = Publisher
+  issueNumber: psaData.cardNumber || "",   // CardNumber = Issue #
+  year: psaData.year || "",
+  grade: psaData.grade || "",
+}));
 
+// When gradingService === 'cgc' (existing logic)
+setFormData(prev => ({
+  ...prev,
+  title: cgcData.title || "",
+  issueNumber: cgcData.issueNumber || "",
+  publisher: cgcData.publisher || cgcData.seriesName || "",
+  year: cgcData.year?.toString() || "",
+  grade: cgcData.grade || "",
+}));
+```
+
+### Database Storage
+
+Both PSA and CGC comics will be stored in `intake_items` with:
+- `grading_company`: "PSA" or "CGC"
+- `psa_cert` or `cgc_cert`: Certificate number (in catalog_snapshot)
+- `main_category`: "comics"
+- `type`: "psa_comic" or "cgc_comic"
+
+## Files to Modify
+
+1. `src/components/GradedComicIntake.tsx` - Add PSA/CGC toggle and dual-API support
+
+## Visual Result
+
+The component will have a radio toggle at the top:
+```
+[○ PSA]  [● CGC]
+
+CGC Certificate Number: [____________] [Fetch Data]
+```
+
+When PSA is selected:
+```
+[● PSA]  [○ CGC]
+
+PSA Certificate Number: [____________] [Fetch Data]
+```
+
+## Testing Approach
+
+1. Toggle between PSA and CGC - form should reset
+2. Enter a PSA comic cert number (when you have one) - should fetch and populate
+3. Enter a CGC comic cert number - existing behavior works
+4. Submit with each service - verify `grading_company` and cert fields saved correctly
