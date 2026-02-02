@@ -2,13 +2,20 @@ export interface PSACertificateData {
   certNumber: string;
   isValid: boolean;
   grade?: string;
+  gradeLabel?: string;        // Full grade label (e.g., "NM+ 9.6")
   year?: string;
-  brandTitle?: string;
-  subject?: string;
-  cardNumber?: string;
-  varietyPedigree?: string;
+  publicationDate?: string;   // Full date (e.g., "2025-01")
+  brandTitle?: string;        // Publisher for comics
+  subject?: string;           // Comic title/name or card subject
+  cardNumber?: string;        // Volume number for comics
+  issueNumber?: string;       // Issue number for comics
+  varietyPedigree?: string;   // Variant
   category?: string;
   gameSport?: string;
+  graderNotes?: string;
+  language?: string;
+  country?: string;
+  pageQuality?: string;       // e.g., "WHITE"
   imageUrl?: string;
   imageUrls?: string[];
   psaUrl: string;
