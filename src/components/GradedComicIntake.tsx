@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2, BookOpen, AlertCircle } from "lucide-react";
@@ -10,9 +11,11 @@ import { useIntakeValidation } from "@/hooks/useIntakeValidation";
 import { useLogger } from "@/hooks/useLogger";
 import { validateCompleteStoreContext, logStoreContext } from "@/utils/storeValidation";
 import { CGCCertificateDisplay } from "@/components/CGCCertificateDisplay";
+import { PSACertificateDisplay } from "@/components/PSACertificateDisplay";
 import { useDebounce } from "@/hooks/useDebounce";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { CGCCertificateData } from "@/types/cgc";
+import type { PSACertificateData } from "@/types/psa";
 import { useAddIntakeItem } from "@/hooks/useAddIntakeItem";
 import { PurchaseLocationSelect } from '@/components/ui/PurchaseLocationSelect';
 
@@ -25,11 +28,13 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
   const logger = useLogger('GradedComicIntake');
   const { mutateAsync: addItem, isPending: isAdding } = useAddIntakeItem();
 
+  const [gradingService, setGradingService] = useState<'psa' | 'cgc'>('cgc');
   const [certInput, setCertInput] = useState("");
   const [barcodeInput, setBarcodeInput] = useState("");
   const [fetchState, setFetchState] = useState<'idle' | 'loading' | 'success' | 'empty' | 'error'>('idle');
   const [submitting, setSubmitting] = useState(false);
-  const [comicData, setComicData] = useState<CGCCertificateData | null>(null);
+  const [cgcData, setCgcData] = useState<CGCCertificateData | null>(null);
+  const [psaData, setPsaData] = useState<PSACertificateData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const debouncedBarcode = useDebounce(barcodeInput, 250);
@@ -75,6 +80,29 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
     }
   }, [formData.price]);
 
+  // Reset form when grading service changes
+  useEffect(() => {
+    setCgcData(null);
+    setPsaData(null);
+    setFetchState('idle');
+    setError(null);
+    setCertInput("");
+    setBarcodeInput("");
+    setFormData({
+      title: "",
+      issueNumber: "",
+      publisher: "",
+      year: "",
+      certNumber: "",
+      grade: "",
+      price: "",
+      cost: "",
+      quantity: 1,
+      mainCategory: "comics",
+      purchaseLocationId: ""
+    });
+  }, [gradingService]);
+
   const updateFormField = (field: string, value: string | number) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
@@ -84,58 +112,106 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
     
     setFetchState('loading');
     setError(null);
-    setComicData(null);
+    setCgcData(null);
+    setPsaData(null);
 
     try {
       updateFormField('certNumber', certNumber);
 
-      logger.logInfo('Looking up CGC cert', { certNumber });
+      if (gradingService === 'psa') {
+        logger.logInfo('Looking up PSA cert', { certNumber });
 
-      const { data, error: invokeError } = await supabase.functions.invoke('cgc-lookup', {
-        body: { 
-          certNumber
+        const { data, error: invokeError } = await supabase.functions.invoke('psa-lookup', {
+          body: { cert_number: certNumber }
+        });
+
+        logger.logDebug('PSA lookup response', { hasData: !!data, hasError: !!invokeError });
+
+        if (invokeError) {
+          throw new Error(invokeError.message || 'Failed to invoke PSA lookup function');
         }
-      });
 
-      logger.logDebug('CGC lookup response', { hasData: !!data, hasError: !!invokeError });
+        if (!data) {
+          throw new Error('No response from PSA lookup service');
+        }
 
-      if (invokeError) {
-        throw new Error(invokeError.message || 'Failed to invoke CGC lookup function');
+        if (!data.ok) {
+          if (data.error === 'NO_DATA') {
+            setFetchState('empty');
+            setError('Certificate not found in PSA database.');
+            toast.info('Certificate not found.');
+            return;
+          }
+          setFetchState('error');
+          setError(data.error || 'Unknown error occurred');
+          toast.error(data.error || 'Failed to fetch comic data');
+          return;
+        }
+
+        const psaCertData = data.data;
+        logger.logInfo('PSA data found', { subject: psaCertData.subject, grade: psaCertData.grade });
+        setPsaData(psaCertData);
+        
+        // Map PSA fields to comic fields
+        setFormData(prev => ({
+          ...prev,
+          title: psaCertData.subject || "",
+          issueNumber: psaCertData.cardNumber || "",
+          publisher: psaCertData.brandTitle || "",
+          year: psaCertData.year || "",
+          grade: psaCertData.grade || "",
+        }));
+
+        setFetchState('success');
+        toast.success("PSA comic data fetched successfully!");
+      } else {
+        // CGC lookup
+        logger.logInfo('Looking up CGC cert', { certNumber });
+
+        const { data, error: invokeError } = await supabase.functions.invoke('cgc-lookup', {
+          body: { certNumber }
+        });
+
+        logger.logDebug('CGC lookup response', { hasData: !!data, hasError: !!invokeError });
+
+        if (invokeError) {
+          throw new Error(invokeError.message || 'Failed to invoke CGC lookup function');
+        }
+
+        if (!data) {
+          throw new Error('No response from CGC lookup service');
+        }
+
+        if (!data.ok) {
+          setFetchState('error');
+          setError(data.error || 'Unknown error occurred');
+          toast.error(data.error || 'Failed to fetch comic data');
+          return;
+        }
+
+        if (!data.data || !data.data.isValid) {
+          setFetchState('empty');
+          setError('Invalid or not found certificate.');
+          toast.info('Certificate not found or invalid.');
+          return;
+        }
+
+        const cgcCertData = data.data;
+        logger.logInfo('CGC data found', { title: cgcCertData.title, grade: cgcCertData.grade });
+        setCgcData(cgcCertData);
+        
+        setFormData(prev => ({
+          ...prev,
+          title: cgcCertData.title || "",
+          issueNumber: cgcCertData.issueNumber || "",
+          publisher: cgcCertData.publisher || cgcCertData.seriesName || "",
+          year: cgcCertData.year?.toString() || "",
+          grade: cgcCertData.grade || "",
+        }));
+
+        setFetchState('success');
+        toast.success("CGC comic data fetched successfully!");
       }
-
-      if (!data) {
-        throw new Error('No response from CGC lookup service');
-      }
-
-      if (!data.ok) {
-        setFetchState('error');
-        setError(data.error || 'Unknown error occurred');
-        toast.error(data.error || 'Failed to fetch comic data');
-        return;
-      }
-
-      if (!data.data || !data.data.isValid) {
-        setFetchState('empty');
-        setError('Invalid or not found certificate.');
-        toast.info('Certificate not found or invalid.');
-        return;
-      }
-
-      const cgcData = data.data;
-      logger.logInfo('CGC data found', { title: cgcData.title, grade: cgcData.grade });
-      setComicData(cgcData);
-      
-      setFormData(prev => ({
-        ...prev,
-        title: cgcData.title || "",
-        issueNumber: cgcData.issueNumber || "",
-        publisher: cgcData.publisher || cgcData.seriesName || "",
-        year: cgcData.year?.toString() || "",
-        grade: cgcData.grade || "",
-      }));
-
-      setFetchState('success');
-      toast.success("Comic data fetched successfully!");
     } catch (error: any) {
       setFetchState('error');
       const errorMsg = error.message || 'Could not reach server.';
@@ -168,6 +244,20 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
     try {
       setSubmitting(true);
 
+      const catalogSnapshot = gradingService === 'psa' 
+        ? {
+            ...psaData,
+            psa_cert: formData.certNumber,
+            grading_company: 'PSA',
+            type: 'psa_comic'
+          }
+        : {
+            ...cgcData,
+            cgc_cert: formData.certNumber,
+            grading_company: 'CGC',
+            type: 'cgc_comic'
+          };
+
       await addItem({
         store_key_in: assignedStore,
         shopify_location_gid_in: selectedLocation,
@@ -176,18 +266,13 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
         brand_title_in: formData.publisher,
         subject_in: formData.title,
         category_in: "Comics",
-        variant_in: `CGC ${formData.grade}`,
+        variant_in: `${gradingService.toUpperCase()} ${formData.grade}`,
         card_number_in: formData.issueNumber,
         price_in: parseFloat(formData.price),
         cost_in: parseFloat(formData.cost),
         sku_in: formData.certNumber,
         main_category_in: formData.mainCategory,
-        catalog_snapshot_in: {
-          ...comicData,
-          cgc_cert: formData.certNumber,
-          grading_company: 'CGC',
-          type: 'cgc_comic'
-        }
+        catalog_snapshot_in: catalogSnapshot
       });
 
       // Update purchase location if selected
@@ -212,7 +297,8 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
 
       setCertInput("");
       setBarcodeInput("");
-      setComicData(null);
+      setCgcData(null);
+      setPsaData(null);
       setFormData({
         title: "",
         issueNumber: "",
@@ -244,12 +330,31 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <BookOpen className="h-5 w-5" />
-            Graded Comics Intake (CGC)
+            Graded Comics Intake ({gradingService.toUpperCase()})
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
+          {/* Grading Service Toggle */}
           <div className="space-y-2">
-            <Label htmlFor="cert-input">CGC Certificate Number</Label>
+            <Label>Grading Service</Label>
+            <RadioGroup
+              value={gradingService}
+              onValueChange={(value: 'psa' | 'cgc') => setGradingService(value)}
+              className="flex gap-4"
+            >
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="psa" id="psa-comic" />
+                <Label htmlFor="psa-comic" className="cursor-pointer font-normal">PSA</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="cgc" id="cgc-comic" />
+                <Label htmlFor="cgc-comic" className="cursor-pointer font-normal">CGC</Label>
+              </div>
+            </RadioGroup>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="cert-input">{gradingService.toUpperCase()} Certificate Number</Label>
             <div className="flex gap-2">
               <div className="flex-1">
                 <Input
@@ -312,10 +417,19 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
             />
           </div>
 
-          {fetchState === 'success' && comicData && (
+          {fetchState === 'success' && gradingService === 'cgc' && cgcData && (
             <div className="space-y-3">
               <CGCCertificateDisplay 
-                cgcData={comicData} 
+                cgcData={cgcData} 
+                className="border-2 border-primary/20 bg-primary/5"
+              />
+            </div>
+          )}
+
+          {fetchState === 'success' && gradingService === 'psa' && psaData && (
+            <div className="space-y-3">
+              <PSACertificateDisplay 
+                psaData={psaData} 
                 className="border-2 border-primary/20 bg-primary/5"
               />
             </div>
