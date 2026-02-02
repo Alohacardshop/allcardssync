@@ -182,6 +182,7 @@ function buildOrderEmbed(regionId: string, payload: any, orderType: OrderType) {
   const payment = getPaymentStatus(payload);
   const fulfillment = getFulfillmentStatus(payload);
   const productImage = extractFirstProductImage(payload);
+  const source = getOrderSource(payload);
   
   // Order date
   const createdAt = payload?.created_at 
@@ -210,6 +211,7 @@ function buildOrderEmbed(regionId: string, payload: any, orderType: OrderType) {
     { name: '👤 Customer', value: safeString(customerName), inline: true },
     { name: '💵 Total', value: safeString(total), inline: true },
     { name: `${orderTypeEmoji(orderType)} Type`, value: orderTypeLabel(orderType), inline: true },
+    { name: '🔗 Source', value: `${source.emoji} ${source.label}`, inline: true },
   ];
   
   if (items) {
@@ -520,4 +522,38 @@ function getOrderType(payload: any): 'shipping' | 'pickup' | 'ebay' {
   }
   
   return 'shipping';
+}
+
+/**
+ * Determines the order source platform (eBay, Shopify, Draft Order, etc.)
+ */
+function getOrderSource(payload: any): { emoji: string; label: string } {
+  const sourceName = payload?.source_name?.toLowerCase() || '';
+  const tags = payload?.tags || '';
+  const tagString = typeof tags === 'string' ? tags.toLowerCase() : (tags as any[]).join(',').toLowerCase();
+  const paymentGateways = payload?.payment_gateway_names || [];
+  const hasEbayGateway = paymentGateways.some((g: string) => g?.toUpperCase() === 'EBAY');
+  
+  // eBay detection: source_name, tags, or payment gateway
+  if (sourceName === 'ebay' || tagString.includes('ebay') || hasEbayGateway) {
+    return { emoji: '🏷️', label: 'eBay' };
+  }
+  
+  // Shopify website orders
+  if (sourceName === 'web' || sourceName === 'online_store' || sourceName === 'shopify') {
+    return { emoji: '🛒', label: 'Shopify Website' };
+  }
+  
+  // Draft orders (manually created)
+  if (sourceName === 'shopify_draft_order' || sourceName === 'draft_order') {
+    return { emoji: '📝', label: 'Draft Order' };
+  }
+  
+  // POS orders (shouldn't typically appear in notifications, but handle anyway)
+  if (sourceName === 'pos' || sourceName === 'shopify_pos') {
+    return { emoji: '🏪', label: 'In-Store POS' };
+  }
+  
+  // Default fallback
+  return { emoji: '🛍️', label: 'Online' };
 }

@@ -436,6 +436,40 @@ function getOrderType(payload: any): 'shipping' | 'pickup' | 'ebay' {
 }
 
 /**
+ * Determines the order source platform (eBay, Shopify, Draft Order, etc.)
+ */
+function getOrderSource(payload: any): { emoji: string; label: string } {
+  const sourceName = payload?.source_name?.toLowerCase() || '';
+  const tags = payload?.tags || '';
+  const tagString = typeof tags === 'string' ? tags.toLowerCase() : (tags as any[]).join(',').toLowerCase();
+  const paymentGateways = payload?.payment_gateway_names || [];
+  const hasEbayGateway = paymentGateways.some((g: string) => g?.toUpperCase() === 'EBAY');
+  
+  // eBay detection: source_name, tags, or payment gateway
+  if (sourceName === 'ebay' || tagString.includes('ebay') || hasEbayGateway) {
+    return { emoji: '🏷️', label: 'eBay' };
+  }
+  
+  // Shopify website orders
+  if (sourceName === 'web' || sourceName === 'online_store' || sourceName === 'shopify') {
+    return { emoji: '🛒', label: 'Shopify Website' };
+  }
+  
+  // Draft orders (manually created)
+  if (sourceName === 'shopify_draft_order' || sourceName === 'draft_order') {
+    return { emoji: '📝', label: 'Draft Order' };
+  }
+  
+  // POS orders (shouldn't typically appear in notifications, but handle anyway)
+  if (sourceName === 'pos' || sourceName === 'shopify_pos') {
+    return { emoji: '🏪', label: 'In-Store POS' };
+  }
+  
+  // Default fallback
+  return { emoji: '🛍️', label: 'Online' };
+}
+
+/**
  * Determines region from order payload using shop domain, fulfillment location, or tags.
  */
 function getOrderRegionFromPayload(payload: any, shopDomain: string | null): string {
@@ -568,13 +602,15 @@ async function sendDiscordNotification(supabase: any, payload: any, shopifyDomai
         return;
       }
 
-      // Add order type badge and region indicator to message
+      // Add order type badge, source, and region indicator to message
       const regionIcon = regionId === 'hawaii' ? '🌺' : '🎰';
       const regionLabel = regionId === 'hawaii' ? 'Hawaii' : 'Las Vegas';
       const orderTypeBadge = orderType === 'ebay' ? '🏷️ **eBay ORDER**' 
                           : orderType === 'pickup' ? '📦 **PICKUP ORDER**' 
                           : '🛍️ **ONLINE ORDER**';
-      const message = `${regionIcon} **${regionLabel}** | ${orderTypeBadge}\n` + renderMessage(config.templates.immediate, payload, roleId, mentionEnabled);
+      const source = getOrderSource(payload);
+      const sourceLine = `🔗 **Source:** ${source.emoji} ${source.label}`;
+      const message = `${regionIcon} **${regionLabel}** | ${orderTypeBadge}\n${sourceLine}\n` + renderMessage(config.templates.immediate, payload, roleId, mentionEnabled);
 
       let barcodeSvg: string | null = null;
       try {
