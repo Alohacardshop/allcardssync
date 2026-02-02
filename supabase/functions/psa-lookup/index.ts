@@ -107,21 +107,49 @@ Deno.serve(async (req) => {
     try {
       const certUrl = `https://api.psacard.com/publicapi/cert/GetByCertNumber/${cert_number}`;
       const imagesUrl = `https://api.psacard.com/publicapi/cert/GetImagesByCertNumber/${cert_number}`;
+      const authHeaders = {
+        'authorization': `bearer ${psaToken}`,
+        'Content-Type': 'application/json'
+      };
 
-      const [certData, imagesData] = await Promise.all([
-        fetchJson<any>(certUrl, {
-          headers: {
-            'authorization': `bearer ${psaToken}`,
-            'Content-Type': 'application/json'
-          }
-        }, { tries: 3, timeoutMs: 10000 }),
-        fetchJson<any[]>(imagesUrl, {
-          headers: {
-            'authorization': `bearer ${psaToken}`,
-            'Content-Type': 'application/json'
-          }
-        }, { tries: 2, timeoutMs: 8000 }).catch(() => null) // Images are optional
-      ]);
+      // Fetch cert data with manual handling for 404
+      const certResponse = await fetch(certUrl, { headers: authHeaders });
+      
+      if (certResponse.status === 404) {
+        log.info('[psa-lookup] Certificate not found in PSA database', { requestId, cert_number });
+        report("psa", true); // API worked, just no data
+        return buildJsonResponse(
+          { ok: false, error: 'NOT_FOUND', message: 'Certificate not found in PSA database' },
+          { status: 404, headers }
+        );
+      }
+      
+      if (!certResponse.ok) {
+        throw new Error(`HTTP ${certResponse.status}: ${certResponse.statusText}`);
+      }
+
+      const certData = await certResponse.json();
+      
+      // Check PSA's own "not found" response format
+      if (certData?.IsValidRequest === true && certData?.ServerMessage === "No data found") {
+        log.info('[psa-lookup] PSA returned no data for cert', { requestId, cert_number });
+        report("psa", true);
+        return buildJsonResponse(
+          { ok: false, error: 'NOT_FOUND', message: 'Certificate not found in PSA database' },
+          { status: 404, headers }
+        );
+      }
+
+      // Fetch images (optional, don't fail if missing)
+      let imagesData = null;
+      try {
+        const imagesResponse = await fetch(imagesUrl, { headers: authHeaders });
+        if (imagesResponse.ok) {
+          imagesData = await imagesResponse.json();
+        }
+      } catch {
+        // Images are optional
+      }
 
       report("psa", true);
       
@@ -137,7 +165,7 @@ Deno.serve(async (req) => {
       if (!certData?.PSACert?.CertNumber) {
         log.warn('[psa-lookup] No valid certificate data', { requestId, cert_number });
         return buildJsonResponse(
-          { ok: false, error: 'NO_DATA' },
+          { ok: false, error: 'NO_DATA', message: 'Invalid certificate data returned' },
           { headers }
         );
       }
@@ -166,10 +194,10 @@ Deno.serve(async (req) => {
       return buildJsonResponse(
         {
           ok: false,
-          error: 'Failed to fetch from PSA API',
+          error: 'API_ERROR',
           message: String(apiError)
         },
-        { status: 500, headers }
+        { status: 502, headers }
       );
     }
 
