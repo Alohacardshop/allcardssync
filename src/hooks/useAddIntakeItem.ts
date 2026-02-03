@@ -55,7 +55,7 @@ export const useAddIntakeItem = () => {
       if (params.sku_in && params.store_key_in) {
         let duplicateQuery = supabase
           .from('intake_items')
-          .select('id, quantity, sku, removed_from_batch_at, lot_id')
+          .select('id, quantity, sku, removed_from_batch_at, lot_id, subject, variant, catalog_snapshot, brand_title, year, grade')
           .eq('sku', params.sku_in)
           .eq('store_key', params.store_key_in)
           .is('deleted_at', null);
@@ -97,7 +97,15 @@ export const useAddIntakeItem = () => {
               quantity: newQuantity,
               lot_id: activeLotId, // Move to current batch
               removed_from_batch_at: null, // Clear any removal flag
-              updated_at: new Date().toISOString()
+              deleted_at: null, // Clear any deletion flag
+              updated_at: new Date().toISOString(),
+              // Update descriptive fields with new data (prefer new over existing)
+              subject: params.subject_in || existing.subject,
+              variant: params.variant_in || existing.variant,
+              catalog_snapshot: params.catalog_snapshot_in || existing.catalog_snapshot,
+              brand_title: params.brand_title_in || existing.brand_title,
+              year: params.year_in || existing.year,
+              grade: params.grade_in || existing.grade,
             })
             .eq('id', existing.id);
 
@@ -140,7 +148,7 @@ export const useAddIntakeItem = () => {
           // Query for the existing item - must match uniq_store_sku_location constraint
           let fallbackQuery = supabase
             .from('intake_items')
-            .select('id, quantity, sku, removed_from_batch_at, lot_id')
+            .select('id, quantity, sku, removed_from_batch_at, lot_id, subject, variant, catalog_snapshot, brand_title, year, grade')
             .eq('sku', params.sku_in)
             .eq('store_key', params.store_key_in)
             .is('deleted_at', null);
@@ -183,7 +191,15 @@ export const useAddIntakeItem = () => {
                 quantity: newQuantity,
                 lot_id: activeLotId, // Move to current batch
                 removed_from_batch_at: null, // Clear any removal flag
-                updated_at: new Date().toISOString()
+                deleted_at: null, // Clear any deletion flag
+                updated_at: new Date().toISOString(),
+                // Update descriptive fields with new data (prefer new over existing)
+                subject: params.subject_in || existing.subject,
+                variant: params.variant_in || existing.variant,
+                catalog_snapshot: params.catalog_snapshot_in || existing.catalog_snapshot,
+                brand_title: params.brand_title_in || existing.brand_title,
+                year: params.year_in || existing.year,
+                grade: params.grade_in || existing.grade,
               })
               .eq('id', existing.id);
 
