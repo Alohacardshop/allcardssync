@@ -200,21 +200,43 @@ export default function E2ETestPage() {
             <CardDescription>Create synthetic inventory items with TEST- prefix</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex flex-wrap gap-3">
-              <Button onClick={() => generateItems(1)} disabled={isGenerating}>
-                {isGenerating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Plus className="h-4 w-4 mr-2" />}
-                Generate 1 Item
-              </Button>
-              <Button onClick={() => generateItems(3)} disabled={isGenerating} variant="secondary">
-                Generate 3 Items
-              </Button>
-              <Button onClick={() => generateItems(5)} disabled={isGenerating} variant="secondary">
-                Generate 5 Items
-              </Button>
-              <Button onClick={loadExistingTestItems} variant="outline">
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Reload
-              </Button>
+            <div className="space-y-3">
+              <div className="flex flex-wrap gap-3">
+                <span className="text-sm text-muted-foreground self-center w-20">Graded:</span>
+                <Button onClick={() => generateItems(1, { gradedOnly: true })} disabled={isGenerating}>
+                  {isGenerating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Plus className="h-4 w-4 mr-2" />}
+                  1 Graded
+                </Button>
+                <Button onClick={() => generateItems(3, { gradedOnly: true })} disabled={isGenerating} variant="secondary">
+                  3 Graded
+                </Button>
+                <Button onClick={() => generateItems(5, { gradedOnly: true })} disabled={isGenerating} variant="secondary">
+                  5 Graded
+                </Button>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <span className="text-sm text-muted-foreground self-center w-20">Raw:</span>
+                <Button onClick={() => generateItems(1, { rawOnly: true })} disabled={isGenerating} variant="outline">
+                  {isGenerating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Plus className="h-4 w-4 mr-2" />}
+                  1 Raw
+                </Button>
+                <Button onClick={() => generateItems(3, { rawOnly: true })} disabled={isGenerating} variant="outline">
+                  3 Raw
+                </Button>
+                <Button onClick={() => generateItems(5, { rawOnly: true })} disabled={isGenerating} variant="outline">
+                  5 Raw
+                </Button>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <span className="text-sm text-muted-foreground self-center w-20">Mixed:</span>
+                <Button onClick={() => generateItems(5)} disabled={isGenerating} variant="secondary">
+                  5 Mixed
+                </Button>
+                <Button onClick={loadExistingTestItems} variant="ghost">
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Reload
+                </Button>
+              </div>
             </div>
             
             {testItems.length > 0 && (

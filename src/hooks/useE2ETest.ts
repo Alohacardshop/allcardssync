@@ -47,7 +47,7 @@ export function useE2ETest() {
   const [state, setState] = useState<E2ETestState>(INITIAL_STATE);
 
   // Generate and insert test items
-  const generateItems = useCallback(async (count: number) => {
+  const generateItems = useCallback(async (count: number, options?: { gradedOnly?: boolean; rawOnly?: boolean }) => {
     setState(s => ({ ...s, isGenerating: true }));
     
     try {
@@ -64,7 +64,9 @@ export function useE2ETest() {
       
       const items = generateTestItems(count, {
         storeKey: 'hawaii',
-        shopifyLocationGid: locationGid
+        shopifyLocationGid: locationGid,
+        gradedOnly: options?.gradedOnly,
+        rawOnly: options?.rawOnly
       });
       
       // Insert into database
