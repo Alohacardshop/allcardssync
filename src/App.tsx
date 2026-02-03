@@ -21,7 +21,7 @@ import { RequireApp } from "@/components/RequireApp";
 // Lazy load heavy routes
 const DashboardHome = React.lazy(() => import("./pages/DashboardHome"));
 const Index = React.lazy(() => import("./pages/Index"));
-const DashboardPage = React.lazy(() => import("./pages/DashboardPage"));
+
 const DocumentsPage = React.lazy(() => import("./features/docs/pages/DocumentsPage"));
 const TestHardwarePage = React.lazy(() => import("./pages/TestHardwarePage"));
 const Inventory = React.lazy(() => import("./pages/Inventory"));
