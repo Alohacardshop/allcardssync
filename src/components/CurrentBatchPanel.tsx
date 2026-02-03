@@ -73,8 +73,11 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
     // Add subject (like card name)
     if (item.subject) parts.push(item.subject)
     
-    // Add variety from catalog_snapshot if not already in subject (for comics)
-    const variety = item.catalog_snapshot && typeof item.catalog_snapshot === 'object' && item.catalog_snapshot !== null && 'varietyPedigree' in item.catalog_snapshot ? item.catalog_snapshot.varietyPedigree : null;
+    // Add variety from catalog_snapshot if not already in subject (check both PSA and CGC field names)
+    const snapshot = item.catalog_snapshot && typeof item.catalog_snapshot === 'object' && item.catalog_snapshot !== null ? item.catalog_snapshot : null;
+    const variety = snapshot 
+      ? (('varietyPedigree' in snapshot ? snapshot.varietyPedigree : null) || ('variety' in snapshot ? snapshot.variety : null))
+      : null;
     if (variety && item.subject && !item.subject.includes(String(variety))) {
       parts.push(String(variety))
     }
