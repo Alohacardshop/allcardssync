@@ -8,6 +8,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { generateTestItems, buildLabelDataFromTestItem, type TestIntakeItem } from '@/lib/testDataGenerator';
 import { zplFromTemplateString } from '@/lib/labels/zpl';
+import { useStore } from '@/contexts/StoreContext';
 
 export type TestItemStatus = 'created' | 'shopify_syncing' | 'shopify_synced' | 'shopify_failed' | 
   'ebay_queued' | 'ebay_processing' | 'ebay_synced' | 'ebay_failed' | 'printed';
@@ -45,26 +46,22 @@ const INITIAL_STATE: E2ETestState = {
 
 export function useE2ETest() {
   const [state, setState] = useState<E2ETestState>(INITIAL_STATE);
+  const { assignedStore, selectedLocation } = useStore();
 
   // Generate and insert test items
   const generateItems = useCallback(async (count: number, options?: { gradedOnly?: boolean; rawOnly?: boolean }) => {
+    // Validate store/location access
+    if (!assignedStore || !selectedLocation) {
+      toast.error('No store or location assigned. Please check your user assignments.');
+      return;
+    }
+    
     setState(s => ({ ...s, isGenerating: true }));
     
     try {
-      // Get location GID from existing items or use default
-      const { data: existingItem } = await supabase
-        .from('intake_items')
-        .select('shopify_location_gid')
-        .eq('store_key', 'hawaii')
-        .not('shopify_location_gid', 'is', null)
-        .limit(1)
-        .maybeSingle();
-      
-      const locationGid = existingItem?.shopify_location_gid || 'gid://shopify/Location/67325100207';
-      
       const items = generateTestItems(count, {
-        storeKey: 'hawaii',
-        shopifyLocationGid: locationGid,
+        storeKey: assignedStore,
+        shopifyLocationGid: selectedLocation,
         gradedOnly: options?.gradedOnly,
         rawOnly: options?.rawOnly
       });
@@ -136,7 +133,7 @@ export function useE2ETest() {
       toast.error('Failed to generate test items');
       setState(s => ({ ...s, isGenerating: false }));
     }
-  }, []);
+  }, [assignedStore, selectedLocation]);
 
   // Sync test items to Shopify
   const syncToShopify = useCallback(async (itemIds: string[]) => {
@@ -173,7 +170,7 @@ export function useE2ETest() {
       
       // Real Shopify sync
       const { data, error } = await supabase.functions.invoke('shopify-sync', {
-        body: { itemIds, storeKey: 'hawaii' }
+        body: { itemIds, storeKey: assignedStore || 'hawaii' }
       });
       
       if (error) throw error;
@@ -206,7 +203,7 @@ export function useE2ETest() {
       }));
       toast.error('Shopify sync failed');
     }
-  }, [state.shopifyDryRun]);
+  }, [state.shopifyDryRun, assignedStore]);
 
   // Queue items for eBay sync
   const queueForEbay = useCallback(async (itemIds: string[]) => {
@@ -397,18 +394,19 @@ export function useE2ETest() {
 
   // Check eBay dry run mode
   const checkEbayDryRun = useCallback(async () => {
+    if (!assignedStore) return;
     try {
       const { data } = await supabase
         .from('ebay_store_config')
         .select('dry_run_mode')
-        .eq('store_key', 'hawaii')
-        .single();
+        .eq('store_key', assignedStore)
+        .maybeSingle();
       
       setState(s => ({ ...s, ebayDryRunEnabled: data?.dry_run_mode ?? true }));
     } catch (error) {
       console.error('Failed to check eBay config:', error);
     }
-  }, []);
+  }, [assignedStore]);
 
   // Toggle Shopify dry run
   const toggleShopifyDryRun = useCallback(() => {
@@ -417,6 +415,8 @@ export function useE2ETest() {
 
   return {
     ...state,
+    assignedStore,
+    selectedLocation,
     generateItems,
     syncToShopify,
     queueForEbay,

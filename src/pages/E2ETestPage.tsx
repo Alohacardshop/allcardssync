@@ -67,6 +67,8 @@ export default function E2ETestPage() {
     isCleaningUp,
     shopifyDryRun,
     ebayDryRunEnabled,
+    assignedStore,
+    selectedLocation,
     generateItems,
     syncToShopify,
     queueForEbay,
@@ -167,6 +169,25 @@ export default function E2ETestPage() {
       </div>
 
       <div className="container mx-auto py-6 px-6 space-y-6">
+        {/* Store/Location Info */}
+        {(!assignedStore || !selectedLocation) ? (
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>No Store/Location Assigned</AlertTitle>
+            <AlertDescription>
+              You need a store and location assignment to generate test items. Please contact your administrator.
+            </AlertDescription>
+          </Alert>
+        ) : (
+          <Alert>
+            <CheckCircle2 className="h-4 w-4" />
+            <AlertTitle>Using: {assignedStore}</AlertTitle>
+            <AlertDescription className="text-xs font-mono truncate">
+              Location: {selectedLocation}
+            </AlertDescription>
+          </Alert>
+        )}
+        
         {/* Safety Alerts */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Alert variant={shopifyDryRun ? 'default' : 'destructive'}>
