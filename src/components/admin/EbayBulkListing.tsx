@@ -8,7 +8,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Package, Search, ShoppingCart, RefreshCw, CheckCircle, Loader2 } from 'lucide-react';
+import { Progress } from '@/components/ui/progress';
+import { Package, Search, ShoppingCart, RefreshCw, CheckCircle, Loader2, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { useEbayListing } from '@/hooks/useEbayListing';
 
@@ -41,7 +42,11 @@ const CATEGORY_OPTIONS = [
   { value: 'comics', label: '📚 Comics' },
 ];
 
-export function EbayBulkListing() {
+interface EbayBulkListingProps {
+  storeKey?: string;
+}
+
+export function EbayBulkListing({ storeKey }: EbayBulkListingProps) {
   const queryClient = useQueryClient();
   const { bulkToggleEbay, queueForEbaySync } = useEbayListing();
   
@@ -50,6 +55,8 @@ export function EbayBulkListing() {
   const [filterStatus, setFilterStatus] = useState<string>('not_listed');
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [isQueueing, setIsQueueing] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(null);
 
   const { data: items, isLoading, refetch } = useQuery({
     queryKey: ['ebay-bulk-listing-items', filterStatus, filterCategory, searchQuery],
@@ -138,6 +145,34 @@ export function EbayBulkListing() {
     }
   };
 
+  const handleImportFromShopify = async () => {
+    if (!storeKey) {
+      toast.error('No store selected');
+      return;
+    }
+    
+    setIsImporting(true);
+    setImportProgress({ current: 0, total: 100 });
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('shopify-import-inventory', {
+        body: { store_key: storeKey, mode: 'sync' }
+      });
+
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error || 'Import failed');
+
+      toast.success(`Imported ${data.imported || 0} items from Shopify`);
+      queryClient.invalidateQueries({ queryKey: ['ebay-bulk-listing-items'] });
+      refetch();
+    } catch (error: any) {
+      toast.error('Import failed: ' + error.message);
+    } finally {
+      setIsImporting(false);
+      setImportProgress(null);
+    }
+  };
+
   const getItemTitle = (item: InventoryItem) => {
     if (item.brand_title && item.subject) {
       return `${item.brand_title} ${item.subject}`;
@@ -175,10 +210,25 @@ export function EbayBulkListing() {
             </CardTitle>
             <CardDescription>Select items to list on eBay</CardDescription>
           </div>
-          <Button variant="outline" size="sm" onClick={() => refetch()}>
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Refresh
-          </Button>
+          <div className="flex gap-2">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={handleImportFromShopify}
+              disabled={isImporting || !storeKey}
+            >
+              {isImporting ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4 mr-2" />
+              )}
+              Import from Shopify
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => refetch()}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">

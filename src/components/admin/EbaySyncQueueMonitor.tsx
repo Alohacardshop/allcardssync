@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { RefreshCw, Play, Trash2, AlertCircle, Clock, CheckCircle, XCircle, Loader2, ExternalLink } from 'lucide-react';
+import { Progress } from '@/components/ui/progress';
+import { RefreshCw, Play, Trash2, AlertCircle, Clock, CheckCircle, XCircle, Loader2, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -39,9 +40,15 @@ const statusConfig: Record<string, { label: string; variant: 'default' | 'second
   failed: { label: 'Failed', variant: 'destructive', icon: <XCircle className="h-3 w-3" /> },
 };
 
-export function EbaySyncQueueMonitor() {
+interface EbaySyncQueueMonitorProps {
+  storeKey?: string;
+}
+
+export function EbaySyncQueueMonitor({ storeKey }: EbaySyncQueueMonitorProps) {
   const queryClient = useQueryClient();
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [processingProgress, setProcessingProgress] = useState<{ current: number; total: number } | null>(null);
 
   const { data: queueItems, isLoading, refetch } = useQuery({
     queryKey: ['ebay-sync-queue', selectedStatus],
@@ -140,6 +147,52 @@ export function EbaySyncQueueMonitor() {
     },
   });
 
+  const processQueueMutation = useMutation({
+    mutationFn: async () => {
+      setIsProcessing(true);
+      setProcessingProgress({ current: 0, total: stats.pending });
+      
+      const batchSize = 10;
+      let processed = 0;
+      let hasMore = true;
+      
+      while (hasMore && processed < 100) { // Safety limit
+        const { data, error } = await supabase.functions.invoke('ebay-sync-processor', {
+          body: { batch_size: batchSize, store_key: storeKey }
+        });
+        
+        if (error) throw error;
+        if (!data.success && data.error) throw new Error(data.error);
+        
+        processed += data.processed || 0;
+        setProcessingProgress({ current: processed, total: stats.pending });
+        
+        // If less than batch_size were processed, we're done
+        if ((data.processed || 0) < batchSize) {
+          hasMore = false;
+        }
+        
+        // Small delay between batches
+        if (hasMore) {
+          await new Promise(r => setTimeout(r, 500));
+        }
+      }
+      
+      return { processed };
+    },
+    onSuccess: (result) => {
+      toast.success(`Processed ${result.processed} items`);
+      queryClient.invalidateQueries({ queryKey: ['ebay-sync-queue'] });
+    },
+    onError: (error: Error) => {
+      toast.error('Processing failed: ' + error.message);
+    },
+    onSettled: () => {
+      setIsProcessing(false);
+      setProcessingProgress(null);
+    },
+  });
+
   const stats = {
     pending: queueItems?.filter(i => i.status === 'pending').length || 0,
     processing: queueItems?.filter(i => i.status === 'processing').length || 0,
@@ -165,10 +218,26 @@ export function EbaySyncQueueMonitor() {
             </CardTitle>
             <CardDescription>Monitor and manage eBay listing synchronization</CardDescription>
           </div>
-          <Button variant="outline" size="sm" onClick={() => refetch()}>
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Refresh
-          </Button>
+          <div className="flex gap-2">
+            {stats.pending > 0 && (
+              <Button 
+                size="sm" 
+                onClick={() => processQueueMutation.mutate()}
+                disabled={isProcessing}
+              >
+                {isProcessing ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Zap className="h-4 w-4 mr-2" />
+                )}
+                {isProcessing ? 'Processing...' : 'Process Queue'}
+              </Button>
+            )}
+            <Button variant="outline" size="sm" onClick={() => refetch()}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -199,6 +268,27 @@ export function EbaySyncQueueMonitor() {
             </div>
           </Card>
         </div>
+
+        {/* Processing Progress */}
+        {isProcessing && processingProgress && (
+          <div className="p-4 bg-muted rounded-lg space-y-2">
+            <div className="flex items-center justify-between text-sm">
+              <span className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Processing eBay queue...
+              </span>
+              <span className="font-medium">
+                {processingProgress.current} / {processingProgress.total}
+              </span>
+            </div>
+            <Progress 
+              value={processingProgress.total > 0 
+                ? (processingProgress.current / processingProgress.total) * 100 
+                : 0
+              } 
+            />
+          </div>
+        )}
 
         {/* Filter Tabs */}
         <Tabs value={selectedStatus} onValueChange={setSelectedStatus}>
