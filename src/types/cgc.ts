@@ -16,6 +16,7 @@ export interface CGCCertificateData {
   barcode?: string;
   certVerificationUrl?: string;
   pageQuality?: string;
+  variety?: string;
   artComments?: string[];
   keyComments?: string[];
   graderNotes?: string[];
