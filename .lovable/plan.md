@@ -1,209 +1,125 @@
 
+## Add Auto-Save to eBay Settings
 
-## Implementing 3 UI Polish Features
+### Problem
+Currently, selecting policies and other settings in the eBay Settings tab only updates local React state. Users must manually click "Save Configuration" to persist changes to the database. This led to your policy selections being lost.
 
-Based on your request, I'll implement these three improvements:
-1. **Priority status borders** on InventoryItemCard
-2. **Animated number counters** on DashboardHome stats
-3. **Toast undo support** for destructive actions
-
----
-
-### 1. Priority Status Borders on Inventory Cards
-
-Add a colored left border (4px) to each inventory card that instantly communicates sync status:
-
-| Status | Border Color | Visual Meaning |
-|--------|--------------|----------------|
-| Error | `destructive` (red) | Needs attention |
-| Synced | `green-500` | Good to go |
-| Queued/Processing | `blue-500` | In progress |
-| Pending | `amber-500` | Waiting |
-| Not synced | Transparent | Default |
-
-**File: `src/components/InventoryItemCard.tsx`**
-
-Update the Card component (around line 267) to add dynamic border classes:
-```tsx
-<Card 
-  className={cn(
-    "transition-all duration-200 border-l-4",
-    item.shopify_sync_status === 'error' && "border-l-destructive",
-    item.shopify_sync_status === 'synced' && item.shopify_product_id && "border-l-green-500",
-    (item.shopify_sync_status === 'queued' || item.shopify_sync_status === 'processing') && "border-l-blue-500",
-    item.shopify_sync_status === 'pending' && "border-l-amber-500",
-    !item.shopify_sync_status && "border-l-transparent",
-    isSelected && "ring-2 ring-primary",
-    item.deleted_at && "opacity-50"
-  )}
-  onMouseEnter={handleMouseEnter}
->
-```
+### Solution
+Implement automatic saving with debouncing so changes persist immediately after selection, with visual feedback showing save status.
 
 ---
 
-### 2. Animated Number Counters on Dashboard Stats
+### Implementation Details
 
-Create a reusable hook that animates numbers counting up when they change (like Stripe's dashboard).
+**1. Add Debounced Auto-Save to `updateConfig`**
 
-**New File: `src/hooks/useAnimatedCounter.ts`**
+Modify the `updateConfig` function to automatically persist changes to the database after a short delay (500ms debounce to batch rapid changes):
+
 ```typescript
-import { useState, useEffect, useRef } from 'react';
+// Add new state for auto-save status
+const [autoSaving, setAutoSaving] = useState(false);
+const saveTimeoutRef = useRef<NodeJS.Timeout>();
 
-export function useAnimatedCounter(
-  targetValue: number,
-  duration: number = 500,
-  enabled: boolean = true
-) {
-  const [displayValue, setDisplayValue] = useState(0);
-  const previousValue = useRef(0);
-  const animationFrame = useRef<number>();
-
-  useEffect(() => {
-    if (!enabled || targetValue === previousValue.current) return;
-
-    const startValue = previousValue.current;
-    const diff = targetValue - startValue;
-    const startTime = performance.now();
-
-    const animate = (currentTime: number) => {
-      const elapsed = currentTime - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-      
-      // Easing function for smooth deceleration
-      const easeOutCubic = 1 - Math.pow(1 - progress, 3);
-      
-      const currentValue = Math.round(startValue + diff * easeOutCubic);
-      setDisplayValue(currentValue);
-
-      if (progress < 1) {
-        animationFrame.current = requestAnimationFrame(animate);
-      } else {
-        previousValue.current = targetValue;
-      }
-    };
-
-    animationFrame.current = requestAnimationFrame(animate);
-
-    return () => {
-      if (animationFrame.current) {
-        cancelAnimationFrame(animationFrame.current);
-      }
-    };
-  }, [targetValue, duration, enabled]);
-
-  return displayValue;
-}
-```
-
-**File: `src/pages/DashboardHome.tsx`**
-
-Update the `StatCard` component to use animated counters:
-```tsx
-import { useAnimatedCounter } from '@/hooks/useAnimatedCounter';
-
-function StatCard({ 
-  label, 
-  value, 
-  icon: Icon, 
-  isLoading,
-}: { 
-  label: string; 
-  value: string | number; 
-  icon: React.ComponentType<{ className?: string }>;
-  isLoading?: boolean;
-}) {
-  const numericValue = typeof value === 'number' ? value : parseInt(value.toString(), 10) || 0;
-  const animatedValue = useAnimatedCounter(numericValue, 600, !isLoading);
+// Replace updateConfig with auto-saving version
+const updateConfig = useCallback((updates: Partial<EbayStoreConfig>) => {
+  if (!selectedConfig) return;
   
-  return (
-    <Card className="relative overflow-hidden">
-      <CardContent className="p-4">
-        <div className="flex items-start justify-between">
-          <div className="space-y-1">
-            <p className="text-sm text-muted-foreground">{label}</p>
-            {isLoading ? (
-              <Skeleton className="h-8 w-16" />
-            ) : (
-              <p className="text-2xl font-semibold tracking-tight tabular-nums">
-                {animatedValue.toLocaleString()}
-              </p>
-            )}
-          </div>
-          <div className="rounded-lg bg-muted p-2">
-            <Icon className="h-5 w-5 text-muted-foreground" />
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-```
-
-The `tabular-nums` class ensures numbers don't jump around during animation.
-
----
-
-### 3. Toast Undo Support for Destructive Actions
-
-Add undo functionality to delete operations using Sonner's built-in action support.
-
-**File: `src/pages/Inventory.tsx`**
-
-Update the delete handler (around line 1095-1099) to include an undo action:
-```tsx
-if (successful > 0) {
-  const message = shopifyRemoved > 0 
-    ? `Deleted ${successful} item${successful > 1 ? 's' : ''} (${shopifyRemoved} from Shopify)`
-    : `Deleted ${successful} item${successful > 1 ? 's' : ''}`;
+  const newConfig = { ...selectedConfig, ...updates };
+  setSelectedConfig(newConfig);
   
-  toast.success(message, {
-    action: {
-      label: 'Undo',
-      onClick: async () => {
-        try {
-          // Restore soft-deleted items
-          await supabase
-            .from('intake_items')
-            .update({ 
-              deleted_at: null, 
-              deleted_reason: null,
-              updated_at: new Date().toISOString()
-            })
-            .in('id', itemIds);
-          
-          toast.success('Items restored');
-          refetch();
-        } catch (error: any) {
-          toast.error('Failed to restore items');
-        }
-      },
-    },
-    duration: 8000, // Longer duration to give time to undo
-  });
-}
+  // Clear existing timeout
+  if (saveTimeoutRef.current) {
+    clearTimeout(saveTimeoutRef.current);
+  }
+  
+  // Debounced auto-save
+  saveTimeoutRef.current = setTimeout(async () => {
+    setAutoSaving(true);
+    try {
+      await supabase
+        .from('ebay_store_config')
+        .update({
+          environment: newConfig.environment,
+          marketplace_id: newConfig.marketplace_id,
+          is_active: newConfig.is_active,
+          default_category_id: newConfig.default_category_id,
+          default_fulfillment_policy_id: newConfig.default_fulfillment_policy_id,
+          default_payment_policy_id: newConfig.default_payment_policy_id,
+          default_return_policy_id: newConfig.default_return_policy_id,
+          title_template: newConfig.title_template,
+          description_template: newConfig.description_template
+        })
+        .eq('id', newConfig.id);
+      
+      toast.success('Settings saved', { duration: 2000 });
+    } catch (error: any) {
+      toast.error('Failed to save: ' + error.message);
+    } finally {
+      setAutoSaving(false);
+    }
+  }, 500);
+}, [selectedConfig]);
+```
+
+**2. Add Saving Indicator**
+
+Replace the manual "Save Configuration" button with an auto-save status indicator:
+
+```tsx
+{/* Auto-save status indicator */}
+<div className="flex justify-end items-center gap-2 text-sm text-muted-foreground">
+  {autoSaving ? (
+    <>
+      <Loader2 className="h-4 w-4 animate-spin" />
+      <span>Saving...</span>
+    </>
+  ) : (
+    <>
+      <CheckCircle className="h-4 w-4 text-green-500" />
+      <span>All changes saved</span>
+    </>
+  )}
+</div>
+```
+
+**3. Cleanup on Unmount**
+
+Add cleanup to prevent memory leaks:
+
+```typescript
+useEffect(() => {
+  return () => {
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+  };
+}, []);
 ```
 
 ---
 
-### Files to Create/Modify
+### Files to Modify
 
-| File | Action | Purpose |
-|------|--------|---------|
-| `src/hooks/useAnimatedCounter.ts` | Create | Reusable animated number hook |
-| `src/pages/DashboardHome.tsx` | Modify | Use animated counters in StatCard |
-| `src/components/InventoryItemCard.tsx` | Modify | Add priority status borders |
-| `src/pages/Inventory.tsx` | Modify | Add undo support to delete toast |
+| File | Changes |
+|------|---------|
+| `src/pages/EbayApp.tsx` | Add `autoSaving` state, `saveTimeoutRef`, replace `updateConfig` with debounced version, replace save button with status indicator, add cleanup effect |
 
 ---
 
-### Visual Impact Summary
+### User Experience
 
-| Feature | Before | After |
-|---------|--------|-------|
-| Status Borders | No visual priority | Instant color-coded status at card edge |
-| Number Counters | Static numbers | Smooth count-up animation on load/change |
-| Delete Toasts | "Items deleted" message | "Items deleted" + Undo button for 8 seconds |
+| Before | After |
+|--------|-------|
+| Select policy from dropdown | Select policy from dropdown |
+| Nothing happens visually | "Saving..." appears briefly |
+| User forgets to click Save | "All changes saved" confirms persistence |
+| Changes lost on navigation | Changes persist immediately |
 
-These changes follow the patterns from Linear (instant feedback), Stripe (animated dashboards), and Gmail/Slack (undo for destructive actions).
+---
 
+### Technical Notes
+
+- **Debounce Duration**: 500ms provides good balance between responsiveness and avoiding excessive API calls
+- **Toast Duration**: Short 2-second toast to avoid notification fatigue
+- **Dependency**: Uses `useCallback` to prevent infinite re-renders while maintaining access to latest `selectedConfig`
+- **No Breaking Changes**: Existing `saveConfig` function retained for any edge cases
