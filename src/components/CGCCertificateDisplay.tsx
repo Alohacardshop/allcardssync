@@ -157,6 +157,13 @@ export const CGCCertificateDisplay = ({ cgcData, className }: CGCCertificateDisp
             </div>
           )}
 
+          {cgcData.variety && (
+            <div>
+              <p className="text-sm text-muted-foreground">Variety</p>
+              <p className="font-medium">{cgcData.variety}</p>
+            </div>
+          )}
+
           {cgcData.autographGrade && (
             <div>
               <p className="text-sm text-muted-foreground">Autograph Grade</p>

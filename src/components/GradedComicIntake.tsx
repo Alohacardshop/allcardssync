@@ -261,7 +261,10 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
             year: formData.year
           };
 
-      const variant = `${gradingService.toUpperCase()} ${formData.grade}`;
+      // Build variant: include variety if available, then grading info
+      const varietyPart = cgcData?.variety || '';
+      const gradePart = `${gradingService.toUpperCase()} ${formData.grade}`;
+      const variant = varietyPart ? `${varietyPart} ${gradePart}` : gradePart;
       const titleWithVariant = `${formData.title} ${variant}`.trim();
 
       await addItem({
