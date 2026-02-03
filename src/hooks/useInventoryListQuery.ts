@@ -10,7 +10,7 @@ export interface InventoryFilters {
   batchFilter: 'all' | 'in_batch' | 'removed_from_batch' | 'current_batch';
   printStatusFilter?: 'all' | 'printed' | 'not-printed';
   typeFilter?: 'all' | 'raw' | 'graded';
-  comicsSubCategory?: string | null;
+  
   searchTerm?: string;
   autoRefreshEnabled?: boolean;
   currentBatchLotId?: string | null;
@@ -33,7 +33,7 @@ export function useInventoryListQuery(filters: InventoryFilters) {
       filters.batchFilter,
       filters.printStatusFilter,
       filters.typeFilter,
-      filters.comicsSubCategory,
+      
       filters.searchTerm,
       filters.currentBatchLotId,
       filters.shopifySyncFilter,
@@ -49,7 +49,7 @@ export function useInventoryListQuery(filters: InventoryFilters) {
         batchFilter,
         printStatusFilter = 'all',
         typeFilter = 'all',
-        comicsSubCategory,
+        
         searchTerm,
         shopifySyncFilter = 'all',
         ebayStatusFilter = 'all',

@@ -125,20 +125,6 @@ export interface ShopifyLocation {
   active: boolean;
 }
 
-/**
- * Inventory Filter Options
- */
-export interface InventoryFilters {
-  search?: string;
-  type?: 'all' | 'graded' | 'raw' | 'comic' | 'other';
-  status?: 'active' | 'sold' | 'errors' | 'deleted' | 'all';
-  storeKey?: string;
-  locationGid?: string;
-  dateFrom?: string;
-  dateTo?: string;
-  priceMin?: number;
-  priceMax?: number;
-}
 
 /**
  * Inventory Sorting Options
