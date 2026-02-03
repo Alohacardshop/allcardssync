@@ -232,7 +232,6 @@ const Inventory = () => {
   // Category tab state
   const [activeTab, setActiveTab] = useState<'raw' | 'graded' | 'raw_comics' | 'graded_comics' | 'sealed'>('raw');
   
-  
   // Auto-refresh state
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
@@ -244,7 +243,6 @@ const Inventory = () => {
   const [syncingRowId, setSyncingRowId] = useState<string | null>(null);
   const [bulkRetrying, setBulkRetrying] = useState(false);
   const [bulkSyncing, setBulkSyncing] = useState(false);
-  
 
   // Auth and error states
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
