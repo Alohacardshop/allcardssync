@@ -1,113 +1,112 @@
 
 
-# Complete Fix: Variety Information Display for Graded Comic Items
+# Graded Comic Flow Verification - Summary & Fixes Needed
 
-## Problem Summary
-The variety information (e.g., "1 1:25 Matteo Scalera Variant Cover") is stored correctly in `catalog_snapshot.varietyPedigree` but is not displayed properly in the batch panel because:
+## Verification Complete
 
-1. The existing item in the database has `subject: "Absolute Superman"` and `variant: "PSA 9.6"` without the variety info
-2. The display logic in `formatCardName()` uses `item.subject` directly without incorporating variety from `catalog_snapshot`
-3. The duplicate update logic (now fixed) wasn't updating descriptive fields
-
-## Solution Overview
-This requires fixes in **3 areas**:
-
-1. **Display Logic** - Update `formatCardName()` to include variety from `catalog_snapshot.varietyPedigree`
-2. **Duplicate Handling** - Already fixed in previous change to `useAddIntakeItem.ts`
-3. **New Item Creation** - Already correct in `GradedComicIntake.tsx` (builds `titleWithVariant` properly)
+After a thorough review of all graded comic components, I identified the current state and remaining issues.
 
 ---
 
-## Technical Details
+## What's Working Correctly
 
-### File 1: `src/components/CurrentBatchPanel.tsx`
-**Change**: Update `formatCardName()` function to incorporate variety information from `catalog_snapshot.varietyPedigree` when displaying comic items.
+| Component | Status | Notes |
+|-----------|--------|-------|
+| `GradedComicIntake.tsx` | Working | Correctly builds title with variety (e.g., "Absolute Superman 1 1:25 Matteo Scalera Variant Cover PSA 9.6") |
+| `useAddIntakeItem.ts` | Fixed | Duplicate handling now updates `subject`, `variant`, `catalog_snapshot`, `brand_title`, `year`, `grade` |
+| `PSACertificateDisplay.tsx` | Working | Shows variety under "Variety:" label |
+| `CGCCertificateDisplay.tsx` | Working | Shows variety when present |
+| `CurrentBatchPanel.tsx` | Partially working | Has fallback for `varietyPedigree` but missing CGC `variety` fallback |
 
-**Current logic (lines 62-89):**
+---
+
+## Issues Requiring Fixes
+
+### Issue 1: Display Logic Missing CGC Variety Fallback
+
+**File:** `src/components/CurrentBatchPanel.tsx`
+
+**Current code (line 77):**
 ```typescript
-const formatCardName = (item: IntakeItem) => {
-  const parts = []
-  // ... adds year, brand, subject, card_number, grade
-  if (item.subject) parts.push(item.subject)
-  // ... adds grading info
-  return parts.length > 0 ? parts.join(' ') : (item.sku || 'Unknown Item')
-}
+const variety = item.catalog_snapshot && typeof item.catalog_snapshot === 'object' 
+  && item.catalog_snapshot !== null && 'varietyPedigree' in item.catalog_snapshot 
+  ? item.catalog_snapshot.varietyPedigree : null;
 ```
 
-**New logic:**
+**Problem:** Only checks for `varietyPedigree` (PSA field), not `variety` (CGC field).
+
+**Fix:** Check both fields:
 ```typescript
-const formatCardName = (item: IntakeItem) => {
-  const parts = []
-  
-  // Get year
-  const year = item.year || (item.catalog_snapshot?.year);
-  if (year) parts.push(year)
-  
-  // Add brand/set
-  if (item.brand_title) parts.push(item.brand_title)
-  
-  // Add subject (like card name)
-  if (item.subject) parts.push(item.subject)
-  
-  // Add variety from catalog_snapshot if not already in subject
-  const variety = item.catalog_snapshot?.varietyPedigree;
-  if (variety && item.subject && !item.subject.includes(variety)) {
-    parts.push(variety)
-  }
-  
-  // Add card number
-  if (item.card_number) parts.push(`#${item.card_number}`)
-  
-  // Handle grading - use PSA for PSA certs
-  if (item.grade && item.psa_cert) {
-    parts.push(`PSA ${item.grade}`)
-  } else if (item.grade) {
-    parts.push(`Grade ${item.grade}`)
-  } else if (item.psa_cert) {
-    parts.push(`PSA ${item.psa_cert}`)
-  }
-  
-  return parts.length > 0 ? parts.join(' ') : (item.sku || 'Unknown Item')
-}
+const snapshot = item.catalog_snapshot && typeof item.catalog_snapshot === 'object' && item.catalog_snapshot !== null ? item.catalog_snapshot : null;
+const variety = snapshot ? (snapshot.varietyPedigree || snapshot.variety) : null;
 ```
 
-This ensures:
-- Existing items (with variety in `catalog_snapshot` but not in `subject`) display correctly
-- New items (where `subject` already includes variety) don't duplicate the variety text
-- The display remains correct for all item types (cards, comics, graded/raw)
+---
+
+### Issue 2: GradedCardIntake Not Including Variety in Subject
+
+**File:** `src/components/GradedCardIntake.tsx` (for trading cards, not comics)
+
+**Current code (lines 414-417):**
+```typescript
+brand_title_in: formData.brandTitle,
+subject_in: formData.subject,  // Raw subject without variety
+```
+
+**Problem:** Unlike `GradedComicIntake.tsx`, the graded CARD intake does not build a combined title with variety info. Trading cards with variety/pedigree info (e.g., "PSA 10 Pop 1") won't show that in the title.
+
+**Recommendation:** Add similar logic to build `subject_in` with variety appended (optional - depends if this is desired for cards).
 
 ---
 
-### File 2: `src/hooks/useAddIntakeItem.ts`
-**Status**: Already fixed in previous change - duplicate handling now updates `subject`, `variant`, `catalog_snapshot`, `brand_title`, `year`, and `grade` fields.
+### Issue 3: Existing Data Not Updated
 
----
+**Current item in database (sku: 125580263):**
+- `subject`: "Absolute Superman" (missing variety)
+- `variant`: "PSA 9.6" (missing variety)  
+- `catalog_snapshot.varietyPedigree`: "1 1:25 Matteo Scalera Variant Cover" (correct)
 
-### File 3: `src/components/GradedComicIntake.tsx`
-**Status**: Already correct - lines 265-278 build `titleWithVariant` by concatenating title + variety + grade info.
+**Options to fix existing data:**
 
----
-
-## Data Migration (Optional)
-For the existing Superman item (id: `3fcb62ff-3425-4f36-89b5-0f18b3b90759`), the user can either:
-
-1. **Re-add the item** (scan the certificate again) - the duplicate logic will now update the title with variety
-2. **Edit manually** via the Edit dialog in the batch panel
-3. **Run a one-time SQL update** (for admin users):
+1. **Re-scan the certificate** - The duplicate logic will now update the title with variety
+2. **Manual edit** via the Edit dialog in the batch panel
+3. **SQL update** (one-time fix):
 ```sql
 UPDATE intake_items 
-SET subject = 'Absolute Superman 1 1:25 Matteo Scalera Variant Cover PSA 9.6',
-    variant = '1 1:25 Matteo Scalera Variant Cover PSA 9.6'
-WHERE id = '3fcb62ff-3425-4f36-89b5-0f18b3b90759';
+SET 
+  subject = 'Absolute Superman 1 1:25 Matteo Scalera Variant Cover PSA 9.6',
+  variant = '1 1:25 Matteo Scalera Variant Cover PSA 9.6'
+WHERE sku = '125580263';
 ```
 
 ---
 
-## Testing Checklist
-After implementation:
-1. Check that existing Superman item displays with variety in batch panel
-2. Add a new PSA comic with variety - verify title includes variety
-3. Re-scan the same certificate - verify quantity updates AND title/variant are preserved
-4. Verify TCG cards still display correctly (no regression)
-5. Verify raw comics without variety info still work
+## Changes to Implement
+
+### Change 1: Fix CurrentBatchPanel display fallback
+
+Update `src/components/CurrentBatchPanel.tsx` line 77 to check both PSA (`varietyPedigree`) and CGC (`variety`) fields:
+
+```typescript
+// Current (only PSA):
+const variety = item.catalog_snapshot && typeof item.catalog_snapshot === 'object' 
+  && item.catalog_snapshot !== null && 'varietyPedigree' in item.catalog_snapshot 
+  ? item.catalog_snapshot.varietyPedigree : null;
+
+// Fixed (both PSA and CGC):
+const snapshot = item.catalog_snapshot && typeof item.catalog_snapshot === 'object' && item.catalog_snapshot !== null ? item.catalog_snapshot : null;
+const variety = snapshot 
+  ? (('varietyPedigree' in snapshot ? snapshot.varietyPedigree : null) || ('variety' in snapshot ? snapshot.variety : null))
+  : null;
+```
+
+---
+
+## Testing After Changes
+
+1. **Check existing Superman item** - Should display "DC Comics Absolute Superman 1 1:25 Matteo Scalera Variant Cover PSA 9.6" in batch panel (due to fallback)
+2. **Add new PSA comic with variety** - Verify title includes variety
+3. **Re-scan same certificate** - Verify quantity updates AND title/variant are preserved with variety
+4. **Add CGC comic** - Verify CGC variety displays correctly (if present)
+5. **Verify trading cards** - Ensure no regression for graded cards
 
