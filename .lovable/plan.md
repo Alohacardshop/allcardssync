@@ -1,73 +1,113 @@
 
-# Fix: Variety Information Missing for Duplicate Items in Graded Comic Intake
+
+# Complete Fix: Variety Information Display for Graded Comic Items
 
 ## Problem Summary
-When adding a PSA-graded comic that has a duplicate SKU (same certificate number already exists in the batch), the variety information (e.g., "1 1:25 Matteo Scalera Variant Cover") is not being saved to the title and variant fields.
+The variety information (e.g., "1 1:25 Matteo Scalera Variant Cover") is stored correctly in `catalog_snapshot.varietyPedigree` but is not displayed properly in the batch panel because:
 
-## Root Cause
-The `useAddIntakeItem` hook has duplicate detection logic that checks if an item with the same SKU already exists. When a duplicate is found, it only updates:
-- `quantity` (incremented)
-- `lot_id` (moved to current batch)
-- `removed_from_batch_at` (cleared)
-- `updated_at` (timestamp)
+1. The existing item in the database has `subject: "Absolute Superman"` and `variant: "PSA 9.6"` without the variety info
+2. The display logic in `formatCardName()` uses `item.subject` directly without incorporating variety from `catalog_snapshot`
+3. The duplicate update logic (now fixed) wasn't updating descriptive fields
 
-It does **NOT** update the descriptive fields like `subject`, `variant`, or `catalog_snapshot`. This means if the original record was created before the variety feature was implemented (or had incomplete data), the new enriched data is discarded.
+## Solution Overview
+This requires fixes in **3 areas**:
+
+1. **Display Logic** - Update `formatCardName()` to include variety from `catalog_snapshot.varietyPedigree`
+2. **Duplicate Handling** - Already fixed in previous change to `useAddIntakeItem.ts`
+3. **New Item Creation** - Already correct in `GradedComicIntake.tsx` (builds `titleWithVariant` properly)
+
+---
 
 ## Technical Details
-The database shows:
-- Certificate #125580263 was first created on Feb 2nd with `subject: "Absolute Superman"` and `variant: "PSA 9.6"` (no variety)
-- The item has been re-added 3 times (quantity: 3)
-- The `catalog_snapshot` correctly contains `varietyPedigree: "1 1:25 Matteo Scalera Variant Cover"` from the most recent PSA lookup
-- But `subject` and `variant` were never updated during subsequent additions
 
-## Solution
-Modify the duplicate handling logic in `useAddIntakeItem.ts` to update the descriptive fields when re-adding an item, ensuring the latest data from the grading service lookup is preserved.
+### File 1: `src/components/CurrentBatchPanel.tsx`
+**Change**: Update `formatCardName()` function to incorporate variety information from `catalog_snapshot.varietyPedigree` when displaying comic items.
 
-### Files to Modify
-
-#### 1. `src/hooks/useAddIntakeItem.ts`
-Update the duplicate handling logic in two places (lines ~94-102 and ~180-188) to include additional fields when updating existing items.
-
-**Current Update (line ~94-102):**
+**Current logic (lines 62-89):**
 ```typescript
-const { error: updateError } = await supabase
-  .from('intake_items')
-  .update({ 
-    quantity: newQuantity,
-    lot_id: activeLotId,
-    removed_from_batch_at: null,
-    updated_at: new Date().toISOString()
-  })
-  .eq('id', existing.id);
+const formatCardName = (item: IntakeItem) => {
+  const parts = []
+  // ... adds year, brand, subject, card_number, grade
+  if (item.subject) parts.push(item.subject)
+  // ... adds grading info
+  return parts.length > 0 ? parts.join(' ') : (item.sku || 'Unknown Item')
+}
 ```
 
-**New Update:**
+**New logic:**
 ```typescript
-const { error: updateError } = await supabase
-  .from('intake_items')
-  .update({ 
-    quantity: newQuantity,
-    lot_id: activeLotId,
-    removed_from_batch_at: null,
-    deleted_at: null,
-    updated_at: new Date().toISOString(),
-    // Update descriptive fields with new data
-    subject: params.subject_in || existing.subject,
-    variant: params.variant_in || existing.variant,
-    catalog_snapshot: params.catalog_snapshot_in || existing.catalog_snapshot,
-    brand_title: params.brand_title_in || existing.brand_title,
-    year: params.year_in || existing.year,
-    grade: params.grade_in || existing.grade,
-  })
-  .eq('id', existing.id);
+const formatCardName = (item: IntakeItem) => {
+  const parts = []
+  
+  // Get year
+  const year = item.year || (item.catalog_snapshot?.year);
+  if (year) parts.push(year)
+  
+  // Add brand/set
+  if (item.brand_title) parts.push(item.brand_title)
+  
+  // Add subject (like card name)
+  if (item.subject) parts.push(item.subject)
+  
+  // Add variety from catalog_snapshot if not already in subject
+  const variety = item.catalog_snapshot?.varietyPedigree;
+  if (variety && item.subject && !item.subject.includes(variety)) {
+    parts.push(variety)
+  }
+  
+  // Add card number
+  if (item.card_number) parts.push(`#${item.card_number}`)
+  
+  // Handle grading - use PSA for PSA certs
+  if (item.grade && item.psa_cert) {
+    parts.push(`PSA ${item.grade}`)
+  } else if (item.grade) {
+    parts.push(`Grade ${item.grade}`)
+  } else if (item.psa_cert) {
+    parts.push(`PSA ${item.psa_cert}`)
+  }
+  
+  return parts.length > 0 ? parts.join(' ') : (item.sku || 'Unknown Item')
+}
 ```
 
-The same change needs to be applied to the second duplicate handling block (race condition fallback around line ~180-188).
+This ensures:
+- Existing items (with variety in `catalog_snapshot` but not in `subject`) display correctly
+- New items (where `subject` already includes variety) don't duplicate the variety text
+- The display remains correct for all item types (cards, comics, graded/raw)
 
-### Testing Required
+---
+
+### File 2: `src/hooks/useAddIntakeItem.ts`
+**Status**: Already fixed in previous change - duplicate handling now updates `subject`, `variant`, `catalog_snapshot`, `brand_title`, `year`, and `grade` fields.
+
+---
+
+### File 3: `src/components/GradedComicIntake.tsx`
+**Status**: Already correct - lines 265-278 build `titleWithVariant` by concatenating title + variety + grade info.
+
+---
+
+## Data Migration (Optional)
+For the existing Superman item (id: `3fcb62ff-3425-4f36-89b5-0f18b3b90759`), the user can either:
+
+1. **Re-add the item** (scan the certificate again) - the duplicate logic will now update the title with variety
+2. **Edit manually** via the Edit dialog in the batch panel
+3. **Run a one-time SQL update** (for admin users):
+```sql
+UPDATE intake_items 
+SET subject = 'Absolute Superman 1 1:25 Matteo Scalera Variant Cover PSA 9.6',
+    variant = '1 1:25 Matteo Scalera Variant Cover PSA 9.6'
+WHERE id = '3fcb62ff-3425-4f36-89b5-0f18b3b90759';
+```
+
+---
+
+## Testing Checklist
 After implementation:
-1. Search for a PSA comic with variety information (e.g., certificate 125580263)
-2. Confirm variety is displayed in the PSA certificate preview
-3. Add to batch - verify title shows variety (e.g., "Absolute Superman 1 1:25 Matteo Scalera Variant Cover PSA 9.6")
-4. Try adding the same certificate again - verify quantity increases AND title/variant remain correct with variety
-5. Check that the batch panel displays the complete title with variety
+1. Check that existing Superman item displays with variety in batch panel
+2. Add a new PSA comic with variety - verify title includes variety
+3. Re-scan the same certificate - verify quantity updates AND title/variant are preserved
+4. Verify TCG cards still display correctly (no regression)
+5. Verify raw comics without variety info still work
+
