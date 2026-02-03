@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { CheckSquare, RotateCcw, Upload, Trash2, Loader2, ShoppingBag } from 'lucide-react';
+import { CheckSquare, RotateCcw, Upload, Trash2, Loader2, ShoppingBag, Printer, Store } from 'lucide-react';
 
 interface BulkActionsToolbarProps {
   selectedCount: number;
@@ -16,6 +16,7 @@ interface BulkActionsToolbarProps {
   onResyncSelected: () => void;
   onDeleteSelected: () => void;
   onBulkToggleEbay?: (enable: boolean) => void;
+  onPrintSelected?: () => void;
 }
 
 export const BulkActionsToolbar = React.memo(({
@@ -31,10 +32,11 @@ export const BulkActionsToolbar = React.memo(({
   onSyncSelected,
   onResyncSelected,
   onDeleteSelected,
-  onBulkToggleEbay
+  onBulkToggleEbay,
+  onPrintSelected
 }: BulkActionsToolbarProps) => {
   return (
-    <div className="flex items-center justify-between">
+    <div className="flex flex-wrap items-center justify-between gap-2">
       <div className="flex items-center space-x-2">
         <Button
           variant="outline"
@@ -62,7 +64,7 @@ export const BulkActionsToolbar = React.memo(({
         )}
       </div>
 
-      <div className="flex items-center space-x-2">
+      <div className="flex flex-wrap items-center gap-2">
         {statusFilter === 'errors' && selectedCount > 0 && (
           <Button
             variant="outline"
@@ -81,6 +83,19 @@ export const BulkActionsToolbar = React.memo(({
 
         {selectedCount > 0 && (
           <>
+            {/* Print Barcodes Button */}
+            {onPrintSelected && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onPrintSelected}
+              >
+                <Printer className="h-4 w-4 mr-2" />
+                Print Barcodes
+              </Button>
+            )}
+            
+            {/* Shopify Sync Buttons */}
             <Button
               variant="outline"
               size="sm"
@@ -90,9 +105,9 @@ export const BulkActionsToolbar = React.memo(({
               {bulkSyncing ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               ) : (
-                <Upload className="h-4 w-4 mr-2" />
+                <Store className="h-4 w-4 mr-2" />
               )}
-              {bulkSyncing ? 'Syncing...' : 'Sync Selected'}
+              {bulkSyncing ? 'Syncing...' : 'List to Shopify'}
             </Button>
 
             <Button
@@ -109,13 +124,13 @@ export const BulkActionsToolbar = React.memo(({
               {bulkSyncing ? 'Resyncing...' : 'Resync Selected'}
             </Button>
 
+            {/* eBay Buttons */}
             {onBulkToggleEbay && (
               <>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => onBulkToggleEbay(true)}
-                  className="text-blue-600 border-blue-300 hover:bg-blue-50"
                 >
                   <ShoppingBag className="h-4 w-4 mr-2" />
                   Add to eBay
@@ -153,7 +168,8 @@ export const BulkActionsToolbar = React.memo(({
     prevProps.totalCount === nextProps.totalCount &&
     prevProps.statusFilter === nextProps.statusFilter &&
     prevProps.bulkRetrying === nextProps.bulkRetrying &&
-    prevProps.bulkSyncing === nextProps.bulkSyncing
+    prevProps.bulkSyncing === nextProps.bulkSyncing &&
+    prevProps.onPrintSelected === nextProps.onPrintSelected
   );
 });
 
