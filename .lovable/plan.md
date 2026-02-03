@@ -1,112 +1,142 @@
 
 
-# Graded Comic Flow Verification - Summary & Fixes Needed
+## Unified Inventory Hub: Filter, List, and Print
 
-## Verification Complete
-
-After a thorough review of all graded comic components, I identified the current state and remaining issues.
+This plan transforms the inventory system into a single, unified hub where all items can be filtered, listed to Shopify/eBay, and have barcodes printed—all from one interface.
 
 ---
 
-## What's Working Correctly
+### Current State
 
-| Component | Status | Notes |
-|-----------|--------|-------|
-| `GradedComicIntake.tsx` | Working | Correctly builds title with variety (e.g., "Absolute Superman 1 1:25 Matteo Scalera Variant Cover PSA 9.6") |
-| `useAddIntakeItem.ts` | Fixed | Duplicate handling now updates `subject`, `variant`, `catalog_snapshot`, `brand_title`, `year`, `grade` |
-| `PSACertificateDisplay.tsx` | Working | Shows variety under "Variety:" label |
-| `CGCCertificateDisplay.tsx` | Working | Shows variety when present |
-| `CurrentBatchPanel.tsx` | Partially working | Has fallback for `varietyPedigree` but missing CGC `variety` fallback |
+**What exists today:**
+- **Inventory page** (`/inventory`): Browse items with filters for type, status, batch, and print status. Can sync to Shopify and toggle eBay flags. No barcode printing.
+- **Barcode Printing page** (`/barcode-printing`): Pull items from Shopify, filter by date/tags/category, and print barcodes. No marketplace listing actions.
+- Both pages query the same `intake_items` table but operate independently.
+
+**Gap identified:**
+- No way to filter by "not synced to Shopify" or "not synced to eBay" 
+- No barcode printing from the main Inventory page
+- Marketplace listing and barcode printing are separate workflows
 
 ---
 
-## Issues Requiring Fixes
+### Proposed Solution
 
-### Issue 1: Display Logic Missing CGC Variety Fallback
+Create a unified "Operations Hub" that combines filtering, marketplace listing, and barcode printing into one streamlined workflow.
 
-**File:** `src/components/CurrentBatchPanel.tsx`
+---
 
-**Current code (line 77):**
-```typescript
-const variety = item.catalog_snapshot && typeof item.catalog_snapshot === 'object' 
-  && item.catalog_snapshot !== null && 'varietyPedigree' in item.catalog_snapshot 
-  ? item.catalog_snapshot.varietyPedigree : null;
+### Implementation Details
+
+**Phase 1: Enhanced Filters on Inventory Page**
+
+Add new filter dropdowns to `useInventoryListQuery.ts` and the Inventory UI:
+
+| Filter | Options | Database Column |
+|--------|---------|-----------------|
+| Shopify Sync | All, Not Synced, Synced, Error | `shopify_product_id`, `shopify_sync_status` |
+| eBay Status | All, Not Listed, Listed, Queued, Error | `ebay_listing_id`, `ebay_sync_status` |
+| Print Status | All, Printed, Not Printed | `printed_at` |
+| Game/Sport | Dynamic from main_category | `main_category` |
+| Date Added | Today, Yesterday, 7 Days, 30 Days, Custom | `created_at` |
+
+**Phase 2: Unified Bulk Actions Toolbar**
+
+Enhance `BulkActionsToolbar.tsx` to include all operations:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  ☑ Select All (125)  │  Clear Selection  │  87 selected         │
+├─────────────────────────────────────────────────────────────────┤
+│  [🛒 List to Shopify]  [📦 List to eBay]  [🏷️ Print Barcodes]  │
+│  [↻ Resync Selected]   [🗑️ Delete Selected (admin)]            │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-**Problem:** Only checks for `varietyPedigree` (PSA field), not `variety` (CGC field).
+- **List to Shopify**: Queues selected unsynced items for Shopify sync
+- **List to eBay**: Sets `list_on_ebay=true` and optionally queues for immediate listing
+- **Print Barcodes**: Opens template selector dialog and prints selected items
 
-**Fix:** Check both fields:
-```typescript
-const snapshot = item.catalog_snapshot && typeof item.catalog_snapshot === 'object' && item.catalog_snapshot !== null ? item.catalog_snapshot : null;
-const variety = snapshot ? (snapshot.varietyPedigree || snapshot.variety) : null;
+**Phase 3: Barcode Printing Integration**
+
+Add printing capability directly to the Inventory page:
+
+1. Create `PrintFromInventoryDialog.tsx` component:
+   - Template selector dropdown (reuse from PulledItemsFilter)
+   - Copy count input
+   - "Mark as printed" toggle
+   - Print button with progress indicator
+
+2. Wire into BulkActionsToolbar print action
+
+3. Reuse existing print infrastructure:
+   - `printQueue.enqueueSafe()` from `@/lib/print/queueInstance`
+   - `zplFromTemplateString()` for template rendering
+   - `label_templates` table for templates
+
+**Phase 4: Quick Filter Presets**
+
+Add one-click filter presets above the main filter panel:
+
 ```
+┌────────────────────────────────────────────────────────────────┐
+│  Quick Filters:                                                 │
+│  [📋 Ready to Sync]  [⚠️ Sync Errors]  [🏷️ Needs Barcode]      │
+│  [📦 Not on eBay]    [📅 Today's Intake]  [🧹 Clear All]       │
+└────────────────────────────────────────────────────────────────┘
+```
+
+Each preset sets multiple filters at once:
+- **Ready to Sync**: `shopify_product_id IS NULL` + `deleted_at IS NULL`
+- **Sync Errors**: `shopify_sync_status = 'error'`
+- **Needs Barcode**: `printed_at IS NULL` + `deleted_at IS NULL`
+- **Not on eBay**: `ebay_listing_id IS NULL` + `list_on_ebay = false`
+- **Today's Intake**: `created_at >= today`
 
 ---
 
-### Issue 2: GradedCardIntake Not Including Variety in Subject
+### File Changes Summary
 
-**File:** `src/components/GradedCardIntake.tsx` (for trading cards, not comics)
-
-**Current code (lines 414-417):**
-```typescript
-brand_title_in: formData.brandTitle,
-subject_in: formData.subject,  // Raw subject without variety
-```
-
-**Problem:** Unlike `GradedComicIntake.tsx`, the graded CARD intake does not build a combined title with variety info. Trading cards with variety/pedigree info (e.g., "PSA 10 Pop 1") won't show that in the title.
-
-**Recommendation:** Add similar logic to build `subject_in` with variety appended (optional - depends if this is desired for cards).
+| File | Changes |
+|------|---------|
+| `src/hooks/useInventoryListQuery.ts` | Add new filter parameters for Shopify sync, eBay status |
+| `src/pages/Inventory.tsx` | Add new filter dropdowns, print button handler, quick presets |
+| `src/components/inventory/BulkActionsToolbar.tsx` | Add Print Barcodes button |
+| `src/components/inventory/PrintFromInventoryDialog.tsx` | NEW: Print dialog with template selection |
+| `src/components/inventory/QuickFilterPresets.tsx` | NEW: Quick filter preset buttons |
+| `src/components/inventory/InventoryFilters.tsx` | NEW: Extract filter UI into separate component for clarity |
 
 ---
 
-### Issue 3: Existing Data Not Updated
+### Technical Notes
 
-**Current item in database (sku: 125580263):**
-- `subject`: "Absolute Superman" (missing variety)
-- `variant`: "PSA 9.6" (missing variety)  
-- `catalog_snapshot.varietyPedigree`: "1 1:25 Matteo Scalera Variant Cover" (correct)
+**Database columns used:**
+- `shopify_product_id` - NULL means not synced to Shopify
+- `shopify_sync_status` - 'pending', 'success', 'error', 'synced'
+- `ebay_listing_id` - NULL means not listed on eBay
+- `ebay_sync_status` - 'pending', 'queued', 'processing', 'synced', 'error'
+- `list_on_ebay` - boolean flag for eBay eligibility
+- `printed_at` - timestamp when barcode was printed
+- `main_category` - 'tcg', 'comics', 'sports', etc.
+- `created_at` - when item was added to intake
 
-**Options to fix existing data:**
-
-1. **Re-scan the certificate** - The duplicate logic will now update the title with variety
-2. **Manual edit** via the Edit dialog in the batch panel
-3. **SQL update** (one-time fix):
-```sql
-UPDATE intake_items 
-SET 
-  subject = 'Absolute Superman 1 1:25 Matteo Scalera Variant Cover PSA 9.6',
-  variant = '1 1:25 Matteo Scalera Variant Cover PSA 9.6'
-WHERE sku = '125580263';
-```
+**Existing hooks to reuse:**
+- `useBatchSendToShopify` - for bulk Shopify sync
+- `useEbayListing.bulkToggleEbay()` - for bulk eBay flagging
+- `useEbayListing.queueForEbaySync()` - for queueing eBay listings
+- `printQueue.enqueueSafe()` - for printing
 
 ---
 
-## Changes to Implement
+### User Workflow After Implementation
 
-### Change 1: Fix CurrentBatchPanel display fallback
+1. Navigate to `/inventory`
+2. Click **"Needs Barcode"** quick preset (filters to unprinted items)
+3. Select desired items using checkboxes
+4. Click **"Print Barcodes"** → select template → print
+5. Click **"Ready to Sync"** preset (filters to un-synced items)
+6. Select items → click **"List to Shopify"**
+7. For eBay, use **"Not on eBay"** preset → select → click **"List to eBay"**
 
-Update `src/components/CurrentBatchPanel.tsx` line 77 to check both PSA (`varietyPedigree`) and CGC (`variety`) fields:
-
-```typescript
-// Current (only PSA):
-const variety = item.catalog_snapshot && typeof item.catalog_snapshot === 'object' 
-  && item.catalog_snapshot !== null && 'varietyPedigree' in item.catalog_snapshot 
-  ? item.catalog_snapshot.varietyPedigree : null;
-
-// Fixed (both PSA and CGC):
-const snapshot = item.catalog_snapshot && typeof item.catalog_snapshot === 'object' && item.catalog_snapshot !== null ? item.catalog_snapshot : null;
-const variety = snapshot 
-  ? (('varietyPedigree' in snapshot ? snapshot.varietyPedigree : null) || ('variety' in snapshot ? snapshot.variety : null))
-  : null;
-```
-
----
-
-## Testing After Changes
-
-1. **Check existing Superman item** - Should display "DC Comics Absolute Superman 1 1:25 Matteo Scalera Variant Cover PSA 9.6" in batch panel (due to fallback)
-2. **Add new PSA comic with variety** - Verify title includes variety
-3. **Re-scan same certificate** - Verify quantity updates AND title/variant are preserved with variety
-4. **Add CGC comic** - Verify CGC variety displays correctly (if present)
-5. **Verify trading cards** - Ensure no regression for graded cards
+All operations in one place, with smart filters to quickly find items needing action.
 
