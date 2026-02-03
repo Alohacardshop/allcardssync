@@ -1,5 +1,6 @@
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { startOfDay, subDays } from 'date-fns';
 
 export interface InventoryFilters {
   storeKey: string;
@@ -13,6 +14,10 @@ export interface InventoryFilters {
   searchTerm?: string;
   autoRefreshEnabled?: boolean;
   currentBatchLotId?: string | null;
+  // New filters for unified hub
+  shopifySyncFilter?: 'all' | 'not-synced' | 'synced' | 'error';
+  ebayStatusFilter?: 'all' | 'not-listed' | 'listed' | 'queued' | 'error';
+  dateRangeFilter?: 'all' | 'today' | 'yesterday' | '7days' | '30days';
 }
 
 const PAGE_SIZE = 25;
@@ -31,6 +36,9 @@ export function useInventoryListQuery(filters: InventoryFilters) {
       filters.comicsSubCategory,
       filters.searchTerm,
       filters.currentBatchLotId,
+      filters.shopifySyncFilter,
+      filters.ebayStatusFilter,
+      filters.dateRangeFilter,
     ],
     queryFn: async ({ pageParam = 0 }) => {
       const {
@@ -43,6 +51,9 @@ export function useInventoryListQuery(filters: InventoryFilters) {
         typeFilter = 'all',
         comicsSubCategory,
         searchTerm,
+        shopifySyncFilter = 'all',
+        ebayStatusFilter = 'all',
+        dateRangeFilter = 'all',
       } = filters;
 
       // Build query with minimal columns for list view (reduced payload)
@@ -70,7 +81,14 @@ export function useInventoryListQuery(filters: InventoryFilters) {
           sold_at,
           card_number,
           ebay_price_check,
-          shopify_snapshot
+          shopify_snapshot,
+          ebay_listing_id,
+          ebay_sync_status,
+          list_on_ebay,
+          vendor,
+          year,
+          category,
+          variant
         `,
           { count: 'exact' }
         )
@@ -128,11 +146,61 @@ export function useInventoryListQuery(filters: InventoryFilters) {
         query = query.eq('lot_id', filters.currentBatchLotId).is('removed_from_batch_at', null);
       }
 
-      // Apply print status filter (Raw cards only)
+      // Apply print status filter
       if (printStatusFilter === 'printed') {
         query = query.not('printed_at', 'is', null);
       } else if (printStatusFilter === 'not-printed') {
         query = query.is('printed_at', null);
+      }
+
+      // Apply Shopify sync filter
+      if (shopifySyncFilter === 'not-synced') {
+        query = query.is('shopify_product_id', null);
+      } else if (shopifySyncFilter === 'synced') {
+        query = query.not('shopify_product_id', 'is', null);
+      } else if (shopifySyncFilter === 'error') {
+        query = query.eq('shopify_sync_status', 'error');
+      }
+
+      // Apply eBay status filter
+      if (ebayStatusFilter === 'not-listed') {
+        query = query.is('ebay_listing_id', null);
+      } else if (ebayStatusFilter === 'listed') {
+        query = query.not('ebay_listing_id', 'is', null);
+      } else if (ebayStatusFilter === 'queued') {
+        query = query.eq('ebay_sync_status', 'queued');
+      } else if (ebayStatusFilter === 'error') {
+        query = query.eq('ebay_sync_status', 'error');
+      }
+
+      // Apply date range filter
+      if (dateRangeFilter !== 'all') {
+        const now = new Date();
+        let fromDate: Date;
+
+        switch (dateRangeFilter) {
+          case 'today':
+            fromDate = startOfDay(now);
+            break;
+          case 'yesterday':
+            fromDate = startOfDay(subDays(now, 1));
+            break;
+          case '7days':
+            fromDate = startOfDay(subDays(now, 7));
+            break;
+          case '30days':
+            fromDate = startOfDay(subDays(now, 30));
+            break;
+          default:
+            fromDate = startOfDay(now);
+        }
+
+        query = query.gte('created_at', fromDate.toISOString());
+        
+        // For yesterday, also add upper bound
+        if (dateRangeFilter === 'yesterday') {
+          query = query.lt('created_at', startOfDay(now).toISOString());
+        }
       }
 
       // Apply search filter - search across multiple fields

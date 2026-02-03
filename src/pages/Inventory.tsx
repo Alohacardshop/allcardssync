@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useRef, lazy, Suspense, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -24,6 +24,8 @@ import { InventoryDeleteDialog } from '@/components/InventoryDeleteDialog';
 import { ConfirmationDialog } from '@/components/ConfirmationDialog';
 import { RefreshControls } from '@/components/RefreshControls';
 import { BulkActionsToolbar } from '@/components/inventory/BulkActionsToolbar';
+import { QuickFilterPresets, QuickFilterState } from '@/components/inventory/QuickFilterPresets';
+import { PrintFromInventoryDialog } from '@/components/inventory/PrintFromInventoryDialog';
 import { PageHeader } from '@/components/layout/PageHeader';
 
 import { useInventoryListQuery } from '@/hooks/useInventoryListQuery';
@@ -218,6 +220,15 @@ const Inventory = () => {
     return (localStorage.getItem('inventory-batch-filter') as 'all' | 'in_batch' | 'removed_from_batch' | 'current_batch') || 'all';
   });
   
+  // New unified hub filters
+  const [shopifySyncFilter, setShopifySyncFilter] = useState<'all' | 'not-synced' | 'synced' | 'error'>('all');
+  const [ebayStatusFilter, setEbayStatusFilter] = useState<'all' | 'not-listed' | 'listed' | 'queued' | 'error'>('all');
+  const [dateRangeFilter, setDateRangeFilter] = useState<'all' | 'today' | 'yesterday' | '7days' | '30days'>('all');
+  const [activeQuickFilter, setActiveQuickFilter] = useState<string | null>(null);
+  
+  // Print dialog state
+  const [showPrintDialog, setShowPrintDialog] = useState(false);
+  
   // Category tab state
   const [activeTab, setActiveTab] = useState<'raw' | 'graded' | 'raw_comics' | 'graded_comics' | 'sealed'>('raw');
   const [comicsSubCategory, setComicsSubCategory] = useState<'graded' | 'raw'>('graded');
@@ -329,6 +340,9 @@ const Inventory = () => {
     searchTerm: debouncedSearchTerm,
     autoRefreshEnabled,
     currentBatchLotId: currentBatch?.items?.[0]?.lot_id,
+    shopifySyncFilter,
+    ebayStatusFilter,
+    dateRangeFilter,
   });
 
   // Flatten paginated data
@@ -873,6 +887,52 @@ const Inventory = () => {
     setSelectedItems(new Set());
   }, []);
 
+  // Quick filter preset handler
+  const handleApplyQuickFilter = useCallback((preset: Partial<QuickFilterState>) => {
+    // Set individual filter states from preset
+    if (preset.shopifySyncFilter) setShopifySyncFilter(preset.shopifySyncFilter);
+    if (preset.ebayStatusFilter) setEbayStatusFilter(preset.ebayStatusFilter);
+    if (preset.printStatusFilter) setPrintStatusFilter(preset.printStatusFilter);
+    if (preset.dateRangeFilter) setDateRangeFilter(preset.dateRangeFilter);
+    if (preset.statusFilter) setStatusFilter(preset.statusFilter);
+    
+    // Determine which preset was applied for highlighting
+    if (preset.shopifySyncFilter === 'not-synced') setActiveQuickFilter('ready-to-sync');
+    else if (preset.statusFilter === 'errors') setActiveQuickFilter('sync-errors');
+    else if (preset.printStatusFilter === 'not-printed') setActiveQuickFilter('needs-barcode');
+    else if (preset.ebayStatusFilter === 'not-listed') setActiveQuickFilter('not-on-ebay');
+    else if (preset.shopifySyncFilter === 'synced') setActiveQuickFilter('on-shopify');
+    else if (preset.dateRangeFilter === 'today') setActiveQuickFilter('todays-intake');
+    else setActiveQuickFilter(null);
+  }, []);
+
+  // Clear all filters handler
+  const handleClearAllFilters = useCallback(() => {
+    setStatusFilter('active');
+    setShopifySyncFilter('all');
+    setEbayStatusFilter('all');
+    setPrintStatusFilter('all');
+    setDateRangeFilter('all');
+    setBatchFilter('all');
+    setTypeFilter('all');
+    setSearchTerm('');
+    setActiveQuickFilter(null);
+  }, []);
+
+  // Print selected items handler
+  const handlePrintSelected = useCallback(() => {
+    if (selectedItems.size === 0) {
+      toast.info('No items selected for printing');
+      return;
+    }
+    setShowPrintDialog(true);
+  }, [selectedItems.size]);
+
+  // Get selected items for print dialog
+  const selectedItemsForPrint = useMemo(() => {
+    return filteredItems.filter(item => selectedItems.has(item.id));
+  }, [filteredItems, selectedItems]);
+
   const handleRemoveFromShopify = useCallback(async (mode: 'delete') => {
     if (!selectedItemForRemoval) return;
     
@@ -1173,14 +1233,26 @@ const Inventory = () => {
                 </CardContent>
               </Card>
               
+              {/* Quick Filter Presets */}
+              <Card>
+                <CardContent className="py-4">
+                  <QuickFilterPresets
+                    onApplyPreset={handleApplyQuickFilter}
+                    onClearFilters={handleClearAllFilters}
+                    activePreset={activeQuickFilter}
+                  />
+                </CardContent>
+              </Card>
+
               {/* Filters and Search */}
             <Card>
               <CardHeader>
                 <CardTitle>Filters & Search</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
+                {/* Row 1: Search and Core Filters */}
                 <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
-                  <div className="relative">
+                  <div className="relative md:col-span-2">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
                       placeholder="Search items..."
@@ -1190,7 +1262,7 @@ const Inventory = () => {
                     />
                   </div>
                   
-                  <Select value={statusFilter} onValueChange={(value: any) => setStatusFilter(value)}>
+                  <Select value={statusFilter} onValueChange={(value: any) => { setStatusFilter(value); setActiveQuickFilter(null); }}>
                     <SelectTrigger>
                       <SelectValue placeholder="Filter by status" />
                     </SelectTrigger>
@@ -1204,14 +1276,14 @@ const Inventory = () => {
                     </SelectContent>
                   </Select>
 
-                  <Select value={printStatusFilter} onValueChange={(value: any) => setPrintStatusFilter(value)}>
+                  <Select value={typeFilter} onValueChange={(value: any) => setTypeFilter(value)}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Print status" />
+                      <SelectValue placeholder="Item type" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Print Status</SelectItem>
-                      <SelectItem value="printed">Printed</SelectItem>
-                      <SelectItem value="not-printed">Not Printed</SelectItem>
+                      <SelectItem value="all">All Types</SelectItem>
+                      <SelectItem value="raw">Raw Only</SelectItem>
+                      <SelectItem value="graded">Graded Only</SelectItem>
                     </SelectContent>
                   </Select>
 
@@ -1226,15 +1298,56 @@ const Inventory = () => {
                       <SelectItem value="removed_from_batch">Removed from Batch</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
 
-                  <Select value={typeFilter} onValueChange={(value: any) => setTypeFilter(value)}>
+                {/* Row 2: Marketplace and Print Filters */}
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                  <Select value={shopifySyncFilter} onValueChange={(value: any) => { setShopifySyncFilter(value); setActiveQuickFilter(null); }}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Item type" />
+                      <SelectValue placeholder="Shopify Status" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Types</SelectItem>
-                      <SelectItem value="raw">Raw Only</SelectItem>
-                      <SelectItem value="graded">Graded Only</SelectItem>
+                      <SelectItem value="all">All Shopify</SelectItem>
+                      <SelectItem value="not-synced">Not Synced</SelectItem>
+                      <SelectItem value="synced">Synced</SelectItem>
+                      <SelectItem value="error">Sync Error</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  <Select value={ebayStatusFilter} onValueChange={(value: any) => { setEbayStatusFilter(value); setActiveQuickFilter(null); }}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="eBay Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All eBay</SelectItem>
+                      <SelectItem value="not-listed">Not Listed</SelectItem>
+                      <SelectItem value="listed">Listed</SelectItem>
+                      <SelectItem value="queued">Queued</SelectItem>
+                      <SelectItem value="error">Error</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  <Select value={printStatusFilter} onValueChange={(value: any) => { setPrintStatusFilter(value); setActiveQuickFilter(null); }}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Print status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Print Status</SelectItem>
+                      <SelectItem value="printed">Printed</SelectItem>
+                      <SelectItem value="not-printed">Not Printed</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  <Select value={dateRangeFilter} onValueChange={(value: any) => { setDateRangeFilter(value); setActiveQuickFilter(null); }}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Date Added" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Time</SelectItem>
+                      <SelectItem value="today">Today</SelectItem>
+                      <SelectItem value="yesterday">Yesterday</SelectItem>
+                      <SelectItem value="7days">Last 7 Days</SelectItem>
+                      <SelectItem value="30days">Last 30 Days</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1261,6 +1374,7 @@ const Inventory = () => {
                     const selectedIds = Array.from(selectedItems);
                     bulkToggleEbay(selectedIds, enable);
                   }}
+                  onPrintSelected={handlePrintSelected}
                 />
 
                 <div className="text-sm text-muted-foreground">
@@ -1386,6 +1500,17 @@ const Inventory = () => {
             onRefresh={refetch}
           />
         )}
+
+        {/* Print From Inventory Dialog */}
+        <PrintFromInventoryDialog
+          open={showPrintDialog}
+          onOpenChange={setShowPrintDialog}
+          selectedItems={selectedItemsForPrint}
+          onPrintComplete={() => {
+            refetch();
+            clearSelection();
+          }}
+        />
 
         {expandedItems.size > 0 && (
           <div className="space-y-4">
