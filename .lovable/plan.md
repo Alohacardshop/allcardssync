@@ -1,8 +1,8 @@
 
 
-## Final Comprehensive Code & UI Review
+## Final Comprehensive Code Review
 
-After reviewing the entire codebase, I've identified cleanup items, UI improvements, and code quality enhancements that will polish the internal app.
+After an exhaustive review of the entire codebase, I've identified issues across different categories. Most previously planned cleanups have been completed, but I found a few remaining items that need attention.
 
 ---
 
@@ -10,168 +10,189 @@ After reviewing the entire codebase, I've identified cleanup items, UI improveme
 
 | Category | Count | Priority |
 |----------|-------|----------|
-| Dead/Unused Files | 2 | High |
-| Hardcoded/Placeholder Data | 1 | Medium |
-| Console.log Cleanup | 30+ files | Low |
-| TODO Comments | 1 | Medium |
-| Unused Imports | 2 | Low |
-| UI/UX Improvements | 3 | Medium |
+| **Missing Query Fields (Bug)** | 3 | High |
+| **Unused Page (Dead Code)** | 1 | Medium |
+| **Console.log Cleanup** | 400+ statements | Low |
+| **Code Quality Polish** | 3 | Low |
 
 ---
 
-### Phase 1: Remove Dead Files
+### Issue 1: Missing Fields in Inventory Query (Bug - High Priority)
 
-**Files to delete (completely unused):**
+**Location:** `src/hooks/useInventoryListQuery.ts` (lines 60-92)
 
-| File | Reason |
-|------|--------|
-| `src/dev/OverlayDetector.tsx` | Temporary debug tool - comment says "Remove this after verifying". Never imported anywhere in codebase. |
-| `src/components/enhanced/` (entire folder) | Contains `ResponsiveInventoryTable`, `EnhancedInventoryTable`, `MobileInventoryCards` - only used internally within folder, never imported by main app. Superseded by `InventoryItemCard` + `VirtualInventoryList`. |
+The query is missing 4 fields that are used by `InventoryItemCard.tsx`:
 
----
+| Missing Field | Used In | Impact |
+|---------------|---------|--------|
+| `ebay_listing_url` | `EbayStatusBadge` → clickable link to eBay | eBay "Live" badge doesn't link to listing |
+| `ebay_sync_error` | `EbayStatusBadge` → error tooltip | eBay Error badge shows "Unknown error" instead of actual message |
+| `psa_cert` | `generateTitle()` function | Title shows "Unknown Item" for PSA cards |
+| `cgc_cert` | `generateTitle()` function | Title shows "Unknown Item" for CGC cards |
+| `grading_company` | `generateTitle()` function | Title defaults to "PSA" for all graded items |
 
-### Phase 2: Fix Hardcoded Placeholder Data
-
-**DashboardHome.tsx** (lines 159-179) has hardcoded stats that should be dynamic:
+**Fix:** Add these fields to the select statement in `useInventoryListQuery.ts`:
 
 ```typescript
-// CURRENT (hardcoded):
-<StatCard label="Active Lots" value="3" icon={Package} />
-<StatCard label="Queue Items" value="12" icon={Clock} />
-<StatCard label="Synced Today" value="47" icon={CheckCircle2} />
-<StatCard label="Total Items" value="2,340" icon={TrendingUp} />
-```
+// Current select (missing fields):
+ebay_listing_id,
+ebay_sync_status,
+list_on_ebay,
 
-**Fix**: Replace with actual database queries using React Query (similar to `DashboardPage.tsx` which already fetches real stats).
+// Should be:
+ebay_listing_id,
+ebay_listing_url,
+ebay_sync_status,
+ebay_sync_error,
+list_on_ebay,
+psa_cert,
+cgc_cert,
+grading_company,
+```
 
 ---
 
-### Phase 3: Fix TODO Comment
+### Issue 2: Unused DashboardPage Component (Medium Priority)
 
-**LocationDriftMonitor.tsx** (line 192):
+**File:** `src/pages/DashboardPage.tsx`
+
+**Problem:** This 131-line component is imported in `App.tsx` via lazy loading, but the `/dashboard` route immediately redirects to `/`:
+
 ```typescript
-storeKey: "hawaii", // TODO: Get from card
+// App.tsx line 167
+<Route path="/dashboard" element={<Navigate to="/" replace />} />
 ```
 
-**Fix**: Extract `store_key` from the card/flag object instead of hardcoding "hawaii".
+**Impact:** The component code is never executed - it's fully dead code now that `DashboardHome.tsx` is the actual dashboard.
+
+**Recommendation:** Delete `src/pages/DashboardPage.tsx` and remove the lazy import from `App.tsx`.
 
 ---
 
-### Phase 4: Clean Up Unused Imports
+### Issue 3: Console.log Cleanup (Low Priority)
 
-**Inventory.tsx** (line 13):
-- `sendGradedToShopify, sendRawToShopify` are imported AND used (confirmed in lines 564-591, 740-764)
-- `Download` icon IS used (line 1207)
-- **No action needed** - imports are actually used
+Found 400+ `console.log` and 900+ `console.error/console.warn` statements across 80+ files. 
 
----
+**Files with debug logs that could use cleanup:**
 
-### Phase 5: Console.log Cleanup (Low Priority)
-
-Multiple files contain `console.log` statements that should be converted to the logger utility for production:
-
-| File | Issue |
-|------|-------|
-| `src/components/enhanced/MobileInventoryCards.tsx` | Line 68: `console.log("Save inline edit:", ...)` |
-| `src/components/enhanced/EnhancedInventoryTable.tsx` | Line 129: `console.log("Save inline edit:", ...)` |
-| `src/lib/zebraTestUtils.ts` | Multiple console.log for test output (acceptable for test utils) |
-| `src/lib/printer/zebraService.ts` | Console.log with `[QZ Tray]` prefix - should use logger |
+| File | Example |
+|------|---------|
+| `src/pages/EbayApp.tsx` | 15+ console.log for OAuth debugging |
+| `src/components/TCGPlayerBulkImport.tsx` | Debug logs for item insertion |
+| `src/lib/printer/zebraService.ts` | `[QZ Tray]` prefixed logs |
 | `src/components/StoreLocationSelectorAuto.tsx` | Debug console.log statements |
-| `src/components/shopify/RealTimeSyncMonitor.tsx` | Line 76: `console.log('Sync monitor:', ...)` |
+| `src/components/shopify/RealTimeSyncMonitor.tsx` | Sync monitor debug logs |
+| `src/components/admin/RegionSettingsEditor.tsx` | Region settings debug logs |
+| `src/hooks/usePrinter.ts` | Printer config debug logs |
 
-**Recommendation**: Since this is an internal app, console.log statements are acceptable for debugging. However, for cleaner logs, consider replacing with the existing `useLogger` hook pattern.
-
----
-
-### Phase 6: UI/UX Improvements
-
-**1. DashboardHome Stats - Use Real Data**
-
-Replace placeholder values with actual queries:
-- "Active Lots" → Count from `intake_lots` where `status = 'active'`
-- "Queue Items" → Count from `intake_items` where `shopify_sync_status = 'queued'`
-- "Synced Today" → Count from `intake_items` where `last_shopify_synced_at` is today
-- "Total Items" → Count from `intake_items` where `deleted_at IS NULL`
-
-**2. DashboardPage is Unused Route**
-
-`DashboardPage.tsx` is imported but `/dashboard` just redirects to `/`. The component is never directly rendered. Options:
-- Keep as-is (the redirect works fine)
-- Or delete `DashboardPage.tsx` if truly unused
-
-**3. PrintLogs Page Access**
-
-`PrintLogs.tsx` is only accessible as a tab within `BarcodePrinting.tsx` - not as a standalone route. This is correct based on memory note about unified printing workflow.
+**Recommendation:** For an internal app, console logs are acceptable. However, for cleaner production logs, consider replacing with the existing `logger` utility in `src/lib/logger.ts`.
 
 ---
 
-### Phase 7: Code Quality Items
+### Issue 4: LocationDriftMonitor Already Fixed ✓
 
-**1. InventoryItemCard Status Logic - Already Fixed**
-The `getStatusBadge()` function now correctly:
-- Verifies BOTH `shopify_sync_status === 'synced'` AND `shopify_product_id` exists
-- Shows "Syncing" for queued/processing states
-- Shows "Needs Resync" for mismatched states
+Verified in `src/components/admin/LocationDriftMonitor.tsx` line 193:
+```typescript
+storeKey: flag.store_key || loc.store_key || "hawaii",
+```
 
-**2. EbayStatusBadge - Already Fixed**
-Now shows "eBay Off" instead of returning null, providing clear visibility.
-
-**3. GradedCardIntake Duplicate Check - Already Fixed**
-Now uses `window.confirm()` for explicit user confirmation before adding duplicates.
+The fallback chain now properly uses store_key from the flag or location objects.
 
 ---
 
-### Files to Modify/Delete
+### Issue 5: DashboardHome Stats Already Fixed ✓
+
+Verified in `src/pages/DashboardHome.tsx` lines 134-166:
+- Real-time stats query using `useQuery`
+- Fetches counts from `intake_lots` and `intake_items`
+- Proper loading state handling
+
+---
+
+### Issue 6: Enhanced Components Already Deleted ✓
+
+The `src/components/enhanced/` folder no longer exists - confirmed deleted in previous cleanup.
+
+---
+
+### Issue 7: OverlayDetector Already Deleted ✓
+
+The `src/dev/OverlayDetector.tsx` file no longer exists - confirmed deleted in previous cleanup.
+
+---
+
+### Files to Modify
 
 | Action | File | Change |
 |--------|------|--------|
-| DELETE | `src/dev/OverlayDetector.tsx` | Remove debug tool |
-| DELETE | `src/components/enhanced/` folder | Remove 3 unused components |
-| MODIFY | `src/pages/DashboardHome.tsx` | Replace hardcoded stats with real queries |
-| MODIFY | `src/components/admin/LocationDriftMonitor.tsx` | Fix hardcoded "hawaii" store key |
-| OPTIONAL | `src/pages/DashboardPage.tsx` | Consider deleting (redirect makes it unused) |
+| **MODIFY** | `src/hooks/useInventoryListQuery.ts` | Add 5 missing fields to select statement |
+| **DELETE** | `src/pages/DashboardPage.tsx` | Remove unused component |
+| **MODIFY** | `src/App.tsx` | Remove lazy import for DashboardPage |
 
 ---
 
-### What This Cleanup Achieves
+### What This Fixes
 
-- Removes ~800 lines of dead code (OverlayDetector + enhanced components)
-- Fixes misleading hardcoded dashboard stats
-- Resolves the last TODO comment
-- Keeps the codebase clean and maintainable
+1. **eBay badge links work** - Clicking "eBay Live" opens the actual listing
+2. **eBay error tooltips show actual errors** - Not just "Unknown error"
+3. **Card titles display correctly** - PSA/CGC cert numbers and grading company show properly
+4. **Cleaner codebase** - Removes ~131 lines of dead code (DashboardPage)
+5. **No performance impact** - Adding 5 fields to query is negligible (~200 extra bytes per item)
 
 ---
 
 ### Technical Details
 
-**DashboardHome.tsx stats fix:**
+**Query field addition in `useInventoryListQuery.ts`:**
+
 ```typescript
-// Add query for real stats
-const { data: dashStats } = useQuery({
-  queryKey: ['dashboard-stats'],
-  queryFn: async () => {
-    const [lots, queue, syncedToday, total] = await Promise.all([
-      supabase.from('intake_lots').select('id', { count: 'exact', head: true }).eq('status', 'active'),
-      supabase.from('intake_items').select('id', { count: 'exact', head: true }).eq('shopify_sync_status', 'queued'),
-      supabase.from('intake_items').select('id', { count: 'exact', head: true })
-        .gte('last_shopify_synced_at', new Date().toISOString().split('T')[0]),
-      supabase.from('intake_items').select('id', { count: 'exact', head: true }).is('deleted_at', null),
-    ]);
-    return {
-      activeLots: lots.count || 0,
-      queueItems: queue.count || 0,
-      syncedToday: syncedToday.count || 0,
-      totalItems: total.count || 0,
-    };
-  },
-  staleTime: 60_000,
-});
+let query = supabase
+  .from('intake_items')
+  .select(
+    `
+    id,
+    sku,
+    brand_title,
+    subject,
+    grade,
+    price,
+    quantity,
+    type,
+    created_at,
+    printed_at,
+    shopify_sync_status,
+    shopify_product_id,
+    store_key,
+    shopify_location_gid,
+    main_category,
+    removed_from_batch_at,
+    deleted_at,
+    sold_at,
+    card_number,
+    ebay_price_check,
+    shopify_snapshot,
+    ebay_listing_id,
+    ebay_listing_url,
+    ebay_sync_status,
+    ebay_sync_error,
+    list_on_ebay,
+    vendor,
+    year,
+    category,
+    variant,
+    psa_cert,
+    cgc_cert,
+    grading_company
+  `,
+    { count: 'exact' }
+  )
 ```
 
-**LocationDriftMonitor fix:**
+**App.tsx cleanup:**
+
 ```typescript
-// Line 192 - get store_key from the flag object
-storeKey: flag.store_key || "hawaii",
+// Remove this line (~24):
+const DashboardPage = React.lazy(() => import("./pages/DashboardPage"));
 ```
 
 ---
@@ -179,9 +200,10 @@ storeKey: flag.store_key || "hawaii",
 ### Verification Checklist
 
 After implementation:
-1. Dashboard home shows real stats that update on refresh
-2. Location drift monitor uses correct store key from data
-3. No broken imports after deleting enhanced folder
-4. No console errors in browser dev tools
-5. All status badges display correctly across Shopify/eBay/Print states
+1. Inventory page loads without errors
+2. Card titles show grading company (PSA/CGC) correctly
+3. eBay "Live" badge links to actual eBay listing
+4. eBay error badges show actual error message on hover
+5. No broken imports after DashboardPage deletion
+6. `/dashboard` route still redirects to `/` properly
 
