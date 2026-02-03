@@ -16,11 +16,12 @@ interface LocationDriftFlag {
   card_id: string | null;
   drift_type: 'multi_location' | 'no_location' | 'location_mismatch';
   expected_location_id: string | null;
-  actual_locations: Array<{ location_id: string; location_gid: string; quantity: number }> | null;
+  actual_locations: Array<{ location_id: string; location_gid: string; quantity: number; store_key?: string }> | null;
   detected_at: string;
   resolved_at: string | null;
   resolved_by: string | null;
   notes: string | null;
+  store_key?: string | null;
 }
 
 const driftTypeLabels: Record<string, { label: string; variant: "destructive" | "outline" | "secondary" }> = {
@@ -183,13 +184,13 @@ export function LocationDriftMonitor() {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => {
+                            onClick={() => {
                                 // Use the first location with stock
                                 const loc = flag.actual_locations![0];
                                 enforceLocationMutation.mutate({
                                   sku: flag.sku,
                                   locationId: loc.location_gid,
-                                  storeKey: "hawaii", // TODO: Get from card
+                                  storeKey: flag.store_key || loc.store_key || "hawaii",
                                 });
                               }}
                               disabled={enforceLocationMutation.isPending}
