@@ -1,11 +1,14 @@
 import { Link } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { useStore } from '@/contexts/StoreContext';
+import { supabase } from '@/integrations/supabase/client';
 import { canUseApp, getUserRole, type AppKey } from '@/lib/permissions';
 import { useEcosystemTheme } from '@/hooks/useEcosystemTheme';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 import { 
   Package, 
   Barcode, 
@@ -91,12 +94,12 @@ function StatCard({
   label, 
   value, 
   icon: Icon, 
-  trend 
+  isLoading,
 }: { 
   label: string; 
   value: string | number; 
   icon: React.ComponentType<{ className?: string }>;
-  trend?: { value: number; label: string };
+  isLoading?: boolean;
 }) {
   return (
     <Card className="relative overflow-hidden">
@@ -104,13 +107,10 @@ function StatCard({
         <div className="flex items-start justify-between">
           <div className="space-y-1">
             <p className="text-sm text-muted-foreground">{label}</p>
-            <p className="text-2xl font-semibold tracking-tight">{value}</p>
-            {trend && (
-              <div className="flex items-center gap-1 text-xs">
-                <TrendingUp className="h-3 w-3 text-success" />
-                <span className="text-success font-medium">+{trend.value}%</span>
-                <span className="text-muted-foreground">{trend.label}</span>
-              </div>
+            {isLoading ? (
+              <Skeleton className="h-8 w-16" />
+            ) : (
+              <p className="text-2xl font-semibold tracking-tight">{value}</p>
             )}
           </div>
           <div className="rounded-lg bg-muted p-2">
@@ -130,8 +130,48 @@ export default function DashboardHome() {
   const role = getUserRole(isAdmin, isStaff);
   const userName = user?.email?.split('@')[0] || 'User';
 
+  // Fetch real dashboard stats
+  const { data: dashStats, isLoading: statsLoading } = useQuery({
+    queryKey: ['dashboard-stats', assignedStore],
+    queryFn: async () => {
+      const today = new Date().toISOString().split('T')[0];
+      
+      const [lotsResult, queueResult, syncedTodayResult, totalResult] = await Promise.all([
+        supabase
+          .from('intake_lots')
+          .select('id', { count: 'exact', head: true })
+          .eq('status', 'active'),
+        supabase
+          .from('intake_items')
+          .select('id', { count: 'exact', head: true })
+          .eq('shopify_sync_status', 'queued'),
+        supabase
+          .from('intake_items')
+          .select('id', { count: 'exact', head: true })
+          .gte('last_shopify_synced_at', today),
+        supabase
+          .from('intake_items')
+          .select('id', { count: 'exact', head: true })
+          .is('deleted_at', null),
+      ]);
+
+      return {
+        activeLots: lotsResult.count || 0,
+        queueItems: queueResult.count || 0,
+        syncedToday: syncedTodayResult.count || 0,
+        totalItems: totalResult.count || 0,
+      };
+    },
+    staleTime: 60_000, // 1 minute
+  });
+
   // Filter tiles based on user permissions
   const visibleTiles = APP_TILES.filter(tile => canUseApp(role, tile.key));
+
+  // Format large numbers with commas
+  const formatNumber = (num: number) => {
+    return num.toLocaleString();
+  };
 
   return (
     <div className="space-y-6 md:space-y-8">
@@ -159,23 +199,27 @@ export default function DashboardHome() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
         <StatCard 
           label="Active Lots" 
-          value="3" 
+          value={formatNumber(dashStats?.activeLots ?? 0)} 
           icon={Package}
+          isLoading={statsLoading}
         />
         <StatCard 
           label="Queue Items" 
-          value="12" 
+          value={formatNumber(dashStats?.queueItems ?? 0)} 
           icon={Clock}
+          isLoading={statsLoading}
         />
         <StatCard 
           label="Synced Today" 
-          value="47" 
+          value={formatNumber(dashStats?.syncedToday ?? 0)} 
           icon={CheckCircle2}
+          isLoading={statsLoading}
         />
         <StatCard 
           label="Total Items" 
-          value="2,340" 
+          value={formatNumber(dashStats?.totalItems ?? 0)} 
           icon={TrendingUp}
+          isLoading={statsLoading}
         />
       </div>
 
