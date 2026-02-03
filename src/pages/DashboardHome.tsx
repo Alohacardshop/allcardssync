@@ -5,6 +5,7 @@ import { useStore } from '@/contexts/StoreContext';
 import { supabase } from '@/integrations/supabase/client';
 import { canUseApp, getUserRole, type AppKey } from '@/lib/permissions';
 import { useEcosystemTheme } from '@/hooks/useEcosystemTheme';
+import { useAnimatedCounter } from '@/hooks/useAnimatedCounter';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -89,7 +90,7 @@ const APP_TILES: AppTile[] = [
   },
 ];
 
-// Quick stat card component
+// Quick stat card component with animated counter
 function StatCard({ 
   label, 
   value, 
@@ -101,6 +102,9 @@ function StatCard({
   icon: React.ComponentType<{ className?: string }>;
   isLoading?: boolean;
 }) {
+  const numericValue = typeof value === 'number' ? value : parseInt(value.toString(), 10) || 0;
+  const animatedValue = useAnimatedCounter(numericValue, 600, !isLoading);
+  
   return (
     <Card className="relative overflow-hidden">
       <CardContent className="p-4">
@@ -110,7 +114,9 @@ function StatCard({
             {isLoading ? (
               <Skeleton className="h-8 w-16" />
             ) : (
-              <p className="text-2xl font-semibold tracking-tight">{value}</p>
+              <p className="text-2xl font-semibold tracking-tight tabular-nums">
+                {animatedValue.toLocaleString()}
+              </p>
             )}
           </div>
           <div className="rounded-lg bg-muted p-2">

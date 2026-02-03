@@ -1092,11 +1092,40 @@ const Inventory = () => {
         .map(r => (r as PromiseFulfilledResult<any>).value)
         .filter(r => r.removedFromShopify).length;
 
+      // Capture item IDs for undo before clearing
+      const deletedItemIds = selectedItemsForDeletion.map(item => item.id);
+      
       if (successful > 0) {
         const message = shopifyRemoved > 0 
-          ? `Successfully deleted ${successful} item${successful > 1 ? 's' : ''} from inventory (${shopifyRemoved} also removed from Shopify)`
-          : `Successfully deleted ${successful} item${successful > 1 ? 's' : ''} from inventory`;
-        toast.success(message);
+          ? `Deleted ${successful} item${successful > 1 ? 's' : ''} (${shopifyRemoved} from Shopify)`
+          : `Deleted ${successful} item${successful > 1 ? 's' : ''}`;
+        
+        toast.success(message, {
+          action: {
+            label: 'Undo',
+            onClick: async () => {
+              try {
+                // Restore soft-deleted items
+                const { error } = await supabase
+                  .from('intake_items')
+                  .update({ 
+                    deleted_at: null, 
+                    deleted_reason: null,
+                    updated_at: new Date().toISOString()
+                  })
+                  .in('id', deletedItemIds);
+                
+                if (error) throw error;
+                
+                toast.success('Items restored');
+                refetch();
+              } catch (error: any) {
+                toast.error('Failed to restore items: ' + error.message);
+              }
+            },
+          },
+          duration: 8000, // Longer duration to give time to undo
+        });
       }
 
       if (failed.length > 0) {

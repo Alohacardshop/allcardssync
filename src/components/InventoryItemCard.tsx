@@ -263,10 +263,21 @@ export const InventoryItemCard = memo(({
     );
   };
 
+  // Determine border color based on sync status
+  const getBorderClass = () => {
+    const status = item.shopify_sync_status;
+    if (status === 'error' || status === 'failed') return "border-l-destructive";
+    if (status === 'synced' && item.shopify_product_id) return "border-l-green-500";
+    if (status === 'pending') return "border-l-amber-500";
+    if (status === 'success') return "border-l-green-500";
+    return "border-l-transparent";
+  };
+
   return (
     <Card 
       className={cn(
-        "transition-all duration-200",
+        "transition-all duration-200 border-l-4",
+        getBorderClass(),
         isSelected && "ring-2 ring-primary",
         item.deleted_at && "opacity-50"
       )}
