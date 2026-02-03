@@ -9,7 +9,8 @@ import {
   Package,
   Command,
   Menu,
-  Globe
+  Globe,
+  TestTube2
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import {
@@ -43,7 +44,7 @@ import { RegionSettingsEditor } from "@/components/admin/RegionSettingsEditor";
 import { QuickActions } from "@/components/admin/QuickActions";
 import { ConfigurationStatus } from "@/components/admin/ConfigurationStatus";
 
-// Consolidated sidebar - 7 sections instead of 11
+// Consolidated sidebar - 8 sections with E2E testing
 const adminSections = [
   {
     id: 'overview',
@@ -219,9 +220,21 @@ export default function Admin() {
               </SidebarMenu>
             </SidebarContent>
 
+            {/* Quick Actions - E2E Testing */}
+            {!sidebarCollapsed && (
+              <div className="border-t p-4">
+                <Link to="/admin/e2e-test">
+                  <Button variant="outline" className="w-full justify-start gap-2">
+                    <TestTube2 className="w-4 h-4" />
+                    E2E Testing
+                  </Button>
+                </Link>
+              </div>
+            )}
+
             {/* Back to Dashboard Link */}
             {!sidebarCollapsed && (
-              <div className="mt-auto border-t p-4">
+              <div className="border-t p-4">
                 <Link to="/">
                   <Button variant="ghost" className="w-full justify-start">
                     ← Back to Dashboard
