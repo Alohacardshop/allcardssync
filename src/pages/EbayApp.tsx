@@ -108,6 +108,7 @@ export default function EbayApp() {
   const location = useLocation();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [autoSaving, setAutoSaving] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -117,6 +118,9 @@ export default function EbayApp() {
   const [selectedConfig, setSelectedConfig] = useState<EbayStoreConfig | null>(null);
   const [newStoreKey, setNewStoreKey] = useState('');
   const [tokenHealth, setTokenHealth] = useState<TokenHealth | null>(null);
+  
+  // Ref for debounced auto-save
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
   
   // Ref to track latest configs for async operations
   const configsRef = useRef<EbayStoreConfig[]>([]);
@@ -563,10 +567,55 @@ export default function EbayApp() {
     }
   };
 
-  const updateConfig = (updates: Partial<EbayStoreConfig>) => {
+  // Auto-saving updateConfig with debounce
+  const updateConfig = useCallback((updates: Partial<EbayStoreConfig>) => {
     if (!selectedConfig) return;
-    setSelectedConfig({ ...selectedConfig, ...updates });
-  };
+    
+    const newConfig = { ...selectedConfig, ...updates };
+    setSelectedConfig(newConfig);
+    
+    // Clear existing timeout
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+    
+    // Debounced auto-save
+    saveTimeoutRef.current = setTimeout(async () => {
+      setAutoSaving(true);
+      try {
+        const { error } = await supabase
+          .from('ebay_store_config')
+          .update({
+            environment: newConfig.environment,
+            marketplace_id: newConfig.marketplace_id,
+            is_active: newConfig.is_active,
+            default_category_id: newConfig.default_category_id,
+            default_fulfillment_policy_id: newConfig.default_fulfillment_policy_id,
+            default_payment_policy_id: newConfig.default_payment_policy_id,
+            default_return_policy_id: newConfig.default_return_policy_id,
+            title_template: newConfig.title_template,
+            description_template: newConfig.description_template
+          })
+          .eq('id', newConfig.id);
+        
+        if (error) throw error;
+        toast.success('Settings saved', { duration: 2000 });
+      } catch (error: any) {
+        toast.error('Failed to save: ' + error.message);
+      } finally {
+        setAutoSaving(false);
+      }
+    }, 500);
+  }, [selectedConfig]);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, []);
 
   if (loading) {
     return (
@@ -1089,18 +1138,19 @@ export default function EbayApp() {
                   </CardContent>
                 </Card>
 
-                {/* Save Button */}
-                <div className="flex justify-end">
-                  <Button onClick={saveConfig} disabled={saving}>
-                    {saving ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Saving...
-                      </>
-                    ) : (
-                      'Save Configuration'
-                    )}
-                  </Button>
+                {/* Auto-save status indicator */}
+                <div className="flex justify-end items-center gap-2 text-sm text-muted-foreground">
+                  {autoSaving ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="h-4 w-4 text-primary" />
+                      <span>All changes saved</span>
+                    </>
+                  )}
                 </div>
               </>
             )}
