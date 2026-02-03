@@ -377,7 +377,7 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
       return;
     }
 
-    // Check for duplicate SKU (cert number)
+    // Check for duplicate SKU (cert number) - require explicit confirmation
     try {
       const { data: existingItems, error: checkError } = await supabase
         .from('intake_items')
@@ -392,11 +392,17 @@ export const GradedCardIntake = ({ onBatchAdd }: GradedCardIntakeProps = {}) => 
       } else if (existingItems && existingItems.length > 0) {
         const existing = existingItems[0];
         const createdDate = new Date(existing.created_at).toLocaleDateString();
-        toast.warning(`⚠️ SKU ${formData.certNumber} already exists (added ${createdDate}). Proceeding anyway...`, {
-          duration: 5000
-        });
-        // Wait a moment so user can see the warning
-        await new Promise(resolve => setTimeout(resolve, 1500));
+        
+        // Require explicit confirmation instead of auto-proceeding
+        const shouldProceed = window.confirm(
+          `SKU ${formData.certNumber} already exists (added ${createdDate}).\n\n` +
+          `Click OK to add anyway (may create duplicate), or Cancel to stop.`
+        );
+        
+        if (!shouldProceed) {
+          toast.info('Submission cancelled - duplicate prevented');
+          return;
+        }
       }
     } catch (error) {
       console.error('Error checking for duplicate SKU:', error);

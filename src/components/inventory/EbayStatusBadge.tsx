@@ -18,9 +18,13 @@ export const EbayStatusBadge = React.memo(({
   syncError,
   listOnEbay
 }: EbayStatusBadgeProps) => {
-  // Not marked for eBay
+  // Not marked for eBay - show explicit status for clarity
   if (!listOnEbay) {
-    return null;
+    return (
+      <Badge variant="outline" className="text-muted-foreground border-muted">
+        eBay Off
+      </Badge>
+    );
   }
 
   // Has active listing

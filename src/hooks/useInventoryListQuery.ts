@@ -15,7 +15,7 @@ export interface InventoryFilters {
   autoRefreshEnabled?: boolean;
   currentBatchLotId?: string | null;
   // New filters for unified hub
-  shopifySyncFilter?: 'all' | 'not-synced' | 'synced' | 'error';
+  shopifySyncFilter?: 'all' | 'not-synced' | 'synced' | 'queued' | 'error';
   ebayStatusFilter?: 'all' | 'not-listed' | 'listed' | 'queued' | 'error';
   dateRangeFilter?: 'all' | 'today' | 'yesterday' | '7days' | '30days';
 }
@@ -157,9 +157,11 @@ export function useInventoryListQuery(filters: InventoryFilters) {
       if (shopifySyncFilter === 'not-synced') {
         query = query.is('shopify_product_id', null);
       } else if (shopifySyncFilter === 'synced') {
-        query = query.not('shopify_product_id', 'is', null);
+        query = query.not('shopify_product_id', 'is', null).eq('shopify_sync_status', 'synced');
       } else if (shopifySyncFilter === 'error') {
         query = query.eq('shopify_sync_status', 'error');
+      } else if (shopifySyncFilter === 'queued') {
+        query = query.in('shopify_sync_status', ['queued', 'processing']);
       }
 
       // Apply eBay status filter
