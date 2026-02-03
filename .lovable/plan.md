@@ -1,118 +1,235 @@
 
-## Implementation Roadmap: eBay & Shopify Multi-Channel Sync
+# End-to-End Test Workflow: Inventory → Shopify → eBay → Print Labels
 
-Based on my audit, here's the recommended step-by-step approach to get your eBay integration fully operational alongside your existing Shopify workflow.
-
----
-
-### Current State Summary
-
-| Component | Hawaii Store | Las Vegas Store |
-|-----------|-------------|-----------------|
-| **Shopify Listed** | 71 items | 1,737 items |
-| **eBay Flagged** | 0 items | 2 items |
-| **eBay Listed** | 0 items | 0 items |
-| **Default Policies Set** | No (all NULL) | N/A |
-| **Policies Synced** | 24 policies available | N/A |
+This plan creates a dedicated **Test Mode** page that allows you to run synthetic test data through the entire pipeline without affecting production inventory.
 
 ---
 
-### Phase 1: Fix Settings Persistence (Immediate)
+## What This Will Do
 
-**Problem**: The auto-save I just implemented needs to be tested. Your policy selections aren't persisting.
+A single "Test Dashboard" page at `/admin/e2e-test` that lets you:
 
-**Actions**:
-1. Navigate to the eBay Settings tab
-2. Select your default policies from the dropdowns:
-   - **Fulfillment**: "Graded Card" (policy_id: 291793805021)
-   - **Payment**: "Instant Payment" (policy_id: 291793771021)  
-   - **Return**: "No returns all sales final" (policy_id: 289553376021)
-3. Watch for "Saving..." → "All changes saved" indicator
-4. Verify the database update occurred
+1. **Create Test Items** - Generate 1-5 fake inventory items with realistic trading card data
+2. **Sync to Shopify** - Push test items to Shopify (dry run or real based on toggle)
+3. **Sync to eBay** - Queue items for eBay and process (dry run mode protects you)
+4. **Print Labels** - Generate ZPL and send to QZ Tray for label printing
+5. **Cleanup** - Delete test items when done
 
 ---
 
-### Phase 2: Flag Items for eBay Listing
+## Test Data Examples
 
-**Option A - Bulk Listing UI** (Recommended for initial testing)
-- Go to eBay App → "Bulk Listing" tab
-- Filter by category (e.g., "Pokemon", "Sports")
-- Select items and click "Mark for eBay"
-- Then click "Queue for Sync" to add them to the processing queue
+The generator will create items like:
 
-**Option B - Sync Rules** (Recommended for automation)
-- Go to eBay App → "Sync Rules" tab
-- Create rules like:
-  - Include all graded cards with price > $50
-  - Include all Pokemon items
-  - Exclude items without images
-- Run "Apply Rules" to automatically flag matching items
-
-**Option C - Individual Toggle**
-- On each inventory card, click the eBay icon to toggle `list_on_ebay`
+| Field | Example Value |
+|-------|---------------|
+| **SKU** | `TEST-A3X7YQ` |
+| **Brand** | Pokemon, Magic, Yu-Gi-Oh! |
+| **Subject** | Charizard, Black Lotus, Blue Eyes |
+| **Variant** | Base Set, First Edition |
+| **Price** | $49.99 |
+| **Grade** | PSA 9, PSA 10, or Raw |
+| **Store** | hawaii |
+| **Location** | Your configured Shopify location |
 
 ---
 
-### Phase 3: Process the eBay Sync Queue
+## Implementation Steps
 
-Once items are queued, the `ebay-sync-processor` edge function handles:
-1. Creating eBay inventory items
-2. Creating offers with your default policies
-3. Publishing listings
-4. Updating `intake_items` with eBay listing IDs
+### Step 1: Create E2E Test Page Component
 
-**Trigger options**:
-- **Manual**: Click "Process Queue" in the Sync Queue Monitor
-- **Scheduled**: Set up a cron job to call the processor periodically
-- **Automatic**: Invoke processor after bulk queue operations
+**File**: `src/pages/E2ETestPage.tsx`
 
----
+A new page with the following sections:
 
-### Phase 4: Shopify Import (Pulling Existing Listings)
+1. **Test Item Generator**
+   - Button to generate 1, 3, or 5 test items
+   - Uses `TestDataGenerators.inventoryItem()` pattern
+   - Inserts via `useAddIntakeItem` hook or direct RPC
 
-For importing your Shopify products to cross-list on eBay:
+2. **Shopify Sync Tester**
+   - Shows test items and their Shopify sync status
+   - "Sync to Shopify" button invokes `shopify-sync` edge function
+   - Displays sync results and any errors
 
-1. **Existing Edge Function**: `shopify-import-inventory`
-   - Pulls products from Shopify into `intake_items`
-   - Sets `list_on_shopify = true`
-   - Preserves Shopify product IDs for sync
+3. **eBay Sync Tester**
+   - "Mark for eBay" toggles `list_on_ebay` flag
+   - "Queue for eBay" adds to `ebay_sync_queue`
+   - "Process Queue" invokes `ebay-sync-processor`
+   - Shows dry-run results (since `dry_run_mode = true`)
 
-2. **After Import**:
-   - Flag desired items for eBay using Phase 2 methods
-   - Queue for eBay sync
+4. **Label Printer Tester**
+   - Preview generated labels for test items
+   - Uses `generateZPLFromLabelData()` from labelRenderer
+   - Sends to QZ Tray via `useQzTray` hook
+   - Works with your existing Zebra printer
 
----
-
-### Technical Implementation Needed
-
-| Task | Priority | Effort |
-|------|----------|--------|
-| Test auto-save and set default policies | Critical | 5 min |
-| Add "Process Queue" button to trigger sync-processor | High | 30 min |
-| Add progress indicator during bulk operations | Medium | 1 hr |
-| Create scheduled job for automatic queue processing | Medium | 1 hr |
-| Add "Import from Shopify" button to eBay Bulk Listing | Low | 2 hr |
+5. **Cleanup Section**
+   - "Delete All Test Items" button
+   - Filters by `sku LIKE 'TEST-%'`
+   - Removes from intake_items and any sync queues
 
 ---
 
-### Recommended Immediate Steps
+### Step 2: Add Route Configuration
 
-1. **Test the auto-save**: Select policies in the eBay Settings tab and verify they persist
-2. **Start small**: Flag 5-10 test items for eBay via the Bulk Listing UI
-3. **Queue and process**: Use the Sync Queue Monitor to process test items
-4. **Verify on eBay**: Check that listings appear in your eBay seller account
-5. **Scale up**: Once validated, use Sync Rules to flag larger batches
+**File**: `src/App.tsx` (or routes config)
+
+Add route: `/admin/e2e-test`
 
 ---
 
-### Files Involved
+### Step 3: Create Test Data Generator Utility
+
+**File**: `src/lib/testDataGenerator.ts`
+
+```text
+Function: generateTestInventoryItems(count: number)
+
+Returns array of intake_items with:
+- sku: `TEST-${randomString}`
+- store_key: 'hawaii' (uses your connected store)
+- shopify_location_gid: from your store config
+- Realistic card data (Pokemon, Magic, etc.)
+- Random prices $10-500
+- Optional grade (PSA 8-10) or Raw
+- list_on_shopify: true
+- list_on_ebay: true (for testing)
+```
+
+---
+
+### Step 4: Add Sidebar Navigation Link
+
+**File**: `src/components/admin/AdminSidebar.tsx` (or equivalent)
+
+Add menu item: "E2E Testing" under Admin section
+
+---
+
+## UI Mockup
+
+```text
+┌─────────────────────────────────────────────────────────────┐
+│  E2E Test Dashboard                                         │
+│  Test the full Shopify/eBay/Print workflow with fake data  │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  ┌── Step 1: Generate Test Items ──────────────────────────┐│
+│  │                                                          ││
+│  │  [Generate 1 Item]  [Generate 3 Items]  [Generate 5]    ││
+│  │                                                          ││
+│  │  Created: 3 test items (TEST-A3X7YQ, TEST-B2Y8ZR, ...)  ││
+│  │                                                          ││
+│  └──────────────────────────────────────────────────────────┘│
+│                                                              │
+│  ┌── Step 2: Sync to Shopify ──────────────────────────────┐│
+│  │                                                          ││
+│  │  [ ] Dry Run Mode                                        ││
+│  │                                                          ││
+│  │  [Sync Selected to Shopify]                              ││
+│  │                                                          ││
+│  │  ✓ TEST-A3X7YQ - Synced (Product ID: 123456789)         ││
+│  │  ✓ TEST-B2Y8ZR - Synced (Product ID: 123456790)         ││
+│  │  ✗ TEST-C1Z9WQ - Failed: Rate limited                   ││
+│  │                                                          ││
+│  └──────────────────────────────────────────────────────────┘│
+│                                                              │
+│  ┌── Step 3: Sync to eBay ─────────────────────────────────┐│
+│  │                                                          ││
+│  │  Status: DRY RUN MODE ENABLED (safe testing)             ││
+│  │                                                          ││
+│  │  [Queue for eBay]  [Process Queue]                       ││
+│  │                                                          ││
+│  │  ✓ TEST-A3X7YQ - Queued → Processed (dry run)           ││
+│  │  ✓ TEST-B2Y8ZR - Queued → Processed (dry run)           ││
+│  │                                                          ││
+│  └──────────────────────────────────────────────────────────┘│
+│                                                              │
+│  ┌── Step 4: Print Labels ─────────────────────────────────┐│
+│  │                                                          ││
+│  │  Printer: ZD421-203dpi-ZPL (Connected ✓)                 ││
+│  │                                                          ││
+│  │  [Print All Test Labels]  [Print Selected]               ││
+│  │                                                          ││
+│  │  Preview:                                                ││
+│  │  ┌─────────────────────┐                                 ││
+│  │  │ PSA 9    |  $149.99 │                                 ││
+│  │  │ |||||||||||||||||||  │                                 ││
+│  │  │ Pokemon Charizard   │                                 ││
+│  │  └─────────────────────┘                                 ││
+│  │                                                          ││
+│  └──────────────────────────────────────────────────────────┘│
+│                                                              │
+│  ┌── Cleanup ──────────────────────────────────────────────┐│
+│  │                                                          ││
+│  │  ⚠️ This will permanently delete all TEST-* items       ││
+│  │                                                          ││
+│  │  [Delete All Test Items]                                 ││
+│  │                                                          ││
+│  └──────────────────────────────────────────────────────────┘│
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Technical Details
+
+### Files to Create
 
 | File | Purpose |
 |------|---------|
-| `src/pages/EbayApp.tsx` | Main settings + auto-save (just updated) |
-| `src/components/admin/EbayBulkListing.tsx` | Bulk select and queue items |
-| `src/components/admin/EbaySyncQueueMonitor.tsx` | View and manage queue |
-| `src/components/admin/EbaySyncRulesEditor.tsx` | Create automation rules |
-| `supabase/functions/ebay-sync-processor/index.ts` | Process queue entries |
-| `supabase/functions/ebay-create-listing/index.ts` | Create individual listings |
-| `supabase/functions/ebay-apply-sync-rules/index.ts` | Apply automation rules |
+| `src/pages/E2ETestPage.tsx` | Main test dashboard component |
+| `src/lib/testDataGenerator.ts` | Utility for generating test items |
+| `src/hooks/useE2ETest.ts` | Hook for managing test workflow state |
+
+### Files to Modify
+
+| File | Change |
+|------|--------|
+| `src/App.tsx` | Add `/admin/e2e-test` route |
+| `src/components/admin/AdminSidebar.tsx` | Add navigation link |
+
+### Edge Functions Used
+
+- `shopify-sync` - Sync to Shopify
+- `ebay-sync-processor` - Process eBay queue
+- Label printing uses client-side QZ Tray (no edge function)
+
+### Database Queries
+
+```sql
+-- Insert test item
+INSERT INTO intake_items (
+  sku, store_key, shopify_location_gid, brand_title, 
+  subject, price, quantity, list_on_shopify, list_on_ebay, ...
+) VALUES (...);
+
+-- Cleanup test items
+DELETE FROM ebay_sync_queue WHERE inventory_item_id IN (
+  SELECT id FROM intake_items WHERE sku LIKE 'TEST-%'
+);
+DELETE FROM intake_items WHERE sku LIKE 'TEST-%';
+```
+
+---
+
+## Safety Features
+
+1. **Test SKU Prefix**: All test items have `TEST-` prefix for easy identification
+2. **Dry Run Mode**: eBay sync in dry run (already enabled in your config)
+3. **Shopify Toggle**: Option to skip actual Shopify API calls
+4. **Cleanup Button**: Easy removal of all test data
+5. **No Production Interference**: Test items are isolated by SKU pattern
+
+---
+
+## Estimated Implementation Time
+
+- E2ETestPage.tsx: 2-3 hours
+- testDataGenerator.ts: 30 minutes
+- Route + navigation: 15 minutes
+- Testing the flow: 1 hour
+
+**Total: ~4-5 hours**
