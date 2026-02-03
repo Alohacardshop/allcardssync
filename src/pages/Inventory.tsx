@@ -221,7 +221,7 @@ const Inventory = () => {
   });
   
   // New unified hub filters
-  const [shopifySyncFilter, setShopifySyncFilter] = useState<'all' | 'not-synced' | 'synced' | 'error'>('all');
+  const [shopifySyncFilter, setShopifySyncFilter] = useState<'all' | 'not-synced' | 'synced' | 'queued' | 'error'>('all');
   const [ebayStatusFilter, setEbayStatusFilter] = useState<'all' | 'not-listed' | 'listed' | 'queued' | 'error'>('all');
   const [dateRangeFilter, setDateRangeFilter] = useState<'all' | 'today' | 'yesterday' | '7days' | '30days'>('all');
   const [activeQuickFilter, setActiveQuickFilter] = useState<string | null>(null);

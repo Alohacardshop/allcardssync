@@ -7,11 +7,12 @@ import {
   Package, 
   Calendar, 
   X,
-  Store
+  Store,
+  Loader2
 } from 'lucide-react';
 
 export interface QuickFilterState {
-  shopifySyncFilter: 'all' | 'not-synced' | 'synced' | 'error';
+  shopifySyncFilter: 'all' | 'not-synced' | 'synced' | 'queued' | 'error';
   ebayStatusFilter: 'all' | 'not-listed' | 'listed' | 'queued' | 'error';
   printStatusFilter: 'all' | 'printed' | 'not-printed';
   dateRangeFilter: 'all' | 'today' | 'yesterday' | '7days' | '30days';
@@ -76,6 +77,16 @@ export const QuickFilterPresets = React.memo(({
       description: 'Items synced to Shopify',
       filters: {
         shopifySyncFilter: 'synced' as const,
+        statusFilter: 'active' as const,
+      }
+    },
+    {
+      id: 'shopify-queued',
+      label: 'Shopify Queue',
+      icon: Loader2,
+      description: 'Items queued/processing for Shopify sync',
+      filters: {
+        shopifySyncFilter: 'queued' as const,
         statusFilter: 'active' as const,
       }
     },
