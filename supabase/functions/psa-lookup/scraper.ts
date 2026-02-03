@@ -24,10 +24,13 @@ interface ScrapedComicData {
 
 /**
  * Extracts field value from HTML using label matching
+ * PSA website uses pattern: LabelValue in markdown/text format
  */
 function extractField(html: string, label: string): string | undefined {
   // Try multiple patterns for different HTML structures
   const patterns = [
+    // Pattern: Label followed by value on same line (markdown format from website)
+    new RegExp(`${label}([^\\n]+)`, 'i'),
     // Pattern: <dt>Label</dt><dd>Value</dd>
     new RegExp(`<dt[^>]*>\\s*${label}\\s*</dt>\\s*<dd[^>]*>([^<]+)</dd>`, 'i'),
     // Pattern: Label</span><span>Value
@@ -43,7 +46,11 @@ function extractField(html: string, label: string): string | undefined {
   for (const pattern of patterns) {
     const match = html.match(pattern);
     if (match && match[1]) {
-      return match[1].trim();
+      const value = match[1].trim();
+      // Skip if value looks like another label (contains colon or is empty)
+      if (value && !value.endsWith(':')) {
+        return value;
+      }
     }
   }
   return undefined;
@@ -112,16 +119,22 @@ export async function scrapeComicCert(certNumber: string, requestId: string): Pr
       result.graderNotes = graderNotes;
     }
 
-    // Extract Name (comic title)
+    // Extract Name (comic/magazine title)
     const name = extractField(html, 'Name');
     if (name) {
       result.subject = name;
     }
 
-    // Extract Volume Number
+    // Extract Volume Number (for comics)
     const volumeNumber = extractField(html, 'Volume Number');
     if (volumeNumber) {
       result.cardNumber = volumeNumber;
+    }
+
+    // Extract Continuous Issue Number (for magazines)
+    const continuousIssue = extractField(html, 'Continuous Issue Number');
+    if (continuousIssue && !result.cardNumber) {
+      result.cardNumber = continuousIssue;
     }
 
     // Extract Issue Number if present
@@ -148,6 +161,15 @@ export async function scrapeComicCert(certNumber: string, requestId: string): Pr
     const variant = extractField(html, 'Variant');
     if (variant) {
       result.varietyPedigree = variant;
+    }
+
+    // Extract Cover Subject (for magazines/comics with cover info)
+    const coverSubject = extractField(html, 'Cover Subject');
+    if (coverSubject) {
+      // Append cover subject to varietyPedigree or use as variant
+      result.varietyPedigree = result.varietyPedigree 
+        ? `${result.varietyPedigree} - ${coverSubject}` 
+        : coverSubject;
     }
 
     // Extract Language
