@@ -1,60 +1,118 @@
-## Unified Inventory Hub: Filter, List, and Print ✅ COMPLETE
 
-This plan transforms the inventory system into a single, unified hub where all items can be filtered, listed to Shopify/eBay, and have barcodes printed—all from one interface.
+## Implementation Review and Dead Code Cleanup
 
----
-
-### Implementation Status: COMPLETE ✅
-
-All phases have been implemented:
-
-**Phase 1: Enhanced Filters** ✅
-- Added Shopify sync filter (All, Not Synced, Synced, Error)
-- Added eBay status filter (All, Not Listed, Listed, Queued, Error)  
-- Added Date Range filter (All Time, Today, Yesterday, 7 Days, 30 Days)
-- Updated `useInventoryListQuery.ts` with new filter parameters
-
-**Phase 2: Quick Filter Presets** ✅
-- Created `QuickFilterPresets.tsx` component with one-click filters:
-  - Ready to Sync, Sync Errors, Needs Barcode, Not on eBay, On Shopify, Today's Intake
-- Clear All button to reset filters
-
-**Phase 3: Barcode Printing Integration** ✅
-- Created `PrintFromInventoryDialog.tsx` with:
-  - Template selector from label_templates table
-  - Copies per item input
-  - Mark as printed toggle
-  - Progress indicator during print
-- Added Print Barcodes button to BulkActionsToolbar
-
-**Phase 4: UI Integration** ✅
-- Updated Inventory page with new filter UI in two rows
-- Integrated quick filter presets above filter panel
-- Connected all handlers for filtering, printing, and marketplace actions
+After thorough analysis of the Unified Inventory Hub implementation, I've identified several issues that need to be addressed.
 
 ---
 
-### Files Changed
+### Current Implementation Status
 
-| File | Status |
-|------|--------|
-| `src/hooks/useInventoryListQuery.ts` | ✅ Updated with new filter parameters |
-| `src/pages/Inventory.tsx` | ✅ Integrated new components and filters |
-| `src/components/inventory/BulkActionsToolbar.tsx` | ✅ Added Print Barcodes button |
-| `src/components/inventory/PrintFromInventoryDialog.tsx` | ✅ NEW |
-| `src/components/inventory/QuickFilterPresets.tsx` | ✅ NEW |
+The core Unified Inventory Hub is correctly implemented:
+- New filter dropdowns for Shopify sync, eBay status, date range - Working correctly
+- Quick filter presets component - Working correctly  
+- Print from inventory dialog - Working correctly
+- Bulk actions toolbar with print button - Working correctly
+- Query hook with new filter parameters - Working correctly
 
 ---
 
-### User Workflow
+### Dead Code Identified for Removal
 
-1. Navigate to `/inventory`
-2. Click **"Needs Barcode"** quick preset (filters to unprinted items)
-3. Select desired items using checkboxes
-4. Click **"Print Barcodes"** → select template → print
-5. Click **"Ready to Sync"** preset (filters to un-synced items)
-6. Select items → click **"List to Shopify"**
-7. For eBay, use **"Not on eBay"** preset → select → click **"Add to eBay"**
+| File | Dead Code | Reason |
+|------|-----------|--------|
+| `src/pages/Inventory.tsx` | `showSoldItems` state (line 218) | Declared but never used - status filter handles 'sold' items |
+| `src/pages/Inventory.tsx` | `comicsSubCategory` state (line 234) | Declared and passed as `null` to query - never actually used |
+| `src/pages/Inventory.tsx` | `setComicsSubCategory` function | Never called anywhere in the codebase |
+| `src/hooks/useInventoryListQuery.ts` | `comicsSubCategory` parameter (line 13, 36, 52) | Extracted from filters but never used in query logic |
+| `src/types/inventory.ts` | `InventoryFilters` interface (lines 131-141) | Duplicate/outdated - the actual interface is in `useInventoryListQuery.ts` and is more complete |
+| `src/layouts/DashboardLayout.tsx` | Entire file | Already marked as `@deprecated` - just returns `<Outlet />` |
 
-All operations in one place, with smart filters to quickly find items needing action.
+---
 
+### Files to Modify
+
+**1. `src/pages/Inventory.tsx`**
+- Remove `showSoldItems` and `setShowSoldItems` (line 218)
+- Remove `comicsSubCategory` and `setComicsSubCategory` (line 234)
+- Remove the `comicsSubCategory: null` prop from the query call (line 339)
+
+**2. `src/hooks/useInventoryListQuery.ts`**
+- Remove `comicsSubCategory` from the `InventoryFilters` interface (line 13)
+- Remove `comicsSubCategory` from the query key array (line 36)
+- Remove `comicsSubCategory` from destructuring in queryFn (line 52)
+
+**3. `src/types/inventory.ts`**
+- Remove the outdated `InventoryFilters` interface (lines 128-141)
+- Keep all other types as they are used
+
+**4. `src/layouts/DashboardLayout.tsx`**
+- Delete this file entirely (already deprecated)
+- Check if any imports reference it
+
+---
+
+### Additional Observations
+
+**BarcodePrinting page**: The `/barcode-printing` page should remain as-is because:
+- It provides the Print Queue management (dead letter queue, failed jobs)
+- It has Printer Settings, Label Templates, Print Profiles
+- It has the "Filter & Print" feature that pulls from Shopify with advanced filtering
+- The new Inventory printing is complementary, not a replacement
+
+The memory note `barcode/unified-printing-workflow` correctly states that operational printing is consolidated in the Barcode section - the new Inventory print feature is for quick bulk printing from the inventory list, while BarcodePrinting offers more advanced workflows.
+
+---
+
+### Implementation Steps
+
+1. Clean up `Inventory.tsx` - remove 3 unused state variables
+2. Clean up `useInventoryListQuery.ts` - remove comicsSubCategory references  
+3. Clean up `src/types/inventory.ts` - remove duplicate InventoryFilters interface
+4. Delete `src/layouts/DashboardLayout.tsx` - verify no imports first, then remove
+
+---
+
+### Technical Details
+
+**Inventory.tsx changes:**
+```typescript
+// REMOVE these lines:
+const [showSoldItems, setShowSoldItems] = useState(false);
+const [comicsSubCategory, setComicsSubCategory] = useState<'graded' | 'raw'>('graded');
+
+// REMOVE from query call:
+comicsSubCategory: null,
+```
+
+**useInventoryListQuery.ts changes:**
+```typescript
+// REMOVE from InventoryFilters interface:
+comicsSubCategory?: string | null;
+
+// REMOVE from queryKey array:
+filters.comicsSubCategory,
+
+// REMOVE from destructuring:
+comicsSubCategory,
+```
+
+**types/inventory.ts changes:**
+```typescript
+// REMOVE this entire block (lines 128-141):
+/**
+ * Inventory Filter Options
+ */
+export interface InventoryFilters {
+  search?: string;
+  type?: 'all' | 'graded' | 'raw' | 'comic' | 'other';
+  status?: 'active' | 'sold' | 'errors' | 'deleted' | 'all';
+  storeKey?: string;
+  locationGid?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  priceMin?: number;
+  priceMax?: number;
+}
+```
+
+These are all safe removals as the code paths are completely unused.
