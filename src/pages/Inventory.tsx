@@ -215,7 +215,7 @@ const Inventory = () => {
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'out-of-stock' | 'sold' | 'deleted' | 'errors'>('active');
   const [typeFilter, setTypeFilter] = useState<'all' | 'raw' | 'graded'>('all');
   const [printStatusFilter, setPrintStatusFilter] = useState<'all' | 'printed' | 'not-printed'>('all');
-  const [showSoldItems, setShowSoldItems] = useState(false);
+  
   const [batchFilter, setBatchFilter] = useState<'all' | 'in_batch' | 'removed_from_batch' | 'current_batch'>(() => {
     return (localStorage.getItem('inventory-batch-filter') as 'all' | 'in_batch' | 'removed_from_batch' | 'current_batch') || 'all';
   });
@@ -231,7 +231,7 @@ const Inventory = () => {
   
   // Category tab state
   const [activeTab, setActiveTab] = useState<'raw' | 'graded' | 'raw_comics' | 'graded_comics' | 'sealed'>('raw');
-  const [comicsSubCategory, setComicsSubCategory] = useState<'graded' | 'raw'>('graded');
+  
   
   // Auto-refresh state
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
@@ -336,7 +336,7 @@ const Inventory = () => {
     batchFilter,
     printStatusFilter,
     typeFilter,
-    comicsSubCategory: null,
+    
     searchTerm: debouncedSearchTerm,
     autoRefreshEnabled,
     currentBatchLotId: currentBatch?.items?.[0]?.lot_id,
