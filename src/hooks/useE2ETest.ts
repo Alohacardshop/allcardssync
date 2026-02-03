@@ -69,46 +69,60 @@ export function useE2ETest() {
         rawOnly: options?.rawOnly
       });
       
-      // Insert into database
-      const toInsert = items.map(item => ({
-        sku: item.sku,
-        store_key: item.store_key,
-        shopify_location_gid: item.shopify_location_gid,
-        brand_title: item.brand_title,
-        subject: item.subject,
-        variant: item.variant,
-        card_number: item.card_number,
-        year: item.year,
-        category: item.category,
-        main_category: item.main_category,
-        sub_category: item.sub_category,
-        price: item.price,
-        cost: item.cost,
-        quantity: item.quantity,
-        type: item.type,
-        grade: item.grade,
-        grading_company: item.grading_company,
-        psa_cert: item.psa_cert,
-        cgc_cert: item.cgc_cert,
-        lot_number: item.lot_number,
-        list_on_shopify: item.list_on_shopify,
-        list_on_ebay: item.list_on_ebay,
-        unique_item_uid: item.unique_item_uid,
-        vendor: item.vendor,
-        processing_notes: item.processing_notes
-      }));
+      // Insert using RPC (direct insert blocked by RLS)
+      const insertedItemIds: string[] = [];
       
-      const { data: inserted, error } = await supabase
-        .from('intake_items')
-        .insert(toInsert)
-        .select();
+      for (const item of items) {
+        const catalogSnapshot = {
+          grading_company: item.grading_company,
+          grade: item.grade,
+          cert_number: item.psa_cert || item.cgc_cert,
+          type: item.type
+        };
+        
+        const { data: insertedItem, error } = await supabase.rpc('create_raw_intake_item', {
+          sku_in: item.sku,
+          store_key_in: item.store_key,
+          shopify_location_gid_in: item.shopify_location_gid,
+          brand_title_in: item.brand_title,
+          subject_in: item.subject,
+          variant_in: item.variant,
+          card_number_in: item.card_number,
+          year_in: item.year,
+          category_in: item.category,
+          main_category_in: item.main_category,
+          sub_category_in: item.sub_category,
+          price_in: item.price,
+          cost_in: item.cost,
+          quantity_in: item.quantity,
+          grade_in: item.grade,
+          catalog_snapshot_in: catalogSnapshot,
+          processing_notes_in: item.processing_notes
+        });
+        
+        if (error) {
+          console.error('Failed to insert test item:', error);
+          continue;
+        }
+        
+        if (insertedItem && Array.isArray(insertedItem) && insertedItem.length > 0) {
+          insertedItemIds.push(insertedItem[0].id);
+        }
+      }
       
-      if (error) throw error;
-      
-      const itemsWithStatus: TestItemWithStatus[] = (inserted || []).map(item => ({
-        ...item,
-        status: 'created' as TestItemStatus
-      })) as TestItemWithStatus[];
+      // Fetch full item data for inserted items
+      let itemsWithStatus: TestItemWithStatus[] = [];
+      if (insertedItemIds.length > 0) {
+        const { data: fullItems } = await supabase
+          .from('intake_items')
+          .select('*')
+          .in('id', insertedItemIds);
+        
+        itemsWithStatus = (fullItems || []).map(item => ({
+          ...item,
+          status: 'created' as TestItemStatus
+        })) as TestItemWithStatus[];
+      }
       
       setState(s => ({
         ...s,
@@ -116,7 +130,7 @@ export function useE2ETest() {
         isGenerating: false
       }));
       
-      toast.success(`Generated ${count} test item(s)`);
+      toast.success(`Generated ${insertedItemIds.length} test item(s)`);
     } catch (error) {
       console.error('Failed to generate test items:', error);
       toast.error('Failed to generate test items');
