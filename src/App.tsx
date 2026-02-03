@@ -44,6 +44,7 @@ const ShopifyBackfill = React.lazy(() => import("./pages/admin/ShopifyBackfill")
 const QzTrayTestPage = React.lazy(() => import("./pages/QzTrayTestPage"));
 const Privacy = React.lazy(() => import("./pages/Privacy"));
 const InventorySyncDashboard = React.lazy(() => import("./pages/admin/InventorySyncDashboard"));
+const E2ETestPage = React.lazy(() => import("./pages/E2ETestPage"));
 
 const EbayApp = React.lazy(() => import("./pages/EbayApp"));
 const EbaySyncDashboard = React.lazy(() => import("./pages/EbaySyncDashboard"));
@@ -86,6 +87,7 @@ const App = () => (
                           <Routes>
                             <Route path="" element={<Admin />} />
                             <Route path="catalog" element={<div className="p-8"><CatalogMigrationPlaceholder /></div>} />
+                            <Route path="e2e-test" element={<E2ETestPage />} />
                             <Route path="notifications/discord" element={<DiscordNotifications />} />
                             <Route path="notifications/pending" element={<PendingNotifications />} />
                             <Route path="shopify-backfill" element={<ShopifyBackfill />} />

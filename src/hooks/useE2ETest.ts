@@ -1,0 +1,414 @@
+/**
+ * Hook for managing E2E test workflow state
+ * Handles test item generation, sync operations, and cleanup
+ */
+
+import { useState, useCallback } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
+import { generateTestItems, buildLabelDataFromTestItem, type TestIntakeItem } from '@/lib/testDataGenerator';
+import { zplFromTemplateString } from '@/lib/labels/zpl';
+
+export type TestItemStatus = 'created' | 'shopify_syncing' | 'shopify_synced' | 'shopify_failed' | 
+  'ebay_queued' | 'ebay_processing' | 'ebay_synced' | 'ebay_failed' | 'printed';
+
+export interface TestItemWithStatus extends TestIntakeItem {
+  status: TestItemStatus;
+  shopify_product_id?: string;
+  shopify_sync_error?: string;
+  ebay_sync_status?: string;
+  ebay_sync_error?: string;
+  printed_at?: string;
+}
+
+export interface E2ETestState {
+  testItems: TestItemWithStatus[];
+  isGenerating: boolean;
+  isShopifySyncing: boolean;
+  isEbaySyncing: boolean;
+  isPrinting: boolean;
+  isCleaningUp: boolean;
+  shopifyDryRun: boolean;
+  ebayDryRunEnabled: boolean;
+}
+
+const INITIAL_STATE: E2ETestState = {
+  testItems: [],
+  isGenerating: false,
+  isShopifySyncing: false,
+  isEbaySyncing: false,
+  isPrinting: false,
+  isCleaningUp: false,
+  shopifyDryRun: true,
+  ebayDryRunEnabled: true
+};
+
+export function useE2ETest() {
+  const [state, setState] = useState<E2ETestState>(INITIAL_STATE);
+
+  // Generate and insert test items
+  const generateItems = useCallback(async (count: number) => {
+    setState(s => ({ ...s, isGenerating: true }));
+    
+    try {
+      // Get location GID from existing items or use default
+      const { data: existingItem } = await supabase
+        .from('intake_items')
+        .select('shopify_location_gid')
+        .eq('store_key', 'hawaii')
+        .not('shopify_location_gid', 'is', null)
+        .limit(1)
+        .maybeSingle();
+      
+      const locationGid = existingItem?.shopify_location_gid || 'gid://shopify/Location/67325100207';
+      
+      const items = generateTestItems(count, {
+        storeKey: 'hawaii',
+        shopifyLocationGid: locationGid
+      });
+      
+      // Insert into database
+      const toInsert = items.map(item => ({
+        sku: item.sku,
+        store_key: item.store_key,
+        shopify_location_gid: item.shopify_location_gid,
+        brand_title: item.brand_title,
+        subject: item.subject,
+        variant: item.variant,
+        card_number: item.card_number,
+        year: item.year,
+        category: item.category,
+        main_category: item.main_category,
+        sub_category: item.sub_category,
+        price: item.price,
+        cost: item.cost,
+        quantity: item.quantity,
+        type: item.type,
+        grade: item.grade,
+        grading_company: item.grading_company,
+        psa_cert: item.psa_cert,
+        cgc_cert: item.cgc_cert,
+        lot_number: item.lot_number,
+        list_on_shopify: item.list_on_shopify,
+        list_on_ebay: item.list_on_ebay,
+        unique_item_uid: item.unique_item_uid,
+        vendor: item.vendor,
+        processing_notes: item.processing_notes
+      }));
+      
+      const { data: inserted, error } = await supabase
+        .from('intake_items')
+        .insert(toInsert)
+        .select();
+      
+      if (error) throw error;
+      
+      const itemsWithStatus: TestItemWithStatus[] = (inserted || []).map(item => ({
+        ...item,
+        status: 'created' as TestItemStatus
+      })) as TestItemWithStatus[];
+      
+      setState(s => ({
+        ...s,
+        testItems: [...s.testItems, ...itemsWithStatus],
+        isGenerating: false
+      }));
+      
+      toast.success(`Generated ${count} test item(s)`);
+    } catch (error) {
+      console.error('Failed to generate test items:', error);
+      toast.error('Failed to generate test items');
+      setState(s => ({ ...s, isGenerating: false }));
+    }
+  }, []);
+
+  // Sync test items to Shopify
+  const syncToShopify = useCallback(async (itemIds: string[]) => {
+    setState(s => ({ ...s, isShopifySyncing: true }));
+    
+    try {
+      // Update status to syncing
+      setState(s => ({
+        ...s,
+        testItems: s.testItems.map(item => 
+          itemIds.includes(item.id) ? { ...item, status: 'shopify_syncing' as TestItemStatus } : item
+        )
+      }));
+      
+      if (state.shopifyDryRun) {
+        // Simulate sync in dry run mode
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        
+        setState(s => ({
+          ...s,
+          testItems: s.testItems.map(item => 
+            itemIds.includes(item.id) ? { 
+              ...item, 
+              status: 'shopify_synced' as TestItemStatus,
+              shopify_product_id: `dry-run-${Date.now()}`
+            } : item
+          ),
+          isShopifySyncing: false
+        }));
+        
+        toast.success(`[DRY RUN] Simulated Shopify sync for ${itemIds.length} item(s)`);
+        return;
+      }
+      
+      // Real Shopify sync
+      const { data, error } = await supabase.functions.invoke('shopify-sync', {
+        body: { itemIds, storeKey: 'hawaii' }
+      });
+      
+      if (error) throw error;
+      
+      // Update items with results
+      const results = data?.results || [];
+      setState(s => ({
+        ...s,
+        testItems: s.testItems.map(item => {
+          if (!itemIds.includes(item.id)) return item;
+          const result = results.find((r: any) => r.itemId === item.id);
+          if (result?.success) {
+            return { ...item, status: 'shopify_synced' as TestItemStatus, shopify_product_id: result.productId };
+          } else {
+            return { ...item, status: 'shopify_failed' as TestItemStatus, shopify_sync_error: result?.error };
+          }
+        }),
+        isShopifySyncing: false
+      }));
+      
+      toast.success(`Synced ${itemIds.length} item(s) to Shopify`);
+    } catch (error) {
+      console.error('Shopify sync failed:', error);
+      setState(s => ({
+        ...s,
+        testItems: s.testItems.map(item => 
+          itemIds.includes(item.id) ? { ...item, status: 'shopify_failed' as TestItemStatus, shopify_sync_error: String(error) } : item
+        ),
+        isShopifySyncing: false
+      }));
+      toast.error('Shopify sync failed');
+    }
+  }, [state.shopifyDryRun]);
+
+  // Queue items for eBay sync
+  const queueForEbay = useCallback(async (itemIds: string[]) => {
+    try {
+      // Insert into ebay_sync_queue
+      const queueItems = itemIds.map(id => ({
+        inventory_item_id: id,
+        action: 'create' as const,
+        status: 'pending',
+        retry_count: 0,
+        max_retries: 3
+      }));
+      
+      const { error } = await supabase
+        .from('ebay_sync_queue')
+        .insert(queueItems);
+      
+      if (error) throw error;
+      
+      setState(s => ({
+        ...s,
+        testItems: s.testItems.map(item => 
+          itemIds.includes(item.id) ? { ...item, status: 'ebay_queued' as TestItemStatus } : item
+        )
+      }));
+      
+      toast.success(`Queued ${itemIds.length} item(s) for eBay sync`);
+    } catch (error) {
+      console.error('Failed to queue for eBay:', error);
+      toast.error('Failed to queue for eBay');
+    }
+  }, []);
+
+  // Process eBay queue
+  const processEbayQueue = useCallback(async () => {
+    setState(s => ({ ...s, isEbaySyncing: true }));
+    
+    try {
+      // Update status to processing
+      setState(s => ({
+        ...s,
+        testItems: s.testItems.map(item => 
+          item.status === 'ebay_queued' ? { ...item, status: 'ebay_processing' as TestItemStatus } : item
+        )
+      }));
+      
+      const { data, error } = await supabase.functions.invoke('ebay-sync-processor', {
+        body: { limit: 10 }
+      });
+      
+      if (error) throw error;
+      
+      // Fetch updated status from database
+      const testItemIds = state.testItems.map(i => i.id);
+      const { data: updatedItems } = await supabase
+        .from('intake_items')
+        .select('id, ebay_sync_status, ebay_sync_error, ebay_listing_id')
+        .in('id', testItemIds);
+      
+      setState(s => ({
+        ...s,
+        testItems: s.testItems.map(item => {
+          const updated = updatedItems?.find(u => u.id === item.id);
+          if (updated) {
+            const newStatus = updated.ebay_sync_status === 'synced' ? 'ebay_synced' : 
+                             updated.ebay_sync_status === 'failed' ? 'ebay_failed' : item.status;
+            return { 
+              ...item, 
+              status: newStatus as TestItemStatus,
+              ebay_sync_status: updated.ebay_sync_status,
+              ebay_sync_error: updated.ebay_sync_error
+            };
+          }
+          return item;
+        }),
+        isEbaySyncing: false
+      }));
+      
+      const isDryRun = data?.dryRun;
+      toast.success(isDryRun ? '[DRY RUN] eBay processor completed' : 'eBay queue processed');
+    } catch (error) {
+      console.error('eBay processing failed:', error);
+      setState(s => ({ ...s, isEbaySyncing: false }));
+      toast.error('eBay processing failed');
+    }
+  }, [state.testItems]);
+
+  // Print labels for test items
+  const printLabels = useCallback(async (
+    itemIds: string[], 
+    printerName: string, 
+    printZpl: (printer: string, zpl: string) => Promise<void>,
+    zplTemplate: string
+  ) => {
+    setState(s => ({ ...s, isPrinting: true }));
+    
+    try {
+      for (const itemId of itemIds) {
+        const item = state.testItems.find(i => i.id === itemId);
+        if (!item) continue;
+        
+        const labelData = buildLabelDataFromTestItem(item as TestIntakeItem);
+        const zpl = zplFromTemplateString(zplTemplate, labelData);
+        
+        await printZpl(printerName, zpl);
+        
+        // Update printed status
+        setState(s => ({
+          ...s,
+          testItems: s.testItems.map(i => 
+            i.id === itemId ? { ...i, status: 'printed' as TestItemStatus, printed_at: new Date().toISOString() } : i
+          )
+        }));
+      }
+      
+      toast.success(`Printed ${itemIds.length} label(s)`);
+    } catch (error) {
+      console.error('Print failed:', error);
+      toast.error('Print failed');
+    } finally {
+      setState(s => ({ ...s, isPrinting: false }));
+    }
+  }, [state.testItems]);
+
+  // Cleanup all test items
+  const cleanupTestItems = useCallback(async () => {
+    setState(s => ({ ...s, isCleaningUp: true }));
+    
+    try {
+      // Get all test item IDs
+      const testItemIds = state.testItems.map(i => i.id);
+      
+      if (testItemIds.length === 0) {
+        toast.info('No test items to clean up');
+        setState(s => ({ ...s, isCleaningUp: false }));
+        return;
+      }
+      
+      // Remove from eBay queue first
+      await supabase
+        .from('ebay_sync_queue')
+        .delete()
+        .in('inventory_item_id', testItemIds);
+      
+      // Delete test items
+      const { error } = await supabase
+        .from('intake_items')
+        .delete()
+        .in('id', testItemIds);
+      
+      if (error) throw error;
+      
+      setState(s => ({
+        ...s,
+        testItems: [],
+        isCleaningUp: false
+      }));
+      
+      toast.success('Cleaned up all test items');
+    } catch (error) {
+      console.error('Cleanup failed:', error);
+      toast.error('Cleanup failed');
+      setState(s => ({ ...s, isCleaningUp: false }));
+    }
+  }, [state.testItems]);
+
+  // Load existing test items from database
+  const loadExistingTestItems = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('intake_items')
+        .select('*')
+        .like('sku', 'TEST-%')
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      
+      const itemsWithStatus: TestItemWithStatus[] = (data || []).map(item => ({
+        ...item,
+        status: item.shopify_product_id ? 'shopify_synced' : 'created' as TestItemStatus
+      })) as TestItemWithStatus[];
+      
+      setState(s => ({ ...s, testItems: itemsWithStatus }));
+    } catch (error) {
+      console.error('Failed to load test items:', error);
+    }
+  }, []);
+
+  // Check eBay dry run mode
+  const checkEbayDryRun = useCallback(async () => {
+    try {
+      const { data } = await supabase
+        .from('ebay_store_config')
+        .select('dry_run_mode')
+        .eq('store_key', 'hawaii')
+        .single();
+      
+      setState(s => ({ ...s, ebayDryRunEnabled: data?.dry_run_mode ?? true }));
+    } catch (error) {
+      console.error('Failed to check eBay config:', error);
+    }
+  }, []);
+
+  // Toggle Shopify dry run
+  const toggleShopifyDryRun = useCallback(() => {
+    setState(s => ({ ...s, shopifyDryRun: !s.shopifyDryRun }));
+  }, []);
+
+  return {
+    ...state,
+    generateItems,
+    syncToShopify,
+    queueForEbay,
+    processEbayQueue,
+    printLabels,
+    cleanupTestItems,
+    loadExistingTestItems,
+    checkEbayDryRun,
+    toggleShopifyDryRun
+  };
+}
