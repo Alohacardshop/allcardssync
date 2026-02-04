@@ -464,10 +464,9 @@ export const InventoryTableView = memo(({
         <div className="flex items-center justify-center">
           <Checkbox
             checked={allSelected}
-            ref={(el) => {
-              if (el) (el as HTMLButtonElement).dataset.indeterminate = someSelected ? 'true' : 'false';
-            }}
+            indeterminate={someSelected}
             onCheckedChange={handleSelectAll}
+            aria-label={allSelected ? "Deselect all items" : someSelected ? "Select all items" : "Select all items"}
           />
         </div>
         <SortableHeader label="SKU" field="sku" sortConfig={sortConfig} onSort={handleSort} />
