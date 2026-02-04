@@ -350,13 +350,13 @@ export function useE2ETest() {
     }
   }, [state.testItems, state.printDryRun]);
 
-  // Cleanup all test items
+  // Cleanup all test items and related records
   const cleanupTestItems = useCallback(async () => {
     setState(s => ({ ...s, isCleaningUp: true }));
     
     try {
-      // Get all test item IDs
       const testItemIds = state.testItems.map(i => i.id);
+      const testSkus = state.testItems.map(i => i.sku).filter(Boolean) as string[];
       
       if (testItemIds.length === 0) {
         toast.info('No test items to clean up');
@@ -364,13 +364,38 @@ export function useE2ETest() {
         return;
       }
       
-      // Remove from eBay queue first
+      // 1. Remove eBay sync logs (by SKU)
+      await supabase
+        .from('ebay_sync_log')
+        .delete()
+        .in('sku', testSkus);
+      
+      // 2. Remove eBay queue entries
       await supabase
         .from('ebay_sync_queue')
         .delete()
         .in('inventory_item_id', testItemIds);
       
-      // Delete test items
+      // 3. Remove item snapshots (FK to intake_items)
+      await supabase
+        .from('item_snapshots')
+        .delete()
+        .in('intake_item_id', testItemIds);
+      
+      // 4. Remove audit log entries for these items
+      await supabase
+        .from('audit_log')
+        .delete()
+        .eq('table_name', 'intake_items')
+        .in('record_id', testItemIds);
+      
+      // 5. Remove cards entries (by SKU)
+      await supabase
+        .from('cards')
+        .delete()
+        .in('sku', testSkus);
+      
+      // 6. Finally, delete test items
       const { error } = await supabase
         .from('intake_items')
         .delete()
@@ -384,7 +409,7 @@ export function useE2ETest() {
         isCleaningUp: false
       }));
       
-      toast.success('Cleaned up all test items');
+      toast.success(`Cleaned up ${testItemIds.length} test item(s) and all related records`);
     } catch (error) {
       console.error('Cleanup failed:', error);
       toast.error('Cleanup failed');

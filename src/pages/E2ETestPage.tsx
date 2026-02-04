@@ -102,6 +102,19 @@ export default function E2ETestPage() {
     loadDefaultTemplate();
   }, [loadExistingTestItems, checkEbayDryRun]);
 
+  // Warn user before leaving if test items exist
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (testItems.length > 0) {
+        e.preventDefault();
+        e.returnValue = 'You have test items that haven\'t been cleaned up. Are you sure you want to leave?';
+      }
+    };
+    
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [testItems.length]);
+
   // Load default label template
   const loadDefaultTemplate = async () => {
     const { data } = await supabase
