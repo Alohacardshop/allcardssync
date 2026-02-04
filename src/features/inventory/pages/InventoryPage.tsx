@@ -18,9 +18,11 @@ import { ConfirmationDialog } from '@/components/ConfirmationDialog';
 import { RefreshControls } from '@/components/RefreshControls';
 import { PrintFromInventoryDialog } from '@/components/inventory/PrintFromInventoryDialog';
 import { KeyboardShortcutsHelp } from '@/components/inventory/KeyboardShortcutsHelp';
+import { TruthModeBadge } from '@/components/inventory/TruthModeBadge';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Progress } from '@/components/ui/progress';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
+import { useInventoryTruthMode } from '@/hooks/useInventoryTruthMode';
 
 import { useInventoryListQuery } from '@/hooks/useInventoryListQuery';
 import { useLocationNames } from '@/hooks/useLocationNames';
@@ -101,6 +103,9 @@ const InventoryPage = () => {
   const { assignedStore, selectedLocation } = useStore();
   const { resyncAll, resyncSelected, isResyncing } = useShopifyResync();
   const { bulkToggleEbay } = useEbayListing();
+  
+  // Fetch truth mode for the current store
+  const { mode: truthMode, isShopifyTruth } = useInventoryTruthMode(assignedStore);
   
   // Fetch location names for display
   const { data: locationsMap } = useLocationNames(assignedStore);
@@ -406,7 +411,7 @@ const InventoryPage = () => {
       <div className="flex-1 min-h-0 flex flex-col">
         {/* Single Sticky Controls Stack - all sticky elements in one container */}
         <div className="shrink-0 sticky top-0 z-20 bg-background border-b border-border">
-          {/* Refresh Controls + View Toggle */}
+          {/* Refresh Controls + View Toggle + Truth Mode */}
           <div className="flex items-center gap-2 flex-wrap py-2">
             <RefreshControls
               autoRefreshEnabled={autoRefreshEnabled}
@@ -415,6 +420,9 @@ const InventoryPage = () => {
               isRefreshing={isFetching}
               lastRefresh={lastRefresh}
             />
+            
+            {/* Truth Mode Badge */}
+            <TruthModeBadge mode={truthMode} />
             
             {/* View Toggle - only show on desktop */}
             {isDesktop && (
@@ -541,6 +549,8 @@ const InventoryPage = () => {
                 inventoryLevelsMap={inventoryLevelsMap}
                 selectedLocationGid={filters.locationFilter}
                 focusedIndex={focusedIndex}
+                quantityReadOnly={isShopifyTruth}
+                quantityReadOnlyReason="Shopify is source of truth. Use Receiving or Transfer to adjust."
                 onToggleSelection={toggleSelection}
                 onSetSelection={setSelection}
                 onToggleExpanded={toggleExpanded}
@@ -570,6 +580,8 @@ const InventoryPage = () => {
                 syncingRowId={syncingRowId}
                 locationsMap={locationsMap}
                 focusedIndex={focusedIndex}
+                quantityReadOnly={isShopifyTruth}
+                quantityReadOnlyReason="Shopify is source of truth. Use Receiving or Transfer to adjust."
                 onToggleSelection={toggleSelection}
                 onToggleExpanded={toggleExpanded}
                 onSync={handleSync}

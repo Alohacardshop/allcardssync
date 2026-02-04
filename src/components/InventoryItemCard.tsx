@@ -59,6 +59,10 @@ interface InventoryItemCardProps {
   isAdmin: boolean;
   syncingRowId: string | null;
   locationsMap?: Map<string, CachedLocation>;
+  /** Whether quantity editing is disabled (e.g., Shopify truth mode) */
+  quantityReadOnly?: boolean;
+  /** Reason for read-only quantity, shown in tooltip */
+  quantityReadOnlyReason?: string;
   onToggleSelection: (itemId: string) => void;
   onToggleExpanded: (itemId: string) => void;
   onSync: (item: InventoryItem) => void;
@@ -76,6 +80,8 @@ export const InventoryItemCard = memo(({
   isAdmin,
   syncingRowId,
   locationsMap,
+  quantityReadOnly,
+  quantityReadOnlyReason,
   onToggleSelection,
   onToggleExpanded,
   onSync,
@@ -157,7 +163,11 @@ export const InventoryItemCard = memo(({
         />
         
         <CardContent className="pt-0 space-y-3">
-          <InventoryItemMetaRow item={item} />
+          <InventoryItemMetaRow 
+            item={item} 
+            quantityReadOnly={quantityReadOnly}
+            quantityReadOnlyReason={quantityReadOnlyReason}
+          />
           <InventoryItemTagsRow item={item} />
           <InventoryItemActionsRow
             item={item}
@@ -195,6 +205,7 @@ export const InventoryItemCard = memo(({
     prevProps.isSelected === nextProps.isSelected &&
     prevProps.isExpanded === nextProps.isExpanded &&
     prevProps.syncingRowId === nextProps.syncingRowId &&
+    prevProps.quantityReadOnly === nextProps.quantityReadOnly &&
     prevTags === nextTags &&
     prevNormTags === nextNormTags
   );
