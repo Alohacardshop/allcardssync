@@ -117,14 +117,18 @@ const TableRow = memo(({
     minute: '2-digit',
   });
 
+  // CSS variable for consistent grid template across header and rows
+  const gridTemplate = "40px 90px minmax(200px, 1fr) 100px 70px 60px 80px 70px 80px 90px 70px 44px";
+
   return (
     <TooltipProvider delayDuration={200}>
       <div 
         className={cn(
-          "grid grid-cols-[40px_90px_1fr_100px_70px_60px_80px_70px_80px_90px_70px_44px] gap-2 items-center px-3 py-2 border-b border-border hover:bg-muted/50 text-sm",
+          "grid gap-2 items-center px-3 py-2 border-b border-border hover:bg-muted/50 text-sm",
           isSelected && "bg-primary/5",
           item.deleted_at && "opacity-50"
         )}
+        style={{ gridTemplateColumns: gridTemplate }}
       >
         {/* Checkbox */}
         <div className="flex items-center justify-center">
@@ -457,10 +461,19 @@ export const InventoryTableView = memo(({
     );
   }
 
+  // CSS variable for consistent grid template
+  const gridTemplate = "40px 90px minmax(200px, 1fr) 100px 70px 60px 80px 70px 80px 90px 70px 44px";
+
   return (
     <div className="rounded-lg border bg-card overflow-hidden flex flex-col h-full">
-      {/* Sticky Header */}
-      <div className="shrink-0 grid grid-cols-[40px_90px_1fr_100px_70px_60px_80px_70px_80px_90px_70px_44px] gap-2 items-center px-3 py-2 bg-muted/50 border-b font-medium text-xs sticky top-0 z-10">
+      {/* Horizontal scroll wrapper */}
+      <div className="overflow-x-auto flex-1 flex flex-col min-h-0">
+        <div className="min-w-[1100px] flex flex-col h-full">
+          {/* Sticky Header */}
+          <div 
+            className="shrink-0 grid gap-2 items-center px-3 py-2 bg-muted/50 border-b font-medium text-xs sticky top-0 z-10"
+            style={{ gridTemplateColumns: gridTemplate }}
+          >
         <div className="flex items-center justify-center">
           <Checkbox
             checked={allSelected}
@@ -546,6 +559,8 @@ export const InventoryTableView = memo(({
               )}
             </div>
           )}
+        </div>
+      </div>
         </div>
       </div>
     </div>
