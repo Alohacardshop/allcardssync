@@ -985,6 +985,9 @@ export type Database = {
           pushed_at: string | null
           quantity: number
           removed_from_batch_at: string | null
+          shopify_drift: boolean | null
+          shopify_drift_details: Json | null
+          shopify_drift_detected_at: string | null
           shopify_inventory_item_id: string | null
           shopify_location_gid: string | null
           shopify_order_id: string | null
@@ -1075,6 +1078,9 @@ export type Database = {
           pushed_at?: string | null
           quantity?: number
           removed_from_batch_at?: string | null
+          shopify_drift?: boolean | null
+          shopify_drift_details?: Json | null
+          shopify_drift_detected_at?: string | null
           shopify_inventory_item_id?: string | null
           shopify_location_gid?: string | null
           shopify_order_id?: string | null
@@ -1165,6 +1171,9 @@ export type Database = {
           pushed_at?: string | null
           quantity?: number
           removed_from_batch_at?: string | null
+          shopify_drift?: boolean | null
+          shopify_drift_details?: Json | null
+          shopify_drift_detected_at?: string | null
           shopify_inventory_item_id?: string | null
           shopify_location_gid?: string | null
           shopify_order_id?: string | null
@@ -2696,6 +2705,54 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      sync_health_runs: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          drift_detected: number
+          drift_fixed: number
+          error_message: string | null
+          errors: number
+          id: string
+          items_checked: number
+          metadata: Json | null
+          run_type: string
+          started_at: string
+          status: string
+          store_key: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          drift_detected?: number
+          drift_fixed?: number
+          error_message?: string | null
+          errors?: number
+          id?: string
+          items_checked?: number
+          metadata?: Json | null
+          run_type: string
+          started_at?: string
+          status?: string
+          store_key: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          drift_detected?: number
+          drift_fixed?: number
+          error_message?: string | null
+          errors?: number
+          id?: string
+          items_checked?: number
+          metadata?: Json | null
+          run_type?: string
+          started_at?: string
+          status?: string
+          store_key?: string
+        }
+        Relationships: []
       }
       sync_queue: {
         Row: {

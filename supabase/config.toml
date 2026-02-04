@@ -119,6 +119,10 @@ verify_jwt = true
 [functions.shopify-resync-inventory]
 verify_jwt = true
 
+# Shopify scheduled inventory reconciliation (cron job - no JWT)
+[functions.shopify-reconcile-inventory]
+verify_jwt = false
+
 # Discord notification functions
 [functions.discord-test]
 verify_jwt = true

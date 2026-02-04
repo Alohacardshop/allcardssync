@@ -45,6 +45,7 @@ const ShopifyBackfill = React.lazy(() => import("./pages/admin/ShopifyBackfill")
 const QzTrayTestPage = React.lazy(() => import("./pages/QzTrayTestPage"));
 const Privacy = React.lazy(() => import("./pages/Privacy"));
 const InventorySyncDashboard = React.lazy(() => import("./pages/admin/InventorySyncDashboard"));
+const SyncHealthPage = React.lazy(() => import("./pages/admin/SyncHealthPage"));
 
 
 const EbayApp = React.lazy(() => import("./pages/EbayApp"));
@@ -94,6 +95,7 @@ const App = () => (
                             <Route path="notifications/pending" element={<PendingNotifications />} />
                             <Route path="shopify-backfill" element={<ShopifyBackfill />} />
                             <Route path="inventory-sync" element={<InventorySyncDashboard />} />
+                            <Route path="sync-health" element={<SyncHealthPage />} />
                             <Route path="ebay-settings" element={<Navigate to="/ebay" replace />} />
                           </Routes>
                         </Suspense>
