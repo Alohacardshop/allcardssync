@@ -139,7 +139,12 @@ export function useE2ETest() {
 
   // Sync test items to Shopify
   const syncToShopify = useCallback(async (itemIds: string[]) => {
-    setState(s => ({ ...s, isShopifySyncing: true }));
+    // Read dry run state synchronously at call time to avoid stale closures
+    let isDryRun = false;
+    setState(s => {
+      isDryRun = s.shopifyDryRun;
+      return { ...s, isShopifySyncing: true };
+    });
     
     try {
       // Update status to syncing
@@ -150,7 +155,7 @@ export function useE2ETest() {
         )
       }));
       
-      if (state.shopifyDryRun) {
+      if (isDryRun) {
         // Simulate sync in dry run mode
         await new Promise(resolve => setTimeout(resolve, 1500));
         
@@ -205,12 +210,12 @@ export function useE2ETest() {
       }));
       toast.error('Shopify sync failed');
     }
-  }, [state.shopifyDryRun, assignedStore]);
+  }, [assignedStore]);
 
   // Queue items for eBay sync
   const queueForEbay = useCallback(async (itemIds: string[]) => {
     try {
-      // Insert into ebay_sync_queue
+      // Insert into ebay_sync_queue with upsert to prevent duplicates
       const queueItems = itemIds.map(id => ({
         inventory_item_id: id,
         action: 'create' as const,
@@ -221,7 +226,10 @@ export function useE2ETest() {
       
       const { error } = await supabase
         .from('ebay_sync_queue')
-        .insert(queueItems);
+        .upsert(queueItems, { 
+          onConflict: 'inventory_item_id',
+          ignoreDuplicates: true 
+        });
       
       if (error) throw error;
       
@@ -304,10 +312,17 @@ export function useE2ETest() {
     printZpl: (printer: string, zpl: string) => Promise<void>,
     zplTemplate: string
   ) => {
-    setState(s => ({ ...s, isPrinting: true }));
+    // Read state synchronously at call time to avoid stale closures
+    let isDryRun = false;
+    let currentItems: TestItemWithStatus[] = [];
+    setState(s => {
+      isDryRun = s.printDryRun;
+      currentItems = s.testItems;
+      return { ...s, isPrinting: true };
+    });
     
     try {
-      if (state.printDryRun) {
+      if (isDryRun) {
         // Simulate printing in dry run mode
         await new Promise(resolve => setTimeout(resolve, 1000));
         
@@ -328,7 +343,7 @@ export function useE2ETest() {
       }
       
       for (const itemId of itemIds) {
-        const item = state.testItems.find(i => i.id === itemId);
+        const item = currentItems.find(i => i.id === itemId);
         if (!item) continue;
         
         const labelData = buildLabelDataFromTestItem(item as TestIntakeItem);
@@ -352,7 +367,7 @@ export function useE2ETest() {
     } finally {
       setState(s => ({ ...s, isPrinting: false }));
     }
-  }, [state.testItems, state.printDryRun]);
+  }, []);
 
   // Cleanup all test items and related records
   const cleanupTestItems = useCallback(async () => {
@@ -377,6 +392,12 @@ export function useE2ETest() {
       // 2. Remove eBay queue entries
       await supabase
         .from('ebay_sync_queue')
+        .delete()
+        .in('inventory_item_id', testItemIds);
+      
+      // 2.5. Remove Shopify queue entries
+      await supabase
+        .from('shopify_sync_queue')
         .delete()
         .in('inventory_item_id', testItemIds);
       
@@ -511,6 +532,7 @@ export function useE2ETest() {
       // Delete from related tables first
       await supabase.from('ebay_sync_log').delete().in('sku', skus);
       await supabase.from('ebay_sync_queue').delete().in('inventory_item_id', itemIds);
+      await supabase.from('shopify_sync_queue').delete().in('inventory_item_id', itemIds);
       await supabase.from('item_snapshots').delete().in('intake_item_id', itemIds);
       await supabase.from('audit_log').delete().eq('table_name', 'intake_items').in('record_id', itemIds);
       await supabase.from('cards').delete().in('sku', skus);
