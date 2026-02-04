@@ -1,221 +1,160 @@
 
-# Tag-Based Inventory System with Auto-Sync to Shopify
+# Fix Tag-Based System: Missing Field + UI Consolidation
 
 ## Summary
 
-This plan consolidates the inventory system around **normalized tags** as the source of truth and ensures that **tag edits made locally automatically sync to Shopify**. It also fixes the current UI overlapping issues.
+The tag-based inventory system with auto-sync to Shopify is mostly implemented, but there's a critical missing field and the UI can be consolidated to fix overlapping issues.
 
 ---
 
-## Current State Analysis
+## Issues Found
 
-### What Works
-- `TagEditor` component exists and saves tags to `intake_items.shopify_tags`
-- A database trigger (`trigger_normalize_tags`) auto-normalizes tags on insert/update
-- The `shopify-tag-manager` edge function exists to update tags in Shopify
-- Quick Filter Presets use normalized tags for filtering
+### Issue 1: Missing `normalized_tags` in Query
+The `useInventoryListQuery.ts` SELECT statement doesn't include `normalized_tags`. This means:
+- The TagEditor always receives empty `normalizedTags` array
+- Users can't see the normalized version of their tags in the editor
 
-### What's Missing
-1. **No auto-sync to Shopify**: When tags are edited in TagEditor, they only update locally—Shopify products keep old tags
-2. **UI Overlap Issues**: QuickFilterPresets card and Filters card create visual clutter; BulkActionsToolbar may overlap on smaller screens
-3. **TagEditor doesn't trigger Shopify sync**: After saving tags, there's no call to push changes to Shopify
+### Issue 2: Two Separate Filter Cards Create Visual Clutter
+Currently the layout has:
+1. A Card for `QuickFilterPresets`
+2. A separate Card for `Search + Filters + Bulk Actions`
+
+This creates visual overlap and wastes vertical space.
 
 ---
 
 ## Implementation Plan
 
-### Phase 1: Fix UI Layout Issues
+### Fix 1: Add `normalized_tags` to Query
 
-**Problem**: Multiple stacked cards (QuickFilterPresets, Filters) create visual clutter and overlap.
+**File:** `src/hooks/useInventoryListQuery.ts`
 
-**Solution**: Consolidate into a single, well-structured filter section.
+Add `normalized_tags` to the SELECT statement (around line 105):
 
-**Changes to `src/pages/Inventory.tsx`**:
-- Merge QuickFilterPresets into the main filter Card header
-- Use a horizontal scrollable container for quick presets on mobile
-- Ensure proper spacing between filter rows and bulk actions
-- Add `overflow-hidden` containers to prevent visual overlap
+```typescript
+vendor,
+year,
+category,
+variant,
+shopify_tags,
+normalized_tags  // ADD THIS LINE
+```
+
+### Fix 2: Consolidate Filter UI into Single Card
+
+**File:** `src/pages/Inventory.tsx`
+
+Merge QuickFilterPresets into the main filter Card for a cleaner layout:
 
 ```text
-Layout Structure:
-┌─────────────────────────────────────────────────────┐
-│ Quick Filters (horizontal scroll on mobile)        │
-│ [Pokemon] [Sports] [Graded] [Sealed] [Sync Errors] │
-├─────────────────────────────────────────────────────┤
-│ [Search........] [Status ▼] [Location ▼] [Filters] │
-├─────────────────────────────────────────────────────┤
-│ Bulk Actions (only when items selected)            │
-├─────────────────────────────────────────────────────┤
-│ Showing X of Y items                   [Select All]│
-└─────────────────────────────────────────────────────┘
+Layout Before:
+┌────────────────────────────────┐
+│ Card 1: QuickFilterPresets     │
+└────────────────────────────────┘
+┌────────────────────────────────┐
+│ Card 2: Search + Filters       │
+│          Bulk Actions          │
+│          Item Count            │
+└────────────────────────────────┘
+
+Layout After:
+┌────────────────────────────────┐
+│ Quick Filters (scrollable)     │
+│ ────────────────────────────── │
+│ Search + Status + Location     │
+│ ────────────────────────────── │
+│ Bulk Actions (if selected)     │
+│ ────────────────────────────── │
+│ Item Count                     │
+└────────────────────────────────┘
 ```
 
-### Phase 2: Auto-Sync Tags to Shopify
-
-**Trigger Point**: When `TagEditor.handleSave()` completes successfully
-
-**Flow**:
-```text
-User edits tags → Save to intake_items → DB trigger normalizes → 
-  → If item has shopify_product_id → Call edge function to update Shopify tags
-```
-
-**Changes to `src/components/inventory/TagEditor.tsx`**:
-
-1. Accept new props: `shopifyProductId`, `storeKey`, `onShopifySync`
-2. After local save succeeds, if `shopifyProductId` exists:
-   - Call `shopify-tag-manager` edge function to sync tags to Shopify
-   - Show "Syncing to Shopify..." state
-   - Show success/error toast
-
-```typescript
-// New handleSave flow
-const handleSave = async () => {
-  setIsSaving(true);
-  try {
-    // 1. Save to local database
-    const { error } = await supabase
-      .from('intake_items')
-      .update({ shopify_tags: tags, updated_at: new Date().toISOString() })
-      .eq('id', itemId);
-    if (error) throw error;
-
-    // 2. If synced to Shopify, push tags there too
-    if (shopifyProductId && storeKey) {
-      setSyncingToShopify(true);
-      try {
-        const { error: shopifyError } = await supabase.functions.invoke('shopify-tag-manager', {
-          body: {
-            action: 'replace',  // New action type for full replacement
-            tags: tags,
-            productId: shopifyProductId,
-            storeKey: storeKey
-          }
-        });
-        if (shopifyError) throw shopifyError;
-        toast.success('Tags synced to Shopify');
-      } catch (shopifyErr) {
-        toast.warning('Tags saved locally, but Shopify sync failed');
-        console.error('Shopify tag sync failed:', shopifyErr);
-      } finally {
-        setSyncingToShopify(false);
-      }
-    } else {
-      toast.success('Tags updated');
-    }
-    
-    setIsOpen(false);
-    queryClient.invalidateQueries({ queryKey: ['inventory-list'] });
-    onTagsUpdated?.();
-  } catch (error) {
-    toast.error(error.message || 'Failed to update tags');
-  } finally {
-    setIsSaving(false);
-  }
-};
-```
-
-### Phase 3: Enhance Edge Function for Tag Replacement
-
-**Current limitation**: `shopify-tag-manager` only supports `add` and `remove` actions.
-
-**Changes to `supabase/functions/shopify-tag-manager/index.ts`**:
-
-Add a `replace` action that completely replaces all product tags:
-
-```typescript
-interface TagOperation {
-  action: 'add' | 'remove' | 'replace';
-  tags: string[];
-  productId: string;
-  storeKey: string;
-}
-
-// In handler:
-if (action === 'replace') {
-  // Complete replacement - set exactly these tags
-  updatedTags = tags;
-} else if (action === 'add') {
-  updatedTags = [...new Set([...currentTags, ...tags])];
-} else {
-  updatedTags = currentTags.filter(t => !tags.includes(t));
-}
-```
-
-### Phase 4: Update InventoryItemCard Integration
-
-**Changes to `src/components/InventoryItemCard.tsx`**:
-
-Pass required props to TagEditor for Shopify sync:
-
-```typescript
-<TagEditor
-  itemId={item.id}
-  currentTags={item.shopify_tags || []}
-  normalizedTags={item.normalized_tags || []}
-  shopifyProductId={item.shopify_product_id}
-  storeKey={item.store_key}
-/>
-```
+**Changes:**
+- Remove the first `<Card>` wrapping `QuickFilterPresets`
+- Move `QuickFilterPresets` inside the main filter Card
+- Add horizontal overflow scrolling for presets on mobile
+- Use subtle dividers (`border-b` or `pb-x`) between sections
 
 ---
 
 ## Files to Modify
 
-| File | Changes |
-|------|---------|
-| `src/pages/Inventory.tsx` | Merge QuickFilterPresets into filter Card, fix spacing/overflow |
-| `src/components/inventory/TagEditor.tsx` | Add Shopify auto-sync after local save |
-| `src/components/InventoryItemCard.tsx` | Pass `shopifyProductId` and `storeKey` to TagEditor |
-| `supabase/functions/shopify-tag-manager/index.ts` | Add `replace` action for full tag replacement |
+| File | Change |
+|------|--------|
+| `src/hooks/useInventoryListQuery.ts` | Add `normalized_tags` to SELECT |
+| `src/pages/Inventory.tsx` | Merge QuickFilterPresets into main filter Card |
 
 ---
 
 ## Technical Details
 
-### TagEditor Props Interface (Updated)
+### Query Change (useInventoryListQuery.ts)
 
 ```typescript
-interface TagEditorProps {
-  itemId: string;
-  currentTags: string[];
-  normalizedTags?: string[];
-  // NEW: For Shopify auto-sync
-  shopifyProductId?: string | null;
-  storeKey?: string | null;
-  onTagsUpdated?: () => void;
-  className?: string;
-}
+// Line ~105 - add normalized_tags after shopify_tags
+          variant,
+          shopify_tags,
+          normalized_tags
 ```
 
-### Shopify Tag Manager - Replace Action
+### UI Consolidation (Inventory.tsx)
 
-When `action: 'replace'` is used:
-1. Fetch current product to verify it exists
-2. Completely replace tags (no merge)
-3. Return success with new tag list
+Replace the two-card structure (lines ~1322-1459) with:
 
-### UI Layout Fixes
+```tsx
+<Card>
+  <CardContent className="py-4 space-y-4">
+    {/* Quick Filter Presets - horizontal scrollable */}
+    <div className="overflow-x-auto pb-2">
+      <QuickFilterPresets
+        onApplyPreset={handleApplyQuickFilter}
+        onClearFilters={handleClearAllFilters}
+        activePreset={activeQuickFilter}
+      />
+    </div>
+    
+    <div className="border-t pt-4">
+      {/* Search + Filters Row */}
+      <div className="flex flex-col md:flex-row gap-3 md:items-center">
+        {/* Search input */}
+        {/* Status, Location, More Filters dropdowns */}
+      </div>
+    </div>
 
-1. **Single Card for all filters**: Combine QuickFilterPresets header with filter dropdowns
-2. **Flex wrap with gap**: Prevent button overflow
-3. **Responsive breakpoints**: Stack vertically on mobile
-4. **Clear visual hierarchy**: Use subtle borders between sections
+    {/* Bulk Actions - only when items selected */}
+    {selectedItems.size > 0 && (
+      <div className="border-t pt-4">
+        <BulkActionsToolbar ... />
+      </div>
+    )}
+
+    {/* Item count footer */}
+    <div className="border-t pt-2 ...">
+      Showing X of Y items
+    </div>
+  </CardContent>
+</Card>
+```
 
 ---
 
-## Expected Behavior After Implementation
+## Current Auto-Sync Behavior (Already Working)
 
-1. **User edits tags in TagEditor** → Tags saved to local DB → Normalized by trigger → Auto-synced to Shopify
-2. **Quick filters work correctly** → Based on normalized_tags from local DB
-3. **No UI overlap** → Clean single-card layout with proper spacing
-4. **Real-time feedback** → User sees "Syncing to Shopify..." indicator during sync
+The tag auto-sync to Shopify is already implemented:
+
+1. **User edits tags in TagEditor**
+2. **Save to local DB** → `intake_items.shopify_tags` updated
+3. **DB trigger fires** → `normalized_tags` auto-populated
+4. **If Shopify synced** → Edge function called with `action: 'replace'`
+5. **Shopify updated** → Product tags replaced with new list
+6. **UI feedback** → "Tags synced to Shopify" toast shown
 
 ---
 
-## Edge Cases Handled
+## Expected Outcome
 
-1. **Item not yet synced to Shopify**: Tags saved locally only, no Shopify call
-2. **Shopify sync fails**: Local save succeeds, warning toast shown, tags can be re-synced later
-3. **Empty tags**: Valid case, will clear all tags from product
-4. **Network timeout**: Graceful degradation with retry on next edit
+After these fixes:
+- TagEditor will show normalized tags (lowercase, deduplicated)
+- Single consolidated Card for all filters - no overlap
+- Better mobile experience with horizontal scroll for presets
+- Cleaner visual hierarchy with subtle dividers
