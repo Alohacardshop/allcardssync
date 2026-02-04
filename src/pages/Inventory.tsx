@@ -30,6 +30,7 @@ import { PrintFromInventoryDialog } from '@/components/inventory/PrintFromInvent
 import { ActiveFilterChips } from '@/components/inventory/ActiveFilterChips';
 import { MoreFiltersPopover } from '@/components/inventory/MoreFiltersPopover';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { navigateTo, routes } from '@/lib/navigation';
 
 import { useInventoryListQuery } from '@/hooks/useInventoryListQuery';
 import { useLocationNames, CachedLocation } from '@/hooks/useLocationNames';
@@ -536,7 +537,7 @@ const Inventory = () => {
         {
           action: {
             label: "View Queue",
-            onClick: () => window.location.href = '/admin#queue'
+            onClick: () => navigateTo(routes.adminQueue)
           }
         }
       );

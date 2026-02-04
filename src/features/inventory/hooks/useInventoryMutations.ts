@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { logger } from '@/lib/logger';
 import { sendGradedToShopify, sendRawToShopify } from '@/hooks/useShopifySend';
+import { navigateTo, routes } from '@/lib/navigation';
 import type { InventoryListItem } from '../types';
 
 // Action types for tracking per-item state
@@ -91,7 +92,7 @@ export function useInventoryMutations({
       toast.success(`${item.sku} queued for Shopify sync`, {
         action: {
           label: 'View Queue',
-          onClick: () => window.location.href = '/admin#queue'
+          onClick: () => navigateTo(routes.adminQueue)
         }
       });
       queryClient.invalidateQueries({ queryKey: ['inventory-list'] });
