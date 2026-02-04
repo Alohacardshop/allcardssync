@@ -28,11 +28,13 @@ import { BulkActionsToolbar } from '@/components/inventory/BulkActionsToolbar';
 import { QuickFilterPresets, QuickFilterState } from '@/components/inventory/QuickFilterPresets';
 import { PrintFromInventoryDialog } from '@/components/inventory/PrintFromInventoryDialog';
 import { ActiveFilterChips } from '@/components/inventory/ActiveFilterChips';
+import { MoreFiltersPopover } from '@/components/inventory/MoreFiltersPopover';
 import { PageHeader } from '@/components/layout/PageHeader';
 
 import { useInventoryListQuery } from '@/hooks/useInventoryListQuery';
 import { useLocationNames, CachedLocation } from '@/hooks/useLocationNames';
 import { useShopifyTags } from '@/hooks/useShopifyTags';
+import { useKeyboardNavigation } from '@/hooks/useKeyboardNavigation';
 import { TagFilterDropdown } from '@/components/inventory/TagFilterDropdown';
 import { Progress } from '@/components/ui/progress';
 import { useQueryClient } from '@tanstack/react-query';
@@ -906,6 +908,21 @@ const Inventory = () => {
     setSelectedItems(new Set());
   }, []);
 
+  // Search input ref for keyboard navigation
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Keyboard navigation hook
+  useKeyboardNavigation({
+    items: filteredItems,
+    selectedItems,
+    onToggleSelection: handleToggleSelection,
+    onClearSelection: clearSelection,
+    onSelectAll: selectAllVisible,
+    onSync: handleSyncSelected,
+    searchInputRef,
+    enabled: !showRemovalDialog && !showDeleteDialog && !showPrintDialog,
+  });
+
   // Quick filter preset handler
   const handleApplyQuickFilter = useCallback((preset: Partial<QuickFilterState>) => {
     // Set individual filter states from preset
@@ -1290,7 +1307,8 @@ const Inventory = () => {
                   <div className="relative md:col-span-2">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
-                      placeholder="Search items..."
+                      ref={searchInputRef}
+                      placeholder="Search items... (press / to focus)"
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                       className="pl-10"
