@@ -176,6 +176,12 @@ export const InventoryItemCard = memo(({
   );
 }, (prevProps, nextProps) => {
   // Custom comparison: only re-render if these specific props change
+  // Use joined strings instead of JSON.stringify for array comparison (much faster)
+  const prevTags = prevProps.item.shopify_tags?.join('|') ?? '';
+  const nextTags = nextProps.item.shopify_tags?.join('|') ?? '';
+  const prevNormTags = prevProps.item.normalized_tags?.join('|') ?? '';
+  const nextNormTags = nextProps.item.normalized_tags?.join('|') ?? '';
+
   return (
     prevProps.item.id === nextProps.item.id &&
     prevProps.item.sku === nextProps.item.sku &&
@@ -189,8 +195,8 @@ export const InventoryItemCard = memo(({
     prevProps.isSelected === nextProps.isSelected &&
     prevProps.isExpanded === nextProps.isExpanded &&
     prevProps.syncingRowId === nextProps.syncingRowId &&
-    JSON.stringify(prevProps.item.shopify_tags) === JSON.stringify(nextProps.item.shopify_tags) &&
-    JSON.stringify(prevProps.item.normalized_tags) === JSON.stringify(nextProps.item.normalized_tags)
+    prevTags === nextTags &&
+    prevNormTags === nextNormTags
   );
 });
 
