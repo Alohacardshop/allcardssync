@@ -9,6 +9,8 @@ import { formatDistanceToNow } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
 import type { InventoryItem, ShopifySyncStep, ShopifyLocation } from '@/types/inventory';
 import { logger } from '@/lib/logger';
+import { StockByLocationSection } from '@/components/inventory/StockByLocationSection';
+import { useLocationNames } from '@/hooks/useLocationNames';
 
 interface ShopifySyncDetailsDialogProps {
   open: boolean;
@@ -24,6 +26,9 @@ export function ShopifySyncDetailsDialog({ open, onOpenChange, row, selectedStor
   const [expandedJson, setExpandedJson] = useState(false);
   const [relinkingGraded, setRelinkingGraded] = useState(false);
   const [resyncing, setResyncing] = useState(false);
+  
+  // Fetch location names for stock by location section
+  const { data: locationsMap } = useLocationNames(row?.store_key || selectedStoreKey || null);
 
   useEffect(() => {
     if (open && row?.last_shopify_store_key && row?.last_shopify_location_gid) {
@@ -341,7 +346,12 @@ export function ShopifySyncDetailsDialog({ open, onOpenChange, row, selectedStor
             </div>
           </div>
 
-          {/* Graded item barcode enforcement details */}
+          {/* Stock by Location - from Shopify webhook data */}
+          <StockByLocationSection
+            inventoryItemId={row.shopify_inventory_item_id}
+            locationsMap={locationsMap}
+            primaryLocationGid={row.shopify_location_gid || row.last_shopify_location_gid}
+          />
           {snapshot?.graded && (
             <div className="border rounded-lg p-4 bg-muted/30">
               <div className="flex items-center justify-between mb-3">

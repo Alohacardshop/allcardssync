@@ -25,10 +25,12 @@ import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 import { InlineQuantityEditor } from '@/components/inventory-card/InlineQuantityEditor';
 import { EbayStatusBadge } from '@/components/inventory/EbayStatusBadge';
+import { LocationStockPopover } from '@/components/inventory/LocationStockPopover';
 import { useEbayListing } from '@/hooks/useEbayListing';
 import type { VirtualInventoryListProps, InventoryListItem } from '../types';
 import type { CachedLocation } from '@/hooks/useLocationNames';
 import { getShortLocationName } from '@/hooks/useLocationNames';
+import type { InventoryLevel } from '@/hooks/useInventoryLevels';
 
 type SortField = 'sku' | 'title' | 'price' | 'quantity' | 'created_at' | 'updated_at';
 type SortDirection = 'asc' | 'desc';
@@ -154,13 +156,13 @@ const TableRow = memo(({
           {title}
         </div>
 
-        {/* Location */}
-        <div className="text-xs text-muted-foreground truncate leading-tight">
-          {item.shopify_location_gid && locationsMap ? (
-            <span>{getShortLocationName(item.shopify_location_gid, locationsMap)}</span>
-          ) : (
-            <span className="text-muted-foreground/50">—</span>
-          )}
+        {/* Location with hover popover for multi-location stock */}
+        <div className="flex items-center h-full">
+          <LocationStockPopover
+            primaryLocationGid={item.shopify_location_gid}
+            locationsMap={locationsMap}
+            className="leading-tight"
+          />
         </div>
 
         {/* Price - right aligned, tabular nums */}
