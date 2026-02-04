@@ -979,12 +979,15 @@ async function handleOrderUpdate(supabase: any, payload: any, shopifyDomain: str
           }
         }
       } else {
-        // For raw items, decrement quantity (legacy behavior)
+        // For raw items: Shopify is source of truth
+        // We receive the order webhook AFTER Shopify has already deducted inventory
+        // Just record the sale locally - do NOT write back to Shopify
         const newQuantity = Math.max(0, (item.quantity || 0) - quantity);
         
         const updateData: any = { 
           quantity: newQuantity,
-          updated_by: 'shopify_webhook'
+          updated_by: 'shopify_webhook',
+          last_shopify_seen_at: new Date().toISOString()
         };
         
         // If quantity goes to 0, record sale info
@@ -1004,35 +1007,12 @@ async function handleOrderUpdate(supabase: any, payload: any, shopifyDomain: str
         if (updateError) {
           console.error('Failed to update raw item quantity:', updateError);
         } else {
-          console.log(`Updated raw item ${item.id} quantity to ${newQuantity}`);
-          
-          // Sync updated quantity back to Shopify (Phase 3: Inventory Sync Back)
-          if (item.type === 'Raw' && newQuantity > 0 && domain && token && item.shopify_inventory_item_id && item.shopify_location_gid) {
-            const shopifyLocationId = item.shopify_location_gid.replace('gid://shopify/Location/', '');
-            
-            const syncResponse = await fetch(
-              `https://${domain}/admin/api/2024-07/inventory_levels/set.json`,
-              {
-                method: 'POST',
-                headers: {
-                  'X-Shopify-Access-Token': token,
-                  'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                  location_id: shopifyLocationId,
-                  inventory_item_id: item.shopify_inventory_item_id,
-                  available: newQuantity
-                })
-              }
-            );
-            
-            if (!syncResponse.ok) {
-              console.error('Failed to sync inventory back to Shopify:', await syncResponse.text());
-            } else {
-              console.log(`✓ Synced inventory back to Shopify: ${sku} → ${newQuantity}`);
-            }
-          }
+          console.log(`[Shopify Truth] Updated raw item ${item.id} quantity to ${newQuantity} (no write-back to Shopify)`);
         }
+        
+        // NOTE: Removed Shopify inventory_levels/set call here
+        // Shopify is source of truth - it already knows the quantity from POS/online sale
+        // We only READ from Shopify webhooks, never write back for sale events
       }
     }
   }
@@ -1344,20 +1324,30 @@ async function handleOrderCancellation(supabase: any, payload: any, shopifyDomai
           }
         }
       } else {
-        // For raw items, add back the cancelled quantity
+        // For raw items: Shopify handles inventory restoration on cancellation
+        // We receive inventory_levels/update webhook which will sync the new quantity
+        // Just update our local record to match what Shopify will send
+        const restoredQty = (item.quantity || 0) + quantity;
+        
         const { error: updateError } = await supabase
           .from('intake_items')
           .update({
-            quantity: (item.quantity || 0) + quantity,
-            updated_by: 'shopify_webhook'
+            quantity: restoredQty,
+            sold_at: null, // Clear sold status
+            sold_order_id: null,
+            updated_by: 'shopify_webhook_cancellation',
+            last_shopify_seen_at: new Date().toISOString()
           })
           .eq('id', item.id);
 
         if (updateError) {
           console.error('Failed to restore raw item quantity:', updateError);
         } else {
-          console.log(`Restored raw item ${item.id} quantity by ${quantity}`);
+          console.log(`[Shopify Truth] Restored raw item ${item.id} quantity to ${restoredQty} (Shopify handles actual inventory)`);
         }
+        
+        // NOTE: No Shopify write needed - Shopify automatically restores inventory on cancellation
+        // The inventory_levels/update webhook will confirm the new quantity
       }
     }
   }
@@ -1501,20 +1491,27 @@ async function handleRefundCreated(supabase: any, payload: any, shopifyDomain: s
           }
         }
       } else {
-        // For raw items, add back refunded quantity
+        // For raw items: Shopify handles inventory restoration on refund
+        // We receive inventory_levels/update webhook which will sync the new quantity
+        const restoredQty = (item.quantity || 0) + refundQuantity;
+        
         const { error: updateError } = await supabase
           .from('intake_items')
           .update({
-            quantity: (item.quantity || 0) + refundQuantity,
-            updated_by: 'shopify_webhook'
+            quantity: restoredQty,
+            updated_by: 'shopify_webhook_refund',
+            last_shopify_seen_at: new Date().toISOString()
           })
           .eq('id', item.id);
 
         if (updateError) {
           console.error('Failed to restore refunded raw item:', updateError);
         } else {
-          console.log(`Restored raw item ${item.id} quantity by ${refundQuantity}`);
+          console.log(`[Shopify Truth] Restored raw item ${item.id} quantity to ${restoredQty} (Shopify handles actual inventory)`);
         }
+        
+        // NOTE: No Shopify write needed - Shopify automatically restores inventory on refund
+        // The inventory_levels/update webhook will confirm the new quantity
       }
     }
   }
