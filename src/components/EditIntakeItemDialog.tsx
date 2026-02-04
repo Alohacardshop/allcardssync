@@ -6,6 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SubCategoryCombobox } from "@/components/ui/sub-category-combobox";
 import { detectMainCategory } from "@/utils/categoryMapping";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+import { Loader2, CloudUpload } from "lucide-react";
 
 export type IntakeItemDetails = {
   id: string;
@@ -41,8 +44,32 @@ interface Props {
   isAdmin?: boolean;
 }
 
+// Generate title from item fields (matches InventoryItemCard logic)
+function generateTitle(item: IntakeItemDetails): string {
+  const parts: string[] = [];
+  
+  if (item.year) parts.push(item.year);
+  if (item.brandTitle) parts.push(item.brandTitle);
+  if (item.subject) parts.push(item.subject);
+  if (item.cardNumber) parts.push(`#${item.cardNumber}`);
+  if (item.variant && item.variant.toLowerCase() !== 'normal') {
+    parts.push(item.variant.toLowerCase());
+  }
+  
+  if (item.grade && (item.psaCert || item.gradingCompany)) {
+    const company = item.gradingCompany || 'PSA';
+    parts.push(`${company} ${item.grade}`);
+  } else if (item.grade) {
+    parts.push(`Grade ${item.grade}`);
+  }
+  
+  return parts.length > 0 ? parts.join(' ') : 'Unknown Item';
+}
+
 function EditIntakeItemDialog({ open, item, onOpenChange, onSave, isAdmin = false }: Props) {
   const [form, setForm] = useState<IntakeItemDetails | null>(item);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isSyncingToShopify, setIsSyncingToShopify] = useState(false);
 
   useEffect(() => {
     setForm(item);
@@ -52,6 +79,9 @@ function EditIntakeItemDialog({ open, item, onOpenChange, onSave, isAdmin = fals
 
   // Check if this is a graded card
   const isGradedCard = Boolean(form.grade && form.grade !== 'Raw' && form.grade !== 'Ungraded') || Boolean(form.psaCert);
+  
+  // Check if item is synced to Shopify
+  const isSyncedToShopify = Boolean(form.shopifyProductId);
 
   const conditionOptions = [
     "Near Mint",
@@ -84,14 +114,89 @@ function EditIntakeItemDialog({ open, item, onOpenChange, onSave, isAdmin = fals
   };
 
   const handleSubmit = async () => {
-    await onSave(form as IntakeItemDetails);
+    if (!form || !item) return;
+    
+    setIsSaving(true);
+    
+    try {
+      // First save to local database
+      await onSave(form);
+      
+      // If synced to Shopify, auto-sync changes
+      if (isSyncedToShopify && form.storeKey) {
+        // Determine what changed and needs syncing
+        const updates: { title?: string; price?: number } = {};
+        
+        // Check if title-affecting fields changed
+        const oldTitle = generateTitle(item);
+        const newTitle = generateTitle(form);
+        if (oldTitle !== newTitle) {
+          updates.title = newTitle;
+        }
+        
+        // Check if price changed
+        const oldPrice = parseFloat(item.price || '0');
+        const newPrice = parseFloat(form.price || '0');
+        if (oldPrice !== newPrice) {
+          updates.price = newPrice;
+        }
+        
+        // If there are updates, sync to Shopify
+        if (Object.keys(updates).length > 0) {
+          setIsSyncingToShopify(true);
+          
+          try {
+            const { data, error } = await supabase.functions.invoke('shopify-update-product', {
+              body: {
+                itemId: form.id,
+                storeKey: form.storeKey,
+                updates
+              }
+            });
+            
+            if (error) {
+              console.error('Shopify sync error:', error);
+              toast.warning(`Saved locally, but Shopify sync failed: ${error.message}`);
+            } else if (data?.success) {
+              const syncedFields = data.updatedFields?.join(', ') || 'fields';
+              toast.success(`Changes saved & synced to Shopify (${syncedFields})`);
+            } else {
+              toast.warning('Saved locally, but Shopify sync failed');
+            }
+          } catch (syncErr: any) {
+            console.error('Shopify sync error:', syncErr);
+            toast.warning('Saved locally, but Shopify sync failed');
+          } finally {
+            setIsSyncingToShopify(false);
+          }
+        } else {
+          toast.success('Changes saved');
+        }
+      } else {
+        toast.success('Changes saved');
+      }
+      
+      onOpenChange(false);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to save changes');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Edit Item Details</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            Edit Item Details
+            {isSyncedToShopify && (
+              <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full flex items-center gap-1">
+                <CloudUpload className="h-3 w-3" />
+                Auto-syncs to Shopify
+              </span>
+            )}
+          </DialogTitle>
         </DialogHeader>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-2">
           <div>
@@ -186,6 +291,11 @@ function EditIntakeItemDialog({ open, item, onOpenChange, onSave, isAdmin = fals
           <div>
             <Label htmlFor="price">Price</Label>
             <Input id="price" value={form.price || ""} onChange={(e) => handleChange("price", e.target.value)} placeholder="$" />
+            {isSyncedToShopify && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Will auto-sync to Shopify on save.
+              </p>
+            )}
           </div>
           <div>
             <Label htmlFor="cost">Cost</Label>
@@ -203,7 +313,7 @@ function EditIntakeItemDialog({ open, item, onOpenChange, onSave, isAdmin = fals
             />
             {form.shopifyProductId && (
               <p className="text-xs text-muted-foreground mt-1">
-                Quantity managed by Shopify. Use 'Resync from Shopify' to update.
+                Edit quantity from the inventory card for Shopify sync.
               </p>
             )}
           </div>
@@ -255,8 +365,24 @@ function EditIntakeItemDialog({ open, item, onOpenChange, onSave, isAdmin = fals
           )}
         </div>
         <DialogFooter>
-          <Button variant="secondary" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={handleSubmit}>Save</Button>
+          <Button variant="secondary" onClick={() => onOpenChange(false)} disabled={isSaving}>
+            Cancel
+          </Button>
+          <Button onClick={handleSubmit} disabled={isSaving}>
+            {isSaving || isSyncingToShopify ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                {isSyncingToShopify ? 'Syncing to Shopify...' : 'Saving...'}
+              </>
+            ) : isSyncedToShopify ? (
+              <>
+                <CloudUpload className="h-4 w-4 mr-2" />
+                Save & Sync
+              </>
+            ) : (
+              'Save'
+            )}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
