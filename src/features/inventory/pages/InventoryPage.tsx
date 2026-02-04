@@ -4,7 +4,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Loader2, AlertCircle, RefreshCw, Download } from 'lucide-react';
 import { toast } from 'sonner';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useStore } from '@/contexts/StoreContext';
 import { useShopifyResync } from '@/hooks/useShopifyResync';
 import { useEbayListing } from '@/hooks/useEbayListing';
@@ -367,7 +367,7 @@ const InventoryPage = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col h-[calc(100vh-4rem)]">
       {/* Loading indicator for background refetches */}
       {isFetching && !isLoading && (
         <div className="fixed top-0 left-0 right-0 z-50">
@@ -375,27 +375,34 @@ const InventoryPage = () => {
         </div>
       )}
       
-      <PageHeader 
-        title="Inventory Management" 
-        description="View, search, and manage your inventory items"
-        showEcosystem
-        actions={
-          <Suspense fallback={<div className="h-8" />}>
-            <QueueStatusIndicator />
-          </Suspense>
-        }
-      />
+      {/* Sticky Header Section */}
+      <div className="shrink-0 space-y-4 pb-4">
+        <PageHeader 
+          title="Inventory Management" 
+          description="View, search, and manage your inventory items"
+          showEcosystem
+          actions={
+            <Suspense fallback={<div className="h-8" />}>
+              <QueueStatusIndicator />
+            </Suspense>
+          }
+        />
 
-      <Tabs defaultValue="inventory" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="inventory">Inventory Management</TabsTrigger>
-          <TabsTrigger value="analytics">Analytics</TabsTrigger>
-          <TabsTrigger value="settings">Printer Settings</TabsTrigger>
-        </TabsList>
+        <Tabs defaultValue="inventory" className="w-full">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="inventory">Inventory Management</TabsTrigger>
+            <TabsTrigger value="analytics">Analytics</TabsTrigger>
+            <TabsTrigger value="settings">Printer Settings</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
 
-        <TabsContent value="inventory" className="space-y-6">
+      {/* Main Content Area */}
+      <div className="flex-1 min-h-0 flex flex-col">
+        {/* Sticky Controls Bar */}
+        <div className="shrink-0 sticky top-0 z-20 bg-background pb-3 space-y-3 border-b border-border">
           {/* Refresh Controls + View Toggle */}
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap pt-2">
             <RefreshControls
               autoRefreshEnabled={autoRefreshEnabled}
               onAutoRefreshToggle={setAutoRefreshEnabled}
@@ -440,21 +447,23 @@ const InventoryPage = () => {
               </Button>
             </div>
           </div>
-          
-          {/* Consolidated Filter Card */}
-          {/* Filters Section - no card wrapper, cleaner look */}
-          <div className="space-y-4">
-            <InventoryFiltersBar
-              filters={filters}
-              onFilterChange={handleFilterChange}
-              onClearAllFilters={handleClearAllFilters}
-              onApplyQuickFilter={handleApplyQuickFilter}
-              locationsMap={locationsMap}
-              shopifyTags={shopifyTags}
-              isLoadingTags={isLoadingTags}
-              searchInputRef={searchInputRef}
-            />
 
+          {/* Filters Bar */}
+          <InventoryFiltersBar
+            filters={filters}
+            onFilterChange={handleFilterChange}
+            onClearAllFilters={handleClearAllFilters}
+            onApplyQuickFilter={handleApplyQuickFilter}
+            locationsMap={locationsMap}
+            shopifyTags={shopifyTags}
+            isLoadingTags={isLoadingTags}
+            searchInputRef={searchInputRef}
+          />
+        </div>
+
+        {/* Sticky Bulk Bar - only when items selected */}
+        {selectedItems.size > 0 && (
+          <div className="shrink-0 sticky top-[140px] z-10 bg-background py-2 border-b border-border">
             <InventoryBulkBar
               selectedItems={selectedItems}
               filteredItems={items}
@@ -481,7 +490,10 @@ const InventoryPage = () => {
               hasNextPage={hasNextPage}
             />
           </div>
+        )}
 
+        {/* Scrollable List Area */}
+        <div className="flex-1 overflow-auto pt-4">
           {/* Empty state */}
           {!isLoading && items.length === 0 && (
             <Card>
@@ -568,14 +580,9 @@ const InventoryPage = () => {
               />
             )
           )}
-        </TabsContent>
+        </div>
+      </div>
 
-        <TabsContent value="analytics">
-          <Suspense fallback={<div className="flex items-center justify-center p-8"><Loader2 className="h-6 w-6 animate-spin" /></div>}>
-            <InventoryAnalytics />
-          </Suspense>
-        </TabsContent>
-      </Tabs>
 
       {/* Dialogs */}
       <ShopifyRemovalDialog
