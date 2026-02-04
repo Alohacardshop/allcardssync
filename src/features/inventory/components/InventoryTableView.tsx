@@ -226,57 +226,78 @@ const TableRow = memo(({
           </Tooltip>
         </div>
 
-        {/* Primary Action - fixed width */}
-        <div className="flex justify-center">
+        {/* Primary Action - fixed width with placeholder to prevent shifting */}
+        <div className="flex justify-center min-w-[70px]">
           {primaryAction ? (
             <Button
               variant="outline"
               size="sm"
               onClick={primaryAction.action}
               disabled={isLoading}
-              className="h-6 px-2 text-[10px] font-medium"
+              className="h-6 px-2 text-[10px] font-medium min-w-[52px]"
+              aria-label={`${primaryAction.label} ${title}`}
             >
               {isLoading ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
+                <Loader2 className="h-3 w-3 animate-spin" aria-label="Saving..." />
               ) : (
                 primaryAction.label
               )}
             </Button>
-          ) : null}
+          ) : (
+            <span className="min-w-[52px]" aria-hidden="true" />
+          )}
         </div>
 
         {/* Kebab Menu */}
         <div className="flex justify-center">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
-                <MoreVertical className="h-4 w-4" />
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="h-7 w-7 p-0"
+                aria-label={`More actions for ${title}`}
+              >
+                <MoreVertical className="h-4 w-4" aria-hidden="true" />
+                <span className="sr-only">Open menu</span>
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => onSyncDetails(item)}>
-                <FileText className="h-4 w-4 mr-2" />
+            <DropdownMenuContent align="end" className="bg-popover">
+              <DropdownMenuItem 
+                onClick={() => onSyncDetails(item)}
+                aria-label="View item details"
+              >
+                <FileText className="h-4 w-4 mr-2" aria-hidden="true" />
                 View Details
               </DropdownMenuItem>
               <DropdownMenuItem 
                 onClick={() => toggleListOnEbay(item.id, item.list_on_ebay || false)}
                 disabled={isToggling === item.id}
+                aria-label={item.list_on_ebay ? 'Remove item from eBay listing' : 'Add item to eBay listing'}
               >
-                <ShoppingBag className="h-4 w-4 mr-2" />
+                <ShoppingBag className="h-4 w-4 mr-2" aria-hidden="true" />
                 {item.list_on_ebay ? 'Remove from eBay' : 'List on eBay'}
               </DropdownMenuItem>
               {item.shopify_product_id && (
                 <>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => onRemove(item)} className="text-destructive">
-                    <Trash2 className="h-4 w-4 mr-2" />
+                  <DropdownMenuItem 
+                    onClick={() => onRemove(item)} 
+                    className="text-destructive"
+                    aria-label="Remove item from Shopify"
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" aria-hidden="true" />
                     Remove from Shopify
                   </DropdownMenuItem>
                 </>
               )}
               {isAdmin && onDelete && !item.deleted_at && (
-                <DropdownMenuItem onClick={() => onDelete(item)} className="text-destructive">
-                  <Trash2 className="h-4 w-4 mr-2" />
+                <DropdownMenuItem 
+                  onClick={() => onDelete(item)} 
+                  className="text-destructive"
+                  aria-label="Permanently delete item"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" aria-hidden="true" />
                   Delete Item
                 </DropdownMenuItem>
               )}
