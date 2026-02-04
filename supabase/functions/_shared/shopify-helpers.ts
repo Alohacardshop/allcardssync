@@ -316,3 +316,146 @@ export async function setInventorySafe(
     return { success: false, error: e instanceof Error ? e.message : 'Unknown error' }
   }
 }
+
+/**
+ * Operation types for inventory updates
+ * - Delta operations use adjust API (safer, additive)
+ * - Ownership operations use set API (for 1-of-1 graded items)
+ */
+export type InventoryOperationType = 
+  | 'refund'           // Delta: +quantity restored
+  | 'transfer_out'     // Delta: -quantity from source
+  | 'transfer_in'      // Delta: +quantity to destination
+  | 'receiving'        // Delta: +quantity received
+  | 'manual_adjust'    // Delta: +/- manual adjustment
+  | 'sale'             // Delta: -quantity sold (though usually handled by Shopify)
+  | 'enforce_graded'   // Set: enforce exact 1-of-1 ownership at location
+
+export interface SmartInventoryParams {
+  domain: string
+  token: string
+  inventory_item_id: string
+  location_id: string
+  operation: InventoryOperationType
+  /** For delta operations: the change amount (+/-). For enforce_graded: the target quantity (0 or 1) */
+  quantity: number
+  /** Optional: expected current level for optimistic locking */
+  expected_available?: number
+  /** Is this a graded 1-of-1 item? If true and operation is ownership-related, uses set API */
+  is_graded?: boolean
+}
+
+export interface SmartInventoryResult extends SafeInventoryResult {
+  api_used: 'adjust' | 'set'
+  operation: InventoryOperationType
+}
+
+/**
+ * Smart inventory update that automatically chooses the correct Shopify API:
+ * - adjust API for delta operations (refunds, transfers, receiving, manual adjustments)
+ * - set API only for enforcing exact ownership of graded 1-of-1 items
+ * 
+ * This prevents race conditions and ensures Shopify remains source of truth for raw items.
+ */
+export async function updateInventorySmart(
+  params: SmartInventoryParams
+): Promise<SmartInventoryResult> {
+  const { 
+    domain, 
+    token, 
+    inventory_item_id, 
+    location_id, 
+    operation, 
+    quantity, 
+    expected_available,
+    is_graded 
+  } = params
+
+  // Determine which API to use based on operation type
+  const useSetApi = operation === 'enforce_graded' && is_graded
+
+  if (useSetApi) {
+    // For graded items: use set API to enforce exact ownership (0 or 1)
+    // This is the ONLY case where we use absolute set
+    const targetQuantity = quantity // Should be 0 or 1 for graded items
+    
+    if (targetQuantity !== 0 && targetQuantity !== 1) {
+      return {
+        success: false,
+        error: `Invalid quantity for graded item: ${targetQuantity}. Must be 0 or 1.`,
+        api_used: 'set',
+        operation
+      }
+    }
+
+    const result = await setInventorySafe(
+      domain, 
+      token, 
+      inventory_item_id, 
+      location_id, 
+      targetQuantity,
+      expected_available
+    )
+
+    return {
+      ...result,
+      api_used: 'set',
+      operation
+    }
+  } else {
+    // For all delta operations: use adjust API
+    // This is the safe default that respects Shopify as source of truth
+    const delta = getDeltaForOperation(operation, quantity)
+    
+    const result = await adjustInventorySafe(
+      domain,
+      token,
+      inventory_item_id,
+      location_id,
+      delta,
+      expected_available
+    )
+
+    return {
+      ...result,
+      api_used: 'adjust',
+      operation
+    }
+  }
+}
+
+/**
+ * Convert operation type and quantity to a signed delta value
+ */
+function getDeltaForOperation(operation: InventoryOperationType, quantity: number): number {
+  switch (operation) {
+    case 'refund':
+    case 'transfer_in':
+    case 'receiving':
+      // These add inventory
+      return Math.abs(quantity)
+    
+    case 'transfer_out':
+    case 'sale':
+      // These remove inventory
+      return -Math.abs(quantity)
+    
+    case 'manual_adjust':
+      // Already signed by caller
+      return quantity
+    
+    case 'enforce_graded':
+      // Should not reach here (handled by set API path)
+      throw new Error('enforce_graded should use set API, not adjust')
+    
+    default:
+      throw new Error(`Unknown operation type: ${operation}`)
+  }
+}
+
+/**
+ * Helper to determine if an item should use set API for inventory operations
+ */
+export function shouldUseSetApi(operation: InventoryOperationType, isGraded: boolean): boolean {
+  return operation === 'enforce_graded' && isGraded
+}
