@@ -2394,6 +2394,42 @@ export type Database = {
         }
         Relationships: []
       }
+      shopify_inventory_levels: {
+        Row: {
+          available: number
+          created_at: string
+          id: string
+          inventory_item_id: string
+          location_gid: string
+          location_name: string | null
+          shopify_updated_at: string | null
+          store_key: string
+          updated_at: string
+        }
+        Insert: {
+          available?: number
+          created_at?: string
+          id?: string
+          inventory_item_id: string
+          location_gid: string
+          location_name?: string | null
+          shopify_updated_at?: string | null
+          store_key: string
+          updated_at?: string
+        }
+        Update: {
+          available?: number
+          created_at?: string
+          id?: string
+          inventory_item_id?: string
+          location_gid?: string
+          location_name?: string | null
+          shopify_updated_at?: string | null
+          store_key?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       shopify_location_cache: {
         Row: {
           cached_at: string
@@ -3006,36 +3042,48 @@ export type Database = {
       webhook_events: {
         Row: {
           created_at: string | null
+          dead_letter: boolean | null
           error_message: string | null
           event_type: string
           id: string
           last_retry_at: string | null
+          max_retries: number | null
           payload: Json
           processed_at: string | null
+          processing_completed_at: string | null
+          processing_started_at: string | null
           retry_count: number | null
           status: string | null
           webhook_id: string
         }
         Insert: {
           created_at?: string | null
+          dead_letter?: boolean | null
           error_message?: string | null
           event_type: string
           id?: string
           last_retry_at?: string | null
+          max_retries?: number | null
           payload: Json
           processed_at?: string | null
+          processing_completed_at?: string | null
+          processing_started_at?: string | null
           retry_count?: number | null
           status?: string | null
           webhook_id: string
         }
         Update: {
           created_at?: string | null
+          dead_letter?: boolean | null
           error_message?: string | null
           event_type?: string
           id?: string
           last_retry_at?: string | null
+          max_retries?: number | null
           payload?: Json
           processed_at?: string | null
+          processing_completed_at?: string | null
+          processing_started_at?: string | null
           retry_count?: number | null
           status?: string | null
           webhook_id?: string
