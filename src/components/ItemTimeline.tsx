@@ -12,6 +12,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
+import { QuantityChangeHistory } from './QuantityChangeHistory';
 
 interface ItemTimelineProps {
   item: any;
@@ -179,6 +180,9 @@ export function ItemTimeline({ item }: ItemTimelineProps) {
           </div>
         </CardContent>
       </Card>
+
+      {/* Quantity Change History - Staff Audit Trail */}
+      <QuantityChangeHistory itemId={item.id} sku={item.sku} />
 
       {/* Additional Details */}
       {(item.processing_notes || item.shopify_sync_status || item.sku) && (
