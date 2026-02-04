@@ -1,235 +1,173 @@
 
-# End-to-End Test Workflow: Inventory → Shopify → eBay → Print Labels
+# Make eBay Sync Safe in Dry Run Mode
 
-This plan creates a dedicated **Test Mode** page that allows you to run synthetic test data through the entire pipeline without affecting production inventory.
-
----
-
-## What This Will Do
-
-A single "Test Dashboard" page at `/admin/e2e-test` that lets you:
-
-1. **Create Test Items** - Generate 1-5 fake inventory items with realistic trading card data
-2. **Sync to Shopify** - Push test items to Shopify (dry run or real based on toggle)
-3. **Sync to eBay** - Queue items for eBay and process (dry run mode protects you)
-4. **Print Labels** - Generate ZPL and send to QZ Tray for label printing
-5. **Cleanup** - Delete test items when done
+This update adds proper dry run protection to the eBay sync processor, ensuring test items never reach the eBay API when `dry_run_mode = true`.
 
 ---
 
-## Test Data Examples
+## Current Problem
 
-The generator will create items like:
-
-| Field | Example Value |
-|-------|---------------|
-| **SKU** | `TEST-A3X7YQ` |
-| **Brand** | Pokemon, Magic, Yu-Gi-Oh! |
-| **Subject** | Charizard, Black Lotus, Blue Eyes |
-| **Variant** | Base Set, First Edition |
-| **Price** | $49.99 |
-| **Grade** | PSA 9, PSA 10, or Raw |
-| **Store** | hawaii |
-| **Location** | Your configured Shopify location |
+The `ebay-sync-processor` edge function fetches the store config (including `dry_run_mode`) but then **ignores it** and makes real API calls to:
+- `createOrUpdateInventoryItem` → Creates inventory on eBay
+- `createOffer` → Creates an offer
+- `publishOffer` → Makes the listing live
 
 ---
 
-## Implementation Steps
+## Solution
 
-### Step 1: Create E2E Test Page Component
+Add a dry run check that simulates success without calling eBay APIs.
 
-**File**: `src/pages/E2ETestPage.tsx`
-
-A new page with the following sections:
-
-1. **Test Item Generator**
-   - Button to generate 1, 3, or 5 test items
-   - Uses `TestDataGenerators.inventoryItem()` pattern
-   - Inserts via `useAddIntakeItem` hook or direct RPC
-
-2. **Shopify Sync Tester**
-   - Shows test items and their Shopify sync status
-   - "Sync to Shopify" button invokes `shopify-sync` edge function
-   - Displays sync results and any errors
-
-3. **eBay Sync Tester**
-   - "Mark for eBay" toggles `list_on_ebay` flag
-   - "Queue for eBay" adds to `ebay_sync_queue`
-   - "Process Queue" invokes `ebay-sync-processor`
-   - Shows dry-run results (since `dry_run_mode = true`)
-
-4. **Label Printer Tester**
-   - Preview generated labels for test items
-   - Uses `generateZPLFromLabelData()` from labelRenderer
-   - Sends to QZ Tray via `useQzTray` hook
-   - Works with your existing Zebra printer
-
-5. **Cleanup Section**
-   - "Delete All Test Items" button
-   - Filters by `sku LIKE 'TEST-%'`
-   - Removes from intake_items and any sync queues
-
----
-
-### Step 2: Add Route Configuration
-
-**File**: `src/App.tsx` (or routes config)
-
-Add route: `/admin/e2e-test`
-
----
-
-### Step 3: Create Test Data Generator Utility
-
-**File**: `src/lib/testDataGenerator.ts`
+### How It Will Work
 
 ```text
-Function: generateTestInventoryItems(count: number)
-
-Returns array of intake_items with:
-- sku: `TEST-${randomString}`
-- store_key: 'hawaii' (uses your connected store)
-- shopify_location_gid: from your store config
-- Realistic card data (Pokemon, Magic, etc.)
-- Random prices $10-500
-- Optional grade (PSA 8-10) or Raw
-- list_on_shopify: true
-- list_on_ebay: true (for testing)
+┌─────────────────────────────────────────┐
+│  ebay-sync-processor receives queue     │
+└───────────────────┬─────────────────────┘
+                    ▼
+┌─────────────────────────────────────────┐
+│  Fetch storeConfig for the store        │
+│  (includes dry_run_mode flag)           │
+└───────────────────┬─────────────────────┘
+                    ▼
+            ┌───────────────┐
+            │ dry_run_mode? │
+            └───────┬───────┘
+                    │
+        ┌───────────┴───────────┐
+        ▼                       ▼
+   [true]                    [false]
+        │                       │
+        ▼                       ▼
+┌───────────────────┐  ┌───────────────────┐
+│ SIMULATE SUCCESS  │  │ REAL eBay API     │
+│ • Log dry run     │  │ • createInventory │
+│ • Mark completed  │  │ • createOffer     │
+│ • Fake IDs        │  │ • publishOffer    │
+│ • Update DB       │  │ • Update DB       │
+└───────────────────┘  └───────────────────┘
 ```
 
 ---
 
-### Step 4: Add Sidebar Navigation Link
+## Changes to `ebay-sync-processor/index.ts`
 
-**File**: `src/components/admin/AdminSidebar.tsx` (or equivalent)
+### 1. Add Dry Run Check Before Processing
 
-Add menu item: "E2E Testing" under Admin section
+After fetching `storeConfig`, check if dry run is enabled:
 
----
+```typescript
+const isDryRun = storeConfig.dry_run_mode === true
 
-## UI Mockup
-
-```text
-┌─────────────────────────────────────────────────────────────┐
-│  E2E Test Dashboard                                         │
-│  Test the full Shopify/eBay/Print workflow with fake data  │
-├─────────────────────────────────────────────────────────────┤
-│                                                              │
-│  ┌── Step 1: Generate Test Items ──────────────────────────┐│
-│  │                                                          ││
-│  │  [Generate 1 Item]  [Generate 3 Items]  [Generate 5]    ││
-│  │                                                          ││
-│  │  Created: 3 test items (TEST-A3X7YQ, TEST-B2Y8ZR, ...)  ││
-│  │                                                          ││
-│  └──────────────────────────────────────────────────────────┘│
-│                                                              │
-│  ┌── Step 2: Sync to Shopify ──────────────────────────────┐│
-│  │                                                          ││
-│  │  [ ] Dry Run Mode                                        ││
-│  │                                                          ││
-│  │  [Sync Selected to Shopify]                              ││
-│  │                                                          ││
-│  │  ✓ TEST-A3X7YQ - Synced (Product ID: 123456789)         ││
-│  │  ✓ TEST-B2Y8ZR - Synced (Product ID: 123456790)         ││
-│  │  ✗ TEST-C1Z9WQ - Failed: Rate limited                   ││
-│  │                                                          ││
-│  └──────────────────────────────────────────────────────────┘│
-│                                                              │
-│  ┌── Step 3: Sync to eBay ─────────────────────────────────┐│
-│  │                                                          ││
-│  │  Status: DRY RUN MODE ENABLED (safe testing)             ││
-│  │                                                          ││
-│  │  [Queue for eBay]  [Process Queue]                       ││
-│  │                                                          ││
-│  │  ✓ TEST-A3X7YQ - Queued → Processed (dry run)           ││
-│  │  ✓ TEST-B2Y8ZR - Queued → Processed (dry run)           ││
-│  │                                                          ││
-│  └──────────────────────────────────────────────────────────┘│
-│                                                              │
-│  ┌── Step 4: Print Labels ─────────────────────────────────┐│
-│  │                                                          ││
-│  │  Printer: ZD421-203dpi-ZPL (Connected ✓)                 ││
-│  │                                                          ││
-│  │  [Print All Test Labels]  [Print Selected]               ││
-│  │                                                          ││
-│  │  Preview:                                                ││
-│  │  ┌─────────────────────┐                                 ││
-│  │  │ PSA 9    |  $149.99 │                                 ││
-│  │  │ |||||||||||||||||||  │                                 ││
-│  │  │ Pokemon Charizard   │                                 ││
-│  │  └─────────────────────┘                                 ││
-│  │                                                          ││
-│  └──────────────────────────────────────────────────────────┘│
-│                                                              │
-│  ┌── Cleanup ──────────────────────────────────────────────┐│
-│  │                                                          ││
-│  │  ⚠️ This will permanently delete all TEST-* items       ││
-│  │                                                          ││
-│  │  [Delete All Test Items]                                 ││
-│  │                                                          ││
-│  └──────────────────────────────────────────────────────────┘│
-│                                                              │
-└─────────────────────────────────────────────────────────────┘
+if (isDryRun) {
+  console.log(`[ebay-sync-processor] DRY RUN MODE for ${currentStoreKey} - skipping real API calls`)
+}
 ```
 
+### 2. Modify `processCreate` to Accept Dry Run Flag
+
+Pass `isDryRun` to processing functions:
+
+```typescript
+case 'create':
+  syncResult = await processCreate(supabase, accessToken, environment, item, storeConfig, isDryRun)
+  break
+```
+
+### 3. Simulate Success in Dry Run Mode
+
+Inside `processCreate`:
+
+```typescript
+if (isDryRun) {
+  const fakeOfferId = `DRY-RUN-OFFER-${Date.now()}`
+  const fakeListingId = `DRY-RUN-LISTING-${Date.now()}`
+  
+  // Update database with simulated data
+  await supabase
+    .from('intake_items')
+    .update({
+      ebay_inventory_item_sku: ebaySku,
+      ebay_offer_id: fakeOfferId,
+      ebay_listing_id: fakeListingId,
+      ebay_listing_url: `[DRY RUN] Would list at ebay.com/itm/${fakeListingId}`,
+      ebay_sync_status: 'dry_run',
+      ebay_sync_error: null,
+      last_ebay_synced_at: new Date().toISOString(),
+      ebay_sync_snapshot: {
+        timestamp: new Date().toISOString(),
+        action: 'create',
+        dry_run: true,
+        simulated: true,
+      },
+    })
+    .eq('id', item.id)
+
+  return { success: true, data: { listing_id: fakeListingId, dry_run: true } }
+}
+
+// ... real API calls below
+```
+
+### 4. Similar Changes for `processUpdate` and `processDelete`
+
+Each function will check the dry run flag and simulate success without calling eBay APIs.
+
 ---
 
-## Technical Details
+## What Changes in the Response
 
-### Files to Create
+The processor will return `dryRun: true` in its response:
 
-| File | Purpose |
-|------|---------|
-| `src/pages/E2ETestPage.tsx` | Main test dashboard component |
-| `src/lib/testDataGenerator.ts` | Utility for generating test items |
-| `src/hooks/useE2ETest.ts` | Hook for managing test workflow state |
+```json
+{
+  "success": true,
+  "processed": 3,
+  "succeeded": 3,
+  "failed": 0,
+  "dryRun": true
+}
+```
 
-### Files to Modify
+The E2E Test Dashboard already shows this indicator.
+
+---
+
+## Database Values in Dry Run
+
+| Field | Value |
+|-------|-------|
+| `ebay_sync_status` | `'dry_run'` |
+| `ebay_offer_id` | `'DRY-RUN-OFFER-...'` |
+| `ebay_listing_id` | `'DRY-RUN-LISTING-...'` |
+| `ebay_listing_url` | `'[DRY RUN] Would list at...'` |
+
+This makes it obvious which items were processed in test mode.
+
+---
+
+## Safety Guarantees After This Change
+
+| Scenario | What Happens |
+|----------|--------------|
+| `dry_run_mode = true` | No eBay API calls made, queue completes with simulated data |
+| `dry_run_mode = false` | Real eBay API calls as normal |
+| Test items (TEST-*) | Safe regardless of mode, but dry run adds extra protection |
+
+---
+
+## Files to Modify
 
 | File | Change |
 |------|--------|
-| `src/App.tsx` | Add `/admin/e2e-test` route |
-| `src/components/admin/AdminSidebar.tsx` | Add navigation link |
-
-### Edge Functions Used
-
-- `shopify-sync` - Sync to Shopify
-- `ebay-sync-processor` - Process eBay queue
-- Label printing uses client-side QZ Tray (no edge function)
-
-### Database Queries
-
-```sql
--- Insert test item
-INSERT INTO intake_items (
-  sku, store_key, shopify_location_gid, brand_title, 
-  subject, price, quantity, list_on_shopify, list_on_ebay, ...
-) VALUES (...);
-
--- Cleanup test items
-DELETE FROM ebay_sync_queue WHERE inventory_item_id IN (
-  SELECT id FROM intake_items WHERE sku LIKE 'TEST-%'
-);
-DELETE FROM intake_items WHERE sku LIKE 'TEST-%';
-```
+| `supabase/functions/ebay-sync-processor/index.ts` | Add dry run logic to skip API calls |
 
 ---
 
-## Safety Features
+## Verification
 
-1. **Test SKU Prefix**: All test items have `TEST-` prefix for easy identification
-2. **Dry Run Mode**: eBay sync in dry run (already enabled in your config)
-3. **Shopify Toggle**: Option to skip actual Shopify API calls
-4. **Cleanup Button**: Easy removal of all test data
-5. **No Production Interference**: Test items are isolated by SKU pattern
-
----
-
-## Estimated Implementation Time
-
-- E2ETestPage.tsx: 2-3 hours
-- testDataGenerator.ts: 30 minutes
-- Route + navigation: 15 minutes
-- Testing the flow: 1 hour
-
-**Total: ~4-5 hours**
+After implementing, you can:
+1. Generate test items in E2E dashboard
+2. Queue for eBay and process
+3. Check that items show `ebay_sync_status = 'dry_run'`
+4. Verify no actual eBay listings were created
