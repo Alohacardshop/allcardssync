@@ -44,11 +44,11 @@ export function CompactLocationSelector() {
               <Store className="h-3 w-3 text-muted-foreground" />
               <MapPin className="h-3 w-3 text-muted-foreground" />
             </div>
-            <div className="flex flex-col items-start text-xs">
+            <div className="flex flex-col items-start text-sm">
               <span className="font-medium text-foreground">
                 {assignedStoreName || "No Store"}
               </span>
-              <span className="text-muted-foreground truncate max-w-20">
+              <span className="text-muted-foreground truncate max-w-32">
                 {selectedLocationName}
               </span>
             </div>
