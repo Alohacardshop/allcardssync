@@ -98,6 +98,11 @@ export type DateRangeFilter = 'all' | 'today' | 'yesterday' | '7days' | '30days'
 export type BatchFilter = 'all' | 'in_batch' | 'removed_from_batch' | 'current_batch';
 
 /**
+ * Location availability filter - controls how items are filtered by stock
+ */
+export type LocationAvailabilityFilter = 'any' | 'at-selected' | 'anywhere';
+
+/**
  * Combined filter state for inventory
  */
 export interface InventoryFilterState {
@@ -111,6 +116,7 @@ export interface InventoryFilterState {
   dateRangeFilter: DateRangeFilter;
   batchFilter: BatchFilter;
   locationFilter: string | null;
+  locationAvailability: LocationAvailabilityFilter;
   tagFilter: string[];
   activeQuickFilter: string | null;
 }
@@ -146,6 +152,10 @@ export interface VirtualInventoryListProps {
   isAdmin: boolean;
   syncingRowId: string | null;
   locationsMap?: Map<string, CachedLocation>;
+  /** Inventory levels map keyed by inventory_item_id */
+  inventoryLevelsMap?: Map<string, Array<{ location_gid: string; available: number }>>;
+  /** Currently selected/filtered location for Shopify-truth display */
+  selectedLocationGid?: string | null;
   focusedIndex?: number;
   /** Optional per-item action state getter for showing loading states */
   getItemActionState?: (itemId: string) => ItemActionState;

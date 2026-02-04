@@ -67,12 +67,21 @@ const getSyncStatus = (item: InventoryListItem) => {
   return { label: 'Not Synced', variant: 'outline' as const };
 };
 
+interface InventoryLevelCompact {
+  location_gid: string;
+  available: number;
+}
+
 interface TableRowProps {
   item: InventoryListItem;
   isSelected: boolean;
   isAdmin: boolean;
   syncingRowId: string | null;
   locationsMap?: Map<string, CachedLocation>;
+  /** Inventory levels for this item */
+  itemLevels?: InventoryLevelCompact[];
+  /** Selected location for Shopify-truth display */
+  selectedLocationGid?: string | null;
   onToggleSelection: (id: string) => void;
   onSync: (item: InventoryListItem) => void;
   onRetrySync: (item: InventoryListItem) => void;
@@ -88,6 +97,8 @@ const TableRow = memo(({
   isAdmin,
   syncingRowId,
   locationsMap,
+  itemLevels,
+  selectedLocationGid,
   onToggleSelection,
   onSync,
   onRetrySync,
@@ -101,6 +112,34 @@ const TableRow = memo(({
   const syncStatus = useMemo(() => getSyncStatus(item), [item]);
   const status = item.shopify_sync_status as string | null;
   const isLoading = syncingRowId === item.id;
+
+  // Calculate Shopify-truth quantity:
+  // 1. If selectedLocationGid is set and we have levels for that location, use Shopify's available
+  // 2. Otherwise fall back to item.quantity
+  const displayQuantity = useMemo(() => {
+    if (!itemLevels || itemLevels.length === 0) {
+      return item.quantity;
+    }
+    
+    // If a specific location is selected, find the level for that location
+    if (selectedLocationGid) {
+      const locationLevel = itemLevels.find(l => l.location_gid === selectedLocationGid);
+      if (locationLevel !== undefined) {
+        return locationLevel.available;
+      }
+    }
+    
+    // Otherwise, find the level for the item's primary location
+    if (item.shopify_location_gid) {
+      const primaryLevel = itemLevels.find(l => l.location_gid === item.shopify_location_gid);
+      if (primaryLevel !== undefined) {
+        return primaryLevel.available;
+      }
+    }
+    
+    // Fallback to intake_items.quantity
+    return item.quantity;
+  }, [item.quantity, item.shopify_location_gid, itemLevels, selectedLocationGid]);
 
   // Determine primary action based on status
   const primaryAction = useMemo(() => {
@@ -171,11 +210,11 @@ const TableRow = memo(({
           ${(item.price || 0).toFixed(2)}
         </div>
 
-        {/* Quantity - center aligned, fixed height container */}
+        {/* Quantity - center aligned, shows Shopify-truth quantity */}
         <div className="flex items-center justify-center h-[28px]">
           <InlineQuantityEditor
             itemId={item.id}
-            quantity={item.quantity}
+            quantity={displayQuantity}
             shopifyProductId={item.shopify_product_id}
             shopifyInventoryItemId={item.shopify_inventory_item_id}
             compact
@@ -357,6 +396,8 @@ export const InventoryTableView = memo(({
   isAdmin,
   syncingRowId,
   locationsMap,
+  inventoryLevelsMap,
+  selectedLocationGid,
   onToggleSelection,
   onSetSelection,
   onSync,
@@ -565,6 +606,8 @@ export const InventoryTableView = memo(({
                   isAdmin={isAdmin}
                   syncingRowId={syncingRowId}
                   locationsMap={locationsMap}
+                  itemLevels={item.shopify_inventory_item_id ? inventoryLevelsMap?.get(item.shopify_inventory_item_id) : undefined}
+                  selectedLocationGid={selectedLocationGid}
                   onToggleSelection={onToggleSelection}
                   onSync={onSync}
                   onRetrySync={onRetrySync}
