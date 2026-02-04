@@ -775,14 +775,14 @@ export type Database = {
           {
             foreignKeyName: "ebay_sync_queue_inventory_item_id_fkey"
             columns: ["inventory_item_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "intake_items"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "ebay_sync_queue_inventory_item_id_fkey"
             columns: ["inventory_item_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "stale_lot_items"
             referencedColumns: ["id"]
           },
