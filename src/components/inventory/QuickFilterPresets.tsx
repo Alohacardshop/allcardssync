@@ -151,36 +151,39 @@ export const QuickFilterPresets = React.memo(({
   ];
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <span className="text-sm font-medium text-muted-foreground mr-2">Quick Filters:</span>
-      {presets.map((preset) => {
-        const Icon = preset.icon;
-        const isActive = activePreset === preset.id;
-        
-        return (
-          <Button
-            key={preset.id}
-            variant={isActive ? "default" : "outline"}
-            size="sm"
-            onClick={() => onApplyPreset(preset.filters)}
-            className={isActive ? "" : "hover:bg-accent"}
-            title={preset.description}
-          >
-            <Icon className="h-4 w-4 mr-1.5" />
-            {preset.label}
-          </Button>
-        );
-      })}
-      
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={onClearFilters}
-        className="text-muted-foreground hover:text-foreground"
-      >
-        <X className="h-4 w-4 mr-1" />
-        Clear All
-      </Button>
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium text-muted-foreground">Quick Filters</span>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onClearFilters}
+          className="text-muted-foreground hover:text-foreground h-7 text-xs"
+        >
+          <X className="h-3 w-3 mr-1" />
+          Clear All
+        </Button>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {presets.map((preset) => {
+          const Icon = preset.icon;
+          const isActive = activePreset === preset.id;
+          
+          return (
+            <Button
+              key={preset.id}
+              variant={isActive ? "default" : "outline"}
+              size="sm"
+              onClick={() => onApplyPreset(preset.filters)}
+              className={`h-8 ${isActive ? "" : "hover:bg-accent"}`}
+              title={preset.description}
+            >
+              <Icon className={`h-3.5 w-3.5 mr-1.5 ${preset.id === 'shopify-queued' && isActive ? 'animate-spin' : ''}`} />
+              {preset.label}
+            </Button>
+          );
+        })}
+      </div>
     </div>
   );
 });
