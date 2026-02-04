@@ -123,7 +123,14 @@ serve(async (req) => {
 
     console.log(`shopify-webhook: Processing ${topic} from ${shopifyDomain}`);
 
+    // Extract location_gid from payload if available (for inventory webhooks)
+    let locationGid: string | null = null;
+    if (payload.location_id) {
+      locationGid = `gid://shopify/Location/${payload.location_id}`;
+    }
+
     // Store webhook event for idempotency (after HMAC check)
+    // Include store_key and location_gid for faster querying
     const { data: insertedEvent, error: insertError } = await supabase
       .from('webhook_events')
       .insert({
@@ -131,7 +138,9 @@ serve(async (req) => {
         event_type: topic,
         payload: payload,
         status: 'processing',
-        processing_started_at: new Date().toISOString()
+        processing_started_at: new Date().toISOString(),
+        store_key: storeKey,
+        location_gid: locationGid
       })
       .select('id')
       .single();
@@ -142,6 +151,7 @@ serve(async (req) => {
     }
 
     console.log(`Processing webhook: ${topic} from ${shopifyDomain} (event_id: ${eventId})`);
+
 
     let processingError: Error | null = null;
 
@@ -230,6 +240,31 @@ serve(async (req) => {
             processing_completed_at: new Date().toISOString()
           })
           .eq('id', eventId);
+      }
+    }
+
+    // Track webhook health for Sync Health dashboard
+    // This is a lightweight upsert to track last received webhook per store/location/topic
+    if (storeKey) {
+      try {
+        await supabase
+          .from('webhook_health')
+          .upsert({
+            store_key: storeKey,
+            location_gid: locationGid,
+            topic: topic,
+            last_received_at: new Date().toISOString(),
+            last_webhook_id: webhookId,
+            event_count: 1,
+            last_error: processingError?.message || null,
+            last_error_at: processingError ? new Date().toISOString() : null,
+            updated_at: new Date().toISOString()
+          }, {
+            onConflict: 'store_key,location_gid,topic'
+          });
+      } catch (healthError) {
+        // Don't fail the webhook for health tracking errors
+        console.warn('Failed to update webhook_health:', healthError);
       }
     }
 
