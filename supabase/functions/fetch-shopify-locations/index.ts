@@ -64,17 +64,23 @@ Deno.serve(async (req) => {
     // Update shopify_location_cache
     for (const loc of locations) {
       const gid = `gid://shopify/Location/${loc.id}`;
-      await supabase
+      const now = new Date();
+      const expires = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24 hours from now
+      
+      const { error: upsertError } = await supabase
         .from("shopify_location_cache")
         .upsert({
           store_key: storeKey,
           location_gid: gid,
+          location_id: String(loc.id),
           location_name: loc.name,
-          is_active: loc.active,
-          address: loc.address1 || null,
-          city: loc.city || null,
-          updated_at: new Date().toISOString()
+          cached_at: now.toISOString(),
+          expires_at: expires.toISOString()
         }, { onConflict: 'store_key,location_gid' });
+      
+      if (upsertError) {
+        console.error(`fetch-shopify-locations: Failed to cache location ${loc.name}:`, upsertError);
+      }
     }
 
     return new Response(

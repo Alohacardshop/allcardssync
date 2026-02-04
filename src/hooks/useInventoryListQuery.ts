@@ -4,12 +4,13 @@ import { startOfDay, subDays } from 'date-fns';
 
 export interface InventoryFilters {
   storeKey: string;
-  locationGid: string;
-  activeTab: 'raw' | 'graded' | 'raw_comics' | 'graded_comics' | 'sealed';
+  locationGid: string | null; // null = all locations
+  activeTab?: 'raw' | 'graded' | 'raw_comics' | 'graded_comics' | 'sealed'; // Now optional
   statusFilter: 'all' | 'active' | 'out-of-stock' | 'sold' | 'deleted' | 'errors';
   batchFilter: 'all' | 'in_batch' | 'removed_from_batch' | 'current_batch';
   printStatusFilter?: 'all' | 'printed' | 'not-printed';
   typeFilter?: 'all' | 'raw' | 'graded';
+  categoryFilter?: 'all' | 'tcg' | 'comics' | 'sealed'; // New category filter
   
   searchTerm?: string;
   autoRefreshEnabled?: boolean;
@@ -29,6 +30,7 @@ export function useInventoryListQuery(filters: InventoryFilters) {
       filters.storeKey,
       filters.locationGid,
       filters.activeTab,
+      filters.categoryFilter,
       filters.statusFilter,
       filters.batchFilter,
       filters.printStatusFilter,
@@ -45,6 +47,7 @@ export function useInventoryListQuery(filters: InventoryFilters) {
         storeKey,
         locationGid,
         activeTab,
+        categoryFilter = 'all',
         statusFilter,
         batchFilter,
         printStatusFilter = 'all',
@@ -98,27 +101,37 @@ export function useInventoryListQuery(filters: InventoryFilters) {
           { count: 'exact' }
         )
         .range(pageParam, pageParam + PAGE_SIZE - 1)
-        .eq('store_key', storeKey)
-        .eq('shopify_location_gid', locationGid);
+        .eq('store_key', storeKey);
 
-      // Apply type filter (overrides tab-based type filtering when set)
+      // Only filter by location if specified (null = all locations)
+      if (locationGid) {
+        query = query.eq('shopify_location_gid', locationGid);
+      }
+
+      // Apply type filter
       if (typeFilter !== 'all') {
         query = query.eq('type', typeFilter === 'raw' ? 'Raw' : 'Graded');
-        // Still apply category from tab
-        if (activeTab === 'raw_comics' || activeTab === 'graded_comics') {
-          query = query.eq('main_category', 'comics');
-        } else if (activeTab !== 'sealed') {
+      }
+
+      // Apply category filter (new unified approach)
+      if (categoryFilter !== 'all') {
+        if (categoryFilter === 'tcg') {
           query = query.or('main_category.is.null,main_category.eq.tcg');
+        } else if (categoryFilter === 'comics') {
+          query = query.eq('main_category', 'comics');
+        } else if (categoryFilter === 'sealed') {
+          // Sealed products: filter by shopify_snapshot tags containing 'sealed'
+          // OR main_category = 'sealed' for future imports
+          query = query.or('main_category.eq.sealed,shopify_snapshot->>tags.ilike.%sealed%');
         }
-      } else {
-        // Apply tab-based filtering
+      } else if (activeTab) {
+        // Legacy tab-based filtering (for backwards compatibility during transition)
         if (activeTab === 'raw') {
-          query = query.eq('main_category', 'tcg').eq('type', 'Raw');
+          query = query.or('main_category.is.null,main_category.eq.tcg').eq('type', 'Raw');
         } else if (activeTab === 'graded') {
           query = query.eq('type', 'Graded').or('main_category.is.null,main_category.eq.tcg');
         } else if (activeTab === 'sealed') {
-          // Sealed products: filter by shopify_snapshot tags containing 'sealed'
-          query = query.ilike('shopify_snapshot->>tags', '%sealed%');
+          query = query.or('main_category.eq.sealed,shopify_snapshot->>tags.ilike.%sealed%');
         } else if (activeTab === 'raw_comics') {
           query = query.eq('main_category', 'comics').eq('type', 'Raw');
         } else if (activeTab === 'graded_comics') {
@@ -252,6 +265,6 @@ export function useInventoryListQuery(filters: InventoryFilters) {
       return undefined;
     },
     refetchInterval: filters.autoRefreshEnabled ? 120000 : false,
-    enabled: Boolean(filters.storeKey && filters.locationGid),
+    enabled: Boolean(filters.storeKey),
   });
 }

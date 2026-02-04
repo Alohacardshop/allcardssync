@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Trash2, Package, Calendar, DollarSign, Eye, EyeOff, FileText, Tag, Printer, ExternalLink, RotateCcw, Loader2, CheckSquare, Square, CheckCircle, ShoppingBag, Pencil, Check, X } from 'lucide-react';
+import { Trash2, Package, Calendar, DollarSign, Eye, EyeOff, FileText, Tag, Printer, ExternalLink, RotateCcw, Loader2, CheckSquare, Square, CheckCircle, ShoppingBag, Pencil, Check, X, MapPin } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 import { EbayPriceComparison } from '@/components/inventory/EbayPriceComparison';
@@ -20,6 +20,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useEbayListing } from '@/hooks/useEbayListing';
 import type { InventoryItem } from '@/types/inventory';
+import type { CachedLocation } from '@/hooks/useLocationNames';
+import { getShortLocationName } from '@/hooks/useLocationNames';
 
 // Helper function outside component to prevent re-creation on every render
 const generateTitle = (item: InventoryItem) => {
@@ -65,6 +67,7 @@ interface InventoryItemCardProps {
   isExpanded: boolean;
   isAdmin: boolean;
   syncingRowId: string | null;
+  locationsMap?: Map<string, CachedLocation>;
   onToggleSelection: (itemId: string) => void;
   onToggleExpanded: (itemId: string) => void;
   onSync: (item: InventoryItem) => void;
@@ -81,6 +84,7 @@ export const InventoryItemCard = memo(({
   isExpanded,
   isAdmin,
   syncingRowId,
+  locationsMap,
   onToggleSelection,
   onToggleExpanded,
   onSync,
@@ -307,6 +311,13 @@ export const InventoryItemCard = memo(({
                 <span className="text-xs text-muted-foreground font-mono">
                   {item.sku}
                 </span>
+                {/* Location Badge */}
+                {item.shopify_location_gid && locationsMap && (
+                  <Badge variant="outline" className="text-xs bg-muted/50">
+                    <MapPin className="h-3 w-3 mr-1" />
+                    {getShortLocationName(item.shopify_location_gid, locationsMap)}
+                  </Badge>
+                )}
                 {getStatusBadge(item)}
                 {getPrintStatusBadge(item)}
                 <EbayStatusBadge
