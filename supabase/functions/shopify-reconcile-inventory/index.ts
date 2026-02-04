@@ -137,7 +137,8 @@ async function fetchShopifyInventoryLevels(
 async function reconcileInventoryLevels(
   supabaseClient: any,
   storeKey: string,
-  levels: InventoryLevelData[]
+  levels: InventoryLevelData[],
+  truthMode: 'shopify' | 'database' = 'shopify'
 ): Promise<ReconcileStats> {
   const stats: ReconcileStats = {
     items_checked: 0,
@@ -193,11 +194,12 @@ async function reconcileInventoryLevels(
       stats.items_checked++;
       locStats.items_checked++;
 
-      // Check for drift: find intake_items with this inventory_item_id
+      // Find intake_items with matching inventory_item_id AND location
       const { data: items, error: fetchError } = await supabaseClient
         .from('intake_items')
-        .select('id, quantity, shopify_drift, shopify_inventory_item_id, shopify_location_gid')
+        .select('id, quantity, shopify_drift, shopify_inventory_item_id, shopify_location_gid, type, sku')
         .eq('shopify_inventory_item_id', level.inventory_item_id)
+        .eq('shopify_location_gid', level.location_gid)
         .is('deleted_at', null);
 
       if (fetchError) {
@@ -207,57 +209,100 @@ async function reconcileInventoryLevels(
         continue;
       }
 
-      // Check each matching item for drift
+      // Process each matching item based on truth mode
       for (const item of items || []) {
-        // Only compare if this is the item's assigned location
-        if (item.shopify_location_gid !== level.location_gid) continue;
+        const localQty = item.quantity || 0;
+        const shopifyQty = level.available;
+        const hasDrift = localQty !== shopifyQty;
 
-        const expectedQuantity = item.quantity;
-        const actualQuantity = level.available;
-        const hasDrift = expectedQuantity !== actualQuantity;
+        if (truthMode === 'shopify') {
+          // Shopify is source of truth: update intake_items.quantity
+          const updateData: any = {
+            quantity: Math.max(0, shopifyQty),
+            last_shopify_seen_at: now,
+            updated_at: now,
+          };
 
-        if (hasDrift && !item.shopify_drift) {
-          // Mark as drift
-          const { error: updateError } = await supabaseClient
-            .from('intake_items')
-            .update({
-              shopify_drift: true,
-              shopify_drift_detected_at: now,
-              shopify_drift_details: {
-                expected: expectedQuantity,
-                actual: actualQuantity,
-                location_gid: level.location_gid,
-                location_name: level.location_name,
-                detected_by: 'reconcile_job',
-                detected_at: now,
-              }
-            })
-            .eq('id', item.id);
-
-          if (!updateError) {
-            stats.drift_detected++;
-            locStats.drift_detected++;
-          } else {
-            stats.errors++;
-            locStats.errors++;
-          }
-        } else if (!hasDrift && item.shopify_drift) {
-          // Clear drift flag if now in sync
-          const { error: clearError } = await supabaseClient
-            .from('intake_items')
-            .update({
-              shopify_drift: false,
-              shopify_drift_detected_at: null,
-              shopify_drift_details: null,
-            })
-            .eq('id', item.id);
-
-          if (!clearError) {
+          // Clear drift since we're syncing from Shopify
+          if (item.shopify_drift) {
+            updateData.shopify_drift = false;
+            updateData.shopify_drift_detected_at = null;
+            updateData.shopify_drift_details = null;
             stats.drift_fixed++;
             locStats.drift_fixed++;
-          } else {
+          }
+
+          // Mark as sold if quantity goes to 0
+          if (shopifyQty === 0 && localQty > 0) {
+            updateData.sold_at = now;
+            updateData.sold_channel = 'shopify_reconcile_sync';
+            updateData.sold_currency = 'USD';
+          }
+
+          const { error: updateError } = await supabaseClient
+            .from('intake_items')
+            .update(updateData)
+            .eq('id', item.id);
+
+          if (updateError) {
             stats.errors++;
             locStats.errors++;
+          } else if (hasDrift) {
+            console.log(`[Reconcile] Synced ${item.sku}: ${localQty} → ${shopifyQty}`);
+          }
+        } else {
+          // Database is source of truth: only flag drift as audit/alert
+          if (hasDrift && !item.shopify_drift) {
+            const { error: updateError } = await supabaseClient
+              .from('intake_items')
+              .update({
+                shopify_drift: true,
+                shopify_drift_detected_at: now,
+                shopify_drift_details: {
+                  expected: localQty,
+                  actual: shopifyQty,
+                  location_gid: level.location_gid,
+                  location_name: level.location_name,
+                  detected_by: 'reconcile_job',
+                  detected_at: now,
+                  mode: 'database_truth'
+                },
+                last_shopify_seen_at: now,
+              })
+              .eq('id', item.id);
+
+            if (!updateError) {
+              stats.drift_detected++;
+              locStats.drift_detected++;
+            } else {
+              stats.errors++;
+              locStats.errors++;
+            }
+          } else if (!hasDrift && item.shopify_drift) {
+            // Clear drift flag if now in sync
+            const { error: clearError } = await supabaseClient
+              .from('intake_items')
+              .update({
+                shopify_drift: false,
+                shopify_drift_detected_at: null,
+                shopify_drift_details: null,
+                last_shopify_seen_at: now,
+              })
+              .eq('id', item.id);
+
+            if (!clearError) {
+              stats.drift_fixed++;
+              locStats.drift_fixed++;
+            } else {
+              stats.errors++;
+              locStats.errors++;
+            }
+          } else {
+            // Just update last_shopify_seen_at
+            await supabaseClient
+              .from('intake_items')
+              .update({ last_shopify_seen_at: now })
+              .eq('id', item.id);
           }
         }
       }
@@ -285,10 +330,10 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Get active stores to reconcile
+    // Get active stores to reconcile with their truth mode
     const { data: stores, error: storesError } = await supabaseClient
       .from('shopify_stores')
-      .select('key, name')
+      .select('key, name, inventory_truth_mode')
       .eq('active', true);
 
     if (storesError) {
@@ -299,6 +344,7 @@ Deno.serve(async (req) => {
 
     for (const store of stores || []) {
       const storeKey = store.key;
+      const truthMode = (store.inventory_truth_mode || 'shopify') as 'shopify' | 'database';
       let runId: string | null = null;
 
       try {
@@ -329,12 +375,12 @@ Deno.serve(async (req) => {
         const { domain, accessToken } = config.credentials;
 
         // Fetch all inventory levels from Shopify
-        console.log(`[${storeKey}] Fetching inventory levels...`);
+        console.log(`[${storeKey}] Fetching inventory levels (mode: ${truthMode})...`);
         const levels = await fetchShopifyInventoryLevels(domain, accessToken);
         console.log(`[${storeKey}] Fetched ${levels.length} inventory levels`);
 
-        // Reconcile with database
-        const stats = await reconcileInventoryLevels(supabaseClient, storeKey, levels);
+        // Reconcile with database using store's truth mode
+        const stats = await reconcileInventoryLevels(supabaseClient, storeKey, levels, truthMode);
 
         // Save per-location stats
         if (runId && stats.location_stats.size > 0) {
@@ -373,6 +419,7 @@ Deno.serve(async (req) => {
                 levels_fetched: levels.length, 
                 duration_ms: Date.now() - startTime,
                 locations_processed: stats.location_stats.size,
+                truth_mode: truthMode,
               }
             })
             .eq('id', runId);

@@ -960,6 +960,7 @@ export type Database = {
           last_shopify_correlation_id: string | null
           last_shopify_location_gid: string | null
           last_shopify_removal_error: string | null
+          last_shopify_seen_at: string | null
           last_shopify_store_key: string | null
           last_shopify_sync_error: string | null
           last_shopify_synced_at: string | null
@@ -1053,6 +1054,7 @@ export type Database = {
           last_shopify_correlation_id?: string | null
           last_shopify_location_gid?: string | null
           last_shopify_removal_error?: string | null
+          last_shopify_seen_at?: string | null
           last_shopify_store_key?: string | null
           last_shopify_sync_error?: string | null
           last_shopify_synced_at?: string | null
@@ -1146,6 +1148,7 @@ export type Database = {
           last_shopify_correlation_id?: string | null
           last_shopify_location_gid?: string | null
           last_shopify_removal_error?: string | null
+          last_shopify_seen_at?: string | null
           last_shopify_store_key?: string | null
           last_shopify_sync_error?: string | null
           last_shopify_synced_at?: string | null
@@ -2593,6 +2596,7 @@ export type Database = {
           api_version: string | null
           created_at: string | null
           domain: string | null
+          inventory_truth_mode: string
           key: string
           name: string
           region_id: string | null
@@ -2604,6 +2608,7 @@ export type Database = {
           api_version?: string | null
           created_at?: string | null
           domain?: string | null
+          inventory_truth_mode?: string
           key: string
           name: string
           region_id?: string | null
@@ -2615,6 +2620,7 @@ export type Database = {
           api_version?: string | null
           created_at?: string | null
           domain?: string | null
+          inventory_truth_mode?: string
           key?: string
           name?: string
           region_id?: string | null

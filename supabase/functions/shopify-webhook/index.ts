@@ -1017,7 +1017,16 @@ async function handleInventoryLevelUpdate(supabase: any, payload: any, shopifyDo
   const storeKey = await getStoreKeyFromDomain(supabase, shopifyDomain);
   if (!storeKey) return;
 
-  // STEP 1: Upsert into shopify_inventory_levels table (source of truth)
+  // Get store's inventory truth mode
+  const { data: storeConfig } = await supabase
+    .from('shopify_stores')
+    .select('inventory_truth_mode')
+    .eq('key', storeKey)
+    .single();
+  
+  const truthMode = storeConfig?.inventory_truth_mode || 'shopify';
+
+  // STEP 1: Upsert into shopify_inventory_levels table (always do this)
   if (locationGid) {
     // Try to get location name from cache for better display
     let locationName: string | null = null;
@@ -1053,54 +1062,112 @@ async function handleInventoryLevelUpdate(supabase: any, payload: any, shopifyDo
     }
   }
 
-  // STEP 2: Find matching items by Shopify inventory item ID with location context
-  let query = supabase
+  // STEP 2: Find matching items by Shopify inventory item ID AND matching location
+  // For "shopify" truth mode: update quantity directly from Shopify
+  // For "database" mode: only flag drift as an alert
+  const { data: matchingItems, error } = await supabase
     .from('intake_items')
-    .select('id, quantity, sku, type, shopify_product_id, shopify_variant_id')
+    .select('id, quantity, sku, type, shopify_product_id, shopify_variant_id, shopify_drift')
     .eq('store_key', storeKey)
-    .or(`shopify_inventory_item_id.eq.${inventoryItemId},shopify_variant_id.eq.${inventoryItemId}`);
-  
-  // Add location validation if available
-  if (locationGid) {
-    query = query.eq('shopify_location_gid', locationGid);
-  }
+    .eq('shopify_inventory_item_id', inventoryItemId)
+    .eq('shopify_location_gid', locationGid)
+    .is('deleted_at', null);
 
-  const { data: items, error } = await query;
-
-  if (error || !items?.length) {
-    // Improved fallback matching - only with location context
-    if (!locationGid) {
-      console.error('Cannot fallback without location context');
-      return;
-    }
-    
-    console.warn(`No direct match for inventory item ${inventoryItemId} at location ${locationGid}`);
-    
-    // Try matching by variant ID as last resort (with location)
-    const { data: variantItems } = await supabase
-      .from('intake_items')
-      .select('id, quantity, sku, type, shopify_product_id, shopify_variant_id')
-      .eq('store_key', storeKey)
-      .eq('shopify_location_gid', locationGid)
-      .not('shopify_variant_id', 'is', null);
-      
-    if (!variantItems?.length) {
-      console.warn('No variants found for fallback matching');
-      return;
-    }
-    
-    // Only update items at this specific location
-    console.log(`Fallback: updating ${variantItems.length} items at location ${locationGid}`);
-    for (const item of variantItems) {
-      await updateItemQuantity(supabase, item, available);
-    }
+  if (error) {
+    console.error('Failed to fetch matching items:', error);
     return;
   }
 
-  // Update matching items
-  console.log(`Found ${items.length} exact matches for inventory item ${inventoryItemId}`);
-  for (const item of items) {
-    await updateItemQuantity(supabase, item, available);
+  if (!matchingItems?.length) {
+    console.log(`No items found for inventory ${inventoryItemId} at location ${locationGid}`);
+    return;
+  }
+
+  const now = new Date().toISOString();
+
+  for (const item of matchingItems) {
+    const localQty = item.quantity || 0;
+    const shopifyQty = available;
+    const hasDrift = localQty !== shopifyQty;
+
+    if (truthMode === 'shopify') {
+      // Shopify is source of truth: update intake_items.quantity directly
+      const updateData: any = {
+        quantity: Math.max(0, shopifyQty),
+        last_shopify_seen_at: now,
+        updated_by: 'shopify_webhook_truth_sync',
+        updated_at: now
+      };
+
+      // Clear drift since we're syncing from Shopify (the truth)
+      if (item.shopify_drift) {
+        updateData.shopify_drift = false;
+        updateData.shopify_drift_detected_at = null;
+        updateData.shopify_drift_details = null;
+      }
+
+      // If quantity goes to 0, mark as sold
+      if (shopifyQty === 0 && localQty > 0) {
+        updateData.sold_at = now;
+        updateData.sold_channel = 'shopify_inventory_sync';
+        updateData.sold_currency = 'USD';
+      }
+
+      const { error: updateError } = await supabase
+        .from('intake_items')
+        .update(updateData)
+        .eq('id', item.id);
+
+      if (updateError) {
+        console.error(`Failed to update item ${item.id} quantity:`, updateError);
+      } else {
+        console.log(`[Shopify Truth] Updated item ${item.id} (${item.sku}) quantity: ${localQty} → ${shopifyQty}`);
+      }
+    } else {
+      // Database is source of truth: only flag drift as alert, don't update quantity
+      if (hasDrift && !item.shopify_drift) {
+        const { error: driftError } = await supabase
+          .from('intake_items')
+          .update({
+            shopify_drift: true,
+            shopify_drift_detected_at: now,
+            shopify_drift_details: {
+              expected: localQty,
+              actual: shopifyQty,
+              location_gid: locationGid,
+              detected_by: 'webhook',
+              detected_at: now,
+              mode: 'database_truth'
+            },
+            last_shopify_seen_at: now,
+            updated_at: now
+          })
+          .eq('id', item.id);
+
+        if (!driftError) {
+          console.log(`[Database Truth] Flagged drift for ${item.sku}: local=${localQty}, shopify=${shopifyQty}`);
+        }
+      } else if (!hasDrift && item.shopify_drift) {
+        // Drift resolved externally
+        await supabase
+          .from('intake_items')
+          .update({
+            shopify_drift: false,
+            shopify_drift_detected_at: null,
+            shopify_drift_details: null,
+            last_shopify_seen_at: now,
+            updated_at: now
+          })
+          .eq('id', item.id);
+        console.log(`[Database Truth] Cleared drift for ${item.sku}`);
+      } else {
+        // Just update last_shopify_seen_at
+        await supabase
+          .from('intake_items')
+          .update({ last_shopify_seen_at: now })
+          .eq('id', item.id);
+      }
+    }
   }
 }
 
