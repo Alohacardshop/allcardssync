@@ -1,93 +1,122 @@
 
 
-# Go Live: Remove E2E Testing & Disable Dry-Run Mode
+# Deep Cleanup: Go-Live Readiness
 
 ## Summary
 
-This plan will:
-1. **Remove** the E2E Test Dashboard and all related test components
-2. **Disable dry-run mode** so eBay syncs will push real changes when triggered
-3. **Keep manual sync only** - no auto-sync, users choose what gets listed
+This plan performs a comprehensive cleanup to prepare the codebase for production, removing stale references, unused testing components, and deprecated edge functions. All E2E test infrastructure has already been removed, but several remnants remain.
 
 ---
 
-## Current State
+## Phase 1: Fix Stale References
 
-| Store | sync_enabled | dry_run_mode | sync_mode |
-|-------|--------------|--------------|-----------|
-| Hawaii | false | true | manual |
-| Las Vegas | false | true | manual |
+### 1. `src/pages/Admin.tsx` (Line 46)
+**Issue**: Comment still says "8 sections with E2E testing" but E2E was removed
 
-**After this change:**
+**Fix**: Update comment to "7 sections - consolidated admin layout"
+
+```text
+Before: // Consolidated sidebar - 8 sections with E2E testing
+After:  // Consolidated sidebar - 7 sections
+```
+
+---
+
+## Phase 2: Remove Shopify Testing Tab
+
+The Store Management tabs include a **Testing** tab with 3 test components that are only used for development/debugging:
+
+### Components to Remove:
+
+| Component | File | Purpose |
+|-----------|------|---------|
+| `ShopifyIntegrationTest` | `src/components/admin/ShopifyIntegrationTest.tsx` | Tests Shopify API connectivity |
+| `WebhookTestPanel` | `src/components/admin/WebhookTestPanel.tsx` | Fires test webhooks |
+| `ShopifyQueueTest` | `src/components/admin/ShopifyQueueTest.tsx` | Tests queue workflow |
+
+### Modification: `src/components/admin/StoreManagementTabs.tsx`
+
+- Remove imports for the 3 test components
+- Remove the "Testing" tab from TabsList (change from 5 to 4 columns)
+- Remove the `<TabsContent value="testing">` section entirely
+
+---
+
+## Phase 3: Remove Edge Function Test Utilities
+
+These edge functions are testing utilities that won't be needed in production:
+
+| Function | Purpose | Action |
+|----------|---------|--------|
+| `shopify-webhook-test` | Fires synthetic webhook payloads | Delete |
+| `shopify-test-webhook` | Tests HMAC, metafields, locations | Delete |
+
+### Edge Functions to Keep:
+
+| Function | Reason |
+|----------|--------|
+| `shopify-sync-dry-run` | **Keep** - Used by ShopifyForceSyncDialog for preview before actual sync |
+
+---
+
+## Phase 4: Clean Up Plan File
+
+### `.lovable/plan.md`
+**Issue**: Contains the old "Go Live" plan that has been executed
+
+**Fix**: Clear the file contents (empty it out)
+
+---
+
+## Files to Delete
+
+| File | Reason |
+|------|--------|
+| `src/components/admin/ShopifyIntegrationTest.tsx` | Testing component - not needed in production |
+| `src/components/admin/WebhookTestPanel.tsx` | Testing component - not needed in production |
+| `src/components/admin/ShopifyQueueTest.tsx` | Testing component - not needed in production |
+| `supabase/functions/shopify-webhook-test/` | Test edge function - not needed in production |
+| `supabase/functions/shopify-test-webhook/` | Test edge function - not needed in production |
+
+---
+
+## Files to Modify
+
+| File | Change |
+|------|--------|
+| `src/pages/Admin.tsx` | Fix stale "8 sections with E2E testing" comment |
+| `src/components/admin/StoreManagementTabs.tsx` | Remove Testing tab and its 3 component imports |
+| `.lovable/plan.md` | Clear executed plan contents |
+
+---
+
+## Current Production Status (Verified)
 
 | Store | sync_enabled | dry_run_mode | sync_mode |
 |-------|--------------|--------------|-----------|
 | Hawaii | false | **false** | manual |
 | Las Vegas | false | **false** | manual |
 
-This means:
-- Items **won't auto-queue** (sync_enabled = false)
-- When you manually trigger sync, it **will push real changes** to eBay (dry_run = false)
-- Syncs only happen **when you click the button** (manual mode)
+All stores are configured correctly for production with manual sync control.
 
 ---
 
-## Files to Delete
+## What This Cleanup Achieves
 
-| File | Description |
-|------|-------------|
-| `src/pages/E2ETestPage.tsx` | Main test dashboard page |
-| `src/components/e2e/E2ETestLayout.tsx` | Split-panel layout |
-| `src/components/e2e/E2EItemsPanel.tsx` | Left panel - items list |
-| `src/components/e2e/E2EDestinationsPanel.tsx` | Right panel - destinations |
-| `src/components/e2e/E2EDestinationCard.tsx` | Marketplace card component |
-| `src/components/e2e/E2EItemRow.tsx` | Item row component |
-| `src/components/e2e/E2EStatusIcons.tsx` | Status icon components |
-| `src/hooks/useE2ETest.ts` | Test hook with state management |
-| `src/lib/testDataGenerator.ts` | Synthetic test data generator |
+1. **Removes ~750 lines of test-only code** from the frontend
+2. **Deletes 2 test edge functions** that aren't needed in production
+3. **Simplifies Store Management tabs** from 5 to 4 tabs
+4. **Eliminates stale comments** referencing removed features
+5. **Clears executed plan file** to avoid confusion
 
 ---
 
-## Files to Modify
+## Items Intentionally Kept
 
-### 1. `src/App.tsx`
-- Remove import: `const E2ETestPage = React.lazy(() => import("./pages/E2ETestPage"));`
-- Remove route: `<Route path="e2e-test" element={<E2ETestPage />} />`
-
-### 2. `src/pages/Admin.tsx`  
-- Remove the E2E Testing link from the sidebar (lines 223-233)
-
----
-
-## Database Update
-
-Run via the `ebay-update-store-config` Edge Function or direct SQL:
-
-```sql
-UPDATE ebay_store_config 
-SET dry_run_mode = false 
-WHERE store_key IN ('hawaii', 'las_vegas');
-```
-
-This turns off dry-run so syncs become real eBay API calls.
-
----
-
-## What This Means for Users
-
-1. **No test dashboard** - The `/admin/e2e-test` page will no longer exist
-2. **Real eBay syncs** - When items are queued and processed, they will create actual eBay listings
-3. **Manual control** - Users must explicitly:
-   - Flag items with `list_on_ebay = true`
-   - Use the Sync Queue Monitor to process queued items
-   - Or create sync rules to auto-flag by category/price/etc.
-
----
-
-## Safety Notes
-
-- **sync_enabled stays FALSE** - Items won't auto-queue
-- **No auto-sync** - Nothing happens without user action
-- **Sync rules optional** - Can add tag/category rules later when ready
-- **Queue Monitor** - Still available at `/admin/ebay` → Sync Queue tab
+| Item | Reason |
+|------|--------|
+| `shopify-sync-dry-run` | Used for Force Sync preview - legitimate production feature |
+| `QzTrayTestPage.tsx` | Hardware testing is a legitimate admin need |
+| `TestHardwarePage.tsx` | Hardware connectivity testing is ongoing |
+| Console logging | Kept for production debugging (can be controlled via log levels) |
 
