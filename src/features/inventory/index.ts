@@ -2,6 +2,10 @@
 export { default as InventoryPage } from './pages/InventoryPage';
 export { InventoryFiltersBar } from './components/InventoryFiltersBar';
 export { InventoryList } from './components/InventoryList';
+export { InventoryCardView } from './components/InventoryCardView';
+export { InventoryTableView } from './components/InventoryTableView';
+export { InventoryViewToggle } from './components/InventoryViewToggle';
+export type { InventoryViewMode } from './components/InventoryViewToggle';
 export { InventoryBulkBar } from './components/InventoryBulkBar';
 export { useInventorySelection } from './hooks/useInventorySelection';
 export { useInventoryActions } from './hooks/useInventoryActions';

@@ -16,6 +16,7 @@ export interface InventoryListItem {
   quantity: number;
   type: string | null;
   created_at: string;
+  updated_at: string;
   printed_at: string | null;
   shopify_sync_status: string | null;
   shopify_product_id: string | null;

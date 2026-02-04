@@ -79,6 +79,7 @@ export function useInventoryListQuery(filters: InventoryFilters) {
           quantity,
           type,
           created_at,
+          updated_at,
           printed_at,
           shopify_sync_status,
           shopify_product_id,

@@ -19,6 +19,7 @@ import { RefreshControls } from '@/components/RefreshControls';
 import { PrintFromInventoryDialog } from '@/components/inventory/PrintFromInventoryDialog';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Progress } from '@/components/ui/progress';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 
 import { useInventoryListQuery } from '@/hooks/useInventoryListQuery';
 import { useLocationNames } from '@/hooks/useLocationNames';
@@ -29,7 +30,9 @@ import { useCurrentBatch } from '@/hooks/useCurrentBatch';
 
 // Feature module imports
 import { InventoryFiltersBar } from '../components/InventoryFiltersBar';
-import { InventoryList } from '../components/InventoryList';
+import { InventoryCardView } from '../components/InventoryCardView';
+import { InventoryTableView } from '../components/InventoryTableView';
+import { InventoryViewToggle, type InventoryViewMode } from '../components/InventoryViewToggle';
 import { InventoryBulkBar } from '../components/InventoryBulkBar';
 import { useInventorySelection } from '../hooks/useInventorySelection';
 import { useInventoryActions } from '../hooks/useInventoryActions';
@@ -75,6 +78,19 @@ const InventoryPage = () => {
   // Auto-refresh state
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+
+  // View mode state - default to table on desktop, cards on mobile
+  const isDesktop = useMediaQuery('(min-width: 1024px)');
+  const [viewMode, setViewMode] = useState<InventoryViewMode>(() => {
+    const saved = localStorage.getItem('inventory-view-mode') as InventoryViewMode | null;
+    return saved || 'table';
+  });
+  
+  // Update view mode preference
+  const handleViewModeChange = useCallback((mode: InventoryViewMode) => {
+    setViewMode(mode);
+    localStorage.setItem('inventory-view-mode', mode);
+  }, []);
 
   // Auth and admin states
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
@@ -378,8 +394,8 @@ const InventoryPage = () => {
         </TabsList>
 
         <TabsContent value="inventory" className="space-y-6">
-          {/* Refresh Controls */}
-          <div className="flex items-center gap-2">
+          {/* Refresh Controls + View Toggle */}
+          <div className="flex items-center gap-2 flex-wrap">
             <RefreshControls
               autoRefreshEnabled={autoRefreshEnabled}
               onAutoRefreshToggle={setAutoRefreshEnabled}
@@ -387,6 +403,14 @@ const InventoryPage = () => {
               isRefreshing={isFetching}
               lastRefresh={lastRefresh}
             />
+            
+            {/* View Toggle - only show on desktop */}
+            {isDesktop && (
+              <InventoryViewToggle
+                mode={viewMode}
+                onChange={handleViewModeChange}
+              />
+            )}
             
             {/* Resync from Shopify */}
             <div className="flex items-center gap-2 ml-auto">
@@ -484,36 +508,66 @@ const InventoryPage = () => {
             </Card>
           )}
 
-          {/* Virtual Scrolling Items List */}
+          {/* Virtual Scrolling Items List - Card or Table view */}
           {items.length > 0 && (
-            <InventoryList
-              items={items}
-              selectedItems={selectedItems}
-              expandedItems={expandedItems}
-              isAdmin={isAdmin}
-              syncingRowId={syncingRowId}
-              locationsMap={locationsMap}
-              focusedIndex={focusedIndex}
-              onToggleSelection={toggleSelection}
-              onToggleExpanded={toggleExpanded}
-              onSync={handleSync}
-              onRetrySync={handleRetrySync}
-              onResync={handleResync}
-              onRemove={(item) => {
-                setSelectedItemForRemoval(item);
-                setShowRemovalDialog(true);
-              }}
-              onDelete={isAdmin ? (item) => {
-                setSelectedItemsForDeletion([item]);
-                setShowDeleteDialog(true);
-              } : undefined}
-              onSyncDetails={(item) => setSyncDetailsRow(item)}
-              isLoading={snapshot.phases.data === 'loading'}
-              hasNextPage={hasNextPage}
-              isFetchingNextPage={isFetchingNextPage}
-              onLoadMore={() => fetchNextPage()}
-              onScrollToIndex={handleSetScrollToIndex}
-            />
+            isDesktop && viewMode === 'table' ? (
+              <InventoryTableView
+                items={items}
+                selectedItems={selectedItems}
+                expandedItems={expandedItems}
+                isAdmin={isAdmin}
+                syncingRowId={syncingRowId}
+                locationsMap={locationsMap}
+                focusedIndex={focusedIndex}
+                onToggleSelection={toggleSelection}
+                onToggleExpanded={toggleExpanded}
+                onSync={handleSync}
+                onRetrySync={handleRetrySync}
+                onResync={handleResync}
+                onRemove={(item) => {
+                  setSelectedItemForRemoval(item);
+                  setShowRemovalDialog(true);
+                }}
+                onDelete={isAdmin ? (item) => {
+                  setSelectedItemsForDeletion([item]);
+                  setShowDeleteDialog(true);
+                } : undefined}
+                onSyncDetails={(item) => setSyncDetailsRow(item)}
+                isLoading={snapshot.phases.data === 'loading'}
+                hasNextPage={hasNextPage}
+                isFetchingNextPage={isFetchingNextPage}
+                onLoadMore={() => fetchNextPage()}
+              />
+            ) : (
+              <InventoryCardView
+                items={items}
+                selectedItems={selectedItems}
+                expandedItems={expandedItems}
+                isAdmin={isAdmin}
+                syncingRowId={syncingRowId}
+                locationsMap={locationsMap}
+                focusedIndex={focusedIndex}
+                onToggleSelection={toggleSelection}
+                onToggleExpanded={toggleExpanded}
+                onSync={handleSync}
+                onRetrySync={handleRetrySync}
+                onResync={handleResync}
+                onRemove={(item) => {
+                  setSelectedItemForRemoval(item);
+                  setShowRemovalDialog(true);
+                }}
+                onDelete={isAdmin ? (item) => {
+                  setSelectedItemsForDeletion([item]);
+                  setShowDeleteDialog(true);
+                } : undefined}
+                onSyncDetails={(item) => setSyncDetailsRow(item)}
+                isLoading={snapshot.phases.data === 'loading'}
+                hasNextPage={hasNextPage}
+                isFetchingNextPage={isFetchingNextPage}
+                onLoadMore={() => fetchNextPage()}
+                onScrollToIndex={handleSetScrollToIndex}
+              />
+            )
           )}
         </TabsContent>
 
