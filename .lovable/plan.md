@@ -1,142 +1,112 @@
 
-# E2E Test Dashboard Improvements
+# Fix eBay Queue Foreign Key Errors & Hidden Items
 
-This plan addresses several issues to make the E2E test flow more robust and complete.
+## Problem
 
----
+Two related issues:
 
-## Issues Summary
+1. **Foreign Key Errors**: When queueing for eBay, the system fails with `"Key is not present in table intake_items"` because `state.testItems` contains stale IDs for items that were already deleted from the database.
 
-| # | Issue | Location | Impact |
-|---|-------|----------|--------|
-| 1 | Missing Shopify queue cleanup | `cleanupTestItems`, `deleteSelectedItems` | Orphan records left in `shopify_sync_queue` |
-| 2 | Stale closure in `syncToShopify` | Line 153 | Uses outdated `state.shopifyDryRun` value |
-| 3 | Stale closure in `printLabels` | Line 310, 331 | Uses outdated state values |
-| 4 | Duplicate queue prevention missing | `queueForEbay` | Multiple clicks create duplicate queue entries |
-| 5 | No error display for failed items | UI | Users can't see why sync failed |
+2. **Hidden Items in Queue Monitor**: The `EbaySyncQueueMonitor` shows queue entries where the linked `intake_item` no longer exists (or is deleted), displaying them with just the UUID.
 
 ---
 
-## Fix 1: Add `shopify_sync_queue` Cleanup
+## Root Causes
 
-**Files**: `src/hooks/useE2ETest.ts`
-
-Add cleanup for `shopify_sync_queue` in both functions:
-
-**In `cleanupTestItems` (after line 381):**
-```typescript
-// 2.5. Remove Shopify queue entries
-await supabase
-  .from('shopify_sync_queue')
-  .delete()
-  .in('inventory_item_id', testItemIds);
-```
-
-**In `deleteSelectedItems` (after line 513):**
-```typescript
-await supabase.from('shopify_sync_queue').delete().in('inventory_item_id', itemIds);
-```
+| Issue | Location | Cause |
+|-------|----------|-------|
+| FK Violation | `useE2ETest.ts` line 227-232 | `queueForEbay` inserts without verifying items still exist in DB |
+| Hidden Items | `EbaySyncQueueMonitor.tsx` line 53-73 | Query doesn't filter out orphan queue records |
+| Stale State | `useE2ETest.ts` line 270 | `processEbayQueue` uses `state.testItems` which may contain deleted items |
 
 ---
 
-## Fix 2: Fix Stale Closure in `syncToShopify`
+## Fix 1: Validate Items Before Queueing
 
 **File**: `src/hooks/useE2ETest.ts`
 
-The callback uses `state.shopifyDryRun` directly but only has `[state.shopifyDryRun, assignedStore]` in deps. When the function is created, it captures the current value. Need to use functional state access or add proper dependency:
+Before inserting into `ebay_sync_queue`, verify the items still exist in the database:
 
-**Current (line 153):**
 ```typescript
-if (state.shopifyDryRun) {
+const queueForEbay = useCallback(async (itemIds: string[]) => {
+  try {
+    // Verify items still exist in database before queueing
+    const { data: existingItems } = await supabase
+      .from('intake_items')
+      .select('id')
+      .in('id', itemIds)
+      .is('deleted_at', null);
+    
+    const validIds = (existingItems || []).map(i => i.id);
+    
+    if (validIds.length === 0) {
+      toast.error('No valid items to queue - items may have been deleted');
+      return;
+    }
+    
+    if (validIds.length < itemIds.length) {
+      toast.warning(`${itemIds.length - validIds.length} item(s) were skipped (already deleted)`);
+    }
+    
+    const queueItems = validIds.map(id => ({
+      inventory_item_id: id,
+      action: 'create' as const,
+      status: 'queued',
+      retry_count: 0,
+      max_retries: 3
+    }));
+    
+    // ... rest of upsert logic
+  }
+}, []);
 ```
 
-**Fix**: Use `setState` with callback pattern and read from passed state, or better - read directly from the state parameter in the callback. Since `syncToShopify` already uses `setState(s => ...)` for updates, we can restructure to check the value at call time:
+---
+
+## Fix 2: Filter Orphan Queue Records
+
+**File**: `src/components/admin/EbaySyncQueueMonitor.tsx`
+
+Add a filter to exclude queue entries where the linked `intake_item` is null or deleted:
 
 ```typescript
-const syncToShopify = useCallback(async (itemIds: string[]) => {
-  // Read dry run state synchronously at call time
-  let isDryRun = false;
+const { data: queueItems, isLoading, refetch } = useQuery({
+  queryKey: ['ebay-sync-queue', selectedStatus],
+  queryFn: async () => {
+    let query = supabase
+      .from('ebay_sync_queue')
+      .select(`
+        *,
+        intake_item:intake_items!inner(sku, psa_cert, brand_title, subject, deleted_at)
+      `)
+      .is('intake_item.deleted_at', null)  // Exclude deleted items
+      .order('queue_position', { ascending: true })
+      .limit(100);
+    // ...
+  }
+});
+```
+
+The `!inner` modifier makes it an inner join, which will exclude queue entries where the intake_item doesn't exist.
+
+---
+
+## Fix 3: Refresh State After Queue Processing
+
+**File**: `src/hooks/useE2ETest.ts`
+
+In `processEbayQueue`, use fresh item IDs from state (we already fixed this with the setState callback pattern, but need to also handle the testItemIds reference):
+
+```typescript
+const processEbayQueue = useCallback(async () => {
+  let testItemIds: string[] = [];
   setState(s => {
-    isDryRun = s.shopifyDryRun;
-    return { ...s, isShopifySyncing: true };
+    testItemIds = s.testItems.map(i => i.id);
+    return { ...s, isEbaySyncing: true };
   });
+  // ... rest uses testItemIds which is now fresh
+}, []);
 ```
-
-This ensures we get the current value when the function is called, not when it was created.
-
----
-
-## Fix 3: Fix Stale Closure in `printLabels`
-
-**File**: `src/hooks/useE2ETest.ts`
-
-Same issue - uses `state.printDryRun` and `state.testItems` but captures stale values.
-
-**Fix**: Use the same pattern - read state synchronously at call time:
-
-```typescript
-const printLabels = useCallback(async (...) => {
-  let isDryRun = false;
-  let currentItems: TestItemWithStatus[] = [];
-  setState(s => {
-    isDryRun = s.printDryRun;
-    currentItems = s.testItems;
-    return { ...s, isPrinting: true };
-  });
-```
-
----
-
-## Fix 4: Prevent Duplicate eBay Queue Entries
-
-**File**: `src/hooks/useE2ETest.ts`
-
-Add upsert logic or check for existing queue entries before inserting.
-
-**Current (line 222-224):**
-```typescript
-const { error } = await supabase
-  .from('ebay_sync_queue')
-  .insert(queueItems);
-```
-
-**Fix**: Use `upsert` with conflict handling on `inventory_item_id`:
-```typescript
-const { error } = await supabase
-  .from('ebay_sync_queue')
-  .upsert(queueItems, { 
-    onConflict: 'inventory_item_id',
-    ignoreDuplicates: true 
-  });
-```
-
----
-
-## Fix 5: Show Sync Errors in UI
-
-**File**: `src/pages/E2ETestPage.tsx`
-
-Add tooltip or inline error display for failed items.
-
-**In the item list (around line 343-346):**
-```typescript
-<div className="flex items-center gap-2 ml-4">
-  <span className="text-sm font-medium">${item.price.toFixed(2)}</span>
-  <StatusBadge status={item.status} />
-  {(item.status === 'shopify_failed' || item.status === 'ebay_failed') && (
-    <Tooltip>
-      <TooltipTrigger>
-        <AlertTriangle className="h-4 w-4 text-destructive" />
-      </TooltipTrigger>
-      <TooltipContent className="max-w-[300px]">
-        <p className="text-xs">{item.shopify_sync_error || item.ebay_sync_error || 'Unknown error'}</p>
-      </TooltipContent>
-    </Tooltip>
-  )}
-</div>
-```
-
-Will require wrapping the page content in `<TooltipProvider>` and importing tooltip components.
 
 ---
 
@@ -144,26 +114,14 @@ Will require wrapping the page content in `<TooltipProvider>` and importing tool
 
 | File | Changes |
 |------|---------|
-| `src/hooks/useE2ETest.ts` | Fix closures, add Shopify queue cleanup, prevent duplicates |
-| `src/pages/E2ETestPage.tsx` | Add error tooltips for failed items |
+| `src/hooks/useE2ETest.ts` | Validate items before queueing, fix stale testItemIds reference |
+| `src/components/admin/EbaySyncQueueMonitor.tsx` | Use inner join to exclude orphan/deleted items |
 
 ---
 
-## Implementation Order
+## Expected Behavior After Fix
 
-1. Fix `cleanupTestItems` and `deleteSelectedItems` to include `shopify_sync_queue`
-2. Fix stale closures in `syncToShopify` and `printLabels`
-3. Add duplicate prevention to `queueForEbay`
-4. Add error tooltips to UI
-
----
-
-## Verification
-
-After implementation:
-1. Generate 3 test items
-2. Sync to Shopify (dry run) → should show "shopify synced"
-3. Queue for eBay → should show "ebay queued"
-4. Click "Queue Selected" again → should NOT create duplicates
-5. Process Queue → should show "ebay synced"
-6. Delete all → verify `shopify_sync_queue` is also cleaned up
+1. **Queueing**: Only valid, existing items are queued; deleted items are skipped with a warning
+2. **Queue Monitor**: Only shows items that have a valid linked `intake_item`
+3. **No FK Errors**: Foreign key violations eliminated because we validate before insert
+4. **Clean Display**: No more "hidden" items with just UUIDs showing
