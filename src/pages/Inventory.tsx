@@ -35,6 +35,7 @@ import { useInventoryListQuery } from '@/hooks/useInventoryListQuery';
 import { useLocationNames, CachedLocation } from '@/hooks/useLocationNames';
 import { useShopifyTags } from '@/hooks/useShopifyTags';
 import { useKeyboardNavigation } from '@/hooks/useKeyboardNavigation';
+import { useInventoryRealtime } from '@/hooks/useInventoryRealtime';
 import { TagFilterDropdown } from '@/components/inventory/TagFilterDropdown';
 import { Progress } from '@/components/ui/progress';
 import { useQueryClient } from '@tanstack/react-query';
@@ -53,6 +54,7 @@ const VirtualInventoryList = React.memo(({
   isAdmin,
   syncingRowId,
   locationsMap,
+  focusedIndex,
   onToggleSelection,
   onToggleExpanded,
   onSync,
@@ -64,7 +66,8 @@ const VirtualInventoryList = React.memo(({
   isLoading,
   hasNextPage,
   isFetchingNextPage,
-  onLoadMore
+  onLoadMore,
+  onScrollToIndex,
 }: {
   items: any[];
   selectedItems: Set<string>;
@@ -72,6 +75,7 @@ const VirtualInventoryList = React.memo(({
   isAdmin: boolean;
   syncingRowId: string | null;
   locationsMap?: Map<string, CachedLocation>;
+  focusedIndex?: number;
   onToggleSelection: (id: string) => void;
   onToggleExpanded: (id: string) => void;
   onSync: (item: any) => void;
@@ -84,6 +88,7 @@ const VirtualInventoryList = React.memo(({
   hasNextPage?: boolean;
   isFetchingNextPage?: boolean;
   onLoadMore?: () => void;
+  onScrollToIndex?: (scrollFn: (index: number) => void) => void;
 }) => {
   const parentRef = useRef<HTMLDivElement>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
@@ -94,6 +99,15 @@ const VirtualInventoryList = React.memo(({
     estimateSize: () => 180,
     overscan: 5,
   });
+
+  // Expose scroll function to parent via callback
+  useEffect(() => {
+    if (onScrollToIndex) {
+      onScrollToIndex((index: number) => {
+        rowVirtualizer.scrollToIndex(index, { align: 'center', behavior: 'smooth' });
+      });
+    }
+  }, [rowVirtualizer, onScrollToIndex]);
 
   // Intersection observer for infinite scroll
   useEffect(() => {
@@ -150,6 +164,7 @@ const VirtualInventoryList = React.memo(({
       >
         {rowVirtualizer.getVirtualItems().map((virtualItem) => {
           const item = items[virtualItem.index];
+          const isFocused = focusedIndex === virtualItem.index;
           return (
             <div
               key={virtualItem.key}
@@ -161,6 +176,7 @@ const VirtualInventoryList = React.memo(({
                 transform: `translateY(${virtualItem.start}px)`,
                 paddingBottom: '1rem',
               }}
+              className={isFocused ? 'ring-2 ring-primary ring-offset-2 rounded-lg' : ''}
             >
               <InventoryItemCard
                 item={item}
@@ -910,9 +926,15 @@ const Inventory = () => {
 
   // Search input ref for keyboard navigation
   const searchInputRef = useRef<HTMLInputElement>(null);
+  
+  // Store virtualizer scroll function
+  const virtualizerScrollToIndexRef = useRef<((index: number) => void) | null>(null);
+  const handleSetScrollToIndex = useCallback((fn: (index: number) => void) => {
+    virtualizerScrollToIndexRef.current = fn;
+  }, []);
 
   // Keyboard navigation hook
-  useKeyboardNavigation({
+  const { focusedIndex } = useKeyboardNavigation({
     items: filteredItems,
     selectedItems,
     onToggleSelection: handleToggleSelection,
@@ -920,7 +942,19 @@ const Inventory = () => {
     onSelectAll: selectAllVisible,
     onSync: handleSyncSelected,
     searchInputRef,
+    virtualizerScrollToIndex: (index: number) => virtualizerScrollToIndexRef.current?.(index),
     enabled: !showRemovalDialog && !showDeleteDialog && !showPrintDialog,
+  });
+
+  // Real-time sync status updates
+  useInventoryRealtime({
+    storeKey: assignedStore,
+    enabled: true,
+    onSyncComplete: (itemId, status) => {
+      if (status === 'synced') {
+        toast.success('Item synced successfully');
+      }
+    },
   });
 
   // Quick filter preset handler
@@ -1296,15 +1330,13 @@ const Inventory = () => {
                 </CardContent>
               </Card>
               
-              {/* Filters and Search */}
+              {/* Filters and Search - Consolidated */}
             <Card>
-              <CardHeader>
-                <CardTitle>Filters & Search</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {/* Row 1: Search and Core Filters */}
-                <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
-                  <div className="relative md:col-span-2">
+              <CardContent className="py-4">
+                {/* Single Row: Search, Status, Location, More Filters */}
+                <div className="flex flex-col md:flex-row gap-4">
+                  {/* Search - takes more space */}
+                  <div className="relative flex-1 md:max-w-md">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
                       ref={searchInputRef}
@@ -1315,9 +1347,10 @@ const Inventory = () => {
                     />
                   </div>
                   
+                  {/* Status Filter */}
                   <Select value={statusFilter} onValueChange={(value: any) => { setStatusFilter(value); setActiveQuickFilter(null); }}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Filter by status" />
+                    <SelectTrigger className="w-[140px]">
+                      <SelectValue placeholder="Status" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="active">Active</SelectItem>
@@ -1329,39 +1362,12 @@ const Inventory = () => {
                     </SelectContent>
                   </Select>
 
-                  <Select value={typeFilter} onValueChange={(value: any) => setTypeFilter(value)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Item type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Types</SelectItem>
-                      <SelectItem value="raw">Raw Only</SelectItem>
-                      <SelectItem value="graded">Graded Only</SelectItem>
-                    </SelectContent>
-                  </Select>
-
-                  {/* New Category Filter */}
-                  <Select value={categoryFilter} onValueChange={(value: any) => setCategoryFilter(value)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Categories</SelectItem>
-                      <SelectItem value="tcg">🎴 TCG Cards</SelectItem>
-                      <SelectItem value="comics">📚 Comics</SelectItem>
-                      <SelectItem value="sealed">📦 Sealed</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Row 2: Location, Marketplace and Print Filters */}
-                <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
                   {/* Location Filter */}
                   <Select 
                     value={locationFilter || 'all'} 
                     onValueChange={(value: string) => setLocationFilter(value === 'all' ? null : value)}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="w-[160px]">
                       <MapPin className="h-4 w-4 mr-2 text-muted-foreground" />
                       <SelectValue placeholder="Location" />
                     </SelectTrigger>
@@ -1375,74 +1381,26 @@ const Inventory = () => {
                     </SelectContent>
                   </Select>
 
-                  <Select value={shopifySyncFilter} onValueChange={(value: any) => { setShopifySyncFilter(value); setActiveQuickFilter(null); }}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Shopify Status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Shopify</SelectItem>
-                      <SelectItem value="not-synced">Not Synced</SelectItem>
-                      <SelectItem value="synced">Synced</SelectItem>
-                      <SelectItem value="queued">Queued</SelectItem>
-                      <SelectItem value="error">Sync Error</SelectItem>
-                    </SelectContent>
-                  </Select>
-
-                  <Select value={ebayStatusFilter} onValueChange={(value: any) => { setEbayStatusFilter(value); setActiveQuickFilter(null); }}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="eBay Status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All eBay</SelectItem>
-                      <SelectItem value="not-listed">Not Listed</SelectItem>
-                      <SelectItem value="listed">Listed</SelectItem>
-                      <SelectItem value="queued">Queued</SelectItem>
-                      <SelectItem value="error">Error</SelectItem>
-                    </SelectContent>
-                  </Select>
-
-                  <Select value={printStatusFilter} onValueChange={(value: any) => { setPrintStatusFilter(value); setActiveQuickFilter(null); }}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Print status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Print Status</SelectItem>
-                      <SelectItem value="printed">Printed</SelectItem>
-                      <SelectItem value="not-printed">Not Printed</SelectItem>
-                    </SelectContent>
-                  </Select>
-
-                  <Select value={dateRangeFilter} onValueChange={(value: any) => { setDateRangeFilter(value); setActiveQuickFilter(null); }}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Date Added" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Time</SelectItem>
-                      <SelectItem value="today">Today</SelectItem>
-                      <SelectItem value="yesterday">Yesterday</SelectItem>
-                      <SelectItem value="7days">Last 7 Days</SelectItem>
-                      <SelectItem value="30days">Last 30 Days</SelectItem>
-                    </SelectContent>
-                  </Select>
-
-                  <Select value={batchFilter} onValueChange={(value: any) => setBatchFilter(value)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Batch status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Items</SelectItem>
-                      <SelectItem value="current_batch">Current Batch {currentBatch?.items?.[0]?.lot_number && `(${currentBatch.items[0].lot_number})`}</SelectItem>
-                      <SelectItem value="in_batch">In Any Batch</SelectItem>
-                      <SelectItem value="removed_from_batch">Removed from Batch</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  
-                  {/* Shopify Tags Filter */}
-                  <TagFilterDropdown
-                    tags={shopifyTags}
-                    selectedTags={tagFilter}
-                    onTagsChange={setTagFilter}
-                    isLoading={isLoadingTags}
+                  {/* More Filters Popover - Contains all secondary filters */}
+                  <MoreFiltersPopover
+                    typeFilter={typeFilter}
+                    onTypeFilterChange={(value) => setTypeFilter(value)}
+                    categoryFilter={categoryFilter}
+                    onCategoryFilterChange={(value) => setCategoryFilter(value)}
+                    shopifySyncFilter={shopifySyncFilter}
+                    onShopifySyncFilterChange={(value) => { setShopifySyncFilter(value); setActiveQuickFilter(null); }}
+                    ebayStatusFilter={ebayStatusFilter}
+                    onEbayStatusFilterChange={(value) => { setEbayStatusFilter(value); setActiveQuickFilter(null); }}
+                    printStatusFilter={printStatusFilter}
+                    onPrintStatusFilterChange={(value) => { setPrintStatusFilter(value); setActiveQuickFilter(null); }}
+                    dateRangeFilter={dateRangeFilter}
+                    onDateRangeFilterChange={(value) => { setDateRangeFilter(value); setActiveQuickFilter(null); }}
+                    batchFilter={batchFilter}
+                    onBatchFilterChange={(value) => setBatchFilter(value)}
+                    tagFilter={tagFilter}
+                    onTagFilterChange={setTagFilter}
+                    shopifyTags={shopifyTags}
+                    isLoadingTags={isLoadingTags}
                   />
                 </div>
 
@@ -1512,6 +1470,7 @@ const Inventory = () => {
               isAdmin={isAdmin}
               syncingRowId={syncingRowId}
               locationsMap={locationsMap}
+              focusedIndex={focusedIndex}
               onToggleSelection={handleToggleSelection}
               onToggleExpanded={handleToggleExpanded}
               onSync={handleSync}
@@ -1530,6 +1489,7 @@ const Inventory = () => {
               hasNextPage={hasNextPage}
               isFetchingNextPage={isFetchingNextPage}
               onLoadMore={() => fetchNextPage()}
+              onScrollToIndex={handleSetScrollToIndex}
             />
             )}
           </TabsContent>
