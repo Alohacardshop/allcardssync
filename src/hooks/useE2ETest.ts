@@ -214,7 +214,7 @@ export function useE2ETest() {
       const queueItems = itemIds.map(id => ({
         inventory_item_id: id,
         action: 'create' as const,
-        status: 'pending',
+        status: 'queued',
         retry_count: 0,
         max_retries: 3
       }));
@@ -444,7 +444,7 @@ export function useE2ETest() {
         // Determine status based on ebay_sync_status, queue status, and shopify status
         let status: TestItemStatus = 'created';
         
-        if (item.ebay_sync_status === 'synced' || item.ebay_listing_id) {
+        if (item.ebay_sync_status === 'synced' || item.ebay_sync_status === 'dry_run' || item.ebay_listing_id) {
           status = 'ebay_synced';
         } else if (item.ebay_sync_status === 'failed') {
           status = 'ebay_failed';
@@ -452,7 +452,7 @@ export function useE2ETest() {
           const queueStatus = queueStatusMap.get(item.id);
           if (queueStatus === 'processing') {
             status = 'ebay_processing';
-          } else if (queueStatus === 'pending') {
+          } else if (queueStatus === 'queued') {
             status = 'ebay_queued';
           } else if (queueStatus === 'completed') {
             status = 'ebay_synced';
