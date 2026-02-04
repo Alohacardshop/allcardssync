@@ -392,10 +392,10 @@ const InventoryPage = () => {
 
       {/* Main Content Area */}
       <div className="flex-1 min-h-0 flex flex-col">
-        {/* Sticky Controls Bar */}
-        <div className="shrink-0 sticky top-0 z-20 bg-background pb-3 space-y-3 border-b border-border">
+        {/* Single Sticky Controls Stack - all sticky elements in one container */}
+        <div className="shrink-0 sticky top-0 z-20 bg-background border-b border-border">
           {/* Refresh Controls + View Toggle */}
-          <div className="flex items-center gap-2 flex-wrap pt-2">
+          <div className="flex items-center gap-2 flex-wrap py-2">
             <RefreshControls
               autoRefreshEnabled={autoRefreshEnabled}
               onAutoRefreshToggle={setAutoRefreshEnabled}
@@ -445,47 +445,49 @@ const InventoryPage = () => {
           </div>
 
           {/* Filters Bar */}
-          <InventoryFiltersBar
-            filters={filters}
-            onFilterChange={handleFilterChange}
-            onClearAllFilters={handleClearAllFilters}
-            locationsMap={locationsMap}
-            shopifyTags={shopifyTags}
-            isLoadingTags={isLoadingTags}
-            searchInputRef={searchInputRef}
-          />
-        </div>
-
-        {/* Sticky Bulk Bar - only when items selected */}
-        {selectedItems.size > 0 && (
-          <div className="shrink-0 sticky top-[140px] z-10 bg-background py-2 border-b border-border">
-            <InventoryBulkBar
-              selectedItems={selectedItems}
-              filteredItems={items}
-              isAdmin={isAdmin}
-              statusFilter={filters.statusFilter}
-              bulkRetrying={bulkRetrying}
-              bulkSyncing={bulkSyncing}
-              onSelectAll={selectAllVisible}
-              onClearSelection={clearSelection}
-              onBulkRetrySync={handleBulkRetrySync}
-              onSyncSelected={handleSyncSelected}
-              onResyncSelected={handleResyncSelected}
-              onDeleteSelected={() => {
-                const selectedItemsArray = items.filter(item => selectedItems.has(item.id));
-                setSelectedItemsForDeletion(selectedItemsArray);
-                setShowDeleteDialog(true);
-              }}
-              onBulkToggleEbay={(enable) => {
-                const selectedIds = Array.from(selectedItems);
-                bulkToggleEbay(selectedIds, enable);
-              }}
-              onPrintSelected={handlePrintSelected}
-              totalCount={totalCount}
-              hasNextPage={hasNextPage}
+          <div className="pb-3">
+            <InventoryFiltersBar
+              filters={filters}
+              onFilterChange={handleFilterChange}
+              onClearAllFilters={handleClearAllFilters}
+              locationsMap={locationsMap}
+              shopifyTags={shopifyTags}
+              isLoadingTags={isLoadingTags}
+              searchInputRef={searchInputRef}
             />
           </div>
-        )}
+
+          {/* Bulk Bar - conditionally rendered within sticky stack */}
+          {selectedItems.size > 0 && (
+            <div className="py-2 border-t border-border">
+              <InventoryBulkBar
+                selectedItems={selectedItems}
+                filteredItems={items}
+                isAdmin={isAdmin}
+                statusFilter={filters.statusFilter}
+                bulkRetrying={bulkRetrying}
+                bulkSyncing={bulkSyncing}
+                onSelectAll={selectAllVisible}
+                onClearSelection={clearSelection}
+                onBulkRetrySync={handleBulkRetrySync}
+                onSyncSelected={handleSyncSelected}
+                onResyncSelected={handleResyncSelected}
+                onDeleteSelected={() => {
+                  const selectedItemsArray = items.filter(item => selectedItems.has(item.id));
+                  setSelectedItemsForDeletion(selectedItemsArray);
+                  setShowDeleteDialog(true);
+                }}
+                onBulkToggleEbay={(enable) => {
+                  const selectedIds = Array.from(selectedItems);
+                  bulkToggleEbay(selectedIds, enable);
+                }}
+                onPrintSelected={handlePrintSelected}
+                totalCount={totalCount}
+                hasNextPage={hasNextPage}
+              />
+            </div>
+          )}
+        </div>
 
         {/* Scrollable List Area */}
         <div className="flex-1 overflow-auto pt-4">
