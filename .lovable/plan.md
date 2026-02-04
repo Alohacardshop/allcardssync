@@ -1,147 +1,77 @@
 
-# Enhanced Test Data Cleanup
+# E2E Test Flow Fixes
 
-This update ensures all test records are properly cleaned up after E2E testing, preventing any data accumulation.
-
----
-
-## Current State
-
-### What's Already Cleaned Up
-| Table | Status |
-|-------|--------|
-| `intake_items` (TEST-* SKUs) | ✅ Deleted |
-| `ebay_sync_queue` (related entries) | ✅ Deleted |
-
-### What's Missing from Cleanup
-| Table | Issue |
-|-------|-------|
-| `shopify_sync_queue` | Not cleaned up |
-| `ebay_sync_log` | Not cleaned up (logs with TEST-* SKUs) |
-| `item_snapshots` | Not cleaned up (FK to intake_items) |
-| `audit_log` | Not cleaned up (records with intake_items reference) |
-| `cards` | Not cleaned up (if TEST-* SKUs exist) |
-
-### Current Test Data
-- 5 TEST-* items in `intake_items` (ready for cleanup)
-- 0 related entries in other tables currently
+This plan addresses three issues preventing the E2E test from working correctly.
 
 ---
 
-## Solution
+## Issues Summary
 
-Enhance `cleanupTestItems` in `useE2ETest.ts` to delete from all related tables in the correct order (respecting foreign key constraints).
+| Issue | Location | Problem | Impact |
+|-------|----------|---------|--------|
+| **1. Queue status mismatch** | `useE2ETest.ts` line 217 | Items inserted as `pending` but processor looks for `queued` | eBay queue never processes |
+| **2. Status mapping gap** | `useE2ETest.ts` line 455 | Maps `pending` → `ebay_queued` but `queued` is correct value | Inconsistent UI state |
+| **3. Dry run status unhandled** | `useE2ETest.ts` line 447 | Only checks 'synced', not 'dry_run' | Dry-run items show wrong status |
 
-### Updated Cleanup Order
+---
 
-```text
-1. ebay_sync_log (no FK, match by SKU)
-2. ebay_sync_queue (no FK, match by item ID)
-3. shopify_sync_queue (no FK, match by item ID)
-4. item_snapshots (FK to intake_items)
-5. audit_log (no FK, match by record_id)
-6. cards (no FK, match by SKU)
-7. intake_items (main table)
+## Fix 1: Use Correct Queue Status
+
+**File**: `src/hooks/useE2ETest.ts`
+
+**Change**: In `queueForEbay`, insert with `status: 'queued'` instead of `status: 'pending'`
+
+```typescript
+// Line 217 - BEFORE
+status: 'pending',
+
+// Line 217 - AFTER  
+status: 'queued',
 ```
 
 ---
 
-## Changes to `useE2ETest.ts`
+## Fix 2: Update Status Mapping in loadExistingTestItems
 
-### Enhanced cleanupTestItems Function
+**File**: `src/hooks/useE2ETest.ts`
+
+**Change**: Update the status mapping to handle `queued` instead of `pending`, and also recognize `dry_run` as a synced state:
 
 ```typescript
-const cleanupTestItems = useCallback(async () => {
-  setState(s => ({ ...s, isCleaningUp: true }));
-  
-  try {
-    const testItemIds = state.testItems.map(i => i.id);
-    const testSkus = state.testItems.map(i => i.sku);
-    
-    if (testItemIds.length === 0) {
-      toast.info('No test items to clean up');
-      setState(s => ({ ...s, isCleaningUp: false }));
-      return;
-    }
-    
-    // 1. Remove eBay sync logs (by SKU)
-    await supabase
-      .from('ebay_sync_log')
-      .delete()
-      .in('sku', testSkus);
-    
-    // 2. Remove eBay queue entries
-    await supabase
-      .from('ebay_sync_queue')
-      .delete()
-      .in('inventory_item_id', testItemIds);
-    
-    // 3. Remove Shopify queue entries
-    await supabase
-      .from('shopify_sync_queue')
-      .delete()
-      .in('inventory_item_id', testItemIds);
-    
-    // 4. Remove item snapshots
-    await supabase
-      .from('item_snapshots')
-      .delete()
-      .in('intake_item_id', testItemIds);
-    
-    // 5. Remove audit log entries
-    await supabase
-      .from('audit_log')
-      .delete()
-      .eq('table_name', 'intake_items')
-      .in('record_id', testItemIds.map(id => id.toString()));
-    
-    // 6. Remove cards entries (by SKU)
-    await supabase
-      .from('cards')
-      .delete()
-      .in('sku', testSkus);
-    
-    // 7. Finally, delete test items
-    const { error } = await supabase
-      .from('intake_items')
-      .delete()
-      .in('id', testItemIds);
-    
-    if (error) throw error;
-    
-    setState(s => ({
-      ...s,
-      testItems: [],
-      isCleaningUp: false
-    }));
-    
-    toast.success('Cleaned up all test items and related records');
-  } catch (error) {
-    console.error('Cleanup failed:', error);
-    toast.error('Cleanup failed');
-    setState(s => ({ ...s, isCleaningUp: false }));
+// Lines 447-464 - Updated logic
+if (item.ebay_sync_status === 'synced' || item.ebay_sync_status === 'dry_run' || item.ebay_listing_id) {
+  status = 'ebay_synced';
+} else if (item.ebay_sync_status === 'failed') {
+  status = 'ebay_failed';
+} else {
+  const queueStatus = queueStatusMap.get(item.id);
+  if (queueStatus === 'processing') {
+    status = 'ebay_processing';
+  } else if (queueStatus === 'queued') {  // Changed from 'pending'
+    status = 'ebay_queued';
+  } else if (queueStatus === 'completed') {
+    status = 'ebay_synced';
+  } else if (queueStatus === 'failed') {
+    status = 'ebay_failed';
+  } else if (item.shopify_product_id) {
+    status = 'shopify_synced';
   }
-}, [state.testItems]);
+}
 ```
 
 ---
 
-## Optional: Auto-Cleanup on Page Unload
+## Fix 3: Clean Up Existing Stale Queue Items
 
-Add a warning when leaving the page with test items still present:
+After applying the code fixes, the 3 existing items with `status: pending` will remain stuck. Two options:
 
-```typescript
-useEffect(() => {
-  const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-    if (testItems.length > 0) {
-      e.preventDefault();
-      e.returnValue = 'You have test items that haven\'t been cleaned up.';
-    }
-  };
-  
-  window.addEventListener('beforeunload', handleBeforeUnload);
-  return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-}, [testItems.length]);
+**Option A** - Delete them via cleanup button (already available in UI)
+
+**Option B** - Fix in database directly:
+```sql
+UPDATE ebay_sync_queue 
+SET status = 'queued' 
+WHERE status = 'pending';
 ```
 
 ---
@@ -150,31 +80,19 @@ useEffect(() => {
 
 | File | Change |
 |------|--------|
-| `src/hooks/useE2ETest.ts` | Expand cleanup to cover all related tables |
-| `src/pages/E2ETestPage.tsx` | Add unload warning (optional) |
+| `src/hooks/useE2ETest.ts` | Fix status values in `queueForEbay` and `loadExistingTestItems` |
 
 ---
 
-## Cleanup Summary Display
-
-Update the cleanup card to show what will be deleted:
-
-```tsx
-<AlertDescription>
-  This will permanently delete:
-  • {testItems.length} test item(s) from intake_items
-  • Related queue entries (eBay, Shopify)
-  • Related logs and snapshots
-</AlertDescription>
-```
-
----
-
-## Safety Verification
+## Verification Steps
 
 After implementing:
-1. Generate test items
-2. Sync to Shopify (dry run)
-3. Queue for eBay and process (dry run)
-4. Click "Delete All Test Items"
-5. Verify all TEST-* records are gone from all tables
+1. Delete all existing test items via "Delete All Test Items"
+2. Generate new test items (e.g., 3 Graded)
+3. Click "Sync All New" (Shopify dry run)
+4. Verify items show "shopify synced" status
+5. Select items and click "Queue Selected" for eBay
+6. Verify items show "ebay queued" status
+7. Click "Process Queue"
+8. Verify items transition to "ebay synced" (with dry run toast)
+9. Verify spinner stops after processing completes
