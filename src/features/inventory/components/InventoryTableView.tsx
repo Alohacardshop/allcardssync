@@ -161,6 +161,7 @@ const TableRow = memo(({
           <LocationStockPopover
             primaryLocationGid={item.shopify_location_gid}
             locationsMap={locationsMap}
+            inventoryItemId={item.shopify_inventory_item_id}
             className="leading-tight"
           />
         </div>
