@@ -455,22 +455,34 @@ export const InventoryItemCard = memo(({
           </div>
         </div>
 
-        {/* Category badges */}
-        {(item.main_category || item.sub_category) && (
-          <div className="flex flex-wrap gap-1 items-center">
-            {item.main_category && (
-              <Badge variant="secondary" className="text-xs">
-                {item.main_category === 'tcg' && '🎴 TCG'}
-                {item.main_category === 'comics' && '📚 Comics'}
-              </Badge>
-            )}
-            {item.sub_category && (
-              <Badge variant="outline" className="text-xs">
-                {item.sub_category}
-              </Badge>
-            )}
-          </div>
-        )}
+        {/* Category badges and Tags */}
+        <div className="flex flex-wrap gap-1 items-center">
+          {item.main_category && (
+            <Badge variant="secondary" className="text-xs">
+              {item.main_category === 'tcg' && '🎴 TCG'}
+              {item.main_category === 'comics' && '📚 Comics'}
+              {item.main_category === 'pokemon' && '⚡ Pokemon'}
+              {item.main_category === 'sports' && '🏈 Sports'}
+              {!['tcg', 'comics', 'pokemon', 'sports'].includes(item.main_category) && item.main_category}
+            </Badge>
+          )}
+          {item.sub_category && (
+            <Badge variant="outline" className="text-xs">
+              {item.sub_category}
+            </Badge>
+          )}
+          {/* Show first 3 shopify tags */}
+          {item.shopify_tags && Array.isArray(item.shopify_tags) && item.shopify_tags.slice(0, 3).map((tag: string) => (
+            <Badge key={tag} variant="outline" className="text-xs bg-muted/50">
+              {tag}
+            </Badge>
+          ))}
+          {item.shopify_tags && Array.isArray(item.shopify_tags) && item.shopify_tags.length > 3 && (
+            <Badge variant="outline" className="text-xs text-muted-foreground">
+              +{item.shopify_tags.length - 3} more
+            </Badge>
+          )}
+        </div>
 
         <div className="flex flex-wrap gap-1">
           {item.shopify_sync_status === 'pending' && (

@@ -48,7 +48,7 @@ Deno.serve(async (req) => {
     const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2')
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-    // Get the intake item with PSA data
+    // Get the intake item with PSA data and normalized tags
     const { data: intakeItem, error: fetchError } = await supabase
       .from('intake_items')
       .select(`
@@ -61,6 +61,10 @@ Deno.serve(async (req) => {
     if (fetchError || !intakeItem) {
       throw new Error(`Failed to fetch intake item: ${fetchError?.message}`)
     }
+
+    // Use normalized_tags as source of truth for Shopify tags
+    // Fall back to shopify_tags if normalized_tags not yet populated
+    const tagsForShopify = intakeItem.normalized_tags || intakeItem.shopify_tags || [];
 
     // Extract PSA URL and image from snapshots
     const psaUrl = intakeItem.catalog_snapshot?.psaUrl || 
@@ -301,28 +305,23 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Build tags array with main_category and sub_category
-    const tagsArray = [...new Set(isComic ? [
-      'comics',
-      'graded',
+    // Build tags array using normalized_tags as source of truth (for sync TO Shopify)
+    // Include additional context tags not in normalized_tags
+    const additionalTags = [
       gradingCompany,
       grade ? `Grade ${grade}` : null,
-      brandTitle, // Publisher (DC, Marvel, etc.)
-      year,
-      intakeItem.main_category,
-      intakeItem.sub_category || 'american',
       vendor,
       purchaseLocation ? `Purchased: ${purchaseLocation}` : null
-    ].filter(Boolean) : [
-      gradingCompany,
-      grade ? `Grade ${grade}` : null,
-      brandTitle, 
-      year,
-      intakeItem.main_category,
-      intakeItem.sub_category,
-      intakeItem.game || intakeItem.catalog_snapshot?.game, 
-      vendor,
-      purchaseLocation ? `Purchased: ${purchaseLocation}` : null
+    ].filter(Boolean);
+
+    // Merge normalized tags with additional context tags
+    const tagsArray = [...new Set([
+      ...tagsForShopify,
+      ...additionalTags,
+      isComic ? 'comics' : null,
+      isComic ? 'graded' : null,
+      intakeItem.primary_category,
+      intakeItem.condition_type
     ].filter(Boolean))];
 
     // Prepare Shopify product data (without metafields - will add them separately)

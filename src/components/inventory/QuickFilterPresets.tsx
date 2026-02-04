@@ -35,6 +35,48 @@ export const QuickFilterPresets = React.memo(({
   activePreset
 }: QuickFilterPresetsProps) => {
   const presets = [
+    // Category presets (using normalized tags)
+    {
+      id: 'pokemon',
+      label: 'Pokemon',
+      icon: Sparkles,
+      description: 'Pokemon cards only',
+      filters: {
+        tagFilter: ['pokemon'],
+        statusFilter: 'active' as const,
+      }
+    },
+    {
+      id: 'sports',
+      label: 'Sports',
+      icon: Trophy,
+      description: 'Sports cards (baseball, basketball, football)',
+      filters: {
+        tagFilter: ['sports'],
+        statusFilter: 'active' as const,
+      }
+    },
+    {
+      id: 'graded-items',
+      label: 'Graded',
+      icon: Trophy,
+      description: 'Graded items by PSA, CGC, etc.',
+      filters: {
+        tagFilter: ['graded'],
+        statusFilter: 'active' as const,
+      }
+    },
+    {
+      id: 'sealed-products',
+      label: 'Sealed',
+      icon: Package,
+      description: 'Sealed products only',
+      filters: {
+        tagFilter: ['sealed'],
+        statusFilter: 'active' as const,
+      }
+    },
+    // Sync status presets
     {
       id: 'ready-to-sync',
       label: 'Ready to Sync',
@@ -52,56 +94,6 @@ export const QuickFilterPresets = React.memo(({
       description: 'Items with sync errors',
       filters: {
         statusFilter: 'errors' as const,
-      }
-    },
-    {
-      id: 'needs-barcode',
-      label: 'Needs Barcode',
-      icon: Tag,
-      description: 'Items not yet printed',
-      filters: {
-        printStatusFilter: 'not-printed' as const,
-        statusFilter: 'active' as const,
-      }
-    },
-    {
-      id: 'not-on-ebay',
-      label: 'Not on eBay',
-      icon: Package,
-      description: 'Items not listed on eBay',
-      filters: {
-        ebayStatusFilter: 'not-listed' as const,
-        statusFilter: 'active' as const,
-      }
-    },
-    {
-      id: 'sealed-products',
-      label: 'Sealed',
-      icon: Package,
-      description: 'Sealed products only',
-      filters: {
-        categoryFilter: 'sealed' as const,
-        statusFilter: 'active' as const,
-      }
-    },
-    {
-      id: 'pokemon',
-      label: 'Pokemon',
-      icon: Sparkles,
-      description: 'Pokemon cards only',
-      filters: {
-        tagFilter: ['pokemon'],
-        statusFilter: 'active' as const,
-      }
-    },
-    {
-      id: 'graded-items',
-      label: 'Graded',
-      icon: Trophy,
-      description: 'Graded items by PSA, CGC, etc.',
-      filters: {
-        tagFilter: ['graded'],
-        statusFilter: 'active' as const,
       }
     },
     {
@@ -124,6 +116,28 @@ export const QuickFilterPresets = React.memo(({
         statusFilter: 'active' as const,
       }
     },
+    // Print/eBay presets
+    {
+      id: 'needs-barcode',
+      label: 'Needs Barcode',
+      icon: Tag,
+      description: 'Items not yet printed',
+      filters: {
+        printStatusFilter: 'not-printed' as const,
+        statusFilter: 'active' as const,
+      }
+    },
+    {
+      id: 'not-on-ebay',
+      label: 'Not on eBay',
+      icon: Package,
+      description: 'Items not listed on eBay',
+      filters: {
+        ebayStatusFilter: 'not-listed' as const,
+        statusFilter: 'active' as const,
+      }
+    },
+    // Date preset
     {
       id: 'todays-intake',
       label: "Today's Intake",

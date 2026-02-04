@@ -11,7 +11,7 @@ export interface InventoryFilters {
   printStatusFilter?: 'all' | 'printed' | 'not-printed';
   typeFilter?: 'all' | 'raw' | 'graded';
   categoryFilter?: 'all' | 'tcg' | 'comics' | 'sealed'; // New category filter
-  tagFilter?: string[]; // Shopify tags filter
+  tagFilter?: string[]; // Shopify tags filter (uses normalized_tags for filtering)
   
   searchTerm?: string;
   autoRefreshEnabled?: boolean;
@@ -20,6 +20,8 @@ export interface InventoryFilters {
   shopifySyncFilter?: 'all' | 'not-synced' | 'synced' | 'queued' | 'error';
   ebayStatusFilter?: 'all' | 'not-listed' | 'listed' | 'queued' | 'error';
   dateRangeFilter?: 'all' | 'today' | 'yesterday' | '7days' | '30days';
+  // Smart refresh context
+  hasActiveSelection?: boolean;
 }
 
 const PAGE_SIZE = 25;
@@ -227,10 +229,13 @@ export function useInventoryListQuery(filters: InventoryFilters) {
         }
       }
 
-      // Apply Shopify tags filter
+      // Apply Shopify tags filter - use normalized_tags for better matching
       if (tagFilter && tagFilter.length > 0) {
-        // Filter items that have ANY of the selected tags
-        query = query.overlaps('shopify_tags', tagFilter);
+        // Filter items that have ANY of the selected tags (using normalized tags)
+        // Try normalized_tags first, fall back to shopify_tags for items not yet normalized
+        query = query.or(
+          `normalized_tags.ov.{${tagFilter.join(',')}},shopify_tags.ov.{${tagFilter.join(',')}}`
+        );
       }
 
       // Apply search filter - search across multiple fields
@@ -274,7 +279,37 @@ export function useInventoryListQuery(filters: InventoryFilters) {
       // Force fresh fetch when switching tabs
       return undefined;
     },
-    refetchInterval: filters.autoRefreshEnabled ? 120000 : false,
+    // Smart auto-refresh based on context
+    refetchInterval: (query) => {
+      // No auto-refresh if user has selected items (editing mode)
+      if (filters.hasActiveSelection) return false;
+      
+      // No auto-refresh if disabled
+      if (!filters.autoRefreshEnabled) return false;
+      
+      // Check for pending syncs - refresh faster
+      const data = query.state.data;
+      const hasPendingSyncs = data?.pages?.some((p: any) => 
+        p.items?.some((i: any) => 
+          i.shopify_sync_status === 'queued' || 
+          i.shopify_sync_status === 'processing' ||
+          i.ebay_sync_status === 'queued' ||
+          i.ebay_sync_status === 'processing'
+        )
+      );
+      
+      // Fast refresh when syncs pending (15 seconds)
+      if (hasPendingSyncs) return 15000;
+      
+      // Check if tab is visible
+      if (typeof document !== 'undefined' && !document.hasFocus()) {
+        // Slow refresh when tab is hidden (5 minutes)
+        return 300000;
+      }
+      
+      // Normal refresh (1 minute)
+      return 60000;
+    },
     enabled: Boolean(filters.storeKey),
   });
 }

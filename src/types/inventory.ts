@@ -52,6 +52,12 @@ export interface InventoryItem extends IntakeItem {
   notes?: string;
   condition?: string;
   psa_snapshot?: Record<string, any> | null;
+  
+  // Tag-based categorization
+  shopify_tags?: string[] | null;
+  normalized_tags?: string[] | null;
+  primary_category?: string | null;
+  condition_type?: 'graded' | 'raw' | 'sealed' | null;
 }
 
 /**

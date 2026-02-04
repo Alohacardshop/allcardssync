@@ -933,6 +933,7 @@ export type Database = {
           category: string | null
           cgc_cert: string | null
           cgc_snapshot: Json | null
+          condition_type: string | null
           cost: number | null
           created_at: string
           created_by: string | null
@@ -967,9 +968,11 @@ export type Database = {
           lot_id: string | null
           lot_number: string
           main_category: string | null
+          normalized_tags: string[] | null
           original_filename: string | null
           price: number | null
           pricing_snapshot: Json | null
+          primary_category: string | null
           printed_at: string | null
           processing_notes: string | null
           product_weight: number | null
@@ -1020,6 +1023,7 @@ export type Database = {
           category?: string | null
           cgc_cert?: string | null
           cgc_snapshot?: Json | null
+          condition_type?: string | null
           cost?: number | null
           created_at?: string
           created_by?: string | null
@@ -1054,9 +1058,11 @@ export type Database = {
           lot_id?: string | null
           lot_number?: string
           main_category?: string | null
+          normalized_tags?: string[] | null
           original_filename?: string | null
           price?: number | null
           pricing_snapshot?: Json | null
+          primary_category?: string | null
           printed_at?: string | null
           processing_notes?: string | null
           product_weight?: number | null
@@ -1107,6 +1113,7 @@ export type Database = {
           category?: string | null
           cgc_cert?: string | null
           cgc_snapshot?: Json | null
+          condition_type?: string | null
           cost?: number | null
           created_at?: string
           created_by?: string | null
@@ -1141,9 +1148,11 @@ export type Database = {
           lot_id?: string | null
           lot_number?: string
           main_category?: string | null
+          normalized_tags?: string[] | null
           original_filename?: string | null
           price?: number | null
           pricing_snapshot?: Json | null
+          primary_category?: string | null
           printed_at?: string | null
           processing_notes?: string | null
           product_weight?: number | null
@@ -3609,6 +3618,10 @@ export type Database = {
       }
       is_inventory_sync_enabled: { Args: never; Returns: boolean }
       normalize_game_slug: { Args: { slug_in: string }; Returns: string }
+      normalize_shopify_tags: {
+        Args: { raw_tags: string[] }
+        Returns: string[]
+      }
       queue_ebay_end_listing: {
         Args: { p_ebay_offer_id: string; p_sku: string }
         Returns: string
