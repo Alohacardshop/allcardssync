@@ -442,46 +442,45 @@ const InventoryPage = () => {
           </div>
           
           {/* Consolidated Filter Card */}
-          <Card>
-            <CardContent className="py-4 space-y-4">
-              <InventoryFiltersBar
-                filters={filters}
-                onFilterChange={handleFilterChange}
-                onClearAllFilters={handleClearAllFilters}
-                onApplyQuickFilter={handleApplyQuickFilter}
-                locationsMap={locationsMap}
-                shopifyTags={shopifyTags}
-                isLoadingTags={isLoadingTags}
-                searchInputRef={searchInputRef}
-              />
+          {/* Filters Section - no card wrapper, cleaner look */}
+          <div className="space-y-4">
+            <InventoryFiltersBar
+              filters={filters}
+              onFilterChange={handleFilterChange}
+              onClearAllFilters={handleClearAllFilters}
+              onApplyQuickFilter={handleApplyQuickFilter}
+              locationsMap={locationsMap}
+              shopifyTags={shopifyTags}
+              isLoadingTags={isLoadingTags}
+              searchInputRef={searchInputRef}
+            />
 
-              <InventoryBulkBar
-                selectedItems={selectedItems}
-                filteredItems={items}
-                isAdmin={isAdmin}
-                statusFilter={filters.statusFilter}
-                bulkRetrying={bulkRetrying}
-                bulkSyncing={bulkSyncing}
-                onSelectAll={selectAllVisible}
-                onClearSelection={clearSelection}
-                onBulkRetrySync={handleBulkRetrySync}
-                onSyncSelected={handleSyncSelected}
-                onResyncSelected={handleResyncSelected}
-                onDeleteSelected={() => {
-                  const selectedItemsArray = items.filter(item => selectedItems.has(item.id));
-                  setSelectedItemsForDeletion(selectedItemsArray);
-                  setShowDeleteDialog(true);
-                }}
-                onBulkToggleEbay={(enable) => {
-                  const selectedIds = Array.from(selectedItems);
-                  bulkToggleEbay(selectedIds, enable);
-                }}
-                onPrintSelected={handlePrintSelected}
-                totalCount={totalCount}
-                hasNextPage={hasNextPage}
-              />
-            </CardContent>
-          </Card>
+            <InventoryBulkBar
+              selectedItems={selectedItems}
+              filteredItems={items}
+              isAdmin={isAdmin}
+              statusFilter={filters.statusFilter}
+              bulkRetrying={bulkRetrying}
+              bulkSyncing={bulkSyncing}
+              onSelectAll={selectAllVisible}
+              onClearSelection={clearSelection}
+              onBulkRetrySync={handleBulkRetrySync}
+              onSyncSelected={handleSyncSelected}
+              onResyncSelected={handleResyncSelected}
+              onDeleteSelected={() => {
+                const selectedItemsArray = items.filter(item => selectedItems.has(item.id));
+                setSelectedItemsForDeletion(selectedItemsArray);
+                setShowDeleteDialog(true);
+              }}
+              onBulkToggleEbay={(enable) => {
+                const selectedIds = Array.from(selectedItems);
+                bulkToggleEbay(selectedIds, enable);
+              }}
+              onPrintSelected={handlePrintSelected}
+              totalCount={totalCount}
+              hasNextPage={hasNextPage}
+            />
+          </div>
 
           {/* Empty state */}
           {!isLoading && items.length === 0 && (

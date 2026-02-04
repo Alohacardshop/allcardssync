@@ -30,44 +30,41 @@ export const InventoryBulkBar = React.memo(({
   const selectedCount = selectedItems.size;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-2">
       {/* Bulk Actions - only when items selected */}
       {selectedCount > 0 && (
-        <div className="border-t pt-4">
-          <BulkActionsToolbar
-            selectedCount={selectedCount}
-            totalCount={filteredItems.length}
-            isAdmin={isAdmin}
-            statusFilter={statusFilter}
-            bulkRetrying={bulkRetrying}
-            bulkSyncing={bulkSyncing}
-            onSelectAll={onSelectAll}
-            onClearSelection={onClearSelection}
-            onBulkRetrySync={onBulkRetrySync}
-            onSyncSelected={onSyncSelected}
-            onResyncSelected={onResyncSelected}
-            onDeleteSelected={onDeleteSelected}
-            onBulkToggleEbay={onBulkToggleEbay}
-            onPrintSelected={onPrintSelected}
-          />
-        </div>
+        <BulkActionsToolbar
+          selectedCount={selectedCount}
+          totalCount={filteredItems.length}
+          isAdmin={isAdmin}
+          statusFilter={statusFilter}
+          bulkRetrying={bulkRetrying}
+          bulkSyncing={bulkSyncing}
+          onSelectAll={onSelectAll}
+          onClearSelection={onClearSelection}
+          onBulkRetrySync={onBulkRetrySync}
+          onSyncSelected={onSyncSelected}
+          onResyncSelected={onResyncSelected}
+          onDeleteSelected={onDeleteSelected}
+          onBulkToggleEbay={onBulkToggleEbay}
+          onPrintSelected={onPrintSelected}
+        />
       )}
 
-      {/* Item count footer */}
-      <div className="flex items-center justify-between text-sm text-muted-foreground pt-2 border-t">
+      {/* Item count footer - minimal */}
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
         <span>
-          Showing {filteredItems.length} items {totalCount > filteredItems.length && `of ${totalCount}`}
-          {hasNextPage && ' • Scroll to load more'}
+          {filteredItems.length} items{totalCount > filteredItems.length && ` of ${totalCount}`}
+          {hasNextPage && ' • scroll for more'}
         </span>
-        {selectedCount === 0 && (
+        {selectedCount === 0 && filteredItems.length > 0 && (
           <Button
             variant="ghost"
             size="sm"
             onClick={onSelectAll}
-            disabled={filteredItems.length === 0}
-            className="h-7 text-xs"
+            className="h-6 px-2 text-xs"
           >
-            <CheckSquare className="h-3 w-3 mr-1.5" />
+            <CheckSquare className="h-3 w-3 mr-1" />
             Select All
           </Button>
         )}
