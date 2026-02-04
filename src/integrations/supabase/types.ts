@@ -2131,6 +2131,53 @@ export type Database = {
         }
         Relationships: []
       }
+      reconciliation_location_stats: {
+        Row: {
+          created_at: string
+          drift_detected: number | null
+          drift_fixed: number | null
+          errors: number | null
+          id: string
+          items_checked: number | null
+          location_gid: string
+          location_name: string | null
+          run_id: string
+          store_key: string
+        }
+        Insert: {
+          created_at?: string
+          drift_detected?: number | null
+          drift_fixed?: number | null
+          errors?: number | null
+          id?: string
+          items_checked?: number | null
+          location_gid: string
+          location_name?: string | null
+          run_id: string
+          store_key: string
+        }
+        Update: {
+          created_at?: string
+          drift_detected?: number | null
+          drift_fixed?: number | null
+          errors?: number | null
+          id?: string
+          items_checked?: number | null
+          location_gid?: string
+          location_name?: string | null
+          run_id?: string
+          store_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reconciliation_location_stats_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "sync_health_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       region_settings: {
         Row: {
           created_at: string | null
@@ -2409,6 +2456,7 @@ export type Database = {
           created_at: string
           id: string
           inventory_item_id: string
+          last_reconciled_at: string | null
           location_gid: string
           location_name: string | null
           shopify_updated_at: string | null
@@ -2420,6 +2468,7 @@ export type Database = {
           created_at?: string
           id?: string
           inventory_item_id: string
+          last_reconciled_at?: string | null
           location_gid: string
           location_name?: string | null
           shopify_updated_at?: string | null
@@ -2431,6 +2480,7 @@ export type Database = {
           created_at?: string
           id?: string
           inventory_item_id?: string
+          last_reconciled_at?: string | null
           location_gid?: string
           location_name?: string | null
           shopify_updated_at?: string | null
@@ -2539,6 +2589,7 @@ export type Database = {
       }
       shopify_stores: {
         Row: {
+          active: boolean | null
           api_version: string | null
           created_at: string | null
           domain: string | null
@@ -2549,6 +2600,7 @@ export type Database = {
           vendor: string | null
         }
         Insert: {
+          active?: boolean | null
           api_version?: string | null
           created_at?: string | null
           domain?: string | null
@@ -2559,6 +2611,7 @@ export type Database = {
           vendor?: string | null
         }
         Update: {
+          active?: boolean | null
           api_version?: string | null
           created_at?: string | null
           domain?: string | null

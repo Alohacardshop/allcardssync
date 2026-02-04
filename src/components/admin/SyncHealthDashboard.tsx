@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { RefreshButton } from '@/components/RefreshButton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Activity, 
   AlertTriangle, 
@@ -14,25 +15,22 @@ import {
   Webhook,
   MapPin,
   XCircle,
-  TrendingUp
+  Store,
+  ChevronDown,
+  ChevronRight
 } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
-
-interface SyncRun {
-  id: string;
-  store_key: string;
-  run_type: string;
-  started_at: string;
-  completed_at: string | null;
-  status: string;
-  items_checked: number;
-  drift_detected: number;
-  drift_fixed: number;
-  errors: number;
-  error_message: string | null;
-  metadata: any;
-}
+import { 
+  useReconciliationRuns, 
+  useStoreReconciliationSummary,
+  useLocationStats 
+} from '@/hooks/useReconciliationStats';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 
 interface WebhookStats {
   store_key: string;
@@ -42,30 +40,14 @@ interface WebhookStats {
   topics: string[];
 }
 
-interface DriftSummary {
-  store_key: string;
-  location_gid: string | null;
-  drift_count: number;
-}
-
 export function SyncHealthDashboard() {
   const [isReconciling, setIsReconciling] = React.useState(false);
+  const [expandedStores, setExpandedStores] = React.useState<Set<string>>(new Set());
 
-  // Fetch latest sync runs
-  const { data: syncRuns, isLoading: runsLoading } = useQuery({
-    queryKey: ['sync-health-runs'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('sync_health_runs')
-        .select('*')
-        .order('started_at', { ascending: false })
-        .limit(20);
-      
-      if (error) throw error;
-      return data as SyncRun[];
-    },
-    refetchInterval: 30000,
-  });
+  // Fetch reconciliation data
+  const { data: syncRuns, isLoading: runsLoading } = useReconciliationRuns(20);
+  const { data: storeSummaries } = useStoreReconciliationSummary();
+  const { data: recentLocationStats } = useLocationStats();
 
   // Fetch webhook stats from webhook_events table
   const { data: webhookStats } = useQuery({
@@ -82,11 +64,9 @@ export function SyncHealthDashboard() {
         return [];
       }
 
-      // Aggregate stats - single "all stores" bucket since we don't have store_key
       const statsMap = new Map<string, WebhookStats>();
       
       for (const event of data || []) {
-        // Extract store from event_type if possible (e.g., "inventory_levels/update")
         const key = 'shopify';
         const existing = statsMap.get(key) || {
           store_key: key,
@@ -116,40 +96,6 @@ export function SyncHealthDashboard() {
     refetchInterval: 30000,
   });
 
-  // Fetch drift summary
-  const { data: driftSummary } = useQuery({
-    queryKey: ['drift-summary'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('intake_items')
-        .select('store_key, shopify_location_gid')
-        .eq('shopify_drift', true)
-        .is('deleted_at', null);
-      
-      if (error) {
-        console.error('Failed to fetch drift items:', error);
-        return [];
-      }
-
-      // Aggregate by store and location
-      const summaryMap = new Map<string, DriftSummary>();
-      
-      for (const item of data || []) {
-        const key = `${item.store_key || 'unknown'}_${item.shopify_location_gid || 'unknown'}`;
-        const existing = summaryMap.get(key) || {
-          store_key: item.store_key || 'unknown',
-          location_gid: item.shopify_location_gid,
-          drift_count: 0,
-        };
-        existing.drift_count++;
-        summaryMap.set(key, existing);
-      }
-
-      return Array.from(summaryMap.values());
-    },
-    refetchInterval: 30000,
-  });
-
   // Trigger manual reconciliation
   const triggerReconcile = async () => {
     setIsReconciling(true);
@@ -160,7 +106,7 @@ export function SyncHealthDashboard() {
       
       toast({
         title: 'Reconciliation complete',
-        description: `Processed stores: ${Object.keys(data.results || {}).join(', ')}`,
+        description: `Processed ${data.stores_processed} stores in ${data.duration_ms}ms`,
       });
     } catch (error: any) {
       toast({
@@ -171,6 +117,18 @@ export function SyncHealthDashboard() {
     } finally {
       setIsReconciling(false);
     }
+  };
+
+  const toggleStoreExpanded = (storeKey: string) => {
+    setExpandedStores(prev => {
+      const next = new Set(prev);
+      if (next.has(storeKey)) {
+        next.delete(storeKey);
+      } else {
+        next.add(storeKey);
+      }
+      return next;
+    });
   };
 
   const getStatusIcon = (status: string) => {
@@ -199,10 +157,10 @@ export function SyncHealthDashboard() {
     }
   };
 
-  const totalDrift = driftSummary?.reduce((sum, s) => sum + s.drift_count, 0) || 0;
+  const totalDrift = storeSummaries?.reduce((sum, s) => sum + s.total_drift, 0) || 0;
   const totalDeadLetter = webhookStats?.reduce((sum, s) => sum + s.dead_letter_count, 0) || 0;
   const lastWebhook = webhookStats?.[0]?.last_event_at;
-  const lastReconcile = syncRuns?.find(r => r.run_type === 'inventory_reconcile' && r.status === 'completed');
+  const lastReconcile = syncRuns?.find(r => r.status === 'completed');
 
   return (
     <div className="space-y-6">
@@ -245,7 +203,7 @@ export function SyncHealthDashboard() {
                   {formatDistanceToNow(new Date(lastReconcile.completed_at || lastReconcile.started_at), { addSuffix: true })}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  {lastReconcile.items_checked} items checked
+                  {lastReconcile.items_checked} items • {lastReconcile.metadata?.locations_processed || 0} locations
                 </p>
               </>
             ) : (
@@ -266,7 +224,7 @@ export function SyncHealthDashboard() {
               {totalDrift}
             </p>
             <p className="text-xs text-muted-foreground mt-1">
-              items with drift detected
+              items with drift across {storeSummaries?.length || 0} stores
             </p>
           </CardContent>
         </Card>
@@ -303,154 +261,262 @@ export function SyncHealthDashboard() {
           )}
           Run Reconciliation Now
         </Button>
-        <RefreshButton queryKey={['sync-health-runs', 'webhook-stats', 'drift-summary']} />
+        <RefreshButton queryKey={['reconciliation-runs', 'store-reconciliation-summary', 'webhook-stats']} />
       </div>
 
-      {/* Drift by Location */}
-      {driftSummary && driftSummary.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <MapPin className="h-5 w-5" />
-              Drift by Location
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {driftSummary.map((summary, idx) => (
-                <div 
-                  key={idx}
-                  className="flex items-center justify-between p-3 rounded-md border"
-                >
-                  <div>
-                    <p className="font-medium">{summary.store_key}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {summary.location_gid?.split('/').pop() || 'Unknown location'}
-                    </p>
-                  </div>
-                  <Badge variant={summary.drift_count > 0 ? "destructive" : "outline"}>
-                    {summary.drift_count} items
-                  </Badge>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {/* Tabbed View */}
+      <Tabs defaultValue="stores" className="w-full">
+        <TabsList>
+          <TabsTrigger value="stores" className="flex items-center gap-2">
+            <Store className="h-4 w-4" />
+            By Store
+          </TabsTrigger>
+          <TabsTrigger value="runs" className="flex items-center gap-2">
+            <Activity className="h-4 w-4" />
+            Recent Runs
+          </TabsTrigger>
+          <TabsTrigger value="webhooks" className="flex items-center gap-2">
+            <Webhook className="h-4 w-4" />
+            Webhooks
+          </TabsTrigger>
+        </TabsList>
 
-      {/* Recent Sync Runs */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Activity className="h-5 w-5" />
-            Recent Sync Runs
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {runsLoading ? (
-            <div className="flex justify-center py-8">
-              <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : !syncRuns?.length ? (
-            <p className="text-muted-foreground text-center py-8">
-              No sync runs recorded yet. Run a reconciliation to get started.
-            </p>
-          ) : (
-            <div className="space-y-3">
-              {syncRuns.map((run) => (
-                <div 
-                  key={run.id}
-                  className="flex items-center justify-between p-4 rounded-lg border"
-                >
-                  <div className="flex items-center gap-3">
-                    {getStatusIcon(run.status)}
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">{run.store_key}</span>
-                        <Badge variant="secondary" className="text-xs">
-                          {run.run_type.replace('_', ' ')}
-                        </Badge>
+        {/* Store View */}
+        <TabsContent value="stores" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Store className="h-5 w-5" />
+                Reconciliation Status by Store
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {!storeSummaries?.length ? (
+                <p className="text-muted-foreground text-center py-8">
+                  No reconciliation data yet. Run a reconciliation to get started.
+                </p>
+              ) : (
+                <div className="space-y-4">
+                  {storeSummaries.map((store) => (
+                    <Collapsible
+                      key={store.store_key}
+                      open={expandedStores.has(store.store_key)}
+                      onOpenChange={() => toggleStoreExpanded(store.store_key)}
+                    >
+                      <div className="border rounded-lg">
+                        <CollapsibleTrigger className="w-full p-4 flex items-center justify-between hover:bg-muted/50 transition-colors">
+                          <div className="flex items-center gap-3">
+                            {store.last_status && getStatusIcon(store.last_status)}
+                            <div className="text-left">
+                              <p className="font-semibold">{store.store_key}</p>
+                              <p className="text-xs text-muted-foreground">
+                                Last run: {store.last_run_at 
+                                  ? formatDistanceToNow(new Date(store.last_run_at), { addSuffix: true })
+                                  : 'Never'}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-2">
+                              {store.total_drift > 0 && (
+                                <Badge variant="destructive">
+                                  {store.total_drift} drift
+                                </Badge>
+                              )}
+                              {store.total_errors > 0 && (
+                                <Badge variant="outline" className="text-orange-600 border-orange-600">
+                                  {store.total_errors} errors
+                                </Badge>
+                              )}
+                              {store.total_drift === 0 && store.total_errors === 0 && (
+                                <Badge variant="outline" className="text-green-600 border-green-600">
+                                  Healthy
+                                </Badge>
+                              )}
+                            </div>
+                            <span className="text-muted-foreground text-sm">
+                              {store.locations.length} locations
+                            </span>
+                            {expandedStores.has(store.store_key) ? (
+                              <ChevronDown className="h-4 w-4" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4" />
+                            )}
+                          </div>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <div className="border-t p-4 space-y-2 bg-muted/20">
+                            {store.locations.length === 0 ? (
+                              <p className="text-muted-foreground text-sm">No location data available</p>
+                            ) : (
+                              store.locations.map((loc) => (
+                                <div 
+                                  key={loc.location_gid}
+                                  className="flex items-center justify-between p-3 rounded-md bg-background border"
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <MapPin className="h-4 w-4 text-muted-foreground" />
+                                    <div>
+                                      <p className="font-medium text-sm">
+                                        {loc.location_name || loc.location_gid.split('/').pop()}
+                                      </p>
+                                      <p className="text-xs text-muted-foreground">
+                                        Last checked: {loc.last_checked_at 
+                                          ? formatDistanceToNow(new Date(loc.last_checked_at), { addSuffix: true })
+                                          : 'Never'} • {loc.last_items_checked} items
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    {loc.current_drift_count > 0 ? (
+                                      <Badge variant="destructive" className="text-xs">
+                                        {loc.current_drift_count} drift
+                                      </Badge>
+                                    ) : (
+                                      <Badge variant="outline" className="text-green-600 border-green-600 text-xs">
+                                        In sync
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </CollapsibleContent>
                       </div>
-                      <p className="text-xs text-muted-foreground">
-                        {formatDistanceToNow(new Date(run.started_at), { addSuffix: true })}
-                      </p>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center gap-4">
-                    <div className="text-right text-sm">
-                      <p><span className="text-muted-foreground">Checked:</span> {run.items_checked}</p>
-                      {run.drift_detected > 0 && (
-                        <p className="text-destructive">Drift: {run.drift_detected}</p>
-                      )}
-                      {run.drift_fixed > 0 && (
-                        <p className="text-green-600">Fixed: {run.drift_fixed}</p>
-                      )}
-                      {run.errors > 0 && (
-                        <p className="text-orange-600">Errors: {run.errors}</p>
-                      )}
-                    </div>
-                    {getStatusBadge(run.status)}
-                  </div>
+                    </Collapsible>
+                  ))}
                 </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-      {/* Webhook Activity */}
-      {webhookStats && webhookStats.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Webhook className="h-5 w-5" />
-              Webhook Activity by Store
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {webhookStats.map((stats) => (
-                <div 
-                  key={stats.store_key}
-                  className="flex items-center justify-between p-4 rounded-lg border"
-                >
-                  <div>
-                    <p className="font-medium">{stats.store_key}</p>
-                    <p className="text-xs text-muted-foreground">
-                      Last event: {stats.last_event_at 
-                        ? formatDistanceToNow(new Date(stats.last_event_at), { addSuffix: true })
-                        : 'Never'}
-                    </p>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {stats.topics.slice(0, 3).map((topic) => (
-                        <Badge key={topic} variant="outline" className="text-[10px]">
-                          {topic}
-                        </Badge>
-                      ))}
-                      {stats.topics.length > 3 && (
-                        <Badge variant="outline" className="text-[10px]">
-                          +{stats.topics.length - 3} more
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                  
-                  <div className="text-right">
-                    <p className="text-lg font-semibold">{stats.total_events}</p>
-                    <p className="text-xs text-muted-foreground">total events</p>
-                    {stats.dead_letter_count > 0 && (
-                      <Badge variant="destructive" className="mt-1 text-xs">
-                        {stats.dead_letter_count} failed
-                      </Badge>
-                    )}
-                  </div>
+        {/* Runs View */}
+        <TabsContent value="runs" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Activity className="h-5 w-5" />
+                Recent Reconciliation Runs
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {runsLoading ? (
+                <div className="flex justify-center py-8">
+                  <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+              ) : !syncRuns?.length ? (
+                <p className="text-muted-foreground text-center py-8">
+                  No reconciliation runs recorded yet.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {syncRuns.map((run) => (
+                    <div 
+                      key={run.id}
+                      className="flex items-center justify-between p-4 rounded-lg border"
+                    >
+                      <div className="flex items-center gap-3">
+                        {getStatusIcon(run.status)}
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{run.store_key}</span>
+                            {run.metadata?.locations_processed && (
+                              <span className="text-xs text-muted-foreground">
+                                ({run.metadata.locations_processed} locations)
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            {formatDistanceToNow(new Date(run.started_at), { addSuffix: true })}
+                            {run.metadata?.duration_ms && ` • ${run.metadata.duration_ms}ms`}
+                          </p>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-4">
+                        <div className="text-right text-sm">
+                          <p><span className="text-muted-foreground">Checked:</span> {run.items_checked}</p>
+                          {run.drift_detected > 0 && (
+                            <p className="text-destructive">Drift: {run.drift_detected}</p>
+                          )}
+                          {run.drift_fixed > 0 && (
+                            <p className="text-green-600">Fixed: {run.drift_fixed}</p>
+                          )}
+                          {run.errors > 0 && (
+                            <p className="text-orange-600">Errors: {run.errors}</p>
+                          )}
+                        </div>
+                        {getStatusBadge(run.status)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Webhooks View */}
+        <TabsContent value="webhooks" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Webhook className="h-5 w-5" />
+                Webhook Activity
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {!webhookStats?.length ? (
+                <p className="text-muted-foreground text-center py-8">
+                  No webhook activity recorded.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {webhookStats.map((stats) => (
+                    <div 
+                      key={stats.store_key}
+                      className="flex items-center justify-between p-4 rounded-lg border"
+                    >
+                      <div>
+                        <p className="font-medium">{stats.store_key}</p>
+                        <p className="text-xs text-muted-foreground">
+                          Last event: {stats.last_event_at 
+                            ? formatDistanceToNow(new Date(stats.last_event_at), { addSuffix: true })
+                            : 'Never'}
+                        </p>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {stats.topics.slice(0, 3).map((topic) => (
+                            <Badge key={topic} variant="outline" className="text-[10px]">
+                              {topic}
+                            </Badge>
+                          ))}
+                          {stats.topics.length > 3 && (
+                            <Badge variant="outline" className="text-[10px]">
+                              +{stats.topics.length - 3} more
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div className="text-right">
+                        <p className="text-lg font-semibold">{stats.total_events}</p>
+                        <p className="text-xs text-muted-foreground">total events</p>
+                        {stats.dead_letter_count > 0 && (
+                          <Badge variant="destructive" className="mt-1 text-xs">
+                            {stats.dead_letter_count} failed
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

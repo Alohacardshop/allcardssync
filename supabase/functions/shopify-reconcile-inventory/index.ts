@@ -7,10 +7,10 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// GraphQL query to fetch inventory levels for multiple items
+// GraphQL query to fetch inventory levels for all locations
 const INVENTORY_LEVELS_QUERY = `
-  query getInventoryLevels($first: Int!, $after: String, $updatedAtMin: DateTime) {
-    inventoryItems(first: $first, after: $after, query: $updatedAtMin) {
+  query getInventoryLevels($first: Int!, $after: String) {
+    inventoryItems(first: $first, after: $after) {
       edges {
         node {
           id
@@ -46,23 +46,32 @@ interface InventoryLevelData {
   shopify_updated_at: string;
 }
 
-interface ReconcileStats {
+interface LocationStats {
+  location_gid: string;
+  location_name: string;
   items_checked: number;
   drift_detected: number;
   drift_fixed: number;
   errors: number;
 }
 
+interface ReconcileStats {
+  items_checked: number;
+  drift_detected: number;
+  drift_fixed: number;
+  errors: number;
+  location_stats: Map<string, LocationStats>;
+}
+
 async function fetchShopifyInventoryLevels(
   domain: string,
-  accessToken: string,
-  lastRunAt: string | null
+  accessToken: string
 ): Promise<InventoryLevelData[]> {
   const levels: InventoryLevelData[] = [];
   let hasNextPage = true;
   let cursor: string | null = null;
   let pageCount = 0;
-  const maxPages = 50; // Safety limit
+  const maxPages = 100; // Higher limit for full reconciliation
 
   while (hasNextPage && pageCount < maxPages) {
     const response = await fetchWithRetry(
@@ -78,7 +87,6 @@ async function fetchShopifyInventoryLevels(
           variables: {
             first: 50,
             after: cursor,
-            updatedAtMin: lastRunAt,
           }
         }),
       },
@@ -109,7 +117,7 @@ async function fetchShopifyInventoryLevels(
           inventory_item_id: inventoryItemId.replace('gid://shopify/InventoryItem/', ''),
           location_gid: level.location.id,
           location_name: level.location.name,
-          available: level.available,
+          available: level.available ?? 0,
           shopify_updated_at: level.updatedAt,
         });
       }
@@ -119,8 +127,8 @@ async function fetchShopifyInventoryLevels(
     cursor = inventoryItems.pageInfo.endCursor;
     pageCount++;
 
-    // Rate limiting
-    await new Promise(r => setTimeout(r, 250));
+    // Rate limiting - respect Shopify's throttling
+    await new Promise(r => setTimeout(r, 200));
   }
 
   return levels;
@@ -136,10 +144,29 @@ async function reconcileInventoryLevels(
     drift_detected: 0,
     drift_fixed: 0,
     errors: 0,
+    location_stats: new Map(),
   };
 
-  // Upsert all levels into shopify_inventory_levels
+  const getLocationStats = (gid: string, name: string): LocationStats => {
+    if (!stats.location_stats.has(gid)) {
+      stats.location_stats.set(gid, {
+        location_gid: gid,
+        location_name: name,
+        items_checked: 0,
+        drift_detected: 0,
+        drift_fixed: 0,
+        errors: 0,
+      });
+    }
+    return stats.location_stats.get(gid)!;
+  };
+
+  const now = new Date().toISOString();
+
+  // Batch upsert all levels into shopify_inventory_levels
   for (const level of levels) {
+    const locStats = getLocationStats(level.location_gid, level.location_name);
+    
     try {
       const { error: upsertError } = await supabaseClient
         .from('shopify_inventory_levels')
@@ -150,7 +177,8 @@ async function reconcileInventoryLevels(
           location_name: level.location_name,
           available: level.available,
           shopify_updated_at: level.shopify_updated_at,
-          updated_at: new Date().toISOString(),
+          updated_at: now,
+          last_reconciled_at: now,
         }, {
           onConflict: 'store_key,inventory_item_id,location_gid'
         });
@@ -158,10 +186,12 @@ async function reconcileInventoryLevels(
       if (upsertError) {
         console.error('Upsert error:', upsertError);
         stats.errors++;
+        locStats.errors++;
         continue;
       }
 
       stats.items_checked++;
+      locStats.items_checked++;
 
       // Check for drift: find intake_items with this inventory_item_id
       const { data: items, error: fetchError } = await supabaseClient
@@ -173,6 +203,7 @@ async function reconcileInventoryLevels(
       if (fetchError) {
         console.error('Fetch error:', fetchError);
         stats.errors++;
+        locStats.errors++;
         continue;
       }
 
@@ -191,20 +222,24 @@ async function reconcileInventoryLevels(
             .from('intake_items')
             .update({
               shopify_drift: true,
-              shopify_drift_detected_at: new Date().toISOString(),
+              shopify_drift_detected_at: now,
               shopify_drift_details: {
                 expected: expectedQuantity,
                 actual: actualQuantity,
                 location_gid: level.location_gid,
+                location_name: level.location_name,
                 detected_by: 'reconcile_job',
+                detected_at: now,
               }
             })
             .eq('id', item.id);
 
           if (!updateError) {
             stats.drift_detected++;
+            locStats.drift_detected++;
           } else {
             stats.errors++;
+            locStats.errors++;
           }
         } else if (!hasDrift && item.shopify_drift) {
           // Clear drift flag if now in sync
@@ -219,14 +254,17 @@ async function reconcileInventoryLevels(
 
           if (!clearError) {
             stats.drift_fixed++;
+            locStats.drift_fixed++;
           } else {
             stats.errors++;
+            locStats.errors++;
           }
         }
       }
     } catch (error) {
       console.error('Error processing level:', error);
       stats.errors++;
+      locStats.errors++;
     }
   }
 
@@ -247,10 +285,10 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Get store keys to reconcile
+    // Get active stores to reconcile
     const { data: stores, error: storesError } = await supabaseClient
       .from('shopify_stores')
-      .select('key')
+      .select('key, name')
       .eq('active', true);
 
     if (storesError) {
@@ -271,6 +309,7 @@ Deno.serve(async (req) => {
             store_key: storeKey,
             run_type: 'inventory_reconcile',
             status: 'running',
+            started_at: new Date().toISOString(),
           })
           .select('id')
           .single();
@@ -281,19 +320,6 @@ Deno.serve(async (req) => {
           runId = run.id;
         }
 
-        // Get last successful run time
-        const { data: lastRun } = await supabaseClient
-          .from('sync_health_runs')
-          .select('completed_at')
-          .eq('store_key', storeKey)
-          .eq('run_type', 'inventory_reconcile')
-          .eq('status', 'completed')
-          .order('completed_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        const lastRunAt = lastRun?.completed_at || null;
-
         // Resolve Shopify credentials
         const config = await resolveShopifyConfig(supabaseClient, storeKey);
         if (!config.ok) {
@@ -302,13 +328,35 @@ Deno.serve(async (req) => {
 
         const { domain, accessToken } = config.credentials;
 
-        // Fetch inventory levels from Shopify
-        console.log(`Fetching inventory for ${storeKey} since ${lastRunAt || 'beginning'}`);
-        const levels = await fetchShopifyInventoryLevels(domain, accessToken, lastRunAt);
-        console.log(`Fetched ${levels.length} inventory levels for ${storeKey}`);
+        // Fetch all inventory levels from Shopify
+        console.log(`[${storeKey}] Fetching inventory levels...`);
+        const levels = await fetchShopifyInventoryLevels(domain, accessToken);
+        console.log(`[${storeKey}] Fetched ${levels.length} inventory levels`);
 
         // Reconcile with database
         const stats = await reconcileInventoryLevels(supabaseClient, storeKey, levels);
+
+        // Save per-location stats
+        if (runId && stats.location_stats.size > 0) {
+          const locationStatsRows = Array.from(stats.location_stats.values()).map(ls => ({
+            run_id: runId,
+            store_key: storeKey,
+            location_gid: ls.location_gid,
+            location_name: ls.location_name,
+            items_checked: ls.items_checked,
+            drift_detected: ls.drift_detected,
+            drift_fixed: ls.drift_fixed,
+            errors: ls.errors,
+          }));
+
+          const { error: statsError } = await supabaseClient
+            .from('reconciliation_location_stats')
+            .insert(locationStatsRows);
+
+          if (statsError) {
+            console.error('Failed to save location stats:', statsError);
+          }
+        }
 
         // Update run record
         if (runId) {
@@ -321,12 +369,25 @@ Deno.serve(async (req) => {
               drift_detected: stats.drift_detected,
               drift_fixed: stats.drift_fixed,
               errors: stats.errors,
-              metadata: { levels_fetched: levels.length, duration_ms: Date.now() - startTime }
+              metadata: { 
+                levels_fetched: levels.length, 
+                duration_ms: Date.now() - startTime,
+                locations_processed: stats.location_stats.size,
+              }
             })
             .eq('id', runId);
         }
 
-        results[storeKey] = { success: true, stats };
+        results[storeKey] = { 
+          success: true, 
+          stats: {
+            items_checked: stats.items_checked,
+            drift_detected: stats.drift_detected,
+            drift_fixed: stats.drift_fixed,
+            errors: stats.errors,
+            locations_processed: stats.location_stats.size,
+          }
+        };
 
       } catch (error) {
         console.error(`Error reconciling ${storeKey}:`, error);
@@ -351,6 +412,7 @@ Deno.serve(async (req) => {
       JSON.stringify({
         success: true,
         duration_ms: Date.now() - startTime,
+        stores_processed: stores?.length || 0,
         results,
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
