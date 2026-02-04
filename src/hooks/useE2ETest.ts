@@ -455,6 +455,44 @@ export function useE2ETest() {
     }
   }, [assignedStore]);
 
+  // Delete specific test items by ID
+  const deleteSelectedItems = useCallback(async (itemIds: string[]) => {
+    if (itemIds.length === 0) {
+      toast.info('No items selected');
+      return;
+    }
+    
+    setState(s => ({ ...s, isCleaningUp: true }));
+    
+    try {
+      const itemsToDelete = state.testItems.filter(i => itemIds.includes(i.id));
+      const skus = itemsToDelete.map(i => i.sku).filter(Boolean) as string[];
+      
+      // Delete from related tables first
+      await supabase.from('ebay_sync_log').delete().in('sku', skus);
+      await supabase.from('ebay_sync_queue').delete().in('inventory_item_id', itemIds);
+      await supabase.from('item_snapshots').delete().in('intake_item_id', itemIds);
+      await supabase.from('audit_log').delete().eq('table_name', 'intake_items').in('record_id', itemIds);
+      await supabase.from('cards').delete().in('sku', skus);
+      
+      // Delete intake items
+      const { error } = await supabase.from('intake_items').delete().in('id', itemIds);
+      if (error) throw error;
+      
+      setState(s => ({
+        ...s,
+        testItems: s.testItems.filter(i => !itemIds.includes(i.id)),
+        isCleaningUp: false
+      }));
+      
+      toast.success(`Deleted ${itemIds.length} test item(s)`);
+    } catch (error) {
+      console.error('Delete failed:', error);
+      toast.error('Delete failed');
+      setState(s => ({ ...s, isCleaningUp: false }));
+    }
+  }, [state.testItems]);
+
   // Toggle Shopify dry run
   const toggleShopifyDryRun = useCallback(() => {
     setState(s => ({ ...s, shopifyDryRun: !s.shopifyDryRun }));
@@ -475,6 +513,7 @@ export function useE2ETest() {
     processEbayQueue,
     printLabels,
     cleanupTestItems,
+    deleteSelectedItems,
     loadExistingTestItems,
     checkEbayDryRun,
     toggleShopifyDryRun,
