@@ -304,13 +304,27 @@ serve(async (req) => {
               continue;
             }
 
+            // For dry run, check quantity filter before adding to preview
+            const variantQty = variant.inventory_quantity || 0;
+            
+            // Apply same quantity filters as actual import
+            if (variantQty < minQuantity || variantQty > maxQuantity) {
+              if (variantQty < minQuantity) {
+                skippedLowQty++;
+              } else {
+                skippedHighQty++;
+              }
+              skippedVariants++;
+              continue;
+            }
+
             if (dryRun) {
               // Collect sample items for preview (limit to 50)
               if (previewItems.length < 50) {
                 previewItems.push({
                   sku: variant.sku,
                   title: product.title + (variant.title !== 'Default Title' ? ` - ${variant.title}` : ''),
-                  quantity: variant.inventory_quantity || 0,
+                  quantity: variantQty,
                   price: parseFloat(variant.price) || 0
                 });
               }
