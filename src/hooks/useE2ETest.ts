@@ -31,6 +31,7 @@ export interface E2ETestState {
   isCleaningUp: boolean;
   shopifyDryRun: boolean;
   ebayDryRunEnabled: boolean;
+  printDryRun: boolean;
 }
 
 const INITIAL_STATE: E2ETestState = {
@@ -41,7 +42,8 @@ const INITIAL_STATE: E2ETestState = {
   isPrinting: false,
   isCleaningUp: false,
   shopifyDryRun: true,
-  ebayDryRunEnabled: true
+  ebayDryRunEnabled: true,
+  printDryRun: true
 };
 
 export function useE2ETest() {
@@ -301,6 +303,26 @@ export function useE2ETest() {
     setState(s => ({ ...s, isPrinting: true }));
     
     try {
+      if (state.printDryRun) {
+        // Simulate printing in dry run mode
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        setState(s => ({
+          ...s,
+          testItems: s.testItems.map(item => 
+            itemIds.includes(item.id) ? { 
+              ...item, 
+              status: 'printed' as TestItemStatus, 
+              printed_at: new Date().toISOString() 
+            } : item
+          ),
+          isPrinting: false
+        }));
+        
+        toast.success(`[DRY RUN] Simulated printing ${itemIds.length} label(s)`);
+        return;
+      }
+      
       for (const itemId of itemIds) {
         const item = state.testItems.find(i => i.id === itemId);
         if (!item) continue;
@@ -326,7 +348,7 @@ export function useE2ETest() {
     } finally {
       setState(s => ({ ...s, isPrinting: false }));
     }
-  }, [state.testItems]);
+  }, [state.testItems, state.printDryRun]);
 
   // Cleanup all test items
   const cleanupTestItems = useCallback(async () => {
@@ -413,6 +435,11 @@ export function useE2ETest() {
     setState(s => ({ ...s, shopifyDryRun: !s.shopifyDryRun }));
   }, []);
 
+  // Toggle Print dry run
+  const togglePrintDryRun = useCallback(() => {
+    setState(s => ({ ...s, printDryRun: !s.printDryRun }));
+  }, []);
+
   return {
     ...state,
     assignedStore,
@@ -425,6 +452,7 @@ export function useE2ETest() {
     cleanupTestItems,
     loadExistingTestItems,
     checkEbayDryRun,
-    toggleShopifyDryRun
+    toggleShopifyDryRun,
+    togglePrintDryRun
   };
 }

@@ -67,6 +67,7 @@ export default function E2ETestPage() {
     isCleaningUp,
     shopifyDryRun,
     ebayDryRunEnabled,
+    printDryRun,
     assignedStore,
     selectedLocation,
     generateItems,
@@ -77,7 +78,8 @@ export default function E2ETestPage() {
     cleanupTestItems,
     loadExistingTestItems,
     checkEbayDryRun,
-    toggleShopifyDryRun
+    toggleShopifyDryRun,
+    togglePrintDryRun
   } = useE2ETest();
 
   const {
@@ -189,14 +191,14 @@ export default function E2ETestPage() {
         )}
         
         {/* Safety Alerts */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Alert variant={shopifyDryRun ? 'default' : 'destructive'}>
             <ShoppingBag className="h-4 w-4" />
             <AlertTitle>Shopify Mode</AlertTitle>
             <AlertDescription className="flex items-center justify-between">
-              <span>{shopifyDryRun ? 'Dry run enabled - no real products created' : '⚠️ LIVE MODE - will create real products'}</span>
+              <span>{shopifyDryRun ? 'Dry run - simulated' : '⚠️ LIVE'}</span>
               <div className="flex items-center gap-2">
-                <Label htmlFor="shopify-dry-run">Dry Run</Label>
+                <Label htmlFor="shopify-dry-run" className="text-xs">Dry</Label>
                 <Switch id="shopify-dry-run" checked={shopifyDryRun} onCheckedChange={toggleShopifyDryRun} />
               </div>
             </AlertDescription>
@@ -206,7 +208,19 @@ export default function E2ETestPage() {
             <Tag className="h-4 w-4" />
             <AlertTitle>eBay Mode</AlertTitle>
             <AlertDescription>
-              {ebayDryRunEnabled ? 'Dry run enabled - no real listings created' : '⚠️ LIVE MODE - will create real listings'}
+              {ebayDryRunEnabled ? 'Dry run - simulated' : '⚠️ LIVE MODE'}
+            </AlertDescription>
+          </Alert>
+          
+          <Alert variant={printDryRun ? 'default' : 'destructive'}>
+            <Printer className="h-4 w-4" />
+            <AlertTitle>Print Mode</AlertTitle>
+            <AlertDescription className="flex items-center justify-between">
+              <span>{printDryRun ? 'Dry run - no print' : '⚠️ LIVE'}</span>
+              <div className="flex items-center gap-2">
+                <Label htmlFor="print-dry-run" className="text-xs">Dry</Label>
+                <Switch id="print-dry-run" checked={printDryRun} onCheckedChange={togglePrintDryRun} />
+              </div>
             </AlertDescription>
           </Alert>
         </div>
