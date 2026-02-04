@@ -53,12 +53,14 @@ export function EbaySyncQueueMonitor({ storeKey }: EbaySyncQueueMonitorProps) {
   const { data: queueItems, isLoading, refetch } = useQuery({
     queryKey: ['ebay-sync-queue', selectedStatus],
     queryFn: async () => {
+      // Use !inner join to exclude orphan queue records (where intake_item doesn't exist or is deleted)
       let query = supabase
         .from('ebay_sync_queue')
         .select(`
           *,
-          intake_item:intake_items(sku, psa_cert, brand_title, subject)
+          intake_item:intake_items!inner(sku, psa_cert, brand_title, subject, deleted_at)
         `)
+        .is('intake_item.deleted_at', null)
         .order('queue_position', { ascending: true })
         .limit(100);
 
