@@ -21,6 +21,8 @@ export interface InventoryFilters {
   shopifySyncFilter?: 'all' | 'not-synced' | 'synced' | 'queued' | 'error';
   ebayStatusFilter?: 'all' | 'not-listed' | 'listed' | 'queued' | 'error';
   dateRangeFilter?: 'all' | 'today' | 'yesterday' | '7days' | '30days';
+  // Location availability filter
+  locationAvailability?: 'any' | 'at-selected' | 'anywhere';
   // Smart refresh context
   hasActiveSelection?: boolean;
 }
@@ -46,6 +48,7 @@ export function useInventoryListQuery(filters: InventoryFilters) {
       filters.ebayStatusFilter,
       filters.dateRangeFilter,
       filters.tagFilter,
+      filters.locationAvailability,
     ],
     queryFn: async ({ pageParam = 0 }) => {
       const {
@@ -58,6 +61,7 @@ export function useInventoryListQuery(filters: InventoryFilters) {
         printStatusFilter = 'all',
         typeFilter = 'all',
         tagFilter = [],
+        locationAvailability = 'any',
         
         searchTerm,
         shopifySyncFilter = 'all',
@@ -83,6 +87,7 @@ export function useInventoryListQuery(filters: InventoryFilters) {
           printed_at,
           shopify_sync_status,
           shopify_product_id,
+          shopify_inventory_item_id,
           store_key,
           shopify_location_gid,
           main_category,
@@ -112,8 +117,43 @@ export function useInventoryListQuery(filters: InventoryFilters) {
         .range(pageParam, pageParam + PAGE_SIZE - 1)
         .eq('store_key', storeKey);
 
-      // Only filter by location if specified (null = all locations)
-      if (locationGid) {
+      // Location availability filter - uses shopify_inventory_levels join
+      if (locationAvailability === 'at-selected' && locationGid) {
+        // Show only items with stock > 0 at the selected location
+        // This requires a subquery/filter on shopify_inventory_levels
+        const { data: itemsWithStock } = await supabase
+          .from('shopify_inventory_levels')
+          .select('inventory_item_id')
+          .eq('store_key', storeKey)
+          .eq('location_gid', locationGid)
+          .gt('available', 0);
+        
+        const inventoryItemIds = (itemsWithStock || []).map(l => l.inventory_item_id);
+        if (inventoryItemIds.length > 0) {
+          query = query.in('shopify_inventory_item_id', inventoryItemIds);
+        } else {
+          // No items have stock at this location
+          query = query.eq('id', 'no-match-force-empty');
+        }
+      } else if (locationAvailability === 'anywhere') {
+        // Show only items with stock > 0 at ANY location
+        const { data: itemsWithAnyStock } = await supabase
+          .from('shopify_inventory_levels')
+          .select('inventory_item_id')
+          .eq('store_key', storeKey)
+          .gt('available', 0);
+        
+        const uniqueInventoryItemIds = [...new Set((itemsWithAnyStock || []).map(l => l.inventory_item_id))];
+        if (uniqueInventoryItemIds.length > 0) {
+          query = query.in('shopify_inventory_item_id', uniqueInventoryItemIds);
+        } else {
+          // No items have stock anywhere
+          query = query.eq('id', 'no-match-force-empty');
+        }
+      }
+
+      // Only filter by location if specified and not using availability filter (which handles location)
+      if (locationGid && locationAvailability !== 'at-selected') {
         query = query.eq('shopify_location_gid', locationGid);
       }
 

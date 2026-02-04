@@ -28,6 +28,7 @@ import { useShopifyTags } from '@/hooks/useShopifyTags';
 import { useKeyboardNavigation } from '@/hooks/useKeyboardNavigation';
 import { useInventoryRealtime } from '@/hooks/useInventoryRealtime';
 import { useCurrentBatch } from '@/hooks/useCurrentBatch';
+import { useBatchInventoryLevels } from '@/hooks/useInventoryLevels';
 
 // Feature module imports
 import { InventoryFiltersBar } from '../components/InventoryFiltersBar';
@@ -61,6 +62,7 @@ const InventoryPage = () => {
     dateRangeFilter: 'all',
     batchFilter: (localStorage.getItem('inventory-batch-filter') as InventoryFilterState['batchFilter']) || 'all',
     locationFilter: null,
+    locationAvailability: 'any',
     tagFilter: [],
     activeQuickFilter: null,
   });
@@ -149,6 +151,7 @@ const InventoryPage = () => {
     shopifySyncFilter: filters.shopifySyncFilter,
     ebayStatusFilter: filters.ebayStatusFilter,
     dateRangeFilter: filters.dateRangeFilter,
+    locationAvailability: filters.locationAvailability,
     hasActiveSelection: false, // Will be updated by selection hook
   });
 
@@ -158,6 +161,13 @@ const InventoryPage = () => {
     [inventoryData]
   );
   const totalCount = inventoryData?.pages[0]?.count || 0;
+
+  // Fetch batch inventory levels for Shopify-truth quantity display
+  const inventoryItemIds = useMemo(() => 
+    items.map(item => item.shopify_inventory_item_id).filter(Boolean) as string[],
+    [items]
+  );
+  const { data: inventoryLevelsMap } = useBatchInventoryLevels(inventoryItemIds);
 
   // Selection hook
   const {
@@ -272,6 +282,7 @@ const InventoryPage = () => {
       dateRangeFilter: 'all',
       batchFilter: 'all',
       locationFilter: null,
+      locationAvailability: 'any',
       tagFilter: [],
       activeQuickFilter: null,
     });
@@ -527,6 +538,8 @@ const InventoryPage = () => {
                 isAdmin={isAdmin}
                 syncingRowId={syncingRowId}
                 locationsMap={locationsMap}
+                inventoryLevelsMap={inventoryLevelsMap}
+                selectedLocationGid={filters.locationFilter}
                 focusedIndex={focusedIndex}
                 onToggleSelection={toggleSelection}
                 onSetSelection={setSelection}

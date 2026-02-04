@@ -3,7 +3,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Search, MapPin, X } from 'lucide-react';
+import { Search, MapPin, X, Package } from 'lucide-react';
 import { MoreFiltersPopover } from '@/components/inventory/MoreFiltersPopover';
 import type { InventoryFiltersBarProps } from '../types';
 
@@ -56,6 +56,19 @@ export const InventoryFiltersBar = React.memo(({
       key: 'location',
       label: locationName,
       onRemove: () => onFilterChange('locationFilter', null)
+    });
+  }
+
+  // Location availability filter chip
+  if (filters.locationAvailability !== 'any') {
+    const labels: Record<string, string> = {
+      'at-selected': 'In Stock at Location',
+      'anywhere': 'In Stock Anywhere'
+    };
+    activeChips.push({
+      key: 'locationAvailability',
+      label: labels[filters.locationAvailability] || filters.locationAvailability,
+      onRemove: () => onFilterChange('locationAvailability', 'any')
     });
   }
 
@@ -157,8 +170,8 @@ export const InventoryFiltersBar = React.memo(({
 
   return (
     <div className="space-y-2">
-      {/* Primary Filters Row - Search + Status + Location + More */}
-      <div className="flex items-center gap-2">
+      {/* Primary Filters Row - Search + Status + Location + Stock Filter + More */}
+      <div className="flex items-center gap-2 flex-wrap">
         {/* Search - takes available space but capped */}
         <div className="relative flex-1 min-w-[200px] max-w-[320px]">
           <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -208,6 +221,24 @@ export const InventoryFiltersBar = React.memo(({
                 {loc.location_name}
               </SelectItem>
             ))}
+          </SelectContent>
+        </Select>
+
+        {/* Stock/Availability Filter - only show when a location is selected OR always for "anywhere" */}
+        <Select 
+          value={filters.locationAvailability} 
+          onValueChange={(value: any) => onFilterChange('locationAvailability', value)}
+        >
+          <SelectTrigger className="w-[140px] h-9 shrink-0">
+            <Package className="h-3.5 w-3.5 mr-1 text-muted-foreground shrink-0" />
+            <SelectValue placeholder="Stock" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="any">Any Stock</SelectItem>
+            <SelectItem value="at-selected" disabled={!filters.locationFilter}>
+              In Stock at Location
+            </SelectItem>
+            <SelectItem value="anywhere">In Stock Anywhere</SelectItem>
           </SelectContent>
         </Select>
 
