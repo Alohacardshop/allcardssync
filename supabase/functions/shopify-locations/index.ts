@@ -87,13 +87,38 @@ Deno.serve(async (req) => {
     
     const locations = data.locations || [];
     console.log(`shopify-locations: Found ${locations.length} locations for store ${storeKey}`);
+
+    // Cache locations in shopify_location_cache table
+    for (const loc of locations) {
+      const gid = `gid://shopify/Location/${loc.id}`;
+      const now = new Date();
+      const expires = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24 hours from now
+      
+      await supabase
+        .from("shopify_location_cache")
+        .upsert({
+          store_key: storeKey,
+          location_gid: gid,
+          location_id: String(loc.id),
+          location_name: loc.name,
+          cached_at: now.toISOString(),
+          expires_at: expires.toISOString()
+        }, { onConflict: 'store_key,location_gid' });
+    }
     
     return new Response(
       JSON.stringify({ 
         ok: true, 
         storeKey,
         count: locations.length,
-        locations
+        locations: locations.map((l: any) => ({
+          id: l.id,
+          gid: `gid://shopify/Location/${l.id}`,
+          name: l.name,
+          active: l.active,
+          address1: l.address1,
+          city: l.city
+        }))
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

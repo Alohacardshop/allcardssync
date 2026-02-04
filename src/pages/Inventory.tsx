@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, lazy, Suspense, useMem
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, Search, AlertCircle, RefreshCw, Download } from 'lucide-react';
+import { Loader2, Search, AlertCircle, RefreshCw, Download, MapPin } from 'lucide-react';
 import { logger } from '@/lib/logger';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { toast } from 'sonner';
@@ -29,6 +29,7 @@ import { PrintFromInventoryDialog } from '@/components/inventory/PrintFromInvent
 import { PageHeader } from '@/components/layout/PageHeader';
 
 import { useInventoryListQuery } from '@/hooks/useInventoryListQuery';
+import { useLocationNames, CachedLocation } from '@/hooks/useLocationNames';
 import { Progress } from '@/components/ui/progress';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCurrentBatch } from '@/hooks/useCurrentBatch';
@@ -45,6 +46,7 @@ const VirtualInventoryList = React.memo(({
   expandedItems,
   isAdmin,
   syncingRowId,
+  locationsMap,
   onToggleSelection,
   onToggleExpanded,
   onSync,
@@ -63,6 +65,7 @@ const VirtualInventoryList = React.memo(({
   expandedItems: Set<string>;
   isAdmin: boolean;
   syncingRowId: string | null;
+  locationsMap?: Map<string, CachedLocation>;
   onToggleSelection: (id: string) => void;
   onToggleExpanded: (id: string) => void;
   onSync: (item: any) => void;
@@ -159,6 +162,7 @@ const VirtualInventoryList = React.memo(({
                 isExpanded={expandedItems.has(item.id)}
                 isAdmin={isAdmin}
                 syncingRowId={syncingRowId}
+                locationsMap={locationsMap}
                 onToggleSelection={onToggleSelection}
                 onToggleExpanded={onToggleExpanded}
                 onSync={onSync}
@@ -229,8 +233,9 @@ const Inventory = () => {
   // Print dialog state
   const [showPrintDialog, setShowPrintDialog] = useState(false);
   
-  // Category tab state
-  const [activeTab, setActiveTab] = useState<'raw' | 'graded' | 'raw_comics' | 'graded_comics' | 'sealed'>('raw');
+  // Category and location filter state (replaces category tabs)
+  const [categoryFilter, setCategoryFilter] = useState<'all' | 'tcg' | 'comics' | 'sealed'>('all');
+  const [locationFilter, setLocationFilter] = useState<string | null>(null); // null = all locations
   
   // Auto-refresh state
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
@@ -263,6 +268,9 @@ const Inventory = () => {
   const { bulkToggleEbay } = useEbayListing();
   const queryClient = useQueryClient();
   
+  // Fetch location names for display
+  const { data: locationsMap } = useLocationNames(assignedStore);
+  
   // Get user ID for current batch
   const [userId, setUserId] = useState<string | undefined>();
   useEffect(() => {
@@ -273,10 +281,12 @@ const Inventory = () => {
     getUserId();
   }, []);
   
-  // Get current active batch
+  // Get current active batch - use location filter or fall back to selected location
+  const effectiveLocation = locationFilter || selectedLocation;
+  
   const { data: currentBatch } = useCurrentBatch({ 
     storeKey: assignedStore, 
-    locationGid: selectedLocation,
+    locationGid: effectiveLocation,
     userId 
   });
 
@@ -328,8 +338,8 @@ const Inventory = () => {
     isFetchingNextPage
   } = useInventoryListQuery({
     storeKey: assignedStore || '',
-    locationGid: selectedLocation || '',
-    activeTab,
+    locationGid: locationFilter, // null = all locations
+    categoryFilter,
     statusFilter,
     batchFilter,
     printStatusFilter,
@@ -406,22 +416,23 @@ const Inventory = () => {
     }
   }, [inventoryData]);
 
-  // Tab prefetching - prefetch adjacent tabs after 2 seconds
+  // Tab prefetching - prefetch adjacent categories after 2 seconds
   useEffect(() => {
-    if (!assignedStore || !selectedLocation) return;
+    if (!assignedStore) return;
 
     const timer = setTimeout(() => {
-      const prefetchTab = (tab: 'raw' | 'graded' | 'raw_comics' | 'graded_comics') => {
+      const prefetchCategory = (category: 'all' | 'tcg' | 'comics' | 'sealed') => {
         queryClient.prefetchInfiniteQuery({
           queryKey: [
             'inventory-list',
             assignedStore,
-            selectedLocation,
-            tab,
+            locationFilter,
+            undefined, // activeTab
+            category,
             statusFilter,
             batchFilter,
             printStatusFilter,
-            null,
+            typeFilter,
             debouncedSearchTerm,
           ],
           queryFn: async () => {
@@ -432,19 +443,19 @@ const Inventory = () => {
         });
       };
 
-      // Prefetch adjacent tabs based on current tab
-      if (activeTab === 'raw') {
-        prefetchTab('graded');
-      } else if (activeTab === 'graded') {
-        prefetchTab('raw');
-        prefetchTab('graded_comics');
-      } else if (activeTab === 'raw_comics' || activeTab === 'graded_comics') {
-        prefetchTab('graded');
+      // Prefetch adjacent categories based on current category
+      if (categoryFilter === 'all' || categoryFilter === 'tcg') {
+        prefetchCategory('comics');
+        prefetchCategory('sealed');
+      } else if (categoryFilter === 'comics') {
+        prefetchCategory('tcg');
+      } else if (categoryFilter === 'sealed') {
+        prefetchCategory('tcg');
       }
     }, 2000);
 
     return () => clearTimeout(timer);
-  }, [activeTab, assignedStore, selectedLocation, statusFilter, batchFilter, printStatusFilter, debouncedSearchTerm, queryClient]);
+  }, [categoryFilter, assignedStore, locationFilter, statusFilter, batchFilter, printStatusFilter, typeFilter, debouncedSearchTerm, queryClient]);
 
   // Memoized event handlers
   const handleToggleSelection = useCallback((itemId: string) => {
@@ -893,13 +904,16 @@ const Inventory = () => {
     if (preset.printStatusFilter) setPrintStatusFilter(preset.printStatusFilter);
     if (preset.dateRangeFilter) setDateRangeFilter(preset.dateRangeFilter);
     if (preset.statusFilter) setStatusFilter(preset.statusFilter);
+    if (preset.categoryFilter) setCategoryFilter(preset.categoryFilter);
     
     // Determine which preset was applied for highlighting
     if (preset.shopifySyncFilter === 'not-synced') setActiveQuickFilter('ready-to-sync');
     else if (preset.statusFilter === 'errors') setActiveQuickFilter('sync-errors');
     else if (preset.printStatusFilter === 'not-printed') setActiveQuickFilter('needs-barcode');
     else if (preset.ebayStatusFilter === 'not-listed') setActiveQuickFilter('not-on-ebay');
+    else if (preset.categoryFilter === 'sealed') setActiveQuickFilter('sealed-products');
     else if (preset.shopifySyncFilter === 'synced') setActiveQuickFilter('on-shopify');
+    else if (preset.shopifySyncFilter === 'queued') setActiveQuickFilter('shopify-queued');
     else if (preset.dateRangeFilter === 'today') setActiveQuickFilter('todays-intake');
     else setActiveQuickFilter(null);
   }, []);
@@ -913,6 +927,8 @@ const Inventory = () => {
     setDateRangeFilter('all');
     setBatchFilter('all');
     setTypeFilter('all');
+    setCategoryFilter('all');
+    setLocationFilter(null);
     setSearchTerm('');
     setActiveQuickFilter(null);
   }, []);
@@ -1242,25 +1258,7 @@ const Inventory = () => {
                 </div>
               </div>
               
-              {/* Category Tabs */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Category</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <Tabs value={activeTab} onValueChange={(value: any) => setActiveTab(value)}>
-                    <TabsList className="grid w-full grid-cols-5">
-                      <TabsTrigger value="raw">🃏 Raw Cards</TabsTrigger>
-                      <TabsTrigger value="graded">⭐ Graded Cards</TabsTrigger>
-                      <TabsTrigger value="sealed">📦 Sealed</TabsTrigger>
-                      <TabsTrigger value="raw_comics">📚 Raw Comics</TabsTrigger>
-                      <TabsTrigger value="graded_comics">📖 Graded Comics</TabsTrigger>
-                    </TabsList>
-                  </Tabs>
-                </CardContent>
-              </Card>
-              
-              {/* Quick Filter Presets */}
+              {/* Quick Filter Presets - now at the top for primary navigation */}
               <Card>
                 <CardContent className="py-4">
                   <QuickFilterPresets
@@ -1270,7 +1268,7 @@ const Inventory = () => {
                   />
                 </CardContent>
               </Card>
-
+              
               {/* Filters and Search */}
             <Card>
               <CardHeader>
@@ -1314,21 +1312,41 @@ const Inventory = () => {
                     </SelectContent>
                   </Select>
 
-                  <Select value={batchFilter} onValueChange={(value: any) => setBatchFilter(value)}>
+                  {/* New Category Filter */}
+                  <Select value={categoryFilter} onValueChange={(value: any) => setCategoryFilter(value)}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Batch status" />
+                      <SelectValue placeholder="Category" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Items</SelectItem>
-                      <SelectItem value="current_batch">Current Batch {currentBatch?.items?.[0]?.lot_number && `(${currentBatch.items[0].lot_number})`}</SelectItem>
-                      <SelectItem value="in_batch">In Any Batch</SelectItem>
-                      <SelectItem value="removed_from_batch">Removed from Batch</SelectItem>
+                      <SelectItem value="all">All Categories</SelectItem>
+                      <SelectItem value="tcg">🎴 TCG Cards</SelectItem>
+                      <SelectItem value="comics">📚 Comics</SelectItem>
+                      <SelectItem value="sealed">📦 Sealed</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
-                {/* Row 2: Marketplace and Print Filters */}
-                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                {/* Row 2: Location, Marketplace and Print Filters */}
+                <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+                  {/* Location Filter */}
+                  <Select 
+                    value={locationFilter || 'all'} 
+                    onValueChange={(value: string) => setLocationFilter(value === 'all' ? null : value)}
+                  >
+                    <SelectTrigger>
+                      <MapPin className="h-4 w-4 mr-2 text-muted-foreground" />
+                      <SelectValue placeholder="Location" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Locations</SelectItem>
+                      {locationsMap && Array.from(locationsMap.values()).map(loc => (
+                        <SelectItem key={loc.location_gid} value={loc.location_gid}>
+                          {loc.location_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
                   <Select value={shopifySyncFilter} onValueChange={(value: any) => { setShopifySyncFilter(value); setActiveQuickFilter(null); }}>
                     <SelectTrigger>
                       <SelectValue placeholder="Shopify Status" />
@@ -1337,6 +1355,7 @@ const Inventory = () => {
                       <SelectItem value="all">All Shopify</SelectItem>
                       <SelectItem value="not-synced">Not Synced</SelectItem>
                       <SelectItem value="synced">Synced</SelectItem>
+                      <SelectItem value="queued">Queued</SelectItem>
                       <SelectItem value="error">Sync Error</SelectItem>
                     </SelectContent>
                   </Select>
@@ -1375,6 +1394,18 @@ const Inventory = () => {
                       <SelectItem value="yesterday">Yesterday</SelectItem>
                       <SelectItem value="7days">Last 7 Days</SelectItem>
                       <SelectItem value="30days">Last 30 Days</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  <Select value={batchFilter} onValueChange={(value: any) => setBatchFilter(value)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Batch status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Items</SelectItem>
+                      <SelectItem value="current_batch">Current Batch {currentBatch?.items?.[0]?.lot_number && `(${currentBatch.items[0].lot_number})`}</SelectItem>
+                      <SelectItem value="in_batch">In Any Batch</SelectItem>
+                      <SelectItem value="removed_from_batch">Removed from Batch</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1420,14 +1451,11 @@ const Inventory = () => {
                     <div>
                       <h3 className="text-lg font-semibold mb-2">No Items Found</h3>
                       <p className="text-muted-foreground mb-4">
-                        {activeTab === 'graded' 
-                          ? 'No graded cards found for this location.'
-                          : activeTab === 'raw'
-                          ? 'No raw cards found for this location.'
-                          : 'No comics found for this location.'}
+                        No items match your current filters.
                       </p>
                       <p className="text-sm text-muted-foreground mb-4">
-                        Store: <strong>{assignedStore}</strong> | Location: <strong>{selectedLocation?.split('/').pop()}</strong>
+                        Store: <strong>{assignedStore}</strong>
+                        {locationFilter && <> | Location: <strong>{locationsMap?.get(locationFilter)?.location_name || locationFilter.split('/').pop()}</strong></>}
                       </p>
                       <Button variant="outline" onClick={handleManualRefresh}>
                         <RefreshCw className="h-4 w-4 mr-2" />
@@ -1447,6 +1475,7 @@ const Inventory = () => {
               expandedItems={expandedItems}
               isAdmin={isAdmin}
               syncingRowId={syncingRowId}
+              locationsMap={locationsMap}
               onToggleSelection={handleToggleSelection}
               onToggleExpanded={handleToggleExpanded}
               onSync={handleSync}

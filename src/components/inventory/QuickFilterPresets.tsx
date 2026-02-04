@@ -17,6 +17,7 @@ export interface QuickFilterState {
   printStatusFilter: 'all' | 'printed' | 'not-printed';
   dateRangeFilter: 'all' | 'today' | 'yesterday' | '7days' | '30days';
   statusFilter: 'all' | 'active' | 'out-of-stock' | 'sold' | 'deleted' | 'errors';
+  categoryFilter?: 'all' | 'tcg' | 'comics' | 'sealed';
 }
 
 interface QuickFilterPresetsProps {
@@ -67,6 +68,16 @@ export const QuickFilterPresets = React.memo(({
       description: 'Items not listed on eBay',
       filters: {
         ebayStatusFilter: 'not-listed' as const,
+        statusFilter: 'active' as const,
+      }
+    },
+    {
+      id: 'sealed-products',
+      label: 'Sealed',
+      icon: Package,
+      description: 'Sealed products only',
+      filters: {
+        categoryFilter: 'sealed' as const,
         statusFilter: 'active' as const,
       }
     },
