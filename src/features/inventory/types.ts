@@ -150,6 +150,7 @@ export interface VirtualInventoryListProps {
   /** Optional per-item action state getter for showing loading states */
   getItemActionState?: (itemId: string) => ItemActionState;
   onToggleSelection: (id: string) => void;
+  onSetSelection?: (ids: string[], mode: 'add' | 'remove' | 'replace') => void;
   onToggleExpanded: (id: string) => void;
   onSync: (item: InventoryListItem) => void;
   onRetrySync: (item: InventoryListItem) => void;

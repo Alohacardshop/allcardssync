@@ -1,6 +1,8 @@
 import { useState, useCallback } from 'react';
 import type { InventoryListItem } from '../types';
 
+type SelectionMode = 'add' | 'remove' | 'replace';
+
 interface UseInventorySelectionOptions {
   items: InventoryListItem[];
 }
@@ -10,6 +12,7 @@ interface UseInventorySelectionReturn {
   expandedItems: Set<string>;
   toggleSelection: (itemId: string) => void;
   toggleExpanded: (itemId: string) => void;
+  setSelection: (ids: string[], mode: SelectionMode) => void;
   selectAllVisible: () => void;
   clearSelection: () => void;
   isAllSelected: boolean;
@@ -46,10 +49,32 @@ export function useInventorySelection({
     });
   }, []);
 
+  // Batched selection update to avoid N state updates
+  const setSelection = useCallback((ids: string[], mode: SelectionMode) => {
+    setSelectedItems(prev => {
+      switch (mode) {
+        case 'replace':
+          return new Set(ids);
+        case 'add': {
+          const newSet = new Set(prev);
+          ids.forEach(id => newSet.add(id));
+          return newSet;
+        }
+        case 'remove': {
+          const newSet = new Set(prev);
+          ids.forEach(id => newSet.delete(id));
+          return newSet;
+        }
+        default:
+          return prev;
+      }
+    });
+  }, []);
+
   const selectAllVisible = useCallback(() => {
-    const allVisibleIds = new Set(items.map(item => item.id));
-    setSelectedItems(allVisibleIds);
-  }, [items]);
+    const allVisibleIds = items.map(item => item.id);
+    setSelection(allVisibleIds, 'replace');
+  }, [items, setSelection]);
 
   const clearSelection = useCallback(() => {
     setSelectedItems(new Set());
@@ -63,6 +88,7 @@ export function useInventorySelection({
     expandedItems,
     toggleSelection,
     toggleExpanded,
+    setSelection,
     selectAllVisible,
     clearSelection,
     isAllSelected,
