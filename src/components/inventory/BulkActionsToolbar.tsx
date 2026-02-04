@@ -36,126 +36,118 @@ export const BulkActionsToolbar = React.memo(({
   onPrintSelected
 }: BulkActionsToolbarProps) => {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2">
-      <div className="flex items-center space-x-2">
+    <div className="flex flex-col gap-3">
+      {/* Selection info */}
+      <div className="flex items-center gap-3">
+        <span className="text-sm font-medium">
+          {selectedCount} item{selectedCount !== 1 ? 's' : ''} selected
+        </span>
         <Button
-          variant="outline"
-          size="sm"
-          onClick={onSelectAll}
-          disabled={totalCount === 0}
-        >
-          <CheckSquare className="h-4 w-4 mr-2" />
-          Select All ({totalCount})
-        </Button>
-        
-        <Button
-          variant="outline"
+          variant="ghost"
           size="sm"
           onClick={onClearSelection}
-          disabled={selectedCount === 0}
+          className="h-7 text-xs text-muted-foreground"
         >
-          Clear Selection
+          Clear
         </Button>
-
-        {selectedCount > 0 && (
-          <span className="text-sm text-muted-foreground">
-            {selectedCount} selected
-          </span>
-        )}
       </div>
 
+      {/* Action buttons - wrap nicely */}
       <div className="flex flex-wrap items-center gap-2">
-        {statusFilter === 'errors' && selectedCount > 0 && (
+        {/* Print Barcodes Button */}
+        {onPrintSelected && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onPrintSelected}
+            className="h-8"
+          >
+            <Printer className="h-3.5 w-3.5 mr-1.5" />
+            Print
+          </Button>
+        )}
+        
+        {/* Shopify Sync Buttons */}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onSyncSelected}
+          disabled={bulkSyncing}
+          className="h-8"
+        >
+          {bulkSyncing ? (
+            <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+          ) : (
+            <Store className="h-3.5 w-3.5 mr-1.5" />
+          )}
+          {bulkSyncing ? 'Syncing...' : 'Sync to Shopify'}
+        </Button>
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onResyncSelected}
+          disabled={bulkSyncing}
+          className="h-8"
+        >
+          {bulkSyncing ? (
+            <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+          ) : (
+            <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
+          )}
+          Resync
+        </Button>
+
+        {statusFilter === 'errors' && (
           <Button
             variant="outline"
             size="sm"
             onClick={onBulkRetrySync}
             disabled={bulkRetrying}
+            className="h-8"
           >
             {bulkRetrying ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
             ) : (
-              <RotateCcw className="h-4 w-4 mr-2" />
+              <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
             )}
-            {bulkRetrying ? 'Retrying...' : 'Retry Selected'}
+            Retry Errors
           </Button>
         )}
 
-        {selectedCount > 0 && (
+        {/* eBay Buttons */}
+        {onBulkToggleEbay && (
           <>
-            {/* Print Barcodes Button */}
-            {onPrintSelected && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={onPrintSelected}
-              >
-                <Printer className="h-4 w-4 mr-2" />
-                Print Barcodes
-              </Button>
-            )}
-            
-            {/* Shopify Sync Buttons */}
             <Button
               variant="outline"
               size="sm"
-              onClick={onSyncSelected}
-              disabled={bulkSyncing}
+              onClick={() => onBulkToggleEbay(true)}
+              className="h-8"
             >
-              {bulkSyncing ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Store className="h-4 w-4 mr-2" />
-              )}
-              {bulkSyncing ? 'Syncing...' : 'List to Shopify'}
+              <ShoppingBag className="h-3.5 w-3.5 mr-1.5" />
+              eBay +
             </Button>
-
             <Button
               variant="outline"
               size="sm"
-              onClick={onResyncSelected}
-              disabled={bulkSyncing}
+              onClick={() => onBulkToggleEbay(false)}
+              className="h-8"
             >
-              {bulkSyncing ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <RotateCcw className="h-4 w-4 mr-2" />
-              )}
-              {bulkSyncing ? 'Resyncing...' : 'Resync Selected'}
+              <ShoppingBag className="h-3.5 w-3.5 mr-1.5" />
+              eBay -
             </Button>
-
-            {/* eBay Buttons */}
-            {onBulkToggleEbay && (
-              <>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => onBulkToggleEbay(true)}
-                >
-                  <ShoppingBag className="h-4 w-4 mr-2" />
-                  Add to eBay
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => onBulkToggleEbay(false)}
-                >
-                  <ShoppingBag className="h-4 w-4 mr-2" />
-                  Remove from eBay
-                </Button>
-              </>
-            )}
           </>
         )}
 
-        {isAdmin && selectedCount > 0 && (
+        {isAdmin && (
           <Button
             variant="destructive"
             size="sm"
             onClick={onDeleteSelected}
+            className="h-8 ml-auto"
           >
-            <Trash2 className="h-4 w-4 mr-2" />
-            Delete Selected
+            <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+            Delete
           </Button>
         )}
       </div>
