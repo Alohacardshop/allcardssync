@@ -991,6 +991,7 @@ export type Database = {
           shopify_snapshot: Json | null
           shopify_sync_snapshot: Json | null
           shopify_sync_status: string | null
+          shopify_tags: string[] | null
           shopify_variant_id: string | null
           sku: string | null
           sold_at: string | null
@@ -1077,6 +1078,7 @@ export type Database = {
           shopify_snapshot?: Json | null
           shopify_sync_snapshot?: Json | null
           shopify_sync_status?: string | null
+          shopify_tags?: string[] | null
           shopify_variant_id?: string | null
           sku?: string | null
           sold_at?: string | null
@@ -1163,6 +1165,7 @@ export type Database = {
           shopify_snapshot?: Json | null
           shopify_sync_snapshot?: Json | null
           shopify_sync_status?: string | null
+          shopify_tags?: string[] | null
           shopify_variant_id?: string | null
           sku?: string | null
           sold_at?: string | null
