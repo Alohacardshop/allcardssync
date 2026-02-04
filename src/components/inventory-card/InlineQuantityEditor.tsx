@@ -2,7 +2,7 @@ import React, { memo, useState, useCallback, useRef, useEffect } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
-import { Minus, Plus, Loader2 } from 'lucide-react';
+import { Minus, Plus, Loader2, RefreshCw } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -12,7 +12,10 @@ interface InlineQuantityEditorProps {
   quantity: number;
   shopifyProductId?: string | null;
   shopifyInventoryItemId?: string | null;
+  /** Last known Shopify available quantity for optimistic locking */
+  shopifyLastKnownAvailable?: number | null;
   compact?: boolean;
+  onRefreshNeeded?: () => void;
 }
 
 export const InlineQuantityEditor = memo(({
@@ -20,18 +23,26 @@ export const InlineQuantityEditor = memo(({
   quantity,
   shopifyProductId,
   shopifyInventoryItemId,
+  shopifyLastKnownAvailable,
   compact = false,
+  onRefreshNeeded,
 }: InlineQuantityEditorProps) => {
   const queryClient = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(quantity.toString());
   const [pendingValue, setPendingValue] = useState<number | null>(null);
+  const [staleDataError, setStaleDataError] = useState<{ current: number } | null>(null);
+
+  // Track the original quantity when editing started for delta calculation
+  const originalQtyRef = useRef(quantity);
 
   // Reset edit value when quantity changes externally
   useEffect(() => {
     if (!isEditing) {
       setEditValue(quantity.toString());
+      originalQtyRef.current = quantity;
+      setStaleDataError(null);
     }
   }, [quantity, isEditing]);
 
@@ -46,6 +57,10 @@ export const InlineQuantityEditor = memo(({
   const updateQuantityMutation = useMutation({
     mutationFn: async (newQty: number) => {
       setPendingValue(newQty);
+      setStaleDataError(null);
+      
+      const originalQty = originalQtyRef.current;
+      const delta = newQty - originalQty;
       
       // Update database first
       const { error } = await supabase
@@ -55,39 +70,85 @@ export const InlineQuantityEditor = memo(({
       
       if (error) throw error;
       
-      // If synced to Shopify, update Shopify inventory too
+      // If synced to Shopify, update Shopify inventory using delta-based adjustment
       if (shopifyProductId && shopifyInventoryItemId) {
         const { data, error: syncError } = await supabase.functions.invoke('v2-shopify-set-inventory', {
-          body: { item_id: itemId, quantity: newQty }
+          body: { 
+            item_id: itemId, 
+            quantity: delta, // Pass delta, not absolute value
+            mode: 'adjust',
+            // Pass expected_available for optimistic locking
+            expected_available: typeof shopifyLastKnownAvailable === 'number' 
+              ? shopifyLastKnownAvailable 
+              : undefined
+          }
         });
+        
+        // Handle stale data error (409 Conflict)
+        if (data?.error === 'STALE_DATA') {
+          return { 
+            newQty, 
+            syncedToShopify: false, 
+            staleData: true,
+            currentShopifyAvailable: data.current_available
+          };
+        }
+        
+        // Handle insufficient inventory
+        if (data?.error === 'INSUFFICIENT_INVENTORY') {
+          throw new Error(data.message || 'Insufficient inventory');
+        }
         
         if (syncError) {
           console.error('Shopify sync error:', syncError);
           return { newQty, syncedToShopify: false, syncError: syncError.message };
         }
         
-        return { newQty, syncedToShopify: data?.synced_to_shopify || false };
+        return { 
+          newQty, 
+          syncedToShopify: data?.synced_to_shopify || false,
+          newShopifyAvailable: data?.new_available
+        };
       }
       
       return { newQty, syncedToShopify: false };
     },
-    onSuccess: ({ newQty, syncedToShopify, syncError }) => {
+    onSuccess: ({ newQty, syncedToShopify, syncError, staleData, currentShopifyAvailable, newShopifyAvailable }) => {
       setPendingValue(null);
+      
+      if (staleData) {
+        setStaleDataError({ current: currentShopifyAvailable });
+        toast.error('Inventory changed in Shopify', {
+          description: `Current: ${currentShopifyAvailable}. Please refresh and try again.`,
+          action: onRefreshNeeded ? {
+            label: 'Refresh',
+            onClick: () => {
+              onRefreshNeeded();
+              setStaleDataError(null);
+            }
+          } : undefined
+        });
+        return;
+      }
       
       if (syncError) {
         toast.warning(`Qty → ${newQty} (Shopify sync failed)`, {
           description: syncError,
         });
       } else if (syncedToShopify) {
-        toast.success(`Qty → ${newQty}`, { description: 'Synced to Shopify' });
+        toast.success(`Qty → ${newQty}`, { 
+          description: `Synced to Shopify (${newShopifyAvailable ?? newQty})` 
+        });
       } else {
         toast.success(`Qty → ${newQty}`);
       }
       
       setIsEditing(false);
       setEditValue(newQty.toString());
+      originalQtyRef.current = newQty;
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
       queryClient.invalidateQueries({ queryKey: ['inventory-list'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory-levels'] });
     },
     onError: (error: Error) => {
       setPendingValue(null);
@@ -111,11 +172,14 @@ export const InlineQuantityEditor = memo(({
   const handleCancel = useCallback(() => {
     setEditValue(quantity.toString());
     setIsEditing(false);
+    setStaleDataError(null);
   }, [quantity]);
 
   const handleStartEdit = useCallback(() => {
     setEditValue(quantity.toString());
+    originalQtyRef.current = quantity;
     setIsEditing(true);
+    setStaleDataError(null);
   }, [quantity]);
 
   const handleIncrement = useCallback((delta: number) => {
@@ -140,8 +204,41 @@ export const InlineQuantityEditor = memo(({
     }
   }, [handleSave, handleCancel, handleIncrement]);
 
+  const handleRefresh = useCallback(() => {
+    onRefreshNeeded?.();
+    setStaleDataError(null);
+  }, [onRefreshNeeded]);
+
   const isPending = updateQuantityMutation.isPending;
   const displayValue = pendingValue !== null ? pendingValue : quantity;
+
+  // Stale data state - show refresh prompt
+  if (staleDataError) {
+    return (
+      <div className="flex items-center gap-1">
+        <span className="text-xs text-destructive font-medium">
+          {staleDataError.current}
+        </span>
+        <TooltipProvider delayDuration={0}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 w-6 p-0 text-destructive hover:text-destructive"
+                onClick={handleRefresh}
+              >
+                <RefreshCw className="h-3 w-3" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="text-xs">
+              Shopify inventory changed. Click to refresh.
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </div>
+    );
+  }
 
   // Edit mode - inline input with steppers
   if (isEditing) {

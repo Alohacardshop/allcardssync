@@ -2,7 +2,21 @@ import { corsHeaders } from '../_shared/cors.ts'
 
 interface SetInventoryArgs {
   item_id: string
+  /** New quantity for 'set_exact' mode, or delta for 'adjust' mode */
   quantity: number
+  /** 'adjust' (default) uses delta, 'set_exact' uses absolute set */
+  mode?: 'adjust' | 'set_exact'
+  /** For optimistic locking: reject if current Shopify level differs */
+  expected_available?: number
+}
+
+interface InventoryLevelResponse {
+  inventory_level: {
+    inventory_item_id: number
+    location_id: number
+    available: number
+    updated_at: string
+  }
 }
 
 Deno.serve(async (req) => {
@@ -11,10 +25,15 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { item_id, quantity }: SetInventoryArgs = await req.json()
+    const { item_id, quantity, mode = 'adjust', expected_available }: SetInventoryArgs = await req.json()
 
-    if (typeof quantity !== 'number' || quantity < 0) {
-      throw new Error('Invalid quantity - must be a non-negative number')
+    if (typeof quantity !== 'number') {
+      throw new Error('Invalid quantity - must be a number')
+    }
+
+    // For set_exact mode, quantity must be non-negative
+    if (mode === 'set_exact' && quantity < 0) {
+      throw new Error('Invalid quantity for set_exact - must be non-negative')
     }
 
     // Get environment variables for Supabase
@@ -84,20 +103,102 @@ Deno.serve(async (req) => {
     }
 
     const locationId = intakeItem.shopify_location_gid.replace('gid://shopify/Location/', '')
-    
-    console.log(`Setting Shopify inventory to ${quantity} for item ${intakeItem.sku} (product ${intakeItem.shopify_product_id})`)
+    const inventoryItemId = intakeItem.shopify_inventory_item_id
 
-    const inventoryResponse = await fetch(`https://${domain}/admin/api/2024-07/inventory_levels/set.json`, {
+    // Step 1: Fetch current Shopify inventory level
+    console.log(`Fetching current Shopify inventory for item ${intakeItem.sku} (inventory_item_id: ${inventoryItemId})`)
+    
+    const currentLevelResponse = await fetch(
+      `https://${domain}/admin/api/2024-07/inventory_levels.json?inventory_item_ids=${inventoryItemId}&location_ids=${locationId}`,
+      {
+        method: 'GET',
+        headers: {
+          'X-Shopify-Access-Token': token,
+          'Content-Type': 'application/json'
+        }
+      }
+    )
+
+    if (!currentLevelResponse.ok) {
+      const errorText = await currentLevelResponse.text()
+      throw new Error(`Failed to fetch current Shopify inventory: ${currentLevelResponse.status} - ${errorText}`)
+    }
+
+    const currentLevelData = await currentLevelResponse.json()
+    const currentLevel = currentLevelData.inventory_levels?.[0]
+    const currentAvailable = currentLevel?.available ?? 0
+
+    console.log(`Current Shopify inventory: ${currentAvailable} for ${intakeItem.sku}`)
+
+    // Step 2: Optimistic locking check
+    if (typeof expected_available === 'number' && expected_available !== currentAvailable) {
+      console.log(`Concurrency conflict: expected ${expected_available}, found ${currentAvailable}`)
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'STALE_DATA',
+        message: 'Inventory changed in Shopify, please refresh',
+        current_available: currentAvailable,
+        expected_available
+      }), {
+        status: 409, // Conflict
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
+    }
+
+    // Step 3: Calculate new quantity and perform update
+    let newQuantity: number
+    let apiEndpoint: string
+    let apiBody: Record<string, unknown>
+
+    if (mode === 'adjust') {
+      // Delta-based adjustment
+      const delta = quantity
+      newQuantity = Math.max(0, currentAvailable + delta)
+      
+      // Use adjust API
+      apiEndpoint = `https://${domain}/admin/api/2024-07/inventory_levels/adjust.json`
+      apiBody = {
+        location_id: locationId,
+        inventory_item_id: inventoryItemId,
+        available_adjustment: delta
+      }
+      
+      console.log(`Adjusting Shopify inventory by ${delta} (${currentAvailable} → ${newQuantity}) for ${intakeItem.sku}`)
+    } else {
+      // Absolute set
+      newQuantity = quantity
+      
+      // Use set API
+      apiEndpoint = `https://${domain}/admin/api/2024-07/inventory_levels/set.json`
+      apiBody = {
+        location_id: locationId,
+        inventory_item_id: inventoryItemId,
+        available: quantity
+      }
+      
+      console.log(`Setting Shopify inventory to ${quantity} for ${intakeItem.sku}`)
+    }
+
+    // Prevent negative inventory
+    if (mode === 'adjust' && (currentAvailable + quantity) < 0) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'INSUFFICIENT_INVENTORY',
+        message: `Cannot reduce inventory below 0. Current: ${currentAvailable}, Attempted delta: ${quantity}`,
+        current_available: currentAvailable
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
+    }
+
+    const inventoryResponse = await fetch(apiEndpoint, {
       method: 'POST',
       headers: {
         'X-Shopify-Access-Token': token,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        location_id: locationId,
-        inventory_item_id: intakeItem.shopify_inventory_item_id,
-        available: quantity
-      })
+      body: JSON.stringify(apiBody)
     })
 
     if (!inventoryResponse.ok) {
@@ -105,7 +206,10 @@ Deno.serve(async (req) => {
       throw new Error(`Failed to update Shopify inventory level: ${inventoryResponse.status} - ${errorText}`)
     }
 
-    // Update last synced timestamp
+    const inventoryResult = await inventoryResponse.json()
+    const updatedLevel = inventoryResult.inventory_level
+
+    // Update last synced timestamp and cache the new known value
     const { error: updateError } = await supabase
       .from('intake_items')
       .update({
@@ -119,13 +223,27 @@ Deno.serve(async (req) => {
       console.error('Failed to update intake item sync timestamp:', updateError)
     }
 
-    console.log(`Successfully set Shopify inventory to ${quantity} for ${intakeItem.sku}`)
+    // Also update local inventory levels cache
+    await supabase
+      .from('shopify_inventory_levels')
+      .upsert({
+        store_key: storeKey,
+        inventory_item_id: inventoryItemId,
+        location_gid: intakeItem.shopify_location_gid,
+        available: updatedLevel?.available ?? newQuantity,
+        shopify_updated_at: updatedLevel?.updated_at || new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'store_key,inventory_item_id,location_gid' })
+
+    console.log(`Successfully ${mode === 'adjust' ? 'adjusted' : 'set'} Shopify inventory to ${updatedLevel?.available ?? newQuantity} for ${intakeItem.sku}`)
 
     return new Response(JSON.stringify({
       success: true,
       synced_to_shopify: true,
-      quantity,
-      message: `Shopify inventory updated to ${quantity}`
+      mode,
+      previous_available: currentAvailable,
+      new_available: updatedLevel?.available ?? newQuantity,
+      message: `Shopify inventory ${mode === 'adjust' ? 'adjusted' : 'set'} to ${updatedLevel?.available ?? newQuantity}`
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })
