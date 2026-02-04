@@ -270,8 +270,12 @@ export function useE2ETest() {
         testItems: s.testItems.map(item => {
           const updated = updatedItems?.find(u => u.id === item.id);
           if (updated) {
-            const newStatus = updated.ebay_sync_status === 'synced' ? 'ebay_synced' : 
-                             updated.ebay_sync_status === 'failed' ? 'ebay_failed' : item.status;
+          const newStatus = 
+            (updated.ebay_sync_status === 'synced' || updated.ebay_sync_status === 'dry_run') 
+              ? 'ebay_synced' 
+              : updated.ebay_sync_status === 'failed' 
+                ? 'ebay_failed' 
+                : item.status;
             return { 
               ...item, 
               status: newStatus as TestItemStatus,
