@@ -4,11 +4,12 @@ import { toast } from 'sonner';
 import { logger } from '@/lib/logger';
 import { sendGradedToShopify, sendRawToShopify } from '@/hooks/useShopifySend';
 import { useQueryClient } from '@tanstack/react-query';
+import type { InventoryListItem } from '../types';
 
 interface UseInventoryActionsOptions {
   selectedLocation: string | null;
   selectedItems: Set<string>;
-  filteredItems: any[];
+  filteredItems: InventoryListItem[];
   isAdmin: boolean;
   refetch: () => void;
   clearSelection: () => void;
@@ -33,18 +34,18 @@ export function useInventoryActions({
   // Optimistic update helper
   const createOptimisticUpdate = useCallback((
     itemIds: string[],
-    updateFn: (item: any) => any
+    updateFn: (item: InventoryListItem) => Partial<InventoryListItem>
   ) => {
     queryClient.cancelQueries({ queryKey: ['inventory-list'] });
     const previousData = queryClient.getQueryData(['inventory-list']);
     
-    queryClient.setQueryData(['inventory-list'], (old: any) => {
+    queryClient.setQueryData(['inventory-list'], (old: { pages: { items: InventoryListItem[] }[] } | undefined) => {
       if (!old) return old;
       return {
         ...old,
-        pages: old.pages.map((page: any) => ({
+        pages: old.pages.map((page) => ({
           ...page,
-          items: page.items.map((item: any) => 
+          items: page.items.map((item) => 
             itemIds.includes(item.id) ? { ...item, ...updateFn(item) } : item
           )
         }))
@@ -54,13 +55,13 @@ export function useInventoryActions({
     return { previousData };
   }, [queryClient]);
 
-  const rollbackOptimisticUpdate = useCallback((previousData: any) => {
+  const rollbackOptimisticUpdate = useCallback((previousData: unknown) => {
     if (previousData) {
       queryClient.setQueryData(['inventory-list'], previousData);
     }
   }, [queryClient]);
 
-  const handleSync = useCallback(async (item: any) => {
+  const handleSync = useCallback(async (item: InventoryListItem) => {
     if (!selectedLocation) { 
       toast.error("Pick a location first"); 
       return;
@@ -97,7 +98,7 @@ export function useInventoryActions({
     }
   }, [selectedLocation, queryClient]);
 
-  const handleRetrySync = useCallback(async (item: any) => {
+  const handleRetrySync = useCallback(async (item: InventoryListItem) => {
     try {
       if (!item.store_key || !item.shopify_location_gid) {
         toast.error('Item is missing store or location data - cannot retry');
@@ -126,7 +127,7 @@ export function useInventoryActions({
     }
   }, [queryClient]);
 
-  const handleResync = useCallback(async (item: any) => {
+  const handleResync = useCallback(async (item: InventoryListItem) => {
     if (!item.store_key || !item.shopify_location_gid) {
       toast.error('Item is missing store or location data');
       return;
@@ -143,8 +144,8 @@ export function useInventoryActions({
       if (item.type?.toLowerCase() === 'graded' || item.psa_cert) {
         const result = await sendGradedToShopify({
           storeKey: item.store_key as "hawaii" | "las_vegas",
-          locationGid: item.shopify_location_gid,
-          vendor: (item as any).vendor,
+          locationGid: item.shopify_location_gid!,
+          vendor: item.vendor ?? undefined,
           item: {
             id: item.id,
             sku: item.sku || '',
@@ -168,8 +169,8 @@ export function useInventoryActions({
         const result = await sendRawToShopify({
           item_id: item.id,
           storeKey: item.store_key as "hawaii" | "las_vegas",
-          locationGid: item.shopify_location_gid,
-          vendor: (item as any).vendor
+          locationGid: item.shopify_location_gid!,
+          vendor: item.vendor ?? undefined
         });
 
         if (result?.success) {
@@ -419,7 +420,7 @@ export function useInventoryActions({
   }, [filteredItems, selectedItems, refetch]);
 
   const handleRemoveFromShopify = useCallback(async (
-    selectedItemForRemoval: any | any[] | null
+    selectedItemForRemoval: InventoryListItem | InventoryListItem[] | null
   ) => {
     if (!selectedItemForRemoval) return;
     
@@ -488,7 +489,7 @@ export function useInventoryActions({
     }
   }, [refetch]);
 
-  const handleDeleteItems = useCallback(async (items: any[]) => {
+  const handleDeleteItems = useCallback(async (items: InventoryListItem[]) => {
     if (!isAdmin) {
       toast.error('Only admins can delete inventory items');
       return;

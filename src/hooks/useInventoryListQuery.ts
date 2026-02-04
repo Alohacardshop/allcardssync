@@ -1,6 +1,7 @@
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { startOfDay, subDays } from 'date-fns';
+import type { InventoryListItem } from '@/features/inventory/types';
 
 export interface InventoryFilters {
   storeKey: string;
@@ -261,10 +262,13 @@ export function useInventoryListQuery(filters: InventoryFilters) {
 
       if (error) throw error;
 
+      // Cast to typed items - the query columns match InventoryListItem
+      const typedItems = (data || []) as InventoryListItem[];
+
       return { 
-        items: data || [], 
+        items: typedItems, 
         count: count || 0,
-        nextCursor: data && data.length === PAGE_SIZE ? pageParam + PAGE_SIZE : undefined
+        nextCursor: typedItems.length === PAGE_SIZE ? pageParam + PAGE_SIZE : undefined
       };
     },
     getNextPageParam: (lastPage) => lastPage.nextCursor,

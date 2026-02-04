@@ -4,7 +4,20 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
 import { InventoryItemCard } from '@/components/InventoryItemCard';
-import type { VirtualInventoryListProps } from '../types';
+import type { VirtualInventoryListProps, InventoryListItem } from '../types';
+import type { InventoryItem } from '@/types/inventory';
+
+// Adapter to convert InventoryListItem to InventoryItem for InventoryItemCard
+// This ensures type compatibility while InventoryItemCard is refactored
+const asInventoryItem = (item: InventoryListItem): InventoryItem => {
+  return {
+    ...item,
+    lot_number: '',
+    quantity: item.quantity,
+    price: item.price ?? 0,
+    created_at: item.created_at,
+  } as InventoryItem;
+};
 
 export const InventoryList = React.memo(({ 
   items, 
@@ -85,6 +98,37 @@ export const InventoryList = React.memo(({
     );
   }
 
+  // Create wrapped handlers that convert between types
+  const handleSync = (inventoryItem: InventoryItem) => {
+    const listItem = items.find(i => i.id === inventoryItem.id);
+    if (listItem) onSync(listItem);
+  };
+  
+  const handleRetrySync = (inventoryItem: InventoryItem) => {
+    const listItem = items.find(i => i.id === inventoryItem.id);
+    if (listItem) onRetrySync(listItem);
+  };
+  
+  const handleResync = (inventoryItem: InventoryItem) => {
+    const listItem = items.find(i => i.id === inventoryItem.id);
+    if (listItem) onResync(listItem);
+  };
+  
+  const handleRemove = (inventoryItem: InventoryItem) => {
+    const listItem = items.find(i => i.id === inventoryItem.id);
+    if (listItem) onRemove(listItem);
+  };
+  
+  const handleDelete = onDelete ? (inventoryItem: InventoryItem) => {
+    const listItem = items.find(i => i.id === inventoryItem.id);
+    if (listItem) onDelete(listItem);
+  } : undefined;
+  
+  const handleSyncDetails = (inventoryItem: InventoryItem) => {
+    const listItem = items.find(i => i.id === inventoryItem.id);
+    if (listItem) onSyncDetails(listItem);
+  };
+
   return (
     <div
       ref={parentRef}
@@ -117,7 +161,7 @@ export const InventoryList = React.memo(({
               className={isFocused ? 'ring-2 ring-primary ring-offset-2 rounded-lg' : ''}
             >
               <InventoryItemCard
-                item={item}
+                item={asInventoryItem(item)}
                 isSelected={selectedItems.has(item.id)}
                 isExpanded={expandedItems.has(item.id)}
                 isAdmin={isAdmin}
@@ -125,12 +169,12 @@ export const InventoryList = React.memo(({
                 locationsMap={locationsMap}
                 onToggleSelection={onToggleSelection}
                 onToggleExpanded={onToggleExpanded}
-                onSync={onSync}
-                onRetrySync={onRetrySync}
-                onResync={onResync}
-                onRemove={onRemove}
-                onDelete={onDelete}
-                onSyncDetails={onSyncDetails}
+                onSync={handleSync}
+                onRetrySync={handleRetrySync}
+                onResync={handleResync}
+                onRemove={handleRemove}
+                onDelete={handleDelete}
+                onSyncDetails={handleSyncDetails}
               />
             </div>
           );
