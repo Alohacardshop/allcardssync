@@ -124,31 +124,41 @@ serve(async (req) => {
     console.log(`Skip already pulled: ${skipAlreadyPulled}, Updated since: ${updatedSinceIso || 'none'}`);
     console.log(`Quantity filters: min=${minQuantity}, max=${maxQuantity}, skipUntracked=${skipUntracked}`);
 
-    // Return immediately and process in background
-    const response = new Response(
-      JSON.stringify({
-        success: true,
-        message: 'Backfill started in background',
-        storeKey,
-        dryRun
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    // For dry run, process synchronously to return preview items
+    // For actual import, run in background to avoid timeout
+    if (dryRun) {
+      const result = await processBackfill();
+      return new Response(
+        JSON.stringify(result),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    } else {
+      // Return immediately and process in background
+      const response = new Response(
+        JSON.stringify({
+          success: true,
+          message: 'Backfill started in background',
+          storeKey,
+          dryRun
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
 
-    // Process backfill in background
-    EdgeRuntime.waitUntil(
-      (async () => {
-        try {
-          await processBackfill();
-        } catch (error) {
-          console.error('Background backfill error:', error);
-        }
-      })()
-    );
+      // Process backfill in background
+      EdgeRuntime.waitUntil(
+        (async () => {
+          try {
+            await processBackfill();
+          } catch (error) {
+            console.error('Background backfill error:', error);
+          }
+        })()
+      );
 
-    return response;
+      return response;
+    }
 
-    async function processBackfill() {
+    async function processBackfill(): Promise<any> {
     const upper = storeKey.toUpperCase();
     const domainKeys = [
       `SHOPIFY_${upper}_DOMAIN`,
@@ -204,6 +214,14 @@ serve(async (req) => {
     let skippedHighQty = 0;
     let upsertedRows = 0;
     let errors: string[] = [];
+    
+    // Preview items for dry run (limit to 50)
+    let previewItems: Array<{
+      sku: string;
+      title: string;
+      quantity: number;
+      price: number;
+    }> = [];
 
     // Fetch products from Shopify with pagination (use full next link URL to avoid 400s)
     let pageCount = 0;
@@ -286,7 +304,19 @@ serve(async (req) => {
               continue;
             }
 
-            if (dryRun) continue;
+            if (dryRun) {
+              // Collect sample items for preview (limit to 50)
+              if (previewItems.length < 50) {
+                previewItems.push({
+                  sku: variant.sku,
+                  title: product.title + (variant.title !== 'Default Title' ? ` - ${variant.title}` : ''),
+                  quantity: variant.inventory_quantity || 0,
+                  price: parseFloat(variant.price) || 0
+                });
+              }
+              upsertedRows++; // Count for "would import" stat
+              continue;
+            }
 
             // Get inventory levels for this variant
             let inventoryLevels: any[] = [];
@@ -437,6 +467,7 @@ serve(async (req) => {
     const result = {
       success: true,
       dryRun,
+      previewItems: dryRun ? previewItems : undefined,
       statistics: {
         totalProducts,
         gradedProducts,
@@ -460,6 +491,8 @@ serve(async (req) => {
         errors: errors.slice(0, 10) // Limit error array size
       }
     };
+    
+    return result;
 
     console.log('Import completed:', result);
     } // End processBackfill
