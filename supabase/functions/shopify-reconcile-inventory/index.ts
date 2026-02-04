@@ -1,6 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 import { resolveShopifyConfig } from '../_shared/resolveShopifyConfig.ts';
 import { fetchWithRetry } from '../_shared/http.ts';
+import { filterLockedSkus, cleanupExpiredLocks } from '../_shared/inventory-lock-helpers.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -92,6 +93,7 @@ interface ReconcileStats {
   drift_detected: number;
   drift_fixed: number;
   errors: number;
+  skipped_locked: number;
   location_stats: Map<string, LocationStats>;
 }
 
@@ -471,8 +473,21 @@ async function reconcileInventoryLevels(
     drift_detected: 0,
     drift_fixed: 0,
     errors: 0,
+    skipped_locked: 0,
     location_stats: new Map(),
   };
+
+  // Clean up expired locks opportunistically
+  await cleanupExpiredLocks(supabaseClient);
+
+  // Pre-fetch all SKUs that are currently locked
+  const allSkus = levels.map(l => l.sku).filter(Boolean) as string[];
+  const { lockedSkus } = await filterLockedSkus(supabaseClient, allSkus, storeKey);
+  const lockedSkuSet = new Set(lockedSkus);
+  
+  if (lockedSkuSet.size > 0) {
+    console.log(`[RECONCILE] Skipping ${lockedSkuSet.size} locked SKUs`);
+  }
 
   const getLocationStats = (gid: string, name: string): LocationStats => {
     if (!stats.location_stats.has(gid)) {
@@ -520,6 +535,12 @@ async function reconcileInventoryLevels(
 
     // Process each level for intake_items reconciliation
     for (const level of batch) {
+      // Skip locked SKUs - they're being modified by another operation
+      if (level.sku && lockedSkuSet.has(level.sku)) {
+        stats.skipped_locked++;
+        continue;
+      }
+
       const locStats = getLocationStats(level.location_gid, level.location_name);
       stats.items_checked++;
       locStats.items_checked++;

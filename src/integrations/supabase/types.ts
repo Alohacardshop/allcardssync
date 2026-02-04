@@ -1297,6 +1297,42 @@ export type Database = {
         }
         Relationships: []
       }
+      inventory_write_locks: {
+        Row: {
+          context: Json | null
+          created_at: string
+          expires_at: string
+          id: string
+          lock_type: string
+          locked_at: string
+          locked_by: string | null
+          sku: string
+          store_key: string
+        }
+        Insert: {
+          context?: Json | null
+          created_at?: string
+          expires_at: string
+          id?: string
+          lock_type: string
+          locked_at?: string
+          locked_by?: string | null
+          sku: string
+          store_key: string
+        }
+        Update: {
+          context?: Json | null
+          created_at?: string
+          expires_at?: string
+          id?: string
+          lock_type?: string
+          locked_at?: string
+          locked_by?: string | null
+          sku?: string
+          store_key?: string
+        }
+        Relationships: []
+      }
       item_snapshots: {
         Row: {
           created_at: string
@@ -3310,6 +3346,21 @@ export type Database = {
     }
     Functions: {
       _norm_gid: { Args: { t: string }; Returns: string }
+      acquire_inventory_locks: {
+        Args: {
+          p_context?: Json
+          p_lock_type: string
+          p_locked_by: string
+          p_skus: string[]
+          p_store_key: string
+          p_timeout_minutes?: number
+        }
+        Returns: {
+          acquired_count: number
+          failed_skus: string[]
+          lock_batch_id: string
+        }[]
+      }
       acquire_shopify_processor_lock: {
         Args: { processor_instance_id: string }
         Returns: boolean
@@ -3569,6 +3620,16 @@ export type Database = {
       catalog_v2_upsert_variants_new: {
         Args: { rows: Json }
         Returns: undefined
+      }
+      check_inventory_locks: {
+        Args: { p_skus: string[]; p_store_key: string }
+        Returns: {
+          expires_at: string
+          is_locked: boolean
+          lock_type: string
+          locked_by: string
+          sku: string
+        }[]
       }
       check_shopify_product_id_dupes: {
         Args: never
@@ -3869,6 +3930,10 @@ export type Database = {
           p_store_key: string
         }
         Returns: string
+      }
+      release_inventory_locks: {
+        Args: { p_batch_id?: string; p_skus?: string[]; p_store_key?: string }
+        Returns: number
       }
       release_shopify_processor_lock: { Args: never; Returns: boolean }
       resolve_location_drift: {
