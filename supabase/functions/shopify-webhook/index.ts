@@ -152,7 +152,6 @@ serve(async (req) => {
 
     console.log(`Processing webhook: ${topic} from ${shopifyDomain} (event_id: ${eventId})`);
 
-
     let processingError: Error | null = null;
 
     try {
@@ -286,6 +285,71 @@ serve(async (req) => {
     });
   }
 });
+
+/**
+ * Check if a sales event has already been processed (idempotency).
+ * Uses sales_events table to deduplicate by source_event_id.
+ * Logs ignored duplicates for audit.
+ * 
+ * @returns true if duplicate (should skip), false if new event (should process)
+ */
+async function checkAndRecordSalesEvent(
+  supabase: any,
+  sourceEventId: string,
+  sku: string,
+  source: 'shopify' | 'ebay',
+  action: string
+): Promise<boolean> {
+  // Check if this event was already processed
+  const { data: existing } = await supabase
+    .from('sales_events')
+    .select('id, status, processed_at')
+    .eq('source_event_id', sourceEventId)
+    .single();
+
+  if (existing) {
+    // Log the duplicate for audit (fire and forget)
+    console.log(`[AUDIT] Duplicate ${action} event ignored: ${sourceEventId} (original: ${existing.id}, status: ${existing.status})`);
+    
+    // Insert audit log for visibility
+    await supabase
+      .from('system_logs')
+      .insert({
+        level: 'info',
+        message: `Duplicate ${source} ${action} webhook ignored`,
+        context: {
+          source_event_id: sourceEventId,
+          sku,
+          original_event_id: existing.id,
+          original_status: existing.status,
+          original_processed_at: existing.processed_at
+        }
+      });
+    
+    return true; // Duplicate - skip processing
+  }
+
+  // Record this event to prevent future duplicates
+  const { error: insertError } = await supabase
+    .from('sales_events')
+    .insert({
+      source,
+      source_event_id: sourceEventId,
+      sku,
+      status: 'received'
+    });
+
+  if (insertError) {
+    // If insert fails due to unique constraint, it's a race condition duplicate
+    if (insertError.code === '23505') { // PostgreSQL unique violation
+      console.log(`[AUDIT] Race condition duplicate detected: ${sourceEventId}`);
+      return true;
+    }
+    console.error(`Failed to record sales event: ${insertError.message}`);
+  }
+
+  return false; // New event - proceed with processing
+}
 
 async function handleProductDelete(supabase: any, payload: any, shopifyDomain: string | null) {
   const productId = payload.id?.toString();
@@ -1211,8 +1275,18 @@ async function handleOrderCancellation(supabase: any, payload: any, shopifyDomai
   for (const lineItem of lineItems) {
     const sku = lineItem.sku;
     const quantity = lineItem.quantity || 0;
+    const lineItemId = lineItem.id?.toString();
 
     if (!sku) continue;
+
+    // ===== IDEMPOTENCY CHECK: order_id + line_item_id + action =====
+    const idempotencyKey = `${orderId}_${lineItemId}_cancellation`;
+    const isDuplicate = await checkAndRecordSalesEvent(supabase, idempotencyKey, sku, 'shopify', 'cancellation');
+    
+    if (isDuplicate) {
+      console.log(`[IDEMPOTENT] Skipping duplicate cancellation: ${idempotencyKey}`);
+      continue;
+    }
 
     // Find items that were sold in this order
     const { data: items, error } = await supabase
@@ -1355,11 +1429,12 @@ async function handleOrderCancellation(supabase: any, payload: any, shopifyDomai
 
 async function handleRefundCreated(supabase: any, payload: any, shopifyDomain: string | null) {
   const orderId = payload.order_id?.toString();
+  const refundId = payload.id?.toString();
   const refundLineItems = payload.refund_line_items || [];
 
   if (!orderId || refundLineItems.length === 0) return;
 
-  console.log(`Handling refund for order: ${orderId} with ${refundLineItems.length} line items`);
+  console.log(`Handling refund ${refundId} for order: ${orderId} with ${refundLineItems.length} line items`);
 
   const storeKey = await getStoreKeyFromDomain(supabase, shopifyDomain);
   if (!storeKey) return;
@@ -1378,9 +1453,19 @@ async function handleRefundCreated(supabase: any, payload: any, shopifyDomain: s
   for (const refundItem of refundLineItems) {
     const lineItem = refundItem.line_item;
     const sku = lineItem?.sku;
+    const lineItemId = lineItem?.id?.toString() || refundItem.line_item_id?.toString();
     const refundQuantity = refundItem.quantity || 0;
 
     if (!sku) continue;
+
+    // ===== IDEMPOTENCY CHECK: order_id + line_item_id + action (include refund_id for uniqueness) =====
+    const idempotencyKey = `${orderId}_${lineItemId}_refund_${refundId}`;
+    const isDuplicate = await checkAndRecordSalesEvent(supabase, idempotencyKey, sku, 'shopify', 'refund');
+    
+    if (isDuplicate) {
+      console.log(`[IDEMPOTENT] Skipping duplicate refund: ${idempotencyKey}`);
+      continue;
+    }
 
     // Find items that were sold in this order
     const { data: items, error } = await supabase
