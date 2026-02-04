@@ -124,59 +124,121 @@ serve(async (req) => {
     console.log(`shopify-webhook: Processing ${topic} from ${shopifyDomain}`);
 
     // Store webhook event for idempotency (after HMAC check)
-    await supabase
+    const { data: insertedEvent, error: insertError } = await supabase
       .from('webhook_events')
       .insert({
         webhook_id: webhookId,
         event_type: topic,
-        payload: payload
-      });
-
-    console.log(`Processing webhook: ${topic} from ${shopifyDomain}`);
-
-    // Handle different webhook types
-    switch (topic) {
-      case 'products/delete':
-        await handleProductDelete(supabase, payload, shopifyDomain);
-        break;
-      
-      case 'product_listings/remove':
-        await handleProductListingRemove(supabase, payload, shopifyDomain);
-        break;
-      
-      case 'orders/create':
-        // Send Discord notification for new orders (all online orders, not just eBay)
-        await sendDiscordNotification(supabase, payload, shopifyDomain);
-        await handleOrderUpdate(supabase, payload, shopifyDomain);
-        break;
-      
-      case 'orders/updated':
-      case 'orders/fulfilled':
-        await handleOrderUpdate(supabase, payload, shopifyDomain);
-        break;
-      
-      case 'inventory_levels/update':
-      case 'inventory_items/update':  // Shopify also sends this topic
-        await handleInventoryLevelUpdate(supabase, payload, shopifyDomain);
-        break;
-      
-      case 'orders/cancelled':
-        await handleOrderCancellation(supabase, payload, shopifyDomain);
-        break;
-      
-      case 'refunds/create':
-        await handleRefundCreated(supabase, payload, shopifyDomain);
-        break;
-      
-      case 'products/update':
-        await handleProductUpdate(supabase, payload, shopifyDomain);
-        break;
-      
-      default:
-        console.log(`Unhandled webhook topic: ${topic}`);
+        payload: payload,
+        status: 'processing',
+        processing_started_at: new Date().toISOString()
+      })
+      .select('id')
+      .single();
+    
+    const eventId = insertedEvent?.id;
+    if (insertError) {
+      console.error('Failed to insert webhook event:', insertError);
     }
 
-    return new Response(JSON.stringify({ message: 'Webhook processed successfully' }), {
+    console.log(`Processing webhook: ${topic} from ${shopifyDomain} (event_id: ${eventId})`);
+
+    let processingError: Error | null = null;
+
+    try {
+      // Handle different webhook types
+      switch (topic) {
+        case 'products/delete':
+          await handleProductDelete(supabase, payload, shopifyDomain);
+          break;
+        
+        case 'product_listings/remove':
+          await handleProductListingRemove(supabase, payload, shopifyDomain);
+          break;
+        
+        case 'orders/create':
+          // Send Discord notification for new orders (all online orders, not just eBay)
+          await sendDiscordNotification(supabase, payload, shopifyDomain);
+          await handleOrderUpdate(supabase, payload, shopifyDomain);
+          break;
+        
+        case 'orders/updated':
+        case 'orders/fulfilled':
+          await handleOrderUpdate(supabase, payload, shopifyDomain);
+          break;
+        
+        case 'inventory_levels/update':
+        case 'inventory_items/update':  // Shopify also sends this topic
+          await handleInventoryLevelUpdate(supabase, payload, shopifyDomain);
+          break;
+        
+        case 'orders/cancelled':
+          await handleOrderCancellation(supabase, payload, shopifyDomain);
+          break;
+        
+        case 'refunds/create':
+          await handleRefundCreated(supabase, payload, shopifyDomain);
+          break;
+        
+        case 'products/update':
+          await handleProductUpdate(supabase, payload, shopifyDomain);
+          break;
+        
+        default:
+          console.log(`Unhandled webhook topic: ${topic}`);
+      }
+    } catch (handlerError) {
+      processingError = handlerError instanceof Error ? handlerError : new Error(String(handlerError));
+      console.error(`Handler error for ${topic}:`, processingError.message);
+    }
+
+    // Update event status based on outcome
+    if (eventId) {
+      if (processingError) {
+        // Mark as failed, increment retry count
+        const { data: currentEvent } = await supabase
+          .from('webhook_events')
+          .select('retry_count, max_retries')
+          .eq('id', eventId)
+          .single();
+        
+        const retryCount = (currentEvent?.retry_count || 0) + 1;
+        const maxRetries = currentEvent?.max_retries || 5;
+        const isDeadLetter = retryCount >= maxRetries;
+
+        await supabase
+          .from('webhook_events')
+          .update({
+            status: isDeadLetter ? 'dead_letter' : 'failed',
+            error_message: processingError.message,
+            retry_count: retryCount,
+            last_retry_at: new Date().toISOString(),
+            dead_letter: isDeadLetter,
+            processing_completed_at: new Date().toISOString()
+          })
+          .eq('id', eventId);
+
+        if (isDeadLetter) {
+          console.error(`[DEAD_LETTER] Event ${eventId} exceeded max retries (${maxRetries})`);
+        }
+      } else {
+        // Mark as processed successfully
+        await supabase
+          .from('webhook_events')
+          .update({
+            status: 'processed',
+            processing_completed_at: new Date().toISOString()
+          })
+          .eq('id', eventId);
+      }
+    }
+
+    // Always return 200 to Shopify to prevent unnecessary retries from their side
+    // We handle our own retry logic internally
+    return new Response(JSON.stringify({ 
+      message: processingError ? 'Webhook failed - queued for retry' : 'Webhook processed successfully',
+      event_id: eventId
+    }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
@@ -955,8 +1017,28 @@ async function handleInventoryLevelUpdate(supabase: any, payload: any, shopifyDo
   const storeKey = await getStoreKeyFromDomain(supabase, shopifyDomain);
   if (!storeKey) return;
 
-  // Phase 2: Add location validation to query
-  // Find matching items by Shopify inventory item ID with location context
+  // STEP 1: Upsert into shopify_inventory_levels table (source of truth)
+  if (locationGid) {
+    const { error: upsertError } = await supabase
+      .from('shopify_inventory_levels')
+      .upsert({
+        store_key: storeKey,
+        inventory_item_id: inventoryItemId,
+        location_gid: locationGid,
+        available: available,
+        shopify_updated_at: payload.updated_at || new Date().toISOString()
+      }, {
+        onConflict: 'store_key,inventory_item_id,location_gid'
+      });
+
+    if (upsertError) {
+      console.error('Failed to upsert shopify_inventory_levels:', upsertError);
+    } else {
+      console.log(`✓ Upserted inventory level: ${storeKey}/${inventoryItemId}@${locationGid} = ${available}`);
+    }
+  }
+
+  // STEP 2: Find matching items by Shopify inventory item ID with location context
   let query = supabase
     .from('intake_items')
     .select('id, quantity, sku, type, shopify_product_id, shopify_variant_id')
@@ -971,7 +1053,7 @@ async function handleInventoryLevelUpdate(supabase: any, payload: any, shopifyDo
   const { data: items, error } = await query;
 
   if (error || !items?.length) {
-    // Phase 4: Improved fallback matching - only with location context
+    // Improved fallback matching - only with location context
     if (!locationGid) {
       console.error('Cannot fallback without location context');
       return;
