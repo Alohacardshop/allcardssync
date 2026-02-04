@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 interface UseKeyboardNavigationOptions {
   items: any[];
@@ -8,6 +8,7 @@ interface UseKeyboardNavigationOptions {
   onSelectAll: () => void;
   onSync?: () => void;
   searchInputRef?: React.RefObject<HTMLInputElement>;
+  virtualizerScrollToIndex?: (index: number) => void;
   enabled?: boolean;
 }
 
@@ -19,10 +20,17 @@ export function useKeyboardNavigation({
   onSelectAll,
   onSync,
   searchInputRef,
+  virtualizerScrollToIndex,
   enabled = true,
 }: UseKeyboardNavigationOptions) {
-  const focusedIndexRef = useRef<number>(-1);
+  const [focusedIndex, setFocusedIndex] = useState<number>(-1);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const scrollToFocusedItem = useCallback((index: number) => {
+    if (virtualizerScrollToIndex) {
+      virtualizerScrollToIndex(index);
+    }
+  }, [virtualizerScrollToIndex]);
 
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
     if (!enabled) return;
@@ -40,29 +48,38 @@ export function useKeyboardNavigation({
 
     switch (event.key) {
       case 'j':
+      case 'ArrowDown':
         // Move focus down
         event.preventDefault();
         if (items.length > 0) {
-          focusedIndexRef.current = Math.min(focusedIndexRef.current + 1, items.length - 1);
-          if (focusedIndexRef.current < 0) focusedIndexRef.current = 0;
-          scrollToFocusedItem();
+          setFocusedIndex(prev => {
+            const newIndex = Math.min(prev + 1, items.length - 1);
+            const actualIndex = newIndex < 0 ? 0 : newIndex;
+            scrollToFocusedItem(actualIndex);
+            return actualIndex;
+          });
         }
         break;
 
       case 'k':
+      case 'ArrowUp':
         // Move focus up
         event.preventDefault();
         if (items.length > 0) {
-          focusedIndexRef.current = Math.max(focusedIndexRef.current - 1, 0);
-          scrollToFocusedItem();
+          setFocusedIndex(prev => {
+            const newIndex = Math.max(prev - 1, 0);
+            scrollToFocusedItem(newIndex);
+            return newIndex;
+          });
         }
         break;
 
       case 'x':
+      case ' ':
         // Toggle selection on focused item
-        event.preventDefault();
-        if (focusedIndexRef.current >= 0 && focusedIndexRef.current < items.length) {
-          const item = items[focusedIndexRef.current];
+        if (focusedIndex >= 0 && focusedIndex < items.length) {
+          event.preventDefault();
+          const item = items[focusedIndex];
           onToggleSelection(item.id);
         }
         break;
@@ -71,7 +88,7 @@ export function useKeyboardNavigation({
         // Clear selection
         event.preventDefault();
         onClearSelection();
-        focusedIndexRef.current = -1;
+        setFocusedIndex(-1);
         break;
 
       case 'A':
@@ -96,40 +113,24 @@ export function useKeyboardNavigation({
         searchInputRef?.current?.focus();
         break;
 
-      case 'ArrowDown':
-        // Alternative to j
+      case 'g':
+        // Go to top
         event.preventDefault();
-        if (items.length > 0) {
-          focusedIndexRef.current = Math.min(focusedIndexRef.current + 1, items.length - 1);
-          if (focusedIndexRef.current < 0) focusedIndexRef.current = 0;
-          scrollToFocusedItem();
-        }
+        setFocusedIndex(0);
+        scrollToFocusedItem(0);
         break;
 
-      case 'ArrowUp':
-        // Alternative to k
-        event.preventDefault();
-        if (items.length > 0) {
-          focusedIndexRef.current = Math.max(focusedIndexRef.current - 1, 0);
-          scrollToFocusedItem();
-        }
-        break;
-
-      case ' ':
-        // Space: Toggle selection (like x)
-        if (focusedIndexRef.current >= 0 && focusedIndexRef.current < items.length) {
+      case 'G':
+        // Go to bottom (Shift+G)
+        if (event.shiftKey && items.length > 0) {
           event.preventDefault();
-          const item = items[focusedIndexRef.current];
-          onToggleSelection(item.id);
+          const lastIndex = items.length - 1;
+          setFocusedIndex(lastIndex);
+          scrollToFocusedItem(lastIndex);
         }
         break;
     }
-  }, [enabled, items, onToggleSelection, onClearSelection, onSelectAll, onSync, searchInputRef, selectedItems.size]);
-
-  const scrollToFocusedItem = useCallback(() => {
-    // This would integrate with the virtualizer - for now just track the index
-    // The virtual list can observe focusedIndexRef to scroll appropriately
-  }, []);
+  }, [enabled, items, focusedIndex, onToggleSelection, onClearSelection, onSelectAll, onSync, searchInputRef, selectedItems.size, scrollToFocusedItem]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -138,11 +139,17 @@ export function useKeyboardNavigation({
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyDown, enabled]);
 
+  // Reset focused index when items change significantly
+  useEffect(() => {
+    if (focusedIndex >= items.length) {
+      setFocusedIndex(items.length > 0 ? items.length - 1 : -1);
+    }
+  }, [items.length, focusedIndex]);
+
   return {
-    focusedIndex: focusedIndexRef.current,
+    focusedIndex,
     containerRef,
-    setFocusedIndex: (index: number) => {
-      focusedIndexRef.current = index;
-    },
+    setFocusedIndex,
   };
 }
+
