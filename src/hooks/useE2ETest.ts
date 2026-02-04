@@ -428,10 +428,46 @@ export function useE2ETest() {
       
       if (error) throw error;
       
-      const itemsWithStatus: TestItemWithStatus[] = (data || []).map(item => ({
-        ...item,
-        status: item.shopify_product_id ? 'shopify_synced' : 'created' as TestItemStatus
-      })) as TestItemWithStatus[];
+      const itemIds = (data || []).map(i => i.id);
+      
+      // Check eBay queue status for these items
+      const { data: queueData } = await supabase
+        .from('ebay_sync_queue')
+        .select('inventory_item_id, status')
+        .in('inventory_item_id', itemIds);
+      
+      const queueStatusMap = new Map(
+        (queueData || []).map(q => [q.inventory_item_id, q.status])
+      );
+      
+      const itemsWithStatus: TestItemWithStatus[] = (data || []).map(item => {
+        // Determine status based on ebay_sync_status, queue status, and shopify status
+        let status: TestItemStatus = 'created';
+        
+        if (item.ebay_sync_status === 'synced' || item.ebay_listing_id) {
+          status = 'ebay_synced';
+        } else if (item.ebay_sync_status === 'failed') {
+          status = 'ebay_failed';
+        } else {
+          const queueStatus = queueStatusMap.get(item.id);
+          if (queueStatus === 'processing') {
+            status = 'ebay_processing';
+          } else if (queueStatus === 'pending') {
+            status = 'ebay_queued';
+          } else if (queueStatus === 'completed') {
+            status = 'ebay_synced';
+          } else if (queueStatus === 'failed') {
+            status = 'ebay_failed';
+          } else if (item.shopify_product_id) {
+            status = 'shopify_synced';
+          }
+        }
+        
+        return {
+          ...item,
+          status
+        };
+      }) as TestItemWithStatus[];
       
       setState(s => ({ ...s, testItems: itemsWithStatus }));
     } catch (error) {
