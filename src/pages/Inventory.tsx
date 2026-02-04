@@ -30,6 +30,8 @@ import { PageHeader } from '@/components/layout/PageHeader';
 
 import { useInventoryListQuery } from '@/hooks/useInventoryListQuery';
 import { useLocationNames, CachedLocation } from '@/hooks/useLocationNames';
+import { useShopifyTags } from '@/hooks/useShopifyTags';
+import { TagFilterDropdown } from '@/components/inventory/TagFilterDropdown';
 import { Progress } from '@/components/ui/progress';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCurrentBatch } from '@/hooks/useCurrentBatch';
@@ -236,6 +238,7 @@ const Inventory = () => {
   // Category and location filter state (replaces category tabs)
   const [categoryFilter, setCategoryFilter] = useState<'all' | 'tcg' | 'comics' | 'sealed'>('all');
   const [locationFilter, setLocationFilter] = useState<string | null>(null); // null = all locations
+  const [tagFilter, setTagFilter] = useState<string[]>([]); // Shopify tags filter
   
   // Auto-refresh state
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
@@ -270,6 +273,9 @@ const Inventory = () => {
   
   // Fetch location names for display
   const { data: locationsMap } = useLocationNames(assignedStore);
+  
+  // Fetch Shopify tags for filter dropdown
+  const { data: shopifyTags = [], isLoading: isLoadingTags } = useShopifyTags(assignedStore);
   
   // Get user ID for current batch
   const [userId, setUserId] = useState<string | undefined>();
@@ -344,6 +350,7 @@ const Inventory = () => {
     batchFilter,
     printStatusFilter,
     typeFilter,
+    tagFilter,
     
     searchTerm: debouncedSearchTerm,
     autoRefreshEnabled,
@@ -1408,6 +1415,14 @@ const Inventory = () => {
                       <SelectItem value="removed_from_batch">Removed from Batch</SelectItem>
                     </SelectContent>
                   </Select>
+                  
+                  {/* Shopify Tags Filter */}
+                  <TagFilterDropdown
+                    tags={shopifyTags}
+                    selectedTags={tagFilter}
+                    onTagsChange={setTagFilter}
+                    isLoading={isLoadingTags}
+                  />
                 </div>
 
                 {/* Bulk Actions */}

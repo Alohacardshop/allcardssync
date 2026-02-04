@@ -8,7 +8,9 @@ import {
   Calendar, 
   X,
   Store,
-  Loader2
+  Loader2,
+  Sparkles,
+  Trophy
 } from 'lucide-react';
 
 export interface QuickFilterState {
@@ -18,6 +20,7 @@ export interface QuickFilterState {
   dateRangeFilter: 'all' | 'today' | 'yesterday' | '7days' | '30days';
   statusFilter: 'all' | 'active' | 'out-of-stock' | 'sold' | 'deleted' | 'errors';
   categoryFilter?: 'all' | 'tcg' | 'comics' | 'sealed';
+  tagFilter?: string[]; // Shopify tags filter
 }
 
 interface QuickFilterPresetsProps {
@@ -78,6 +81,26 @@ export const QuickFilterPresets = React.memo(({
       description: 'Sealed products only',
       filters: {
         categoryFilter: 'sealed' as const,
+        statusFilter: 'active' as const,
+      }
+    },
+    {
+      id: 'pokemon',
+      label: 'Pokemon',
+      icon: Sparkles,
+      description: 'Pokemon cards only',
+      filters: {
+        tagFilter: ['pokemon'],
+        statusFilter: 'active' as const,
+      }
+    },
+    {
+      id: 'graded-items',
+      label: 'Graded',
+      icon: Trophy,
+      description: 'Graded items by PSA, CGC, etc.',
+      filters: {
+        tagFilter: ['graded'],
         statusFilter: 'active' as const,
       }
     },

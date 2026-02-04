@@ -11,6 +11,7 @@ export interface InventoryFilters {
   printStatusFilter?: 'all' | 'printed' | 'not-printed';
   typeFilter?: 'all' | 'raw' | 'graded';
   categoryFilter?: 'all' | 'tcg' | 'comics' | 'sealed'; // New category filter
+  tagFilter?: string[]; // Shopify tags filter
   
   searchTerm?: string;
   autoRefreshEnabled?: boolean;
@@ -41,6 +42,7 @@ export function useInventoryListQuery(filters: InventoryFilters) {
       filters.shopifySyncFilter,
       filters.ebayStatusFilter,
       filters.dateRangeFilter,
+      filters.tagFilter,
     ],
     queryFn: async ({ pageParam = 0 }) => {
       const {
@@ -52,6 +54,7 @@ export function useInventoryListQuery(filters: InventoryFilters) {
         batchFilter,
         printStatusFilter = 'all',
         typeFilter = 'all',
+        tagFilter = [],
         
         searchTerm,
         shopifySyncFilter = 'all',
@@ -96,7 +99,8 @@ export function useInventoryListQuery(filters: InventoryFilters) {
           vendor,
           year,
           category,
-          variant
+          variant,
+          shopify_tags
         `,
           { count: 'exact' }
         )
@@ -221,6 +225,12 @@ export function useInventoryListQuery(filters: InventoryFilters) {
         if (dateRangeFilter === 'yesterday') {
           query = query.lt('created_at', startOfDay(now).toISOString());
         }
+      }
+
+      // Apply Shopify tags filter
+      if (tagFilter && tagFilter.length > 0) {
+        // Filter items that have ANY of the selected tags
+        query = query.overlaps('shopify_tags', tagFilter);
       }
 
       // Apply search filter - search across multiple fields
