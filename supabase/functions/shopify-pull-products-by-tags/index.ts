@@ -84,7 +84,11 @@ serve(async (req) => {
       maxPages = 50,
       dryRun = false,
       status = 'active',
-      skipAlreadyPulled = true
+      skipAlreadyPulled = true,
+      // Quantity filters
+      minQuantity = 1,        // Skip items below this quantity (default: skip 0)
+      maxQuantity = 900,      // Skip items above this quantity (default: skip bulk)
+      skipUntracked = true    // Skip items not tracked in Shopify inventory
     } = await req.json();
 
     if (!storeKey) {
@@ -118,6 +122,7 @@ serve(async (req) => {
     console.log(`Graded tags: ${JSON.stringify(gradedTags)}`);
     console.log(`Raw tags: ${JSON.stringify(rawTags)}`);
     console.log(`Skip already pulled: ${skipAlreadyPulled}, Updated since: ${updatedSinceIso || 'none'}`);
+    console.log(`Quantity filters: min=${minQuantity}, max=${maxQuantity}, skipUntracked=${skipUntracked}`);
 
     // Return immediately and process in background
     const response = new Response(
@@ -193,6 +198,10 @@ serve(async (req) => {
     let rawProducts = 0;
     let totalVariants = 0;
     let skippedVariants = 0;
+    let skippedNoSku = 0;
+    let skippedUntracked = 0;
+    let skippedLowQty = 0;
+    let skippedHighQty = 0;
     let upsertedRows = 0;
     let errors: string[] = [];
 
@@ -265,6 +274,15 @@ serve(async (req) => {
             if (!variant.sku || variant.sku.trim() === '') {
               console.log(`Skipping variant ${variant.id} from product "${product.title}" - no SKU`);
               skippedVariants++;
+              skippedNoSku++;
+              continue;
+            }
+
+            // Skip untracked variants (inventory not managed by Shopify)
+            if (skipUntracked && variant.inventory_management === null) {
+              console.log(`Skipping variant ${variant.id} (SKU: ${variant.sku}) - inventory not tracked`);
+              skippedVariants++;
+              skippedUntracked++;
               continue;
             }
 
@@ -306,14 +324,26 @@ serve(async (req) => {
               console.log(`Skipping inventory levels for variant ${variant.id} - no valid inventory_item_id (${variant.inventory_item_id})`);
             }
 
-            // Only process locations with actual inventory (location_id exists and quantity > 0)
-            const locationsToProcess = inventoryLevels.filter(level => 
-              level.location_id && level.available > 0
-            );
+            // Filter by quantity range (minQuantity to maxQuantity)
+            const locationsToProcess = inventoryLevels.filter(level => {
+              const qty = level.available || 0;
+              return level.location_id && qty >= minQuantity && qty <= maxQuantity;
+            });
 
-            // Skip variant if no valid inventory locations
+            // Skip variant if no valid inventory locations, track reason
             if (locationsToProcess.length === 0) {
-              console.log(`Skipping variant ${variant.id} (SKU: ${variant.sku}) - no locations with quantity > 0 (found ${inventoryLevels.length} locations total)`);
+              const hasHighQty = inventoryLevels.some(l => (l.available || 0) > maxQuantity);
+              const hasLowQty = inventoryLevels.every(l => (l.available || 0) < minQuantity);
+              
+              if (hasHighQty) {
+                console.log(`Skipping variant ${variant.id} (SKU: ${variant.sku}) - quantity > ${maxQuantity}`);
+                skippedHighQty++;
+              } else if (hasLowQty) {
+                console.log(`Skipping variant ${variant.id} (SKU: ${variant.sku}) - quantity < ${minQuantity}`);
+                skippedLowQty++;
+              } else {
+                console.log(`Skipping variant ${variant.id} (SKU: ${variant.sku}) - no valid locations`);
+              }
               skippedVariants++;
               continue;
             }
@@ -413,8 +443,19 @@ serve(async (req) => {
         rawProducts,
         totalVariants,
         skippedVariants,
+        skippedBreakdown: {
+          noSku: skippedNoSku,
+          untracked: skippedUntracked,
+          lowQuantity: skippedLowQty,
+          highQuantity: skippedHighQty
+        },
         upsertedRows,
         pagesProcessed: pageCount,
+        filters: {
+          minQuantity,
+          maxQuantity,
+          skipUntracked
+        },
         updatedSince: updatedSinceIso,
         errors: errors.slice(0, 10) // Limit error array size
       }
