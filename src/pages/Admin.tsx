@@ -10,7 +10,6 @@ import {
   Command,
   Menu,
   Globe,
-  TestTube2
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import {
@@ -220,17 +219,6 @@ export default function Admin() {
               </SidebarMenu>
             </SidebarContent>
 
-            {/* Quick Actions - E2E Testing */}
-            {!sidebarCollapsed && (
-              <div className="border-t p-4">
-                <Link to="/admin/e2e-test">
-                  <Button variant="outline" className="w-full justify-start gap-2">
-                    <TestTube2 className="w-4 h-4" />
-                    E2E Testing
-                  </Button>
-                </Link>
-              </div>
-            )}
 
             {/* Back to Dashboard Link */}
             {!sidebarCollapsed && (
