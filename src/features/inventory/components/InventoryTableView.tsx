@@ -105,11 +105,20 @@ const TableRow = memo(({
   const status = item.shopify_sync_status as string | null;
   const isLoading = syncingRowId === item.id;
 
+  // Determine primary action based on status
+  const primaryAction = useMemo(() => {
+    if (item.deleted_at || item.sold_at) return null;
+    if (status === 'pending') return { label: 'Sync', action: () => onSync(item), icon: ExternalLink };
+    if (status === 'error') return { label: 'Retry', action: () => onRetrySync(item), icon: RotateCcw };
+    if (status === 'synced' && item.shopify_product_id) return { label: 'Resync', action: () => onResync(item), icon: RotateCcw };
+    return null;
+  }, [status, item, onSync, onRetrySync, onResync]);
+
   return (
     <TooltipProvider>
       <div 
         className={cn(
-          "grid grid-cols-[40px_100px_1fr_100px_80px_70px_90px_80px_90px_100px_50px] gap-2 items-center px-3 py-2 border-b border-border hover:bg-muted/50 text-sm",
+          "grid grid-cols-[40px_100px_1fr_100px_80px_70px_90px_80px_90px_100px_80px_50px] gap-2 items-center px-3 py-2 border-b border-border hover:bg-muted/50 text-sm",
           isSelected && "bg-primary/5",
           item.deleted_at && "opacity-50"
         )}
@@ -208,7 +217,31 @@ const TableRow = memo(({
           {formatDistanceToNow(new Date(item.updated_at), { addSuffix: true })}
         </div>
 
-        {/* Actions */}
+        {/* Primary Action - fixed width */}
+        <div className="flex justify-center">
+          {primaryAction ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={primaryAction.action}
+              disabled={isLoading}
+              className="h-7 w-[70px] text-xs"
+            >
+              {isLoading ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <>
+                  <primaryAction.icon className="h-3 w-3 mr-1" />
+                  {primaryAction.label}
+                </>
+              )}
+            </Button>
+          ) : (
+            <span className="w-[70px]" /> // Placeholder to maintain column width
+          )}
+        </div>
+
+        {/* Kebab Menu */}
         <div className="flex justify-center">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -217,24 +250,6 @@ const TableRow = memo(({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              {status === 'pending' && (
-                <DropdownMenuItem onClick={() => onSync(item)} disabled={isLoading}>
-                  {isLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <ExternalLink className="h-4 w-4 mr-2" />}
-                  Sync to Shopify
-                </DropdownMenuItem>
-              )}
-              {status === 'error' && (
-                <DropdownMenuItem onClick={() => onRetrySync(item)} disabled={isLoading}>
-                  {isLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RotateCcw className="h-4 w-4 mr-2" />}
-                  Retry Sync
-                </DropdownMenuItem>
-              )}
-              {status === 'synced' && item.shopify_product_id && (
-                <DropdownMenuItem onClick={() => onResync(item)} disabled={isLoading}>
-                  {isLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RotateCcw className="h-4 w-4 mr-2" />}
-                  Resync
-                </DropdownMenuItem>
-              )}
               <DropdownMenuItem onClick={() => onSyncDetails(item)}>
                 <FileText className="h-4 w-4 mr-2" />
                 View Details
@@ -445,7 +460,7 @@ export const InventoryTableView = memo(({
   return (
     <div className="rounded-lg border bg-card overflow-hidden">
       {/* Sticky Header */}
-      <div className="grid grid-cols-[40px_100px_1fr_100px_80px_70px_90px_80px_90px_100px_50px] gap-2 items-center px-3 py-2 bg-muted/50 border-b font-medium text-xs sticky top-0 z-10">
+      <div className="grid grid-cols-[40px_100px_1fr_100px_80px_70px_90px_80px_90px_100px_80px_50px] gap-2 items-center px-3 py-2 bg-muted/50 border-b font-medium text-xs sticky top-0 z-10">
         <div className="flex items-center justify-center">
           <Checkbox
             checked={allSelected}
@@ -464,6 +479,7 @@ export const InventoryTableView = memo(({
         <span className="text-muted-foreground text-center">Print</span>
         <span className="text-muted-foreground text-center">eBay</span>
         <SortableHeader label="Updated" field="updated_at" sortConfig={sortConfig} onSort={handleSort} />
+        <span className="text-muted-foreground text-center">Action</span>
         <span></span>
       </div>
 
