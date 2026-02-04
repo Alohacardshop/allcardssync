@@ -17,6 +17,7 @@ import { GlobalLoading } from "@/components/GlobalLoading";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { FontPreloader } from "@/components/fonts/FontPreloader";
 import { RequireApp } from "@/components/RequireApp";
+import { NavigationProvider } from "@/components/NavigationProvider";
 
 // Lazy load heavy routes
 const DashboardHome = React.lazy(() => import("./pages/DashboardHome"));
@@ -73,6 +74,7 @@ const App = () => (
               <GlobalLoading />
               <FontPreloader />
               <BrowserRouter>
+              <NavigationProvider>
               <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><LoadingSpinner size="lg" /></div>}>
                 <Routes>
               {/* Public routes - accessible without authentication */}
@@ -187,6 +189,7 @@ const App = () => (
               <SessionTimeoutWarning />
               <RecoveryMode />
               <PrintQueueStatus />
+              </NavigationProvider>
             </BrowserRouter>
             </PrintQueueProvider>
           </StoreProvider>
