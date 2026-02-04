@@ -174,7 +174,6 @@ export interface InventoryFiltersBarProps {
     value: InventoryFilterState[K]
   ) => void;
   onClearAllFilters: () => void;
-  onApplyQuickFilter: (preset: Partial<InventoryFilterState>) => void;
   locationsMap?: Map<string, CachedLocation>;
   shopifyTags: Array<{ tag: string; count: number }>;
   isLoadingTags: boolean;

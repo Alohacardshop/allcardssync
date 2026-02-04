@@ -2,14 +2,14 @@ import React from 'react';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Search, MapPin, X } from 'lucide-react';
-import { QuickFilterPresets, QuickFilterState } from '@/components/inventory/QuickFilterPresets';
 import { MoreFiltersPopover } from '@/components/inventory/MoreFiltersPopover';
-import type { InventoryFiltersBarProps, InventoryFilterState } from '../types';
+import type { InventoryFiltersBarProps } from '../types';
 
 // Active filter chip component
 const FilterChip = ({ label, onRemove }: { label: string; onRemove: () => void }) => (
-  <Badge variant="secondary" className="gap-1 pr-1 text-xs font-normal">
+  <Badge variant="secondary" className="gap-1 pr-1 text-xs font-normal h-6">
     {label}
     <button
       type="button"
@@ -25,28 +25,39 @@ export const InventoryFiltersBar = React.memo(({
   filters,
   onFilterChange,
   onClearAllFilters,
-  onApplyQuickFilter,
   locationsMap,
   shopifyTags,
   isLoadingTags,
   searchInputRef,
 }: InventoryFiltersBarProps) => {
-  // Map filter state to quick filter preset format
-  const handleApplyPreset = (preset: Partial<QuickFilterState>) => {
-    const mappedPreset: Partial<InventoryFilterState> = {};
-    
-    if (preset.shopifySyncFilter) mappedPreset.shopifySyncFilter = preset.shopifySyncFilter;
-    if (preset.ebayStatusFilter) mappedPreset.ebayStatusFilter = preset.ebayStatusFilter;
-    if (preset.printStatusFilter) mappedPreset.printStatusFilter = preset.printStatusFilter;
-    if (preset.dateRangeFilter) mappedPreset.dateRangeFilter = preset.dateRangeFilter;
-    if (preset.statusFilter) mappedPreset.statusFilter = preset.statusFilter;
-    if (preset.categoryFilter) mappedPreset.categoryFilter = preset.categoryFilter;
-    
-    onApplyQuickFilter(mappedPreset);
-  };
-
   // Build active filter chips
   const activeChips: Array<{ key: string; label: string; onRemove: () => void }> = [];
+
+  // Status filter chip (only if not default 'active')
+  if (filters.statusFilter !== 'active') {
+    const labels: Record<string, string> = {
+      'all': 'All Status',
+      'out-of-stock': 'Out of Stock',
+      'sold': 'Sold',
+      'errors': 'Errors',
+      'deleted': 'Deleted'
+    };
+    activeChips.push({
+      key: 'status',
+      label: labels[filters.statusFilter] || filters.statusFilter,
+      onRemove: () => onFilterChange('statusFilter', 'active')
+    });
+  }
+
+  // Location filter chip
+  if (filters.locationFilter) {
+    const locationName = locationsMap?.get(filters.locationFilter)?.location_name || 'Location';
+    activeChips.push({
+      key: 'location',
+      label: locationName,
+      onRemove: () => onFilterChange('locationFilter', null)
+    });
+  }
 
   if (filters.shopifySyncFilter !== 'all') {
     const labels: Record<string, string> = {
@@ -119,6 +130,18 @@ export const InventoryFiltersBar = React.memo(({
     });
   }
 
+  if (filters.batchFilter !== 'all') {
+    const labels: Record<string, string> = {
+      'current': 'Current Batch',
+      'recent': 'Recent Batches'
+    };
+    activeChips.push({
+      key: 'batch',
+      label: labels[filters.batchFilter] || filters.batchFilter,
+      onRemove: () => onFilterChange('batchFilter', 'all')
+    });
+  }
+
   if (filters.tagFilter && filters.tagFilter.length > 0) {
     filters.tagFilter.forEach(tag => {
       activeChips.push({
@@ -129,114 +152,123 @@ export const InventoryFiltersBar = React.memo(({
     });
   }
 
+  // Check if any non-default filters are active (for Clear All button)
+  const hasActiveFilters = activeChips.length > 0 || filters.searchTerm.length > 0;
+
   return (
-    <div className="space-y-3">
-      {/* Quick Filter Presets - compact horizontal row */}
-      <QuickFilterPresets
-        onApplyPreset={handleApplyPreset}
-        onClearFilters={onClearAllFilters}
-        activePreset={filters.activeQuickFilter}
-      />
-      
-      {/* Search + Filters Row */}
-      <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
-        {/* Search */}
-        <div className="relative flex-1 max-w-sm">
+    <div className="space-y-2">
+      {/* Primary Filters Row - Search + Status + Location + More */}
+      <div className="flex items-center gap-2">
+        {/* Search - takes available space but capped */}
+        <div className="relative flex-1 min-w-[200px] max-w-[320px]">
           <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             ref={searchInputRef}
-            placeholder="Search items... (press /)"
+            placeholder="Search... (/)"
             value={filters.searchTerm}
             onChange={(e) => onFilterChange('searchTerm', e.target.value)}
             className="pl-8 h-9"
           />
         </div>
         
-        {/* Filter controls */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Status Filter */}
-          <Select 
-            value={filters.statusFilter} 
-            onValueChange={(value: any) => { 
-              onFilterChange('statusFilter', value); 
-              onFilterChange('activeQuickFilter', null); 
-            }}
-          >
-            <SelectTrigger className="w-[120px] h-9">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="out-of-stock">Out of Stock</SelectItem>
-              <SelectItem value="sold">Sold</SelectItem>
-              <SelectItem value="errors">Errors</SelectItem>
-              <SelectItem value="deleted">Deleted</SelectItem>
-              <SelectItem value="all">All</SelectItem>
-            </SelectContent>
-          </Select>
+        {/* Status Filter */}
+        <Select 
+          value={filters.statusFilter} 
+          onValueChange={(value: any) => { 
+            onFilterChange('statusFilter', value); 
+            onFilterChange('activeQuickFilter', null); 
+          }}
+        >
+          <SelectTrigger className="w-[110px] h-9 shrink-0">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="active">Active</SelectItem>
+            <SelectItem value="out-of-stock">Out of Stock</SelectItem>
+            <SelectItem value="sold">Sold</SelectItem>
+            <SelectItem value="errors">Errors</SelectItem>
+            <SelectItem value="deleted">Deleted</SelectItem>
+            <SelectItem value="all">All</SelectItem>
+          </SelectContent>
+        </Select>
 
-          {/* Location Filter */}
-          <Select 
-            value={filters.locationFilter || 'all'} 
-            onValueChange={(value: string) => onFilterChange('locationFilter', value === 'all' ? null : value)}
-          >
-            <SelectTrigger className="w-[140px] h-9">
-              <MapPin className="h-3.5 w-3.5 mr-1 text-muted-foreground shrink-0" />
-              <SelectValue placeholder="Location" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Locations</SelectItem>
-              {locationsMap && Array.from(locationsMap.values()).map(loc => (
-                <SelectItem key={loc.location_gid} value={loc.location_gid}>
-                  {loc.location_name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        {/* Location Filter */}
+        <Select 
+          value={filters.locationFilter || 'all'} 
+          onValueChange={(value: string) => onFilterChange('locationFilter', value === 'all' ? null : value)}
+        >
+          <SelectTrigger className="w-[130px] h-9 shrink-0">
+            <MapPin className="h-3.5 w-3.5 mr-1 text-muted-foreground shrink-0" />
+            <SelectValue placeholder="Location" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Locations</SelectItem>
+            {locationsMap && Array.from(locationsMap.values()).map(loc => (
+              <SelectItem key={loc.location_gid} value={loc.location_gid}>
+                {loc.location_name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
-          {/* More Filters Popover */}
-          <MoreFiltersPopover
-            typeFilter={filters.typeFilter}
-            onTypeFilterChange={(value) => onFilterChange('typeFilter', value)}
-            categoryFilter={filters.categoryFilter}
-            onCategoryFilterChange={(value) => onFilterChange('categoryFilter', value)}
-            shopifySyncFilter={filters.shopifySyncFilter}
-            onShopifySyncFilterChange={(value) => { 
-              onFilterChange('shopifySyncFilter', value); 
-              onFilterChange('activeQuickFilter', null); 
-            }}
-            ebayStatusFilter={filters.ebayStatusFilter}
-            onEbayStatusFilterChange={(value) => { 
-              onFilterChange('ebayStatusFilter', value); 
-              onFilterChange('activeQuickFilter', null); 
-            }}
-            printStatusFilter={filters.printStatusFilter}
-            onPrintStatusFilterChange={(value) => { 
-              onFilterChange('printStatusFilter', value); 
-              onFilterChange('activeQuickFilter', null); 
-            }}
-            dateRangeFilter={filters.dateRangeFilter}
-            onDateRangeFilterChange={(value) => { 
-              onFilterChange('dateRangeFilter', value); 
-              onFilterChange('activeQuickFilter', null); 
-            }}
-            batchFilter={filters.batchFilter}
-            onBatchFilterChange={(value) => onFilterChange('batchFilter', value)}
-            tagFilter={filters.tagFilter}
-            onTagFilterChange={(tags) => onFilterChange('tagFilter', tags)}
-            shopifyTags={shopifyTags}
-            isLoadingTags={isLoadingTags}
-          />
-        </div>
+        {/* More Filters Popover */}
+        <MoreFiltersPopover
+          typeFilter={filters.typeFilter}
+          onTypeFilterChange={(value) => onFilterChange('typeFilter', value)}
+          categoryFilter={filters.categoryFilter}
+          onCategoryFilterChange={(value) => onFilterChange('categoryFilter', value)}
+          shopifySyncFilter={filters.shopifySyncFilter}
+          onShopifySyncFilterChange={(value) => { 
+            onFilterChange('shopifySyncFilter', value); 
+            onFilterChange('activeQuickFilter', null); 
+          }}
+          ebayStatusFilter={filters.ebayStatusFilter}
+          onEbayStatusFilterChange={(value) => { 
+            onFilterChange('ebayStatusFilter', value); 
+            onFilterChange('activeQuickFilter', null); 
+          }}
+          printStatusFilter={filters.printStatusFilter}
+          onPrintStatusFilterChange={(value) => { 
+            onFilterChange('printStatusFilter', value); 
+            onFilterChange('activeQuickFilter', null); 
+          }}
+          dateRangeFilter={filters.dateRangeFilter}
+          onDateRangeFilterChange={(value) => { 
+            onFilterChange('dateRangeFilter', value); 
+            onFilterChange('activeQuickFilter', null); 
+          }}
+          batchFilter={filters.batchFilter}
+          onBatchFilterChange={(value) => onFilterChange('batchFilter', value)}
+          tagFilter={filters.tagFilter}
+          onTagFilterChange={(tags) => onFilterChange('tagFilter', tags)}
+          shopifyTags={shopifyTags}
+          isLoadingTags={isLoadingTags}
+        />
       </div>
 
-      {/* Active filter chips - compact row */}
-      {activeChips.length > 0 && (
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-xs text-muted-foreground mr-1">Filters:</span>
-          {activeChips.map((chip) => (
-            <FilterChip key={chip.key} label={chip.label} onRemove={chip.onRemove} />
-          ))}
+      {/* Active filter chips - always visible when filters active */}
+      {hasActiveFilters && (
+        <div className="flex items-center gap-1.5 min-h-[28px]">
+          <span className="text-xs text-muted-foreground shrink-0">Active:</span>
+          <div className="flex items-center gap-1.5 flex-wrap flex-1">
+            {filters.searchTerm && (
+              <FilterChip 
+                label={`"${filters.searchTerm}"`} 
+                onRemove={() => onFilterChange('searchTerm', '')} 
+              />
+            )}
+            {activeChips.map((chip) => (
+              <FilterChip key={chip.key} label={chip.label} onRemove={chip.onRemove} />
+            ))}
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onClearAllFilters}
+            className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground shrink-0"
+          >
+            Clear all
+          </Button>
         </div>
       )}
     </div>
