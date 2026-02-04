@@ -7,6 +7,8 @@ interface UseKeyboardNavigationOptions {
   onClearSelection: () => void;
   onSelectAll: () => void;
   onSync?: () => void;
+  onPrint?: () => void;
+  onExpandDetails?: (id: string) => void;
   searchInputRef?: React.RefObject<HTMLInputElement>;
   virtualizerScrollToIndex?: (index: number) => void;
   enabled?: boolean;
@@ -19,6 +21,8 @@ export function useKeyboardNavigation({
   onClearSelection,
   onSelectAll,
   onSync,
+  onPrint,
+  onExpandDetails,
   searchInputRef,
   virtualizerScrollToIndex,
   enabled = true,
@@ -84,6 +88,15 @@ export function useKeyboardNavigation({
         }
         break;
 
+      case 'Enter':
+        // Expand details for focused item
+        if (focusedIndex >= 0 && focusedIndex < items.length && onExpandDetails) {
+          event.preventDefault();
+          const item = items[focusedIndex];
+          onExpandDetails(item.id);
+        }
+        break;
+
       case 'Escape':
         // Clear selection
         event.preventDefault();
@@ -104,6 +117,14 @@ export function useKeyboardNavigation({
         if (selectedItems.size > 0 && onSync) {
           event.preventDefault();
           onSync();
+        }
+        break;
+
+      case 'p':
+        // Print selected items
+        if (selectedItems.size > 0 && onPrint) {
+          event.preventDefault();
+          onPrint();
         }
         break;
 
@@ -130,7 +151,7 @@ export function useKeyboardNavigation({
         }
         break;
     }
-  }, [enabled, items, focusedIndex, onToggleSelection, onClearSelection, onSelectAll, onSync, searchInputRef, selectedItems.size, scrollToFocusedItem]);
+  }, [enabled, items, focusedIndex, onToggleSelection, onClearSelection, onSelectAll, onSync, onPrint, onExpandDetails, searchInputRef, selectedItems.size, scrollToFocusedItem]);
 
   useEffect(() => {
     if (!enabled) return;
