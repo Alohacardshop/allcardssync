@@ -1,7 +1,8 @@
 import { useState, useCallback } from 'react';
+import type { InventoryListItem } from '../types';
 
 interface UseInventorySelectionOptions {
-  items: any[];
+  items: InventoryListItem[];
 }
 
 interface UseInventorySelectionReturn {

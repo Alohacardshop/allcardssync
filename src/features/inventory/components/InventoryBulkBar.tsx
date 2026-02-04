@@ -2,7 +2,7 @@ import React from 'react';
 import { Button } from '@/components/ui/button';
 import { CheckSquare } from 'lucide-react';
 import { BulkActionsToolbar } from '@/components/inventory/BulkActionsToolbar';
-import type { InventoryBulkBarProps } from '../types';
+import type { InventoryBulkBarProps, InventoryListItem } from '../types';
 
 interface InventoryBulkBarContainerProps extends InventoryBulkBarProps {
   totalCount: number;

@@ -1,5 +1,60 @@
 // Type definitions for the inventory feature module
 import type { CachedLocation } from '@/hooks/useLocationNames';
+import type { InventoryItem } from '@/types/inventory';
+
+/**
+ * InventoryListItem - Lightweight type for list view queries
+ * Contains only fields selected by useInventoryListQuery
+ */
+export interface InventoryListItem {
+  id: string;
+  sku: string | null;
+  brand_title: string | null;
+  subject: string | null;
+  grade: string | null;
+  price: number | null;
+  quantity: number;
+  type: string | null;
+  created_at: string;
+  printed_at: string | null;
+  shopify_sync_status: string | null;
+  shopify_product_id: string | null;
+  shopify_inventory_item_id?: string | null;
+  store_key: string | null;
+  shopify_location_gid: string | null;
+  main_category: string | null;
+  removed_from_batch_at: string | null;
+  deleted_at: string | null;
+  sold_at: string | null;
+  card_number: string | null;
+  ebay_price_check: {
+    checked_at?: string;
+    ebay_average?: number;
+    difference_percent?: number;
+    price_count?: number;
+  } | null;
+  shopify_snapshot: Record<string, unknown> | null;
+  ebay_listing_id: string | null;
+  ebay_listing_url: string | null;
+  ebay_sync_status: string | null;
+  ebay_sync_error: string | null;
+  list_on_ebay: boolean | null;
+  psa_cert: string | null;
+  cgc_cert: string | null;
+  grading_company: string | null;
+  vendor: string | null;
+  year: string | null;
+  category: string | null;
+  variant: string | null;
+  shopify_tags: string[] | null;
+  normalized_tags: string[] | null;
+  // Optional fields that may be needed for title generation
+  catalog_snapshot?: {
+    year?: string;
+    varietyPedigree?: string;
+    [key: string]: unknown;
+  } | null;
+}
 
 /**
  * Status filter options for inventory items
@@ -69,10 +124,9 @@ export interface InventorySelectionState {
 
 /**
  * Props for VirtualInventoryList component
- * Uses any[] for items since they come from dynamic query results
  */
 export interface VirtualInventoryListProps {
-  items: any[];
+  items: InventoryListItem[];
   selectedItems: Set<string>;
   expandedItems: Set<string>;
   isAdmin: boolean;
@@ -81,12 +135,12 @@ export interface VirtualInventoryListProps {
   focusedIndex?: number;
   onToggleSelection: (id: string) => void;
   onToggleExpanded: (id: string) => void;
-  onSync: (item: any) => void;
-  onRetrySync: (item: any) => void;
-  onResync: (item: any) => void;
-  onRemove: (item: any) => void;
-  onDelete?: (item: any) => void;
-  onSyncDetails: (item: any) => void;
+  onSync: (item: InventoryListItem) => void;
+  onRetrySync: (item: InventoryListItem) => void;
+  onResync: (item: InventoryListItem) => void;
+  onRemove: (item: InventoryListItem) => void;
+  onDelete?: (item: InventoryListItem) => void;
+  onSyncDetails: (item: InventoryListItem) => void;
   isLoading: boolean;
   hasNextPage?: boolean;
   isFetchingNextPage?: boolean;
@@ -113,11 +167,10 @@ export interface InventoryFiltersBarProps {
 
 /**
  * Props for bulk actions bar
- * Uses any[] for items since they come from dynamic query results
  */
 export interface InventoryBulkBarProps {
   selectedItems: Set<string>;
-  filteredItems: any[];
+  filteredItems: InventoryListItem[];
   isAdmin: boolean;
   statusFilter: InventoryStatusFilter;
   bulkRetrying: boolean;
@@ -136,14 +189,14 @@ export interface InventoryBulkBarProps {
  * Action handlers interface for inventory operations
  */
 export interface InventoryActionHandlers {
-  handleSync: (item: any) => Promise<void>;
-  handleRetrySync: (item: any) => Promise<void>;
-  handleResync: (item: any) => Promise<void>;
+  handleSync: (item: InventoryListItem) => Promise<void>;
+  handleRetrySync: (item: InventoryListItem) => Promise<void>;
+  handleResync: (item: InventoryListItem) => Promise<void>;
   handleSyncSelected: () => Promise<void>;
   handleResyncSelected: () => Promise<void>;
   handleBulkRetrySync: () => Promise<void>;
   handleRemoveFromShopify: (mode: 'delete') => Promise<void>;
-  handleDeleteItems: (items: any[]) => Promise<void>;
+  handleDeleteItems: (items: InventoryListItem[]) => Promise<void>;
   handlePrintSelected: () => void;
 }
 
@@ -155,7 +208,7 @@ export interface InventoryDialogState {
   showDeleteDialog: boolean;
   showResyncConfirm: boolean;
   showPrintDialog: boolean;
-  selectedItemForRemoval: any | any[] | null;
-  selectedItemsForDeletion: any[];
-  syncDetailsRow: any | null;
+  selectedItemForRemoval: InventoryListItem | InventoryListItem[] | null;
+  selectedItemsForDeletion: InventoryListItem[];
+  syncDetailsRow: InventoryListItem | null;
 }
