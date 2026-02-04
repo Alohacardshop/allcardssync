@@ -24,7 +24,7 @@ const Index = React.lazy(() => import("./pages/Index"));
 
 const DocumentsPage = React.lazy(() => import("./features/docs/pages/DocumentsPage"));
 const TestHardwarePage = React.lazy(() => import("./pages/TestHardwarePage"));
-const Inventory = React.lazy(() => import("./pages/Inventory"));
+const Inventory = React.lazy(() => import("./features/inventory/pages/InventoryPage"));
 const Batches = React.lazy(() => import("./pages/Batches"));
 const Admin = React.lazy(() => import("./pages/Admin"));
 const NotFound = React.lazy(() => import("./pages/NotFound"));
