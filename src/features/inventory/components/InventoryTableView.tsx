@@ -17,14 +17,9 @@ import {
   ArrowUpDown, 
   ArrowUp, 
   ArrowDown,
-  ExternalLink,
-  RotateCcw,
   Trash2,
   FileText,
-  ShoppingBag,
-  CheckCircle,
-  Printer,
-  MapPin
+  ShoppingBag
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
@@ -108,17 +103,25 @@ const TableRow = memo(({
   // Determine primary action based on status
   const primaryAction = useMemo(() => {
     if (item.deleted_at || item.sold_at) return null;
-    if (status === 'pending') return { label: 'Sync', action: () => onSync(item), icon: ExternalLink };
-    if (status === 'error') return { label: 'Retry', action: () => onRetrySync(item), icon: RotateCcw };
-    if (status === 'synced' && item.shopify_product_id) return { label: 'Resync', action: () => onResync(item), icon: RotateCcw };
+    if (status === 'pending') return { label: 'Sync', action: () => onSync(item) };
+    if (status === 'error') return { label: 'Retry', action: () => onRetrySync(item) };
+    if (status === 'synced' && item.shopify_product_id) return { label: 'Resync', action: () => onResync(item) };
     return null;
   }, [status, item, onSync, onRetrySync, onResync]);
 
+  const formattedDate = new Date(item.updated_at).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+
   return (
-    <TooltipProvider>
+    <TooltipProvider delayDuration={200}>
       <div 
         className={cn(
-          "grid grid-cols-[40px_100px_1fr_100px_80px_70px_90px_80px_90px_100px_80px_50px] gap-2 items-center px-3 py-2 border-b border-border hover:bg-muted/50 text-sm",
+          "grid grid-cols-[40px_90px_1fr_100px_70px_60px_80px_70px_80px_90px_70px_44px] gap-2 items-center px-3 py-2 border-b border-border hover:bg-muted/50 text-sm",
           isSelected && "bg-primary/5",
           item.deleted_at && "opacity-50"
         )}
@@ -131,30 +134,27 @@ const TableRow = memo(({
           />
         </div>
 
-        {/* SKU */}
-        <div className="font-mono text-xs truncate" title={item.sku || ''}>
+        {/* SKU - monospace, muted */}
+        <div className="font-mono text-xs text-muted-foreground truncate" title={item.sku || ''}>
           {item.sku}
         </div>
 
-        {/* Title */}
-        <div className="truncate font-medium" title={title}>
+        {/* Title - bold, primary color */}
+        <div className="truncate font-semibold text-foreground" title={title}>
           {title}
         </div>
 
         {/* Location */}
-        <div className="text-xs truncate">
+        <div className="text-xs text-muted-foreground truncate">
           {item.shopify_location_gid && locationsMap ? (
-            <span className="flex items-center gap-1">
-              <MapPin className="h-3 w-3 text-muted-foreground shrink-0" />
-              <span className="truncate">{getShortLocationName(item.shopify_location_gid, locationsMap)}</span>
-            </span>
+            <span className="truncate">{getShortLocationName(item.shopify_location_gid, locationsMap)}</span>
           ) : (
-            <span className="text-muted-foreground">—</span>
+            <span>—</span>
           )}
         </div>
 
         {/* Price */}
-        <div className="text-right tabular-nums">
+        <div className="text-right tabular-nums font-medium">
           ${(item.price || 0).toFixed(2)}
         </div>
 
@@ -168,37 +168,33 @@ const TableRow = memo(({
           />
         </div>
 
-        {/* Shopify Status */}
+        {/* Shopify Status - consistent chip */}
         <div className="flex justify-center">
           <Badge 
             variant={syncStatus.variant}
             className={cn(
-              "text-xs",
+              "text-[10px] h-5 px-1.5 font-medium",
               syncStatus.loading && "animate-pulse"
             )}
           >
-            {syncStatus.loading && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+            {syncStatus.loading && <Loader2 className="h-3 w-3 mr-0.5 animate-spin" />}
             {syncStatus.label}
           </Badge>
         </div>
 
-        {/* Print Status */}
+        {/* Print Status - minimal badge */}
         <div className="flex justify-center">
-          {item.printed_at ? (
-            <Tooltip>
-              <TooltipTrigger>
-                <CheckCircle className="h-4 w-4 text-primary" />
-              </TooltipTrigger>
-              <TooltipContent>Printed</TooltipContent>
-            </Tooltip>
-          ) : (
-            <Tooltip>
-              <TooltipTrigger>
-                <Printer className="h-4 w-4 text-muted-foreground" />
-              </TooltipTrigger>
-              <TooltipContent>Not Printed</TooltipContent>
-            </Tooltip>
-          )}
+          <Badge
+            variant={item.printed_at ? "default" : "outline"}
+            className={cn(
+              "text-[10px] h-5 px-1.5 font-medium",
+              item.printed_at 
+                ? "bg-primary/10 text-primary border-primary/20 hover:bg-primary/20" 
+                : "text-muted-foreground"
+            )}
+          >
+            {item.printed_at ? 'Printed' : 'No Label'}
+          </Badge>
         </div>
 
         {/* eBay Status */}
@@ -212,9 +208,18 @@ const TableRow = memo(({
           />
         </div>
 
-        {/* Updated */}
-        <div className="text-xs text-muted-foreground truncate" title={item.updated_at}>
-          {formatDistanceToNow(new Date(item.updated_at), { addSuffix: true })}
+        {/* Updated - relative with tooltip */}
+        <div className="flex justify-center">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="text-xs text-muted-foreground cursor-default truncate">
+                {formatDistanceToNow(new Date(item.updated_at), { addSuffix: true }).replace('about ', '')}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="text-xs">
+              {formattedDate}
+            </TooltipContent>
+          </Tooltip>
         </div>
 
         {/* Primary Action - fixed width */}
@@ -225,27 +230,22 @@ const TableRow = memo(({
               size="sm"
               onClick={primaryAction.action}
               disabled={isLoading}
-              className="h-7 w-[70px] text-xs"
+              className="h-6 px-2 text-[10px] font-medium"
             >
               {isLoading ? (
                 <Loader2 className="h-3 w-3 animate-spin" />
               ) : (
-                <>
-                  <primaryAction.icon className="h-3 w-3 mr-1" />
-                  {primaryAction.label}
-                </>
+                primaryAction.label
               )}
             </Button>
-          ) : (
-            <span className="w-[70px]" /> // Placeholder to maintain column width
-          )}
+          ) : null}
         </div>
 
         {/* Kebab Menu */}
         <div className="flex justify-center">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+              <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
                 <MoreVertical className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
@@ -460,7 +460,7 @@ export const InventoryTableView = memo(({
   return (
     <div className="rounded-lg border bg-card overflow-hidden flex flex-col h-full">
       {/* Sticky Header */}
-      <div className="shrink-0 grid grid-cols-[40px_100px_1fr_100px_80px_70px_90px_80px_90px_100px_80px_50px] gap-2 items-center px-3 py-2 bg-muted/50 border-b font-medium text-xs sticky top-0 z-10">
+      <div className="shrink-0 grid grid-cols-[40px_90px_1fr_100px_70px_60px_80px_70px_80px_90px_70px_44px] gap-2 items-center px-3 py-2 bg-muted/50 border-b font-medium text-xs sticky top-0 z-10">
         <div className="flex items-center justify-center">
           <Checkbox
             checked={allSelected}
@@ -476,10 +476,10 @@ export const InventoryTableView = memo(({
         <SortableHeader label="Price" field="price" sortConfig={sortConfig} onSort={handleSort} className="justify-end" />
         <SortableHeader label="Qty" field="quantity" sortConfig={sortConfig} onSort={handleSort} className="justify-center" />
         <span className="text-muted-foreground text-center">Shopify</span>
-        <span className="text-muted-foreground text-center">Print</span>
+        <span className="text-muted-foreground text-center">Label</span>
         <span className="text-muted-foreground text-center">eBay</span>
-        <SortableHeader label="Updated" field="updated_at" sortConfig={sortConfig} onSort={handleSort} />
-        <span className="text-muted-foreground text-center">Action</span>
+        <SortableHeader label="Updated" field="updated_at" sortConfig={sortConfig} onSort={handleSort} className="justify-center" />
+        <span></span>
         <span></span>
       </div>
 
