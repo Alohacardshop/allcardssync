@@ -19,7 +19,8 @@ import {
   ChevronDown,
   ChevronRight,
   Cloud,
-  Database
+  Database,
+  Wifi
 } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
@@ -35,6 +36,7 @@ import {
 } from '@/components/ui/collapsible';
 import { TruthModeBadge } from '@/components/inventory/TruthModeBadge';
 import type { InventoryTruthMode } from '@/hooks/useInventoryTruthMode';
+import { ShopifyHeartbeatWarning, HeartbeatStatusBadge } from '@/components/admin/ShopifyHeartbeatWarning';
 
 interface WebhookStats {
   store_key: string;
@@ -190,8 +192,24 @@ export function SyncHealthDashboard() {
 
   return (
     <div className="space-y-6">
+      {/* Heartbeat Warning - Only shows if stale activity detected */}
+      <ShopifyHeartbeatWarning />
+
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        {/* Heartbeat Status Card */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Wifi className="h-4 w-4 text-muted-foreground" />
+              Shopify Heartbeat
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ShopifyHeartbeatWarning compact />
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -402,6 +420,10 @@ export function SyncHealthDashboard() {
                                     </div>
                                   </div>
                                   <div className="flex items-center gap-2">
+                                    <HeartbeatStatusBadge 
+                                      storeKey={store.store_key} 
+                                      locationGid={loc.location_gid} 
+                                    />
                                     {loc.current_drift_count > 0 ? (
                                       <Badge variant="destructive" className="text-xs">
                                         {loc.current_drift_count} drift
