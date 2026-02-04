@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 import { EbayPriceComparison } from '@/components/inventory/EbayPriceComparison';
 import { EbayStatusBadge } from '@/components/inventory/EbayStatusBadge';
+import { TagEditor } from '@/components/inventory/TagEditor';
 import { checkEbayPrice, generateEbaySearchQuery } from '@/lib/ebayPriceCheck';
 import { toast } from 'sonner';
 import { 
@@ -482,6 +483,12 @@ export const InventoryItemCard = memo(({
               +{item.shopify_tags.length - 3} more
             </Badge>
           )}
+          {/* Tag Editor */}
+          <TagEditor
+            itemId={item.id}
+            currentTags={item.shopify_tags || []}
+            normalizedTags={item.normalized_tags || []}
+          />
         </div>
 
         <div className="flex flex-wrap gap-1">
@@ -609,7 +616,10 @@ export const InventoryItemCard = memo(({
     prevProps.item.ebay_listing_id === nextProps.item.ebay_listing_id &&
     prevProps.isSelected === nextProps.isSelected &&
     prevProps.isExpanded === nextProps.isExpanded &&
-    prevProps.syncingRowId === nextProps.syncingRowId
+    prevProps.syncingRowId === nextProps.syncingRowId &&
+    // Include tag fields for tag editor updates
+    JSON.stringify(prevProps.item.shopify_tags) === JSON.stringify(nextProps.item.shopify_tags) &&
+    JSON.stringify(prevProps.item.normalized_tags) === JSON.stringify(nextProps.item.normalized_tags)
   );
 });
 

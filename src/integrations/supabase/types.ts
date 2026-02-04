@@ -3592,6 +3592,13 @@ export type Database = {
           total_processed: number
         }[]
       }
+      get_tag_counts: {
+        Args: { p_store_key: string }
+        Returns: {
+          count: number
+          tag: string
+        }[]
+      }
       get_webhook_health_stats: {
         Args: never
         Returns: {
