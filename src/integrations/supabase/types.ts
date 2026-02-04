@@ -3163,6 +3163,7 @@ export type Database = {
           event_type: string
           id: string
           last_retry_at: string | null
+          location_gid: string | null
           max_retries: number | null
           payload: Json
           processed_at: string | null
@@ -3170,6 +3171,7 @@ export type Database = {
           processing_started_at: string | null
           retry_count: number | null
           status: string | null
+          store_key: string | null
           webhook_id: string
         }
         Insert: {
@@ -3179,6 +3181,7 @@ export type Database = {
           event_type: string
           id?: string
           last_retry_at?: string | null
+          location_gid?: string | null
           max_retries?: number | null
           payload: Json
           processed_at?: string | null
@@ -3186,6 +3189,7 @@ export type Database = {
           processing_started_at?: string | null
           retry_count?: number | null
           status?: string | null
+          store_key?: string | null
           webhook_id: string
         }
         Update: {
@@ -3195,6 +3199,7 @@ export type Database = {
           event_type?: string
           id?: string
           last_retry_at?: string | null
+          location_gid?: string | null
           max_retries?: number | null
           payload?: Json
           processed_at?: string | null
@@ -3202,7 +3207,50 @@ export type Database = {
           processing_started_at?: string | null
           retry_count?: number | null
           status?: string | null
+          store_key?: string | null
           webhook_id?: string
+        }
+        Relationships: []
+      }
+      webhook_health: {
+        Row: {
+          created_at: string
+          event_count: number
+          id: string
+          last_error: string | null
+          last_error_at: string | null
+          last_received_at: string
+          last_webhook_id: string | null
+          location_gid: string | null
+          store_key: string
+          topic: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          event_count?: number
+          id?: string
+          last_error?: string | null
+          last_error_at?: string | null
+          last_received_at?: string
+          last_webhook_id?: string | null
+          location_gid?: string | null
+          store_key: string
+          topic: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          event_count?: number
+          id?: string
+          last_error?: string | null
+          last_error_at?: string | null
+          last_received_at?: string
+          last_webhook_id?: string | null
+          location_gid?: string | null
+          store_key?: string
+          topic?: string
+          updated_at?: string
         }
         Relationships: []
       }
