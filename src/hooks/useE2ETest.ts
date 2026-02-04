@@ -215,8 +215,26 @@ export function useE2ETest() {
   // Queue items for eBay sync
   const queueForEbay = useCallback(async (itemIds: string[]) => {
     try {
+      // Verify items still exist in database before queueing (prevents FK violations)
+      const { data: existingItems } = await supabase
+        .from('intake_items')
+        .select('id')
+        .in('id', itemIds)
+        .is('deleted_at', null);
+      
+      const validIds = (existingItems || []).map(i => i.id);
+      
+      if (validIds.length === 0) {
+        toast.error('No valid items to queue - items may have been deleted');
+        return;
+      }
+      
+      if (validIds.length < itemIds.length) {
+        toast.warning(`${itemIds.length - validIds.length} item(s) were skipped (already deleted)`);
+      }
+      
       // Insert into ebay_sync_queue with upsert to prevent duplicates
-      const queueItems = itemIds.map(id => ({
+      const queueItems = validIds.map(id => ({
         inventory_item_id: id,
         action: 'create' as const,
         status: 'queued',
@@ -236,11 +254,11 @@ export function useE2ETest() {
       setState(s => ({
         ...s,
         testItems: s.testItems.map(item => 
-          itemIds.includes(item.id) ? { ...item, status: 'ebay_queued' as TestItemStatus } : item
+          validIds.includes(item.id) ? { ...item, status: 'ebay_queued' as TestItemStatus } : item
         )
       }));
       
-      toast.success(`Queued ${itemIds.length} item(s) for eBay sync`);
+      toast.success(`Queued ${validIds.length} item(s) for eBay sync`);
     } catch (error) {
       console.error('Failed to queue for eBay:', error);
       toast.error('Failed to queue for eBay');
@@ -249,7 +267,12 @@ export function useE2ETest() {
 
   // Process eBay queue
   const processEbayQueue = useCallback(async () => {
-    setState(s => ({ ...s, isEbaySyncing: true }));
+    // Get fresh item IDs from state to avoid stale references
+    let testItemIds: string[] = [];
+    setState(s => {
+      testItemIds = s.testItems.map(i => i.id);
+      return { ...s, isEbaySyncing: true };
+    });
     
     try {
       // Update status to processing
@@ -266,8 +289,7 @@ export function useE2ETest() {
       
       if (error) throw error;
       
-      // Fetch updated status from database
-      const testItemIds = state.testItems.map(i => i.id);
+      // Fetch updated status from database (testItemIds already captured above)
       const { data: updatedItems } = await supabase
         .from('intake_items')
         .select('id, ebay_sync_status, ebay_sync_error, ebay_listing_id')
