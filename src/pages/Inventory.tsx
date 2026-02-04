@@ -23,9 +23,11 @@ import { ShopifySyncDetailsDialog } from '@/components/ShopifySyncDetailsDialog'
 import { InventoryDeleteDialog } from '@/components/InventoryDeleteDialog';
 import { ConfirmationDialog } from '@/components/ConfirmationDialog';
 import { RefreshControls } from '@/components/RefreshControls';
+import { CompactRefreshControls } from '@/components/inventory/CompactRefreshControls';
 import { BulkActionsToolbar } from '@/components/inventory/BulkActionsToolbar';
 import { QuickFilterPresets, QuickFilterState } from '@/components/inventory/QuickFilterPresets';
 import { PrintFromInventoryDialog } from '@/components/inventory/PrintFromInventoryDialog';
+import { ActiveFilterChips } from '@/components/inventory/ActiveFilterChips';
 import { PageHeader } from '@/components/layout/PageHeader';
 
 import { useInventoryListQuery } from '@/hooks/useInventoryListQuery';
@@ -358,6 +360,7 @@ const Inventory = () => {
     shopifySyncFilter,
     ebayStatusFilter,
     dateRangeFilter,
+    hasActiveSelection: selectedItems.size > 0, // Smart refresh - pause when selecting
   });
 
   // Flatten paginated data
