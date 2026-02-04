@@ -1,156 +1,160 @@
 
-# Inventory Management Overhaul Plan ✅ COMPLETED
 
-## Overview
-This plan addresses three interconnected improvements:
-1. ✅ **Location visibility** - Show item locations in the inventory and allow viewing items across all locations
-2. ✅ **UI simplification** - Remove redundant category tabs and consolidate into unified filters
-3. ✅ **Sealed product handling** - Ensure sealed products are properly categorized
+# Shopify Tag-Based Filtering Enhancement
 
-## Phase 1: Location Name Resolution
+## Summary
+Add a new "Shopify Tags" filter to the Inventory page that lets you filter by the actual tags from Shopify (like "pokemon", "baseball", "graded", etc.), while keeping the existing Raw/Graded/Comics categories only for items imported through this system.
 
-### Problem
-The import correctly pulls from all 4 Hawaii locations (Ward, Windward, Warehouse, etc.), but:
-- Location names aren't stored or displayed
-- Users can only view items from their currently selected location
-- The `shopify_location_cache` table exists but isn't being populated
+## Current State
+- Shopify products have rich tags stored in `shopify_snapshot.tags` (e.g., `["graded", "pokemon", "PSA"]`)
+- Most common tags: graded (497), pokemon (369), single (299), baseball (160), basketball (129), football (80)
+- Currently all Shopify-imported items have `type: 'Raw'` and `main_category: null`
+- The Type filter (Raw/Graded) doesn't work correctly for Shopify imports
 
-### Solution
+## Solution Overview
 
-**1.1 Populate Location Cache**
-- Modify the `shopify-locations` edge function to cache location data in `shopify_location_cache` table when fetched
-- Add a scheduled task or on-demand refresh to keep cache updated
+### 1. Add "shopify_tags" Column
+Store the raw Shopify tags as a dedicated column for efficient filtering:
+- Add `shopify_tags TEXT[]` column to `intake_items` table
+- Populate during import from `shopify_snapshot.tags`
+- Create GIN index for fast array contains queries
 
-**1.2 Add Location Display to Inventory Items**
-- Update `InventoryItemCard` to show the location name badge
-- Create a `useLocationNames` hook that fetches and caches location GID-to-name mappings
-- Display location as a small badge next to the SKU (e.g., "Ward", "Windward")
+### 2. New Multi-Select Tag Filter in UI
+Add a new filter dropdown that shows available Shopify tags:
+- Dynamic list based on tags actually in inventory
+- Multi-select capability (e.g., filter by "pokemon" AND "graded")
+- Show item count per tag
 
-**1.3 Add "All Locations" View Option**
-- Add a new location filter option: "All Locations"
-- When selected, remove the `.eq('shopify_location_gid', locationGid)` filter
-- Group or badge items by location for clarity
-
-## Phase 2: Inventory UI Simplification
-
-### Current Structure
-```text
-+------------------------------------------+
-| Inventory Management                      |
-+------------------------------------------+
-| [Inventory] [Analytics] [Printer]         |  <- Main tabs (keep)
-+------------------------------------------+
-| Category Card                             |
-| [Raw] [Graded] [Sealed] [Raw C.] [Grd C.] |  <- REMOVE these tabs
-+------------------------------------------+
-| Quick Filters: [Ready to Sync] [Errors].. |  <- Keep (primary nav)
-+------------------------------------------+
-| Filters & Search Card                     |
-| [Search] [Status] [Type] [Batch]          |  <- Consolidate here
-| [Shopify] [eBay] [Print] [Date]           |
-+------------------------------------------+
+**Tag filter options to display:**
+```
+- graded (497)
+- pokemon (369)
+- single (299)
+- baseball (160)
+- basketball (129)
+- football (80)
+- tcg (58)
+- PSA (251)
+- CGC (34)
+- Sealed (6)
 ```
 
-### Proposed Structure
-```text
-+------------------------------------------+
-| Inventory Management                      |
-+------------------------------------------+
-| [Inventory] [Analytics] [Printer]         |
-+------------------------------------------+
-| Quick Filters: [Ready to Sync] [Errors].. |  <- Move up, primary nav
-+------------------------------------------+
-| Filters Card                              |
-| [Search] [Status] [Type] [Category] [Loc] |  <- Add Location filter
-| [Shopify] [eBay] [Print] [Date] [Batch]   |
-+------------------------------------------+
+### 3. Update Category Filter Logic
+Distinguish between Shopify-imported and internally-created items:
+- **Shopify-imported**: Use `shopify_tags` for filtering (source_provider = 'shopify-pull')
+- **Internally-created**: Use existing `type`, `main_category` fields
+
+### 4. Quick Filter Presets for Popular Tags
+Add new quick filter presets:
+- "Pokemon Cards" - filters by tag "pokemon"
+- "Sports Cards" - filters by tags "baseball" OR "basketball" OR "football"
+- "Graded Items" - filters by tag "graded"
+
+## Technical Implementation
+
+### Database Changes
+
+**New column and index:**
+```sql
+-- Add shopify_tags column
+ALTER TABLE intake_items 
+ADD COLUMN IF NOT EXISTS shopify_tags TEXT[];
+
+-- Create GIN index for fast array queries
+CREATE INDEX IF NOT EXISTS idx_intake_items_shopify_tags 
+ON intake_items USING GIN (shopify_tags);
+
+-- Backfill existing data from shopify_snapshot
+UPDATE intake_items 
+SET shopify_tags = ARRAY(
+  SELECT jsonb_array_elements_text(shopify_snapshot->'tags')
+)
+WHERE shopify_snapshot IS NOT NULL 
+  AND shopify_snapshot->'tags' IS NOT NULL
+  AND shopify_tags IS NULL;
 ```
 
-### Changes
+### Files to Modify
 
-**2.1 Remove Category Tabs Card**
-- Delete the "Category" card with 5 tabs (Raw, Graded, Sealed, Raw Comics, Graded Comics)
-- This removes ~50 lines from Inventory.tsx
+1. **`supabase/functions/shopify-pull-products-by-tags/index.ts`**
+   - Add `p_shopify_tags` parameter to RPC call
+   - Extract tags array from product and pass to upsert
 
-**2.2 Add Category Dropdown Filter**
-- Add new filter dropdown with options:
-  - All Categories
-  - TCG Cards
-  - Sealed Products
-  - Comics
-- Combine with existing Type filter (Raw/Graded) for full coverage
+2. **`src/hooks/useInventoryListQuery.ts`**
+   - Add `tagFilter: string[]` to `InventoryFilters`
+   - Add query logic: `.overlaps('shopify_tags', tagFilter)` when tags selected
 
-**2.3 Add Location Dropdown Filter**
-- Add new filter dropdown with options:
-  - All Locations (default when entering page)
-  - Ward
-  - Windward
-  - Warehouse
-  - (dynamically populated from available locations)
+3. **`src/hooks/useShopifyTags.ts`** (new file)
+   - Hook to fetch distinct tags with counts
+   - Cache results for filter dropdown
 
-**2.4 Update Query Logic**
-- Modify `useInventoryListQuery` to:
-  - Make locationGid optional
-  - Add categoryFilter parameter
-  - Handle "All" options for both
+4. **`src/pages/Inventory.tsx`**
+   - Add new Tag Filter multi-select dropdown
+   - State: `const [tagFilter, setTagFilter] = useState<string[]>([])`
+   - Pass to query hook
 
-**2.5 Move Quick Filters Up**
-- Position Quick Filter Presets immediately after the main tabs
-- They become the primary workflow navigation
+5. **`src/components/inventory/TagFilterDropdown.tsx`** (new file)
+   - Multi-select dropdown component
+   - Shows tags with item counts
+   - Search/filter within tags list
 
-## Phase 3: Sealed Product Handling
+6. **`src/components/inventory/QuickFilterPresets.tsx`**
+   - Add "Pokemon", "Sports Cards", "Graded" presets
 
-### Current Issue
-- Only 6 sealed items imported (detected by Shopify tag "Sealed")
-- No `main_category` or `sub_category` set on imported items
-- Sealed tab relies solely on `shopify_snapshot->>'tags' ILIKE '%sealed%'`
+### Query Example
+```typescript
+// In useInventoryListQuery.ts
+if (tagFilter && tagFilter.length > 0) {
+  // Filter items that have ANY of the selected tags
+  query = query.overlaps('shopify_tags', tagFilter);
+}
+```
 
-### Solution
+## UI Changes
 
-**3.1 Improve Sealed Detection**
-- Update the category dropdown to detect sealed products via:
-  - Primary: `shopify_snapshot->>'tags' ILIKE '%sealed%'`
-  - Secondary: Quantity > 1 (most sealed products have multiple units)
-  - Fallback: Product title contains "booster", "box", "pack", "sealed"
+### Filters Section Layout
+```
+Row 1: [Search........] [Status▾] [Type▾] [Category▾]
+Row 2: [Location▾] [Tags ▾] [Shopify▾] [eBay▾] [Print▾] [Date▾] [Batch▾]
+                    ↑ NEW
+```
 
-**3.2 Update Import to Set Categories**
-- Modify `shopify-pull-products-by-tags` edge function to:
-  - Detect sealed products during import
-  - Set `main_category = 'sealed'` when detected
-  - This allows filtering without relying on runtime tag parsing
-
-**3.3 Add Quick Filter for Sealed**
-- Add "Sealed Products" preset to QuickFilterPresets
-- Filter: `categoryFilter: 'sealed'`
+### Tags Filter Dropdown
+```
+┌─ Tags Filter ──────────────┐
+│ 🔍 Search tags...          │
+├────────────────────────────┤
+│ ☑ pokemon (369)            │
+│ ☐ baseball (160)           │
+│ ☐ basketball (129)         │
+│ ☐ football (80)            │
+│ ☐ graded (497)             │
+│ ☐ single (299)             │
+│ ☐ Sealed (6)               │
+│ ☐ PSA (251)                │
+│ ☐ CGC (34)                 │
+└────────────────────────────┘
+```
 
 ## Implementation Order
 
 | Step | Task | Effort |
 |------|------|--------|
-| 1 | Create `useLocationNames` hook for GID-to-name mapping | Small |
-| 2 | Update `shopify-locations` to cache names in database | Small |
-| 3 | Add location badge to `InventoryItemCard` | Small |
-| 4 | Add Location dropdown filter to Inventory.tsx | Medium |
-| 5 | Update `useInventoryListQuery` for optional location | Medium |
-| 6 | Add Category dropdown filter | Medium |
-| 7 | Remove Category tabs card | Small |
-| 8 | Update import to set `main_category` for sealed | Small |
-| 9 | Add "Sealed Products" quick filter preset | Small |
-| 10 | Test end-to-end with all locations visible | Medium |
+| 1 | Add `shopify_tags` column and index | Small |
+| 2 | Backfill existing data from shopify_snapshot | Small |
+| 3 | Update Shopify import to populate `shopify_tags` | Small |
+| 4 | Create `useShopifyTags` hook | Small |
+| 5 | Create `TagFilterDropdown` component | Medium |
+| 6 | Add tag filter to Inventory.tsx | Medium |
+| 7 | Update `useInventoryListQuery` for tag filtering | Medium |
+| 8 | Add Quick Filter presets (Pokemon, Sports, Graded) | Small |
+| 9 | Test end-to-end with various tag combinations | Medium |
 
-## Technical Notes
+## Benefits
 
-### Database Changes Required
-- Ensure `shopify_location_cache` is populated on location fetch
-- Consider adding index on `intake_items(store_key, main_category)` for category filtering
+1. **Filter by actual Shopify data** - no need to re-categorize imported items
+2. **Multi-select capability** - combine tags like "pokemon" + "graded"
+3. **Clear separation** - Raw/Graded/Comics categories reserved for manual imports
+4. **Fast queries** - GIN index on array column for efficient filtering
+5. **Dynamic tags** - filter options based on what's actually in inventory
 
-### Query Performance
-- Adding "All Locations" view may increase result set size
-- Virtual list already implemented - should handle larger datasets
-- May need to increase page size or add location-based grouping
-
-### Filter State Management
-- New filters need to be added to:
-  - Component state in Inventory.tsx
-  - Query key in useInventoryListQuery
-  - URL params for shareable filter states (optional enhancement)
