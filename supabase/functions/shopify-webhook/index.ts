@@ -1019,12 +1019,27 @@ async function handleInventoryLevelUpdate(supabase: any, payload: any, shopifyDo
 
   // STEP 1: Upsert into shopify_inventory_levels table (source of truth)
   if (locationGid) {
+    // Try to get location name from cache for better display
+    let locationName: string | null = null;
+    
+    const { data: cachedLoc } = await supabase
+      .from('shopify_location_cache')
+      .select('location_name')
+      .eq('store_key', storeKey)
+      .eq('location_gid', locationGid)
+      .maybeSingle();
+    
+    if (cachedLoc?.location_name) {
+      locationName = cachedLoc.location_name;
+    }
+
     const { error: upsertError } = await supabase
       .from('shopify_inventory_levels')
       .upsert({
         store_key: storeKey,
         inventory_item_id: inventoryItemId,
         location_gid: locationGid,
+        location_name: locationName,
         available: available,
         shopify_updated_at: payload.updated_at || new Date().toISOString()
       }, {
@@ -1034,7 +1049,7 @@ async function handleInventoryLevelUpdate(supabase: any, payload: any, shopifyDo
     if (upsertError) {
       console.error('Failed to upsert shopify_inventory_levels:', upsertError);
     } else {
-      console.log(`✓ Upserted inventory level: ${storeKey}/${inventoryItemId}@${locationGid} = ${available}`);
+      console.log(`✓ Upserted inventory level: ${storeKey}/${inventoryItemId}@${locationGid} = ${available} (${locationName || 'no name'})`);
     }
   }
 

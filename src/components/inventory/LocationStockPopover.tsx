@@ -5,10 +5,11 @@ import {
   HoverCardTrigger,
 } from '@/components/ui/hover-card';
 import { Badge } from '@/components/ui/badge';
-import { MapPin, Package } from 'lucide-react';
+import { MapPin, Package, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { CachedLocation } from '@/hooks/useLocationNames';
 import { getShortLocationName, getLocationName } from '@/hooks/useLocationNames';
+import { useInventoryLevels, getTotalStock } from '@/hooks/useInventoryLevels';
 
 interface LocationStock {
   location_gid: string;
@@ -20,15 +21,26 @@ interface LocationStockPopoverProps {
   primaryLocationGid: string | null | undefined;
   locationsMap?: Map<string, CachedLocation>;
   allLocationStock?: LocationStock[];
+  /** If provided, fetches live stock from shopify_inventory_levels */
+  inventoryItemId?: string | null;
   className?: string;
 }
 
 export function LocationStockPopover({
   primaryLocationGid,
   locationsMap,
-  allLocationStock,
+  allLocationStock: providedStock,
+  inventoryItemId,
   className,
 }: LocationStockPopoverProps) {
+  // Fetch live stock from shopify_inventory_levels if inventoryItemId is provided
+  const { data: fetchedLevels, isLoading } = useInventoryLevels(
+    inventoryItemId && !providedStock ? inventoryItemId : null
+  );
+
+  // Use provided stock or fetched levels
+  const allLocationStock = providedStock || fetchedLevels || [];
+
   // If no primary location, show placeholder
   if (!primaryLocationGid) {
     return (
@@ -39,6 +51,16 @@ export function LocationStockPopover({
   const shortName = getShortLocationName(primaryLocationGid, locationsMap);
   const fullName = getLocationName(primaryLocationGid, locationsMap);
 
+  // Show loading spinner when fetching
+  if (isLoading && inventoryItemId) {
+    return (
+      <span className={cn("text-xs text-muted-foreground flex items-center gap-1", className)}>
+        <Loader2 className="h-3 w-3 animate-spin" />
+        {shortName}
+      </span>
+    );
+  }
+
   // If no multi-location stock data, just show the primary location
   if (!allLocationStock || allLocationStock.length <= 1) {
     return (
@@ -48,7 +70,7 @@ export function LocationStockPopover({
     );
   }
 
-  // Calculate total stock
+  // Calculate total stock - handle both LocationStock and InventoryLevel types
   const totalStock = allLocationStock.reduce((sum, loc) => sum + Math.max(0, loc.available), 0);
   const locationsWithStock = allLocationStock.filter(loc => loc.available > 0);
 
