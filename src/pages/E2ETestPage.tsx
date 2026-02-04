@@ -13,6 +13,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   Plus,
   RefreshCw,
@@ -163,6 +164,7 @@ export default function E2ETestPage() {
   const printedItems = testItems.filter(i => i.status === 'printed');
 
   return (
+    <TooltipProvider>
     <div className="min-h-screen bg-background">
       <div className="border-b">
         <div className="container mx-auto py-4 px-6">
@@ -343,6 +345,16 @@ export default function E2ETestPage() {
                         <div className="flex items-center gap-2 ml-4">
                           <span className="text-sm font-medium">${item.price.toFixed(2)}</span>
                           <StatusBadge status={item.status} />
+                          {(item.status === 'shopify_failed' || item.status === 'ebay_failed') && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <AlertTriangle className="h-4 w-4 text-destructive cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-[300px]">
+                                <p className="text-xs">{item.shopify_sync_error || item.ebay_sync_error || 'Unknown error'}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -535,5 +547,6 @@ export default function E2ETestPage() {
         </Card>
       </div>
     </div>
+    </TooltipProvider>
   );
 }
