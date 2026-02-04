@@ -1,213 +1,93 @@
 
-# E2E Test Dashboard Redesign: Split Panel Sync Interface
 
-## Overview
+# Go Live: Remove E2E Testing & Disable Dry-Run Mode
 
-Transform the current step-by-step card layout into a modern split-panel interface where:
-- **Left Panel**: Inventory items with filters, search, and multi-select
-- **Right Panel**: Marketplace destinations (Shopify, eBay, Print) showing sync status and actions
+## Summary
 
-This creates an intuitive "source → destination" workflow similar to file transfer UIs.
+This plan will:
+1. **Remove** the E2E Test Dashboard and all related test components
+2. **Disable dry-run mode** so eBay syncs will push real changes when triggered
+3. **Keep manual sync only** - no auto-sync, users choose what gets listed
 
 ---
 
-## Visual Design
+## Current State
 
-```text
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  E2E Test Dashboard                                      [Safety Toggles]   │
-├─────────────────────────────────────┬───────────────────────────────────────┤
-│  TEST ITEMS                         │  DESTINATIONS                         │
-│  ┌─────────────────────────────┐    │  ┌─────────────────────────────────┐  │
-│  │ 🔍 Search...    [Filters ▼] │    │  │ SHOPIFY            [Dry Run ✓] │  │
-│  └─────────────────────────────┘    │  │ ├─ 3 synced                     │  │
-│                                     │  │ └─ [Sync Selected →]            │  │
-│  [Select All] [Clear]  3 selected   │  └─────────────────────────────────┘  │
-│  ┌─────────────────────────────┐    │  ┌─────────────────────────────────┐  │
-│  │ ☑ TEST-ABC-001  Graded  ✓S │    │  │ EBAY                [Dry Run ✓] │  │
-│  │ ☑ TEST-DEF-002  Raw     ⏳E │    │  │ ├─ 2 queued, 1 synced           │  │
-│  │ ☑ TEST-GHI-003  Graded  ✓S │    │  │ └─ [Queue →] [Process Queue]    │  │
-│  │ ☐ TEST-JKL-004  Raw        │    │  └─────────────────────────────────┘  │
-│  └─────────────────────────────┘    │  ┌─────────────────────────────────┐  │
-│                                     │  │ PRINT               [Dry Run ✓] │  │
-│  ┌─────────────────────────────┐    │  │ ├─ Printer: Zebra ZD420         │  │
-│  │ Generate: [1] [3] [5]       │    │  │ └─ [Print Selected]             │  │
-│  │ [🗑 Delete All Test Items]  │    │  └─────────────────────────────────┘  │
-│  └─────────────────────────────┘    │                                       │
-├─────────────────────────────────────┴───────────────────────────────────────┤
-│  Store: Hawaii  │  Location: gid://shopify/...                              │
-└─────────────────────────────────────────────────────────────────────────────┘
+| Store | sync_enabled | dry_run_mode | sync_mode |
+|-------|--------------|--------------|-----------|
+| Hawaii | false | true | manual |
+| Las Vegas | false | true | manual |
+
+**After this change:**
+
+| Store | sync_enabled | dry_run_mode | sync_mode |
+|-------|--------------|--------------|-----------|
+| Hawaii | false | **false** | manual |
+| Las Vegas | false | **false** | manual |
+
+This means:
+- Items **won't auto-queue** (sync_enabled = false)
+- When you manually trigger sync, it **will push real changes** to eBay (dry_run = false)
+- Syncs only happen **when you click the button** (manual mode)
+
+---
+
+## Files to Delete
+
+| File | Description |
+|------|-------------|
+| `src/pages/E2ETestPage.tsx` | Main test dashboard page |
+| `src/components/e2e/E2ETestLayout.tsx` | Split-panel layout |
+| `src/components/e2e/E2EItemsPanel.tsx` | Left panel - items list |
+| `src/components/e2e/E2EDestinationsPanel.tsx` | Right panel - destinations |
+| `src/components/e2e/E2EDestinationCard.tsx` | Marketplace card component |
+| `src/components/e2e/E2EItemRow.tsx` | Item row component |
+| `src/components/e2e/E2EStatusIcons.tsx` | Status icon components |
+| `src/hooks/useE2ETest.ts` | Test hook with state management |
+| `src/lib/testDataGenerator.ts` | Synthetic test data generator |
+
+---
+
+## Files to Modify
+
+### 1. `src/App.tsx`
+- Remove import: `const E2ETestPage = React.lazy(() => import("./pages/E2ETestPage"));`
+- Remove route: `<Route path="e2e-test" element={<E2ETestPage />} />`
+
+### 2. `src/pages/Admin.tsx`  
+- Remove the E2E Testing link from the sidebar (lines 223-233)
+
+---
+
+## Database Update
+
+Run via the `ebay-update-store-config` Edge Function or direct SQL:
+
+```sql
+UPDATE ebay_store_config 
+SET dry_run_mode = false 
+WHERE store_key IN ('hawaii', 'las_vegas');
 ```
 
----
-
-## Component Architecture
-
-### New Components
-
-| Component | Purpose |
-|-----------|---------|
-| `E2ETestLayout.tsx` | Main split-panel layout using ResizablePanelGroup |
-| `E2EItemsPanel.tsx` | Left panel - items list with filters and selection |
-| `E2EDestinationsPanel.tsx` | Right panel - marketplace sync cards |
-| `E2EDestinationCard.tsx` | Individual marketplace card (Shopify/eBay/Print) |
-| `E2EItemRow.tsx` | Individual item row with status icons |
-
-### Component Structure
-
-```text
-E2ETestPage
-├── E2ETestLayout
-│   ├── ResizablePanelGroup (horizontal)
-│   │   ├── ResizablePanel (left - items)
-│   │   │   └── E2EItemsPanel
-│   │   │       ├── Search + Filters
-│   │   │       ├── Selection controls
-│   │   │       ├── ScrollArea with E2EItemRow items
-│   │   │       └── Generate/Cleanup actions
-│   │   │
-│   │   ├── ResizableHandle
-│   │   │
-│   │   └── ResizablePanel (right - destinations)
-│   │       └── E2EDestinationsPanel
-│   │           ├── E2EDestinationCard (Shopify)
-│   │           ├── E2EDestinationCard (eBay)
-│   │           └── E2EDestinationCard (Print)
-│   │
-│   └── Footer (store/location info)
-```
+This turns off dry-run so syncs become real eBay API calls.
 
 ---
 
-## Left Panel: Items Panel
+## What This Means for Users
 
-### Features
-
-1. **Search bar** - Filter items by SKU, title, or cert number
-2. **Filter dropdown** - Filter by:
-   - Type: All / Graded / Raw
-   - Status: All / Created / Synced / Failed
-3. **Bulk selection** - Select All / Clear / Count display
-4. **Item list** - Scrollable with checkbox selection
-5. **Item row shows**:
-   - Checkbox for selection
-   - SKU badge
-   - Type badge (Graded/Raw)
-   - Status icons: S (Shopify), E (eBay), P (Printed)
-   - Error indicator with tooltip
-6. **Generation buttons** - Quick 1/3/5 graded or raw generation
-7. **Cleanup section** - Delete all test items
+1. **No test dashboard** - The `/admin/e2e-test` page will no longer exist
+2. **Real eBay syncs** - When items are queued and processed, they will create actual eBay listings
+3. **Manual control** - Users must explicitly:
+   - Flag items with `list_on_ebay = true`
+   - Use the Sync Queue Monitor to process queued items
+   - Or create sync rules to auto-flag by category/price/etc.
 
 ---
 
-## Right Panel: Destinations Panel
+## Safety Notes
 
-### Shopify Card
-- Dry run toggle
-- Stats: X synced, Y failed
-- Button: "Sync Selected (N)" - syncs selected items
-- Progress indicator when syncing
+- **sync_enabled stays FALSE** - Items won't auto-queue
+- **No auto-sync** - Nothing happens without user action
+- **Sync rules optional** - Can add tag/category rules later when ready
+- **Queue Monitor** - Still available at `/admin/ebay` → Sync Queue tab
 
-### eBay Card  
-- Dry run status (read from config)
-- Stats: X queued, Y synced, Z failed
-- Button: "Queue Selected (N)" - adds to queue
-- Button: "Process Queue" - triggers processor
-- Progress indicator when processing
-
-### Print Card
-- Dry run toggle
-- Printer selector (QZ Tray connection)
-- Stats: X printed
-- Button: "Print Selected (N)"
-- Warning if no default template
-
----
-
-## Item Status Icons
-
-Each item shows compact status indicators:
-
-| Icon | Meaning |
-|------|---------|
-| `✓S` | Synced to Shopify (green) |
-| `⏳S` | Syncing to Shopify (yellow, animated) |
-| `✗S` | Shopify sync failed (red) |
-| `✓E` | Synced to eBay (green) |
-| `⏳E` | Queued/processing eBay (yellow) |
-| `✗E` | eBay sync failed (red) |
-| `✓P` | Printed (green) |
-
----
-
-## State Management
-
-Keep using `useE2ETest` hook but add:
-
-```typescript
-// New filter state in the hook
-filters: {
-  search: string;
-  type: 'all' | 'graded' | 'raw';
-  status: 'all' | 'created' | 'shopify_synced' | 'ebay_synced' | 'failed';
-}
-
-// Computed filtered items
-filteredItems = useMemo(() => {
-  return testItems.filter(item => {
-    // Apply search and filter logic
-  });
-}, [testItems, filters]);
-```
-
----
-
-## Files to Create/Modify
-
-| File | Action | Description |
-|------|--------|-------------|
-| `src/components/e2e/E2ETestLayout.tsx` | Create | Main split-panel layout |
-| `src/components/e2e/E2EItemsPanel.tsx` | Create | Left panel with items |
-| `src/components/e2e/E2EDestinationsPanel.tsx` | Create | Right panel with destinations |
-| `src/components/e2e/E2EDestinationCard.tsx` | Create | Individual marketplace card |
-| `src/components/e2e/E2EItemRow.tsx` | Create | Compact item row with status |
-| `src/components/e2e/E2EStatusIcons.tsx` | Create | Status icon components |
-| `src/pages/E2ETestPage.tsx` | Refactor | Use new layout components |
-| `src/hooks/useE2ETest.ts` | Extend | Add filtering logic |
-
----
-
-## Implementation Order
-
-1. Create base layout with ResizablePanelGroup
-2. Build E2EItemRow component with status icons
-3. Build E2EItemsPanel with search, filters, and item list
-4. Build E2EDestinationCard component
-5. Build E2EDestinationsPanel with Shopify/eBay/Print cards
-6. Wire up to existing useE2ETest hook
-7. Add filtering logic to hook
-8. Refactor E2ETestPage to use new components
-
----
-
-## Technical Considerations
-
-- **Responsive**: On mobile, stack panels vertically
-- **Keyboard**: Support Shift+Click for range selection
-- **Performance**: Keep virtualization for large item lists
-- **Accessibility**: Proper ARIA labels for selection and actions
-- **Error handling**: Show toast + inline error badges
-
----
-
-## Mobile Layout
-
-On screens < 768px, switch to tabbed interface:
-
-```text
-┌─────────────────────────────┐
-│  [Items] [Destinations]     │  ← Tabs
-├─────────────────────────────┤
-│  (Current tab content)      │
-└─────────────────────────────┘
-```
