@@ -1,83 +1,221 @@
-# Inventory Management Optimization - Phase 2
 
-## Implementation Status
+# Tag-Based Inventory System with Auto-Sync to Shopify
 
-| Priority | Task | Status | Notes |
-|----------|------|--------|-------|
-| 1 | Fix normalization backfill | ✅ Done | 2,110 items normalized |
-| 2 | Database tag aggregation function | ✅ Done | `get_tag_counts()` RPC |
-| 3 | Connect TagEditor to ItemCard | ✅ Done | Edit tags inline |
-| 4 | Keyboard navigation | ✅ Done | j/k, x, /, Escape, Shift+A, s, g, G |
-| 5 | MoreFiltersPopover component | ✅ Done | Consolidates 8 secondary filters |
-| 6 | Updated useShopifyTags hook | ✅ Done | Uses RPC for 100x faster |
-| 7 | Optimistic UI for tags | ✅ Done | Pre-existing in TagEditor |
-| 8 | Real-time sync updates | ✅ Done | Supabase Realtime subscription |
-| 9 | Consolidated filter UI | ✅ Done | Single row + popover |
-| 10 | Enhanced virtualizer | ✅ Done | Keyboard scroll + focus highlight |
+## Summary
 
-## Completed Changes
+This plan consolidates the inventory system around **normalized tags** as the source of truth and ensures that **tag edits made locally automatically sync to Shopify**. It also fixes the current UI overlapping issues.
 
-### Database
-- Created `get_tag_counts(p_store_key TEXT)` function for efficient tag aggregation
-- Re-ran normalization backfill: 2,110 items now have normalized_tags
-- Primary category set on 1,781 items (68%)
-- Condition type set on 2,110 items (81%)
+---
 
-### Hooks
-- **`useShopifyTags.ts`**: Now uses RPC function instead of fetching all items
-- **`useKeyboardNavigation.ts`**: Keyboard shortcuts with virtualizer integration
-- **`useInventoryRealtime.ts`** (new): Real-time sync status updates via Supabase
+## Current State Analysis
 
-### Components
-- **`InventoryItemCard.tsx`**: 
-  - Added TagEditor component inline
-  - Updated memo comparison to include shopify_tags and normalized_tags
-  
-- **`MoreFiltersPopover.tsx`** (new): 
-  - Consolidates 8 secondary filters into a popover
-  - Shows count of active filters
-  - "Clear all" button
+### What Works
+- `TagEditor` component exists and saves tags to `intake_items.shopify_tags`
+- A database trigger (`trigger_normalize_tags`) auto-normalizes tags on insert/update
+- The `shopify-tag-manager` edge function exists to update tags in Shopify
+- Quick Filter Presets use normalized tags for filtering
 
-- **`Inventory.tsx`**:
-  - Integrated keyboard navigation hook with virtualizer scroll
-  - Real-time sync status updates
-  - Consolidated filter UI (single row + popover)
-  - Focus highlight on keyboard-navigated items
+### What's Missing
+1. **No auto-sync to Shopify**: When tags are edited in TagEditor, they only update locally—Shopify products keep old tags
+2. **UI Overlap Issues**: QuickFilterPresets card and Filters card create visual clutter; BulkActionsToolbar may overlap on smaller screens
+3. **TagEditor doesn't trigger Shopify sync**: After saving tags, there's no call to push changes to Shopify
 
-- **`VirtualInventoryList`**:
-  - Accepts focusedIndex prop for visual highlight
-  - Exposes scrollToIndex for keyboard navigation
+---
 
-## Keyboard Shortcuts
+## Implementation Plan
 
-| Shortcut | Action |
-|----------|--------|
-| `j` / `↓` | Move focus down |
-| `k` / `↑` | Move focus up |
-| `x` / `Space` | Toggle item selection |
-| `Shift+A` | Select all visible |
-| `Escape` | Clear selection |
-| `s` | Sync selected items |
-| `/` | Focus search input |
-| `g` | Go to top |
-| `Shift+G` | Go to bottom |
+### Phase 1: Fix UI Layout Issues
 
-## Current Metrics (Post-Implementation)
+**Problem**: Multiple stacked cards (QuickFilterPresets, Filters) create visual clutter and overlap.
 
-| Metric | Value |
-|--------|-------|
-| Total Items | 2,615 |
-| Normalized Tags | 2,110 (81%) |
-| Primary Category | 1,781 (68%) |
-| Condition Type | 2,110 (81%) |
+**Solution**: Consolidate into a single, well-structured filter section.
 
-## Implementation Complete ✅
+**Changes to `src/pages/Inventory.tsx`**:
+- Merge QuickFilterPresets into the main filter Card header
+- Use a horizontal scrollable container for quick presets on mobile
+- Ensure proper spacing between filter rows and bulk actions
+- Add `overflow-hidden` containers to prevent visual overlap
 
-All planned phases have been implemented:
-1. ✅ Database-level tag aggregation (100x faster)
-2. ✅ Real-time sync status updates (no more polling)
-3. ✅ Normalization backfill (data quality)
-4. ✅ Consolidated filter UI (cleaner interface)
-5. ✅ Tag editor in item cards (inline editing)
-6. ✅ Keyboard navigation with virtualizer (power users)
-7. ✅ Optimistic UI for tags (pre-existing)
+```text
+Layout Structure:
+┌─────────────────────────────────────────────────────┐
+│ Quick Filters (horizontal scroll on mobile)        │
+│ [Pokemon] [Sports] [Graded] [Sealed] [Sync Errors] │
+├─────────────────────────────────────────────────────┤
+│ [Search........] [Status ▼] [Location ▼] [Filters] │
+├─────────────────────────────────────────────────────┤
+│ Bulk Actions (only when items selected)            │
+├─────────────────────────────────────────────────────┤
+│ Showing X of Y items                   [Select All]│
+└─────────────────────────────────────────────────────┘
+```
+
+### Phase 2: Auto-Sync Tags to Shopify
+
+**Trigger Point**: When `TagEditor.handleSave()` completes successfully
+
+**Flow**:
+```text
+User edits tags → Save to intake_items → DB trigger normalizes → 
+  → If item has shopify_product_id → Call edge function to update Shopify tags
+```
+
+**Changes to `src/components/inventory/TagEditor.tsx`**:
+
+1. Accept new props: `shopifyProductId`, `storeKey`, `onShopifySync`
+2. After local save succeeds, if `shopifyProductId` exists:
+   - Call `shopify-tag-manager` edge function to sync tags to Shopify
+   - Show "Syncing to Shopify..." state
+   - Show success/error toast
+
+```typescript
+// New handleSave flow
+const handleSave = async () => {
+  setIsSaving(true);
+  try {
+    // 1. Save to local database
+    const { error } = await supabase
+      .from('intake_items')
+      .update({ shopify_tags: tags, updated_at: new Date().toISOString() })
+      .eq('id', itemId);
+    if (error) throw error;
+
+    // 2. If synced to Shopify, push tags there too
+    if (shopifyProductId && storeKey) {
+      setSyncingToShopify(true);
+      try {
+        const { error: shopifyError } = await supabase.functions.invoke('shopify-tag-manager', {
+          body: {
+            action: 'replace',  // New action type for full replacement
+            tags: tags,
+            productId: shopifyProductId,
+            storeKey: storeKey
+          }
+        });
+        if (shopifyError) throw shopifyError;
+        toast.success('Tags synced to Shopify');
+      } catch (shopifyErr) {
+        toast.warning('Tags saved locally, but Shopify sync failed');
+        console.error('Shopify tag sync failed:', shopifyErr);
+      } finally {
+        setSyncingToShopify(false);
+      }
+    } else {
+      toast.success('Tags updated');
+    }
+    
+    setIsOpen(false);
+    queryClient.invalidateQueries({ queryKey: ['inventory-list'] });
+    onTagsUpdated?.();
+  } catch (error) {
+    toast.error(error.message || 'Failed to update tags');
+  } finally {
+    setIsSaving(false);
+  }
+};
+```
+
+### Phase 3: Enhance Edge Function for Tag Replacement
+
+**Current limitation**: `shopify-tag-manager` only supports `add` and `remove` actions.
+
+**Changes to `supabase/functions/shopify-tag-manager/index.ts`**:
+
+Add a `replace` action that completely replaces all product tags:
+
+```typescript
+interface TagOperation {
+  action: 'add' | 'remove' | 'replace';
+  tags: string[];
+  productId: string;
+  storeKey: string;
+}
+
+// In handler:
+if (action === 'replace') {
+  // Complete replacement - set exactly these tags
+  updatedTags = tags;
+} else if (action === 'add') {
+  updatedTags = [...new Set([...currentTags, ...tags])];
+} else {
+  updatedTags = currentTags.filter(t => !tags.includes(t));
+}
+```
+
+### Phase 4: Update InventoryItemCard Integration
+
+**Changes to `src/components/InventoryItemCard.tsx`**:
+
+Pass required props to TagEditor for Shopify sync:
+
+```typescript
+<TagEditor
+  itemId={item.id}
+  currentTags={item.shopify_tags || []}
+  normalizedTags={item.normalized_tags || []}
+  shopifyProductId={item.shopify_product_id}
+  storeKey={item.store_key}
+/>
+```
+
+---
+
+## Files to Modify
+
+| File | Changes |
+|------|---------|
+| `src/pages/Inventory.tsx` | Merge QuickFilterPresets into filter Card, fix spacing/overflow |
+| `src/components/inventory/TagEditor.tsx` | Add Shopify auto-sync after local save |
+| `src/components/InventoryItemCard.tsx` | Pass `shopifyProductId` and `storeKey` to TagEditor |
+| `supabase/functions/shopify-tag-manager/index.ts` | Add `replace` action for full tag replacement |
+
+---
+
+## Technical Details
+
+### TagEditor Props Interface (Updated)
+
+```typescript
+interface TagEditorProps {
+  itemId: string;
+  currentTags: string[];
+  normalizedTags?: string[];
+  // NEW: For Shopify auto-sync
+  shopifyProductId?: string | null;
+  storeKey?: string | null;
+  onTagsUpdated?: () => void;
+  className?: string;
+}
+```
+
+### Shopify Tag Manager - Replace Action
+
+When `action: 'replace'` is used:
+1. Fetch current product to verify it exists
+2. Completely replace tags (no merge)
+3. Return success with new tag list
+
+### UI Layout Fixes
+
+1. **Single Card for all filters**: Combine QuickFilterPresets header with filter dropdowns
+2. **Flex wrap with gap**: Prevent button overflow
+3. **Responsive breakpoints**: Stack vertically on mobile
+4. **Clear visual hierarchy**: Use subtle borders between sections
+
+---
+
+## Expected Behavior After Implementation
+
+1. **User edits tags in TagEditor** → Tags saved to local DB → Normalized by trigger → Auto-synced to Shopify
+2. **Quick filters work correctly** → Based on normalized_tags from local DB
+3. **No UI overlap** → Clean single-card layout with proper spacing
+4. **Real-time feedback** → User sees "Syncing to Shopify..." indicator during sync
+
+---
+
+## Edge Cases Handled
+
+1. **Item not yet synced to Shopify**: Tags saved locally only, no Shopify call
+2. **Shopify sync fails**: Local save succeeds, warning toast shown, tags can be re-synced later
+3. **Empty tags**: Valid case, will clear all tags from product
+4. **Network timeout**: Graceful degradation with retry on next edit
