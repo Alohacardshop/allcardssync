@@ -1,162 +1,156 @@
 
+# Inventory Management Overhaul Plan
 
-# Show Preview Items for Shopify Backfill
+## Overview
+This plan addresses three interconnected improvements:
+1. **Location visibility** - Show item locations in the inventory and allow viewing items across all locations
+2. **UI simplification** - Remove redundant category tabs and consolidate into unified filters
+3. **Sealed product handling** - Ensure sealed products are properly categorized
 
-## Problem
+## Phase 1: Location Name Resolution
 
-The current Preview Mode only shows statistics (e.g., "Would Import: 150 items") but doesn't show *which* items would be imported. You want to see the actual product names/SKUs before committing to the import.
+### Problem
+The import correctly pulls from all 4 Hawaii locations (Ward, Windward, Warehouse, etc.), but:
+- Location names aren't stored or displayed
+- Users can only view items from their currently selected location
+- The `shopify_location_cache` table exists but isn't being populated
 
----
+### Solution
 
-## Solution
+**1.1 Populate Location Cache**
+- Modify the `shopify-locations` edge function to cache location data in `shopify_location_cache` table when fetched
+- Add a scheduled task or on-demand refresh to keep cache updated
 
-Add an "items preview" feature that collects and displays sample items during dry run mode.
+**1.2 Add Location Display to Inventory Items**
+- Update `InventoryItemCard` to show the location name badge
+- Create a `useLocationNames` hook that fetches and caches location GID-to-name mappings
+- Display location as a small badge next to the SKU (e.g., "Ward", "Windward")
 
----
+**1.3 Add "All Locations" View Option**
+- Add a new location filter option: "All Locations"
+- When selected, remove the `.eq('shopify_location_gid', locationGid)` filter
+- Group or badge items by location for clarity
 
-## Technical Changes
+## Phase 2: Inventory UI Simplification
 
-### 1. Edge Function: Return Sample Items in Dry Run
-
-**File**: `supabase/functions/shopify-pull-products-by-tags/index.ts`
-
-Add a `previewItems` array that collects up to 50 sample items during dry run:
-
-```typescript
-// Add to statistics tracking (around line 200)
-let previewItems: Array<{
-  sku: string;
-  title: string;
-  quantity: number;
-  price: number;
-  location: string;
-}> = [];
-
-// Inside the variant processing loop, when dryRun is true (around line 289)
-if (dryRun) {
-  // Collect sample items for preview (limit to 50)
-  if (previewItems.length < 50) {
-    previewItems.push({
-      sku: variant.sku,
-      title: product.title + (variant.title !== 'Default Title' ? ` - ${variant.title}` : ''),
-      quantity: variant.inventory_quantity || 0,
-      price: parseFloat(variant.price) || 0,
-      location: 'Pending inventory check'
-    });
-  }
-  continue;
-}
+### Current Structure
+```text
++------------------------------------------+
+| Inventory Management                      |
++------------------------------------------+
+| [Inventory] [Analytics] [Printer]         |  <- Main tabs (keep)
++------------------------------------------+
+| Category Card                             |
+| [Raw] [Graded] [Sealed] [Raw C.] [Grd C.] |  <- REMOVE these tabs
++------------------------------------------+
+| Quick Filters: [Ready to Sync] [Errors].. |  <- Keep (primary nav)
++------------------------------------------+
+| Filters & Search Card                     |
+| [Search] [Status] [Type] [Batch]          |  <- Consolidate here
+| [Shopify] [eBay] [Print] [Date]           |
++------------------------------------------+
 ```
 
-Add `previewItems` to the result object (around line 437):
-
-```typescript
-const result = {
-  success: true,
-  dryRun,
-  previewItems: dryRun ? previewItems : undefined,  // Only in dry run
-  statistics: { ... }
-};
+### Proposed Structure
+```text
++------------------------------------------+
+| Inventory Management                      |
++------------------------------------------+
+| [Inventory] [Analytics] [Printer]         |
++------------------------------------------+
+| Quick Filters: [Ready to Sync] [Errors].. |  <- Move up, primary nav
++------------------------------------------+
+| Filters Card                              |
+| [Search] [Status] [Type] [Category] [Loc] |  <- Add Location filter
+| [Shopify] [eBay] [Print] [Date] [Batch]   |
++------------------------------------------+
 ```
 
-**Important**: For dry run, we need to run synchronously (not background) to return the preview items. Wrap the background processing logic:
+### Changes
 
-```typescript
-// For dry run, run synchronously to return preview items
-if (dryRun) {
-  await processBackfill();
-  return new Response(JSON.stringify(result), { headers: corsHeaders });
-}
+**2.1 Remove Category Tabs Card**
+- Delete the "Category" card with 5 tabs (Raw, Graded, Sealed, Raw Comics, Graded Comics)
+- This removes ~50 lines from Inventory.tsx
 
-// For actual import, run in background
-EdgeRuntime.waitUntil(processBackfill());
-return new Response(JSON.stringify({ success: true, message: 'Import started in background' }), ...);
-```
+**2.2 Add Category Dropdown Filter**
+- Add new filter dropdown with options:
+  - All Categories
+  - TCG Cards
+  - Sealed Products
+  - Comics
+- Combine with existing Type filter (Raw/Graded) for full coverage
 
----
+**2.3 Add Location Dropdown Filter**
+- Add new filter dropdown with options:
+  - All Locations (default when entering page)
+  - Ward
+  - Windward
+  - Warehouse
+  - (dynamically populated from available locations)
 
-### 2. Frontend: Display Preview Items
+**2.4 Update Query Logic**
+- Modify `useInventoryListQuery` to:
+  - Make locationGid optional
+  - Add categoryFilter parameter
+  - Handle "All" options for both
 
-**File**: `src/pages/admin/ShopifyBackfill.tsx`
+**2.5 Move Quick Filters Up**
+- Position Quick Filter Presets immediately after the main tabs
+- They become the primary workflow navigation
 
-Add `previewItems` to the result interface:
+## Phase 3: Sealed Product Handling
 
-```typescript
-interface BackfillResult {
-  // ... existing fields
-  previewItems?: Array<{
-    sku: string;
-    title: string;
-    quantity: number;
-    price: number;
-  }>;
-}
-```
+### Current Issue
+- Only 6 sealed items imported (detected by Shopify tag "Sealed")
+- No `main_category` or `sub_category` set on imported items
+- Sealed tab relies solely on `shopify_snapshot->>'tags' ILIKE '%sealed%'`
 
-Add a scrollable table to show preview items:
+### Solution
 
-```tsx
-{result.dryRun && result.previewItems && result.previewItems.length > 0 && (
-  <div className="border-t pt-4">
-    <p className="text-sm font-medium mb-2">
-      Sample Items ({result.previewItems.length} of {result.statistics?.upsertedRows || 0}):
-    </p>
-    <div className="max-h-64 overflow-auto border rounded">
-      <table className="w-full text-xs">
-        <thead className="bg-muted sticky top-0">
-          <tr>
-            <th className="p-2 text-left">SKU</th>
-            <th className="p-2 text-left">Title</th>
-            <th className="p-2 text-right">Qty</th>
-            <th className="p-2 text-right">Price</th>
-          </tr>
-        </thead>
-        <tbody>
-          {result.previewItems.map((item, i) => (
-            <tr key={i} className="border-t">
-              <td className="p-2 font-mono">{item.sku}</td>
-              <td className="p-2 truncate max-w-[200px]">{item.title}</td>
-              <td className="p-2 text-right">{item.quantity}</td>
-              <td className="p-2 text-right">${item.price.toFixed(2)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-    {(result.statistics?.upsertedRows || 0) > 50 && (
-      <p className="text-xs text-muted-foreground mt-2">
-        Showing first 50 items. {(result.statistics?.upsertedRows || 0) - 50} more items would also be imported.
-      </p>
-    )}
-  </div>
-)}
-```
+**3.1 Improve Sealed Detection**
+- Update the category dropdown to detect sealed products via:
+  - Primary: `shopify_snapshot->>'tags' ILIKE '%sealed%'`
+  - Secondary: Quantity > 1 (most sealed products have multiple units)
+  - Fallback: Product title contains "booster", "box", "pack", "sealed"
 
----
+**3.2 Update Import to Set Categories**
+- Modify `shopify-pull-products-by-tags` edge function to:
+  - Detect sealed products during import
+  - Set `main_category = 'sealed'` when detected
+  - This allows filtering without relying on runtime tag parsing
 
-## Files to Modify
+**3.3 Add Quick Filter for Sealed**
+- Add "Sealed Products" preset to QuickFilterPresets
+- Filter: `categoryFilter: 'sealed'`
 
-| File | Changes |
-|------|---------|
-| `supabase/functions/shopify-pull-products-by-tags/index.ts` | Add previewItems collection, run synchronously for dry run |
-| `src/pages/admin/ShopifyBackfill.tsx` | Add preview items table display |
+## Implementation Order
 
----
+| Step | Task | Effort |
+|------|------|--------|
+| 1 | Create `useLocationNames` hook for GID-to-name mapping | Small |
+| 2 | Update `shopify-locations` to cache names in database | Small |
+| 3 | Add location badge to `InventoryItemCard` | Small |
+| 4 | Add Location dropdown filter to Inventory.tsx | Medium |
+| 5 | Update `useInventoryListQuery` for optional location | Medium |
+| 6 | Add Category dropdown filter | Medium |
+| 7 | Remove Category tabs card | Small |
+| 8 | Update import to set `main_category` for sealed | Small |
+| 9 | Add "Sealed Products" quick filter preset | Small |
+| 10 | Test end-to-end with all locations visible | Medium |
 
-## Expected Result
+## Technical Notes
 
-After running **Preview Import**, you'll see:
-1. Statistics (Products Scanned, Total Variants, Would Import, Skipped)
-2. Skip Breakdown (No SKU, Untracked, Low Qty, High Qty)
-3. **NEW: Sample Items Table** showing up to 50 items with SKU, Title, Quantity, and Price
-4. Note indicating how many more items would be imported beyond the sample
+### Database Changes Required
+- Ensure `shopify_location_cache` is populated on location fetch
+- Consider adding index on `intake_items(store_key, main_category)` for category filtering
 
----
+### Query Performance
+- Adding "All Locations" view may increase result set size
+- Virtual list already implemented - should handle larger datasets
+- May need to increase page size or add location-based grouping
 
-## Safety Notes
-
-- Preview (dry run) runs synchronously so it can return item data
-- Actual import still runs in background to avoid timeouts
-- Sample limited to 50 items to keep response size reasonable
-- No database changes during preview
-
+### Filter State Management
+- New filters need to be added to:
+  - Component state in Inventory.tsx
+  - Query key in useInventoryListQuery
+  - URL params for shareable filter states (optional enhancement)
