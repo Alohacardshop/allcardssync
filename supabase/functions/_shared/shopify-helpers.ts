@@ -142,6 +142,10 @@ export async function publishIfNeeded(domain: string, token: string, productId: 
   }
 }
 
+/**
+ * DEPRECATED: Use adjustInventorySafe or setInventorySafe for concurrency-safe updates
+ * This function remains for backwards compatibility but does NOT check for stale data
+ */
 export async function setInventory(domain: string, token: string, inventory_item_id: string, location_id: string, available: number) {
   const r = await fetchRetry(`https://${domain}/admin/api/${API_VER}/inventory_levels/set.json`, {
     method: 'POST',
@@ -149,4 +153,166 @@ export async function setInventory(domain: string, token: string, inventory_item
     body: JSON.stringify({ inventory_item_id, location_id, available })
   })
   if (!r.ok) throw new Error(`Inventory set failed: ${r.status} ${await r.text()}`)
+}
+
+/**
+ * Fetch current Shopify inventory level for an item at a location
+ */
+export async function getInventoryLevel(
+  domain: string, 
+  token: string, 
+  inventory_item_id: string, 
+  location_id: string
+): Promise<{ available: number; updated_at: string } | null> {
+  try {
+    const r = await fetchRetry(
+      `https://${domain}/admin/api/${API_VER}/inventory_levels.json?inventory_item_ids=${inventory_item_id}&location_ids=${location_id}`,
+      { headers: { 'X-Shopify-Access-Token': token } }
+    )
+    if (!r.ok) return null
+    
+    const data = await r.json()
+    const level = data.inventory_levels?.[0]
+    if (!level) return null
+    
+    return {
+      available: level.available ?? 0,
+      updated_at: level.updated_at || new Date().toISOString()
+    }
+  } catch {
+    return null
+  }
+}
+
+export interface SafeInventoryResult {
+  success: boolean
+  previous_available?: number
+  new_available?: number
+  error?: string
+  stale?: boolean
+}
+
+/**
+ * Safe inventory adjustment using delta (increment/decrement)
+ * - Fetches current level before adjusting
+ * - Optionally validates against expected_available (optimistic locking)
+ * - Prevents negative inventory
+ */
+export async function adjustInventorySafe(
+  domain: string,
+  token: string,
+  inventory_item_id: string,
+  location_id: string,
+  delta: number,
+  expected_available?: number
+): Promise<SafeInventoryResult> {
+  // Step 1: Fetch current level
+  const current = await getInventoryLevel(domain, token, inventory_item_id, location_id)
+  if (!current) {
+    return { success: false, error: 'Failed to fetch current inventory level' }
+  }
+  
+  // Step 2: Optimistic locking check
+  if (typeof expected_available === 'number' && expected_available !== current.available) {
+    return {
+      success: false,
+      error: 'STALE_DATA',
+      stale: true,
+      previous_available: current.available
+    }
+  }
+  
+  // Step 3: Prevent negative inventory
+  const newAvailable = current.available + delta
+  if (newAvailable < 0) {
+    return {
+      success: false,
+      error: `INSUFFICIENT_INVENTORY: have ${current.available}, attempted delta ${delta}`,
+      previous_available: current.available
+    }
+  }
+  
+  // Step 4: Apply adjustment
+  try {
+    const r = await fetchRetry(`https://${domain}/admin/api/${API_VER}/inventory_levels/adjust.json`, {
+      method: 'POST',
+      headers: { 'X-Shopify-Access-Token': token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        location_id,
+        inventory_item_id,
+        available_adjustment: delta
+      })
+    })
+    
+    if (!r.ok) {
+      const text = await r.text()
+      return { success: false, error: `Adjust failed: ${r.status} ${text}` }
+    }
+    
+    const result = await r.json()
+    return {
+      success: true,
+      previous_available: current.available,
+      new_available: result.inventory_level?.available ?? newAvailable
+    }
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : 'Unknown error' }
+  }
+}
+
+/**
+ * Safe inventory set (absolute value) with optimistic locking
+ * - Fetches current level before setting
+ * - Validates against expected_available to prevent overwriting POS changes
+ */
+export async function setInventorySafe(
+  domain: string,
+  token: string,
+  inventory_item_id: string,
+  location_id: string,
+  new_available: number,
+  expected_available?: number
+): Promise<SafeInventoryResult> {
+  // Step 1: Fetch current level
+  const current = await getInventoryLevel(domain, token, inventory_item_id, location_id)
+  if (!current) {
+    return { success: false, error: 'Failed to fetch current inventory level' }
+  }
+  
+  // Step 2: Optimistic locking check
+  if (typeof expected_available === 'number' && expected_available !== current.available) {
+    return {
+      success: false,
+      error: 'STALE_DATA',
+      stale: true,
+      previous_available: current.available
+    }
+  }
+  
+  // Step 3: Apply set
+  try {
+    const r = await fetchRetry(`https://${domain}/admin/api/${API_VER}/inventory_levels/set.json`, {
+      method: 'POST',
+      headers: { 'X-Shopify-Access-Token': token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        location_id,
+        inventory_item_id,
+        available: new_available
+      })
+    })
+    
+    if (!r.ok) {
+      const text = await r.text()
+      return { success: false, error: `Set failed: ${r.status} ${text}` }
+    }
+    
+    const result = await r.json()
+    return {
+      success: true,
+      previous_available: current.available,
+      new_available: result.inventory_level?.available ?? new_available
+    }
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : 'Unknown error' }
+  }
 }
