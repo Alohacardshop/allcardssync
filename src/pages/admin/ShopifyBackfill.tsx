@@ -6,14 +6,23 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, ArrowLeft, Package, Filter, AlertCircle, CheckCircle2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
+
+interface PreviewItem {
+  sku: string;
+  title: string;
+  quantity: number;
+  price: number;
+}
 
 interface BackfillResult {
   success: boolean;
   message?: string;
   dryRun?: boolean;
+  previewItems?: PreviewItem[];
   statistics?: {
     totalProducts: number;
     gradedProducts: number;
@@ -283,9 +292,45 @@ export default function ShopifyBackfill() {
                       </>
                     )}
 
-                    {result.message && (
-                      <p className="text-sm text-muted-foreground">{result.message}</p>
-                    )}
+                                    {/* Preview Items Table */}
+                                    {result.dryRun && result.previewItems && result.previewItems.length > 0 && (
+                                      <div className="border-t pt-4">
+                                        <p className="text-sm font-medium mb-2">
+                                          Sample Items ({result.previewItems.length} of {result.statistics?.upsertedRows || 0}):
+                                        </p>
+                                        <div className="max-h-64 overflow-auto border rounded">
+                                          <Table>
+                                            <TableHeader>
+                                              <TableRow className="bg-muted">
+                                                <TableHead className="text-xs py-2">SKU</TableHead>
+                                                <TableHead className="text-xs py-2">Title</TableHead>
+                                                <TableHead className="text-xs py-2 text-right">Qty</TableHead>
+                                                <TableHead className="text-xs py-2 text-right">Price</TableHead>
+                                              </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                              {result.previewItems.map((item, i) => (
+                                                <TableRow key={i}>
+                                                  <TableCell className="text-xs py-1 font-mono">{item.sku}</TableCell>
+                                                  <TableCell className="text-xs py-1 truncate max-w-[200px]">{item.title}</TableCell>
+                                                  <TableCell className="text-xs py-1 text-right">{item.quantity}</TableCell>
+                                                  <TableCell className="text-xs py-1 text-right">${item.price.toFixed(2)}</TableCell>
+                                                </TableRow>
+                                              ))}
+                                            </TableBody>
+                                          </Table>
+                                        </div>
+                                        {(result.statistics?.upsertedRows || 0) > 50 && (
+                                          <p className="text-xs text-muted-foreground mt-2">
+                                            Showing first 50 items. {(result.statistics?.upsertedRows || 0) - 50} more items would also be imported.
+                                          </p>
+                                        )}
+                                      </div>
+                                    )}
+
+                                    {result.message && (
+                                      <p className="text-sm text-muted-foreground">{result.message}</p>
+                                    )}
                   </div>
                 ) : (
                   <div className="text-destructive">
