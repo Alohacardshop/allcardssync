@@ -159,6 +159,10 @@ export interface VirtualInventoryListProps {
   focusedIndex?: number;
   /** Optional per-item action state getter for showing loading states */
   getItemActionState?: (itemId: string) => ItemActionState;
+  /** Whether quantity editing is disabled (e.g., Shopify truth mode) */
+  quantityReadOnly?: boolean;
+  /** Reason for read-only quantity, shown in tooltip */
+  quantityReadOnlyReason?: string;
   onToggleSelection: (id: string) => void;
   onSetSelection?: (ids: string[], mode: 'add' | 'remove' | 'replace') => void;
   onToggleExpanded: (id: string) => void;

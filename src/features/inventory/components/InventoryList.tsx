@@ -27,6 +27,8 @@ export const InventoryList = React.memo(({
   syncingRowId,
   locationsMap,
   focusedIndex,
+  quantityReadOnly,
+  quantityReadOnlyReason,
   onToggleSelection,
   onToggleExpanded,
   onSync,
@@ -167,6 +169,8 @@ export const InventoryList = React.memo(({
                 isAdmin={isAdmin}
                 syncingRowId={syncingRowId}
                 locationsMap={locationsMap}
+                quantityReadOnly={quantityReadOnly}
+                quantityReadOnlyReason={quantityReadOnlyReason}
                 onToggleSelection={onToggleSelection}
                 onToggleExpanded={onToggleExpanded}
                 onSync={handleSync}

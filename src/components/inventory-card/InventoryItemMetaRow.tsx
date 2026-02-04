@@ -9,9 +9,17 @@ import type { InventoryItem } from '@/types/inventory';
 
 interface InventoryItemMetaRowProps {
   item: InventoryItem;
+  /** Whether quantity editing is disabled (e.g., Shopify truth mode) */
+  quantityReadOnly?: boolean;
+  /** Reason for read-only quantity, shown in tooltip */
+  quantityReadOnlyReason?: string;
 }
 
-export const InventoryItemMetaRow = memo(({ item }: InventoryItemMetaRowProps) => {
+export const InventoryItemMetaRow = memo(({ 
+  item, 
+  quantityReadOnly,
+  quantityReadOnlyReason 
+}: InventoryItemMetaRowProps) => {
   const queryClient = useQueryClient();
 
   const handleCheckEbayPrice = useCallback(async () => {
@@ -74,6 +82,8 @@ export const InventoryItemMetaRow = memo(({ item }: InventoryItemMetaRowProps) =
           quantity={item.quantity}
           shopifyProductId={item.shopify_product_id}
           shopifyInventoryItemId={item.shopify_inventory_item_id}
+          readOnly={quantityReadOnly}
+          readOnlyReason={quantityReadOnlyReason}
         />
       </div>
       <div className="flex items-center space-x-1">

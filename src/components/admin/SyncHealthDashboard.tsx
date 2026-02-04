@@ -17,7 +17,9 @@ import {
   XCircle,
   Store,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  Cloud,
+  Database
 } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
@@ -31,6 +33,8 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
+import { TruthModeBadge } from '@/components/inventory/TruthModeBadge';
+import type { InventoryTruthMode } from '@/hooks/useInventoryTruthMode';
 
 interface WebhookStats {
   store_key: string;
@@ -48,6 +52,28 @@ export function SyncHealthDashboard() {
   const { data: syncRuns, isLoading: runsLoading } = useReconciliationRuns(20);
   const { data: storeSummaries } = useStoreReconciliationSummary();
   const { data: recentLocationStats } = useLocationStats();
+
+  // Fetch store truth modes
+  const { data: storeTruthModes } = useQuery({
+    queryKey: ['store-truth-modes'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('shopify_stores')
+        .select('key, name, inventory_truth_mode');
+      
+      if (error) {
+        console.error('Failed to fetch store truth modes:', error);
+        return new Map<string, InventoryTruthMode>();
+      }
+      
+      const modeMap = new Map<string, InventoryTruthMode>();
+      for (const store of data || []) {
+        modeMap.set(store.key, (store.inventory_truth_mode || 'shopify') as InventoryTruthMode);
+      }
+      return modeMap;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
 
   // Fetch webhook stats from webhook_events table
   const { data: webhookStats } = useQuery({
@@ -308,7 +334,15 @@ export function SyncHealthDashboard() {
                           <div className="flex items-center gap-3">
                             {store.last_status && getStatusIcon(store.last_status)}
                             <div className="text-left">
-                              <p className="font-semibold">{store.store_key}</p>
+                              <div className="flex items-center gap-2">
+                                <p className="font-semibold">{store.store_key}</p>
+                                {storeTruthModes && (
+                                  <TruthModeBadge 
+                                    mode={storeTruthModes.get(store.store_key) || 'shopify'} 
+                                    showLabel={false}
+                                  />
+                                )}
+                              </div>
                               <p className="text-xs text-muted-foreground">
                                 Last run: {store.last_run_at 
                                   ? formatDistanceToNow(new Date(store.last_run_at), { addSuffix: true })

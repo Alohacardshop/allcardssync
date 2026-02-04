@@ -82,6 +82,10 @@ interface TableRowProps {
   itemLevels?: InventoryLevelCompact[];
   /** Selected location for Shopify-truth display */
   selectedLocationGid?: string | null;
+  /** Whether quantity editing is disabled (e.g., Shopify truth mode) */
+  quantityReadOnly?: boolean;
+  /** Reason for read-only quantity, shown in tooltip */
+  quantityReadOnlyReason?: string;
   onToggleSelection: (id: string) => void;
   onSync: (item: InventoryListItem) => void;
   onRetrySync: (item: InventoryListItem) => void;
@@ -99,6 +103,8 @@ const TableRow = memo(({
   locationsMap,
   itemLevels,
   selectedLocationGid,
+  quantityReadOnly,
+  quantityReadOnlyReason,
   onToggleSelection,
   onSync,
   onRetrySync,
@@ -218,6 +224,8 @@ const TableRow = memo(({
             shopifyProductId={item.shopify_product_id}
             shopifyInventoryItemId={item.shopify_inventory_item_id}
             compact
+            readOnly={quantityReadOnly}
+            readOnlyReason={quantityReadOnlyReason}
           />
         </div>
 
@@ -398,6 +406,8 @@ export const InventoryTableView = memo(({
   locationsMap,
   inventoryLevelsMap,
   selectedLocationGid,
+  quantityReadOnly,
+  quantityReadOnlyReason,
   onToggleSelection,
   onSetSelection,
   onSync,
@@ -608,6 +618,8 @@ export const InventoryTableView = memo(({
                   locationsMap={locationsMap}
                   itemLevels={item.shopify_inventory_item_id ? inventoryLevelsMap?.get(item.shopify_inventory_item_id) : undefined}
                   selectedLocationGid={selectedLocationGid}
+                  quantityReadOnly={quantityReadOnly}
+                  quantityReadOnlyReason={quantityReadOnlyReason}
                   onToggleSelection={onToggleSelection}
                   onSync={onSync}
                   onRetrySync={onRetrySync}

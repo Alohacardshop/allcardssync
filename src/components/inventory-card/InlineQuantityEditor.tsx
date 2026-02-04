@@ -2,7 +2,7 @@ import React, { memo, useState, useCallback, useRef, useEffect } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
-import { Minus, Plus, Loader2, RefreshCw } from 'lucide-react';
+import { Minus, Plus, Loader2, RefreshCw, Lock } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -16,6 +16,10 @@ interface InlineQuantityEditorProps {
   shopifyLastKnownAvailable?: number | null;
   compact?: boolean;
   onRefreshNeeded?: () => void;
+  /** When true, editing is disabled (e.g., Shopify truth mode) */
+  readOnly?: boolean;
+  /** Message to show when readOnly */
+  readOnlyReason?: string;
 }
 
 export const InlineQuantityEditor = memo(({
@@ -26,6 +30,8 @@ export const InlineQuantityEditor = memo(({
   shopifyLastKnownAvailable,
   compact = false,
   onRefreshNeeded,
+  readOnly = false,
+  readOnlyReason = 'Quantity is managed by Shopify',
 }: InlineQuantityEditorProps) => {
   const queryClient = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -294,6 +300,32 @@ export const InlineQuantityEditor = memo(({
           <Loader2 className="h-3 w-3 animate-spin text-muted-foreground ml-1" />
         )}
       </div>
+    );
+  }
+
+  // Read-only mode - show quantity with lock icon
+  if (readOnly) {
+    return (
+      <TooltipProvider delayDuration={300}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div
+              className={cn(
+                "flex items-center justify-center gap-1 rounded font-medium tabular-nums",
+                "text-muted-foreground cursor-not-allowed",
+                compact ? "h-6 min-w-[28px] px-1.5 text-xs" : "h-7 min-w-[32px] px-2 text-sm"
+              )}
+            >
+              <Lock className="h-3 w-3 opacity-50" />
+              {displayValue}
+            </div>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="text-xs max-w-[200px]">
+            <p>{readOnlyReason}</p>
+            <p className="text-muted-foreground mt-1">Use Receiving or Transfer to adjust</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     );
   }
 
