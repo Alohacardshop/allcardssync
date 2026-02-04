@@ -1,127 +1,213 @@
 
-# Fix eBay Queue Foreign Key Errors & Hidden Items
+# E2E Test Dashboard Redesign: Split Panel Sync Interface
 
-## Problem
+## Overview
 
-Two related issues:
+Transform the current step-by-step card layout into a modern split-panel interface where:
+- **Left Panel**: Inventory items with filters, search, and multi-select
+- **Right Panel**: Marketplace destinations (Shopify, eBay, Print) showing sync status and actions
 
-1. **Foreign Key Errors**: When queueing for eBay, the system fails with `"Key is not present in table intake_items"` because `state.testItems` contains stale IDs for items that were already deleted from the database.
-
-2. **Hidden Items in Queue Monitor**: The `EbaySyncQueueMonitor` shows queue entries where the linked `intake_item` no longer exists (or is deleted), displaying them with just the UUID.
-
----
-
-## Root Causes
-
-| Issue | Location | Cause |
-|-------|----------|-------|
-| FK Violation | `useE2ETest.ts` line 227-232 | `queueForEbay` inserts without verifying items still exist in DB |
-| Hidden Items | `EbaySyncQueueMonitor.tsx` line 53-73 | Query doesn't filter out orphan queue records |
-| Stale State | `useE2ETest.ts` line 270 | `processEbayQueue` uses `state.testItems` which may contain deleted items |
+This creates an intuitive "source → destination" workflow similar to file transfer UIs.
 
 ---
 
-## Fix 1: Validate Items Before Queueing
+## Visual Design
 
-**File**: `src/hooks/useE2ETest.ts`
-
-Before inserting into `ebay_sync_queue`, verify the items still exist in the database:
-
-```typescript
-const queueForEbay = useCallback(async (itemIds: string[]) => {
-  try {
-    // Verify items still exist in database before queueing
-    const { data: existingItems } = await supabase
-      .from('intake_items')
-      .select('id')
-      .in('id', itemIds)
-      .is('deleted_at', null);
-    
-    const validIds = (existingItems || []).map(i => i.id);
-    
-    if (validIds.length === 0) {
-      toast.error('No valid items to queue - items may have been deleted');
-      return;
-    }
-    
-    if (validIds.length < itemIds.length) {
-      toast.warning(`${itemIds.length - validIds.length} item(s) were skipped (already deleted)`);
-    }
-    
-    const queueItems = validIds.map(id => ({
-      inventory_item_id: id,
-      action: 'create' as const,
-      status: 'queued',
-      retry_count: 0,
-      max_retries: 3
-    }));
-    
-    // ... rest of upsert logic
-  }
-}, []);
+```text
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  E2E Test Dashboard                                      [Safety Toggles]   │
+├─────────────────────────────────────┬───────────────────────────────────────┤
+│  TEST ITEMS                         │  DESTINATIONS                         │
+│  ┌─────────────────────────────┐    │  ┌─────────────────────────────────┐  │
+│  │ 🔍 Search...    [Filters ▼] │    │  │ SHOPIFY            [Dry Run ✓] │  │
+│  └─────────────────────────────┘    │  │ ├─ 3 synced                     │  │
+│                                     │  │ └─ [Sync Selected →]            │  │
+│  [Select All] [Clear]  3 selected   │  └─────────────────────────────────┘  │
+│  ┌─────────────────────────────┐    │  ┌─────────────────────────────────┐  │
+│  │ ☑ TEST-ABC-001  Graded  ✓S │    │  │ EBAY                [Dry Run ✓] │  │
+│  │ ☑ TEST-DEF-002  Raw     ⏳E │    │  │ ├─ 2 queued, 1 synced           │  │
+│  │ ☑ TEST-GHI-003  Graded  ✓S │    │  │ └─ [Queue →] [Process Queue]    │  │
+│  │ ☐ TEST-JKL-004  Raw        │    │  └─────────────────────────────────┘  │
+│  └─────────────────────────────┘    │  ┌─────────────────────────────────┐  │
+│                                     │  │ PRINT               [Dry Run ✓] │  │
+│  ┌─────────────────────────────┐    │  │ ├─ Printer: Zebra ZD420         │  │
+│  │ Generate: [1] [3] [5]       │    │  │ └─ [Print Selected]             │  │
+│  │ [🗑 Delete All Test Items]  │    │  └─────────────────────────────────┘  │
+│  └─────────────────────────────┘    │                                       │
+├─────────────────────────────────────┴───────────────────────────────────────┤
+│  Store: Hawaii  │  Location: gid://shopify/...                              │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Fix 2: Filter Orphan Queue Records
+## Component Architecture
 
-**File**: `src/components/admin/EbaySyncQueueMonitor.tsx`
+### New Components
 
-Add a filter to exclude queue entries where the linked `intake_item` is null or deleted:
+| Component | Purpose |
+|-----------|---------|
+| `E2ETestLayout.tsx` | Main split-panel layout using ResizablePanelGroup |
+| `E2EItemsPanel.tsx` | Left panel - items list with filters and selection |
+| `E2EDestinationsPanel.tsx` | Right panel - marketplace sync cards |
+| `E2EDestinationCard.tsx` | Individual marketplace card (Shopify/eBay/Print) |
+| `E2EItemRow.tsx` | Individual item row with status icons |
 
-```typescript
-const { data: queueItems, isLoading, refetch } = useQuery({
-  queryKey: ['ebay-sync-queue', selectedStatus],
-  queryFn: async () => {
-    let query = supabase
-      .from('ebay_sync_queue')
-      .select(`
-        *,
-        intake_item:intake_items!inner(sku, psa_cert, brand_title, subject, deleted_at)
-      `)
-      .is('intake_item.deleted_at', null)  // Exclude deleted items
-      .order('queue_position', { ascending: true })
-      .limit(100);
-    // ...
-  }
-});
-```
+### Component Structure
 
-The `!inner` modifier makes it an inner join, which will exclude queue entries where the intake_item doesn't exist.
-
----
-
-## Fix 3: Refresh State After Queue Processing
-
-**File**: `src/hooks/useE2ETest.ts`
-
-In `processEbayQueue`, use fresh item IDs from state (we already fixed this with the setState callback pattern, but need to also handle the testItemIds reference):
-
-```typescript
-const processEbayQueue = useCallback(async () => {
-  let testItemIds: string[] = [];
-  setState(s => {
-    testItemIds = s.testItems.map(i => i.id);
-    return { ...s, isEbaySyncing: true };
-  });
-  // ... rest uses testItemIds which is now fresh
-}, []);
+```text
+E2ETestPage
+├── E2ETestLayout
+│   ├── ResizablePanelGroup (horizontal)
+│   │   ├── ResizablePanel (left - items)
+│   │   │   └── E2EItemsPanel
+│   │   │       ├── Search + Filters
+│   │   │       ├── Selection controls
+│   │   │       ├── ScrollArea with E2EItemRow items
+│   │   │       └── Generate/Cleanup actions
+│   │   │
+│   │   ├── ResizableHandle
+│   │   │
+│   │   └── ResizablePanel (right - destinations)
+│   │       └── E2EDestinationsPanel
+│   │           ├── E2EDestinationCard (Shopify)
+│   │           ├── E2EDestinationCard (eBay)
+│   │           └── E2EDestinationCard (Print)
+│   │
+│   └── Footer (store/location info)
 ```
 
 ---
 
-## Files to Modify
+## Left Panel: Items Panel
 
-| File | Changes |
+### Features
+
+1. **Search bar** - Filter items by SKU, title, or cert number
+2. **Filter dropdown** - Filter by:
+   - Type: All / Graded / Raw
+   - Status: All / Created / Synced / Failed
+3. **Bulk selection** - Select All / Clear / Count display
+4. **Item list** - Scrollable with checkbox selection
+5. **Item row shows**:
+   - Checkbox for selection
+   - SKU badge
+   - Type badge (Graded/Raw)
+   - Status icons: S (Shopify), E (eBay), P (Printed)
+   - Error indicator with tooltip
+6. **Generation buttons** - Quick 1/3/5 graded or raw generation
+7. **Cleanup section** - Delete all test items
+
+---
+
+## Right Panel: Destinations Panel
+
+### Shopify Card
+- Dry run toggle
+- Stats: X synced, Y failed
+- Button: "Sync Selected (N)" - syncs selected items
+- Progress indicator when syncing
+
+### eBay Card  
+- Dry run status (read from config)
+- Stats: X queued, Y synced, Z failed
+- Button: "Queue Selected (N)" - adds to queue
+- Button: "Process Queue" - triggers processor
+- Progress indicator when processing
+
+### Print Card
+- Dry run toggle
+- Printer selector (QZ Tray connection)
+- Stats: X printed
+- Button: "Print Selected (N)"
+- Warning if no default template
+
+---
+
+## Item Status Icons
+
+Each item shows compact status indicators:
+
+| Icon | Meaning |
 |------|---------|
-| `src/hooks/useE2ETest.ts` | Validate items before queueing, fix stale testItemIds reference |
-| `src/components/admin/EbaySyncQueueMonitor.tsx` | Use inner join to exclude orphan/deleted items |
+| `✓S` | Synced to Shopify (green) |
+| `⏳S` | Syncing to Shopify (yellow, animated) |
+| `✗S` | Shopify sync failed (red) |
+| `✓E` | Synced to eBay (green) |
+| `⏳E` | Queued/processing eBay (yellow) |
+| `✗E` | eBay sync failed (red) |
+| `✓P` | Printed (green) |
 
 ---
 
-## Expected Behavior After Fix
+## State Management
 
-1. **Queueing**: Only valid, existing items are queued; deleted items are skipped with a warning
-2. **Queue Monitor**: Only shows items that have a valid linked `intake_item`
-3. **No FK Errors**: Foreign key violations eliminated because we validate before insert
-4. **Clean Display**: No more "hidden" items with just UUIDs showing
+Keep using `useE2ETest` hook but add:
+
+```typescript
+// New filter state in the hook
+filters: {
+  search: string;
+  type: 'all' | 'graded' | 'raw';
+  status: 'all' | 'created' | 'shopify_synced' | 'ebay_synced' | 'failed';
+}
+
+// Computed filtered items
+filteredItems = useMemo(() => {
+  return testItems.filter(item => {
+    // Apply search and filter logic
+  });
+}, [testItems, filters]);
+```
+
+---
+
+## Files to Create/Modify
+
+| File | Action | Description |
+|------|--------|-------------|
+| `src/components/e2e/E2ETestLayout.tsx` | Create | Main split-panel layout |
+| `src/components/e2e/E2EItemsPanel.tsx` | Create | Left panel with items |
+| `src/components/e2e/E2EDestinationsPanel.tsx` | Create | Right panel with destinations |
+| `src/components/e2e/E2EDestinationCard.tsx` | Create | Individual marketplace card |
+| `src/components/e2e/E2EItemRow.tsx` | Create | Compact item row with status |
+| `src/components/e2e/E2EStatusIcons.tsx` | Create | Status icon components |
+| `src/pages/E2ETestPage.tsx` | Refactor | Use new layout components |
+| `src/hooks/useE2ETest.ts` | Extend | Add filtering logic |
+
+---
+
+## Implementation Order
+
+1. Create base layout with ResizablePanelGroup
+2. Build E2EItemRow component with status icons
+3. Build E2EItemsPanel with search, filters, and item list
+4. Build E2EDestinationCard component
+5. Build E2EDestinationsPanel with Shopify/eBay/Print cards
+6. Wire up to existing useE2ETest hook
+7. Add filtering logic to hook
+8. Refactor E2ETestPage to use new components
+
+---
+
+## Technical Considerations
+
+- **Responsive**: On mobile, stack panels vertically
+- **Keyboard**: Support Shift+Click for range selection
+- **Performance**: Keep virtualization for large item lists
+- **Accessibility**: Proper ARIA labels for selection and actions
+- **Error handling**: Show toast + inline error badges
+
+---
+
+## Mobile Layout
+
+On screens < 768px, switch to tabbed interface:
+
+```text
+┌─────────────────────────────┐
+│  [Items] [Destinations]     │  ← Tabs
+├─────────────────────────────┤
+│  (Current tab content)      │
+└─────────────────────────────┘
+```
