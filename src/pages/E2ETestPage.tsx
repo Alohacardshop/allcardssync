@@ -76,6 +76,7 @@ export default function E2ETestPage() {
     processEbayQueue,
     printLabels,
     cleanupTestItems,
+    deleteSelectedItems,
     loadExistingTestItems,
     checkEbayDryRun,
     toggleShopifyDryRun,
@@ -296,6 +297,20 @@ export default function E2ETestPage() {
                   <div className="flex gap-2">
                     <Button size="sm" variant="ghost" onClick={selectAll}>Select All</Button>
                     <Button size="sm" variant="ghost" onClick={clearSelection}>Clear</Button>
+                    {selectedItems.size > 0 && (
+                      <Button 
+                        size="sm" 
+                        variant="destructive" 
+                        onClick={() => {
+                          deleteSelectedItems(selectedItemIds);
+                          clearSelection();
+                        }}
+                        disabled={isCleaningUp}
+                      >
+                        {isCleaningUp ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Trash2 className="h-3 w-3 mr-1" />}
+                        Delete ({selectedItems.size})
+                      </Button>
+                    )}
                   </div>
                 </div>
                 <ScrollArea className="h-[200px] border rounded-md">
