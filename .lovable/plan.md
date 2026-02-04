@@ -1,144 +1,136 @@
 
 
-# Shopify Inventory Backfill for Hawaii
+# Show Preview Items for Shopify Backfill
 
-## Summary
+## Problem
 
-Pull all products from Shopify (Hawaii store) into the local intake_items table with intelligent filtering:
-- **Skip**: Untracked inventory (not managed in Shopify)
-- **Skip**: 0 quantity items (out of stock)
-- **Skip**: Items with quantity > 900 (likely bulk/unlimited items)
-- **Pull**: Everything else with valid SKUs
+The current Preview Mode only shows statistics (e.g., "Would Import: 150 items") but doesn't show *which* items would be imported. You want to see the actual product names/SKUs before committing to the import.
 
 ---
 
-## Current State
+## Solution
 
-| Metric | Value |
-|--------|-------|
-| Items in local DB (Hawaii) | 70 |
-| Already synced to Shopify | 70 |
-| Last pull timestamp | Never (no SHOPIFY_LAST_PULL_HAWAII setting) |
+Add an "items preview" feature that collects and displays sample items during dry run mode.
 
 ---
 
-## What Needs to Change
+## Technical Changes
 
-### 1. Update Edge Function: `shopify-pull-products-by-tags/index.ts`
-
-Add three new filter parameters and apply them during processing:
-
-```typescript
-// New parameters (with sensible defaults)
-minQuantity = 1,        // Skip 0 quantity items
-maxQuantity = 900,      // Skip bulk items (>900 qty)
-skipUntracked = true    // Skip items not tracked in Shopify inventory
-```
-
-**Filter Logic Changes:**
-
-| Current Behavior | New Behavior |
-|-----------------|--------------|
-| Skips qty = 0 | Skips qty < minQuantity (default 1) |
-| No max check | Skips qty > maxQuantity (default 900) |
-| Pulls all tracked items | Checks `inventory_management` field to skip untracked |
-
-### 2. Update Frontend: `src/pages/admin/ShopifyBackfill.tsx`
-
-- Update to only show Hawaii (per your request to focus on Hawaii)
-- Add filter controls for min/max quantity thresholds
-- Add "Skip Untracked" toggle
-- Improve results display with filter summary
-
----
-
-## Technical Details
-
-### Edge Function Changes
+### 1. Edge Function: Return Sample Items in Dry Run
 
 **File**: `supabase/functions/shopify-pull-products-by-tags/index.ts`
 
-1. **Add parameters** (lines ~79-88):
-```typescript
-const { 
-  storeKey, 
-  gradedTags = ["graded", "PSA"],
-  rawTags = ["single"],
-  updatedSince,
-  maxPages = 50,
-  dryRun = false,
-  status = 'active',
-  skipAlreadyPulled = true,
-  // NEW FILTERS
-  minQuantity = 1,        // Skip items below this quantity
-  maxQuantity = 900,      // Skip items above this quantity  
-  skipUntracked = true    // Skip items with inventory_management = null
-} = await req.json();
-```
+Add a `previewItems` array that collects up to 50 sample items during dry run:
 
-2. **Add untracked check** (after line ~268):
 ```typescript
-// Skip untracked variants (inventory not managed by Shopify)
-if (skipUntracked && variant.inventory_management === null) {
-  console.log(`Skipping variant ${variant.id} (SKU: ${variant.sku}) - inventory not tracked`);
-  skippedVariants++;
+// Add to statistics tracking (around line 200)
+let previewItems: Array<{
+  sku: string;
+  title: string;
+  quantity: number;
+  price: number;
+  location: string;
+}> = [];
+
+// Inside the variant processing loop, when dryRun is true (around line 289)
+if (dryRun) {
+  // Collect sample items for preview (limit to 50)
+  if (previewItems.length < 50) {
+    previewItems.push({
+      sku: variant.sku,
+      title: product.title + (variant.title !== 'Default Title' ? ` - ${variant.title}` : ''),
+      quantity: variant.inventory_quantity || 0,
+      price: parseFloat(variant.price) || 0,
+      location: 'Pending inventory check'
+    });
+  }
   continue;
 }
 ```
 
-3. **Add quantity range filter** (modify lines ~310-319):
-```typescript
-// Filter by quantity range
-const locationsToProcess = inventoryLevels.filter(level => {
-  const qty = level.available || 0;
-  return level.location_id && 
-         qty >= minQuantity && 
-         qty <= maxQuantity;
-});
+Add `previewItems` to the result object (around line 437):
 
-// Track reason for skip
-if (locationsToProcess.length === 0) {
-  const hasHighQty = inventoryLevels.some(l => l.available > maxQuantity);
-  const hasZeroQty = inventoryLevels.every(l => l.available < minQuantity);
-  const reason = hasHighQty ? 'quantity > 900' : (hasZeroQty ? 'quantity = 0' : 'no valid locations');
-  console.log(`Skipping variant ${variant.id} (SKU: ${variant.sku}) - ${reason}`);
-  skippedVariants++;
-  continue;
+```typescript
+const result = {
+  success: true,
+  dryRun,
+  previewItems: dryRun ? previewItems : undefined,  // Only in dry run
+  statistics: { ... }
+};
+```
+
+**Important**: For dry run, we need to run synchronously (not background) to return the preview items. Wrap the background processing logic:
+
+```typescript
+// For dry run, run synchronously to return preview items
+if (dryRun) {
+  await processBackfill();
+  return new Response(JSON.stringify(result), { headers: corsHeaders });
 }
+
+// For actual import, run in background
+EdgeRuntime.waitUntil(processBackfill());
+return new Response(JSON.stringify({ success: true, message: 'Import started in background' }), ...);
 ```
-
-4. **Update statistics** to track skip reasons:
-```typescript
-let skippedUntracked = 0;
-let skippedZeroQty = 0;
-let skippedHighQty = 0;
-```
-
-### Frontend Changes
-
-**File**: `src/pages/admin/ShopifyBackfill.tsx`
-
-1. Remove Las Vegas card (focus only on Hawaii)
-2. Add filter controls:
-   - Min quantity input (default: 1)
-   - Max quantity input (default: 900)
-   - Skip untracked toggle (default: true)
-3. Pass filter params to edge function
-4. Improve results display with breakdown of skipped items
 
 ---
 
-## Expected Behavior After Changes
+### 2. Frontend: Display Preview Items
 
-When you run the backfill for Hawaii:
+**File**: `src/pages/admin/ShopifyBackfill.tsx`
 
-| Items | Action |
-|-------|--------|
-| SKU with qty = 0 | **Skipped** - out of stock |
-| SKU with qty = 1-900 | **Pulled** - added to intake_items |
-| SKU with qty > 900 | **Skipped** - likely bulk/unlimited |
-| SKU with no inventory tracking | **Skipped** - untracked items |
-| SKU with no SKU value | **Skipped** - can't be identified |
+Add `previewItems` to the result interface:
+
+```typescript
+interface BackfillResult {
+  // ... existing fields
+  previewItems?: Array<{
+    sku: string;
+    title: string;
+    quantity: number;
+    price: number;
+  }>;
+}
+```
+
+Add a scrollable table to show preview items:
+
+```tsx
+{result.dryRun && result.previewItems && result.previewItems.length > 0 && (
+  <div className="border-t pt-4">
+    <p className="text-sm font-medium mb-2">
+      Sample Items ({result.previewItems.length} of {result.statistics?.upsertedRows || 0}):
+    </p>
+    <div className="max-h-64 overflow-auto border rounded">
+      <table className="w-full text-xs">
+        <thead className="bg-muted sticky top-0">
+          <tr>
+            <th className="p-2 text-left">SKU</th>
+            <th className="p-2 text-left">Title</th>
+            <th className="p-2 text-right">Qty</th>
+            <th className="p-2 text-right">Price</th>
+          </tr>
+        </thead>
+        <tbody>
+          {result.previewItems.map((item, i) => (
+            <tr key={i} className="border-t">
+              <td className="p-2 font-mono">{item.sku}</td>
+              <td className="p-2 truncate max-w-[200px]">{item.title}</td>
+              <td className="p-2 text-right">{item.quantity}</td>
+              <td className="p-2 text-right">${item.price.toFixed(2)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+    {(result.statistics?.upsertedRows || 0) > 50 && (
+      <p className="text-xs text-muted-foreground mt-2">
+        Showing first 50 items. {(result.statistics?.upsertedRows || 0) - 50} more items would also be imported.
+      </p>
+    )}
+  </div>
+)}
+```
 
 ---
 
@@ -146,15 +138,25 @@ When you run the backfill for Hawaii:
 
 | File | Changes |
 |------|---------|
-| `supabase/functions/shopify-pull-products-by-tags/index.ts` | Add filter params, quantity range check, untracked check |
-| `src/pages/admin/ShopifyBackfill.tsx` | Remove Vegas, add filter controls, improve UI |
+| `supabase/functions/shopify-pull-products-by-tags/index.ts` | Add previewItems collection, run synchronously for dry run |
+| `src/pages/admin/ShopifyBackfill.tsx` | Add preview items table display |
+
+---
+
+## Expected Result
+
+After running **Preview Import**, you'll see:
+1. Statistics (Products Scanned, Total Variants, Would Import, Skipped)
+2. Skip Breakdown (No SKU, Untracked, Low Qty, High Qty)
+3. **NEW: Sample Items Table** showing up to 50 items with SKU, Title, Quantity, and Price
+4. Note indicating how many more items would be imported beyond the sample
 
 ---
 
 ## Safety Notes
 
-- **Dry run mode** available - preview what would be pulled without actually inserting
-- **Upsert behavior** - existing items are updated, not duplicated (uses `upsert_shopify_intake_item` RPC)
-- **Background processing** - runs async, returns immediately so it won't timeout
-- **Rate limiting** - built-in 250ms throttle respects Shopify's 4 calls/sec limit
+- Preview (dry run) runs synchronously so it can return item data
+- Actual import still runs in background to avoid timeouts
+- Sample limited to 50 items to keep response size reasonable
+- No database changes during preview
 
