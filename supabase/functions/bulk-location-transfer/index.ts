@@ -1,6 +1,10 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { adjustInventorySafe, getInventoryLevel } from '../_shared/shopify-helpers.ts';
 import { resolveShopifyConfig } from '../_shared/resolveShopifyConfig.ts';
+import { 
+  acquireInventoryLocks, 
+  releaseInventoryLocksByBatch 
+} from '../_shared/inventory-lock-helpers.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -265,10 +269,48 @@ Deno.serve(async (req) => {
 
     console.log(`✅ Found ${validItems.length} valid items to transfer`);
 
+    // Acquire inventory locks for all SKUs in this batch
+    const skusToLock = validItems.map(item => item.sku).filter(Boolean) as string[];
+    let lockBatchId: string | null = null;
+    
+    if (skusToLock.length > 0) {
+      const lockResult = await acquireInventoryLocks(
+        supabase,
+        skusToLock,
+        store_key,
+        'bulk_transfer',
+        user.id,
+        15, // 15 minute timeout
+        { transfer_id, item_count: validItems.length }
+      );
+
+      if (lockResult.failedSkus.length > 0) {
+        console.warn(`⚠️ Could not lock ${lockResult.failedSkus.length} SKUs - they may be in another operation`);
+        // Filter out items we couldn't lock
+        const lockedSkuSet = new Set(lockResult.failedSkus);
+        const itemsToProcess = validItems.filter(item => !item.sku || !lockedSkuSet.has(item.sku));
+        
+        if (itemsToProcess.length === 0) {
+          throw new Error('All items are locked by another operation. Please wait and try again.');
+        }
+        
+        // Update validItems to only process unlocked ones
+        validItems.length = 0;
+        validItems.push(...itemsToProcess);
+      }
+
+      lockBatchId = lockResult.batchId;
+      console.log(`🔒 Acquired locks for ${lockResult.acquiredCount} SKUs, batch: ${lockBatchId}`);
+    }
+
     // Resolve Shopify credentials using shared helper
     const configResult = await resolveShopifyConfig(supabase, store_key);
     
     if (!configResult.ok) {
+      // Release locks before throwing
+      if (lockBatchId) {
+        await releaseInventoryLocksByBatch(supabase, lockBatchId);
+      }
       throw new Error(`Shopify config error: ${configResult.message}`);
     }
 
@@ -483,6 +525,12 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Release inventory locks
+    if (lockBatchId) {
+      const released = await releaseInventoryLocksByBatch(supabase, lockBatchId);
+      console.log(`🔓 Released ${released} inventory locks`);
+    }
+
     // Update transfer record with final status
     const finalStatus = failCount === 0 ? 'completed' : (successCount === 0 ? 'failed' : 'partial');
     await supabase
@@ -506,6 +554,7 @@ Deno.serve(async (req) => {
         failed: failCount,
         status: finalStatus,
         results,
+        locks_released: lockBatchId ? true : false,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
