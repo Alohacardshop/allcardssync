@@ -117,8 +117,13 @@ serve(async (req) => {
       }
 
       const environment = storeConfig.environment as 'sandbox' | 'production'
+      const isDryRun = storeConfig.dry_run_mode === true
 
-      // Get access token once per store
+      if (isDryRun) {
+        console.log(`[ebay-sync-processor] DRY RUN MODE for ${currentStoreKey} - skipping real eBay API calls`)
+      }
+
+      // Get access token once per store (skip in dry run mode)
       let accessToken: string
       try {
         accessToken = await getValidAccessToken(supabase, currentStoreKey, environment)
@@ -243,13 +248,13 @@ serve(async (req) => {
 
           switch (queueItem.action) {
             case 'create':
-              syncResult = await processCreate(supabase, accessToken, environment, item, storeConfig)
+              syncResult = await processCreate(supabase, accessToken, environment, item, storeConfig, isDryRun)
               break
             case 'update':
-              syncResult = await processUpdate(supabase, accessToken, environment, item, storeConfig)
+              syncResult = await processUpdate(supabase, accessToken, environment, item, storeConfig, isDryRun)
               break
             case 'delete':
-              syncResult = await processDelete(supabase, accessToken, environment, item)
+              syncResult = await processDelete(supabase, accessToken, environment, item, isDryRun)
               break
             default:
               syncResult = { success: false, error: `Unknown action: ${queueItem.action}` }
@@ -305,7 +310,8 @@ async function processCreate(
   accessToken: string,
   environment: 'sandbox' | 'production',
   item: any,
-  storeConfig: any
+  storeConfig: any,
+  isDryRun: boolean = false
 ): Promise<{ success: boolean; data?: any; error?: string }> {
   const ebaySku = item.sku || `INV-${item.id.substring(0, 8)}`
   const title = buildTitle(item).substring(0, 80)
@@ -313,6 +319,36 @@ async function processCreate(
   
   // Use effective quantity (derived from cards.status for graded items)
   const quantity = item._effectiveQuantity ?? item.quantity ?? 1
+
+  // DRY RUN: Simulate success without calling eBay APIs
+  if (isDryRun) {
+    const fakeOfferId = `DRY-RUN-OFFER-${Date.now()}`
+    const fakeListingId = `DRY-RUN-LISTING-${Date.now()}`
+    
+    console.log(`[ebay-sync-processor] DRY RUN: Would create listing for SKU ${ebaySku}, title: ${title}`)
+    
+    await supabase
+      .from('intake_items')
+      .update({
+        ebay_inventory_item_sku: ebaySku,
+        ebay_offer_id: fakeOfferId,
+        ebay_listing_id: fakeListingId,
+        ebay_listing_url: `[DRY RUN] Would list at ebay.com/itm/${fakeListingId}`,
+        ebay_sync_status: 'dry_run',
+        ebay_sync_error: null,
+        last_ebay_synced_at: new Date().toISOString(),
+        ebay_sync_snapshot: {
+          timestamp: new Date().toISOString(),
+          action: 'create',
+          dry_run: true,
+          simulated: true,
+          sku: ebaySku,
+        },
+      })
+      .eq('id', item.id)
+
+    return { success: true, data: { listing_id: fakeListingId, dry_run: true } }
+  }
 
   // Create inventory item
   const inventoryResult = await createOrUpdateInventoryItem(accessToken, environment, {
@@ -399,7 +435,8 @@ async function processUpdate(
   accessToken: string,
   environment: 'sandbox' | 'production',
   item: any,
-  storeConfig: any
+  storeConfig: any,
+  isDryRun: boolean = false
 ): Promise<{ success: boolean; error?: string }> {
   const ebaySku = item.ebay_inventory_item_sku || item.sku
 
@@ -409,6 +446,29 @@ async function processUpdate(
 
   // Use effective quantity (derived from cards.status for graded items)
   const quantity = item._effectiveQuantity ?? item.quantity ?? 1
+
+  // DRY RUN: Simulate success without calling eBay APIs
+  if (isDryRun) {
+    console.log(`[ebay-sync-processor] DRY RUN: Would update listing for SKU ${ebaySku}`)
+    
+    await supabase
+      .from('intake_items')
+      .update({
+        ebay_sync_status: 'dry_run',
+        ebay_sync_error: null,
+        last_ebay_synced_at: new Date().toISOString(),
+        ebay_sync_snapshot: {
+          timestamp: new Date().toISOString(),
+          action: 'update',
+          dry_run: true,
+          simulated: true,
+          sku: ebaySku,
+        },
+      })
+      .eq('id', item.id)
+
+    return { success: true }
+  }
 
   // Update inventory item
   const inventoryResult = await createOrUpdateInventoryItem(accessToken, environment, {
@@ -478,12 +538,39 @@ async function processDelete(
   supabase: ReturnType<typeof createClient>,
   accessToken: string,
   environment: 'sandbox' | 'production',
-  item: any
+  item: any,
+  isDryRun: boolean = false
 ): Promise<{ success: boolean; error?: string }> {
   const ebaySku = item.ebay_inventory_item_sku
 
   if (!ebaySku) {
     // Nothing to delete
+    return { success: true }
+  }
+
+  // DRY RUN: Simulate success without calling eBay APIs
+  if (isDryRun) {
+    console.log(`[ebay-sync-processor] DRY RUN: Would delete listing for SKU ${ebaySku}`)
+    
+    await supabase
+      .from('intake_items')
+      .update({
+        ebay_inventory_item_sku: null,
+        ebay_offer_id: null,
+        ebay_listing_id: null,
+        ebay_listing_url: null,
+        ebay_sync_status: 'dry_run',
+        ebay_sync_error: null,
+        ebay_sync_snapshot: {
+          timestamp: new Date().toISOString(),
+          action: 'delete',
+          dry_run: true,
+          simulated: true,
+          deleted_sku: ebaySku,
+        },
+      })
+      .eq('id', item.id)
+
     return { success: true }
   }
 
