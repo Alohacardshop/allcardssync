@@ -458,9 +458,9 @@ export const InventoryTableView = memo(({
   }
 
   return (
-    <div className="rounded-lg border bg-card overflow-hidden">
+    <div className="rounded-lg border bg-card overflow-hidden flex flex-col h-full">
       {/* Sticky Header */}
-      <div className="grid grid-cols-[40px_100px_1fr_100px_80px_70px_90px_80px_90px_100px_80px_50px] gap-2 items-center px-3 py-2 bg-muted/50 border-b font-medium text-xs sticky top-0 z-10">
+      <div className="shrink-0 grid grid-cols-[40px_100px_1fr_100px_80px_70px_90px_80px_90px_100px_80px_50px] gap-2 items-center px-3 py-2 bg-muted/50 border-b font-medium text-xs sticky top-0 z-10">
         <div className="flex items-center justify-center">
           <Checkbox
             checked={allSelected}
@@ -486,7 +486,7 @@ export const InventoryTableView = memo(({
       {/* Virtualized Rows */}
       <div
         ref={parentRef}
-        style={{ height: '70vh', overflow: 'auto' }}
+        className="flex-1 overflow-auto"
       >
         <div
           style={{
