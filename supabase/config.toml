@@ -194,3 +194,7 @@ verify_jwt = false
 
 [functions.sync-card-locations]
 verify_jwt = false
+
+# Webhook health monitoring (cron job - no JWT)
+[functions.check-webhook-health]
+verify_jwt = false
