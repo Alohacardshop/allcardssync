@@ -43,7 +43,7 @@ import { RegionSettingsEditor } from "@/components/admin/RegionSettingsEditor";
 import { QuickActions } from "@/components/admin/QuickActions";
 import { ConfigurationStatus } from "@/components/admin/ConfigurationStatus";
 
-// Consolidated sidebar - 8 sections with E2E testing
+// Consolidated sidebar - 7 sections
 const adminSections = [
   {
     id: 'overview',
