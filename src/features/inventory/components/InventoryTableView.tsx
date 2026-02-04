@@ -123,85 +123,93 @@ const TableRow = memo(({
   return (
     <div 
       className={cn(
-        "grid gap-2 items-center px-3 py-2 border-b border-border hover:bg-muted/50 text-sm",
-        isSelected && "bg-primary/5",
-        item.deleted_at && "opacity-50"
+        "grid gap-2 items-center px-3 min-h-[44px] border-b border-border text-sm transition-colors",
+        // Hover state - subtle background
+        "hover:bg-muted/40",
+        // Selected state - more prominent
+        isSelected && "bg-primary/8 hover:bg-primary/12 border-l-2 border-l-primary",
+        // Deleted state
+        item.deleted_at && "opacity-50",
+        // Focus-within for keyboard navigation
+        "focus-within:ring-1 focus-within:ring-inset focus-within:ring-ring"
       )}
       style={{ gridTemplateColumns: gridTemplate }}
     >
         {/* Checkbox */}
-        <div className="flex items-center justify-center">
+        <div className="flex items-center justify-center h-full">
           <Checkbox
             checked={isSelected}
             onCheckedChange={() => onToggleSelection(item.id)}
+            aria-label={`Select ${title}`}
           />
         </div>
 
         {/* SKU - monospace, muted */}
-        <div className="font-mono text-xs text-muted-foreground truncate" title={item.sku || ''}>
-          {item.sku}
+        <div className="font-mono text-xs text-muted-foreground truncate leading-tight" title={item.sku || ''}>
+          {item.sku || '—'}
         </div>
 
-        {/* Title - bold, primary color */}
-        <div className="truncate font-semibold text-foreground" title={title}>
+        {/* Title - semibold, primary color */}
+        <div className="truncate font-semibold text-foreground leading-tight" title={title}>
           {title}
         </div>
 
         {/* Location */}
-        <div className="text-xs text-muted-foreground truncate">
+        <div className="text-xs text-muted-foreground truncate leading-tight">
           {item.shopify_location_gid && locationsMap ? (
-            <span className="truncate">{getShortLocationName(item.shopify_location_gid, locationsMap)}</span>
+            <span>{getShortLocationName(item.shopify_location_gid, locationsMap)}</span>
           ) : (
-            <span>—</span>
+            <span className="text-muted-foreground/50">—</span>
           )}
         </div>
 
-        {/* Price */}
-        <div className="text-right tabular-nums font-medium">
+        {/* Price - right aligned, tabular nums */}
+        <div className="text-right tabular-nums font-medium text-foreground pr-1">
           ${(item.price || 0).toFixed(2)}
         </div>
 
-        {/* Quantity - inline editable */}
-        <div className="flex justify-center">
+        {/* Quantity - center aligned, fixed height container */}
+        <div className="flex items-center justify-center h-[28px]">
           <InlineQuantityEditor
             itemId={item.id}
             quantity={item.quantity}
             shopifyProductId={item.shopify_product_id}
             shopifyInventoryItemId={item.shopify_inventory_item_id}
+            compact
           />
         </div>
 
-        {/* Shopify Status - consistent chip */}
-        <div className="flex justify-center">
+        {/* Shopify Status - consistent chip with fixed height */}
+        <div className="flex items-center justify-center h-[28px]">
           <Badge 
             variant={syncStatus.variant}
             className={cn(
-              "text-[10px] h-5 px-1.5 font-medium",
+              "text-[10px] h-5 px-1.5 font-medium whitespace-nowrap",
               syncStatus.loading && "animate-pulse"
             )}
           >
-            {syncStatus.loading && <Loader2 className="h-3 w-3 mr-0.5 animate-spin" />}
+            {syncStatus.loading && <Loader2 className="h-3 w-3 mr-0.5 animate-spin" aria-hidden="true" />}
             {syncStatus.label}
           </Badge>
         </div>
 
-        {/* Print Status - minimal badge */}
-        <div className="flex justify-center">
+        {/* Print Status - minimal badge with fixed height */}
+        <div className="flex items-center justify-center h-[28px]">
           <Badge
             variant={item.printed_at ? "default" : "outline"}
             className={cn(
-              "text-[10px] h-5 px-1.5 font-medium",
+              "text-[10px] h-5 px-1.5 font-medium whitespace-nowrap",
               item.printed_at 
-                ? "bg-primary/10 text-primary border-primary/20 hover:bg-primary/20" 
-                : "text-muted-foreground"
+                ? "bg-primary/10 text-primary border-primary/20" 
+                : "text-muted-foreground border-muted-foreground/30"
             )}
           >
             {item.printed_at ? 'Printed' : 'No Label'}
           </Badge>
         </div>
 
-        {/* eBay Status */}
-        <div className="flex justify-center">
+        {/* eBay Status - fixed height container */}
+        <div className="flex items-center justify-center h-[28px]">
           <EbayStatusBadge
             syncStatus={item.ebay_sync_status}
             listingId={item.ebay_listing_id}
@@ -211,29 +219,29 @@ const TableRow = memo(({
           />
         </div>
 
-        {/* Updated - relative with tooltip */}
-        <div className="flex justify-center">
+        {/* Updated - relative with tooltip, fixed height */}
+        <div className="flex items-center justify-center h-[28px]">
           <Tooltip>
             <TooltipTrigger asChild>
-              <span className="text-xs text-muted-foreground cursor-default truncate">
+              <span className="text-xs text-muted-foreground cursor-default truncate tabular-nums">
                 {formatDistanceToNow(new Date(item.updated_at), { addSuffix: true }).replace('about ', '')}
               </span>
             </TooltipTrigger>
-            <TooltipContent side="top" className="text-xs">
+            <TooltipContent side="top" className="text-xs font-medium">
               {formattedDate}
             </TooltipContent>
           </Tooltip>
         </div>
 
         {/* Primary Action - fixed width with placeholder to prevent shifting */}
-        <div className="flex justify-center min-w-[70px]">
+        <div className="flex items-center justify-center h-[28px] min-w-[70px]">
           {primaryAction ? (
             <Button
               variant="outline"
               size="sm"
               onClick={primaryAction.action}
               disabled={isLoading}
-              className="h-6 px-2 text-[10px] font-medium min-w-[52px]"
+              className="h-6 px-2 text-[10px] font-medium min-w-[52px] focus-visible:ring-2"
               aria-label={`${primaryAction.label} ${title}`}
             >
               {isLoading ? (
@@ -243,18 +251,18 @@ const TableRow = memo(({
               )}
             </Button>
           ) : (
-            <span className="min-w-[52px]" aria-hidden="true" />
+            <span className="min-w-[52px] h-6" aria-hidden="true" />
           )}
         </div>
 
-        {/* Kebab Menu */}
-        <div className="flex justify-center">
+        {/* Kebab Menu - fixed height container */}
+        <div className="flex items-center justify-center h-[28px]">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button 
                 variant="ghost" 
                 size="sm" 
-                className="h-7 w-7 p-0"
+                className="h-7 w-7 p-0 hover:bg-muted focus-visible:ring-2"
                 aria-label={`More actions for ${title}`}
               >
                 <MoreVertical className="h-4 w-4" aria-hidden="true" />
@@ -497,31 +505,31 @@ export const InventoryTableView = memo(({
         {/* Horizontal scroll wrapper */}
         <div className="overflow-x-auto flex-1 flex flex-col min-h-0">
           <div className="min-w-[1100px] flex flex-col h-full">
-          {/* Sticky Header */}
-          <div 
-            className="shrink-0 grid gap-2 items-center px-3 py-2 bg-muted/50 border-b font-medium text-xs sticky top-0 z-10"
-            style={{ gridTemplateColumns: gridTemplate }}
-          >
-        <div className="flex items-center justify-center">
-          <Checkbox
-            checked={allSelected}
-            indeterminate={someSelected}
-            onCheckedChange={handleSelectAll}
-            aria-label={allSelected ? "Deselect all items" : someSelected ? "Select all items" : "Select all items"}
-          />
-        </div>
-        <SortableHeader label="SKU" field="sku" sortConfig={sortConfig} onSort={handleSort} />
-        <SortableHeader label="Title" field="title" sortConfig={sortConfig} onSort={handleSort} />
-        <span className="text-muted-foreground">Location</span>
-        <SortableHeader label="Price" field="price" sortConfig={sortConfig} onSort={handleSort} className="justify-end" />
-        <SortableHeader label="Qty" field="quantity" sortConfig={sortConfig} onSort={handleSort} className="justify-center" />
-        <span className="text-muted-foreground text-center">Shopify</span>
-        <span className="text-muted-foreground text-center">Label</span>
-        <span className="text-muted-foreground text-center">eBay</span>
-        <SortableHeader label="Updated" field="updated_at" sortConfig={sortConfig} onSort={handleSort} className="justify-center" />
-        <span></span>
-        <span></span>
-      </div>
+            {/* Sticky Header */}
+            <div 
+              className="shrink-0 grid gap-2 items-center px-3 min-h-[40px] bg-muted/60 border-b font-medium text-xs sticky top-0 z-10"
+              style={{ gridTemplateColumns: gridTemplate }}
+            >
+              <div className="flex items-center justify-center h-full">
+                <Checkbox
+                  checked={allSelected}
+                  indeterminate={someSelected}
+                  onCheckedChange={handleSelectAll}
+                  aria-label={allSelected ? "Deselect all items" : someSelected ? "Select all items" : "Select all items"}
+                />
+              </div>
+              <SortableHeader label="SKU" field="sku" sortConfig={sortConfig} onSort={handleSort} />
+              <SortableHeader label="Title" field="title" sortConfig={sortConfig} onSort={handleSort} />
+              <span className="text-muted-foreground">Location</span>
+              <SortableHeader label="Price" field="price" sortConfig={sortConfig} onSort={handleSort} className="justify-end pr-1" />
+              <SortableHeader label="Qty" field="quantity" sortConfig={sortConfig} onSort={handleSort} className="justify-center" />
+              <span className="text-muted-foreground text-center">Shopify</span>
+              <span className="text-muted-foreground text-center">Label</span>
+              <span className="text-muted-foreground text-center">eBay</span>
+              <SortableHeader label="Updated" field="updated_at" sortConfig={sortConfig} onSort={handleSort} className="justify-center" />
+              <span aria-hidden="true"></span>
+              <span aria-hidden="true"></span>
+            </div>
 
       {/* Virtualized Rows */}
       <div
