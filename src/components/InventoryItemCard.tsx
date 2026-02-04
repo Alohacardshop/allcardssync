@@ -488,6 +488,8 @@ export const InventoryItemCard = memo(({
             itemId={item.id}
             currentTags={item.shopify_tags || []}
             normalizedTags={item.normalized_tags || []}
+            shopifyProductId={item.shopify_product_id}
+            storeKey={item.store_key}
           />
         </div>
 

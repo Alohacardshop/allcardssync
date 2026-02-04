@@ -17,6 +17,8 @@ interface TagEditorProps {
   itemId: string;
   currentTags: string[];
   normalizedTags?: string[];
+  shopifyProductId?: string | null;
+  storeKey?: string | null;
   onTagsUpdated?: () => void;
   className?: string;
 }
@@ -32,6 +34,8 @@ export function TagEditor({
   itemId, 
   currentTags = [], 
   normalizedTags = [],
+  shopifyProductId,
+  storeKey,
   onTagsUpdated,
   className 
 }: TagEditorProps) {
@@ -39,6 +43,7 @@ export function TagEditor({
   const [tags, setTags] = useState<string[]>(currentTags);
   const [newTag, setNewTag] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [isSyncingToShopify, setIsSyncingToShopify] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
@@ -71,6 +76,7 @@ export function TagEditor({
   const handleSave = async () => {
     setIsSaving(true);
     try {
+      // 1. Save to local database
       const { error } = await supabase
         .from('intake_items')
         .update({ 
@@ -81,7 +87,30 @@ export function TagEditor({
 
       if (error) throw error;
 
-      toast.success('Tags updated successfully');
+      // 2. If synced to Shopify, push tags there too
+      if (shopifyProductId && storeKey) {
+        setIsSyncingToShopify(true);
+        try {
+          const { error: shopifyError } = await supabase.functions.invoke('shopify-tag-manager', {
+            body: {
+              action: 'replace',
+              tags: tags,
+              productId: shopifyProductId,
+              storeKey: storeKey
+            }
+          });
+          if (shopifyError) throw shopifyError;
+          toast.success('Tags synced to Shopify');
+        } catch (shopifyErr: any) {
+          toast.warning('Tags saved locally, but Shopify sync failed');
+          console.error('Shopify tag sync failed:', shopifyErr);
+        } finally {
+          setIsSyncingToShopify(false);
+        }
+      } else {
+        toast.success('Tags updated');
+      }
+      
       setIsOpen(false);
       
       // Invalidate queries to refresh data
@@ -229,18 +258,18 @@ export function TagEditor({
             <Button
               size="sm"
               onClick={handleSave}
-              disabled={!hasChanges || isSaving}
+              disabled={!hasChanges || isSaving || isSyncingToShopify}
               className="h-7 text-xs"
             >
-              {isSaving ? (
+              {isSaving || isSyncingToShopify ? (
                 <>
                   <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                  Saving...
+                  {isSyncingToShopify ? 'Syncing to Shopify...' : 'Saving...'}
                 </>
               ) : (
                 <>
                   <Check className="h-3 w-3 mr-1" />
-                  Save Tags
+                  {shopifyProductId ? 'Save & Sync' : 'Save Tags'}
                 </>
               )}
             </Button>

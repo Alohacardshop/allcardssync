@@ -6,7 +6,7 @@ const corsHeaders = {
 };
 
 interface TagOperation {
-  action: 'add' | 'remove';
+  action: 'add' | 'remove' | 'replace';
   tags: string[];
   productId: string;
   storeKey: string;
@@ -77,12 +77,15 @@ Deno.serve(async (req) => {
     const productData = await productResponse.json();
     const currentTags = productData.product.tags ? productData.product.tags.split(', ') : [];
 
-    // Update tags
-    let updatedTags = [...currentTags];
-    if (action === 'add') {
-      updatedTags = [...new Set([...updatedTags, ...tags])];
+    // Update tags based on action
+    let updatedTags: string[];
+    if (action === 'replace') {
+      // Complete replacement - set exactly these tags
+      updatedTags = [...tags];
+    } else if (action === 'add') {
+      updatedTags = [...new Set([...currentTags, ...tags])];
     } else {
-      updatedTags = updatedTags.filter((tag: string) => !tags.includes(tag));
+      updatedTags = currentTags.filter((tag: string) => !tags.includes(tag));
     }
 
     // Update product with new tags
