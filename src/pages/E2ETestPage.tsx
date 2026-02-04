@@ -158,7 +158,9 @@ export default function E2ETestPage() {
   const selectedItemIds = Array.from(selectedItems);
   const createdItems = testItems.filter(i => i.status === 'created');
   const shopifySyncedItems = testItems.filter(i => i.status === 'shopify_synced');
-  const ebayQueuedItems = testItems.filter(i => ['ebay_queued', 'ebay_processing', 'ebay_synced'].includes(i.status));
+  const ebayQueuedItems = testItems.filter(i => i.status === 'ebay_queued');
+  const ebaySyncedItems = testItems.filter(i => i.status === 'ebay_synced');
+  const printedItems = testItems.filter(i => i.status === 'printed');
 
   return (
     <div className="min-h-screen bg-background">
@@ -174,9 +176,13 @@ export default function E2ETestPage() {
               <TestTube2 className="h-6 w-6 text-primary" />
               <h1 className="text-2xl font-bold">E2E Test Dashboard</h1>
             </div>
-            <Badge variant="secondary" className="ml-auto">
-              {testItems.length} test items
-            </Badge>
+            <div className="ml-auto flex items-center gap-2">
+              {createdItems.length > 0 && <Badge variant="outline">{createdItems.length} new</Badge>}
+              {shopifySyncedItems.length > 0 && <Badge variant="secondary"><ShoppingBag className="h-3 w-3 mr-1" />{shopifySyncedItems.length}</Badge>}
+              {ebaySyncedItems.length > 0 && <Badge variant="secondary"><Tag className="h-3 w-3 mr-1" />{ebaySyncedItems.length}</Badge>}
+              {printedItems.length > 0 && <Badge><Printer className="h-3 w-3 mr-1" />{printedItems.length}</Badge>}
+              <Badge variant="secondary">{testItems.length} total</Badge>
+            </div>
           </div>
           <p className="text-muted-foreground mt-1 ml-14">
             Test the full Shopify/eBay/Print workflow with synthetic data
@@ -411,10 +417,20 @@ export default function E2ETestPage() {
               </Button>
             </div>
             
-            {ebayQueuedItems.length > 0 && (
-              <div className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
-                <Clock className="h-4 w-4" />
-                {ebayQueuedItems.length} item(s) in eBay queue/processed
+            {(ebayQueuedItems.length > 0 || ebaySyncedItems.length > 0) && (
+              <div className="mt-4 flex items-center gap-4 text-sm">
+                {ebayQueuedItems.length > 0 && (
+                  <span className="flex items-center gap-1 text-muted-foreground">
+                    <Clock className="h-4 w-4" />
+                    {ebayQueuedItems.length} queued
+                  </span>
+                )}
+                {ebaySyncedItems.length > 0 && (
+                  <span className="flex items-center gap-1 text-primary">
+                    <CheckCircle2 className="h-4 w-4" />
+                    {ebaySyncedItems.length} synced to eBay
+                  </span>
+                )}
               </div>
             )}
           </CardContent>
@@ -471,6 +487,13 @@ export default function E2ETestPage() {
                   Print Selected ({selectedItemIds.length})
                 </Button>
               </div>
+              
+              {printedItems.length > 0 && (
+                <div className="flex items-center gap-2 text-sm text-primary">
+                  <CheckCircle2 className="h-4 w-4" />
+                  {printedItems.length} label(s) printed
+                </div>
+              )}
               
               {!defaultTemplate && (
                 <Alert>
