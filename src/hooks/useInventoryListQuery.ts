@@ -102,7 +102,8 @@ export function useInventoryListQuery(filters: InventoryFilters) {
           year,
           category,
           variant,
-          shopify_tags
+          shopify_tags,
+          normalized_tags
         `,
           { count: 'exact' }
         )

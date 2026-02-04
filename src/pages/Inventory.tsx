@@ -1319,95 +1319,95 @@ const Inventory = () => {
                 </div>
               </div>
               
-              {/* Quick Filter Presets - now at the top for primary navigation */}
-              <Card>
-                <CardContent className="py-4">
+              {/* Consolidated Filter Card */}
+            <Card>
+              <CardContent className="py-4 space-y-4">
+                {/* Quick Filter Presets - horizontal scrollable on mobile */}
+                <div className="overflow-x-auto pb-2 -mx-2 px-2">
                   <QuickFilterPresets
                     onApplyPreset={handleApplyQuickFilter}
                     onClearFilters={handleClearAllFilters}
                     activePreset={activeQuickFilter}
                   />
-                </CardContent>
-              </Card>
-              
-              {/* Filters and Search - Consolidated */}
-            <Card>
-              <CardContent className="py-4 space-y-4">
-                {/* Single Row: Search, Status, Location, More Filters */}
-                <div className="flex flex-col md:flex-row gap-3 md:items-center">
-                  {/* Search - takes more space */}
-                  <div className="relative flex-1 md:max-w-md">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      ref={searchInputRef}
-                      placeholder="Search items... (press / to focus)"
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="pl-10"
-                    />
-                  </div>
-                  
-                  {/* Filter controls row */}
-                  <div className="flex flex-wrap items-center gap-2">
-                    {/* Status Filter */}
-                    <Select value={statusFilter} onValueChange={(value: any) => { setStatusFilter(value); setActiveQuickFilter(null); }}>
-                      <SelectTrigger className="w-[130px] h-9">
-                        <SelectValue placeholder="Status" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="active">Active</SelectItem>
-                        <SelectItem value="out-of-stock">Out of Stock</SelectItem>
-                        <SelectItem value="sold">Sold</SelectItem>
-                        <SelectItem value="errors">Errors</SelectItem>
-                        <SelectItem value="deleted">Deleted</SelectItem>
-                        <SelectItem value="all">All</SelectItem>
-                      </SelectContent>
-                    </Select>
+                </div>
+                
+                {/* Search + Filters Row */}
+                <div className="border-t pt-4">
+                  <div className="flex flex-col md:flex-row gap-3 md:items-center">
+                    {/* Search - takes more space */}
+                    <div className="relative flex-1 md:max-w-md">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        ref={searchInputRef}
+                        placeholder="Search items... (press / to focus)"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="pl-10"
+                      />
+                    </div>
+                    
+                    {/* Filter controls row */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      {/* Status Filter */}
+                      <Select value={statusFilter} onValueChange={(value: any) => { setStatusFilter(value); setActiveQuickFilter(null); }}>
+                        <SelectTrigger className="w-[130px] h-9">
+                          <SelectValue placeholder="Status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="active">Active</SelectItem>
+                          <SelectItem value="out-of-stock">Out of Stock</SelectItem>
+                          <SelectItem value="sold">Sold</SelectItem>
+                          <SelectItem value="errors">Errors</SelectItem>
+                          <SelectItem value="deleted">Deleted</SelectItem>
+                          <SelectItem value="all">All</SelectItem>
+                        </SelectContent>
+                      </Select>
 
-                    {/* Location Filter */}
-                    <Select 
-                      value={locationFilter || 'all'} 
-                      onValueChange={(value: string) => setLocationFilter(value === 'all' ? null : value)}
-                    >
-                      <SelectTrigger className="w-[150px] h-9">
-                        <MapPin className="h-4 w-4 mr-1.5 text-muted-foreground shrink-0" />
-                        <SelectValue placeholder="Location" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Locations</SelectItem>
-                        {locationsMap && Array.from(locationsMap.values()).map(loc => (
-                          <SelectItem key={loc.location_gid} value={loc.location_gid}>
-                            {loc.location_name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      {/* Location Filter */}
+                      <Select 
+                        value={locationFilter || 'all'} 
+                        onValueChange={(value: string) => setLocationFilter(value === 'all' ? null : value)}
+                      >
+                        <SelectTrigger className="w-[150px] h-9">
+                          <MapPin className="h-4 w-4 mr-1.5 text-muted-foreground shrink-0" />
+                          <SelectValue placeholder="Location" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Locations</SelectItem>
+                          {locationsMap && Array.from(locationsMap.values()).map(loc => (
+                            <SelectItem key={loc.location_gid} value={loc.location_gid}>
+                              {loc.location_name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
 
-                    {/* More Filters Popover - Contains all secondary filters */}
-                    <MoreFiltersPopover
-                      typeFilter={typeFilter}
-                      onTypeFilterChange={(value) => setTypeFilter(value)}
-                      categoryFilter={categoryFilter}
-                      onCategoryFilterChange={(value) => setCategoryFilter(value)}
-                      shopifySyncFilter={shopifySyncFilter}
-                      onShopifySyncFilterChange={(value) => { setShopifySyncFilter(value); setActiveQuickFilter(null); }}
-                      ebayStatusFilter={ebayStatusFilter}
-                      onEbayStatusFilterChange={(value) => { setEbayStatusFilter(value); setActiveQuickFilter(null); }}
-                      printStatusFilter={printStatusFilter}
-                      onPrintStatusFilterChange={(value) => { setPrintStatusFilter(value); setActiveQuickFilter(null); }}
-                      dateRangeFilter={dateRangeFilter}
-                      onDateRangeFilterChange={(value) => { setDateRangeFilter(value); setActiveQuickFilter(null); }}
-                      batchFilter={batchFilter}
-                      onBatchFilterChange={(value) => setBatchFilter(value)}
-                      tagFilter={tagFilter}
-                      onTagFilterChange={setTagFilter}
-                      shopifyTags={shopifyTags}
-                      isLoadingTags={isLoadingTags}
-                    />
+                      {/* More Filters Popover - Contains all secondary filters */}
+                      <MoreFiltersPopover
+                        typeFilter={typeFilter}
+                        onTypeFilterChange={(value) => setTypeFilter(value)}
+                        categoryFilter={categoryFilter}
+                        onCategoryFilterChange={(value) => setCategoryFilter(value)}
+                        shopifySyncFilter={shopifySyncFilter}
+                        onShopifySyncFilterChange={(value) => { setShopifySyncFilter(value); setActiveQuickFilter(null); }}
+                        ebayStatusFilter={ebayStatusFilter}
+                        onEbayStatusFilterChange={(value) => { setEbayStatusFilter(value); setActiveQuickFilter(null); }}
+                        printStatusFilter={printStatusFilter}
+                        onPrintStatusFilterChange={(value) => { setPrintStatusFilter(value); setActiveQuickFilter(null); }}
+                        dateRangeFilter={dateRangeFilter}
+                        onDateRangeFilterChange={(value) => { setDateRangeFilter(value); setActiveQuickFilter(null); }}
+                        batchFilter={batchFilter}
+                        onBatchFilterChange={(value) => setBatchFilter(value)}
+                        tagFilter={tagFilter}
+                        onTagFilterChange={setTagFilter}
+                        shopifyTags={shopifyTags}
+                        isLoadingTags={isLoadingTags}
+                      />
+                    </div>
                   </div>
                 </div>
 
-                {/* Separator between filters and bulk actions */}
+                {/* Bulk Actions - only when items selected */}
                 {selectedItems.size > 0 && (
                   <div className="border-t pt-4">
                     <BulkActionsToolbar
@@ -1436,7 +1436,7 @@ const Inventory = () => {
                   </div>
                 )}
 
-                {/* Item count - minimal footer */}
+                {/* Item count footer */}
                 <div className="flex items-center justify-between text-sm text-muted-foreground pt-2 border-t">
                   <span>
                     Showing {filteredItems.length} items {totalCount > filteredItems.length && `of ${totalCount}`}
