@@ -1,160 +1,383 @@
 
+# Inventory Management Efficiency Overhaul
 
-# Shopify Tag-Based Filtering Enhancement
+## Executive Summary
+This plan transforms the inventory system to use **Shopify tags as the primary categorization system** while making **this program the source of truth** that syncs TO Shopify. The current system has scattered data, inefficient auto-refresh, and underutilized Shopify metadata.
 
-## Summary
-Add a new "Shopify Tags" filter to the Inventory page that lets you filter by the actual tags from Shopify (like "pokemon", "baseball", "graded", etc.), while keeping the existing Raw/Graded/Comics categories only for items imported through this system.
+## Current State Analysis
 
-## Current State
-- Shopify products have rich tags stored in `shopify_snapshot.tags` (e.g., `["graded", "pokemon", "PSA"]`)
-- Most common tags: graded (497), pokemon (369), single (299), baseball (160), basketball (129), football (80)
-- Currently all Shopify-imported items have `type: 'Raw'` and `main_category: null`
-- The Type filter (Raw/Graded) doesn't work correctly for Shopify imports
+### Data Distribution
+| Source | Count | Notes |
+|--------|-------|-------|
+| shopify-pull (Las Vegas) | 1,297 | Imported from Shopify |
+| shopify-pull (Hawaii) | 813 | Imported from Shopify |
+| tcgplayer (Las Vegas) | 278 | Manual intake |
+| manual | 227 | Direct entry |
 
-## Solution Overview
+### Tag Usage (Top Tags)
+- `sportscards` / `sports` (772 items) - **Primary category**
+- `graded` (653 items) - **Item type**
+- `pokemon` (399 items) - **Primary category**
+- `PSA` (440 items) - **Grading company**
+- `baseball/basketball/football` (369 total) - **Sport type**
+- Vendor tags: `Joe`, `Neal Rabinowitz`, `Adam` - **Source tracking**
 
-### 1. Add "shopify_tags" Column
-Store the raw Shopify tags as a dedicated column for efficient filtering:
-- Add `shopify_tags TEXT[]` column to `intake_items` table
-- Populate during import from `shopify_snapshot.tags`
-- Create GIN index for fast array contains queries
+### Current Problems
 
-### 2. New Multi-Select Tag Filter in UI
-Add a new filter dropdown that shows available Shopify tags:
-- Dynamic list based on tags actually in inventory
-- Multi-select capability (e.g., filter by "pokemon" AND "graded")
-- Show item count per tag
+1. **Type/Category Mismatch**: 1,939 Shopify-pulled items have `type: 'Raw'` and `main_category: null` - they're not properly categorized
+2. **Redundant Filters**: Multiple overlapping filter systems (Type, Category, Tags)
+3. **Inefficient Auto-Refresh**: 2-minute interval regardless of user activity
+4. **Data Flow Confusion**: Unclear if program or Shopify is source of truth
+5. **Tag Normalization Issues**: Same data in different formats (`PSA`, `psa-10`, `grade10`)
 
-**Tag filter options to display:**
+## Solution Architecture
+
+### Core Principle: This Program as Source of Truth
+
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│                    INTAKE SYSTEM (Source of Truth)              │
+│                                                                 │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
+│  │ TCGPlayer    │  │ PSA Lookup   │  │ Manual Entry │          │
+│  │ Import       │  │ Import       │  │              │          │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘          │
+│         │                 │                 │                   │
+│         └─────────────────┴─────────────────┘                   │
+│                           │                                     │
+│                           ▼                                     │
+│              ┌────────────────────────┐                         │
+│              │     intake_items       │                         │
+│              │  (normalized tags)     │                         │
+│              │  (unified categories)  │                         │
+│              └────────────┬───────────┘                         │
+│                           │                                     │
+│         ┌─────────────────┴─────────────────┐                   │
+│         ▼                                   ▼                   │
+│  ┌──────────────┐                   ┌──────────────┐           │
+│  │   Shopify    │                   │    eBay      │           │
+│  │  (sync TO)   │                   │  (sync TO)   │           │
+│  └──────────────┘                   └──────────────┘           │
+└─────────────────────────────────────────────────────────────────┘
 ```
-- graded (497)
-- pokemon (369)
-- single (299)
-- baseball (160)
-- basketball (129)
-- football (80)
-- tcg (58)
-- PSA (251)
-- CGC (34)
-- Sealed (6)
+
+### Phase 1: Tag Normalization & Hierarchy
+
+**Create a unified tag taxonomy derived from Shopify but normalized:**
+
+```text
+Category (Primary)
+├── pokemon
+├── sports
+│   ├── baseball
+│   ├── basketball
+│   └── football
+├── tcg (other card games)
+└── comics
+
+Condition/Type
+├── graded
+│   ├── psa (PSA graded)
+│   ├── cgc (CGC graded)
+│   └── bgs (BGS graded)
+└── raw
+
+Grade Level (for graded items)
+├── gem-mint (10)
+├── mint (9)
+├── near-mint (8)
+└── excellent (7 and below)
 ```
 
-### 3. Update Category Filter Logic
-Distinguish between Shopify-imported and internally-created items:
-- **Shopify-imported**: Use `shopify_tags` for filtering (source_provider = 'shopify-pull')
-- **Internally-created**: Use existing `type`, `main_category` fields
+**Database Changes:**
+- Add `normalized_tags TEXT[]` column for cleaned/standardized tags
+- Add `primary_category TEXT` derived from tags (pokemon, sports, tcg, comics)
+- Add `condition_type TEXT` (graded, raw, sealed)
+- Create tag normalization function that runs on insert/update
 
-### 4. Quick Filter Presets for Popular Tags
-Add new quick filter presets:
-- "Pokemon Cards" - filters by tag "pokemon"
-- "Sports Cards" - filters by tags "baseball" OR "basketball" OR "football"
-- "Graded Items" - filters by tag "graded"
-
-## Technical Implementation
-
-### Database Changes
-
-**New column and index:**
+**Tag Normalization Rules:**
 ```sql
--- Add shopify_tags column
+-- Example normalization rules
+'graded', 'PSA', 'psa-10', 'grade10' → ['graded', 'psa', 'grade-10']
+'pokemon', 'Pokemon', 'POKEMON' → ['pokemon']
+'sports', 'sportscards', 'Sports Cards' → ['sports']
+'baseball', 'Baseball Cards' → ['sports', 'baseball']
+```
+
+### Phase 2: Smart Auto-Refresh
+
+**Current**: Fixed 2-minute polling regardless of activity
+**Proposed**: Adaptive refresh based on context
+
+```typescript
+// New smart refresh logic
+const getRefreshInterval = () => {
+  // No refresh if user is actively editing/selecting
+  if (selectedItems.size > 0) return false;
+  
+  // Fast refresh when syncing
+  if (hasPendingSyncs) return 15000; // 15 seconds
+  
+  // Normal refresh when browsing
+  if (document.hasFocus()) return 60000; // 1 minute
+  
+  // Slow refresh when tab is hidden
+  return 300000; // 5 minutes
+};
+```
+
+**Implementation:**
+- Replace fixed `refetchInterval: 120000` with dynamic function
+- Use `visibilitychange` event to pause/resume
+- Add "changes pending" indicator instead of constant polling
+
+### Phase 3: Unified Filter System
+
+**Current State**: Multiple overlapping filters
+- Type filter (Raw/Graded)
+- Category filter (TCG/Comics/Sealed)
+- Tag filter (Shopify tags)
+- Status filters
+
+**Proposed State**: Single unified tag-based filter
+
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│ Quick Filters: [Pokemon] [Sports] [Graded] [Ready to Sync]...  │
+├─────────────────────────────────────────────────────────────────┤
+│ [Search...        ] [Status ▼] [Location ▼] [More Filters ▼]   │
+├─────────────────────────────────────────────────────────────────┤
+│ Active Tags: [pokemon ×] [graded ×]              [Clear All]   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Changes:**
+- Remove separate Type/Category dropdowns
+- Enhance Tag filter to be the primary filter mechanism
+- Quick Filters become tag presets (e.g., "Pokemon" = `tagFilter: ['pokemon']`)
+- Consolidate into fewer, more meaningful filter options
+
+### Phase 4: Sync TO Shopify (Source of Truth)
+
+**Current Flow (confusing):**
+```text
+Shopify → Pull Products → intake_items ← Manual Entry
+                              ↓
+                          Sync back? 🤔
+```
+
+**Proposed Flow (clear):**
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│                       INTAKE (Source of Truth)                  │
+│ - All items created/edited here                                 │
+│ - Tags managed here                                             │
+│ - Prices set here                                               │
+└─────────────────────────────────────────────────────────────────┘
+                              ↓
+                        [Sync TO Shopify]
+                              ↓
+┌─────────────────────────────────────────────────────────────────┐
+│                          SHOPIFY                                │
+│ - Receives product data FROM intake                            │
+│ - Tags/metafields populated FROM intake                        │
+│ - Inventory levels controlled BY intake                        │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Key Changes:**
+1. Tags edited in intake are pushed TO Shopify (not pulled FROM)
+2. Add "Edit Tags" button to InventoryItemCard
+3. When tags change locally, queue item for Shopify resync
+4. Remove dependency on shopify_snapshot for categorization
+
+### Phase 5: Layout Efficiency
+
+**Current Layout Issues:**
+- RefreshControls takes significant space
+- Quick Filters and regular filters are separate cards
+- Too many rows of filter dropdowns
+
+**Proposed Compact Layout:**
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│ Inventory Management                    [↻ Auto] [🔄 Refresh]  │
+├─────────────────────────────────────────────────────────────────┤
+│ [Pokemon][Sports][Graded][Ready to Sync][Errors][+] [Clear All]│
+├─────────────────────────────────────────────────────────────────┤
+│ [🔍 Search items...     ][Status▼][Location▼][⚙️ More Filters]│
+├─────────────────────────────────────────────────────────────────┤
+│ Active: [pokemon ×] [graded ×]  │  Showing 847 items          │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Changes:**
+- Move refresh controls to header row (compact toggle + button)
+- Combine Quick Filters into single scrollable row
+- Collapse secondary filters into "More Filters" popover
+- Show active filter chips with remove buttons
+
+## Implementation Order
+
+| Step | Task | Impact | Effort |
+|------|------|--------|--------|
+| 1 | Add `normalized_tags` column + migration | Foundation | Medium |
+| 2 | Create tag normalization function | Data quality | Medium |
+| 3 | Backfill normalized tags from existing data | Data | Small |
+| 4 | Update Quick Filters to use normalized tags | UX | Small |
+| 5 | Implement smart auto-refresh | Performance | Medium |
+| 6 | Consolidate filter UI (remove redundant dropdowns) | UX | Medium |
+| 7 | Add tag editing to InventoryItemCard | Feature | Medium |
+| 8 | Update sync functions to push tags TO Shopify | Core feature | Large |
+| 9 | Compact layout redesign | UX | Medium |
+
+## Technical Details
+
+### Database Migration
+
+```sql
+-- Add normalized tag columns
 ALTER TABLE intake_items 
-ADD COLUMN IF NOT EXISTS shopify_tags TEXT[];
+ADD COLUMN IF NOT EXISTS normalized_tags TEXT[],
+ADD COLUMN IF NOT EXISTS primary_category TEXT,
+ADD COLUMN IF NOT EXISTS condition_type TEXT;
 
--- Create GIN index for fast array queries
-CREATE INDEX IF NOT EXISTS idx_intake_items_shopify_tags 
-ON intake_items USING GIN (shopify_tags);
+-- Create normalization function
+CREATE OR REPLACE FUNCTION normalize_shopify_tags(raw_tags TEXT[])
+RETURNS TEXT[] AS $$
+DECLARE
+  normalized TEXT[] := '{}';
+  tag TEXT;
+BEGIN
+  FOREACH tag IN ARRAY raw_tags LOOP
+    -- Lowercase and trim
+    tag := lower(trim(tag));
+    
+    -- Category normalization
+    IF tag IN ('pokemon', 'pokémon') THEN
+      normalized := array_append(normalized, 'pokemon');
+    ELSIF tag IN ('sports', 'sportscards', 'sports cards') THEN
+      normalized := array_append(normalized, 'sports');
+    ELSIF tag IN ('graded', 'psa', 'cgc', 'bgs') THEN
+      normalized := array_append(normalized, 'graded');
+      IF tag != 'graded' THEN
+        normalized := array_append(normalized, tag);
+      END IF;
+    ELSIF tag ~ '^grade-?\d+$' OR tag ~ '^psa-?\d+$' THEN
+      -- Normalize grade tags: grade10, psa-10, grade-10 → grade-10
+      normalized := array_append(normalized, 'grade-' || regexp_replace(tag, '\D', '', 'g'));
+    ELSE
+      normalized := array_append(normalized, tag);
+    END IF;
+  END LOOP;
+  
+  RETURN array(SELECT DISTINCT unnest(normalized));
+END;
+$$ LANGUAGE plpgsql;
 
--- Backfill existing data from shopify_snapshot
-UPDATE intake_items 
-SET shopify_tags = ARRAY(
-  SELECT jsonb_array_elements_text(shopify_snapshot->'tags')
-)
-WHERE shopify_snapshot IS NOT NULL 
-  AND shopify_snapshot->'tags' IS NOT NULL
-  AND shopify_tags IS NULL;
+-- Trigger to auto-normalize on insert/update
+CREATE OR REPLACE FUNCTION trigger_normalize_tags()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.shopify_tags IS NOT NULL THEN
+    NEW.normalized_tags := normalize_shopify_tags(NEW.shopify_tags);
+    
+    -- Derive primary category
+    IF 'pokemon' = ANY(NEW.normalized_tags) THEN
+      NEW.primary_category := 'pokemon';
+    ELSIF 'sports' = ANY(NEW.normalized_tags) THEN
+      NEW.primary_category := 'sports';
+    ELSIF 'comics' = ANY(NEW.normalized_tags) THEN
+      NEW.primary_category := 'comics';
+    ELSE
+      NEW.primary_category := 'tcg';
+    END IF;
+    
+    -- Derive condition type
+    IF 'graded' = ANY(NEW.normalized_tags) THEN
+      NEW.condition_type := 'graded';
+    ELSIF 'sealed' = ANY(NEW.normalized_tags) THEN
+      NEW.condition_type := 'sealed';
+    ELSE
+      NEW.condition_type := 'raw';
+    END IF;
+  END IF;
+  
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER intake_items_normalize_tags
+BEFORE INSERT OR UPDATE ON intake_items
+FOR EACH ROW EXECUTE FUNCTION trigger_normalize_tags();
+```
+
+### Smart Refresh Hook Update
+
+```typescript
+// In useInventoryListQuery.ts
+refetchInterval: (query) => {
+  // No auto-refresh if user has selected items
+  if (filters.hasActiveSelection) return false;
+  
+  // Check for pending syncs
+  const data = query.state.data;
+  const hasPending = data?.pages?.some(p => 
+    p.items?.some(i => 
+      i.shopify_sync_status === 'queued' || 
+      i.shopify_sync_status === 'processing'
+    )
+  );
+  
+  // Fast refresh when syncs pending
+  if (hasPending) return 15000;
+  
+  // Normal refresh if auto-enabled and tab visible
+  if (filters.autoRefreshEnabled && document.hasFocus()) {
+    return 60000;
+  }
+  
+  // Slow background refresh
+  return 300000;
+},
 ```
 
 ### Files to Modify
 
-1. **`supabase/functions/shopify-pull-products-by-tags/index.ts`**
-   - Add `p_shopify_tags` parameter to RPC call
-   - Extract tags array from product and pass to upsert
+1. **`src/pages/Inventory.tsx`**
+   - Consolidate filter UI
+   - Remove redundant dropdowns
+   - Move refresh controls to header
+   - Add active filter chips display
 
 2. **`src/hooks/useInventoryListQuery.ts`**
-   - Add `tagFilter: string[]` to `InventoryFilters`
-   - Add query logic: `.overlaps('shopify_tags', tagFilter)` when tags selected
+   - Implement smart refresh logic
+   - Switch to `normalized_tags` for filtering
+   - Add `primary_category` filter option
 
-3. **`src/hooks/useShopifyTags.ts`** (new file)
-   - Hook to fetch distinct tags with counts
-   - Cache results for filter dropdown
+3. **`src/components/InventoryItemCard.tsx`**
+   - Add tag editing capability
+   - Show normalized tags instead of raw
+   - Add "Edit Tags" button
 
-4. **`src/pages/Inventory.tsx`**
-   - Add new Tag Filter multi-select dropdown
-   - State: `const [tagFilter, setTagFilter] = useState<string[]>([])`
-   - Pass to query hook
+4. **`src/components/inventory/QuickFilterPresets.tsx`**
+   - Update presets to use normalized tags
+   - Add more category-based presets
 
-5. **`src/components/inventory/TagFilterDropdown.tsx`** (new file)
-   - Multi-select dropdown component
-   - Shows tags with item counts
-   - Search/filter within tags list
+5. **`supabase/functions/v2-shopify-send-*`**
+   - Push `normalized_tags` to Shopify product tags
+   - Update metafields with category/condition info
 
-6. **`src/components/inventory/QuickFilterPresets.tsx`**
-   - Add "Pokemon", "Sports Cards", "Graded" presets
-
-### Query Example
-```typescript
-// In useInventoryListQuery.ts
-if (tagFilter && tagFilter.length > 0) {
-  // Filter items that have ANY of the selected tags
-  query = query.overlaps('shopify_tags', tagFilter);
-}
-```
-
-## UI Changes
-
-### Filters Section Layout
-```
-Row 1: [Search........] [Status▾] [Type▾] [Category▾]
-Row 2: [Location▾] [Tags ▾] [Shopify▾] [eBay▾] [Print▾] [Date▾] [Batch▾]
-                    ↑ NEW
-```
-
-### Tags Filter Dropdown
-```
-┌─ Tags Filter ──────────────┐
-│ 🔍 Search tags...          │
-├────────────────────────────┤
-│ ☑ pokemon (369)            │
-│ ☐ baseball (160)           │
-│ ☐ basketball (129)         │
-│ ☐ football (80)            │
-│ ☐ graded (497)             │
-│ ☐ single (299)             │
-│ ☐ Sealed (6)               │
-│ ☐ PSA (251)                │
-│ ☐ CGC (34)                 │
-└────────────────────────────┘
-```
-
-## Implementation Order
-
-| Step | Task | Effort |
-|------|------|--------|
-| 1 | Add `shopify_tags` column and index | Small |
-| 2 | Backfill existing data from shopify_snapshot | Small |
-| 3 | Update Shopify import to populate `shopify_tags` | Small |
-| 4 | Create `useShopifyTags` hook | Small |
-| 5 | Create `TagFilterDropdown` component | Medium |
-| 6 | Add tag filter to Inventory.tsx | Medium |
-| 7 | Update `useInventoryListQuery` for tag filtering | Medium |
-| 8 | Add Quick Filter presets (Pokemon, Sports, Graded) | Small |
-| 9 | Test end-to-end with various tag combinations | Medium |
+6. **New: `src/components/inventory/TagEditor.tsx`**
+   - Inline tag editing component
+   - Autocomplete from existing tags
+   - Validation against taxonomy
 
 ## Benefits
 
-1. **Filter by actual Shopify data** - no need to re-categorize imported items
-2. **Multi-select capability** - combine tags like "pokemon" + "graded"
-3. **Clear separation** - Raw/Graded/Comics categories reserved for manual imports
-4. **Fast queries** - GIN index on array column for efficient filtering
-5. **Dynamic tags** - filter options based on what's actually in inventory
-
+1. **Consistent Categorization**: All items properly categorized by normalized tags
+2. **Reduced Confusion**: One source of truth (this program)
+3. **Efficient Filtering**: Tag-based filtering matches Shopify workflow
+4. **Performance**: Smart refresh reduces unnecessary API calls
+5. **Cleaner UI**: Consolidated filters, compact layout
+6. **Future-Proof**: Normalized tag system scales with inventory growth
