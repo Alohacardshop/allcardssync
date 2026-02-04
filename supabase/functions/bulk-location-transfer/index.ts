@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { adjustInventorySafe, setInventorySafe, getInventoryLevel } from '../_shared/shopify-helpers.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -23,74 +24,68 @@ interface TransferResult {
   after_dest_qty?: number;
 }
 
-async function getShopifyInventoryLevel(
-  domain: string,
-  token: string,
-  inventoryItemId: string,
-  locationId: string,
-  apiVersion: string
-): Promise<number | null> {
+async function writeAuditEntry(
+  supabase: any,
+  action: string,
+  tableName: string,
+  recordId: string,
+  userId: string,
+  userEmail: string,
+  oldData: any,
+  newData: any,
+  locationGid: string
+) {
   try {
-    const response = await fetch(
-      `https://${domain}/admin/api/${apiVersion}/inventory_levels.json?inventory_item_ids=${inventoryItemId}&location_ids=${locationId}`,
-      {
-        headers: { 'X-Shopify-Access-Token': token },
-      }
-    );
-    
-    if (!response.ok) return null;
-    
-    const data = await response.json();
-    const level = data.inventory_levels?.[0];
-    return level?.available ?? null;
-  } catch {
-    return null;
+    await supabase.from('audit_log').insert({
+      action,
+      table_name: tableName,
+      record_id: recordId,
+      user_id: userId,
+      user_email: userEmail,
+      old_data: oldData,
+      new_data: newData,
+      location_gid: locationGid,
+    });
+  } catch (e) {
+    console.error('Failed to write audit entry:', e);
   }
 }
 
-async function setShopifyInventoryLevel(
-  domain: string,
-  token: string,
+async function updateInventoryLevelsOptimistic(
+  supabase: any,
+  storeKey: string,
   inventoryItemId: string,
-  locationId: string,
-  available: number,
-  apiVersion: string
-): Promise<{ ok: boolean; error?: string }> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 30000);
+  sourceLocationGid: string,
+  destLocationGid: string,
+  quantity: number,
+  beforeSourceQty: number,
+  beforeDestQty: number
+) {
+  // Update source location (decrement)
+  await supabase
+    .from('shopify_inventory_levels')
+    .upsert({
+      store_key: storeKey,
+      inventory_item_id: inventoryItemId,
+      location_gid: sourceLocationGid,
+      available: Math.max(0, beforeSourceQty - quantity),
+      updated_at: new Date().toISOString(),
+    }, {
+      onConflict: 'store_key,inventory_item_id,location_gid'
+    });
   
-  try {
-    const response = await fetch(
-      `https://${domain}/admin/api/${apiVersion}/inventory_levels/set.json`,
-      {
-        method: 'POST',
-        headers: {
-          'X-Shopify-Access-Token': token,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          location_id: locationId,
-          inventory_item_id: inventoryItemId,
-          available,
-        }),
-        signal: controller.signal,
-      }
-    );
-    clearTimeout(timeout);
-    
-    if (!response.ok) {
-      const text = await response.text();
-      return { ok: false, error: `Shopify error ${response.status}: ${text}` };
-    }
-    
-    return { ok: true };
-  } catch (e) {
-    clearTimeout(timeout);
-    if (e instanceof Error && e.name === 'AbortError') {
-      return { ok: false, error: 'Request timed out after 30 seconds' };
-    }
-    return { ok: false, error: e instanceof Error ? e.message : 'Unknown error' };
-  }
+  // Update destination location (increment)
+  await supabase
+    .from('shopify_inventory_levels')
+    .upsert({
+      store_key: storeKey,
+      inventory_item_id: inventoryItemId,
+      location_gid: destLocationGid,
+      available: beforeDestQty + quantity,
+      updated_at: new Date().toISOString(),
+    }, {
+      onConflict: 'store_key,inventory_item_id,location_gid'
+    });
 }
 
 async function writeAuditEntry(
@@ -244,28 +239,30 @@ Deno.serve(async (req) => {
       try {
         // Pre-flight check: verify source has sufficient inventory
         if (shopifyToken && shopifyDomain && item.shopify_inventory_item_id) {
-          const sourceQty = await getShopifyInventoryLevel(
+          // Fetch current levels using safe helper
+          const sourceLevel = await getInventoryLevel(
             shopifyDomain,
             shopifyToken,
             item.shopify_inventory_item_id,
-            sourceLocationId,
-            apiVersion
+            sourceLocationId
           );
           
-          const destQty = await getShopifyInventoryLevel(
+          const destLevel = await getInventoryLevel(
             shopifyDomain,
             shopifyToken,
             item.shopify_inventory_item_id,
-            destLocationId,
-            apiVersion
-          ) ?? 0;
+            destLocationId
+          );
 
-          result.before_source_qty = sourceQty ?? 0;
+          const sourceQty = sourceLevel?.available ?? 0;
+          const destQty = destLevel?.available ?? 0;
+
+          result.before_source_qty = sourceQty;
           result.before_dest_qty = destQty;
 
           // CRITICAL: Prevent negative inventory
-          if (sourceQty === null || sourceQty < item.quantity) {
-            throw new Error(`Insufficient inventory at source: have ${sourceQty ?? 0}, need ${item.quantity}`);
+          if (sourceQty < item.quantity) {
+            throw new Error(`Insufficient inventory at source: have ${sourceQty}, need ${item.quantity}`);
           }
 
           // Optimistically update our local inventory_levels table
@@ -280,50 +277,54 @@ Deno.serve(async (req) => {
             destQty
           );
 
-          // Set source to 0 (for 1-of-1 items) or decrement
-          const newSourceQty = sourceQty - item.quantity;
-          const setSourceResult = await setShopifyInventoryLevel(
+          // Use adjust API for source (decrement) - safer than absolute set
+          const adjustSourceResult = await adjustInventorySafe(
             shopifyDomain,
             shopifyToken,
             item.shopify_inventory_item_id,
             sourceLocationId,
-            newSourceQty,
-            apiVersion
+            -item.quantity, // negative delta to decrement
+            sourceQty // optimistic lock on expected value
           );
 
-          if (!setSourceResult.ok) {
-            throw new Error(`Failed to set source inventory: ${setSourceResult.error}`);
+          if (!adjustSourceResult.success) {
+            if (adjustSourceResult.stale) {
+              throw new Error(`Source inventory changed in Shopify (expected ${sourceQty}, found ${adjustSourceResult.previous_available}). Refresh required.`);
+            }
+            throw new Error(`Failed to adjust source inventory: ${adjustSourceResult.error}`);
           }
 
-          // Set destination with incremented quantity
-          const newDestQty = destQty + item.quantity;
-          const setDestResult = await setShopifyInventoryLevel(
+          // Use adjust API for destination (increment)
+          const adjustDestResult = await adjustInventorySafe(
             shopifyDomain,
             shopifyToken,
             item.shopify_inventory_item_id,
             destLocationId,
-            newDestQty,
-            apiVersion
+            item.quantity, // positive delta to increment
+            destQty // optimistic lock on expected value
           );
 
-          if (!setDestResult.ok) {
-            // Rollback source
+          if (!adjustDestResult.success) {
+            // Rollback source by adding back the quantity
             console.log(`⚠️ Rolling back source inventory for item ${item.id}`);
-            await setShopifyInventoryLevel(
+            await adjustInventorySafe(
               shopifyDomain,
               shopifyToken,
               item.shopify_inventory_item_id,
               sourceLocationId,
-              sourceQty,
-              apiVersion
+              item.quantity // add back what we subtracted
             );
-            throw new Error(`Failed to set destination inventory: ${setDestResult.error}`);
+            
+            if (adjustDestResult.stale) {
+              throw new Error(`Destination inventory changed in Shopify (expected ${destQty}, found ${adjustDestResult.previous_available}). Refresh required.`);
+            }
+            throw new Error(`Failed to adjust destination inventory: ${adjustDestResult.error}`);
           }
 
-          result.after_source_qty = newSourceQty;
-          result.after_dest_qty = newDestQty;
+          result.after_source_qty = adjustSourceResult.new_available;
+          result.after_dest_qty = adjustDestResult.new_available;
 
-          console.log(`✅ Shopify inventory updated: source ${sourceQty}→${newSourceQty}, dest ${destQty}→${newDestQty}`);
+          console.log(`✅ Shopify inventory adjusted: source ${sourceQty}→${adjustSourceResult.new_available}, dest ${destQty}→${adjustDestResult.new_available}`);
         }
 
         // Update intake_items location
