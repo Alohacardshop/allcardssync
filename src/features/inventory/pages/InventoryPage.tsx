@@ -17,6 +17,7 @@ import { InventoryDeleteDialog } from '@/components/InventoryDeleteDialog';
 import { ConfirmationDialog } from '@/components/ConfirmationDialog';
 import { RefreshControls } from '@/components/RefreshControls';
 import { PrintFromInventoryDialog } from '@/components/inventory/PrintFromInventoryDialog';
+import { KeyboardShortcutsHelp } from '@/components/inventory/KeyboardShortcutsHelp';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Progress } from '@/components/ui/progress';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
@@ -316,6 +317,14 @@ const InventoryPage = () => {
     virtualizerScrollToIndexRef.current = fn;
   }, []);
 
+  // Handle opening details for an item
+  const handleOpenDetails = useCallback((itemId: string) => {
+    const item = items.find(i => i.id === itemId);
+    if (item) {
+      setSyncDetailsRow(item);
+    }
+  }, [items]);
+
   // Keyboard navigation
   const { focusedIndex } = useKeyboardNavigation({
     items,
@@ -324,6 +333,8 @@ const InventoryPage = () => {
     onClearSelection: clearSelection,
     onSelectAll: selectAllVisible,
     onSync: handleSyncSelected,
+    onPrint: handlePrintSelected,
+    onExpandDetails: handleOpenDetails,
     searchInputRef,
     virtualizerScrollToIndex: (index: number) => virtualizerScrollToIndexRef.current?.(index),
     enabled: !showRemovalDialog && !showDeleteDialog && !showPrintDialog,
@@ -445,6 +456,9 @@ const InventoryPage = () => {
                   ? `Resync Selected (${selectedItems.size})` 
                   : 'Resync All from Shopify'}
               </Button>
+              
+              {/* Keyboard shortcuts help */}
+              {isDesktop && <KeyboardShortcutsHelp />}
             </div>
           </div>
 
