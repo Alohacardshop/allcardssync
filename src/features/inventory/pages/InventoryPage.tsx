@@ -165,6 +165,7 @@ const InventoryPage = () => {
     expandedItems,
     toggleSelection,
     toggleExpanded,
+    setSelection,
     selectAllVisible,
     clearSelection,
     selectedCount,
@@ -528,6 +529,7 @@ const InventoryPage = () => {
                 locationsMap={locationsMap}
                 focusedIndex={focusedIndex}
                 onToggleSelection={toggleSelection}
+                onSetSelection={setSelection}
                 onToggleExpanded={toggleExpanded}
                 onSync={handleSync}
                 onRetrySync={handleRetrySync}

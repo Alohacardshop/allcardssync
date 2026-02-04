@@ -121,15 +121,14 @@ const TableRow = memo(({
   const gridTemplate = "40px 90px minmax(200px, 1fr) 100px 70px 60px 80px 70px 80px 90px 70px 44px";
 
   return (
-    <TooltipProvider delayDuration={200}>
-      <div 
-        className={cn(
-          "grid gap-2 items-center px-3 py-2 border-b border-border hover:bg-muted/50 text-sm",
-          isSelected && "bg-primary/5",
-          item.deleted_at && "opacity-50"
-        )}
-        style={{ gridTemplateColumns: gridTemplate }}
-      >
+    <div 
+      className={cn(
+        "grid gap-2 items-center px-3 py-2 border-b border-border hover:bg-muted/50 text-sm",
+        isSelected && "bg-primary/5",
+        item.deleted_at && "opacity-50"
+      )}
+      style={{ gridTemplateColumns: gridTemplate }}
+    >
         {/* Checkbox */}
         <div className="flex items-center justify-center">
           <Checkbox
@@ -305,7 +304,6 @@ const TableRow = memo(({
           </DropdownMenu>
         </div>
       </div>
-    </TooltipProvider>
   );
 });
 
@@ -349,6 +347,7 @@ export const InventoryTableView = memo(({
   syncingRowId,
   locationsMap,
   onToggleSelection,
+  onSetSelection,
   onSync,
   onRetrySync,
   onResync,
@@ -444,23 +443,30 @@ export const InventoryTableView = memo(({
   const allSelected = items.length > 0 && items.every(item => selectedItems.has(item.id));
   const someSelected = items.some(item => selectedItems.has(item.id)) && !allSelected;
 
+  // Batched select all - uses setSelection if available for performance
   const handleSelectAll = useCallback(() => {
-    if (allSelected) {
-      // Deselect all
-      items.forEach(item => {
-        if (selectedItems.has(item.id)) {
-          onToggleSelection(item.id);
-        }
-      });
+    if (onSetSelection) {
+      if (allSelected) {
+        // Clear all visible items
+        const visibleIds = items.map(item => item.id);
+        onSetSelection(visibleIds, 'remove');
+      } else {
+        // Select all visible items
+        const visibleIds = items.map(item => item.id);
+        onSetSelection(visibleIds, 'add');
+      }
     } else {
-      // Select all
+      // Fallback to individual toggles
       items.forEach(item => {
-        if (!selectedItems.has(item.id)) {
+        const isCurrentlySelected = selectedItems.has(item.id);
+        if (allSelected && isCurrentlySelected) {
+          onToggleSelection(item.id);
+        } else if (!allSelected && !isCurrentlySelected) {
           onToggleSelection(item.id);
         }
       });
     }
-  }, [items, selectedItems, allSelected, onToggleSelection]);
+  }, [items, selectedItems, allSelected, onToggleSelection, onSetSelection]);
 
   if (isLoading) {
     return (
@@ -486,10 +492,11 @@ export const InventoryTableView = memo(({
   const gridTemplate = "40px 90px minmax(200px, 1fr) 100px 70px 60px 80px 70px 80px 90px 70px 44px";
 
   return (
-    <div className="rounded-lg border bg-card overflow-hidden flex flex-col h-full">
-      {/* Horizontal scroll wrapper */}
-      <div className="overflow-x-auto flex-1 flex flex-col min-h-0">
-        <div className="min-w-[1100px] flex flex-col h-full">
+    <TooltipProvider delayDuration={200}>
+      <div className="rounded-lg border bg-card overflow-hidden flex flex-col h-full">
+        {/* Horizontal scroll wrapper */}
+        <div className="overflow-x-auto flex-1 flex flex-col min-h-0">
+          <div className="min-w-[1100px] flex flex-col h-full">
           {/* Sticky Header */}
           <div 
             className="shrink-0 grid gap-2 items-center px-3 py-2 bg-muted/50 border-b font-medium text-xs sticky top-0 z-10"
@@ -582,9 +589,10 @@ export const InventoryTableView = memo(({
           )}
         </div>
       </div>
+          </div>
         </div>
       </div>
-    </div>
+    </TooltipProvider>
   );
 });
 
