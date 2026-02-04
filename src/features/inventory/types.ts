@@ -123,6 +123,19 @@ export interface InventorySelectionState {
 }
 
 /**
+ * Action types for tracking per-item state
+ */
+export type ActionType = 'sync' | 'retry' | 'resync' | 'remove' | 'delete';
+
+/**
+ * Per-item action state
+ */
+export interface ItemActionState {
+  isLoading: boolean;
+  action: ActionType | null;
+}
+
+/**
  * Props for VirtualInventoryList component
  */
 export interface VirtualInventoryListProps {
@@ -133,6 +146,8 @@ export interface VirtualInventoryListProps {
   syncingRowId: string | null;
   locationsMap?: Map<string, CachedLocation>;
   focusedIndex?: number;
+  /** Optional per-item action state getter for showing loading states */
+  getItemActionState?: (itemId: string) => ItemActionState;
   onToggleSelection: (id: string) => void;
   onToggleExpanded: (id: string) => void;
   onSync: (item: InventoryListItem) => void;
@@ -189,15 +204,18 @@ export interface InventoryBulkBarProps {
  * Action handlers interface for inventory operations
  */
 export interface InventoryActionHandlers {
-  handleSync: (item: InventoryListItem) => Promise<void>;
-  handleRetrySync: (item: InventoryListItem) => Promise<void>;
-  handleResync: (item: InventoryListItem) => Promise<void>;
-  handleSyncSelected: () => Promise<void>;
-  handleResyncSelected: () => Promise<void>;
-  handleBulkRetrySync: () => Promise<void>;
-  handleRemoveFromShopify: (mode: 'delete') => Promise<void>;
-  handleDeleteItems: (items: InventoryListItem[]) => Promise<void>;
+  handleSync: (item: InventoryListItem) => void;
+  handleRetrySync: (item: InventoryListItem) => void;
+  handleResync: (item: InventoryListItem) => void;
+  handleSyncSelected: () => void;
+  handleResyncSelected: () => void;
+  handleBulkRetrySync: () => void;
+  handleRemoveFromShopify: (items: InventoryListItem | InventoryListItem[] | null) => void;
+  handleDeleteItems: (items: InventoryListItem[]) => void;
   handlePrintSelected: () => void;
+  // State helpers
+  getItemActionState: (itemId: string) => ItemActionState;
+  isItemBusy: (itemId: string) => boolean;
 }
 
 /**
