@@ -276,24 +276,6 @@ const InventoryPage = () => {
     });
   }, []);
 
-  // Apply quick filter preset
-  const handleApplyQuickFilter = useCallback((preset: Partial<InventoryFilterState>) => {
-    setFilters(prev => ({
-      ...prev,
-      ...preset,
-    }));
-    
-    // Determine which preset was applied
-    if (preset.shopifySyncFilter === 'not-synced') setFilters(f => ({ ...f, activeQuickFilter: 'ready-to-sync' }));
-    else if (preset.statusFilter === 'errors') setFilters(f => ({ ...f, activeQuickFilter: 'sync-errors' }));
-    else if (preset.printStatusFilter === 'not-printed') setFilters(f => ({ ...f, activeQuickFilter: 'needs-barcode' }));
-    else if (preset.ebayStatusFilter === 'not-listed') setFilters(f => ({ ...f, activeQuickFilter: 'not-on-ebay' }));
-    else if (preset.categoryFilter === 'sealed') setFilters(f => ({ ...f, activeQuickFilter: 'sealed-products' }));
-    else if (preset.shopifySyncFilter === 'synced') setFilters(f => ({ ...f, activeQuickFilter: 'on-shopify' }));
-    else if (preset.shopifySyncFilter === 'queued') setFilters(f => ({ ...f, activeQuickFilter: 'shopify-queued' }));
-    else if (preset.dateRangeFilter === 'today') setFilters(f => ({ ...f, activeQuickFilter: 'todays-intake' }));
-  }, []);
-
   // Print handler
   const handlePrintSelected = useCallback(() => {
     if (selectedItems.size === 0) {
@@ -467,7 +449,6 @@ const InventoryPage = () => {
             filters={filters}
             onFilterChange={handleFilterChange}
             onClearAllFilters={handleClearAllFilters}
-            onApplyQuickFilter={handleApplyQuickFilter}
             locationsMap={locationsMap}
             shopifyTags={shopifyTags}
             isLoadingTags={isLoadingTags}
