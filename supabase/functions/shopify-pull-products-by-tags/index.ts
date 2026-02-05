@@ -288,17 +288,14 @@ serve(async (req) => {
           for (const variant of product.variants || []) {
             totalVariants++;
 
-            // Skip variants without SKUs - they can't be properly tracked in inventory
-            if (!variant.sku || variant.sku.trim() === '') {
-              console.log(`Skipping variant ${variant.id} from product "${product.title}" - no SKU`);
-              skippedVariants++;
-              skippedNoSku++;
-              continue;
-            }
+            // Use variant ID as fallback SKU if none exists
+            const effectiveSku = (variant.sku && variant.sku.trim()) 
+              ? variant.sku 
+              : `NOSKU-${variant.id}`;
 
             // Skip untracked variants (inventory not managed by Shopify)
             if (skipUntracked && variant.inventory_management === null) {
-              console.log(`Skipping variant ${variant.id} (SKU: ${variant.sku}) - inventory not tracked`);
+              console.log(`Skipping variant ${variant.id} (SKU: ${effectiveSku}) - inventory not tracked`);
               skippedVariants++;
               skippedUntracked++;
               continue;
@@ -322,7 +319,7 @@ serve(async (req) => {
               // Collect sample items for preview (limit to 50)
               if (previewItems.length < 50) {
                 previewItems.push({
-                  sku: variant.sku,
+                  sku: effectiveSku,
                   title: product.title + (variant.title !== 'Default Title' ? ` - ${variant.title}` : ''),
                   quantity: variantQty,
                   price: parseFloat(variant.price) || 0
@@ -392,7 +389,7 @@ serve(async (req) => {
               continue;
             }
 
-            console.log(`Processing variant ${variant.id} (SKU: ${variant.sku}): ${locationsToProcess.length} locations with inventory`);
+            console.log(`Processing variant ${variant.id} (SKU: ${effectiveSku}): ${locationsToProcess.length} locations with inventory`);
 
             for (const level of locationsToProcess) {
               const locationGid = `gid://shopify/Location/${level.location_id}`;
@@ -406,7 +403,7 @@ serve(async (req) => {
 
               // Use database function to properly handle ON CONFLICT upsert
               const { error: upsertError } = await supabase.rpc('upsert_shopify_intake_item', {
-                p_sku: variant.sku,
+                p_sku: effectiveSku,
                 p_store_key: storeKey,
                 p_shopify_location_gid: locationGid,
                 p_shopify_product_id: product.id.toString(),
@@ -434,8 +431,8 @@ serve(async (req) => {
               });
 
               if (upsertError) {
-                console.error(`Upsert error for SKU ${variant.sku}:`, upsertError);
-                errors.push(`Failed to upsert ${variant.sku}: ${upsertError.message}`);
+                console.error(`Upsert error for SKU ${effectiveSku}:`, upsertError);
+                errors.push(`Failed to upsert ${effectiveSku}: ${upsertError.message}`);
               } else {
                 upsertedRows++;
               }
