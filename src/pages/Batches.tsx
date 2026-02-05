@@ -77,7 +77,7 @@ export default function Batches() {
   const [lots, setLots] = useState<IntakeLot[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+const [statusFilter, setStatusFilter] = useState<string>("active");
   const [selectedLot, setSelectedLot] = useState<IntakeLot | null>(null);
   const [lotItems, setLotItems] = useState<IntakeItem[]>([]);
   const [loadingItems, setLoadingItems] = useState(false);
@@ -236,12 +236,19 @@ export default function Batches() {
 
       toast({
         title: "Batch Deleted",
-        description: `Batch ${lotNumber} and ${data} items have been deleted`,
+      description: `Batch ${lotNumber} deleted`,
       });
 
       // Refresh the lots list
       await fetchLots();
       
+    // Clear from selection if it was selected
+    setSelectedBatches(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(lotId);
+      return newSet;
+    });
+    
       // Close the modal if it was open
       if (selectedLot?.id === lotId) {
         setSelectedLot(null);
@@ -336,7 +343,7 @@ export default function Batches() {
       
       toast({
         title: "Batches Deleted",
-        description: `${batchesToDelete.length} batches have been deleted`,
+      description: `${batchesToDelete.length} batches deleted. View in "Deleted" filter.`,
       });
       
       setSelectedBatches(new Set());
