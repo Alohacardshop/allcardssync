@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { getLocationNickname, getLocationDisplayInfo } from '@/lib/locationNicknames';
 
 export interface CachedLocation {
   location_gid: string;
@@ -84,13 +85,24 @@ export function getLocationName(
 }
 
 /**
- * Get short location name (first word only for badges)
+ * Get short location name (nickname) for badges
+ * Uses centralized nickname mapping for consistency
  */
 export function getShortLocationName(
   gid: string | null | undefined,
   locationsMap: Map<string, CachedLocation> | undefined
 ): string {
   const fullName = getLocationName(gid, locationsMap);
-  // Return first word for compact display
-  return fullName.split(' ')[0] || fullName;
+  return getLocationNickname(fullName);
+}
+
+/**
+ * Get both nickname and full name for display with tooltip
+ */
+export function getLocationDisplayInfoFromGid(
+  gid: string | null | undefined,
+  locationsMap: Map<string, CachedLocation> | undefined
+): { nickname: string; fullName: string } {
+  const fullName = getLocationName(gid, locationsMap);
+  return getLocationDisplayInfo(fullName);
 }

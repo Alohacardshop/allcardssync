@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import type { CachedLocation } from './useLocationNames';
+import { getLocationNickname } from '@/lib/locationNicknames';
 
 export interface InventoryLevel {
   id: string;
@@ -83,17 +84,23 @@ export function getTotalStock(levels: InventoryLevel[]): number {
 
 /**
  * Enrich inventory levels with location names from cache
+ * Includes both nickname (displayName) and fullName for tooltips
  */
 export function enrichLevelsWithNames(
   levels: InventoryLevel[],
   locationsMap: Map<string, CachedLocation> | undefined
-): Array<InventoryLevel & { displayName: string }> {
-  return levels.map(level => ({
-    ...level,
-    displayName: level.location_name || 
+): Array<InventoryLevel & { displayName: string; fullName: string }> {
+  return levels.map(level => {
+    const rawFullName = level.location_name || 
       locationsMap?.get(level.location_gid)?.location_name ||
-      extractLocationId(level.location_gid)
-  }));
+      extractLocationId(level.location_gid);
+    
+    return {
+      ...level,
+      fullName: rawFullName,
+      displayName: getLocationNickname(rawFullName),
+    };
+  });
 }
 
 function extractLocationId(gid: string): string {

@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ChevronDown, ChevronRight, Loader2, Download } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
-import { getLocationNameFromGid } from "@/lib/locationUtils";
+import { getLocationNameFromGid, getLocationNicknameFromGid, getLocationDisplayInfoFromGid } from "@/lib/locationUtils";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import Papa from "papaparse";
 import { logger } from '@/lib/logger';
 
@@ -222,84 +223,96 @@ export function TransferHistoryLog() {
       </div>
 
       <div className="space-y-2">
-        {transfers.map((transfer) => (
-          <Collapsible
-            key={transfer.id}
-            open={expandedTransfer === transfer.id}
-            onOpenChange={() => handleToggleExpand(transfer.id)}
-          >
-            <div className="border rounded-lg">
-              <CollapsibleTrigger asChild>
-                <Button
-                  variant="ghost"
-                  className="w-full justify-between p-4 h-auto"
-                >
-                  <div className="flex items-center gap-4 text-left">
-                    {expandedTransfer === transfer.id ? (
-                      <ChevronDown className="h-4 w-4" />
-                    ) : (
-                      <ChevronRight className="h-4 w-4" />
-                    )}
-                    <div>
-                      <div className="font-medium">
-                        {getLocationNameFromGid(transfer.source_location_gid, locations)} → {getLocationNameFromGid(transfer.destination_location_gid, locations)}
-                      </div>
-                      <div className="text-sm text-muted-foreground">
-                        {formatDistanceToNow(new Date(transfer.created_at), { addSuffix: true })}
+        {transfers.map((transfer) => {
+          const sourceInfo = getLocationDisplayInfoFromGid(transfer.source_location_gid, locations);
+          const destInfo = getLocationDisplayInfoFromGid(transfer.destination_location_gid, locations);
+          
+          return (
+            <Collapsible
+              key={transfer.id}
+              open={expandedTransfer === transfer.id}
+              onOpenChange={() => handleToggleExpand(transfer.id)}
+            >
+              <div className="border rounded-lg">
+                <CollapsibleTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-between p-4 h-auto"
+                  >
+                    <div className="flex items-center gap-4 text-left">
+                      {expandedTransfer === transfer.id ? (
+                        <ChevronDown className="h-4 w-4" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4" />
+                      )}
+                      <div>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="font-medium cursor-help">
+                              {sourceInfo.nickname} → {destInfo.nickname}
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p className="text-xs">{sourceInfo.fullName} → {destInfo.fullName}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                        <div className="text-sm text-muted-foreground">
+                          {formatDistanceToNow(new Date(transfer.created_at), { addSuffix: true })}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <div className="text-sm">
-                      {transfer.successful_items}/{transfer.total_items} succeeded
+                    <div className="flex items-center gap-4">
+                      <div className="text-sm">
+                        {transfer.successful_items}/{transfer.total_items} succeeded
+                      </div>
+                      {getStatusBadge(transfer.status)}
                     </div>
-                    {getStatusBadge(transfer.status)}
-                  </div>
-                </Button>
-              </CollapsibleTrigger>
+                  </Button>
+                </CollapsibleTrigger>
 
-              <CollapsibleContent>
-                <div className="border-t p-4">
-                  {loadingItems === transfer.id ? (
-                    <div className="flex items-center justify-center p-4">
-                      <Loader2 className="h-5 w-5 animate-spin" />
-                    </div>
-                  ) : transferItems[transfer.id] ? (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Item</TableHead>
-                          <TableHead>SKU</TableHead>
-                          <TableHead className="text-right">Qty</TableHead>
-                          <TableHead>Status</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {transferItems[transfer.id].map((item) => (
-                          <TableRow key={item.id}>
-                            <TableCell>{item.item_name || 'Unknown'}</TableCell>
-                            <TableCell className="font-mono text-sm">{item.sku}</TableCell>
-                            <TableCell className="text-right">{item.quantity}</TableCell>
-                            <TableCell>
-                              <div className="space-y-1">
-                                {getStatusBadge(item.status)}
-                                {item.error_message && (
-                                  <div className="text-xs text-destructive">
-                                    {item.error_message}
-                                  </div>
-                                )}
-                              </div>
-                            </TableCell>
+                <CollapsibleContent>
+                  <div className="border-t p-4">
+                    {loadingItems === transfer.id ? (
+                      <div className="flex items-center justify-center p-4">
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                      </div>
+                    ) : transferItems[transfer.id] ? (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Item</TableHead>
+                            <TableHead>SKU</TableHead>
+                            <TableHead className="text-right">Qty</TableHead>
+                            <TableHead>Status</TableHead>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  ) : null}
-                </div>
-              </CollapsibleContent>
-            </div>
-          </Collapsible>
-        ))}
+                        </TableHeader>
+                        <TableBody>
+                          {transferItems[transfer.id].map((item) => (
+                            <TableRow key={item.id}>
+                              <TableCell>{item.item_name || 'Unknown'}</TableCell>
+                              <TableCell className="font-mono text-sm">{item.sku}</TableCell>
+                              <TableCell className="text-right">{item.quantity}</TableCell>
+                              <TableCell>
+                                <div className="space-y-1">
+                                  {getStatusBadge(item.status)}
+                                  {item.error_message && (
+                                    <div className="text-xs text-destructive">
+                                      {item.error_message}
+                                    </div>
+                                  )}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    ) : null}
+                  </div>
+                </CollapsibleContent>
+              </div>
+            </Collapsible>
+          );
+        })}
       </div>
     </div>
   );
