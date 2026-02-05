@@ -396,10 +396,10 @@ const TableRow = memo(({
           </div>
         )}
 
-        {/* Primary Action - fixed width container to prevent shifting */}
-         {isColVisible('actions') && (
-         <>
-        <div className="flex items-center justify-center h-[44px] min-w-[70px]">
+        {/* Actions: primary button + print indicator + kebab menu - all in ONE cell */}
+        {isColVisible('actions') && (
+        <div className="flex items-center justify-end gap-1.5 h-[44px] pr-1">
+          {/* Primary action button */}
           {primaryAction ? (
             <Button
               variant="outline"
@@ -418,10 +418,7 @@ const TableRow = memo(({
           ) : (
             <span className="min-w-[52px] h-6 inline-block" aria-hidden="true" />
           )}
-        </div>
 
-        {/* Print indicator + Kebab Menu - fixed container height */}
-        <div className="flex items-center justify-end gap-1 h-[44px]">
           {/* Compact print indicator - only shows when printed */}
           {item.printed_at && (
             <Tooltip>
@@ -435,6 +432,8 @@ const TableRow = memo(({
               </TooltipContent>
             </Tooltip>
           )}
+
+          {/* Kebab menu */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button 
@@ -498,7 +497,6 @@ const TableRow = memo(({
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-        </>
         )}
       </div>
   );
@@ -735,10 +733,7 @@ export const InventoryTableView = memo(({
                {isColumnVisible('shopify_cost') && <span className="text-muted-foreground text-right pr-1">Cost</span>}
                {isColumnVisible('shopify_shopify_status') && <span className="text-muted-foreground text-center">Shopify Status</span>}
                {isColumnVisible('last_shopify_sync') && <span className="text-muted-foreground text-center">Last Sync</span>}
-               {isColumnVisible('actions') && <>
-                 <span aria-hidden="true"></span>
-                 <span aria-hidden="true"></span>
-               </>}
+               {isColumnVisible('actions') && <span aria-hidden="true" />}
             </div>
 
       {/* Virtualized Rows */}
