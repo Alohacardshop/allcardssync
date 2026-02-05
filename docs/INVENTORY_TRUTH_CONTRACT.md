@@ -145,3 +145,46 @@ The `inventory_write_log` table captures:
 - Success/failure with error messages
 - Latency in milliseconds
 - Source function and trigger context
+
+---
+
+## Transfer Operations
+
+Location transfers are first-class operations handled by `bulk-location-transfer` edge function.
+
+### Safety Guarantees
+
+1. **Locking**: Acquires `inventory_write_locks` for all SKUs before processing
+2. **Finally Release**: Locks are ALWAYS released in finally block, even on errors
+3. **Delta-based**: Uses `transfer_out` (-qty) and `transfer_in` (+qty) with adjust API
+4. **Optimistic Locking**: Verifies expected quantity before each adjustment
+5. **Atomic Rollback**: If destination fails, source is rolled back
+6. **Negative Prevention**: Pre-checks source quantity before transfer
+
+### Idempotency
+
+Transfers are safe to retry:
+- Checks `location_transfer_items` for already-processed items
+- Skips items with `status = 'success'` in the same transfer_id
+- Returns early if all items already processed
+
+### Audit Trail
+
+Each transfer line generates:
+- Entry in `location_transfer_items` with status and timestamps
+- Entry in `audit_log` with before/after quantities
+- Entries in `inventory_write_log` for both source and destination writes
+
+### Usage
+
+```bash
+curl -X POST /functions/v1/bulk-location-transfer \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "transfer_id": "uuid",
+    "item_ids": ["uuid1", "uuid2"],
+    "source_location_gid": "gid://shopify/Location/123",
+    "destination_location_gid": "gid://shopify/Location/456",
+    "store_key": "hawaii"
+  }'
+```
