@@ -15,7 +15,6 @@ import { ShopifyRemovalDialog } from '@/components/ShopifyRemovalDialog';
 import { ShopifySyncDetailsDialog } from '@/components/ShopifySyncDetailsDialog';
 import { InventoryDeleteDialog } from '@/components/InventoryDeleteDialog';
 import { ConfirmationDialog } from '@/components/ConfirmationDialog';
-import { RefreshControls } from '@/components/RefreshControls';
 import { PrintFromInventoryDialog } from '@/components/inventory/PrintFromInventoryDialog';
 import { KeyboardShortcutsHelp } from '@/components/inventory/KeyboardShortcutsHelp';
 import { TruthModeBadge } from '@/components/inventory/TruthModeBadge';
@@ -411,16 +410,8 @@ const InventoryPage = () => {
       <div className="flex-1 min-h-0 flex flex-col">
         {/* Single Sticky Controls Stack - all sticky elements in one container */}
         <div className="shrink-0 sticky top-0 z-20 bg-background border-b border-border">
-          {/* Refresh Controls + View Toggle + Truth Mode */}
+          {/* View Toggle + Truth Mode */}
           <div className="flex items-center gap-2 flex-wrap py-2">
-            <RefreshControls
-              autoRefreshEnabled={autoRefreshEnabled}
-              onAutoRefreshToggle={setAutoRefreshEnabled}
-              onManualRefresh={handleManualRefresh}
-              isRefreshing={isFetching}
-              lastRefresh={lastRefresh}
-            />
-            
             {/* Truth Mode Badge */}
             <TruthModeBadge mode={truthMode} />
             
