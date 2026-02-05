@@ -22,6 +22,7 @@ export interface InventoryListItem {
   shopify_sync_status: string | null;
   shopify_product_id: string | null;
   shopify_inventory_item_id?: string | null;
+  shopify_variant_id?: string | null;
   store_key: string | null;
   shopify_location_gid: string | null;
   main_category: string | null;
@@ -35,7 +36,15 @@ export interface InventoryListItem {
     difference_percent?: number;
     price_count?: number;
   } | null;
-  shopify_snapshot: Record<string, unknown> | null;
+  shopify_snapshot: {
+    created_at?: string;
+    updated_at?: string;
+    status?: string;
+    compare_at_price?: string | number;
+    tags?: string | string[];
+    vendor?: string;
+    [key: string]: unknown;
+  } | null;
   ebay_listing_id: string | null;
   ebay_listing_url: string | null;
   ebay_sync_status: string | null;
@@ -50,6 +59,10 @@ export interface InventoryListItem {
   variant: string | null;
   shopify_tags: string[] | null;
   normalized_tags: string[] | null;
+  // Shopify metadata for visibility
+  cost: number | null;
+  last_shopify_synced_at: string | null;
+  last_shopify_sync_error: string | null;
   // Optional fields that may be needed for title generation
   catalog_snapshot?: {
     year?: string;

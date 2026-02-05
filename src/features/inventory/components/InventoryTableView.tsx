@@ -331,6 +331,70 @@ const TableRow = memo(({
         </div>
          )}
 
+        {/* Optional Shopify Columns */}
+        {/* Shopify Created At */}
+        {isColVisible('shopify_created_at') && (
+          <div className="flex items-center justify-center h-[44px]">
+            {item.shopify_snapshot?.created_at ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="text-xs text-muted-foreground cursor-default truncate tabular-nums">
+                    {formatDistanceToNow(new Date(item.shopify_snapshot.created_at as string), { addSuffix: true }).replace('about ', '')}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs font-medium">
+                  Entered Shopify
+                </TooltipContent>
+              </Tooltip>
+            ) : (
+              <span className="text-xs text-muted-foreground italic">—</span>
+            )}
+          </div>
+        )}
+
+        {/* Shopify Cost */}
+        {isColVisible('shopify_cost') && (
+          <div className="text-right tabular-nums text-sm text-muted-foreground pr-1 flex items-center justify-end h-[44px]">
+            {item.cost != null ? `$${item.cost.toFixed(2)}` : <span className="italic">—</span>}
+          </div>
+        )}
+
+        {/* Shopify Product Status */}
+        {isColVisible('shopify_shopify_status') && (
+          <div className="flex items-center justify-center h-[44px]">
+            {item.shopify_snapshot?.status ? (
+              <Badge 
+                variant={item.shopify_snapshot.status === 'active' ? 'default' : 'outline'}
+                className="text-[10px] h-5 px-1.5 font-medium whitespace-nowrap capitalize"
+              >
+                {String(item.shopify_snapshot.status)}
+              </Badge>
+            ) : (
+              <span className="text-xs text-muted-foreground italic">—</span>
+            )}
+          </div>
+        )}
+
+        {/* Last Shopify Sync */}
+        {isColVisible('last_shopify_sync') && (
+          <div className="flex items-center justify-center h-[44px]">
+            {item.last_shopify_synced_at ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="text-xs text-muted-foreground cursor-default truncate tabular-nums">
+                    {formatDistanceToNow(new Date(item.last_shopify_synced_at), { addSuffix: true }).replace('about ', '')}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs font-medium">
+                  Last synced to Shopify
+                </TooltipContent>
+              </Tooltip>
+            ) : (
+              <span className="text-xs text-muted-foreground italic">Never</span>
+            )}
+          </div>
+        )}
+
         {/* Primary Action - fixed width container to prevent shifting */}
          {isColVisible('actions') && (
          <>
@@ -652,6 +716,11 @@ export const InventoryTableView = memo(({
                {isColumnVisible('print_status') && <span className="text-muted-foreground text-center">Label</span>}
                {isColumnVisible('ebay_status') && <span className="text-muted-foreground text-center">eBay</span>}
                {isColumnVisible('updated_at') && <SortableHeader label="Updated" field="updated_at" sortConfig={sortConfig} onSort={handleSort} className="justify-center" />}
+               {/* Optional Shopify metadata columns */}
+               {isColumnVisible('shopify_created_at') && <span className="text-muted-foreground text-center">Shopify Created</span>}
+               {isColumnVisible('shopify_cost') && <span className="text-muted-foreground text-right pr-1">Cost</span>}
+               {isColumnVisible('shopify_shopify_status') && <span className="text-muted-foreground text-center">Shopify Status</span>}
+               {isColumnVisible('last_shopify_sync') && <span className="text-muted-foreground text-center">Last Sync</span>}
                {isColumnVisible('actions') && <>
                  <span aria-hidden="true"></span>
                  <span aria-hidden="true"></span>

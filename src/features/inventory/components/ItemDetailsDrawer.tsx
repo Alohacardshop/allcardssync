@@ -189,7 +189,13 @@ eBay: ${item.ebay_sync_status || 'Not listed'}
               {/* Shopify */}
               <ShopifySection 
                 item={item}
-                detailData={detailData as { last_shopify_synced_at?: string | null; last_shopify_sync_error?: string | null; shopify_sync_snapshot?: unknown } | null}
+                detailData={detailData as { 
+                  last_shopify_synced_at?: string | null; 
+                  last_shopify_sync_error?: string | null; 
+                  shopify_sync_snapshot?: unknown;
+                  cost?: number | null;
+                  vendor?: string | null;
+                } | null}
                 onResync={() => onResync(item)}
                 isResyncing={isResyncing}
               />

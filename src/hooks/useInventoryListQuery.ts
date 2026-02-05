@@ -69,7 +69,7 @@ export function useInventoryListQuery(filters: InventoryFilters) {
         dateRangeFilter = 'all',
       } = filters;
 
-      // Build query with minimal columns for list view (reduced payload)
+      // Build query with columns for list view including Shopify metadata
       let query = supabase
         .from('intake_items')
         .select(
@@ -87,6 +87,7 @@ export function useInventoryListQuery(filters: InventoryFilters) {
           printed_at,
           shopify_sync_status,
           shopify_product_id,
+          shopify_variant_id,
           shopify_inventory_item_id,
           store_key,
           shopify_location_gid,
@@ -110,7 +111,10 @@ export function useInventoryListQuery(filters: InventoryFilters) {
           category,
           variant,
           shopify_tags,
-          normalized_tags
+          normalized_tags,
+          cost,
+          last_shopify_synced_at,
+          last_shopify_sync_error
         `,
           { count: 'exact' }
         )
