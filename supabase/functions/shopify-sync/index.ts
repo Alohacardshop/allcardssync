@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+ import { writeInventory, generateRequestId } from '../_shared/inventory-write.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -614,17 +615,30 @@ async function createProductVariant(credentials: ShopifyCredentials, productId: 
   return result.variant
 }
 
-async function setInventoryLevel(credentials: ShopifyCredentials, inventoryItemId: string, locationId: string, quantity: number) {
+async function setInventoryLevel(credentials: ShopifyCredentials, inventoryItemId: string, locationId: string, quantity: number, supabase?: any, itemContext?: { item_id?: string; sku?: string; store_key?: string }) {
   console.log(`📊 Setting inventory: ${quantity} units at location ${locationId}`)
   
-  await shopifyRequest(credentials, 'inventory_levels/set.json', {
-    method: 'POST',
-    body: JSON.stringify({
-      location_id: locationId,
-      inventory_item_id: inventoryItemId,
-      available: quantity
-    })
+  const requestId = generateRequestId('shopify-sync')
+  
+  const result = await writeInventory({
+    domain: credentials.domain,
+    token: credentials.access_token,
+    inventory_item_id: inventoryItemId,
+    location_id: locationId,
+    action: 'initial_set',
+    quantity,
+    request_id: requestId,
+    store_key: itemContext?.store_key || 'unknown',
+    item_id: itemContext?.item_id,
+    sku: itemContext?.sku,
+    source_function: 'shopify-sync',
+    triggered_by: 'system',
+    supabase
   })
+  
+  if (!result.success) {
+    throw new Error(`Inventory set failed: ${result.error}`)
+  }
 }
 
 async function deleteShopifyProduct(credentials: ShopifyCredentials, productId: string) {

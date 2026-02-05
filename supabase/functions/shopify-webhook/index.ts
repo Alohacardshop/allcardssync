@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.56.0";
 import JsBarcode from 'https://esm.sh/jsbarcode@3.11.6';
+ import { writeInventory, generateRequestId, locationGidToId } from '../_shared/inventory-write.ts'
 
  /**
   * Shopify Webhook Handler
@@ -1380,51 +1381,34 @@ async function handleOrderCancellation(supabase: any, payload: any, shopifyDomai
 
         // Re-establish location ownership by setting Shopify inventory back to 1
         if (domain && token && item.shopify_inventory_item_id && item.shopify_location_gid) {
-          const locationId = item.shopify_location_gid.replace('gid://shopify/Location/', '');
+          const requestId = generateRequestId('cancel-restore');
+          const locationId = locationGidToId(item.shopify_location_gid);
           
-          try {
-            const shopifyResponse = await fetch(
-              `https://${domain}/admin/api/2024-07/inventory_levels/set.json`,
-              {
-                method: 'POST',
-                headers: {
-                  'X-Shopify-Access-Token': token,
-                  'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                  location_id: locationId,
-                  inventory_item_id: item.shopify_inventory_item_id,
-                  available: 1
-                })
-              }
-            );
+          const inventoryResult = await writeInventory({
+            domain,
+            token,
+            inventory_item_id: item.shopify_inventory_item_id,
+            location_id: locationId,
+            action: 'refund',
+            quantity: 1,
+            request_id: requestId,
+            store_key: storeKey,
+            sku,
+            source_function: 'shopify-webhook',
+            triggered_by: 'webhook',
+            supabase
+          });
 
-            if (shopifyResponse.ok) {
-              console.log(`✓ Restored Shopify inventory for ${sku} at location ${locationId}`);
-              
-              // Update cards.current_shopify_location_id
-              await supabase
-                .from('cards')
-                .update({ current_shopify_location_id: item.shopify_location_gid })
-                .eq('sku', sku);
-            } else {
-              const errorText = await shopifyResponse.text();
-              console.error(`Failed to restore Shopify inventory: ${errorText}`);
-              
-              // Queue for retry
-              await supabase.from('retry_jobs').insert({
-                job_type: 'ENFORCE_LOCATION',
-                sku,
-                payload: {
-                  desired_location_id: item.shopify_location_gid,
-                  inventory_item_id: item.shopify_inventory_item_id,
-                  store_key: storeKey,
-                  reason: 'order_cancellation'
-                }
-              });
-            }
-          } catch (shopifyError) {
-            console.error('Shopify API error during cancellation restore:', shopifyError);
+          if (inventoryResult.success) {
+            console.log(`✓ Restored Shopify inventory for ${sku} at location ${locationId}`);
+            
+            // Update cards.current_shopify_location_id
+            await supabase
+              .from('cards')
+              .update({ current_shopify_location_id: item.shopify_location_gid })
+              .eq('sku', sku);
+          } else {
+            console.error(`Failed to restore Shopify inventory: ${inventoryResult.error}`);
             
             // Queue for retry
             await supabase.from('retry_jobs').insert({
@@ -1558,51 +1542,34 @@ async function handleRefundCreated(supabase: any, payload: any, shopifyDomain: s
 
         // Re-establish location ownership by setting Shopify inventory back to 1
         if (domain && token && item.shopify_inventory_item_id && item.shopify_location_gid) {
-          const locationId = item.shopify_location_gid.replace('gid://shopify/Location/', '');
+          const requestId = generateRequestId('refund-restore');
+          const locationId = locationGidToId(item.shopify_location_gid);
           
-          try {
-            const shopifyResponse = await fetch(
-              `https://${domain}/admin/api/2024-07/inventory_levels/set.json`,
-              {
-                method: 'POST',
-                headers: {
-                  'X-Shopify-Access-Token': token,
-                  'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                  location_id: locationId,
-                  inventory_item_id: item.shopify_inventory_item_id,
-                  available: 1
-                })
-              }
-            );
+          const inventoryResult = await writeInventory({
+            domain,
+            token,
+            inventory_item_id: item.shopify_inventory_item_id,
+            location_id: locationId,
+            action: 'refund',
+            quantity: 1,
+            request_id: requestId,
+            store_key: storeKey,
+            sku,
+            source_function: 'shopify-webhook',
+            triggered_by: 'webhook',
+            supabase
+          });
 
-            if (shopifyResponse.ok) {
-              console.log(`✓ Restored Shopify inventory for ${sku} at location ${locationId}`);
-              
-              // Update cards.current_shopify_location_id
-              await supabase
-                .from('cards')
-                .update({ current_shopify_location_id: item.shopify_location_gid })
-                .eq('sku', sku);
-            } else {
-              const errorText = await shopifyResponse.text();
-              console.error(`Failed to restore Shopify inventory: ${errorText}`);
-              
-              // Queue for retry
-              await supabase.from('retry_jobs').insert({
-                job_type: 'ENFORCE_LOCATION',
-                sku,
-                payload: {
-                  desired_location_id: item.shopify_location_gid,
-                  inventory_item_id: item.shopify_inventory_item_id,
-                  store_key: storeKey,
-                  reason: 'refund'
-                }
-              });
-            }
-          } catch (shopifyError) {
-            console.error('Shopify API error during refund restore:', shopifyError);
+          if (inventoryResult.success) {
+            console.log(`✓ Restored Shopify inventory for ${sku} at location ${locationId}`);
+            
+            // Update cards.current_shopify_location_id
+            await supabase
+              .from('cards')
+              .update({ current_shopify_location_id: item.shopify_location_gid })
+              .eq('sku', sku);
+          } else {
+            console.error(`Failed to restore Shopify inventory: ${inventoryResult.error}`);
             
             // Queue for retry
             await supabase.from('retry_jobs').insert({

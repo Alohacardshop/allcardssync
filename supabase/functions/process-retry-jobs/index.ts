@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+ import { writeInventory, generateRequestId, locationGidToId } from '../_shared/inventory-write.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -218,29 +219,28 @@ async function processShopifyZeroJob(
     return { success: false, error: `No Shopify credentials for store: ${store_key}` }
   }
 
-  const locationNumericId = location_id.replace('gid://shopify/Location/', '')
+  const locationNumericId = locationGidToId(location_id)
+  const requestId = generateRequestId('retry-zero')
 
-  const response = await fetch(
-    `https://${domain}/admin/api/2024-07/inventory_levels/set.json`,
-    {
-      method: 'POST',
-      headers: {
-        'X-Shopify-Access-Token': token,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        location_id: locationNumericId,
-        inventory_item_id: inventory_item_id,
-        available: 0
-      })
-    }
-  )
+  const inventoryResult = await writeInventory({
+    domain,
+    token,
+    inventory_item_id: inventory_item_id,
+    location_id: locationNumericId,
+    action: 'cross_channel_zero',
+    quantity: 0,
+    request_id: requestId,
+    store_key: store_key,
+    sku: job.sku,
+    source_function: 'process-retry-jobs',
+    triggered_by: 'system',
+    supabase
+  })
 
-  if (response.ok) {
+  if (inventoryResult.success) {
     return { success: true }
   } else {
-    const errorText = await response.text()
-    return { success: false, error: `Shopify API error: ${errorText}` }
+    return { success: false, error: inventoryResult.error || 'Unknown error' }
   }
 }
 

@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+ import { writeInventory, generateRequestId } from '../_shared/inventory-write.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -110,56 +111,44 @@ serve(async (req) => {
       const locationId = location.id.toString()
       const targetQuantity = (desired_location_id && locationId === desiredLocationNumericId) ? 1 : 0
 
-      try {
-        const inventoryResponse = await fetch(
-          `https://${domain}/admin/api/2024-07/inventory_levels/set.json`,
-          {
-            method: 'POST',
-            headers: {
-              'X-Shopify-Access-Token': token,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              location_id: locationId,
-              inventory_item_id: card.shopify_inventory_item_id,
-              available: targetQuantity
-            })
-          }
-        )
+      const requestId = generateRequestId('enforce-loc')
+      
+      const inventoryResult = await writeInventory({
+        domain,
+        token,
+        inventory_item_id: card.shopify_inventory_item_id,
+        location_id: locationId,
+        action: 'enforce_graded',
+        quantity: targetQuantity,
+        request_id: requestId,
+        store_key: store_key,
+        sku,
+        source_function: 'enforce-single-location-stock',
+        triggered_by: 'system',
+        supabase
+      })
 
-        if (inventoryResponse.ok) {
-          console.log(`[enforce-single-location] ✓ Set ${sku} at location ${location.name} to ${targetQuantity}`)
-          results.push({
-            location_id: locationId,
-            location_name: location.name,
-            quantity: targetQuantity,
-            success: true
-          })
-        } else {
-          const errorText = await inventoryResponse.text()
-          console.error(`[enforce-single-location] Failed at location ${location.name}:`, errorText)
-          results.push({
-            location_id: locationId,
-            location_name: location.name,
-            quantity: targetQuantity,
-            success: false,
-            error: errorText
-          })
-        }
-
-        // Rate limit protection
-        await new Promise(resolve => setTimeout(resolve, 100))
-
-      } catch (locError: any) {
-        console.error(`[enforce-single-location] Error at location ${location.name}:`, locError)
+      if (inventoryResult.success) {
+        console.log(`[enforce-single-location] ✓ Set ${sku} at location ${location.name} to ${targetQuantity}`)
+        results.push({
+          location_id: locationId,
+          location_name: location.name,
+          quantity: targetQuantity,
+          success: true
+        })
+      } else {
+        console.error(`[enforce-single-location] Failed at location ${location.name}:`, inventoryResult.error)
         results.push({
           location_id: locationId,
           location_name: location.name,
           quantity: targetQuantity,
           success: false,
-          error: locError.message
+          error: inventoryResult.error
         })
       }
+
+      // Rate limit protection
+      await new Promise(resolve => setTimeout(resolve, 100))
     }
 
     // Step 5: Update card's current location in database

@@ -1,6 +1,7 @@
 import { corsHeaders } from '../_shared/cors.ts'
 import { requireAuth, requireRole, requireStoreAccess } from '../_shared/auth.ts'
 import { SendRawSchema, SendRawInput } from '../_shared/validation.ts'
+ import { writeInventory, generateRequestId, locationGidToId } from '../_shared/inventory-write.ts'
 
 // Helper function to fetch image and convert to base64 for Shopify upload
 async function fetchImageAsBase64(imageUrl: string): Promise<{ attachment: string; filename: string } | null> {
@@ -199,23 +200,27 @@ Deno.serve(async (req) => {
 
       const newQuantity = currentQuantity + (intakeItem.quantity || 1)
       
-      // Update inventory level
-      const updateInventoryResponse = await fetch(`https://${domain}/admin/api/2024-07/inventory_levels/set.json`, {
-        method: 'POST',
-        headers: {
-          'X-Shopify-Access-Token': token,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          location_id: locationId,
-          inventory_item_id: variant.inventory_item_id,
-          available: newQuantity
-        })
+      // Update inventory level using centralized helper
+      // For existing products, we use receiving (delta) to add stock
+      const requestId = generateRequestId('send-raw-adjust')
+      const inventoryResult = await writeInventory({
+        domain,
+        token,
+        inventory_item_id: String(variant.inventory_item_id),
+        location_id: locationId,
+        action: 'receiving',
+        quantity: intakeItem.quantity || 1,
+        request_id: requestId,
+        store_key: storeKey,
+        item_id: item_id,
+        sku: intakeItem.sku,
+        source_function: 'v2-shopify-send-raw',
+        triggered_by: user.id,
+        supabase
       })
 
-      if (!updateInventoryResponse.ok) {
-        const errorText = await updateInventoryResponse.text()
-        throw new Error(`Failed to update inventory level: ${errorText}`)
+      if (!inventoryResult.success) {
+        throw new Error(`Failed to update inventory level: ${inventoryResult.error}`)
       }
 
       // Create shopify snapshot with adjustment data
@@ -223,7 +228,7 @@ Deno.serve(async (req) => {
         action: 'quantity_adjusted',
         existing_product_id: product.id,
         old_quantity: currentQuantity,
-        new_quantity: newQuantity,
+        new_quantity: inventoryResult.new_available ?? newQuantity,
         sync_timestamp: new Date().toISOString(),
         graded: false
       }
@@ -519,25 +524,28 @@ Deno.serve(async (req) => {
       variant = product.variants[0]
     }
 
-    // Set inventory level at location
-    const locationId = intakeItem.shopify_location_gid.replace('gid://shopify/Location/', '')
+    // Set inventory level at location using centralized helper
+    const requestId = generateRequestId('send-raw-new')
+    const locationId = locationGidToId(intakeItem.shopify_location_gid)
     
-    const inventoryResponse = await fetch(`https://${domain}/admin/api/2024-07/inventory_levels/set.json`, {
-      method: 'POST',
-      headers: {
-        'X-Shopify-Access-Token': token,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        location_id: locationId,
-        inventory_item_id: variant.inventory_item_id,
-        available: intakeItem.quantity || 1
-      })
+    const inventoryResult = await writeInventory({
+      domain,
+      token,
+      inventory_item_id: String(variant.inventory_item_id),
+      location_id: locationId,
+      action: 'initial_set',
+      quantity: intakeItem.quantity || 1,
+      request_id: requestId,
+      store_key: storeKey,
+      item_id: item_id,
+      sku: intakeItem.sku,
+      source_function: 'v2-shopify-send-raw',
+      triggered_by: user.id,
+      supabase
     })
 
-    if (!inventoryResponse.ok) {
-      const errorText = await inventoryResponse.text()
-      console.warn(`Failed to set inventory level: ${errorText}`)
+    if (!inventoryResult.success) {
+      console.warn(`Failed to set inventory level: ${inventoryResult.error}`)
     }
 
     // Now create metafields separately after product creation
