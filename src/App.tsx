@@ -4,13 +4,14 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/ui/theme-provider";
 import { QueryClientProvider } from "@tanstack/react-query";
+import { FullScreenLoader } from "@/components/ui/FullScreenLoader";
 import { BrowserRouter, Routes } from "react-router-dom";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { StoreProvider } from "@/contexts/StoreContext";
 import { PrintQueueProvider } from "@/contexts/PrintQueueContext";
 import { GlobalLoading } from "@/components/GlobalLoading";
-import { LoadingSpinner } from "@/components/LoadingSpinner";
+
 import { FontPreloader } from "@/components/fonts/FontPreloader";
 import { NavigationProvider } from "@/components/NavigationProvider";
 import { GlobalKeyboardHandler } from "@/components/GlobalKeyboardHandler";
@@ -39,7 +40,7 @@ const App = () => (
                 <FontPreloader />
                 <BrowserRouter>
                   <NavigationProvider>
-                    <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><LoadingSpinner size="lg" /></div>}>
+                    <Suspense fallback={<FullScreenLoader title="Loading…" subtitle="Starting application…" />}>
                       <Routes>
                         {publicRoutes}
                         {adminRoutes}

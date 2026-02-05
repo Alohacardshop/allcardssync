@@ -2,7 +2,7 @@ import { Suspense } from 'react';
 import { Outlet } from 'react-router-dom';
 import { AuthGuard } from '@/components/AuthGuard';
 import { AppShell } from '@/components/layout/AppShell';
-import { LoadingSpinner } from '@/components/LoadingSpinner';
+import { FullScreenLoader } from '@/components/ui/FullScreenLoader';
 
 /**
  * Layout wrapper for protected routes with AppShell
@@ -12,7 +12,7 @@ export function ProtectedLayout() {
   return (
     <AuthGuard>
       <AppShell>
-        <Suspense fallback={<div className="flex items-center justify-center min-h-[50vh]"><LoadingSpinner size="lg" /></div>}>
+        <Suspense fallback={<FullScreenLoader title="Loading…" subtitle="Loading app…" />}>
           <Outlet />
         </Suspense>
       </AppShell>
