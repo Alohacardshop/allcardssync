@@ -3,9 +3,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,8 +20,8 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useStore } from "@/contexts/StoreContext";
-import { Search, Package, DollarSign, Calendar, Eye, History, Trash2 } from "lucide-react";
-import { format } from "date-fns";
+import { Search, Package, DollarSign, Calendar, Eye, Trash2, XCircle, AlertTriangle } from "lucide-react";
+import { format, differenceInDays } from "date-fns";
 import { logger } from "@/lib/logger";
 import { PageHeader } from "@/components/layout/PageHeader";
 
@@ -55,6 +55,7 @@ interface IntakeItem {
   subject?: string;
   card_number?: string;
   psa_cert?: string;
+  deleted_at?: string;
 }
 
 function useSEO({ title, description }: { title: string; description: string }) {
@@ -82,6 +83,10 @@ export default function Batches() {
   const [loadingItems, setLoadingItems] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [deletingBatch, setDeletingBatch] = useState<string | null>(null);
+  const [selectedBatches, setSelectedBatches] = useState<Set<string>>(new Set());
+  const [closingBatch, setClosingBatch] = useState<string | null>(null);
+  const [showDeletedItems, setShowDeletedItems] = useState(false);
+  const [bulkActionLoading, setBulkActionLoading] = useState(false);
   const { toast } = useToast();
   const { assignedStore, selectedLocation } = useStore();
 
@@ -142,12 +147,18 @@ export default function Batches() {
   const fetchLotItems = async (lotId: string) => {
     try {
       setLoadingItems(true);
-      const { data, error } = await supabase
+      let query = supabase
         .from('intake_items')
         .select('*')
-        .eq('lot_id', lotId)
-        .order('created_at', { ascending: false });
+        .eq('lot_id', lotId);
       
+      // Filter out deleted items by default
+      if (!showDeletedItems) {
+        query = query.is('deleted_at', null);
+      }
+      
+      const { data, error } = await query.order('created_at', { ascending: false });
+
       if (error) throw error;
       setLotItems(data || []);
     } catch (error) {
@@ -165,6 +176,44 @@ export default function Batches() {
   useEffect(() => {
     fetchLots();
   }, [assignedStore, selectedLocation]); // Re-fetch when store/location changes
+
+  // Re-fetch lot items when showDeletedItems changes
+  useEffect(() => {
+    if (selectedLot) {
+      fetchLotItems(selectedLot.id);
+    }
+  }, [showDeletedItems]);
+
+  const handleCloseBatch = async (lotId: string, lotNumber: string) => {
+    setClosingBatch(lotId);
+    try {
+      const { error } = await supabase.rpc('close_empty_batch', {
+        lot_id_in: lotId
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Batch Closed",
+        description: `Batch ${lotNumber} has been closed`,
+      });
+
+      await fetchLots();
+      
+      if (selectedLot?.id === lotId) {
+        setSelectedLot(null);
+      }
+    } catch (error) {
+      logger.error('Error closing batch', error as Error, { lotId, lotNumber });
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to close batch",
+        variant: "destructive",
+      });
+    } finally {
+      setClosingBatch(null);
+    }
+  };
 
   const handleDeleteBatch = async (lotId: string, lotNumber: string) => {
     if (!isAdmin) {
@@ -210,6 +259,115 @@ export default function Batches() {
     }
   };
 
+  const toggleBatchSelection = (lotId: string) => {
+    setSelectedBatches(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(lotId)) {
+        newSet.delete(lotId);
+      } else {
+        newSet.add(lotId);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedBatches.size === filteredLots.length) {
+      setSelectedBatches(new Set());
+    } else {
+      setSelectedBatches(new Set(filteredLots.map(lot => lot.id)));
+    }
+  };
+
+  const handleBulkClose = async () => {
+    const emptyBatches = filteredLots.filter(
+      lot => selectedBatches.has(lot.id) && lot.status === 'active' && (lot.total_items === 0)
+    );
+    
+    if (emptyBatches.length === 0) {
+      toast({
+        title: "No eligible batches",
+        description: "Only empty active batches can be closed",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setBulkActionLoading(true);
+    try {
+      for (const lot of emptyBatches) {
+        await supabase.rpc('close_empty_batch', { lot_id_in: lot.id });
+      }
+      
+      toast({
+        title: "Batches Closed",
+        description: `${emptyBatches.length} empty batches have been closed`,
+      });
+      
+      setSelectedBatches(new Set());
+      await fetchLots();
+    } catch (error) {
+      logger.error('Error bulk closing batches', error as Error);
+      toast({
+        title: "Error",
+        description: "Failed to close some batches",
+        variant: "destructive",
+      });
+    } finally {
+      setBulkActionLoading(false);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (!isAdmin) return;
+    
+    const batchesToDelete = filteredLots.filter(
+      lot => selectedBatches.has(lot.id) && lot.status !== 'deleted'
+    );
+    
+    setBulkActionLoading(true);
+    try {
+      for (const lot of batchesToDelete) {
+        await supabase.rpc('admin_delete_batch', {
+          lot_id_in: lot.id,
+          reason_in: `Bulk deleted via admin interface`
+        });
+      }
+      
+      toast({
+        title: "Batches Deleted",
+        description: `${batchesToDelete.length} batches have been deleted`,
+      });
+      
+      setSelectedBatches(new Set());
+      await fetchLots();
+    } catch (error) {
+      logger.error('Error bulk deleting batches', error as Error);
+      toast({
+        title: "Error",
+        description: "Failed to delete some batches",
+        variant: "destructive",
+      });
+    } finally {
+      setBulkActionLoading(false);
+    }
+  };
+
+  const getStaleInfo = (lot: IntakeLot) => {
+    if (lot.status !== 'active') return null;
+    
+    const daysOld = differenceInDays(new Date(), new Date(lot.created_at));
+    const isEmpty = lot.total_items === 0;
+    
+    if (isEmpty) {
+      return { type: 'empty', label: 'Stale - 0 items' };
+    }
+    if (daysOld > 7) {
+      return { type: 'old', label: `Stale - ${daysOld} days` };
+    }
+    return null;
+  };
+
   const filteredLots = lots.filter(lot => {
     const matchesSearch = searchTerm === "" || 
       lot.lot_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -229,8 +387,8 @@ export default function Batches() {
     switch (status) {
       case 'active': return 'bg-green-500';
       case 'processing': return 'bg-yellow-500';
-      case 'completed': return 'bg-blue-500';
-      case 'archived': return 'bg-gray-500';
+      case 'closed': return 'bg-blue-500';
+      case 'deleted': return 'bg-red-500';
       default: return 'bg-gray-500';
     }
   };
@@ -322,11 +480,73 @@ export default function Batches() {
           >
             <option value="all">All Status</option>
             <option value="active">Active</option>
-            <option value="processing">Processing</option>
-            <option value="completed">Completed</option>
-            <option value="archived">Archived</option>
+            <option value="closed">Closed</option>
+            <option value="deleted">Deleted</option>
           </select>
         </div>
+
+        {/* Bulk Actions Bar */}
+        {selectedBatches.size > 0 && (
+          <Card className="mb-6 border-primary">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">
+                  {selectedBatches.size} batch{selectedBatches.size > 1 ? 'es' : ''} selected
+                </span>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleBulkClose}
+                    disabled={bulkActionLoading}
+                  >
+                    <XCircle className="h-4 w-4 mr-1" />
+                    Close Empty
+                  </Button>
+                  {isAdmin && (
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          disabled={bulkActionLoading}
+                        >
+                          <Trash2 className="h-4 w-4 mr-1" />
+                          Delete Selected
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Delete Selected Batches</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Are you sure you want to delete {selectedBatches.size} batches? 
+                            This will soft-delete all items in these batches. This action cannot be undone.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={handleBulkDelete}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                          >
+                            Delete Batches
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSelectedBatches(new Set())}
+                  >
+                    Clear
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Batches Table */}
         <Card>
@@ -344,6 +564,13 @@ export default function Batches() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-12">
+                      <Checkbox
+                        checked={selectedBatches.size === filteredLots.length && filteredLots.length > 0}
+                        indeterminate={selectedBatches.size > 0 && selectedBatches.size < filteredLots.length}
+                        onCheckedChange={toggleSelectAll}
+                      />
+                    </TableHead>
                     <TableHead>Lot Number</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead>Status</TableHead>
@@ -354,8 +581,16 @@ export default function Batches() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredLots.map((lot) => (
-                    <TableRow key={lot.id}>
+                  {filteredLots.map((lot) => {
+                    const staleInfo = getStaleInfo(lot);
+                    return (
+                    <TableRow key={lot.id} className={staleInfo ? 'bg-amber-50 dark:bg-amber-950/20' : ''}>
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedBatches.has(lot.id)}
+                          onCheckedChange={() => toggleBatchSelection(lot.id)}
+                        />
+                      </TableCell>
                       <TableCell className="font-mono">{lot.lot_number}</TableCell>
                       <TableCell>
                         <Badge variant="outline">
@@ -363,12 +598,20 @@ export default function Batches() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <Badge 
-                          variant="outline" 
-                          className={`text-white ${getStatusColor(lot.status)}`}
-                        >
-                          {lot.status}
-                        </Badge>
+                        <div className="flex items-center gap-1">
+                          <Badge 
+                            variant="outline" 
+                            className={`text-white ${getStatusColor(lot.status)}`}
+                          >
+                            {lot.status}
+                          </Badge>
+                          {staleInfo && (
+                            <Badge variant="outline" className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 border-amber-300">
+                              <AlertTriangle className="h-3 w-3 mr-1" />
+                              {staleInfo.label}
+                            </Badge>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>{lot.total_items || 0}</TableCell>
                       <TableCell>
@@ -384,6 +627,17 @@ export default function Batches() {
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
+                          {lot.status === 'active' && lot.total_items === 0 && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleCloseBatch(lot.id, lot.lot_number)}
+                              disabled={closingBatch === lot.id}
+                              title="Close empty batch"
+                            >
+                              <XCircle className="h-4 w-4 text-amber-600" />
+                            </Button>
+                          )}
                           {isAdmin && lot.status !== 'deleted' && (
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
@@ -419,7 +673,7 @@ export default function Batches() {
                         </div>
                       </TableCell>
                     </TableRow>
-                  ))}
+                  )})}
                 </TableBody>
               </Table>
             )}
@@ -470,7 +724,16 @@ export default function Batches() {
 
               {/* Items Table */}
               <div>
-                <h3 className="text-lg font-semibold mb-4">Items ({lotItems.length})</h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold">Items ({lotItems.length})</h3>
+                  <label className="flex items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={showDeletedItems}
+                      onCheckedChange={(checked) => setShowDeletedItems(checked === true)}
+                    />
+                    Show deleted items
+                  </label>
+                </div>
                 
                 {loadingItems ? (
                   <div className="text-center py-8">Loading items...</div>
