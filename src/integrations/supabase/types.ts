@@ -3086,6 +3086,48 @@ export type Database = {
         }
         Relationships: []
       }
+      user_inventory_views: {
+        Row: {
+          created_at: string
+          filters: Json
+          id: string
+          is_default: boolean | null
+          is_system: boolean | null
+          name: string
+          sort_column: string | null
+          sort_direction: string | null
+          updated_at: string
+          user_id: string
+          visible_columns: string[]
+        }
+        Insert: {
+          created_at?: string
+          filters?: Json
+          id?: string
+          is_default?: boolean | null
+          is_system?: boolean | null
+          name: string
+          sort_column?: string | null
+          sort_direction?: string | null
+          updated_at?: string
+          user_id: string
+          visible_columns?: string[]
+        }
+        Update: {
+          created_at?: string
+          filters?: Json
+          id?: string
+          is_default?: boolean | null
+          is_system?: boolean | null
+          name?: string
+          sort_column?: string | null
+          sort_direction?: string | null
+          updated_at?: string
+          user_id?: string
+          visible_columns?: string[]
+        }
+        Relationships: []
+      }
       user_printer_preferences: {
         Row: {
           created_at: string

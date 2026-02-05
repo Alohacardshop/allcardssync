@@ -34,6 +34,7 @@ import type { VirtualInventoryListProps, InventoryListItem } from '../types';
 import type { CachedLocation } from '@/hooks/useLocationNames';
 import { getShortLocationName } from '@/hooks/useLocationNames';
 import type { InventoryLevel } from '@/hooks/useInventoryLevels';
+ import { INVENTORY_COLUMNS, buildGridTemplate, getVisibleColumns, type InventoryColumn } from '../types/views';
 
 type SortField = 'sku' | 'title' | 'price' | 'quantity' | 'created_at' | 'updated_at';
 type SortDirection = 'asc' | 'desc';
@@ -89,6 +90,10 @@ interface TableRowProps {
   quantityReadOnly?: boolean;
   /** Reason for read-only quantity, shown in tooltip */
   quantityReadOnlyReason?: string;
+   /** Visible columns from column chooser */
+   visibleColumns?: InventoryColumn[];
+   /** Pre-computed grid template */
+   gridTemplate?: string;
   onToggleSelection: (id: string) => void;
   onSync: (item: InventoryListItem) => void;
   onRetrySync: (item: InventoryListItem) => void;
@@ -109,6 +114,8 @@ const TableRow = memo(({
   selectedLocationGid,
   quantityReadOnly,
   quantityReadOnlyReason,
+   visibleColumns,
+   gridTemplate: propGridTemplate,
   onToggleSelection,
   onSync,
   onRetrySync,
@@ -169,9 +176,10 @@ const TableRow = memo(({
     minute: '2-digit',
   });
 
-  // CSS variable for consistent grid template across header and rows
-  // Fixed column widths ensure loading states never shift layout
-  const gridTemplate = "40px 90px minmax(200px, 1fr) 110px 75px 65px 85px 75px 85px 95px 70px 44px";
+   // Use provided grid template or compute from visible columns
+   const effectiveColumns = visibleColumns ? getVisibleColumns(visibleColumns) : INVENTORY_COLUMNS.map(c => c.id);
+   const isColVisible = (colId: InventoryColumn) => effectiveColumns.includes(colId);
+   const gridTemplate = propGridTemplate || buildGridTemplate(effectiveColumns);
 
   return (
     <div 
@@ -188,7 +196,8 @@ const TableRow = memo(({
       )}
       style={{ gridTemplateColumns: gridTemplate }}
     >
-        {/* Checkbox - fixed height container */}
+         {/* Checkbox - fixed height container */}
+         {isColVisible('checkbox') && (
         <div className="flex items-center justify-center h-[44px]">
           <Checkbox
             checked={isSelected}
@@ -196,18 +205,24 @@ const TableRow = memo(({
             aria-label={`Select ${title}`}
           />
         </div>
+         )}
 
-        {/* SKU - monospace, muted, fixed height */}
+         {/* SKU - monospace, muted, fixed height */}
+         {isColVisible('sku') && (
         <div className="font-mono text-xs text-muted-foreground truncate leading-tight flex items-center h-[44px]" title={item.sku || ''}>
           {item.sku || '—'}
         </div>
+         )}
 
-        {/* Title - semibold, primary color, fixed height */}
+         {/* Title - semibold, primary color, fixed height */}
+         {isColVisible('title') && (
         <div className="truncate font-semibold text-foreground leading-tight flex items-center h-[44px]" title={title}>
           {title}
         </div>
+         )}
 
         {/* Location with hover popover for multi-location stock - fixed height */}
+         {isColVisible('location') && (
         <div className="flex items-center h-[44px]">
           <LocationStockPopover
             primaryLocationGid={item.shopify_location_gid}
@@ -216,13 +231,17 @@ const TableRow = memo(({
             className="leading-tight"
           />
         </div>
+         )}
 
         {/* Price - right aligned, tabular nums, fixed height */}
+         {isColVisible('price') && (
         <div className="text-right tabular-nums font-medium text-foreground pr-1 flex items-center justify-end h-[44px]">
           ${(item.price || 0).toFixed(2)}
         </div>
+         )}
 
         {/* Quantity - center aligned, shows Shopify-truth quantity, fixed container */}
+         {isColVisible('quantity') && (
         <QuantityAuditTooltip itemId={item.id} sku={item.sku}>
           <div className="flex items-center justify-center h-[44px] cursor-help">
           <InlineQuantityEditor
@@ -236,8 +255,10 @@ const TableRow = memo(({
           />
           </div>
         </QuantityAuditTooltip>
+         )}
 
         {/* Shopify Status - consistent chip with fixed container height */}
+         {isColVisible('shopify_status') && (
         <div className="flex items-center justify-center h-[44px]">
           <Badge 
             variant={syncStatus.variant}
@@ -250,8 +271,10 @@ const TableRow = memo(({
             {syncStatus.label}
           </Badge>
         </div>
+         )}
 
         {/* Print Status - minimal badge with fixed container height */}
+         {isColVisible('print_status') && (
         <div className="flex items-center justify-center h-[44px]">
           <Badge
             variant={item.printed_at ? "default" : "outline"}
@@ -265,8 +288,10 @@ const TableRow = memo(({
             {item.printed_at ? 'Printed' : 'No Label'}
           </Badge>
         </div>
+         )}
 
         {/* eBay Status - fixed container height */}
+         {isColVisible('ebay_status') && (
         <div className="flex items-center justify-center h-[44px]">
           <EbayStatusBadge
             syncStatus={item.ebay_sync_status}
@@ -276,8 +301,10 @@ const TableRow = memo(({
             listOnEbay={item.list_on_ebay}
           />
         </div>
+         )}
 
         {/* Updated - relative with tooltip, fixed container height */}
+         {isColVisible('updated_at') && (
         <div className="flex items-center justify-center h-[44px]">
           <Tooltip>
             <TooltipTrigger asChild>
@@ -290,8 +317,11 @@ const TableRow = memo(({
             </TooltipContent>
           </Tooltip>
         </div>
+         )}
 
         {/* Primary Action - fixed width container to prevent shifting */}
+         {isColVisible('actions') && (
+         <>
         <div className="flex items-center justify-center h-[44px] min-w-[70px]">
           {primaryAction ? (
             <Button
@@ -378,6 +408,8 @@ const TableRow = memo(({
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+        </>
+        )}
       </div>
   );
 });
@@ -437,6 +469,7 @@ export const InventoryTableView = memo(({
   hasNextPage,
   isFetchingNextPage,
   onLoadMore,
+   visibleColumns: propVisibleColumns,
 }: VirtualInventoryListProps) => {
   const parentRef = useRef<HTMLDivElement>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
@@ -495,6 +528,11 @@ export const InventoryTableView = memo(({
     });
   }, []);
 
+   // Compute visible columns and grid template
+   const visibleColumns = propVisibleColumns || INVENTORY_COLUMNS.map(c => c.id);
+   const effectiveColumns = getVisibleColumns(visibleColumns);
+   const isColumnVisible = (colId: InventoryColumn) => effectiveColumns.includes(colId);
+ 
   const rowVirtualizer = useVirtualizer({
     count: items.length,
     getScrollElement: () => parentRef.current,
@@ -570,7 +608,7 @@ export const InventoryTableView = memo(({
 
   // CSS variable for consistent grid template
   // Match column widths exactly with TableRow for layout stability
-  const gridTemplate = "40px 90px minmax(200px, 1fr) 110px 75px 65px 85px 75px 85px 95px 70px 44px";
+   const gridTemplate = buildGridTemplate(effectiveColumns);
 
   return (
     <>
@@ -584,25 +622,27 @@ export const InventoryTableView = memo(({
               className="shrink-0 grid gap-2 items-center px-3 h-[44px] bg-muted/60 border-b font-medium text-xs sticky top-0 z-10"
               style={{ gridTemplateColumns: gridTemplate }}
             >
-              <div className="flex items-center justify-center h-full">
+               {isColumnVisible('checkbox') && <div className="flex items-center justify-center h-full">
                 <Checkbox
                   checked={allSelected}
                   indeterminate={someSelected}
                   onCheckedChange={handleSelectAll}
                   aria-label={allSelected ? "Deselect all items" : someSelected ? "Select all items" : "Select all items"}
                 />
-              </div>
-              <SortableHeader label="SKU" field="sku" sortConfig={sortConfig} onSort={handleSort} />
-              <SortableHeader label="Title" field="title" sortConfig={sortConfig} onSort={handleSort} />
-              <span className="text-muted-foreground">Location</span>
-              <SortableHeader label="Price" field="price" sortConfig={sortConfig} onSort={handleSort} className="justify-end pr-1" />
-              <SortableHeader label="Qty" field="quantity" sortConfig={sortConfig} onSort={handleSort} className="justify-center" />
-              <span className="text-muted-foreground text-center">Shopify</span>
-              <span className="text-muted-foreground text-center">Label</span>
-              <span className="text-muted-foreground text-center">eBay</span>
-              <SortableHeader label="Updated" field="updated_at" sortConfig={sortConfig} onSort={handleSort} className="justify-center" />
-              <span aria-hidden="true"></span>
-              <span aria-hidden="true"></span>
+               </div>}
+               {isColumnVisible('sku') && <SortableHeader label="SKU" field="sku" sortConfig={sortConfig} onSort={handleSort} />}
+               {isColumnVisible('title') && <SortableHeader label="Title" field="title" sortConfig={sortConfig} onSort={handleSort} />}
+               {isColumnVisible('location') && <span className="text-muted-foreground">Location</span>}
+               {isColumnVisible('price') && <SortableHeader label="Price" field="price" sortConfig={sortConfig} onSort={handleSort} className="justify-end pr-1" />}
+               {isColumnVisible('quantity') && <SortableHeader label="Qty" field="quantity" sortConfig={sortConfig} onSort={handleSort} className="justify-center" />}
+               {isColumnVisible('shopify_status') && <span className="text-muted-foreground text-center">Shopify</span>}
+               {isColumnVisible('print_status') && <span className="text-muted-foreground text-center">Label</span>}
+               {isColumnVisible('ebay_status') && <span className="text-muted-foreground text-center">eBay</span>}
+               {isColumnVisible('updated_at') && <SortableHeader label="Updated" field="updated_at" sortConfig={sortConfig} onSort={handleSort} className="justify-center" />}
+               {isColumnVisible('actions') && <>
+                 <span aria-hidden="true"></span>
+                 <span aria-hidden="true"></span>
+               </>}
             </div>
 
       {/* Virtualized Rows */}
@@ -640,6 +680,8 @@ export const InventoryTableView = memo(({
                   selectedLocationGid={selectedLocationGid}
                   quantityReadOnly={quantityReadOnly}
                   quantityReadOnlyReason={quantityReadOnlyReason}
+                   visibleColumns={effectiveColumns}
+                   gridTemplate={gridTemplate}
                   onToggleSelection={onToggleSelection}
                   onSync={onSync}
                   onRetrySync={onRetrySync}
