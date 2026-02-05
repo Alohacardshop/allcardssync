@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { logger } from '@/lib/logger';
 import { FullScreenLoader } from '@/components/ui/FullScreenLoader';
 import { UserX } from 'lucide-react';
+import { PATHS } from '@/routes/paths';
 
 interface AuthGuardProps {
   children: React.ReactNode;
@@ -22,7 +23,7 @@ export function AuthGuard({ children }: AuthGuardProps) {
 
   if (!user) {
     logger.info('AuthGuard: Redirecting to auth page - no user', {}, 'auth');
-    return <Navigate to="/auth" replace />;
+    return <Navigate to={PATHS.auth} replace />;
   }
 
   if (!isAuthorized) {
