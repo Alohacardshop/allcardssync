@@ -20,6 +20,10 @@ import {
   Trash2
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
+import { cleanupAuthState } from '@/lib/auth';
+import { navigateTo } from '@/lib/navigation';
+import { PATHS } from '@/routes/paths';
 
 // Lock Screen Component
 export function LockScreen({ isLocked, onUnlock }: { isLocked: boolean; onUnlock: () => void }) {
@@ -109,9 +113,11 @@ export function SessionTimeoutWarning() {
       const timeSinceActivity = Date.now() - lastActivity;
       
       if (timeSinceActivity >= TIMEOUT_DURATION) {
-        // Force logout
-        localStorage.clear();
-        window.location.href = '/auth';
+        // Force logout using proper auth signout
+        cleanupAuthState();
+        supabase.auth.signOut().finally(() => {
+          navigateTo(PATHS.auth);
+        });
         return;
       }
       
@@ -152,9 +158,10 @@ export function SessionTimeoutWarning() {
     setTimeLeft(900);
   };
 
-  const signOut = () => {
-    localStorage.clear();
-    window.location.href = '/auth';
+  const signOut = async () => {
+    cleanupAuthState();
+    await supabase.auth.signOut();
+    navigateTo(PATHS.auth);
   };
 
   const formatTime = (seconds: number) => {
