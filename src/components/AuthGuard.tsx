@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { logger } from '@/lib/logger';
 import { FullScreenLoader } from '@/components/ui/FullScreenLoader';
+import { UserX } from 'lucide-react';
 
 interface AuthGuardProps {
   children: React.ReactNode;
@@ -16,7 +17,7 @@ export function AuthGuard({ children }: AuthGuardProps) {
   const isAuthorized = isStaff || isAdmin;
 
   if (loading) {
-    return <FullScreenLoader title="Loading…" subtitle="Checking your session…" />;
+    return <FullScreenLoader title="Checking Session" subtitle="Verifying your credentials…" />;
   }
 
   if (!user) {
@@ -27,15 +28,20 @@ export function AuthGuard({ children }: AuthGuardProps) {
   if (!isAuthorized) {
     logger.warn('AuthGuard: Access denied - insufficient permissions', { userId: user.id }, 'auth');
     return (
-      <div className="flex items-center justify-center flex-1">
-        <div className="text-center max-w-md mx-auto p-6">
-          <h1 className="text-2xl font-bold text-foreground mb-4">Access Restricted</h1>
-          <p className="text-muted-foreground mb-6">
-            Your account is signed in but not authorized to access this application. 
-            Please contact an administrator to grant you Staff access.
-          </p>
-          <Button onClick={() => supabase.auth.signOut()}>
-            Sign out
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background p-6">
+        <div className="text-center max-w-md space-y-6">
+          <div className="mx-auto w-16 h-16 rounded-full bg-warning/10 flex items-center justify-center">
+            <UserX className="w-8 h-8 text-warning" />
+          </div>
+          <div className="space-y-2">
+            <h1 className="text-2xl font-bold text-foreground">Access Restricted</h1>
+            <p className="text-muted-foreground">
+              Your account is signed in but not authorized to access this application. 
+              Please contact an administrator to grant you Staff access.
+            </p>
+          </div>
+          <Button onClick={() => supabase.auth.signOut()} variant="outline">
+            Sign Out
           </Button>
         </div>
       </div>
