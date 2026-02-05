@@ -11,7 +11,7 @@ import { TransferItemsList } from "./TransferItemsList";
 import { ConfirmationDialog } from "./ConfirmationDialog";
 import { Loader2, ScanBarcode, Undo2, Volume2, VolumeX } from "lucide-react";
 import { useStore } from "@/contexts/StoreContext";
-import { getLocationNameFromGid } from "@/lib/locationUtils";
+import { getLocationNameFromGid, getLocationDisplayInfoFromGid } from "@/lib/locationUtils";
 import { playSuccessSound, playErrorSound, playCompletionSound, areSoundsEnabled, toggleSounds } from "@/lib/soundEffects";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -366,8 +366,8 @@ export function BulkTransferScanner({ onTransferComplete }: BulkTransferScannerP
     });
   };
 
-  const sourceName = sourceLocation ? getLocationNameFromGid(sourceLocation, locations) : null;
-  const destinationName = destinationLocation ? getLocationNameFromGid(destinationLocation, locations) : null;
+  const sourceDisplayInfo = sourceLocation ? getLocationDisplayInfoFromGid(sourceLocation, locations) : null;
+  const destinationDisplayInfo = destinationLocation ? getLocationDisplayInfoFromGid(destinationLocation, locations) : null;
 
    // Fetch inventory levels for scanned items
    const inventoryItemIds = useMemo(
@@ -408,12 +408,19 @@ export function BulkTransferScanner({ onTransferComplete }: BulkTransferScannerP
   return (
     <div className="space-y-6">
       {/* Source Location Display */}
-      {sourceName && (
+      {sourceDisplayInfo && (
         <div className="bg-muted/50 border rounded-lg p-4">
           <div className="flex items-center justify-between">
             <div>
               <Label className="text-sm text-muted-foreground">Source Location</Label>
-              <p className="text-lg font-medium">{sourceName}</p>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <p className="text-lg font-medium cursor-help">{sourceDisplayInfo.nickname}</p>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="text-xs">{sourceDisplayInfo.fullName}</p>
+                </TooltipContent>
+              </Tooltip>
             </div>
             <TooltipProvider>
               <Tooltip>
@@ -564,12 +571,12 @@ export function BulkTransferScanner({ onTransferComplete }: BulkTransferScannerP
                <div className="flex items-center justify-center py-4">
                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                </div>
-             ) : sourceLocation && destinationLocation && sourceName && destinationName ? (
+             ) : sourceLocation && destinationLocation && sourceDisplayInfo && destinationDisplayInfo ? (
                <TransferConfirmationSummary
                  sourceLocationGid={sourceLocation}
-                 sourceLocationName={sourceName}
+                 sourceLocationName={sourceDisplayInfo.nickname}
                  destinationLocationGid={destinationLocation}
-                 destinationLocationName={destinationName}
+                 destinationLocationName={destinationDisplayInfo.nickname}
                  sourceLevels={sourceLevels}
                  destinationLevels={destinationLevels}
                  itemCount={scannedItems.length}

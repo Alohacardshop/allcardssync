@@ -8,7 +8,7 @@ import { EbayStatusBadge } from '@/components/inventory/EbayStatusBadge';
 import { InventoryLockIndicator } from './InventoryLockIndicator';
 import type { InventoryItem } from '@/types/inventory';
 import type { CachedLocation } from '@/hooks/useLocationNames';
-import { getShortLocationName } from '@/hooks/useLocationNames';
+import { getLocationDisplayInfoFromGid } from '@/hooks/useLocationNames';
 import type { InventoryLock } from '@/hooks/useInventoryLocks';
 
 interface InventoryItemHeaderProps {
@@ -108,12 +108,22 @@ export const InventoryItemHeader = memo(({
               <span className="text-xs text-muted-foreground font-mono">
                 {item.sku}
               </span>
-              {item.shopify_location_gid && locationsMap && (
-                <Badge variant="outline" className="text-xs bg-muted/50">
-                  <MapPin className="h-3 w-3 mr-1" />
-                  {getShortLocationName(item.shopify_location_gid, locationsMap)}
-                </Badge>
-              )}
+              {item.shopify_location_gid && locationsMap && (() => {
+                const { nickname, fullName } = getLocationDisplayInfoFromGid(item.shopify_location_gid, locationsMap);
+                return (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Badge variant="outline" className="text-xs bg-muted/50 cursor-help">
+                        <MapPin className="h-3 w-3 mr-1" />
+                        {nickname}
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">
+                      <p className="text-xs">{fullName}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                );
+              })()}
               {getStatusBadge(item)}
               {getPrintStatusBadge(item)}
               {lockInfo && (

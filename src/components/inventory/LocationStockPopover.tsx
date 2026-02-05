@@ -6,10 +6,12 @@ import {
 } from '@/components/ui/hover-card';
 import { Badge } from '@/components/ui/badge';
 import { MapPin, Package, Loader2 } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import type { CachedLocation } from '@/hooks/useLocationNames';
-import { getShortLocationName, getLocationName } from '@/hooks/useLocationNames';
-import { useInventoryLevels, getTotalStock } from '@/hooks/useInventoryLevels';
+import { getLocationDisplayInfoFromGid } from '@/hooks/useLocationNames';
+import { useInventoryLevels } from '@/hooks/useInventoryLevels';
+import { getLocationNickname } from '@/lib/locationNicknames';
 
 interface LocationStock {
   location_gid: string;
@@ -48,25 +50,31 @@ export function LocationStockPopover({
     );
   }
 
-  const shortName = getShortLocationName(primaryLocationGid, locationsMap);
-  const fullName = getLocationName(primaryLocationGid, locationsMap);
+  const { nickname, fullName } = getLocationDisplayInfoFromGid(primaryLocationGid, locationsMap);
 
   // Show loading spinner when fetching
   if (isLoading && inventoryItemId) {
     return (
       <span className={cn("text-xs text-muted-foreground flex items-center gap-1", className)}>
         <Loader2 className="h-3 w-3 animate-spin" />
-        {shortName}
+        {nickname}
       </span>
     );
   }
 
-  // If no multi-location stock data, just show the primary location
+  // If no multi-location stock data, just show the primary location with tooltip
   if (!allLocationStock || allLocationStock.length <= 1) {
     return (
-      <span className={cn("text-xs text-muted-foreground truncate", className)} title={fullName}>
-        {shortName}
-      </span>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className={cn("text-xs text-muted-foreground truncate cursor-help", className)}>
+            {nickname}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">
+          <p className="text-xs">{fullName}</p>
+        </TooltipContent>
+      </Tooltip>
     );
   }
 
@@ -84,7 +92,7 @@ export function LocationStockPopover({
             className
           )}
         >
-          <span>{shortName}</span>
+          <span>{nickname}</span>
           {locationsWithStock.length > 1 && (
             <Badge variant="secondary" className="text-[9px] h-4 px-1 font-normal">
               +{locationsWithStock.length - 1}
@@ -112,9 +120,10 @@ export function LocationStockPopover({
           
           <div className="space-y-1.5">
             {allLocationStock.map((loc) => {
-              const locationName = loc.location_name || 
+              const rawLocationName = loc.location_name || 
                 locationsMap?.get(loc.location_gid)?.location_name ||
                 extractLocationId(loc.location_gid);
+              const locationNickname = getLocationNickname(rawLocationName);
               const isPrimary = loc.location_gid === primaryLocationGid;
               
               return (
@@ -126,15 +135,22 @@ export function LocationStockPopover({
                     loc.available === 0 && "text-muted-foreground"
                   )}
                 >
-                  <span className={cn(
-                    "truncate flex-1",
-                    isPrimary && "font-medium"
-                  )}>
-                    {locationName}
-                    {isPrimary && (
-                      <span className="text-[10px] text-muted-foreground ml-1">(primary)</span>
-                    )}
-                  </span>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className={cn(
+                        "truncate flex-1 cursor-help",
+                        isPrimary && "font-medium"
+                      )}>
+                        {locationNickname}
+                        {isPrimary && (
+                          <span className="text-[10px] text-muted-foreground ml-1">(primary)</span>
+                        )}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="left">
+                      <p className="text-xs">{rawLocationName}</p>
+                    </TooltipContent>
+                  </Tooltip>
                   <span className={cn(
                     "tabular-nums font-medium ml-2",
                     loc.available === 0 && "text-muted-foreground",

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Badge } from '@/components/ui/badge';
 import { MapPin, Package, RefreshCw } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { useInventoryLevels, enrichLevelsWithNames } from '@/hooks/useInventoryLevels';
 import type { CachedLocation } from '@/hooks/useLocationNames';
@@ -107,12 +108,19 @@ export function StockByLocationSection({
             >
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className={cn(
-                    "text-sm truncate",
-                    isPrimary && "font-medium"
-                  )}>
-                    {level.displayName}
-                  </span>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className={cn(
+                        "text-sm truncate cursor-help",
+                        isPrimary && "font-medium"
+                      )}>
+                        {level.displayName}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                      <p className="text-xs">{level.fullName}</p>
+                    </TooltipContent>
+                  </Tooltip>
                   {isPrimary && (
                     <Badge variant="secondary" className="text-[10px] h-4 px-1">
                       Primary
