@@ -22,8 +22,6 @@ import { ShopifyRemovalDialog } from '@/components/ShopifyRemovalDialog';
 import { ShopifySyncDetailsDialog } from '@/components/ShopifySyncDetailsDialog';
 import { InventoryDeleteDialog } from '@/components/InventoryDeleteDialog';
 import { ConfirmationDialog } from '@/components/ConfirmationDialog';
-import { RefreshControls } from '@/components/RefreshControls';
-import { CompactRefreshControls } from '@/components/inventory/CompactRefreshControls';
 import { BulkActionsToolbar } from '@/components/inventory/BulkActionsToolbar';
 import { QuickFilterPresets, QuickFilterState } from '@/components/inventory/QuickFilterPresets';
 import { PrintFromInventoryDialog } from '@/components/inventory/PrintFromInventoryDialog';
@@ -1281,18 +1279,8 @@ const Inventory = () => {
           </TabsList>
 
             <TabsContent value="inventory" className="space-y-6">
-              {/* Refresh Controls */}
-              <div className="flex items-center gap-2">
-                <RefreshControls
-                  autoRefreshEnabled={autoRefreshEnabled}
-                  onAutoRefreshToggle={setAutoRefreshEnabled}
-                  onManualRefresh={handleManualRefresh}
-                  isRefreshing={isFetching}
-                  lastRefresh={lastRefresh}
-                />
-                
-                {/* Resync from Shopify Dropdown */}
-                <div className="flex items-center gap-2 ml-auto">
+               {/* Resync from Shopify */}
+               <div className="flex items-center gap-2 justify-end">
                   <Button
                     variant="outline"
                     size="sm"
@@ -1318,7 +1306,6 @@ const Inventory = () => {
                       : 'Resync All from Shopify'}
                   </Button>
                 </div>
-              </div>
               
               {/* Consolidated Filter Card */}
             <Card>
