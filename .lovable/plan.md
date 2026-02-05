@@ -1,102 +1,43 @@
 
-# Fix Delete Appearing to Not Work
+# Add Batches to Main Navigation
 
-## The Problem
-
-The delete **is actually working** - batches are being marked as `status: 'deleted'` in the database. However, users think it's broken because:
-
-1. **Default filter shows "all"** - Deleted batches remain visible with a red "deleted" badge
-2. **No clear visual transition** - The row stays in the same position, just with a different status
-3. **Users expect rows to disappear** - But they're just changing status
+## Problem
+The `/batches` route is defined but not visible in the main Sidebar or BottomNav. Users have no obvious way to navigate there except via dashboard quick actions, keyboard shortcuts, or command palette.
 
 ## Solution
-
-Make the delete experience clearer with these improvements:
-
-### 1. Change Default Filter to "Active"
-Show active batches by default instead of all - this is the most common use case.
-
-### 2. Auto-Switch Filter After Delete  
-When deleting while on "active" filter, the batch naturally disappears. But if on "all", either:
-- Option A: Keep filter on "all" but add animation/fade-out effect
-- Option B: Switch to "active" filter after bulk delete (recommended for cleanup workflows)
-
-### 3. Add Success Animation
-Brief visual feedback when delete succeeds (row fades out or strikethrough animation).
-
-### 4. Improve Toast Message
-Current: "Batch LOT-xxx and 0 items have been deleted"  
-Better: "Batch LOT-xxx deleted - switch to 'Deleted' filter to view"
+Add a "Batches" link to both the Sidebar and BottomNav navigation components.
 
 ---
 
-## Technical Implementation
+## Changes
 
-### File: `src/pages/Batches.tsx`
+### 1. Update Sidebar Navigation (`src/components/layout/Sidebar.tsx`)
 
-**Change 1: Default filter to "active"**
-```tsx
-// Line 80 - change default state
-const [statusFilter, setStatusFilter] = useState<string>("active");
-```
+Add Batches to the `NAV_ITEMS` array:
+- Add `Archive` icon import from lucide-react
+- Add `Archive` to `ICON_MAP`
+- Insert a new nav item after Inventory:
+  ```
+  { key: 'batches', label: 'Batches', href: PATHS.batches, icon: 'Archive' }
+  ```
 
-**Change 2: Clear selection after delete and provide clearer feedback**
-```tsx
-const handleDeleteBatch = async (lotId: string, lotNumber: string) => {
-  // ... existing code ...
-  
-  toast({
-    title: "Batch Deleted",
-    description: `Batch ${lotNumber} has been deleted`,  // Simplified message
-  });
+### 2. Update Bottom Navigation (`src/components/layout/BottomNav.tsx`)
 
-  // Already correctly calls fetchLots() - no change needed
-  await fetchLots();
-  
-  // Clear from selection if it was selected
-  setSelectedBatches(prev => {
-    const newSet = new Set(prev);
-    newSet.delete(lotId);
-    return newSet;
-  });
-  // ... rest of code ...
-};
-```
-
-**Change 3: Improve bulk delete feedback**
-```tsx
-const handleBulkDelete = async () => {
-  // ... existing code ...
-  
-  toast({
-    title: "Batches Deleted",
-    description: `${batchesToDelete.length} batches deleted. View in "Deleted" filter.`,
-  });
-  
-  // ... rest already correctly clears selection and fetches ...
-};
-```
-
-**Change 4: Add row transition when status changes (optional enhancement)**
-```tsx
-// In TableRow - add transition class
-<TableRow 
-  key={lot.id} 
-  className={cn(
-    staleInfo ? 'bg-amber-50 dark:bg-amber-950/20' : '',
-    lot.status === 'deleted' && 'opacity-60'  // Dim deleted items
-  )}
->
-```
+Add Batches to the `MORE_ITEMS` array (the "More" sheet menu):
+- Add `Archive` icon import from lucide-react
+- Add `Archive` to `ICON_MAP`
+- Insert a new item:
+  ```
+  { key: 'batches', label: 'Batches', href: PATHS.batches, icon: 'Archive' }
+  ```
 
 ---
 
-## Summary
+## Technical Details
 
-| Change | Impact |
-|--------|--------|
-| Default filter: "active" | Deleted batches won't show by default |
-| Clearer toast messages | Users understand what happened |
-| Dim deleted rows | Visual distinction when viewing "all" |
+| File | Change |
+|------|--------|
+| `src/components/layout/Sidebar.tsx` | Add `Archive` import, update `ICON_MAP`, add batches to `NAV_ITEMS` |
+| `src/components/layout/BottomNav.tsx` | Add `Archive` import, update `ICON_MAP`, add batches to `MORE_ITEMS` |
 
-This is a quick fix - the core functionality is already working correctly.
+The route already exists at `/batches` via `PATHS.batches` - only navigation links are missing.
