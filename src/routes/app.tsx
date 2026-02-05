@@ -25,8 +25,7 @@ const EbaySyncDashboard = lazy(() => import('@/pages/EbaySyncDashboard'));
 const TestHardwarePage = lazy(() => import('@/pages/TestHardwarePage'));
 const QzTrayTestPage = lazy(() => import('@/pages/QzTrayTestPage'));
 
-// Light page - no lazy loading
-import NotFound from '@/pages/NotFound';
+// NotFound is handled in public routes for unauthenticated access
 
 /**
  * Protected app routes - uses ProtectedLayout which provides its own Suspense boundary
@@ -93,8 +92,5 @@ export const appRoutes = (
     <Route path="/dashboard" element={<Navigate to={PATHS.dashboard} replace />} />
     <Route path={PATHS.testHardware} element={<TestHardwarePage />} />
     <Route path={PATHS.qzTrayTest} element={<QzTrayTestPage />} />
-    
-    {/* Catch-all (light, no lazy loading) */}
-    <Route path="*" element={<NotFound />} />
   </Route>
 );
