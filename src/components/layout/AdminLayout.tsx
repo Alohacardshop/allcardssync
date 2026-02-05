@@ -29,7 +29,6 @@ import { Button } from '@/components/ui/button';
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { AuthGuard } from '@/components/AuthGuard';
@@ -110,8 +109,7 @@ export function AdminLayout() {
   return (
     <AuthGuard>
       <AdminGuard>
-        <TooltipProvider>
-          <SidebarProvider>
+        <SidebarProvider>
             <div className="min-h-screen flex w-full bg-background">
               {/* Admin Sidebar */}
               <Sidebar
@@ -285,9 +283,8 @@ export function AdminLayout() {
                 onOpenChange={setCommandPaletteOpen}
                 onNavigate={handleNavigate}
               />
-            </div>
-          </SidebarProvider>
-        </TooltipProvider>
+          </div>
+        </SidebarProvider>
       </AdminGuard>
     </AuthGuard>
   );
