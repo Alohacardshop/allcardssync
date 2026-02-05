@@ -24,7 +24,6 @@ export interface ForceSyncOptions {
   locationGid: string;
   itemIds: string[];
   force?: boolean;
-  dryRun?: boolean;
 }
 
 export function useShopifyForceSync() {

@@ -72,7 +72,7 @@ export default function PulledItemsFilter() {
   // Mark as unprinted loading state
   const [isMarkingUnprinted, setIsMarkingUnprinted] = useState(false);
 
-  // Testing mode - don't mark as printed when disabled
+  // Print tracking option - skip marking as printed when disabled
   const [markAsPrinted, setMarkAsPrinted] = useState(true);
 
   // Shift+select: track last selected index for range selection
@@ -525,7 +525,7 @@ export default function PulledItemsFilter() {
         .in('id', successIds);
     }
 
-    const modeText = markAsPrinted ? '' : ' (test mode)';
+    const modeText = markAsPrinted ? '' : ' (no tracking)';
     if (results.failed > 0) {
       toast.warning(`Printed ${results.success} labels, ${results.failed} failed${modeText}`);
     } else {
@@ -609,7 +609,7 @@ export default function PulledItemsFilter() {
             .in('id', itemIds);
         }
 
-        toast.success(`Queued ${printedCount} label${printedCount > 1 ? 's' : ''} for printing${!markAsPrinted ? ' (test mode)' : ''}`);
+        toast.success(`Queued ${printedCount} label${printedCount > 1 ? 's' : ''} for printing${!markAsPrinted ? ' (no tracking)' : ''}`);
         setSelectedItems(new Set());
         fetchAllItems();
       } catch (error) {

@@ -7,9 +7,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, ArrowLeft, Package, Filter, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Loader2, ArrowLeft, Package, Filter, CheckCircle2, ChevronDown, HelpCircle, Eye } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
 
 interface PreviewItem {
   sku: string;
@@ -51,15 +54,23 @@ export default function ShopifyBackfill() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<BackfillResult | null>(null);
+  const [showConfirm, setShowConfirm] = useState(false);
   
   // Filter controls
   const [minQuantity, setMinQuantity] = useState(1);
   const [maxQuantity, setMaxQuantity] = useState(900);
   const [skipUntracked, setSkipUntracked] = useState(true);
-  const [dryRun, setDryRun] = useState(true);
+  
+  // Advanced options - hidden by default
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
 
-  const runBackfill = async () => {
-    setLoading(true);
+  const handleImportClick = () => {
+    setShowConfirm(true);
+  };
+
+  const runPreview = async () => {
+    setPreviewLoading(true);
     setResult(null);
     
     try {
@@ -69,7 +80,7 @@ export default function ShopifyBackfill() {
           skipAlreadyPulled: false,
           status: 'active',
           maxPages: 100,
-          dryRun,
+          dryRun: true,
           minQuantity,
           maxQuantity,
           skipUntracked
@@ -78,10 +89,43 @@ export default function ShopifyBackfill() {
 
       if (error) throw error;
       setResult(data as BackfillResult);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Preview failed';
       setResult({ 
         success: false,
-        error: error.message 
+        error: errorMessage
+      });
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const runImport = async () => {
+    setLoading(true);
+    setResult(null);
+    setShowConfirm(false);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('shopify-pull-products-by-tags', {
+        body: {
+          storeKey: 'hawaii',
+          skipAlreadyPulled: false,
+          status: 'active',
+          maxPages: 100,
+          dryRun: false,
+          minQuantity,
+          maxQuantity,
+          skipUntracked
+        }
+      });
+
+      if (error) throw error;
+      setResult(data as BackfillResult);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Import failed';
+      setResult({ 
+        success: false,
+        error: errorMessage
       });
     } finally {
       setLoading(false);
@@ -91,8 +135,8 @@ export default function ShopifyBackfill() {
   return (
     <div className="container mx-auto px-4 py-6 max-w-4xl">
       <PageHeader
-        title="Shopify Inventory Backfill"
-        description="Pull all products from Hawaii Shopify store with valid SKUs"
+        title="Shopify Inventory Import"
+        description="Pull all products from Hawaii Shopify store"
         showEcosystem
         actions={
           <Button variant="ghost" size="sm" onClick={() => navigate('/admin')}>
@@ -101,16 +145,8 @@ export default function ShopifyBackfill() {
           </Button>
         }
       />
-      
-      <Alert className="mb-6 mt-6">
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription>
-          This will pull products from Shopify that match your filter criteria.
-          Use <strong>Preview Mode</strong> first to see what would be imported.
-        </AlertDescription>
-      </Alert>
 
-      <div className="grid gap-6">
+      <div className="grid gap-6 mt-6">
         {/* Filter Controls */}
         <Card>
           <CardHeader>
@@ -166,29 +202,15 @@ export default function ShopifyBackfill() {
                 onCheckedChange={setSkipUntracked}
               />
             </div>
-
-            <div className="flex items-center justify-between rounded-lg border p-4 bg-muted/50">
-              <div className="space-y-0.5">
-                <Label htmlFor="dryRun" className="font-semibold">Preview Mode (Dry Run)</Label>
-                <p className="text-xs text-muted-foreground">
-                  When enabled, shows what would be imported without making changes
-                </p>
-              </div>
-              <Switch
-                id="dryRun"
-                checked={dryRun}
-                onCheckedChange={setDryRun}
-              />
-            </div>
           </CardContent>
         </Card>
 
-        {/* Run Backfill */}
+        {/* Import Card */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Package className="h-5 w-5" />
-              Hawaii Store Backfill
+              Hawaii Store Import
             </CardTitle>
             <CardDescription>
               Pull inventory from aloha-card-shop.myshopify.com
@@ -196,27 +218,64 @@ export default function ShopifyBackfill() {
           </CardHeader>
           <CardContent className="space-y-4">
             <Button 
-              onClick={runBackfill} 
+              onClick={handleImportClick} 
               disabled={loading}
               className="w-full"
               size="lg"
-              variant={dryRun ? "outline" : "default"}
             >
               {loading ? (
                 <>
                   <Loader2 className="animate-spin mr-2" />
-                  {dryRun ? 'Previewing...' : 'Importing...'}
+                  Importing...
                 </>
               ) : (
-                dryRun ? 'Preview Import' : 'Run Import'
+                'Run Import'
               )}
             </Button>
-            
-            {!dryRun && (
-              <p className="text-sm text-destructive text-center">
-                ⚠️ This will insert/update records in the database
-              </p>
-            )}
+
+            {/* Diagnostics - Collapsible */}
+            <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" size="sm" className="w-full justify-between text-muted-foreground">
+                  Diagnostics
+                  <ChevronDown className={`h-4 w-4 transition-transform ${advancedOpen ? 'rotate-180' : ''}`} />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="pt-2">
+                <div className="p-3 rounded-lg border bg-muted/50">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1">
+                      <span className="text-sm">Preview Mode</span>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <HelpCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-xs">
+                            <p>For diagnostics only. Shows what would be imported without making changes.</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={runPreview}
+                      disabled={previewLoading || loading}
+                    >
+                      {previewLoading ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <>
+                          <Eye className="h-4 w-4 mr-1" />
+                          Preview
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
 
             {/* Results */}
             {result && (
@@ -292,45 +351,45 @@ export default function ShopifyBackfill() {
                       </>
                     )}
 
-                                    {/* Preview Items Table */}
-                                    {result.dryRun && result.previewItems && result.previewItems.length > 0 && (
-                                      <div className="border-t pt-4">
-                                        <p className="text-sm font-medium mb-2">
-                                          Sample Items ({result.previewItems.length} of {result.statistics?.upsertedRows || 0}):
-                                        </p>
-                                        <div className="max-h-64 overflow-auto border rounded">
-                                          <Table>
-                                            <TableHeader>
-                                              <TableRow className="bg-muted">
-                                                <TableHead className="text-xs py-2">SKU</TableHead>
-                                                <TableHead className="text-xs py-2">Title</TableHead>
-                                                <TableHead className="text-xs py-2 text-right">Qty</TableHead>
-                                                <TableHead className="text-xs py-2 text-right">Price</TableHead>
-                                              </TableRow>
-                                            </TableHeader>
-                                            <TableBody>
-                                              {result.previewItems.map((item, i) => (
-                                                <TableRow key={i}>
-                                                  <TableCell className="text-xs py-1 font-mono">{item.sku}</TableCell>
-                                                  <TableCell className="text-xs py-1 truncate max-w-[200px]">{item.title}</TableCell>
-                                                  <TableCell className="text-xs py-1 text-right">{item.quantity}</TableCell>
-                                                  <TableCell className="text-xs py-1 text-right">${item.price.toFixed(2)}</TableCell>
-                                                </TableRow>
-                                              ))}
-                                            </TableBody>
-                                          </Table>
-                                        </div>
-                                        {(result.statistics?.upsertedRows || 0) > 50 && (
-                                          <p className="text-xs text-muted-foreground mt-2">
-                                            Showing first 50 items. {(result.statistics?.upsertedRows || 0) - 50} more items would also be imported.
-                                          </p>
-                                        )}
-                                      </div>
-                                    )}
+                    {/* Preview Items Table */}
+                    {result.dryRun && result.previewItems && result.previewItems.length > 0 && (
+                      <div className="border-t pt-4">
+                        <p className="text-sm font-medium mb-2">
+                          Sample Items ({result.previewItems.length} of {result.statistics?.upsertedRows || 0}):
+                        </p>
+                        <div className="max-h-64 overflow-auto border rounded">
+                          <Table>
+                            <TableHeader>
+                              <TableRow className="bg-muted">
+                                <TableHead className="text-xs py-2">SKU</TableHead>
+                                <TableHead className="text-xs py-2">Title</TableHead>
+                                <TableHead className="text-xs py-2 text-right">Qty</TableHead>
+                                <TableHead className="text-xs py-2 text-right">Price</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {result.previewItems.map((item, i) => (
+                                <TableRow key={i}>
+                                  <TableCell className="text-xs py-1 font-mono">{item.sku}</TableCell>
+                                  <TableCell className="text-xs py-1 truncate max-w-[200px]">{item.title}</TableCell>
+                                  <TableCell className="text-xs py-1 text-right">{item.quantity}</TableCell>
+                                  <TableCell className="text-xs py-1 text-right">${item.price.toFixed(2)}</TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                        {(result.statistics?.upsertedRows || 0) > 50 && (
+                          <p className="text-xs text-muted-foreground mt-2">
+                            Showing first 50 items. {(result.statistics?.upsertedRows || 0) - 50} more items would also be imported.
+                          </p>
+                        )}
+                      </div>
+                    )}
 
-                                    {result.message && (
-                                      <p className="text-sm text-muted-foreground">{result.message}</p>
-                                    )}
+                    {result.message && (
+                      <p className="text-sm text-muted-foreground">{result.message}</p>
+                    )}
                   </div>
                 ) : (
                   <div className="text-destructive">
@@ -343,6 +402,16 @@ export default function ShopifyBackfill() {
           </CardContent>
         </Card>
       </div>
+
+      <ConfirmActionDialog
+        open={showConfirm}
+        onOpenChange={setShowConfirm}
+        onConfirm={runImport}
+        title="Confirm Shopify Import"
+        description="This will import products from Shopify into your local inventory. Existing items with matching SKUs will be updated. This action cannot be undone."
+        confirmLabel="Run Import"
+        loading={loading}
+      />
     </div>
   );
 }
