@@ -2,9 +2,15 @@ import React, { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspens
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, AlertCircle, RefreshCw, Download } from 'lucide-react';
+import { Loader2, AlertCircle, RefreshCw, Download, MoreHorizontal } from 'lucide-react';
 import { toast } from 'sonner';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { useStore } from '@/contexts/StoreContext';
 import { useShopifyResync } from '@/hooks/useShopifyResync';
 import { useEbayListing } from '@/hooks/useEbayListing';
@@ -22,7 +28,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { Progress } from '@/components/ui/progress';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useInventoryTruthMode } from '@/hooks/useInventoryTruthMode';
- import { SystemStatusBanner } from '@/components/inventory/SystemStatusBanner';
+import { SystemStatusBanner } from '@/components/inventory/SystemStatusBanner';
 
 import { useInventoryListQuery } from '@/hooks/useInventoryListQuery';
 import { useLocationNames } from '@/hooks/useLocationNames';
@@ -38,19 +44,20 @@ import { InventoryCardView } from '../components/InventoryCardView';
 import { InventoryTableView } from '../components/InventoryTableView';
 import { InventoryViewToggle, type InventoryViewMode } from '../components/InventoryViewToggle';
 import { InventoryBulkBar } from '../components/InventoryBulkBar';
+import { ItemDetailsDrawer } from '../components/ItemDetailsDrawer';
 import { useInventorySelection } from '../hooks/useInventorySelection';
 import { useInventoryActions } from '../hooks/useInventoryActions';
-import type { InventoryFilterState } from '../types';
- import { ColumnChooser } from '../components/ColumnChooser';
- import { SavedViewsDropdown } from '../components/SavedViewsDropdown';
- import { 
-   INVENTORY_COLUMNS, 
-   type InventoryColumn, 
-   type SortField, 
-   type SortDirection,
-   type SavedInventoryView
- } from '../types/views';
- import { getDefaultVisibleColumns } from '../hooks/useInventoryViews';
+import type { InventoryFilterState, InventoryListItem } from '../types';
+import { ColumnChooser } from '../components/ColumnChooser';
+import { SavedViewsDropdown } from '../components/SavedViewsDropdown';
+import { 
+  INVENTORY_COLUMNS, 
+  type InventoryColumn, 
+  type SortField, 
+  type SortDirection,
+  type SavedInventoryView
+} from '../types/views';
+import { getDefaultVisibleColumns } from '../hooks/useInventoryViews';
 
 // Lazy load heavy components
 const InventoryAnalytics = lazy(() => import('@/components/InventoryAnalytics').then(m => ({ default: m.InventoryAnalytics })));
@@ -97,6 +104,9 @@ const InventoryPage = () => {
   const [selectedItemForRemoval, setSelectedItemForRemoval] = useState<any>(null);
   const [selectedItemsForDeletion, setSelectedItemsForDeletion] = useState<any[]>([]);
   const [syncDetailsRow, setSyncDetailsRow] = useState<any>(null);
+  
+  // Item details drawer state
+  const [detailsDrawerItem, setDetailsDrawerItem] = useState<InventoryListItem | null>(null);
   
   // Auto-refresh state
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
@@ -469,36 +479,8 @@ const InventoryPage = () => {
               />
             )}
             
-            {/* Resync from Shopify */}
+            {/* Right side controls */}
             <div className="flex items-center gap-2 ml-auto">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  if (selectedItems.size > 0) {
-                    resyncSelected.mutate({
-                      storeKey: assignedStore || '',
-                      itemIds: Array.from(selectedItems)
-                    });
-                  } else {
-                    setShowResyncConfirm(true);
-                  }
-                }}
-                disabled={isResyncing || !assignedStore || !selectedLocation}
-              >
-                {isResyncing ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Download className="h-4 w-4 mr-2" />
-                )}
-                {selectedItems.size > 0 
-                  ? `Resync Selected (${selectedItems.size})` 
-                  : 'Resync All from Shopify'}
-              </Button>
-              
-              {/* Keyboard shortcuts help */}
-              {isDesktop && <KeyboardShortcutsHelp />}
-             
              {/* Saved Views - desktop only */}
              {isDesktop && (
                <>
@@ -517,6 +499,43 @@ const InventoryPage = () => {
                  />
                </>
              )}
+             
+             {/* More actions dropdown - consolidates less-used actions */}
+             <DropdownMenu>
+               <DropdownMenuTrigger asChild>
+                 <Button variant="outline" size="sm" className="gap-1">
+                   <MoreHorizontal className="h-4 w-4" />
+                   <span className="hidden sm:inline">More</span>
+                 </Button>
+               </DropdownMenuTrigger>
+               <DropdownMenuContent align="end" className="w-56">
+                 <DropdownMenuItem
+                   onClick={() => {
+                     if (selectedItems.size > 0) {
+                       resyncSelected.mutate({
+                         storeKey: assignedStore || '',
+                         itemIds: Array.from(selectedItems)
+                       });
+                     } else {
+                       setShowResyncConfirm(true);
+                     }
+                   }}
+                   disabled={isResyncing || !assignedStore || !selectedLocation}
+                 >
+                   {isResyncing ? (
+                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                   ) : (
+                     <Download className="h-4 w-4 mr-2" />
+                   )}
+                   {selectedItems.size > 0 
+                     ? `Resync Selected (${selectedItems.size})` 
+                     : 'Resync All from Shopify'}
+                 </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              
+              {/* Keyboard shortcuts help - desktop only */}
+              {isDesktop && <KeyboardShortcutsHelp />}
             </div>
           </div>
 
@@ -623,6 +642,7 @@ const InventoryPage = () => {
                   setShowDeleteDialog(true);
                 } : undefined}
                 onSyncDetails={(item) => setSyncDetailsRow(item)}
+                onOpenDetails={(item) => setDetailsDrawerItem(item)}
                 isLoading={snapshot.phases.data === 'loading'}
                 hasNextPage={hasNextPage}
                 isFetchingNextPage={isFetchingNextPage}
@@ -725,6 +745,27 @@ const InventoryPage = () => {
           clearSelection();
         }}
       />
+
+      {/* Item Details Drawer */}
+      <ItemDetailsDrawer
+        item={detailsDrawerItem}
+        items={items}
+        locationsMap={locationsMap}
+        isOpen={!!detailsDrawerItem}
+        onClose={() => setDetailsDrawerItem(null)}
+        onNavigate={(item) => setDetailsDrawerItem(item)}
+        onResync={handleResync}
+        onPrint={(item) => {
+          setDetailsDrawerItem(null);
+          // Select the item and open print dialog
+          if (!selectedItems.has(item.id)) {
+            toggleSelection(item.id);
+          }
+          setShowPrintDialog(true);
+        }}
+        isResyncing={syncingRowId === detailsDrawerItem?.id}
+      />
+
 
       {expandedItems.size > 0 && (
         <div className="space-y-4">
