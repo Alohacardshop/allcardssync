@@ -9,6 +9,7 @@ import {
   Home, 
   PackagePlus, 
   Package, 
+  Archive,
   Printer, 
   FileText, 
   ShoppingBag, 
@@ -26,6 +27,7 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   Home,
   PackagePlus,
   Package,
+  Archive,
   Printer,
   FileText,
   ShoppingBag,
@@ -44,6 +46,7 @@ const NAV_ITEMS: NavItem[] = [
   { key: 'home', label: 'Home', href: PATHS.dashboard, icon: 'Home' },
   { key: 'intake', label: 'Intake', href: PATHS.intake, icon: 'PackagePlus' },
   { key: 'inventory', label: 'Inventory', href: PATHS.inventory, icon: 'Package' },
+  { key: 'batches', label: 'Batches', href: PATHS.batches, icon: 'Archive' },
   { key: 'barcode', label: 'Print', href: PATHS.barcodePrinting, icon: 'Printer' },
   { key: 'docs', label: 'Documents', href: PATHS.docs, icon: 'FileText' },
 ];
