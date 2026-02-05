@@ -22,6 +22,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { Progress } from '@/components/ui/progress';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useInventoryTruthMode } from '@/hooks/useInventoryTruthMode';
+ import { SystemStatusBanner } from '@/components/inventory/SystemStatusBanner';
 
 import { useInventoryListQuery } from '@/hooks/useInventoryListQuery';
 import { useLocationNames } from '@/hooks/useLocationNames';
@@ -414,6 +415,11 @@ const InventoryPage = () => {
           <div className="flex items-center gap-2 flex-wrap py-2">
             {/* Truth Mode Badge */}
             <TruthModeBadge mode={truthMode} prominent />
+             
+             {/* System Status Banner - desktop only */}
+             {isDesktop && (
+               <SystemStatusBanner storeKey={assignedStore} />
+             )}
             
             {/* View Toggle - only show on desktop */}
             {isDesktop && (
