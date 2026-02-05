@@ -1,33 +1,35 @@
-import React from 'react';
+import { lazy } from 'react';
 import { Route, Navigate } from 'react-router-dom';
 import { ErrorBoundaryWrapper } from '@/components/ErrorBoundaryWrapper';
 import { RequireApp } from '@/components/RequireApp';
 import { ProtectedLayout } from '@/components/layout/ProtectedLayout';
 import { PATHS } from './paths';
 
-// Lazy load pages
-const DashboardHome = React.lazy(() => import('@/pages/DashboardHome'));
-const Index = React.lazy(() => import('@/pages/Index'));
-const DocumentsPage = React.lazy(() => import('@/features/docs/pages/DocumentsPage'));
-const TestHardwarePage = React.lazy(() => import('@/pages/TestHardwarePage'));
-const Inventory = React.lazy(() => import('@/features/inventory/pages/InventoryPage'));
-const Batches = React.lazy(() => import('@/pages/Batches'));
-const NotFound = React.lazy(() => import('@/pages/NotFound'));
-const BarcodePrinting = React.lazy(() => import('@/pages/BarcodePrinting'));
-const LabelEditorPage = React.lazy(() => import('@/features/barcode/pages/LabelEditorPage'));
-const ShopifyMapping = React.lazy(() => import('@/pages/ShopifyMapping'));
-const ShopifySync = React.lazy(() => import('@/pages/ShopifySync'));
-const BulkImport = React.lazy(() => import('@/pages/BulkImport'));
-const BulkTransfer = React.lazy(() => import('@/pages/BulkTransfer'));
-const CrossRegionTransfers = React.lazy(() => import('@/pages/CrossRegionTransfers'));
-const GradedIntake = React.lazy(() => import('@/pages/intake/GradedIntake'));
-const BulkIntake = React.lazy(() => import('@/pages/intake/BulkIntake'));
-const QzTrayTestPage = React.lazy(() => import('@/pages/QzTrayTestPage'));
-const EbayApp = React.lazy(() => import('@/pages/EbayApp'));
-const EbaySyncDashboard = React.lazy(() => import('@/pages/EbaySyncDashboard'));
+// Heavy pages - lazy load (large bundles, complex UI)
+const DashboardHome = lazy(() => import('@/pages/DashboardHome'));
+const Index = lazy(() => import('@/pages/Index'));
+const DocumentsPage = lazy(() => import('@/features/docs/pages/DocumentsPage'));
+const Inventory = lazy(() => import('@/features/inventory/pages/InventoryPage'));
+const Batches = lazy(() => import('@/pages/Batches'));
+const BarcodePrinting = lazy(() => import('@/pages/BarcodePrinting'));
+const LabelEditorPage = lazy(() => import('@/features/barcode/pages/LabelEditorPage'));
+const ShopifyMapping = lazy(() => import('@/pages/ShopifyMapping'));
+const ShopifySync = lazy(() => import('@/pages/ShopifySync'));
+const BulkImport = lazy(() => import('@/pages/BulkImport'));
+const BulkTransfer = lazy(() => import('@/pages/BulkTransfer'));
+const CrossRegionTransfers = lazy(() => import('@/pages/CrossRegionTransfers'));
+const GradedIntake = lazy(() => import('@/pages/intake/GradedIntake'));
+const BulkIntake = lazy(() => import('@/pages/intake/BulkIntake'));
+const EbayApp = lazy(() => import('@/pages/EbayApp'));
+const EbaySyncDashboard = lazy(() => import('@/pages/EbaySyncDashboard'));
+const TestHardwarePage = lazy(() => import('@/pages/TestHardwarePage'));
+const QzTrayTestPage = lazy(() => import('@/pages/QzTrayTestPage'));
+
+// Light page - no lazy loading
+import NotFound from '@/pages/NotFound';
 
 /**
- * Protected app routes - uses ProtectedLayout (AppShell with auth)
+ * Protected app routes - uses ProtectedLayout which provides its own Suspense boundary
  */
 export const appRoutes = (
   <Route element={<ProtectedLayout />}>
@@ -87,12 +89,12 @@ export const appRoutes = (
       </RequireApp>
     } />
     
-    {/* Other Pages */}
+    {/* Utility Pages */}
     <Route path="/dashboard" element={<Navigate to={PATHS.dashboard} replace />} />
     <Route path={PATHS.testHardware} element={<TestHardwarePage />} />
     <Route path={PATHS.qzTrayTest} element={<QzTrayTestPage />} />
     
-    {/* Catch-all */}
+    {/* Catch-all (light, no lazy loading) */}
     <Route path="*" element={<NotFound />} />
   </Route>
 );
