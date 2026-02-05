@@ -1,69 +1,47 @@
 
+Goal: remove the “three vertical dots” that are showing up on the LEFT of every row, and keep row actions (Sync + print indicator + menu) grouped cleanly on the RIGHT near the Sync button.
 
-# Improve Print Status Indicator in Inventory Table
+## What’s happening (root cause)
+Those “three black dots” are the **row overflow menu icon** (`MoreVertical`).
+In the current table row implementation, the grid defines **one** `actions` column, but the row renders **two separate grid children** for actions:
+1) a cell for the primary action button (Sync/Retry/Resync)
+2) a second cell for the print icon + kebab menu
 
-## Current State
+Because the CSS grid only has one track for `actions`, the second “actions” element **wraps into a new grid row** and starts again at column 1, which makes the kebab icon appear at the far left of each row.
 
-The inventory table has a dedicated **Print Status** column showing badges:
-- "Printed" (with primary styling) 
-- "No Label" (muted outline)
+## Implementation changes (no behavior changes)
+### 1) Make the Actions column render exactly ONE grid cell
+In `InventoryTableView.tsx` → `TableRow`:
+- Replace the current fragment under `isColVisible('actions')` that returns two `<div>`s
+- With a single `<div>` that contains:
+  - the primary action button (or placeholder)
+  - the compact print indicator (only when printed)
+  - the kebab menu button (MoreVertical)
 
-This takes up horizontal space and may feel redundant since there's also Shopify and eBay status columns.
+This keeps all row actions in one place and prevents grid wrapping.
 
-## Proposed Solution
+### 2) Fix the header to also render ONE placeholder cell for Actions
+In `InventoryTableView.tsx` → sticky header:
+- Replace the current `actions` header fragment that renders two `<span aria-hidden="true" />`
+- With a single placeholder element so the header has the same number of grid children as the grid template.
 
-Move the print status indicator to be a subtle visual marker **combined with the Shopify/eBay status area** or as a small icon near the actions column. This reduces a full column to a minimal indicator.
+### 3) Widen the Actions column so “Sync + icon + menu” fits cleanly
+In `src/features/inventory/types/views.ts`:
+- Update the `actions` column width from `44px` to something that matches the new combined layout, e.g. `120px` (or `minmax(110px, 120px)`).
+Reason: once Sync and kebab are in the same cell, `44px` is too tight and can reintroduce awkward overflow.
 
-### Option: Merge into Status Area
+(Your previous change to hide `print_status` by default stays as-is.)
 
-Instead of a separate column, add a small printer icon next to the Shopify status:
-- **Printed**: Show a small checkmark or filled printer icon 
-- **Not Printed**: Show nothing (clean) or a subtle muted printer icon with tooltip
+## Files to change
+1) `src/features/inventory/components/InventoryTableView.tsx`
+   - TableRow: merge the two action “cells” into one flex container
+   - Header: actions placeholder becomes a single cell
+2) `src/features/inventory/types/views.ts`
+   - `INVENTORY_COLUMNS`: widen `actions.width`
 
-### Implementation Changes
-
-#### 1. Remove the `print_status` Column from Default View
-**File: `src/features/inventory/types/views.ts`**
-
-Change `print_status` from `defaultVisible: true` to `defaultVisible: false` so it doesn't take up space by default, but remains toggleable for users who want it.
-
-#### 2. Add Print Indicator to the Actions/Status Area
-**File: `src/features/inventory/components/InventoryTableView.tsx`**
-
-Add a small print indicator icon right before the kebab menu:
-- If `printed_at` exists: Show a small `Printer` icon with a checkmark badge
-- If not printed: No visual (keeps it clean)
-- Tooltip on hover showing "Printed" or "Not printed"
-
-### Visual Result
-
-```
-Before:
-| SKU | Title | Location | Price | Qty | Shopify | Print   | eBay | Updated | Actions |
-|     |       |          |       |     | Synced  | Printed | —    | 2h ago  | ... ⋮   |
-
-After:
-| SKU | Title | Location | Price | Qty | Shopify | eBay | Updated | 🖨️✓ | ⋮ |
-|     |       |          |       |     | Synced  | —    | 2h ago  |     |   |
-```
-
-The print indicator becomes a small icon near the actions that only draws attention when printed (showing a checkmark) or on hover.
-
----
-
-## Files to Modify
-
-| File | Changes |
-|------|---------|
-| `src/features/inventory/types/views.ts` | Set `print_status` to `defaultVisible: false` |
-| `src/features/inventory/components/InventoryTableView.tsx` | Add compact print indicator icon before kebab menu |
-
----
-
-## Benefits
-
-1. **Less visual noise** - Removes a full column's width
-2. **Glanceable** - Small icon is easy to scan
-3. **Optional detail** - Users can still enable the full column if needed
-4. **Consistent** - Follows the pattern of putting secondary info near actions
-
+## Acceptance checks (what we’ll verify after)
+- The three dots no longer appear on the left.
+- Row actions are grouped on the right: Sync button + (optional) printer icon + kebab menu.
+- Row height remains stable (44px) and doesn’t jump/wrap.
+- Clicking a row still opens the inspector; clicking buttons/menus still does not.
+- Filters, selection, and scroll position remain unchanged.
