@@ -23,7 +23,7 @@ interface PrintActionBarProps {
   isPrinting: boolean;
   onPrint: () => void;
   onClearSelection: () => void;
-  // Test mode
+  // Print options
   markAsPrinted: boolean;
   onMarkAsPrintedChange: (value: boolean) => void;
   showMarkUnprinted: boolean;
@@ -114,12 +114,12 @@ export function PrintActionBar({
               Print Selected ({selectedCount})
             </Button>
             
-            {/* Test Mode Controls */}
+            {/* Print Options */}
             <Popover>
               <PopoverTrigger asChild>
                 <Button variant="outline" size="sm" className="gap-1">
                   <Wrench className="h-4 w-4" />
-                  Test Mode
+                  Options
                   <ChevronDown className="h-3 w-3" />
                 </Button>
               </PopoverTrigger>
