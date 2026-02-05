@@ -38,7 +38,6 @@ export const PATHS = {
 
   // Admin routes
   admin: '/admin',
-  adminCatalog: '/admin/catalog',
   adminDiscordNotifications: '/admin/notifications/discord',
   adminPendingNotifications: '/admin/notifications/pending',
   adminShopifyBackfill: '/admin/shopify-backfill',

@@ -50,7 +50,7 @@ export default function Admin() {
         );
       case 'store':
         return <StoreManagementTabs />;
-      case 'catalog':
+      case 'data':
         return <CatalogTabsSection />;
       case 'queue':
         return <QueueManagementTabs />;

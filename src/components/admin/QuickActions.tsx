@@ -21,10 +21,10 @@ export function QuickActions({ onNavigate }: QuickActionsProps) {
       onClick: () => onNavigate('queue'),
     },
     {
-      label: 'Catalog Settings',
+      label: 'Data Settings',
       icon: Upload,
-      description: 'Database & intake config',
-      onClick: () => onNavigate('catalog'),
+      description: 'TCG database & intake config',
+      onClick: () => onNavigate('data'),
     },
     {
       label: 'Webhooks',
