@@ -165,7 +165,8 @@ const TableRow = memo(({
   });
 
   // CSS variable for consistent grid template across header and rows
-  const gridTemplate = "40px 90px minmax(200px, 1fr) 100px 70px 60px 80px 70px 80px 90px 70px 44px";
+  // Fixed column widths ensure loading states never shift layout
+  const gridTemplate = "40px 90px minmax(200px, 1fr) 110px 75px 65px 85px 75px 85px 95px 70px 44px";
 
   return (
     <div 
@@ -182,8 +183,8 @@ const TableRow = memo(({
       )}
       style={{ gridTemplateColumns: gridTemplate }}
     >
-        {/* Checkbox */}
-        <div className="flex items-center justify-center h-full">
+        {/* Checkbox - fixed height container */}
+        <div className="flex items-center justify-center h-[44px]">
           <Checkbox
             checked={isSelected}
             onCheckedChange={() => onToggleSelection(item.id)}
@@ -191,18 +192,18 @@ const TableRow = memo(({
           />
         </div>
 
-        {/* SKU - monospace, muted */}
-        <div className="font-mono text-xs text-muted-foreground truncate leading-tight" title={item.sku || ''}>
+        {/* SKU - monospace, muted, fixed height */}
+        <div className="font-mono text-xs text-muted-foreground truncate leading-tight flex items-center h-[44px]" title={item.sku || ''}>
           {item.sku || '—'}
         </div>
 
-        {/* Title - semibold, primary color */}
-        <div className="truncate font-semibold text-foreground leading-tight" title={title}>
+        {/* Title - semibold, primary color, fixed height */}
+        <div className="truncate font-semibold text-foreground leading-tight flex items-center h-[44px]" title={title}>
           {title}
         </div>
 
-        {/* Location with hover popover for multi-location stock */}
-        <div className="flex items-center h-full">
+        {/* Location with hover popover for multi-location stock - fixed height */}
+        <div className="flex items-center h-[44px]">
           <LocationStockPopover
             primaryLocationGid={item.shopify_location_gid}
             locationsMap={locationsMap}
@@ -211,13 +212,13 @@ const TableRow = memo(({
           />
         </div>
 
-        {/* Price - right aligned, tabular nums */}
-        <div className="text-right tabular-nums font-medium text-foreground pr-1">
+        {/* Price - right aligned, tabular nums, fixed height */}
+        <div className="text-right tabular-nums font-medium text-foreground pr-1 flex items-center justify-end h-[44px]">
           ${(item.price || 0).toFixed(2)}
         </div>
 
-        {/* Quantity - center aligned, shows Shopify-truth quantity */}
-        <div className="flex items-center justify-center h-[28px]">
+        {/* Quantity - center aligned, shows Shopify-truth quantity, fixed container */}
+        <div className="flex items-center justify-center h-[44px]">
           <InlineQuantityEditor
             itemId={item.id}
             quantity={displayQuantity}
@@ -229,12 +230,12 @@ const TableRow = memo(({
           />
         </div>
 
-        {/* Shopify Status - consistent chip with fixed height */}
-        <div className="flex items-center justify-center h-[28px]">
+        {/* Shopify Status - consistent chip with fixed container height */}
+        <div className="flex items-center justify-center h-[44px]">
           <Badge 
             variant={syncStatus.variant}
             className={cn(
-              "text-[10px] h-5 px-1.5 font-medium whitespace-nowrap",
+              "text-[10px] h-5 px-1.5 font-medium whitespace-nowrap min-w-[52px] justify-center",
               syncStatus.loading && "animate-pulse"
             )}
           >
@@ -243,12 +244,12 @@ const TableRow = memo(({
           </Badge>
         </div>
 
-        {/* Print Status - minimal badge with fixed height */}
-        <div className="flex items-center justify-center h-[28px]">
+        {/* Print Status - minimal badge with fixed container height */}
+        <div className="flex items-center justify-center h-[44px]">
           <Badge
             variant={item.printed_at ? "default" : "outline"}
             className={cn(
-              "text-[10px] h-5 px-1.5 font-medium whitespace-nowrap",
+              "text-[10px] h-5 px-1.5 font-medium whitespace-nowrap min-w-[50px] justify-center",
               item.printed_at 
                 ? "bg-primary/10 text-primary border-primary/20" 
                 : "text-muted-foreground border-muted-foreground/30"
@@ -258,8 +259,8 @@ const TableRow = memo(({
           </Badge>
         </div>
 
-        {/* eBay Status - fixed height container */}
-        <div className="flex items-center justify-center h-[28px]">
+        {/* eBay Status - fixed container height */}
+        <div className="flex items-center justify-center h-[44px]">
           <EbayStatusBadge
             syncStatus={item.ebay_sync_status}
             listingId={item.ebay_listing_id}
@@ -269,8 +270,8 @@ const TableRow = memo(({
           />
         </div>
 
-        {/* Updated - relative with tooltip, fixed height */}
-        <div className="flex items-center justify-center h-[28px]">
+        {/* Updated - relative with tooltip, fixed container height */}
+        <div className="flex items-center justify-center h-[44px]">
           <Tooltip>
             <TooltipTrigger asChild>
               <span className="text-xs text-muted-foreground cursor-default truncate tabular-nums">
@@ -283,8 +284,8 @@ const TableRow = memo(({
           </Tooltip>
         </div>
 
-        {/* Primary Action - fixed width with placeholder to prevent shifting */}
-        <div className="flex items-center justify-center h-[28px] min-w-[70px]">
+        {/* Primary Action - fixed width container to prevent shifting */}
+        <div className="flex items-center justify-center h-[44px] min-w-[70px]">
           {primaryAction ? (
             <Button
               variant="outline"
@@ -301,12 +302,12 @@ const TableRow = memo(({
               )}
             </Button>
           ) : (
-            <span className="min-w-[52px] h-6" aria-hidden="true" />
+            <span className="min-w-[52px] h-6 inline-block" aria-hidden="true" />
           )}
         </div>
 
-        {/* Kebab Menu - fixed height container */}
-        <div className="flex items-center justify-center h-[28px]">
+        {/* Kebab Menu - fixed container height */}
+        <div className="flex items-center justify-center h-[44px]">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button 
@@ -551,7 +552,8 @@ export const InventoryTableView = memo(({
   }
 
   // CSS variable for consistent grid template
-  const gridTemplate = "40px 90px minmax(200px, 1fr) 100px 70px 60px 80px 70px 80px 90px 70px 44px";
+  // Match column widths exactly with TableRow for layout stability
+  const gridTemplate = "40px 90px minmax(200px, 1fr) 110px 75px 65px 85px 75px 85px 95px 70px 44px";
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -561,7 +563,7 @@ export const InventoryTableView = memo(({
           <div className="min-w-[1100px] flex flex-col h-full">
             {/* Sticky Header */}
             <div 
-              className="shrink-0 grid gap-2 items-center px-3 min-h-[40px] bg-muted/60 border-b font-medium text-xs sticky top-0 z-10"
+              className="shrink-0 grid gap-2 items-center px-3 h-[44px] bg-muted/60 border-b font-medium text-xs sticky top-0 z-10"
               style={{ gridTemplateColumns: gridTemplate }}
             >
               <div className="flex items-center justify-center h-full">

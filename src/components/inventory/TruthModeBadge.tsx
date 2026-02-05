@@ -6,13 +6,16 @@ import {
   TooltipTrigger, 
   TooltipProvider 
 } from '@/components/ui/tooltip';
-import { Cloud, Database, Info } from 'lucide-react';
+import { Cloud, Database, Info, Lock } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import type { InventoryTruthMode } from '@/hooks/useInventoryTruthMode';
 
 interface TruthModeBadgeProps {
   mode: InventoryTruthMode;
   className?: string;
   showLabel?: boolean;
+  /** Show as a more prominent banner-style indicator */
+  prominent?: boolean;
 }
 
 const MODE_CONFIG = {
@@ -22,6 +25,7 @@ const MODE_CONFIG = {
     icon: Cloud,
     variant: 'default' as const,
     className: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20 hover:bg-emerald-500/20',
+    prominentClassName: 'bg-emerald-500/15 text-emerald-700 border-emerald-500/30 shadow-sm',
     description: 'Shopify is the source of truth for inventory quantities.',
     details: [
       'Quantities sync automatically from Shopify POS & online sales',
@@ -36,6 +40,7 @@ const MODE_CONFIG = {
     icon: Database,
     variant: 'secondary' as const,
     className: 'bg-blue-500/10 text-blue-600 border-blue-500/20 hover:bg-blue-500/20',
+    prominentClassName: 'bg-blue-500/15 text-blue-700 border-blue-500/30 shadow-sm',
     description: 'Local database is the source of truth for inventory quantities.',
     details: [
       'Manual quantity edits are allowed',
@@ -46,9 +51,10 @@ const MODE_CONFIG = {
   },
 };
 
-export function TruthModeBadge({ mode, className, showLabel = true }: TruthModeBadgeProps) {
+export function TruthModeBadge({ mode, className, showLabel = true, prominent = false }: TruthModeBadgeProps) {
   const config = MODE_CONFIG[mode];
   const Icon = config.icon;
+  const isShopifyTruth = mode === 'shopify';
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -56,11 +62,19 @@ export function TruthModeBadge({ mode, className, showLabel = true }: TruthModeB
         <TooltipTrigger asChild>
           <Badge 
             variant="outline" 
-            className={`${config.className} cursor-help ${className || ''}`}
+            className={cn(
+              prominent ? config.prominentClassName : config.className,
+              "cursor-help transition-colors",
+              prominent && "h-8 px-3 text-sm gap-1.5",
+              className
+            )}
           >
             <Icon className="h-3 w-3 mr-1" />
-            {showLabel && <span>{config.shortLabel}</span>}
-            <Info className="h-3 w-3 ml-1 opacity-60" />
+            {showLabel && <span className={cn(prominent && "font-medium")}>{config.shortLabel}</span>}
+            {isShopifyTruth && prominent && (
+              <Lock className="h-3 w-3 ml-0.5 opacity-70" aria-label="Editing locked" />
+            )}
+            <Info className="h-3 w-3 ml-1 opacity-50" />
           </Badge>
         </TooltipTrigger>
         <TooltipContent 
@@ -69,7 +83,10 @@ export function TruthModeBadge({ mode, className, showLabel = true }: TruthModeB
           className="max-w-xs p-3"
         >
           <div className="space-y-2">
-            <div className="font-semibold text-sm">{config.label}</div>
+            <div className="font-semibold text-sm flex items-center gap-1.5">
+              {config.label}
+              {isShopifyTruth && <Lock className="h-3 w-3 text-muted-foreground" />}
+            </div>
             <p className="text-xs text-muted-foreground">{config.description}</p>
             <ul className="text-xs space-y-1 mt-2">
               {config.details.map((detail, i) => (
