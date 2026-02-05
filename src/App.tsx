@@ -1,63 +1,29 @@
-import React, { Suspense } from "react";
+import { Suspense } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/ui/theme-provider";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { BrowserRouter, Routes } from "react-router-dom";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { ErrorBoundaryWrapper } from "@/components/ErrorBoundaryWrapper";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { StoreProvider } from "@/contexts/StoreContext";
 import { PrintQueueProvider } from "@/contexts/PrintQueueContext";
 import { GlobalLoading } from "@/components/GlobalLoading";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { FontPreloader } from "@/components/fonts/FontPreloader";
-import { RequireApp } from "@/components/RequireApp";
 import { NavigationProvider } from "@/components/NavigationProvider";
-import { AdminLayout } from "@/components/layout/AdminLayout";
-import { ProtectedLayout } from "@/components/layout/ProtectedLayout";
-
-// Lazy load heavy routes
-const DashboardHome = React.lazy(() => import("./pages/DashboardHome"));
-const Index = React.lazy(() => import("./pages/Index"));
-
-const DocumentsPage = React.lazy(() => import("./features/docs/pages/DocumentsPage"));
-const TestHardwarePage = React.lazy(() => import("./pages/TestHardwarePage"));
-const Inventory = React.lazy(() => import("./features/inventory/pages/InventoryPage"));
-const Batches = React.lazy(() => import("./pages/Batches"));
-const Admin = React.lazy(() => import("./pages/Admin"));
-const NotFound = React.lazy(() => import("./pages/NotFound"));
-const Auth = React.lazy(() => import("./pages/Auth"));
-const BarcodePrinting = React.lazy(() => import("./pages/BarcodePrinting"));
-const LabelEditorPage = React.lazy(() => import("./features/barcode/pages/LabelEditorPage"));
-const ShopifyMapping = React.lazy(() => import("./pages/ShopifyMapping"));
-const ShopifySync = React.lazy(() => import("./pages/ShopifySync"));
-const BulkImport = React.lazy(() => import("./pages/BulkImport"));
-const BulkTransfer = React.lazy(() => import("./pages/BulkTransfer"));
-const CrossRegionTransfers = React.lazy(() => import("./pages/CrossRegionTransfers"));
-const DiscordNotifications = React.lazy(() => import("./pages/admin/DiscordNotifications"));
-const PendingNotifications = React.lazy(() => import("./pages/PendingNotifications"));
-const GradedIntake = React.lazy(() => import("./pages/intake/GradedIntake"));
-const BulkIntake = React.lazy(() => import("./pages/intake/BulkIntake"));
-const ShopifyBackfill = React.lazy(() => import("./pages/admin/ShopifyBackfill"));
-const QzTrayTestPage = React.lazy(() => import("./pages/QzTrayTestPage"));
-const Privacy = React.lazy(() => import("./pages/Privacy"));
-const InventorySyncDashboard = React.lazy(() => import("./pages/admin/InventorySyncDashboard"));
-const SyncHealthPage = React.lazy(() => import("./pages/admin/SyncHealthPage"));
-
-const EbayApp = React.lazy(() => import("./pages/EbayApp"));
-const EbaySyncDashboard = React.lazy(() => import("./pages/EbaySyncDashboard"));
-import { GlobalKeyboardHandler } from "./components/GlobalKeyboardHandler";
-import { FloatingActionButton } from "./components/FloatingActionButton";
-import { PerformanceMonitor } from "./components/PerformanceMonitor";
-import { SessionTimeoutWarning, RecoveryMode } from "./components/OperationalSafeguards";
-import { PrintQueueStatus } from "./components/PrintQueueStatus";
-
-import { CatalogMigrationPlaceholder } from "@/components/CatalogMigrationPlaceholder";
-
+import { GlobalKeyboardHandler } from "@/components/GlobalKeyboardHandler";
+import { FloatingActionButton } from "@/components/FloatingActionButton";
+import { PerformanceMonitor } from "@/components/PerformanceMonitor";
+import { SessionTimeoutWarning, RecoveryMode } from "@/components/OperationalSafeguards";
+import { PrintQueueStatus } from "@/components/PrintQueueStatus";
 import { queryClient } from "@/lib/queryClient";
 
+// Route modules
+import { publicRoutes } from "@/routes/public";
+import { adminRoutes } from "@/routes/admin";
+import { appRoutes } from "@/routes/app";
 
 const App = () => (
   <ErrorBoundary>
@@ -65,117 +31,38 @@ const App = () => (
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <AuthProvider>
-              <StoreProvider>
+            <StoreProvider>
               <PrintQueueProvider>
-              <Toaster />
-              <Sonner />
-              <GlobalLoading />
-              <FontPreloader />
-              <BrowserRouter>
-              <NavigationProvider>
-              <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><LoadingSpinner size="lg" /></div>}>
-                <Routes>
-                  {/* Public routes - accessible without authentication */}
-                  <Route path="/auth" element={<Auth />} />
-                  <Route path="/privacy" element={<Privacy />} />
-                  
-                  {/* Admin routes - WITHOUT AppShell (has its own sidebar layout) */}
-                  <Route path="/admin" element={<AdminLayout />}>
-                    <Route index element={<Admin />} />
-                    <Route path="catalog" element={<div className="p-8"><CatalogMigrationPlaceholder /></div>} />
-                    <Route path="notifications/discord" element={<DiscordNotifications />} />
-                    <Route path="notifications/pending" element={<PendingNotifications />} />
-                    <Route path="shopify-backfill" element={<ShopifyBackfill />} />
-                    <Route path="inventory-sync" element={<InventorySyncDashboard />} />
-                    <Route path="sync-health" element={<SyncHealthPage />} />
-                    <Route path="ebay-settings" element={<Navigate to="/ebay" replace />} />
-                  </Route>
-                  
-                  {/* Protected routes with AppShell */}
-                  <Route element={<ProtectedLayout />}>
-                    {/* Dashboard Home */}
-                    <Route path="/" element={<ErrorBoundaryWrapper componentName="DashboardHome"><DashboardHome /></ErrorBoundaryWrapper>} />
+                <Toaster />
+                <Sonner />
+                <GlobalLoading />
+                <FontPreloader />
+                <BrowserRouter>
+                  <NavigationProvider>
+                    <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><LoadingSpinner size="lg" /></div>}>
+                      <Routes>
+                        {publicRoutes}
+                        {adminRoutes}
+                        {appRoutes}
+                      </Routes>
+                    </Suspense>
                     
-                    {/* Intake App (formerly Index) */}
-                    <Route path="/intake" element={
-                      <RequireApp appKey="intake">
-                        <ErrorBoundaryWrapper componentName="Intake"><Index /></ErrorBoundaryWrapper>
-                      </RequireApp>
-                    } />
-                    <Route path="/intake/graded" element={<RequireApp appKey="intake"><GradedIntake /></RequireApp>} />
-                    <Route path="/intake/bulk" element={<RequireApp appKey="intake"><BulkIntake /></RequireApp>} />
-                    
-                    {/* Inventory App */}
-                    <Route path="/inventory" element={
-                      <RequireApp appKey="inventory">
-                        <ErrorBoundaryWrapper componentName="Inventory"><Inventory /></ErrorBoundaryWrapper>
-                      </RequireApp>
-                    } />
-                    <Route path="/batches" element={<RequireApp appKey="inventory"><ErrorBoundaryWrapper componentName="Batch Management"><Batches /></ErrorBoundaryWrapper></RequireApp>} />
-                    <Route path="/bulk-import" element={<RequireApp appKey="inventory"><BulkImport /></RequireApp>} />
-                    <Route path="/bulk-transfer" element={<RequireApp appKey="inventory"><BulkTransfer /></RequireApp>} />
-                    <Route path="/cross-region-transfers" element={<RequireApp appKey="inventory"><CrossRegionTransfers /></RequireApp>} />
-                    <Route path="/shopify-mapping" element={<RequireApp appKey="inventory"><ShopifyMapping /></RequireApp>} />
-                    <Route path="/shopify-sync" element={<RequireApp appKey="inventory"><ShopifySync /></RequireApp>} />
-                    
-                    {/* Barcode App */}
-                    <Route path="/barcode-printing" element={
-                      <RequireApp appKey="barcode">
-                        <ErrorBoundaryWrapper componentName="BarcodePrinting"><BarcodePrinting /></ErrorBoundaryWrapper>
-                      </RequireApp>
-                    } />
-                    <Route path="/barcode/label-editor" element={
-                      <RequireApp appKey="barcode">
-                        <ErrorBoundaryWrapper componentName="LabelEditor"><LabelEditorPage /></ErrorBoundaryWrapper>
-                      </RequireApp>
-                    } />
-                    
-                    {/* Documents App */}
-                    <Route path="/docs" element={
-                      <RequireApp appKey="docs">
-                        <ErrorBoundaryWrapper componentName="Documents"><DocumentsPage /></ErrorBoundaryWrapper>
-                      </RequireApp>
-                    } />
-                    
-                    {/* eBay App */}
-                    <Route path="/ebay" element={
-                      <RequireApp appKey="ebay">
-                        <ErrorBoundaryWrapper componentName="eBay"><EbayApp /></ErrorBoundaryWrapper>
-                      </RequireApp>
-                    } />
-                    <Route path="/ebay/sync" element={
-                      <RequireApp appKey="ebay">
-                        <ErrorBoundaryWrapper componentName="eBaySyncDashboard"><EbaySyncDashboard /></ErrorBoundaryWrapper>
-                      </RequireApp>
-                    } />
-                    
-                    {/* Other Pages */}
-                    <Route path="/dashboard" element={<Navigate to="/" replace />} />
-                    <Route path="/test-hardware" element={<TestHardwarePage />} />
-                    <Route path="/qz-tray-test" element={<QzTrayTestPage />} />
-                    
-                    {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-                    <Route path="*" element={<NotFound />} />
-                  </Route>
-                </Routes>
-              </Suspense>
-              
-              {/* Global Components */}
-              <GlobalKeyboardHandler />
-              <FloatingActionButton />
-              {import.meta.env.DEV && <PerformanceMonitor />}
-              <SessionTimeoutWarning />
-              <RecoveryMode />
-              <PrintQueueStatus />
-              </NavigationProvider>
-            </BrowserRouter>
-            </PrintQueueProvider>
-          </StoreProvider>
-      </AuthProvider>
-    </TooltipProvider>
-  </QueryClientProvider>
-  </ThemeProvider>
-</ErrorBoundary>
+                    {/* Global Components */}
+                    <GlobalKeyboardHandler />
+                    <FloatingActionButton />
+                    {import.meta.env.DEV && <PerformanceMonitor />}
+                    <SessionTimeoutWarning />
+                    <RecoveryMode />
+                    <PrintQueueStatus />
+                  </NavigationProvider>
+                </BrowserRouter>
+              </PrintQueueProvider>
+            </StoreProvider>
+          </AuthProvider>
+        </TooltipProvider>
+      </QueryClientProvider>
+    </ThemeProvider>
+  </ErrorBoundary>
 );
 
 export default App;
