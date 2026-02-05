@@ -3,6 +3,8 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.56.0";
 
+export type LockType = 'bulk_transfer' | 'recount' | 'reconciliation' | 'manual_adjustment';
+
 export interface LockAcquisitionResult {
   success: boolean;
   acquiredCount: number;
@@ -19,13 +21,23 @@ export interface LockCheckResult {
   expiresAt: string | null;
 }
 
+export interface LockInfo {
+  id: string;
+  sku: string;
+  storeKey: string;
+  lockType: LockType;
+  lockedBy: string | null;
+  lockedAt: string;
+  expiresAt: string;
+  context: Record<string, unknown>;
+}
+
 /**
  * Acquire inventory locks for a set of SKUs
  * @param supabase - Supabase client (service role)
  * @param skus - Array of SKUs to lock
  * @param storeKey - Store identifier
  * @param lockType - Type of lock (bulk_transfer, recount, reconciliation, manual_adjustment)
- * @param lockedBy - User ID or system identifier
  * @param timeoutMinutes - Lock expiration time in minutes (default 15)
  * @param context - Additional context data
  */
@@ -33,7 +45,7 @@ export async function acquireInventoryLocks(
   supabase: ReturnType<typeof createClient>,
   skus: string[],
   storeKey: string,
-  lockType: 'bulk_transfer' | 'recount' | 'reconciliation' | 'manual_adjustment',
+  lockType: LockType,
   lockedBy: string,
   timeoutMinutes: number = 15,
   context: Record<string, unknown> = {}
@@ -95,6 +107,166 @@ export async function acquireInventoryLocks(
       batchId: null,
       error: err instanceof Error ? err.message : String(err)
     };
+  }
+}
+
+/**
+ * Refresh/extend lock timeout for a batch or specific SKUs
+ * Call this periodically for long-running operations to prevent expiration
+ */
+export async function refreshInventoryLocks(
+  supabase: ReturnType<typeof createClient>,
+  batchId?: string,
+  skus?: string[],
+  storeKey?: string,
+  extendMinutes: number = 15
+): Promise<number> {
+  try {
+    const params: Record<string, unknown> = {
+      p_extend_minutes: extendMinutes
+    };
+    
+    if (batchId) {
+      params.p_batch_id = batchId;
+    } else if (skus && storeKey) {
+      params.p_skus = skus;
+      params.p_store_key = storeKey;
+    } else {
+      console.error('[LOCK] refreshInventoryLocks requires batchId or (skus + storeKey)');
+      return 0;
+    }
+
+    const { data, error } = await supabase.rpc('refresh_inventory_locks', params);
+
+    if (error) {
+      console.error('[LOCK] Failed to refresh locks:', error);
+      return 0;
+    }
+
+    const refreshed = data || 0;
+    if (refreshed > 0) {
+      console.log(`[LOCK] Refreshed ${refreshed} locks for ${extendMinutes} more minutes`);
+    }
+    return refreshed;
+  } catch (err) {
+    console.error('[LOCK] Exception refreshing locks:', err);
+    return 0;
+  }
+}
+
+/**
+ * Check if a single SKU is locked (fast path for UI checks)
+ */
+export async function isSkuLocked(
+  supabase: ReturnType<typeof createClient>,
+  sku: string,
+  storeKey: string
+): Promise<boolean> {
+  try {
+    const { data, error } = await supabase.rpc('is_sku_locked', {
+      p_sku: sku,
+      p_store_key: storeKey
+    });
+
+    if (error) {
+      console.error('[LOCK] Failed to check SKU lock:', error);
+      return false;
+    }
+
+    return data === true;
+  } catch (err) {
+    console.error('[LOCK] Exception checking SKU lock:', err);
+    return false;
+  }
+}
+
+/**
+ * Force-release locks (admin only)
+ * Can release by lock IDs, SKUs, lock type, or all locks for a store
+ */
+export async function forceReleaseInventoryLocks(
+  supabase: ReturnType<typeof createClient>,
+  options: {
+    lockIds?: string[];
+    skus?: string[];
+    storeKey?: string;
+    lockType?: LockType;
+  }
+): Promise<number> {
+  try {
+    const params: Record<string, unknown> = {};
+    
+    if (options.lockIds) {
+      params.p_lock_ids = options.lockIds;
+    } else if (options.skus && options.storeKey) {
+      params.p_skus = options.skus;
+      params.p_store_key = options.storeKey;
+    } else if (options.lockType && options.storeKey) {
+      params.p_lock_type = options.lockType;
+      params.p_store_key = options.storeKey;
+    } else if (options.storeKey) {
+      params.p_store_key = options.storeKey;
+    } else {
+      console.error('[LOCK] forceReleaseInventoryLocks requires valid options');
+      return 0;
+    }
+
+    const { data, error } = await supabase.rpc('force_release_inventory_locks', params);
+
+    if (error) {
+      console.error('[LOCK] Failed to force-release locks:', error);
+      return 0;
+    }
+
+    const released = data || 0;
+    console.log(`[LOCK] Force-released ${released} locks`);
+    return released;
+  } catch (err) {
+    console.error('[LOCK] Exception force-releasing locks:', err);
+    return 0;
+  }
+}
+
+/**
+ * Get detailed info about active locks for a store
+ */
+export async function getActiveLocks(
+  supabase: ReturnType<typeof createClient>,
+  storeKey: string,
+  lockType?: LockType
+): Promise<LockInfo[]> {
+  try {
+    let query = supabase
+      .from('inventory_write_locks')
+      .select('*')
+      .eq('store_key', storeKey)
+      .gt('expires_at', new Date().toISOString())
+      .order('locked_at', { ascending: false });
+
+    if (lockType) {
+      query = query.eq('lock_type', lockType);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('[LOCK] Failed to get active locks:', error);
+      return [];
+    }
+
+    return (data || []).map((lock: any) => ({
+      id: lock.id,
+      sku: lock.sku,
+      storeKey: lock.store_key,
+      lockType: lock.lock_type,
+      lockedBy: lock.locked_by,
+      lockedAt: lock.locked_at,
+      expiresAt: lock.expires_at,
+      context: lock.context || {},
+    }));
+  } catch (err) {
+    console.error('[LOCK] Exception getting active locks:', err);
+    return [];
   }
 }
 

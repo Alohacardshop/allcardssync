@@ -5,9 +5,11 @@ import { CardHeader, CardTitle } from '@/components/ui/card';
 import { Eye, EyeOff, CheckSquare, Square, MapPin, Loader2, CheckCircle, Printer } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { EbayStatusBadge } from '@/components/inventory/EbayStatusBadge';
+import { InventoryLockIndicator } from './InventoryLockIndicator';
 import type { InventoryItem } from '@/types/inventory';
 import type { CachedLocation } from '@/hooks/useLocationNames';
 import { getShortLocationName } from '@/hooks/useLocationNames';
+import type { InventoryLock } from '@/hooks/useInventoryLocks';
 
 interface InventoryItemHeaderProps {
   item: InventoryItem;
@@ -15,6 +17,7 @@ interface InventoryItemHeaderProps {
   isSelected: boolean;
   isExpanded: boolean;
   locationsMap?: Map<string, CachedLocation>;
+  lockInfo?: InventoryLock | null;
   onToggleSelection: (itemId: string) => void;
   onToggleExpanded: (itemId: string) => void;
 }
@@ -76,6 +79,7 @@ export const InventoryItemHeader = memo(({
   isSelected,
   isExpanded,
   locationsMap,
+  lockInfo,
   onToggleSelection,
   onToggleExpanded,
 }: InventoryItemHeaderProps) => {
@@ -112,6 +116,13 @@ export const InventoryItemHeader = memo(({
               )}
               {getStatusBadge(item)}
               {getPrintStatusBadge(item)}
+              {lockInfo && (
+                <InventoryLockIndicator
+                  lockType={lockInfo.lock_type}
+                  lockedBy={lockInfo.locked_by}
+                  expiresAt={lockInfo.expires_at}
+                />
+              )}
               <EbayStatusBadge
                 syncStatus={item.ebay_sync_status}
                 listingId={item.ebay_listing_id}

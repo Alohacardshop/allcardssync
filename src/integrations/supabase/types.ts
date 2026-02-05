@@ -3855,6 +3855,15 @@ export type Database = {
           old_lot_number: string
         }[]
       }
+      force_release_inventory_locks: {
+        Args: {
+          p_lock_ids?: string[]
+          p_lock_type?: string
+          p_skus?: string[]
+          p_store_key?: string
+        }
+        Returns: number
+      }
       generate_lot_number: { Args: never; Returns: string }
       get_decrypted_secret: { Args: { secret_name: string }; Returns: string }
       get_distinct_categories:
@@ -3966,6 +3975,10 @@ export type Database = {
         Returns: number
       }
       is_inventory_sync_enabled: { Args: never; Returns: boolean }
+      is_sku_locked: {
+        Args: { p_sku: string; p_store_key: string }
+        Returns: boolean
+      }
       normalize_game_slug: { Args: { slug_in: string }; Returns: string }
       normalize_shopify_tags: {
         Args: { raw_tags: string[] }
@@ -3999,6 +4012,15 @@ export type Database = {
           p_store_key: string
         }
         Returns: string
+      }
+      refresh_inventory_locks: {
+        Args: {
+          p_batch_id?: string
+          p_extend_minutes?: number
+          p_skus?: string[]
+          p_store_key?: string
+        }
+        Returns: number
       }
       release_inventory_locks: {
         Args: { p_batch_id?: string; p_skus?: string[]; p_store_key?: string }
