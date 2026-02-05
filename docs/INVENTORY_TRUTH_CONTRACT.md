@@ -71,5 +71,39 @@
  - [ ] Does this write to Shopify during a sale event? **If yes, STOP.**
  - [ ] Does this read from `shopify_inventory_levels` for display? **Good.**
  - [ ] Does this use delta adjustments (not absolute sets) for raw cards? **Good.**
- - [ ] Does this respect the `inventory_truth_mode` store setting? **Good.**
- - [ ] Does this handle graded cards as 1-of-1? **Good.**
+  - [ ] Does this respect the `inventory_truth_mode` store setting? **Good.**
+  - [ ] Does this handle graded cards as 1-of-1? **Good.**
+ 
+ ---
+ 
+ ## Reconciliation Modes
+ 
+ The `shopify-reconcile-inventory` function supports three modes:
+ 
+ | Mode | When to Use | What It Does |
+ |------|-------------|--------------|
+ | `full` | Daily scheduled job | Bulk Operations export → parse all inventory levels → upsert mirror → sync intake_items |
+ | `drift_only` | Hourly scheduled job | Query items with `shopify_drift=true` → targeted GraphQL → fix drift |
+ | `missing_only` | On-demand | Query items with `last_shopify_seen_at IS NULL` → targeted GraphQL → initial sync |
+ 
+ **Safety Features:**
+ - Always skips items with active `inventory_write_locks`
+ - Uses Bulk Operations for full runs (no rate limits)
+ - Falls back to paginated GraphQL if bulk fails
+ - Respects rate limits with exponential backoff
+ - Records run stats in `sync_health_runs` for dashboard visibility
+ 
+ **Example Invocation:**
+ ```bash
+ # Dry run (preview changes without applying)
+ curl -X POST /functions/v1/shopify-reconcile-inventory \
+   -d '{"mode": "full", "store_key": "hawaii", "dry_run": true}'
+ 
+ # Full reconciliation
+ curl -X POST /functions/v1/shopify-reconcile-inventory \
+   -d '{"mode": "full"}'
+ 
+ # Drift-only (hourly)
+ curl -X POST /functions/v1/shopify-reconcile-inventory \
+   -d '{"mode": "drift_only"}'
+ ```
