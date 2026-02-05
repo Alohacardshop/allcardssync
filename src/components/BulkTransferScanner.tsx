@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+ import { useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,10 @@ import { playSuccessSound, playErrorSound, playCompletionSound, areSoundsEnabled
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useLogger } from "@/hooks/useLogger";
+ import { useBatchInventoryLevels } from "@/hooks/useInventoryLevels";
+ import { TransferConfirmationSummary, wouldTransferGoNegative } from "@/components/TransferConfirmationSummary";
+ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+ import { RefreshCw } from "lucide-react";
 
 interface ScannedItem {
   id: string;
@@ -364,6 +369,42 @@ export function BulkTransferScanner({ onTransferComplete }: BulkTransferScannerP
   const sourceName = sourceLocation ? getLocationNameFromGid(sourceLocation, locations) : null;
   const destinationName = destinationLocation ? getLocationNameFromGid(destinationLocation, locations) : null;
 
+   // Fetch inventory levels for scanned items
+   const inventoryItemIds = useMemo(
+     () => scannedItems.map(item => item.shopify_inventory_item_id).filter(Boolean),
+     [scannedItems]
+   );
+   const { data: levelsMap, isLoading: isLoadingLevels } = useBatchInventoryLevels(inventoryItemIds);
+ 
+   // Calculate source and destination levels
+   const { sourceLevels, destinationLevels } = useMemo(() => {
+     const source = new Map<string, number>();
+     const dest = new Map<string, number>();
+     
+     if (!levelsMap || !sourceLocation || !destinationLocation) {
+       return { sourceLevels: source, destinationLevels: dest };
+     }
+     
+     scannedItems.forEach(item => {
+       const levels = levelsMap.get(item.shopify_inventory_item_id) || [];
+       
+       const sourceLevel = levels.find(l => l.location_gid === sourceLocation);
+       const destLevel = levels.find(l => l.location_gid === destinationLocation);
+       
+       // Add to source total (use item quantity if no level found)
+       source.set(item.id, sourceLevel?.available ?? item.quantity);
+       dest.set(item.id, destLevel?.available ?? 0);
+     });
+     
+     return { sourceLevels: source, destinationLevels: dest };
+   }, [levelsMap, scannedItems, sourceLocation, destinationLocation]);
+ 
+   // Check if transfer would go negative
+   const transferWouldGoNegative = useMemo(() => {
+     if (scannedItems.length === 0) return false;
+     return wouldTransferGoNegative(sourceLevels, scannedItems.length);
+   }, [sourceLevels, scannedItems.length]);
+ 
   return (
     <div className="space-y-6">
       {/* Source Location Display */}
@@ -500,22 +541,54 @@ export function BulkTransferScanner({ onTransferComplete }: BulkTransferScannerP
         </div>
       )}
 
-      {/* Confirmation Dialog */}
-      <ConfirmationDialog
+       {/* Enhanced Confirmation Dialog with Before/After Summary */}
+       <AlertDialog
         open={showConfirmDialog}
         onOpenChange={setShowConfirmDialog}
-        onConfirm={handleConfirmTransfer}
-        title="Confirm Transfer"
-        description={`Transfer ${scannedItems.length} item${scannedItems.length !== 1 ? 's' : ''} from ${sourceName} to ${destinationName}?`}
-        confirmText="Confirm Transfer"
-        variant="default"
-        icon="sync"
       >
-        <div className="text-sm space-y-1 bg-muted/50 p-3 rounded-md">
-          <div><strong>From:</strong> {sourceName}</div>
-          <div><strong>To:</strong> {destinationName}</div>
-        </div>
-      </ConfirmationDialog>
+         <AlertDialogContent className="max-w-md">
+           <AlertDialogHeader>
+             <div className="flex items-center gap-3">
+               <div className="p-2 rounded-full bg-muted text-primary">
+                 <RefreshCw className="w-5 h-5" />
+               </div>
+               <AlertDialogTitle>Confirm Transfer</AlertDialogTitle>
+             </div>
+             <AlertDialogDescription className="mt-3">
+               Review the inventory changes before confirming this transfer.
+             </AlertDialogDescription>
+           </AlertDialogHeader>
+           
+           <div className="py-2">
+             {isLoadingLevels ? (
+               <div className="flex items-center justify-center py-4">
+                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+               </div>
+             ) : sourceLocation && destinationLocation && sourceName && destinationName ? (
+               <TransferConfirmationSummary
+                 sourceLocationGid={sourceLocation}
+                 sourceLocationName={sourceName}
+                 destinationLocationGid={destinationLocation}
+                 destinationLocationName={destinationName}
+                 sourceLevels={sourceLevels}
+                 destinationLevels={destinationLevels}
+                 itemCount={scannedItems.length}
+               />
+             ) : null}
+           </div>
+ 
+           <AlertDialogFooter>
+             <AlertDialogCancel>Cancel</AlertDialogCancel>
+             <AlertDialogAction
+               onClick={handleConfirmTransfer}
+               disabled={transferWouldGoNegative || isLoadingLevels}
+               className={transferWouldGoNegative ? 'opacity-50 cursor-not-allowed' : undefined}
+             >
+               {transferWouldGoNegative ? 'Cannot Transfer' : 'Confirm Transfer'}
+             </AlertDialogAction>
+           </AlertDialogFooter>
+         </AlertDialogContent>
+       </AlertDialog>
     </div>
   );
 }
