@@ -1,5 +1,5 @@
 import { useState, useEffect, Suspense } from 'react';
-import { Outlet, Link, useLocation } from 'react-router-dom';
+import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Settings,
   Store,
@@ -67,6 +67,7 @@ export function AdminLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -102,7 +103,7 @@ export function AdminLayout() {
     // Used by command palette - find matching section and navigate
     const section = ADMIN_NAV_SECTIONS.find(s => s.id === sectionId);
     if (section) {
-      window.location.href = section.path;
+      navigate(section.path);
     }
   };
 
