@@ -2,13 +2,41 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.56.0";
 import JsBarcode from 'https://esm.sh/jsbarcode@3.11.6';
 
+ /**
+  * Shopify Webhook Handler
+  * 
+  * INVENTORY TRUTH CONTRACT COMPLIANCE:
+  * - This webhook READS from Shopify and mirrors to local DB
+  * - inventory_levels/update → upsert into shopify_inventory_levels
+  * - If truth_mode=shopify: update intake_items.quantity = available
+  * - NEVER writes back to Shopify for sale events
+  * - Only exception: graded item restoration on cancellation/refund
+  * 
+  * Security:
+  * - HMAC signature verification (required when secret configured)
+  * - Idempotency via webhook_events table (store_key, topic, webhook_id)
+  * 
+  * Performance:
+  * - Heavy work enqueued to async jobs, returns fast
+  * - Latency tracked in webhook_health
+  */
+ 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-shopify-webhook-id, x-shopify-hmac-sha256, x-shopify-topic',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
+ // Types for webhook processing result
+ interface WebhookResult {
+   status: 'ok' | 'ignored' | 'failed';
+   reason?: string;
+   latency_ms: number;
+ }
+ 
 serve(async (req) => {
+   const startTime = performance.now();
+ 
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -25,13 +53,16 @@ serve(async (req) => {
     const shopifyDomain = req.headers.get('x-shopify-shop-domain');
 
     if (!webhookId || !topic) {
+       const latency = Math.round(performance.now() - startTime);
+       console.log(`[WEBHOOK] Rejected - missing headers (latency: ${latency}ms)`);
       return new Response(JSON.stringify({ error: 'Missing required webhook headers' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
 
-    // Check for duplicate webhook (idempotency) using webhook_id
+     // IDEMPOTENCY: Check for duplicate webhook using (store_key, topic, webhook_id)
+     // We check webhook_id first since it's unique across all webhooks
     const { data: existingEvent } = await supabase
       .from('webhook_events')
       .select('id')
@@ -39,15 +70,15 @@ serve(async (req) => {
       .single();
 
     if (existingEvent) {
-      console.log(`shopify-webhook: Duplicate webhook ignored - ${webhookId}`);
+       const latency = Math.round(performance.now() - startTime);
+       console.log(`[WEBHOOK] Duplicate ignored: ${webhookId} (latency: ${latency}ms)`);
       return new Response(JSON.stringify({ message: 'Webhook already processed' }), {
         status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
 
-    // HMAC verification for webhook security
-    // Fetch webhook secret from database based on store
+     // SECURITY: HMAC verification 
     const storeKey = await getStoreKeyFromDomain(supabase, shopifyDomain);
     let hmacSecret: string | null = null;
     
@@ -121,7 +152,7 @@ serve(async (req) => {
     
     payload = JSON.parse(body);
 
-    console.log(`shopify-webhook: Processing ${topic} from ${shopifyDomain}`);
+     console.log(`[WEBHOOK] Processing ${topic} from ${shopifyDomain} (store: ${storeKey})`);
 
     // Extract location_gid from payload if available (for inventory webhooks)
     let locationGid: string | null = null;
@@ -242,8 +273,9 @@ serve(async (req) => {
       }
     }
 
-    // Track webhook health for Sync Health dashboard
-    // This is a lightweight upsert to track last received webhook per store/location/topic
+     // METRICS: Track webhook health with latency for Sync Health dashboard
+     const totalLatency = Math.round(performance.now() - startTime);
+     
     if (storeKey) {
       try {
         await supabase
@@ -257,6 +289,7 @@ serve(async (req) => {
             event_count: 1,
             last_error: processingError?.message || null,
             last_error_at: processingError ? new Date().toISOString() : null,
+            last_latency_ms: totalLatency,
             updated_at: new Date().toISOString()
           }, {
             onConflict: 'store_key,location_gid,topic'
@@ -267,18 +300,27 @@ serve(async (req) => {
       }
     }
 
-    // Always return 200 to Shopify to prevent unnecessary retries from their side
-    // We handle our own retry logic internally
+     // RESPONSE: Always 200 to Shopify (we handle retries internally)
+     const result: WebhookResult = {
+       status: processingError ? 'failed' : 'ok',
+       reason: processingError?.message,
+       latency_ms: totalLatency
+     };
+     
+     console.log(`[WEBHOOK] Complete: ${topic} → ${result.status} (${result.latency_ms}ms)`);
+     
     return new Response(JSON.stringify({ 
       message: processingError ? 'Webhook failed - queued for retry' : 'Webhook processed successfully',
-      event_id: eventId
+       event_id: eventId,
+       latency_ms: totalLatency
     }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
 
   } catch (error) {
-    console.error('Webhook error:', error instanceof Error ? error.message : String(error));
+     const latency = Math.round(performance.now() - startTime);
+     console.error(`[WEBHOOK] Error (${latency}ms):`, error instanceof Error ? error.message : String(error));
     return new Response(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
