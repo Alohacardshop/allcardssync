@@ -1,9 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Loader2, AlertCircle, RefreshCw, Download, MoreHorizontal, Keyboard, ChevronDown } from 'lucide-react';
+import { Loader2, AlertCircle, RefreshCw, Download, MoreHorizontal, Keyboard } from 'lucide-react';
 import { toast } from 'sonner';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
@@ -13,7 +11,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
+import { TooltipProvider } from '@/components/ui/tooltip';
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { useStore } from '@/contexts/StoreContext';
 import { useShopifyResync } from '@/hooks/useShopifyResync';
 import { useEbayListing } from '@/hooks/useEbayListing';
@@ -30,7 +29,6 @@ import { TruthModeBadge } from '@/components/inventory/TruthModeBadge';
 import { Progress } from '@/components/ui/progress';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useInventoryTruthMode } from '@/hooks/useInventoryTruthMode';
-import { cn } from '@/lib/utils';
 
 import { useInventoryListQuery } from '@/hooks/useInventoryListQuery';
 import { useLocationNames } from '@/hooks/useLocationNames';
@@ -46,7 +44,7 @@ import { InventoryCardView } from '../components/InventoryCardView';
 import { InventoryTableView } from '../components/InventoryTableView';
 import { InventoryViewToggle, type InventoryViewMode } from '../components/InventoryViewToggle';
 import { InventoryBulkBar } from '../components/InventoryBulkBar';
-import { ItemDetailsDrawer } from '../components/ItemDetailsDrawer';
+import { InspectorPanel } from '../components/inspector/InspectorPanel';
 import { useInventorySelection } from '../hooks/useInventorySelection';
 import { useInventoryActions } from '../hooks/useInventoryActions';
 import type { InventoryFilterState, InventoryListItem } from '../types';
@@ -54,7 +52,6 @@ import { ColumnChooser } from '../components/ColumnChooser';
 import { SavedViewsDropdown } from '../components/SavedViewsDropdown';
 import { CompactStatusStrip } from '../components/CompactStatusStrip';
 import { 
-  INVENTORY_COLUMNS, 
   type InventoryColumn, 
   type SortField, 
   type SortDirection,
@@ -66,6 +63,18 @@ import { getDefaultVisibleColumns } from '../hooks/useInventoryViews';
 const InventoryAnalytics = lazy(() => import('@/components/InventoryAnalytics').then(m => ({ default: m.InventoryAnalytics })));
 const ItemTimeline = lazy(() => import('@/components/ItemTimeline').then(m => ({ default: m.ItemTimeline })));
 const QueueStatusIndicator = lazy(() => import('@/components/QueueStatusIndicator').then(m => ({ default: m.QueueStatusIndicator })));
+
+// Workbench-optimized default columns (scan-critical only)
+const WORKBENCH_COLUMNS: InventoryColumn[] = [
+  'checkbox',
+  'sku',
+  'title',
+  'location',
+  'price',
+  'quantity',
+  'shopify_status',
+  'actions',
+];
 
 const InventoryPage = () => {
   // Unified loading state management
@@ -92,7 +101,7 @@ const InventoryPage = () => {
    // Saved Views state (desktop only)
    const [activeViewId, setActiveViewId] = useState<string | null>(null);
    const [visibleColumns, setVisibleColumns] = useState<InventoryColumn[]>(() => 
-     getDefaultVisibleColumns()
+     WORKBENCH_COLUMNS
    );
    const [sortColumn, setSortColumn] = useState<SortField | null>(null);
    const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
@@ -108,8 +117,8 @@ const InventoryPage = () => {
   const [selectedItemsForDeletion, setSelectedItemsForDeletion] = useState<any[]>([]);
   const [syncDetailsRow, setSyncDetailsRow] = useState<any>(null);
   
-  // Item details drawer state
-  const [detailsDrawerItem, setDetailsDrawerItem] = useState<InventoryListItem | null>(null);
+  // Inspector panel state - persistent right panel
+  const [inspectorItem, setInspectorItem] = useState<InventoryListItem | null>(null);
   
   // Auto-refresh state
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
@@ -366,13 +375,28 @@ const InventoryPage = () => {
     virtualizerScrollToIndexRef.current = fn;
   }, []);
 
-  // Handle opening details for an item
-  const handleOpenDetails = useCallback((itemId: string) => {
-    const item = items.find(i => i.id === itemId);
-    if (item) {
-      setSyncDetailsRow(item);
+  // Handle opening inspector for an item
+  const handleOpenInspector = useCallback((item: InventoryListItem) => {
+    setInspectorItem(item);
+  }, []);
+
+  // Handle inspector navigation
+  const handleInspectorNavigate = useCallback((item: InventoryListItem) => {
+    setInspectorItem(item);
+    // Also scroll table to keep item in view
+    const index = items.findIndex(i => i.id === item.id);
+    if (index >= 0 && virtualizerScrollToIndexRef.current) {
+      virtualizerScrollToIndexRef.current(index);
     }
   }, [items]);
+
+  // Handle printing from inspector
+  const handlePrintFromInspector = useCallback((item: InventoryListItem) => {
+    if (!selectedItems.has(item.id)) {
+      setSelection([item.id], 'replace');
+    }
+    setShowPrintDialog(true);
+  }, [selectedItems, setSelection]);
 
   // Keyboard navigation
   const { focusedIndex } = useKeyboardNavigation({
@@ -383,7 +407,10 @@ const InventoryPage = () => {
     onSelectAll: selectAllVisible,
     onSync: handleSyncSelected,
     onPrint: handlePrintSelected,
-    onExpandDetails: handleOpenDetails,
+    onExpandDetails: (itemId: string) => {
+      const item = items.find(i => i.id === itemId);
+      if (item) handleOpenInspector(item);
+    },
     searchInputRef,
     virtualizerScrollToIndex: (index: number) => virtualizerScrollToIndexRef.current?.(index),
     enabled: !showRemovalDialog && !showDeleteDialog && !showPrintDialog,
@@ -597,22 +624,15 @@ const InventoryPage = () => {
             )}
           </div>
 
-          {/* Table/Cards Area - full width, minimal wrapper */}
-          <div className="flex-1 overflow-auto">
-            {/* Empty state */}
-            {!isLoading && items.length === 0 && (
-              <div className="flex items-center justify-center p-12 text-center">
+          {/* Workbench: Table + Inspector */}
+          <div className="flex-1 overflow-hidden">
+            {items.length === 0 && !isLoading ? (
+              <div className="flex items-center justify-center p-12 text-center h-full">
                 <div className="space-y-4 max-w-md">
                   <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto" />
                   <div>
                     <h3 className="text-lg font-semibold mb-2">No Items Found</h3>
-                    <p className="text-muted-foreground text-sm mb-4">
-                      No items match your current filters.
-                    </p>
-                    <p className="text-xs text-muted-foreground mb-4">
-                      Store: <strong>{assignedStore}</strong>
-                      {filters.locationFilter && <> | Location: <strong>{locationsMap?.get(filters.locationFilter)?.location_name || filters.locationFilter.split('/').pop()}</strong></>}
-                    </p>
+                    <p className="text-muted-foreground text-sm mb-4">No items match your current filters.</p>
                     <Button variant="outline" size="sm" onClick={handleManualRefresh}>
                       <RefreshCw className="h-4 w-4 mr-2" />
                       Refresh
@@ -620,77 +640,81 @@ const InventoryPage = () => {
                   </div>
                 </div>
               </div>
-            )}
-
-            {/* Table View */}
-            {items.length > 0 && (
-              isDesktop && viewMode === 'table' ? (
-                <InventoryTableView
-                  items={items}
-                  selectedItems={selectedItems}
-                  expandedItems={expandedItems}
-                  isAdmin={isAdmin}
-                  syncingRowId={syncingRowId}
-                  locationsMap={locationsMap}
-                  inventoryLevelsMap={inventoryLevelsMap}
-                  selectedLocationGid={filters.locationFilter}
-                  focusedIndex={focusedIndex}
-                  quantityReadOnly={isShopifyTruth}
-                  quantityReadOnlyReason="Shopify is source of truth. Use Receiving or Transfer to adjust."
-                  visibleColumns={visibleColumns}
-                  onToggleSelection={toggleSelection}
-                  onSetSelection={setSelection}
-                  onToggleExpanded={toggleExpanded}
-                  onSync={handleSync}
-                  onRetrySync={handleRetrySync}
-                  onResync={handleResync}
-                  onRemove={(item) => {
-                    setSelectedItemForRemoval(item);
-                    setShowRemovalDialog(true);
-                  }}
-                  onDelete={isAdmin ? (item) => {
-                    setSelectedItemsForDeletion([item]);
-                    setShowDeleteDialog(true);
-                  } : undefined}
-                  onSyncDetails={(item) => setSyncDetailsRow(item)}
-                  onOpenDetails={(item) => setDetailsDrawerItem(item)}
-                  isLoading={snapshot.phases.data === 'loading'}
-                  hasNextPage={hasNextPage}
-                  isFetchingNextPage={isFetchingNextPage}
-                  onLoadMore={() => fetchNextPage()}
-                />
-              ) : (
-                <InventoryCardView
-                  items={items}
-                  selectedItems={selectedItems}
-                  expandedItems={expandedItems}
-                  isAdmin={isAdmin}
-                  syncingRowId={syncingRowId}
-                  locationsMap={locationsMap}
-                  focusedIndex={focusedIndex}
-                  quantityReadOnly={isShopifyTruth}
-                  quantityReadOnlyReason="Shopify is source of truth. Use Receiving or Transfer to adjust."
-                  onToggleSelection={toggleSelection}
-                  onToggleExpanded={toggleExpanded}
-                  onSync={handleSync}
-                  onRetrySync={handleRetrySync}
-                  onResync={handleResync}
-                  onRemove={(item) => {
-                    setSelectedItemForRemoval(item);
-                    setShowRemovalDialog(true);
-                  }}
-                  onDelete={isAdmin ? (item) => {
-                    setSelectedItemsForDeletion([item]);
-                    setShowDeleteDialog(true);
-                  } : undefined}
-                  onSyncDetails={(item) => setSyncDetailsRow(item)}
-                  isLoading={snapshot.phases.data === 'loading'}
-                  hasNextPage={hasNextPage}
-                  isFetchingNextPage={isFetchingNextPage}
-                  onLoadMore={() => fetchNextPage()}
-                  onScrollToIndex={handleSetScrollToIndex}
-                />
-              )
+            ) : isDesktop && viewMode === 'table' ? (
+              <ResizablePanelGroup direction="horizontal" className="h-full">
+                <ResizablePanel defaultSize={inspectorItem ? 60 : 100} minSize={40} className="h-full">
+                  <InventoryTableView
+                    items={items}
+                    selectedItems={selectedItems}
+                    expandedItems={expandedItems}
+                    isAdmin={isAdmin}
+                    syncingRowId={syncingRowId}
+                    locationsMap={locationsMap}
+                    inventoryLevelsMap={inventoryLevelsMap}
+                    selectedLocationGid={filters.locationFilter}
+                    focusedIndex={focusedIndex}
+                    quantityReadOnly={isShopifyTruth}
+                    quantityReadOnlyReason="Shopify is source of truth."
+                    visibleColumns={visibleColumns}
+                    onToggleSelection={toggleSelection}
+                    onSetSelection={setSelection}
+                    onToggleExpanded={toggleExpanded}
+                    onSync={handleSync}
+                    onRetrySync={handleRetrySync}
+                    onResync={handleResync}
+                    onRemove={(item) => { setSelectedItemForRemoval(item); setShowRemovalDialog(true); }}
+                    onDelete={isAdmin ? (item) => { setSelectedItemsForDeletion([item]); setShowDeleteDialog(true); } : undefined}
+                    onSyncDetails={(item) => setSyncDetailsRow(item)}
+                    onOpenDetails={handleOpenInspector}
+                    isLoading={snapshot.phases.data === 'loading'}
+                    hasNextPage={hasNextPage}
+                    isFetchingNextPage={isFetchingNextPage}
+                    onLoadMore={() => fetchNextPage()}
+                  />
+                </ResizablePanel>
+                {inspectorItem && (
+                  <>
+                    <ResizableHandle withHandle />
+                    <ResizablePanel defaultSize={40} minSize={25} maxSize={50} className="border-l border-border">
+                      <InspectorPanel
+                        item={inspectorItem}
+                        items={items}
+                        locationsMap={locationsMap}
+                        onClose={() => setInspectorItem(null)}
+                        onNavigate={handleInspectorNavigate}
+                        onResync={handleResync}
+                        onPrint={handlePrintFromInspector}
+                        isResyncing={syncingRowId === inspectorItem?.id}
+                      />
+                    </ResizablePanel>
+                  </>
+                )}
+              </ResizablePanelGroup>
+            ) : (
+              <InventoryCardView
+                items={items}
+                selectedItems={selectedItems}
+                expandedItems={expandedItems}
+                isAdmin={isAdmin}
+                syncingRowId={syncingRowId}
+                locationsMap={locationsMap}
+                focusedIndex={focusedIndex}
+                quantityReadOnly={isShopifyTruth}
+                quantityReadOnlyReason="Shopify is source of truth."
+                onToggleSelection={toggleSelection}
+                onToggleExpanded={toggleExpanded}
+                onSync={handleSync}
+                onRetrySync={handleRetrySync}
+                onResync={handleResync}
+                onRemove={(item) => { setSelectedItemForRemoval(item); setShowRemovalDialog(true); }}
+                onDelete={isAdmin ? (item) => { setSelectedItemsForDeletion([item]); setShowDeleteDialog(true); } : undefined}
+                onSyncDetails={(item) => setSyncDetailsRow(item)}
+                isLoading={snapshot.phases.data === 'loading'}
+                hasNextPage={hasNextPage}
+                isFetchingNextPage={isFetchingNextPage}
+                onLoadMore={() => fetchNextPage()}
+                onScrollToIndex={handleSetScrollToIndex}
+              />
             )}
           </div>
         </div>
@@ -756,24 +780,6 @@ const InventoryPage = () => {
           }}
         />
 
-        {/* Item Details Drawer */}
-        <ItemDetailsDrawer
-          item={detailsDrawerItem}
-          items={items}
-          locationsMap={locationsMap}
-          isOpen={!!detailsDrawerItem}
-          onClose={() => setDetailsDrawerItem(null)}
-          onNavigate={(item) => setDetailsDrawerItem(item)}
-          onResync={handleResync}
-          onPrint={(item) => {
-            setDetailsDrawerItem(null);
-            if (!selectedItems.has(item.id)) {
-              toggleSelection(item.id);
-            }
-            setShowPrintDialog(true);
-          }}
-          isResyncing={syncingRowId === detailsDrawerItem?.id}
-        />
 
         {expandedItems.size > 0 && (
           <div className="space-y-4">
