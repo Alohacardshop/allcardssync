@@ -413,7 +413,7 @@ const InventoryPage = () => {
           {/* View Toggle + Truth Mode */}
           <div className="flex items-center gap-2 flex-wrap py-2">
             {/* Truth Mode Badge */}
-            <TruthModeBadge mode={truthMode} />
+            <TruthModeBadge mode={truthMode} prominent />
             
             {/* View Toggle - only show on desktop */}
             {isDesktop && (
