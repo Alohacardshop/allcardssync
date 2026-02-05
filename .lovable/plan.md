@@ -1,144 +1,74 @@
 
-# Navigation Cleanup: Remove Dead Routes and Migration Placeholders
+# Allow Backfill to Import Items Without SKU
 
 ## Summary
-Remove all dead menu items, placeholder pages, and migration notices from admin and app navigation. Consolidate navigation configuration to prevent deprecated features from reappearing.
+Remove the SKU skip logic from the Shopify backfill so items without SKUs are imported. This allows staff to assign SKUs in the local database and sync them back to Shopify.
 
 ---
 
-## Issues Found
+## Current Behavior
+Items without a SKU are skipped during backfill with the message:
+> "Skipping variant {id} from product {title} - no SKU"
 
-| Location | Problem |
-|----------|---------|
-| `/admin/catalog` route | Shows "functionality moved" placeholder |
-| AdminLayout sidebar | "Catalog" links to placeholder page |
-| Command palette | Has catalog references that lead to dead/misleading pages |
-| QuickActions | "Catalog Settings" button navigates to migrated feature |
-| `/admin/ebay-settings` route | Redirect-only route (dead) |
-| `CatalogTab.tsx` | Unused component showing migration notice |
-| `CatalogMigrationPlaceholder.tsx` | Only used for dead routes |
-| `PATHS.adminCatalog` | Route constant for removed feature |
+## New Behavior
+- Items without SKU will be imported
+- They'll use the Shopify variant ID as a temporary identifier
+- Staff can add SKUs later and sync back to Shopify
 
 ---
 
 ## Changes
 
-### 1. Remove `/admin/catalog` Route
+### File: `supabase/functions/shopify-pull-products-by-tags/index.ts`
 
-**File: `src/routes/admin.tsx`**
-- Delete the catalog route: `<Route path="catalog" ...>`
-- Remove `CatalogMigrationPlaceholder` import
-- Remove `/admin/ebay-settings` redirect route (dead)
+**Remove lines 291-297** (the SKU skip block):
+```typescript
+// DELETE THIS BLOCK:
+if (!variant.sku || variant.sku.trim() === '') {
+  console.log(`Skipping variant ${variant.id} from product "${product.title}" - no SKU`);
+  skippedVariants++;
+  skippedNoSku++;
+  continue;
+}
+```
 
-### 2. Update AdminLayout Sidebar Navigation
+**Update the upsert call** to handle missing SKUs by using variant ID as fallback:
+```typescript
+// Use variant ID as fallback SKU if none exists
+const effectiveSku = (variant.sku && variant.sku.trim()) 
+  ? variant.sku 
+  : `NOSKU-${variant.id}`;
+```
 
-**File: `src/components/layout/AdminLayout.tsx`**
-- Remove `{ id: 'catalog', path: PATHS.adminCatalog, title: 'Catalog', icon: Database }` from `ADMIN_NAV_SECTIONS`
-- Remove `adminCatalog` import from PATHS (now unused)
-
-### 3. Rename "catalog" Section to "Data & Intake"
-
-**File: `src/pages/Admin.tsx`**
-- Rename `case 'catalog'` to `case 'data'`
-- Keep `CatalogTabsSection` component but it now represents "Data & Intake" settings (TCG config, intake settings, APIs, vendors, categories)
-
-### 4. Update AdminLayout Navigation to Match
-
-**File: `src/components/layout/AdminLayout.tsx`**
-- Change catalog entry to: `{ id: 'data', path: '${PATHS.admin}?section=data', title: 'Data & Intake', icon: Database }`
-- This uses query-param navigation instead of a separate route
-
-### 5. Update Command Palette
-
-**File: `src/components/admin/AdminCommandPalette.tsx`**
-- Update `nav-catalog` to:
-  - id: `nav-data`
-  - label: `Data & Intake`
-  - description: `TCG database and intake settings`
-  - action: `onNavigate?.('data')`
-- Update `settings-tcg`:
-  - action: `onNavigate?.('data')`
-
-### 6. Update QuickActions
-
-**File: `src/components/admin/QuickActions.tsx`**
-- Change "Catalog Settings" to:
-  - label: `Data Settings`
-  - description: `TCG database & intake config`
-  - onClick: `onNavigate('data')`
-
-### 7. Remove Unused Path Constants
-
-**File: `src/routes/paths.ts`**
-- Remove `adminCatalog: '/admin/catalog'` from PATHS object
-
-### 8. Delete Dead Files
-
-**Files to delete:**
-- `src/components/admin/CatalogTab.tsx` - Unused, only shows migration notice
-- `src/components/CatalogMigrationPlaceholder.tsx` - No longer needed after route removal
-
----
-
-## Navigation After Cleanup
-
-### Admin Sidebar (ADMIN_NAV_SECTIONS)
-| Section | Path | Status |
-|---------|------|--------|
-| Overview | `/admin` | Keep |
-| Store | `/admin?section=store` | Keep |
-| **Data & Intake** | `/admin?section=data` | **Renamed from Catalog** |
-| Queue | `/admin?section=queue` | Keep |
-| Users | `/admin?section=users` | Keep |
-| Hardware | `/admin?section=hardware` | Keep |
-| Regions | `/admin?section=regions` | Keep |
-| System | `/admin?section=system` | Keep |
-
-### Admin Tools (ADMIN_TOOLS)
-All tools remain unchanged (Discord, Pending, Backfill, Inv Sync, Health)
-
-### Admin Routes
-| Route | Status |
-|-------|--------|
-| `/admin` | Keep |
-| `/admin/catalog` | **Remove** |
-| `/admin/notifications/discord` | Keep |
-| `/admin/notifications/pending` | Keep |
-| `/admin/shopify-backfill` | Keep |
-| `/admin/inventory-sync` | Keep |
-| `/admin/sync-health` | Keep |
-| `/admin/ebay-settings` | **Remove** (was just a redirect) |
+**Update preview items logic** (around line 324) to use the same fallback:
+```typescript
+previewItems.push({
+  sku: effectiveSku,
+  title: product.title + (variant.title !== 'Default Title' ? ` - ${variant.title}` : ''),
+  quantity: variantQty,
+  price: parseFloat(variant.price) || 0
+});
+```
 
 ---
 
 ## Technical Details
 
-### Files Modified
-| File | Change |
-|------|--------|
-| `src/routes/admin.tsx` | Remove catalog and ebay-settings routes |
-| `src/routes/paths.ts` | Remove `adminCatalog` constant |
-| `src/components/layout/AdminLayout.tsx` | Update `ADMIN_NAV_SECTIONS` to use data section |
-| `src/pages/Admin.tsx` | Rename catalog case to data |
-| `src/components/admin/AdminCommandPalette.tsx` | Update navigation commands |
-| `src/components/admin/QuickActions.tsx` | Update button labels |
+| Location | Change |
+|----------|--------|
+| Lines 291-297 | Remove SKU skip logic |
+| Line ~310 | Add `effectiveSku` variable with fallback |
+| Line 324 | Use `effectiveSku` in preview items |
+| Line 409 | Use `effectiveSku` in upsert RPC call |
 
-### Files Deleted
-| File | Reason |
-|------|--------|
-| `src/components/admin/CatalogTab.tsx` | Unused, only shows migration placeholder |
-| `src/components/CatalogMigrationPlaceholder.tsx` | No longer referenced after cleanup |
+The `NOSKU-{variant_id}` format makes it obvious which items need SKUs assigned, and the variant ID ensures uniqueness.
 
 ---
 
-## UX Impact
+## After This Change
 
-**Before:**
-- Staff could click "Catalog" → land on "This feature has moved" page
-- Dead-end experience, confusing and unprofessional
+- Backfill will import ALL products meeting quantity criteria
+- Items without SKU show with `NOSKU-123456` placeholder
+- Staff can edit SKU in inventory UI
+- Bi-directional sync will push the new SKU back to Shopify
 
-**After:**
-- "Data & Intake" section shows working tools (TCG settings, intake config, vendors, categories)
-- No migration notices in navigation
-- Every menu item leads to functional content
-- Staff never encounter "feature moved" pages via navigation
