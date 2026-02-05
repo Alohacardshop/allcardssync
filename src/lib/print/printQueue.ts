@@ -29,8 +29,10 @@ const SUPPRESS_MS = 3000;
 const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_RETRY_DELAY_MS = 1000;
 const PROCESSING_TIMEOUT_MS = 30000;
+const DEAD_LETTER_MAX_SIZE = 200;
+const DEAD_LETTER_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
-function byteLen(s: string) { 
+function byteLen(s: string) {
   return new Blob([s]).size; 
 }
 
@@ -114,11 +116,50 @@ export class PrintQueue {
   }
   
   public getDeadLetterQueue() {
+    this.cleanupDeadLetterQueue();
     return [...this.deadLetterQueue];
   }
   
   public clearDeadLetterQueue() {
     this.deadLetterQueue = [];
+  }
+  
+  /** Remove expired entries and enforce max size */
+  private cleanupDeadLetterQueue() {
+    const now = Date.now();
+    
+    // Remove expired entries (older than TTL)
+    const beforeCount = this.deadLetterQueue.length;
+    this.deadLetterQueue = this.deadLetterQueue.filter(
+      entry => (now - entry.timestamp) < DEAD_LETTER_TTL_MS
+    );
+    
+    // Enforce max size (keep most recent)
+    if (this.deadLetterQueue.length > DEAD_LETTER_MAX_SIZE) {
+      // Sort by timestamp descending and keep only the most recent
+      this.deadLetterQueue.sort((a, b) => b.timestamp - a.timestamp);
+      this.deadLetterQueue = this.deadLetterQueue.slice(0, DEAD_LETTER_MAX_SIZE);
+    }
+    
+    const removedCount = beforeCount - this.deadLetterQueue.length;
+    if (removedCount > 0) {
+      logger.debug('[dead_letter_cleanup]', { 
+        removed: removedCount, 
+        remaining: this.deadLetterQueue.length 
+      }, 'print-queue');
+    }
+  }
+  
+  /** Add entry to dead letter queue with automatic cleanup */
+  private addToDeadLetterQueue(items: QueueItem[], error: Error) {
+    this.deadLetterQueue.push({
+      items,
+      error,
+      timestamp: Date.now()
+    });
+    
+    // Cleanup after adding
+    this.cleanupDeadLetterQueue();
   }
   
   public clearSentHashes() {
@@ -274,12 +315,8 @@ export class PrintQueue {
         maxRetries 
       }, 'print-queue');
       
-      // Only add unsent items to dead letter queue
-      this.deadLetterQueue.push({
-        items: unsentItems,
-        error: err,
-        timestamp: Date.now()
-      });
+      // Only add unsent items to dead letter queue (with cleanup)
+      this.addToDeadLetterQueue(unsentItems, err);
       
       // Call dead letter callback if provided
       if (this.opts.onDeadLetter) {
