@@ -28,6 +28,7 @@ import { InlineQuantityEditor } from '@/components/inventory-card/InlineQuantity
 import { EbayStatusBadge } from '@/components/inventory/EbayStatusBadge';
 import { LocationStockPopover } from '@/components/inventory/LocationStockPopover';
 import { ItemAuditDialog } from '@/components/inventory/ItemAuditDialog';
+import { QuantityAuditTooltip } from '@/components/inventory/QuantityAuditTooltip';
 import { useEbayListing } from '@/hooks/useEbayListing';
 import type { VirtualInventoryListProps, InventoryListItem } from '../types';
 import type { CachedLocation } from '@/hooks/useLocationNames';
@@ -222,7 +223,8 @@ const TableRow = memo(({
         </div>
 
         {/* Quantity - center aligned, shows Shopify-truth quantity, fixed container */}
-        <div className="flex items-center justify-center h-[44px]">
+        <QuantityAuditTooltip itemId={item.id} sku={item.sku}>
+          <div className="flex items-center justify-center h-[44px] cursor-help">
           <InlineQuantityEditor
             itemId={item.id}
             quantity={displayQuantity}
@@ -232,7 +234,8 @@ const TableRow = memo(({
             readOnly={quantityReadOnly}
             readOnlyReason={quantityReadOnlyReason}
           />
-        </div>
+          </div>
+        </QuantityAuditTooltip>
 
         {/* Shopify Status - consistent chip with fixed container height */}
         <div className="flex items-center justify-center h-[44px]">
