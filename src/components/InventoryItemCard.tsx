@@ -12,6 +12,7 @@ import {
 } from '@/components/inventory-card';
 import type { InventoryItem } from '@/types/inventory';
 import type { CachedLocation } from '@/hooks/useLocationNames';
+import type { InventoryLock } from '@/hooks/useInventoryLocks';
 
 // Helper function outside component to prevent re-creation on every render
 const generateTitle = (item: InventoryItem) => {
@@ -59,6 +60,8 @@ interface InventoryItemCardProps {
   isAdmin: boolean;
   syncingRowId: string | null;
   locationsMap?: Map<string, CachedLocation>;
+  /** Lock info if item is currently locked */
+  lockInfo?: InventoryLock | null;
   /** Whether quantity editing is disabled (e.g., Shopify truth mode) */
   quantityReadOnly?: boolean;
   /** Reason for read-only quantity, shown in tooltip */
@@ -80,6 +83,7 @@ export const InventoryItemCard = memo(({
   isAdmin,
   syncingRowId,
   locationsMap,
+  lockInfo,
   quantityReadOnly,
   quantityReadOnlyReason,
   onToggleSelection,
@@ -158,6 +162,7 @@ export const InventoryItemCard = memo(({
           isSelected={isSelected}
           isExpanded={isExpanded}
           locationsMap={locationsMap}
+          lockInfo={lockInfo}
           onToggleSelection={onToggleSelection}
           onToggleExpanded={onToggleExpanded}
         />
@@ -206,6 +211,7 @@ export const InventoryItemCard = memo(({
     prevProps.isExpanded === nextProps.isExpanded &&
     prevProps.syncingRowId === nextProps.syncingRowId &&
     prevProps.quantityReadOnly === nextProps.quantityReadOnly &&
+    prevProps.lockInfo?.id === nextProps.lockInfo?.id &&
     prevTags === nextTags &&
     prevNormTags === nextNormTags
   );

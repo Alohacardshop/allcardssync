@@ -1,5 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.56.0";
+import { 
+  acquireInventoryLocks, 
+  releaseInventoryLocksByBatch,
+  filterLockedSkus 
+} from '../_shared/inventory-lock-helpers.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -105,6 +110,36 @@ serve(async (req) => {
 
     console.log(`shopify-resync-inventory: Found ${items.length} items to check`);
 
+    // Get SKUs and check which are locked
+    const allSkus = items.map(i => i.sku).filter(Boolean) as string[];
+    const { lockedSkus } = await filterLockedSkus(supabase, allSkus, store_key);
+    const lockedSkuSet = new Set(lockedSkus);
+    
+    if (lockedSkuSet.size > 0) {
+      console.log(`shopify-resync-inventory: Skipping ${lockedSkuSet.size} locked SKUs`);
+    }
+    
+    // Filter out locked items
+    const unlockItems = items.filter(item => !item.sku || !lockedSkuSet.has(item.sku));
+    
+    if (unlockItems.length === 0 && lockedSkuSet.size > 0) {
+      return new Response(JSON.stringify({ 
+        success: true,
+        results: {
+          total_checked: 0,
+          updated: 0,
+          unchanged: 0,
+          not_found: 0,
+          errors: 0,
+          skipped_locked: lockedSkuSet.size
+        },
+        details: []
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
     // Process items in batches of 50
     const BATCH_SIZE = 50;
     const results = {
@@ -112,12 +147,13 @@ serve(async (req) => {
       updated: 0,
       unchanged: 0,
       not_found: 0,
-      errors: 0
+      errors: 0,
+      skipped_locked: lockedSkuSet.size
     };
     const details: any[] = [];
 
-    for (let i = 0; i < items.length; i += BATCH_SIZE) {
-      const batch = items.slice(i, i + BATCH_SIZE);
+    for (let i = 0; i < unlockItems.length; i += BATCH_SIZE) {
+      const batch = unlockItems.slice(i, i + BATCH_SIZE);
       
       for (const item of batch) {
         results.total_checked++;
@@ -185,7 +221,7 @@ serve(async (req) => {
 
           if (response.status === 429) {
             // Rate limited - wait and retry
-            await new Promise(resolve => setTimeout(resolve, 2000));
+            await new Promise(r => setTimeout(r, 2000));
             i -= BATCH_SIZE; // Retry this batch
             break;
           }

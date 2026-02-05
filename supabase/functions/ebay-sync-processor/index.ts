@@ -1,5 +1,10 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { 
+  acquireInventoryLocks, 
+  releaseInventoryLocksByBatch,
+  filterLockedSkus 
+} from '../_shared/inventory-lock-helpers.ts'
 import {
   getValidAccessToken,
   createOrUpdateInventoryItem,
@@ -82,11 +87,29 @@ serve(async (req) => {
 
     console.log(`[ebay-sync-processor] Found ${queueItems.length} items to process`)
 
+    // Check for locked SKUs and skip them
+    const allSkus = queueItems.map(q => (q.intake_items as any)?.sku).filter(Boolean) as string[];
+    const storeKeysForLockCheck = [...new Set(queueItems.map(q => (q.intake_items as any)?.store_key).filter(Boolean))];
+    
+    // Build locked SKU set across all stores
+    const lockedSkuSet = new Set<string>();
+    for (const sk of storeKeysForLockCheck) {
+      const { lockedSkus } = await filterLockedSkus(supabase, allSkus, sk);
+      for (const sku of lockedSkus) {
+        lockedSkuSet.add(sku);
+      }
+    }
+    
+    if (lockedSkuSet.size > 0) {
+      console.log(`[ebay-sync-processor] Found ${lockedSkuSet.size} locked SKUs, will skip`);
+    }
+
     const results = {
       processed: 0,
       succeeded: 0,
       failed: 0,
       skipped_sold: 0,
+      skipped_locked: 0,
       errors: [] as { item_id: string; error: string }[],
     }
 
@@ -142,6 +165,13 @@ serve(async (req) => {
         results.processed++
         const item = queueItem.intake_items as any
         const isGraded = item.grading_company && item.grading_company !== 'RAW' && item.grading_company !== 'UNGRADED'
+
+        // Skip locked SKUs
+        if (item.sku && lockedSkuSet.has(item.sku)) {
+          console.log(`[ebay-sync-processor] Skipping locked SKU: ${item.sku}`);
+          results.skipped_locked++;
+          continue;
+        }
 
         try {
           // =======================================================

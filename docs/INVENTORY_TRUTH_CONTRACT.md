@@ -188,3 +188,96 @@ curl -X POST /functions/v1/bulk-location-transfer \
     "store_key": "hawaii"
   }'
 ```
+
+---
+
+## Inventory Write Locks
+
+The `inventory_write_locks` table prevents race conditions during bulk operations. All operations that modify inventory MUST respect locks.
+
+### Lock Types
+
+| Type | Description | Typical Duration |
+|------|-------------|------------------|
+| `bulk_transfer` | Items being transferred between locations | 15 min |
+| `recount` | Items being physically recounted | 30 min |
+| `reconciliation` | Items being reconciled with Shopify | 10 min |
+| `manual_adjustment` | User making manual quantity changes | 5 min |
+
+### Lock Helpers
+
+Available in `_shared/inventory-lock-helpers.ts`:
+
+| Function | Description |
+|----------|-------------|
+| `acquireInventoryLocks()` | Acquire locks for SKUs atomically (batch) |
+| `releaseInventoryLocksByBatch()` | Release all locks by batch ID |
+| `releaseInventoryLocksBySkus()` | Release locks for specific SKUs |
+| `refreshInventoryLocks()` | Extend lock timeout for ongoing operations |
+| `isSkuLocked()` | Quick check if single SKU is locked |
+| `filterLockedSkus()` | Get locked vs unlocked SKUs from a list |
+| `forceReleaseInventoryLocks()` | Admin: force-clear any locks |
+| `getActiveLocks()` | Get detailed info about active locks |
+| `cleanupExpiredLocks()` | Remove expired locks (opportunistic) |
+
+### Lock Acquisition Pattern
+
+```typescript
+import { acquireInventoryLocks, releaseInventoryLocksByBatch } from '../_shared/inventory-lock-helpers.ts';
+
+let lockBatchId: string | null = null;
+try {
+  const lockResult = await acquireInventoryLocks(
+    supabase, skus, storeKey, 'bulk_transfer', userId, 15, { operation: 'transfer' }
+  );
+  lockBatchId = lockResult.batchId;
+  
+  if (lockResult.failedSkus.length > 0) {
+    // Handle items we couldn't lock
+  }
+  
+  // ... do work ...
+  
+} finally {
+  // ALWAYS release locks
+  if (lockBatchId) {
+    await releaseInventoryLocksByBatch(supabase, lockBatchId);
+  }
+}
+```
+
+### Operations That Respect Locks
+
+| Operation | Behavior |
+|-----------|----------|
+| `shopify-reconcile-inventory` | Skips locked SKUs, counts as `skipped_locked` |
+| `bulk-location-transfer` | Acquires locks, releases in finally block |
+| `shopify-resync-inventory` | Skips locked SKUs |
+| `ebay-sync-processor` | Skips locked SKUs |
+| `v2-shopify-set-inventory` | Should acquire lock for single item |
+
+### Auto-Expiration
+
+Locks auto-expire after their timeout. Expired locks are cleaned up:
+- Opportunistically during lock acquisition
+- By background cleanup job (if configured)
+- When calling `cleanupExpiredLocks()`
+
+### Admin Force-Clear
+
+Admins can force-release locks via RPC:
+```sql
+SELECT force_release_inventory_locks(
+  p_store_key := 'hawaii',
+  p_lock_type := 'bulk_transfer'
+);
+```
+
+Or by specific lock IDs/SKUs. See `forceReleaseInventoryLocks()` helper.
+
+### UI Indicators
+
+The `InventoryLockIndicator` component shows a subtle lock badge on locked items in the inventory list with:
+- Lock icon with amber styling
+- Tooltip showing lock type, who locked it, and expiration
+- Pulse animation if expiring soon (< 5 min)
