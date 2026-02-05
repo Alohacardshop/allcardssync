@@ -3856,13 +3856,13 @@ export type Database = {
         Args: { hours_back?: number }
         Returns: {
           avg_processing_time_ms: number
-          by_action: Json
-          by_hour: Json
+          completed_count: number
+          failed_count: number
           items_per_hour: number
-          max_processing_time_ms: number
+          pending_count: number
+          processing_count: number
           success_rate: number
-          total_failed: number
-          total_processed: number
+          total_items: number
         }[]
       }
       get_tag_counts: {
