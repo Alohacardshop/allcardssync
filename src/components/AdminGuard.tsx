@@ -1,7 +1,7 @@
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { logger } from '@/lib/logger';
-import { LoadingState } from '@/components/ui/LoadingState';
+import { FullScreenLoader } from '@/components/ui/FullScreenLoader';
 
 interface AdminGuardProps {
   children: React.ReactNode;
@@ -11,7 +11,7 @@ export function AdminGuard({ children }: AdminGuardProps) {
   const { isAdmin, loading } = useAuth();
 
   if (loading) {
-    return <LoadingState message="Verifying admin access..." />;
+    return <FullScreenLoader title="Verifying Access" subtitle="Checking admin permissions…" />;
   }
 
   if (isAdmin === false) {

@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { logger } from '@/lib/logger';
-import { LoadingState } from '@/components/ui/LoadingState';
+import { FullScreenLoader } from '@/components/ui/FullScreenLoader';
 
 interface AuthGuardProps {
   children: React.ReactNode;
@@ -16,7 +16,7 @@ export function AuthGuard({ children }: AuthGuardProps) {
   const isAuthorized = isStaff || isAdmin;
 
   if (loading) {
-    return <LoadingState message="Loading..." fullPage />;
+    return <FullScreenLoader title="Loading…" subtitle="Checking your session…" />;
   }
 
   if (!user) {
