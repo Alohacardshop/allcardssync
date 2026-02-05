@@ -48,7 +48,7 @@ export const INVENTORY_COLUMNS: ColumnConfig[] = [
   { id: 'print_status', label: 'Print', defaultVisible: false, width: '75px' },
   { id: 'ebay_status', label: 'eBay', defaultVisible: true, width: '80px' },
   { id: 'updated_at', label: 'Updated', defaultVisible: true, width: '100px' },
-  { id: 'actions', label: '', defaultVisible: true, locked: true, width: '44px' },
+  { id: 'actions', label: '', defaultVisible: true, locked: true, width: '120px' },
   // Optional Shopify metadata columns (hidden by default)
   { id: 'shopify_created_at', label: 'Shopify Created', defaultVisible: false, width: '110px' },
   { id: 'shopify_cost', label: 'Shopify Cost', defaultVisible: false, width: '90px' },
