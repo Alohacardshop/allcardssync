@@ -878,6 +878,8 @@ Deno.serve(async (req) => {
     });
   }
 
+  let authenticatedUserId: string;
+  
   try {
     // Verify JWT token
     const token = authHeader.replace('Bearer ', '');
@@ -895,7 +897,40 @@ Deno.serve(async (req) => {
       });
     }
     
+    authenticatedUserId = user.id;
     console.log('✅ Authenticated user:', user.id);
+    
+    // Verify user has required role (staff or admin)
+    const serviceClient = createClient(
+      'https://dmpoandoydaqxhzdjnmk.supabase.co',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
+    
+    const { data: roles, error: roleError } = await serviceClient
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', user.id);
+    
+    if (roleError) {
+      console.error('❌ Failed to fetch user roles:', roleError);
+      return new Response(JSON.stringify({ error: 'Failed to verify permissions' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+    
+    const userRoles = roles?.map(r => r.role) || [];
+    const hasRequiredRole = userRoles.some(role => ['admin', 'staff'].includes(role));
+    
+    if (!hasRequiredRole) {
+      console.error('❌ Insufficient permissions for user:', user.id, 'roles:', userRoles);
+      return new Response(JSON.stringify({ error: 'Insufficient permissions. Required: admin or staff role.' }), {
+        status: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+    
+    console.log('✅ User has required role:', userRoles);
   } catch (authErr) {
     console.error('❌ Authentication error:', authErr);
     return new Response(JSON.stringify({ error: 'Authentication failed' }), {
