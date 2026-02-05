@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -95,22 +95,48 @@ export function SessionTimeoutWarning() {
   const [timeLeft, setTimeLeft] = useState(900); // 15 minutes warning
   const [showWarning, setShowWarning] = useState(false);
   const { toast } = useToast();
+  
+  // Persist lastActivity across renders
+  const lastActivityRef = useRef(Date.now());
+  const showWarningRef = useRef(false);
+  const toastShownRef = useRef(false);
+  
+  const TIMEOUT_DURATION = 8 * 60 * 60 * 1000; // 8 hours
+  const WARNING_DURATION = 15 * 60 * 1000; // 15 minutes before timeout
 
+  // Keep ref in sync with state for use in callbacks
   useEffect(() => {
-    let lastActivity = Date.now();
-    const TIMEOUT_DURATION = 8 * 60 * 60 * 1000; // 8 hours
-    const WARNING_DURATION = 15 * 60 * 1000; // 15 minutes before timeout
+    showWarningRef.current = showWarning;
+  }, [showWarning]);
 
-    const resetTimer = () => {
-      lastActivity = Date.now();
-      if (showWarning) {
-        setShowWarning(false);
-        setTimeLeft(900);
-      }
+  // Reset activity timer - stable callback
+  const resetTimer = useCallback(() => {
+    lastActivityRef.current = Date.now();
+    if (showWarningRef.current) {
+      setShowWarning(false);
+      setTimeLeft(900);
+      toastShownRef.current = false;
+    }
+  }, []);
+
+  // Event listeners - registered once
+  useEffect(() => {
+    const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
+    events.forEach(event => {
+      document.addEventListener(event, resetTimer, true);
+    });
+
+    return () => {
+      events.forEach(event => {
+        document.removeEventListener(event, resetTimer, true);
+      });
     };
+  }, [resetTimer]);
 
+  // Session check interval - separate effect
+  useEffect(() => {
     const checkSession = () => {
-      const timeSinceActivity = Date.now() - lastActivity;
+      const timeSinceActivity = Date.now() - lastActivityRef.current;
       
       if (timeSinceActivity >= TIMEOUT_DURATION) {
         // Force logout using proper auth signout
@@ -121,42 +147,34 @@ export function SessionTimeoutWarning() {
         return;
       }
       
-      if (timeSinceActivity >= TIMEOUT_DURATION - WARNING_DURATION && !showWarning) {
-        setShowWarning(true);
-        setTimeLeft(Math.floor((TIMEOUT_DURATION - timeSinceActivity) / 1000));
-        toast({
-          title: "Session Timeout Warning",
-          description: "Your session will expire soon due to inactivity",
-          variant: "destructive"
-        });
-      }
-      
-      if (showWarning) {
+      if (timeSinceActivity >= TIMEOUT_DURATION - WARNING_DURATION) {
         const remaining = Math.floor((TIMEOUT_DURATION - timeSinceActivity) / 1000);
         setTimeLeft(Math.max(0, remaining));
+        
+        if (!showWarningRef.current) {
+          setShowWarning(true);
+          if (!toastShownRef.current) {
+            toastShownRef.current = true;
+            toast({
+              title: "Session Timeout Warning",
+              description: "Your session will expire soon due to inactivity",
+              variant: "destructive"
+            });
+          }
+        }
       }
     };
 
-    // Listen for user activity
-    const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
-    events.forEach(event => {
-      document.addEventListener(event, resetTimer, true);
-    });
-
     const interval = setInterval(checkSession, 1000);
+    return () => clearInterval(interval);
+  }, [toast]);
 
-    return () => {
-      clearInterval(interval);
-      events.forEach(event => {
-        document.removeEventListener(event, resetTimer, true);
-      });
-    };
-  }, [showWarning, toast]);
-
-  const extendSession = () => {
+  const extendSession = useCallback(() => {
+    lastActivityRef.current = Date.now();
     setShowWarning(false);
     setTimeLeft(900);
-  };
+    toastShownRef.current = false;
+  }, []);
 
   const signOut = async () => {
     cleanupAuthState();
