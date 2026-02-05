@@ -90,13 +90,13 @@ export function AdminCommandPalette({
       keywords: ['printer', 'test', 'zebra']
     },
     {
-      id: 'nav-catalog',
-      label: 'Catalog & Data',
-      description: 'TCG database settings',
+      id: 'nav-data',
+      label: 'Data & Intake',
+      description: 'TCG database and intake settings',
       icon: Database,
       category: 'Navigation',
-      action: () => onNavigate?.('catalog'),
-      keywords: ['tcg', 'database', 'catalog']
+      action: () => onNavigate?.('data'),
+      keywords: ['tcg', 'database', 'intake', 'data']
     },
     {
       id: 'nav-users',
@@ -171,7 +171,7 @@ export function AdminCommandPalette({
       description: 'Configure TCG database',
       icon: Database,
       category: 'Settings',
-      action: () => onNavigate?.('catalog'),
+      action: () => onNavigate?.('data'),
       keywords: ['tcg', 'database', 'justtcg']
     }
   ], [navigate, onNavigate]);

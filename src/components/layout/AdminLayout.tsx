@@ -42,7 +42,7 @@ import { cn } from '@/lib/utils';
 const ADMIN_NAV_SECTIONS = [
   { id: 'overview', path: PATHS.admin, title: 'Overview', icon: LayoutDashboard },
   { id: 'store', path: `${PATHS.admin}?section=store`, title: 'Store', icon: Store },
-  { id: 'catalog', path: PATHS.adminCatalog, title: 'Catalog', icon: Database },
+  { id: 'data', path: `${PATHS.admin}?section=data`, title: 'Data & Intake', icon: Database },
   { id: 'queue', path: `${PATHS.admin}?section=queue`, title: 'Queue', icon: Package },
   { id: 'users', path: `${PATHS.admin}?section=users`, title: 'Users', icon: Users },
   { id: 'hardware', path: `${PATHS.admin}?section=hardware`, title: 'Hardware', icon: Printer },
