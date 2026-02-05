@@ -279,7 +279,7 @@ export const InventoryFiltersBar = React.memo(({
 
       {/* Active filter chips - always visible when filters active */}
       {hasActiveFilters && (
-        <div className="flex items-center gap-1.5 min-h-[28px]">
+        <div className="flex items-center gap-1.5 min-h-[32px]">
           <span className="text-xs text-muted-foreground shrink-0">Active:</span>
           <div className="flex items-center gap-1.5 flex-wrap flex-1">
             {filters.searchTerm && (

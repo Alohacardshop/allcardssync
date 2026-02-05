@@ -173,6 +173,7 @@ export interface VirtualInventoryListProps {
   onRemove: (item: InventoryListItem) => void;
   onDelete?: (item: InventoryListItem) => void;
   onSyncDetails: (item: InventoryListItem) => void;
+  onOpenDetails?: (item: InventoryListItem) => void;
   isLoading: boolean;
   hasNextPage?: boolean;
   isFetchingNextPage?: boolean;

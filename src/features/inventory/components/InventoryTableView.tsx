@@ -102,6 +102,7 @@ interface TableRowProps {
   onDelete?: (item: InventoryListItem) => void;
   onSyncDetails: (item: InventoryListItem) => void;
   onViewAudit?: (item: InventoryListItem) => void;
+  onOpenDetails?: (item: InventoryListItem) => void;
 }
 
 const TableRow = memo(({
@@ -124,6 +125,7 @@ const TableRow = memo(({
   onDelete,
   onSyncDetails,
   onViewAudit,
+  onOpenDetails,
 }: TableRowProps) => {
   const { toggleListOnEbay, isToggling } = useEbayListing();
   const title = useMemo(() => generateTitle(item), [item]);
@@ -181,10 +183,19 @@ const TableRow = memo(({
    const isColVisible = (colId: InventoryColumn) => effectiveColumns.includes(colId);
    const gridTemplate = propGridTemplate || buildGridTemplate(effectiveColumns);
 
+  // Handle row click - open details if not clicking checkbox or button
+  const handleRowClick = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('[role="checkbox"]') || target.closest('button') || target.closest('[data-radix-collection-item]')) {
+      return;
+    }
+    onOpenDetails?.(item);
+  };
+
   return (
     <div 
       className={cn(
-        "grid gap-2 items-center px-3 min-h-[44px] border-b border-border text-sm transition-colors",
+        "grid gap-2 items-center px-3 min-h-[44px] border-b border-border text-sm transition-colors cursor-pointer",
         // Hover state - subtle background
         "hover:bg-muted/40",
         // Selected state - more prominent
@@ -195,6 +206,7 @@ const TableRow = memo(({
         "focus-within:ring-1 focus-within:ring-inset focus-within:ring-ring"
       )}
       style={{ gridTemplateColumns: gridTemplate }}
+      onClick={handleRowClick}
     >
          {/* Checkbox - fixed height container */}
          {isColVisible('checkbox') && (
@@ -465,6 +477,7 @@ export const InventoryTableView = memo(({
   onRemove,
   onDelete,
   onSyncDetails,
+  onOpenDetails,
   isLoading,
   hasNextPage,
   isFetchingNextPage,
@@ -690,6 +703,7 @@ export const InventoryTableView = memo(({
                   onDelete={onDelete}
                   onSyncDetails={onSyncDetails}
                   onViewAudit={setAuditDialogItem}
+                  onOpenDetails={onOpenDetails}
                 />
               </div>
             );

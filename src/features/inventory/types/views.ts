@@ -32,19 +32,19 @@
  /**
   * Default column configurations
   */
- export const INVENTORY_COLUMNS: ColumnConfig[] = [
-   { id: 'checkbox', label: 'Select', defaultVisible: true, locked: true, width: '40px' },
-   { id: 'sku', label: 'SKU', defaultVisible: true, width: '90px' },
-   { id: 'title', label: 'Title', defaultVisible: true, width: 'minmax(200px, 1fr)' },
-   { id: 'location', label: 'Location', defaultVisible: true, width: '110px' },
-   { id: 'price', label: 'Price', defaultVisible: true, width: '75px' },
-   { id: 'quantity', label: 'Qty', defaultVisible: true, width: '65px' },
-   { id: 'shopify_status', label: 'Shopify', defaultVisible: true, width: '85px' },
-   { id: 'print_status', label: 'Print', defaultVisible: true, width: '75px' },
-   { id: 'ebay_status', label: 'eBay', defaultVisible: true, width: '85px' },
-   { id: 'updated_at', label: 'Updated', defaultVisible: true, width: '95px' },
-   { id: 'actions', label: '', defaultVisible: true, locked: true, width: '44px' },
- ];
+export const INVENTORY_COLUMNS: ColumnConfig[] = [
+  { id: 'checkbox', label: 'Select', defaultVisible: true, locked: true, width: '40px' },
+  { id: 'sku', label: 'SKU', defaultVisible: true, width: '100px' },
+  { id: 'title', label: 'Title', defaultVisible: true, width: 'minmax(220px, 1fr)' },
+  { id: 'location', label: 'Location', defaultVisible: true, width: '120px' },
+  { id: 'price', label: 'Price', defaultVisible: true, width: '80px' },
+  { id: 'quantity', label: 'Qty', defaultVisible: true, width: '65px' },
+  { id: 'shopify_status', label: 'Shopify', defaultVisible: true, width: '80px' },
+  { id: 'print_status', label: 'Print', defaultVisible: true, width: '75px' },
+  { id: 'ebay_status', label: 'eBay', defaultVisible: true, width: '80px' },
+  { id: 'updated_at', label: 'Updated', defaultVisible: true, width: '100px' },
+  { id: 'actions', label: '', defaultVisible: true, locked: true, width: '44px' },
+];
  
  /**
   * Sort configuration for views
