@@ -3359,6 +3359,36 @@ export type Database = {
         }
         Relationships: []
       }
+      webhook_health_alerts: {
+        Row: {
+          alerted_at: string
+          created_at: string
+          id: string
+          location_gid: string | null
+          minutes_since_activity: number | null
+          resolved_at: string | null
+          store_key: string
+        }
+        Insert: {
+          alerted_at?: string
+          created_at?: string
+          id?: string
+          location_gid?: string | null
+          minutes_since_activity?: number | null
+          resolved_at?: string | null
+          store_key: string
+        }
+        Update: {
+          alerted_at?: string
+          created_at?: string
+          id?: string
+          location_gid?: string | null
+          minutes_since_activity?: number | null
+          resolved_at?: string | null
+          store_key?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       dead_letter_failure_analysis: {
