@@ -41,6 +41,16 @@ import { InventoryBulkBar } from '../components/InventoryBulkBar';
 import { useInventorySelection } from '../hooks/useInventorySelection';
 import { useInventoryActions } from '../hooks/useInventoryActions';
 import type { InventoryFilterState } from '../types';
+ import { ColumnChooser } from '../components/ColumnChooser';
+ import { SavedViewsDropdown } from '../components/SavedViewsDropdown';
+ import { 
+   INVENTORY_COLUMNS, 
+   type InventoryColumn, 
+   type SortField, 
+   type SortDirection,
+   type SavedInventoryView
+ } from '../types/views';
+ import { getDefaultVisibleColumns } from '../hooks/useInventoryViews';
 
 // Lazy load heavy components
 const InventoryAnalytics = lazy(() => import('@/components/InventoryAnalytics').then(m => ({ default: m.InventoryAnalytics })));
@@ -69,6 +79,14 @@ const InventoryPage = () => {
     activeQuickFilter: null,
   });
 
+   // Saved Views state (desktop only)
+   const [activeViewId, setActiveViewId] = useState<string | null>(null);
+   const [visibleColumns, setVisibleColumns] = useState<InventoryColumn[]>(() => 
+     getDefaultVisibleColumns()
+   );
+   const [sortColumn, setSortColumn] = useState<SortField | null>(null);
+   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+ 
   const debouncedSearchTerm = useDebounce(filters.searchTerm, 300);
   
   // Dialog state
@@ -291,8 +309,30 @@ const InventoryPage = () => {
       tagFilter: [],
       activeQuickFilter: null,
     });
+     setActiveViewId(null);
   }, []);
 
+   // Apply a saved view
+   const handleApplyView = useCallback((view: SavedInventoryView) => {
+     // Apply filters from the view
+     setFilters(prev => ({
+       ...prev,
+       ...view.filters,
+       activeQuickFilter: null,
+     }));
+     
+     // Apply column visibility
+     if (view.visible_columns && view.visible_columns.length > 0) {
+       setVisibleColumns(view.visible_columns);
+     }
+     
+     // Apply sort
+     if (view.sort_column) {
+       setSortColumn(view.sort_column);
+       setSortDirection(view.sort_direction || 'desc');
+     }
+   }, []);
+ 
   // Print handler
   const handlePrintSelected = useCallback(() => {
     if (selectedItems.size === 0) {
@@ -458,6 +498,25 @@ const InventoryPage = () => {
               
               {/* Keyboard shortcuts help */}
               {isDesktop && <KeyboardShortcutsHelp />}
+             
+             {/* Saved Views - desktop only */}
+             {isDesktop && (
+               <>
+                 <SavedViewsDropdown
+                   currentFilters={filters}
+                   currentColumns={visibleColumns}
+                   sortColumn={sortColumn}
+                   sortDirection={sortDirection}
+                   activeViewId={activeViewId}
+                   onApplyView={handleApplyView}
+                   onViewChange={setActiveViewId}
+                 />
+                 <ColumnChooser
+                   visibleColumns={visibleColumns}
+                   onChange={setVisibleColumns}
+                 />
+               </>
+             )}
             </div>
           </div>
 
@@ -548,6 +607,7 @@ const InventoryPage = () => {
                 focusedIndex={focusedIndex}
                 quantityReadOnly={isShopifyTruth}
                 quantityReadOnlyReason="Shopify is source of truth. Use Receiving or Transfer to adjust."
+                 visibleColumns={visibleColumns}
                 onToggleSelection={toggleSelection}
                 onSetSelection={setSelection}
                 onToggleExpanded={toggleExpanded}

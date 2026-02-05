@@ -1,6 +1,7 @@
 // Type definitions for the inventory feature module
 import type { CachedLocation } from '@/hooks/useLocationNames';
 import type { InventoryItem } from '@/types/inventory';
+ import type { InventoryColumn } from './types/views';
 
 /**
  * InventoryListItem - Lightweight type for list view queries
@@ -177,6 +178,8 @@ export interface VirtualInventoryListProps {
   isFetchingNextPage?: boolean;
   onLoadMore?: () => void;
   onScrollToIndex?: (scrollFn: (index: number) => void) => void;
+   /** Visible columns for column chooser feature */
+   visibleColumns?: InventoryColumn[];
 }
 
 /**
