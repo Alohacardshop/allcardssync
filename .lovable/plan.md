@@ -1,122 +1,144 @@
 
-# Location Nicknames Display System
+# Navigation Cleanup: Remove Dead Routes and Migration Placeholders
 
 ## Summary
-Create a centralized location nickname helper that maps Shopify location names to short, memorable nicknames (e.g., "Aloha Card Shop Windward Mall" → "Windward"). Display nicknames prominently across the UI with full names in tooltips on hover.
+Remove all dead menu items, placeholder pages, and migration notices from admin and app navigation. Consolidate navigation configuration to prevent deprecated features from reappearing.
 
 ---
 
-## Nickname Mappings
+## Issues Found
 
-| Full Shopify Location Name | Nickname |
-|---------------------------|----------|
-| Aloha Card Shop Windward Mall | Windward |
-| Aloha Card Shop Kahala | Kahala |
-| Aloha Card Shop Ward Warehouse | Ward Warehouse |
-| (any other location) | Full name (no shortening) |
+| Location | Problem |
+|----------|---------|
+| `/admin/catalog` route | Shows "functionality moved" placeholder |
+| AdminLayout sidebar | "Catalog" links to placeholder page |
+| Command palette | Has catalog references that lead to dead/misleading pages |
+| QuickActions | "Catalog Settings" button navigates to migrated feature |
+| `/admin/ebay-settings` route | Redirect-only route (dead) |
+| `CatalogTab.tsx` | Unused component showing migration notice |
+| `CatalogMigrationPlaceholder.tsx` | Only used for dead routes |
+| `PATHS.adminCatalog` | Route constant for removed feature |
 
 ---
 
 ## Changes
 
-### 1. Create Centralized Nickname Helper
+### 1. Remove `/admin/catalog` Route
 
-**New file: `src/lib/locationNicknames.ts`**
+**File: `src/routes/admin.tsx`**
+- Delete the catalog route: `<Route path="catalog" ...>`
+- Remove `CatalogMigrationPlaceholder` import
+- Remove `/admin/ebay-settings` redirect route (dead)
 
-```typescript
-// Location nickname mappings for display
-const LOCATION_NICKNAMES: Record<string, string> = {
-  'Aloha Card Shop Windward Mall': 'Windward',
-  'Aloha Card Shop Kahala': 'Kahala', 
-  'Aloha Card Shop Ward Warehouse': 'Ward Warehouse',
-};
+### 2. Update AdminLayout Sidebar Navigation
 
-// Get nickname from full name (or return full name if no match)
-export function getLocationNickname(fullName: string): string
+**File: `src/components/layout/AdminLayout.tsx`**
+- Remove `{ id: 'catalog', path: PATHS.adminCatalog, title: 'Catalog', icon: Database }` from `ADMIN_NAV_SECTIONS`
+- Remove `adminCatalog` import from PATHS (now unused)
 
-// Get nickname from GID using locationsMap
-export function getLocationNicknameFromGid(
-  gid: string | null | undefined,
-  locationsMap: Map<string, CachedLocation> | undefined
-): { nickname: string; fullName: string }
-```
+### 3. Rename "catalog" Section to "Data & Intake"
 
-### 2. Update `useLocationNames.ts`
+**File: `src/pages/Admin.tsx`**
+- Rename `case 'catalog'` to `case 'data'`
+- Keep `CatalogTabsSection` component but it now represents "Data & Intake" settings (TCG config, intake settings, APIs, vendors, categories)
 
-Replace the existing `getShortLocationName` function to use the new nickname system:
-- Import `getLocationNickname` from `locationNicknames.ts`
-- Update `getShortLocationName` to call `getLocationNickname(fullName)` instead of `fullName.split(' ')[0]`
-- Add `getLocationDisplayInfo` export that returns both nickname and full name for tooltip use
+### 4. Update AdminLayout Navigation to Match
 
-### 3. Update `useInventoryLevels.ts` → `enrichLevelsWithNames`
+**File: `src/components/layout/AdminLayout.tsx`**
+- Change catalog entry to: `{ id: 'data', path: '${PATHS.admin}?section=data', title: 'Data & Intake', icon: Database }`
+- This uses query-param navigation instead of a separate route
 
-Modify the `enrichLevelsWithNames` function to include both `displayName` (nickname) and `fullName` for tooltip:
-- Add `fullName` property alongside `displayName`
-- Use nickname logic for `displayName`
+### 5. Update Command Palette
 
-### 4. Update UI Components
+**File: `src/components/admin/AdminCommandPalette.tsx`**
+- Update `nav-catalog` to:
+  - id: `nav-data`
+  - label: `Data & Intake`
+  - description: `TCG database and intake settings`
+  - action: `onNavigate?.('data')`
+- Update `settings-tcg`:
+  - action: `onNavigate?.('data')`
 
-#### A. `InventoryItemHeader.tsx` (Card view badge)
-- Wrap the location badge in a `Tooltip`
-- Display nickname in the badge
-- Show full name on hover
+### 6. Update QuickActions
 
-#### B. `LocationStockPopover.tsx` (Table hover card)
-- Update trigger to show nickname with tooltip
-- Update popover list to show nicknames with full names accessible
+**File: `src/components/admin/QuickActions.tsx`**
+- Change "Catalog Settings" to:
+  - label: `Data Settings`
+  - description: `TCG database & intake config`
+  - onClick: `onNavigate('data')`
 
-#### C. `StockByLocationSection.tsx` (Item detail panel)
-- Show nickname as primary display
-- Add tooltip with full name
-- Update `level.displayName` usage to use new nickname
+### 7. Remove Unused Path Constants
 
-#### D. `InventoryTableView.tsx` (Table location column)
-- `LocationStockPopover` already uses `getShortLocationName` - will inherit changes
-- Verify tooltip shows full name
+**File: `src/routes/paths.ts`**
+- Remove `adminCatalog: '/admin/catalog'` from PATHS object
 
-#### E. `BulkTransferScanner.tsx` & `TransferHistoryLog.tsx`
-- Update `getLocationNameFromGid` usage in `src/lib/locationUtils.ts` to support nickname display
-- Add tooltip for full name where space is limited
+### 8. Delete Dead Files
 
-### 5. Update `src/lib/locationUtils.ts`
+**Files to delete:**
+- `src/components/admin/CatalogTab.tsx` - Unused, only shows migration notice
+- `src/components/CatalogMigrationPlaceholder.tsx` - No longer needed after route removal
 
-Add nickname-aware variants:
-- `getLocationNicknameFromGid()` for compact display
-- Keep `getLocationNameFromGid()` as-is for full name access
+---
+
+## Navigation After Cleanup
+
+### Admin Sidebar (ADMIN_NAV_SECTIONS)
+| Section | Path | Status |
+|---------|------|--------|
+| Overview | `/admin` | Keep |
+| Store | `/admin?section=store` | Keep |
+| **Data & Intake** | `/admin?section=data` | **Renamed from Catalog** |
+| Queue | `/admin?section=queue` | Keep |
+| Users | `/admin?section=users` | Keep |
+| Hardware | `/admin?section=hardware` | Keep |
+| Regions | `/admin?section=regions` | Keep |
+| System | `/admin?section=system` | Keep |
+
+### Admin Tools (ADMIN_TOOLS)
+All tools remain unchanged (Discord, Pending, Backfill, Inv Sync, Health)
+
+### Admin Routes
+| Route | Status |
+|-------|--------|
+| `/admin` | Keep |
+| `/admin/catalog` | **Remove** |
+| `/admin/notifications/discord` | Keep |
+| `/admin/notifications/pending` | Keep |
+| `/admin/shopify-backfill` | Keep |
+| `/admin/inventory-sync` | Keep |
+| `/admin/sync-health` | Keep |
+| `/admin/ebay-settings` | **Remove** (was just a redirect) |
 
 ---
 
 ## Technical Details
 
-| File | Change Type |
-|------|-------------|
-| `src/lib/locationNicknames.ts` | **New** - Centralized nickname config + helpers |
-| `src/hooks/useLocationNames.ts` | **Edit** - Update `getShortLocationName`, add `getLocationDisplayInfo` |
-| `src/hooks/useInventoryLevels.ts` | **Edit** - Add `fullName` to enriched levels |
-| `src/lib/locationUtils.ts` | **Edit** - Add nickname helper |
-| `src/components/inventory-card/InventoryItemHeader.tsx` | **Edit** - Add tooltip around location badge |
-| `src/components/inventory/LocationStockPopover.tsx` | **Edit** - Use nickname with tooltip |
-| `src/components/inventory/StockByLocationSection.tsx` | **Edit** - Use nickname with tooltip |
-| `src/components/BulkTransferScanner.tsx` | **Edit** - Update to use nickname with tooltip |
-| `src/components/TransferHistoryLog.tsx` | **Edit** - Update to use nickname with tooltip |
+### Files Modified
+| File | Change |
+|------|--------|
+| `src/routes/admin.tsx` | Remove catalog and ebay-settings routes |
+| `src/routes/paths.ts` | Remove `adminCatalog` constant |
+| `src/components/layout/AdminLayout.tsx` | Update `ADMIN_NAV_SECTIONS` to use data section |
+| `src/pages/Admin.tsx` | Rename catalog case to data |
+| `src/components/admin/AdminCommandPalette.tsx` | Update navigation commands |
+| `src/components/admin/QuickActions.tsx` | Update button labels |
+
+### Files Deleted
+| File | Reason |
+|------|--------|
+| `src/components/admin/CatalogTab.tsx` | Unused, only shows migration placeholder |
+| `src/components/CatalogMigrationPlaceholder.tsx` | No longer referenced after cleanup |
 
 ---
 
-## Affected UI Areas
+## UX Impact
 
-- **Inventory Table**: Location column shows nickname, hover reveals full name
-- **Inventory Cards**: Location badge shows nickname with tooltip
-- **Item Detail Panel**: Stock by Location section shows nicknames with tooltips
-- **Location Popover**: Hover card shows nicknames with full names
-- **Bulk Transfer Scanner**: Source/destination show nicknames with tooltips
-- **Transfer History Log**: Location names show nicknames with tooltips
+**Before:**
+- Staff could click "Catalog" → land on "This feature has moved" page
+- Dead-end experience, confusing and unprofessional
 
----
-
-## Fallback Behavior
-
-When a location name doesn't match any known nickname:
-1. Display the full Shopify location name (no truncation)
-2. Tooltip shows the same full name (for consistency)
-
-This ensures no information is ever lost for unknown locations.
+**After:**
+- "Data & Intake" section shows working tools (TCG settings, intake config, vendors, categories)
+- No migration notices in navigation
+- Every menu item leads to functional content
+- Staff never encounter "feature moved" pages via navigation
