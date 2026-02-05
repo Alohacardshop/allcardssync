@@ -3,6 +3,7 @@ import { Route, Navigate } from 'react-router-dom';
 import { ErrorBoundaryWrapper } from '@/components/ErrorBoundaryWrapper';
 import { RequireApp } from '@/components/RequireApp';
 import { ProtectedLayout } from '@/components/layout/ProtectedLayout';
+import { PATHS } from './paths';
 
 // Lazy load pages
 const DashboardHome = React.lazy(() => import('@/pages/DashboardHome'));
@@ -31,65 +32,65 @@ const EbaySyncDashboard = React.lazy(() => import('@/pages/EbaySyncDashboard'));
 export const appRoutes = (
   <Route element={<ProtectedLayout />}>
     {/* Dashboard Home */}
-    <Route path="/" element={<ErrorBoundaryWrapper componentName="DashboardHome"><DashboardHome /></ErrorBoundaryWrapper>} />
+    <Route path={PATHS.dashboard} element={<ErrorBoundaryWrapper componentName="DashboardHome"><DashboardHome /></ErrorBoundaryWrapper>} />
     
     {/* Intake App */}
-    <Route path="/intake" element={
+    <Route path={PATHS.intake} element={
       <RequireApp appKey="intake">
         <ErrorBoundaryWrapper componentName="Intake"><Index /></ErrorBoundaryWrapper>
       </RequireApp>
     } />
-    <Route path="/intake/graded" element={<RequireApp appKey="intake"><GradedIntake /></RequireApp>} />
-    <Route path="/intake/bulk" element={<RequireApp appKey="intake"><BulkIntake /></RequireApp>} />
+    <Route path={PATHS.intakeGraded} element={<RequireApp appKey="intake"><GradedIntake /></RequireApp>} />
+    <Route path={PATHS.intakeBulk} element={<RequireApp appKey="intake"><BulkIntake /></RequireApp>} />
     
     {/* Inventory App */}
-    <Route path="/inventory" element={
+    <Route path={PATHS.inventory} element={
       <RequireApp appKey="inventory">
         <ErrorBoundaryWrapper componentName="Inventory"><Inventory /></ErrorBoundaryWrapper>
       </RequireApp>
     } />
-    <Route path="/batches" element={<RequireApp appKey="inventory"><ErrorBoundaryWrapper componentName="Batch Management"><Batches /></ErrorBoundaryWrapper></RequireApp>} />
-    <Route path="/bulk-import" element={<RequireApp appKey="inventory"><BulkImport /></RequireApp>} />
-    <Route path="/bulk-transfer" element={<RequireApp appKey="inventory"><BulkTransfer /></RequireApp>} />
-    <Route path="/cross-region-transfers" element={<RequireApp appKey="inventory"><CrossRegionTransfers /></RequireApp>} />
-    <Route path="/shopify-mapping" element={<RequireApp appKey="inventory"><ShopifyMapping /></RequireApp>} />
-    <Route path="/shopify-sync" element={<RequireApp appKey="inventory"><ShopifySync /></RequireApp>} />
+    <Route path={PATHS.batches} element={<RequireApp appKey="inventory"><ErrorBoundaryWrapper componentName="Batch Management"><Batches /></ErrorBoundaryWrapper></RequireApp>} />
+    <Route path={PATHS.bulkImport} element={<RequireApp appKey="inventory"><BulkImport /></RequireApp>} />
+    <Route path={PATHS.bulkTransfer} element={<RequireApp appKey="inventory"><BulkTransfer /></RequireApp>} />
+    <Route path={PATHS.crossRegionTransfers} element={<RequireApp appKey="inventory"><CrossRegionTransfers /></RequireApp>} />
+    <Route path={PATHS.shopifyMapping} element={<RequireApp appKey="inventory"><ShopifyMapping /></RequireApp>} />
+    <Route path={PATHS.shopifySync} element={<RequireApp appKey="inventory"><ShopifySync /></RequireApp>} />
     
     {/* Barcode App */}
-    <Route path="/barcode-printing" element={
+    <Route path={PATHS.barcodePrinting} element={
       <RequireApp appKey="barcode">
         <ErrorBoundaryWrapper componentName="BarcodePrinting"><BarcodePrinting /></ErrorBoundaryWrapper>
       </RequireApp>
     } />
-    <Route path="/barcode/label-editor" element={
+    <Route path={PATHS.labelEditor} element={
       <RequireApp appKey="barcode">
         <ErrorBoundaryWrapper componentName="LabelEditor"><LabelEditorPage /></ErrorBoundaryWrapper>
       </RequireApp>
     } />
     
     {/* Documents App */}
-    <Route path="/docs" element={
+    <Route path={PATHS.docs} element={
       <RequireApp appKey="docs">
         <ErrorBoundaryWrapper componentName="Documents"><DocumentsPage /></ErrorBoundaryWrapper>
       </RequireApp>
     } />
     
     {/* eBay App */}
-    <Route path="/ebay" element={
+    <Route path={PATHS.ebay} element={
       <RequireApp appKey="ebay">
         <ErrorBoundaryWrapper componentName="eBay"><EbayApp /></ErrorBoundaryWrapper>
       </RequireApp>
     } />
-    <Route path="/ebay/sync" element={
+    <Route path={PATHS.ebaySync} element={
       <RequireApp appKey="ebay">
         <ErrorBoundaryWrapper componentName="eBaySyncDashboard"><EbaySyncDashboard /></ErrorBoundaryWrapper>
       </RequireApp>
     } />
     
     {/* Other Pages */}
-    <Route path="/dashboard" element={<Navigate to="/" replace />} />
-    <Route path="/test-hardware" element={<TestHardwarePage />} />
-    <Route path="/qz-tray-test" element={<QzTrayTestPage />} />
+    <Route path="/dashboard" element={<Navigate to={PATHS.dashboard} replace />} />
+    <Route path={PATHS.testHardware} element={<TestHardwarePage />} />
+    <Route path={PATHS.qzTrayTest} element={<QzTrayTestPage />} />
     
     {/* Catch-all */}
     <Route path="*" element={<NotFound />} />

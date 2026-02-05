@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Plus, Package, Printer, Scan, Upload } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
+import { PATHS } from '@/routes/paths';
 
 export function FloatingActionButton() {
   const [isOpen, setIsOpen] = useState(false);
@@ -12,25 +13,25 @@ export function FloatingActionButton() {
     {
       icon: Package,
       label: 'Add Cards',
-      action: () => navigate('/inventory'),
+      action: () => navigate(PATHS.inventory),
       color: 'bg-blue-500 hover:bg-blue-600'
     },
     {
       icon: Scan,
       label: 'Bulk Import',
-      action: () => navigate('/bulk-import'),
+      action: () => navigate(PATHS.bulkImport),
       color: 'bg-green-500 hover:bg-green-600'
     },
     {
       icon: Printer,
       label: 'Print Labels',
-      action: () => navigate('/barcode-printing'),
+      action: () => navigate(PATHS.barcodePrinting),
       color: 'bg-purple-500 hover:bg-purple-600'
     },
     {
       icon: Upload,
       label: 'Batches',
-      action: () => navigate('/batches'),
+      action: () => navigate(PATHS.batches),
       color: 'bg-orange-500 hover:bg-orange-600'
     }
   ];

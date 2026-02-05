@@ -12,11 +12,10 @@ import {
   FileText,
   ShoppingBag,
   Settings,
-  X,
 } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { EcosystemBadge } from '@/components/ui/EcosystemBadge';
-import { LAYOUT } from '@/lib/design-tokens';
+import { PATHS } from '@/routes/paths';
 
 interface BottomNavProps {
   className?: string;
@@ -41,16 +40,16 @@ interface NavItem {
 }
 
 const BOTTOM_NAV_ITEMS: NavItem[] = [
-  { key: 'home', label: 'Home', href: '/', icon: 'Home' },
-  { key: 'intake', label: 'Intake', href: '/intake', icon: 'PackagePlus' },
-  { key: 'inventory', label: 'Inventory', href: '/inventory', icon: 'Package' },
-  { key: 'barcode', label: 'Print', href: '/barcode-printing', icon: 'Printer' },
+  { key: 'home', label: 'Home', href: PATHS.dashboard, icon: 'Home' },
+  { key: 'intake', label: 'Intake', href: PATHS.intake, icon: 'PackagePlus' },
+  { key: 'inventory', label: 'Inventory', href: PATHS.inventory, icon: 'Package' },
+  { key: 'barcode', label: 'Print', href: PATHS.barcodePrinting, icon: 'Printer' },
 ];
 
 const MORE_ITEMS: NavItem[] = [
-  { key: 'docs', label: 'Documents', href: '/docs', icon: 'FileText' },
-  { key: 'ebay', label: 'eBay', href: '/ebay', icon: 'ShoppingBag' },
-  { key: 'admin', label: 'Settings', href: '/admin', icon: 'Settings' },
+  { key: 'docs', label: 'Documents', href: PATHS.docs, icon: 'FileText' },
+  { key: 'ebay', label: 'eBay', href: PATHS.ebay, icon: 'ShoppingBag' },
+  { key: 'admin', label: 'Settings', href: PATHS.admin, icon: 'Settings' },
 ];
 
 /**
@@ -61,14 +60,14 @@ export function BottomNav({ className }: BottomNavProps) {
   const [moreOpen, setMoreOpen] = useState(false);
   const location = useLocation();
   const { isAdmin } = useAuth();
-  const { accentClass, badgeClass } = useEcosystemTheme();
+  const { accentClass } = useEcosystemTheme();
 
   const isActive = (href: string) => {
-    if (href === '/') return location.pathname === '/';
+    if (href === PATHS.dashboard) return location.pathname === PATHS.dashboard;
     return location.pathname.startsWith(href);
   };
 
-  const renderNavItem = (item: NavItem, index: number) => {
+  const renderNavItem = (item: NavItem) => {
     const Icon = ICON_MAP[item.icon] || Home;
     const active = isActive(item.href);
 

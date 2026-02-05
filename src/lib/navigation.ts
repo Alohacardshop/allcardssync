@@ -3,6 +3,8 @@
  * Provides a central place for navigation that works with React Router
  */
 
+import { PATHS } from '@/routes/paths';
+
 let navigateRef: ((to: string) => void) | null = null;
 
 /**
@@ -28,10 +30,11 @@ export function navigateTo(path: string) {
 
 /**
  * Pre-defined navigation destinations
+ * @deprecated Use PATHS from '@/routes/paths' directly
  */
 export const routes = {
   adminQueue: '/admin#queue',
-  inventory: '/inventory',
-  dashboard: '/',
-  admin: '/admin',
+  inventory: PATHS.inventory,
+  dashboard: PATHS.dashboard,
+  admin: PATHS.admin,
 } as const;
