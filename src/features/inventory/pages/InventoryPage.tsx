@@ -2,15 +2,18 @@ import React, { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspens
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, AlertCircle, RefreshCw, Download, MoreHorizontal } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Loader2, AlertCircle, RefreshCw, Download, MoreHorizontal, Keyboard, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
 import { useStore } from '@/contexts/StoreContext';
 import { useShopifyResync } from '@/hooks/useShopifyResync';
 import { useEbayListing } from '@/hooks/useEbayListing';
@@ -24,11 +27,10 @@ import { ConfirmationDialog } from '@/components/ConfirmationDialog';
 import { PrintFromInventoryDialog } from '@/components/inventory/PrintFromInventoryDialog';
 import { KeyboardShortcutsHelp } from '@/components/inventory/KeyboardShortcutsHelp';
 import { TruthModeBadge } from '@/components/inventory/TruthModeBadge';
-import { PageHeader } from '@/components/layout/PageHeader';
 import { Progress } from '@/components/ui/progress';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useInventoryTruthMode } from '@/hooks/useInventoryTruthMode';
-import { SystemStatusBanner } from '@/components/inventory/SystemStatusBanner';
+import { cn } from '@/lib/utils';
 
 import { useInventoryListQuery } from '@/hooks/useInventoryListQuery';
 import { useLocationNames } from '@/hooks/useLocationNames';
@@ -50,6 +52,7 @@ import { useInventoryActions } from '../hooks/useInventoryActions';
 import type { InventoryFilterState, InventoryListItem } from '../types';
 import { ColumnChooser } from '../components/ColumnChooser';
 import { SavedViewsDropdown } from '../components/SavedViewsDropdown';
+import { CompactStatusStrip } from '../components/CompactStatusStrip';
 import { 
   INVENTORY_COLUMNS, 
   type InventoryColumn, 
@@ -185,10 +188,10 @@ const InventoryPage = () => {
     ebayStatusFilter: filters.ebayStatusFilter,
     dateRangeFilter: filters.dateRangeFilter,
     locationAvailability: filters.locationAvailability,
-    hasActiveSelection: false, // Will be updated by selection hook
+    hasActiveSelection: false,
   });
 
-  // Flatten paginated data - use any[] for dynamic query results
+  // Flatten paginated data
   const items: any[] = useMemo(() => 
     inventoryData?.pages.flatMap(page => page.items) || [], 
     [inventoryData]
@@ -324,19 +327,16 @@ const InventoryPage = () => {
 
    // Apply a saved view
    const handleApplyView = useCallback((view: SavedInventoryView) => {
-     // Apply filters from the view
      setFilters(prev => ({
        ...prev,
        ...view.filters,
        activeQuickFilter: null,
      }));
      
-     // Apply column visibility
      if (view.visible_columns && view.visible_columns.length > 0) {
        setVisibleColumns(view.visible_columns);
      }
      
-     // Apply sort
      if (view.sort_column) {
        setSortColumn(view.sort_column);
        setSortDirection(view.sort_direction || 'desc');
@@ -427,359 +427,371 @@ const InventoryPage = () => {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)]">
-      {/* Loading indicator for background refetches */}
-      {isFetching && !isLoading && (
-        <div className="fixed top-0 left-0 right-0 z-50">
-          <Progress className="h-1 rounded-none" />
-        </div>
-      )}
-      
-      {/* Sticky Header Section */}
-      <div className="shrink-0 space-y-4 pb-4">
-        <PageHeader 
-          title="Inventory Management" 
-          description="View, search, and manage your inventory items"
-          showEcosystem
-          actions={
-            <Suspense fallback={<div className="h-8" />}>
-              <QueueStatusIndicator />
-            </Suspense>
-          }
-        />
-
-        <Tabs defaultValue="inventory" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="inventory">Inventory Management</TabsTrigger>
-            <TabsTrigger value="analytics">Analytics</TabsTrigger>
-            <TabsTrigger value="settings">Printer Settings</TabsTrigger>
-          </TabsList>
-        </Tabs>
-      </div>
-
-      {/* Main Content Area */}
-      <div className="flex-1 min-h-0 flex flex-col">
-        {/* Single Sticky Controls Stack - all sticky elements in one container */}
-        <div className="shrink-0 sticky top-0 z-20 bg-background border-b border-border">
-          {/* View Toggle + Truth Mode */}
-          <div className="flex items-center gap-2 flex-wrap py-2">
-            {/* Truth Mode Badge */}
-            <TruthModeBadge mode={truthMode} prominent />
-             
-             {/* System Status Banner - desktop only */}
-             {isDesktop && (
-               <SystemStatusBanner storeKey={assignedStore} />
-             )}
-            
-            {/* View Toggle - only show on desktop */}
-            {isDesktop && (
-              <InventoryViewToggle
-                mode={viewMode}
-                onChange={handleViewModeChange}
-              />
-            )}
-            
-            {/* Right side controls */}
-            <div className="flex items-center gap-2 ml-auto">
-             {/* Saved Views - desktop only */}
-             {isDesktop && (
-               <>
-                 <SavedViewsDropdown
-                   currentFilters={filters}
-                   currentColumns={visibleColumns}
-                   sortColumn={sortColumn}
-                   sortDirection={sortDirection}
-                   activeViewId={activeViewId}
-                   onApplyView={handleApplyView}
-                   onViewChange={setActiveViewId}
-                 />
-                 <ColumnChooser
-                   visibleColumns={visibleColumns}
-                   onChange={setVisibleColumns}
-                 />
-               </>
-             )}
-             
-             {/* More actions dropdown - consolidates less-used actions */}
-             <DropdownMenu>
-               <DropdownMenuTrigger asChild>
-                 <Button variant="outline" size="sm" className="gap-1">
-                   <MoreHorizontal className="h-4 w-4" />
-                   <span className="hidden sm:inline">More</span>
-                 </Button>
-               </DropdownMenuTrigger>
-               <DropdownMenuContent align="end" className="w-56">
-                 <DropdownMenuItem
-                   onClick={() => {
-                     if (selectedItems.size > 0) {
-                       resyncSelected.mutate({
-                         storeKey: assignedStore || '',
-                         itemIds: Array.from(selectedItems)
-                       });
-                     } else {
-                       setShowResyncConfirm(true);
-                     }
-                   }}
-                   disabled={isResyncing || !assignedStore || !selectedLocation}
-                 >
-                   {isResyncing ? (
-                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                   ) : (
-                     <Download className="h-4 w-4 mr-2" />
-                   )}
-                   {selectedItems.size > 0 
-                     ? `Resync Selected (${selectedItems.size})` 
-                     : 'Resync All from Shopify'}
-                 </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+    <TooltipProvider delayDuration={200}>
+      <div className="flex flex-col h-[calc(100vh-4rem)]">
+        {/* Loading indicator for background refetches */}
+        {isFetching && !isLoading && (
+          <div className="fixed top-0 left-0 right-0 z-50">
+            <Progress className="h-0.5 rounded-none" />
+          </div>
+        )}
+        
+        {/* Compact Header Row: Title + Tabs + Queue Badge */}
+        <div className="shrink-0 border-b border-border bg-background">
+          <div className="flex items-center justify-between gap-4 py-3">
+            {/* Left: Title + Tabs */}
+            <div className="flex items-center gap-6">
+              <h1 className="text-xl font-semibold tracking-tight">Inventory</h1>
               
-              {/* Keyboard shortcuts help - desktop only */}
-              {isDesktop && <KeyboardShortcutsHelp />}
+              <Tabs defaultValue="inventory" className="hidden sm:block">
+                <TabsList className="h-8">
+                  <TabsTrigger value="inventory" className="text-xs px-3 h-7">Management</TabsTrigger>
+                  <TabsTrigger value="analytics" className="text-xs px-3 h-7">Analytics</TabsTrigger>
+                  <TabsTrigger value="settings" className="text-xs px-3 h-7">Printer</TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
+            
+            {/* Right: Queue status + Truth mode */}
+            <div className="flex items-center gap-3">
+              {/* Compact Status Strip - desktop only */}
+              {isDesktop && (
+                <CompactStatusStrip storeKey={assignedStore} />
+              )}
+              
+              <TruthModeBadge mode={truthMode} />
+              
+              {/* Queue indicator - more subtle */}
+              <Suspense fallback={null}>
+                <QueueStatusIndicator />
+              </Suspense>
             </div>
           </div>
-
-          {/* Filters Bar */}
-          <div className="pb-3">
-            <InventoryFiltersBar
-              filters={filters}
-              onFilterChange={handleFilterChange}
-              onClearAllFilters={handleClearAllFilters}
-              locationsMap={locationsMap}
-              shopifyTags={shopifyTags}
-              isLoadingTags={isLoadingTags}
-              searchInputRef={searchInputRef}
-            />
-          </div>
-
-          {/* Bulk Bar - conditionally rendered within sticky stack */}
-          {selectedItems.size > 0 && (
-            <div className="py-2 border-t border-border">
-              <InventoryBulkBar
-                selectedItems={selectedItems}
-                filteredItems={items}
-                isAdmin={isAdmin}
-                statusFilter={filters.statusFilter}
-                bulkRetrying={bulkRetrying}
-                bulkSyncing={bulkSyncing}
-                onSelectAll={selectAllVisible}
-                onClearSelection={clearSelection}
-                onBulkRetrySync={handleBulkRetrySync}
-                onSyncSelected={handleSyncSelected}
-                onResyncSelected={handleResyncSelected}
-                onDeleteSelected={() => {
-                  const selectedItemsArray = items.filter(item => selectedItems.has(item.id));
-                  setSelectedItemsForDeletion(selectedItemsArray);
-                  setShowDeleteDialog(true);
-                }}
-                onBulkToggleEbay={(enable) => {
-                  const selectedIds = Array.from(selectedItems);
-                  bulkToggleEbay(selectedIds, enable);
-                }}
-                onPrintSelected={handlePrintSelected}
-                totalCount={totalCount}
-                hasNextPage={hasNextPage}
-              />
-            </div>
-          )}
         </div>
 
-        {/* Scrollable List Area */}
-        <div className="flex-1 overflow-auto pt-4">
-          {/* Empty state */}
-          {!isLoading && items.length === 0 && (
-            <Card>
-              <CardContent className="flex items-center justify-center p-12 text-center">
-                <div className="space-y-4">
+        {/* Main Content Area */}
+        <div className="flex-1 min-h-0 flex flex-col">
+          {/* Sticky Controls Bar */}
+          <div className="shrink-0 sticky top-0 z-20 bg-background/95 backdrop-blur-sm border-b border-border">
+            {/* Single unified controls row */}
+            <div className="flex items-center gap-3 py-2">
+              {/* Left: Filters */}
+              <div className="flex-1 min-w-0">
+                <InventoryFiltersBar
+                  filters={filters}
+                  onFilterChange={handleFilterChange}
+                  onClearAllFilters={handleClearAllFilters}
+                  locationsMap={locationsMap}
+                  shopifyTags={shopifyTags}
+                  isLoadingTags={isLoadingTags}
+                  searchInputRef={searchInputRef}
+                />
+              </div>
+              
+              {/* Right: Actions cluster */}
+              <div className="flex items-center gap-2 shrink-0">
+                {/* View Toggle - desktop only */}
+                {isDesktop && (
+                  <InventoryViewToggle
+                    mode={viewMode}
+                    onChange={handleViewModeChange}
+                  />
+                )}
+                
+                {/* Saved Views - desktop only */}
+                {isDesktop && (
+                  <SavedViewsDropdown
+                    currentFilters={filters}
+                    currentColumns={visibleColumns}
+                    sortColumn={sortColumn}
+                    sortDirection={sortDirection}
+                    activeViewId={activeViewId}
+                    onApplyView={handleApplyView}
+                    onViewChange={setActiveViewId}
+                  />
+                )}
+                
+                {/* Column Chooser - desktop only */}
+                {isDesktop && (
+                  <ColumnChooser
+                    visibleColumns={visibleColumns}
+                    onChange={setVisibleColumns}
+                  />
+                )}
+                
+                {/* More actions dropdown */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="h-8 gap-1">
+                      <MoreHorizontal className="h-4 w-4" />
+                      <span className="hidden sm:inline text-xs">More</span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-52">
+                    <DropdownMenuItem
+                      onClick={() => {
+                        if (selectedItems.size > 0) {
+                          resyncSelected.mutate({
+                            storeKey: assignedStore || '',
+                            itemIds: Array.from(selectedItems)
+                          });
+                        } else {
+                          setShowResyncConfirm(true);
+                        }
+                      }}
+                      disabled={isResyncing || !assignedStore || !selectedLocation}
+                    >
+                      {isResyncing ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Download className="h-4 w-4 mr-2" />
+                      )}
+                      {selectedItems.size > 0 
+                        ? `Resync Selected (${selectedItems.size})` 
+                        : 'Resync All from Shopify'}
+                    </DropdownMenuItem>
+                    
+                    {isDesktop && (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => document.dispatchEvent(new CustomEvent('open-keyboard-shortcuts'))}>
+                          <Keyboard className="h-4 w-4 mr-2" />
+                          Keyboard Shortcuts
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </div>
+
+            {/* Bulk Selection Bar - appears when items selected */}
+            {selectedItems.size > 0 && (
+              <div className="py-2 border-t border-border bg-muted/30">
+                <InventoryBulkBar
+                  selectedItems={selectedItems}
+                  filteredItems={items}
+                  isAdmin={isAdmin}
+                  statusFilter={filters.statusFilter}
+                  bulkRetrying={bulkRetrying}
+                  bulkSyncing={bulkSyncing}
+                  onSelectAll={selectAllVisible}
+                  onClearSelection={clearSelection}
+                  onBulkRetrySync={handleBulkRetrySync}
+                  onSyncSelected={handleSyncSelected}
+                  onResyncSelected={handleResyncSelected}
+                  onDeleteSelected={() => {
+                    const selectedItemsArray = items.filter(item => selectedItems.has(item.id));
+                    setSelectedItemsForDeletion(selectedItemsArray);
+                    setShowDeleteDialog(true);
+                  }}
+                  onBulkToggleEbay={(enable) => {
+                    const selectedIds = Array.from(selectedItems);
+                    bulkToggleEbay(selectedIds, enable);
+                  }}
+                  onPrintSelected={handlePrintSelected}
+                  totalCount={totalCount}
+                  hasNextPage={hasNextPage}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Table/Cards Area - full width, minimal wrapper */}
+          <div className="flex-1 overflow-auto">
+            {/* Empty state */}
+            {!isLoading && items.length === 0 && (
+              <div className="flex items-center justify-center p-12 text-center">
+                <div className="space-y-4 max-w-md">
                   <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto" />
                   <div>
                     <h3 className="text-lg font-semibold mb-2">No Items Found</h3>
-                    <p className="text-muted-foreground mb-4">
+                    <p className="text-muted-foreground text-sm mb-4">
                       No items match your current filters.
                     </p>
-                    <p className="text-sm text-muted-foreground mb-4">
+                    <p className="text-xs text-muted-foreground mb-4">
                       Store: <strong>{assignedStore}</strong>
                       {filters.locationFilter && <> | Location: <strong>{locationsMap?.get(filters.locationFilter)?.location_name || filters.locationFilter.split('/').pop()}</strong></>}
                     </p>
-                    <Button variant="outline" onClick={handleManualRefresh}>
+                    <Button variant="outline" size="sm" onClick={handleManualRefresh}>
                       <RefreshCw className="h-4 w-4 mr-2" />
                       Refresh
                     </Button>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-          )}
+              </div>
+            )}
 
-          {/* Virtual Scrolling Items List - Card or Table view */}
-          {items.length > 0 && (
-            isDesktop && viewMode === 'table' ? (
-              <InventoryTableView
-                items={items}
-                selectedItems={selectedItems}
-                expandedItems={expandedItems}
-                isAdmin={isAdmin}
-                syncingRowId={syncingRowId}
-                locationsMap={locationsMap}
-                inventoryLevelsMap={inventoryLevelsMap}
-                selectedLocationGid={filters.locationFilter}
-                focusedIndex={focusedIndex}
-                quantityReadOnly={isShopifyTruth}
-                quantityReadOnlyReason="Shopify is source of truth. Use Receiving or Transfer to adjust."
-                 visibleColumns={visibleColumns}
-                onToggleSelection={toggleSelection}
-                onSetSelection={setSelection}
-                onToggleExpanded={toggleExpanded}
-                onSync={handleSync}
-                onRetrySync={handleRetrySync}
-                onResync={handleResync}
-                onRemove={(item) => {
-                  setSelectedItemForRemoval(item);
-                  setShowRemovalDialog(true);
-                }}
-                onDelete={isAdmin ? (item) => {
-                  setSelectedItemsForDeletion([item]);
-                  setShowDeleteDialog(true);
-                } : undefined}
-                onSyncDetails={(item) => setSyncDetailsRow(item)}
-                onOpenDetails={(item) => setDetailsDrawerItem(item)}
-                isLoading={snapshot.phases.data === 'loading'}
-                hasNextPage={hasNextPage}
-                isFetchingNextPage={isFetchingNextPage}
-                onLoadMore={() => fetchNextPage()}
-              />
-            ) : (
-              <InventoryCardView
-                items={items}
-                selectedItems={selectedItems}
-                expandedItems={expandedItems}
-                isAdmin={isAdmin}
-                syncingRowId={syncingRowId}
-                locationsMap={locationsMap}
-                focusedIndex={focusedIndex}
-                quantityReadOnly={isShopifyTruth}
-                quantityReadOnlyReason="Shopify is source of truth. Use Receiving or Transfer to adjust."
-                onToggleSelection={toggleSelection}
-                onToggleExpanded={toggleExpanded}
-                onSync={handleSync}
-                onRetrySync={handleRetrySync}
-                onResync={handleResync}
-                onRemove={(item) => {
-                  setSelectedItemForRemoval(item);
-                  setShowRemovalDialog(true);
-                }}
-                onDelete={isAdmin ? (item) => {
-                  setSelectedItemsForDeletion([item]);
-                  setShowDeleteDialog(true);
-                } : undefined}
-                onSyncDetails={(item) => setSyncDetailsRow(item)}
-                isLoading={snapshot.phases.data === 'loading'}
-                hasNextPage={hasNextPage}
-                isFetchingNextPage={isFetchingNextPage}
-                onLoadMore={() => fetchNextPage()}
-                onScrollToIndex={handleSetScrollToIndex}
-              />
-            )
-          )}
+            {/* Table View */}
+            {items.length > 0 && (
+              isDesktop && viewMode === 'table' ? (
+                <InventoryTableView
+                  items={items}
+                  selectedItems={selectedItems}
+                  expandedItems={expandedItems}
+                  isAdmin={isAdmin}
+                  syncingRowId={syncingRowId}
+                  locationsMap={locationsMap}
+                  inventoryLevelsMap={inventoryLevelsMap}
+                  selectedLocationGid={filters.locationFilter}
+                  focusedIndex={focusedIndex}
+                  quantityReadOnly={isShopifyTruth}
+                  quantityReadOnlyReason="Shopify is source of truth. Use Receiving or Transfer to adjust."
+                  visibleColumns={visibleColumns}
+                  onToggleSelection={toggleSelection}
+                  onSetSelection={setSelection}
+                  onToggleExpanded={toggleExpanded}
+                  onSync={handleSync}
+                  onRetrySync={handleRetrySync}
+                  onResync={handleResync}
+                  onRemove={(item) => {
+                    setSelectedItemForRemoval(item);
+                    setShowRemovalDialog(true);
+                  }}
+                  onDelete={isAdmin ? (item) => {
+                    setSelectedItemsForDeletion([item]);
+                    setShowDeleteDialog(true);
+                  } : undefined}
+                  onSyncDetails={(item) => setSyncDetailsRow(item)}
+                  onOpenDetails={(item) => setDetailsDrawerItem(item)}
+                  isLoading={snapshot.phases.data === 'loading'}
+                  hasNextPage={hasNextPage}
+                  isFetchingNextPage={isFetchingNextPage}
+                  onLoadMore={() => fetchNextPage()}
+                />
+              ) : (
+                <InventoryCardView
+                  items={items}
+                  selectedItems={selectedItems}
+                  expandedItems={expandedItems}
+                  isAdmin={isAdmin}
+                  syncingRowId={syncingRowId}
+                  locationsMap={locationsMap}
+                  focusedIndex={focusedIndex}
+                  quantityReadOnly={isShopifyTruth}
+                  quantityReadOnlyReason="Shopify is source of truth. Use Receiving or Transfer to adjust."
+                  onToggleSelection={toggleSelection}
+                  onToggleExpanded={toggleExpanded}
+                  onSync={handleSync}
+                  onRetrySync={handleRetrySync}
+                  onResync={handleResync}
+                  onRemove={(item) => {
+                    setSelectedItemForRemoval(item);
+                    setShowRemovalDialog(true);
+                  }}
+                  onDelete={isAdmin ? (item) => {
+                    setSelectedItemsForDeletion([item]);
+                    setShowDeleteDialog(true);
+                  } : undefined}
+                  onSyncDetails={(item) => setSyncDetailsRow(item)}
+                  isLoading={snapshot.phases.data === 'loading'}
+                  hasNextPage={hasNextPage}
+                  isFetchingNextPage={isFetchingNextPage}
+                  onLoadMore={() => fetchNextPage()}
+                  onScrollToIndex={handleSetScrollToIndex}
+                />
+              )
+            )}
+          </div>
         </div>
-      </div>
 
-
-      {/* Dialogs */}
-      <ShopifyRemovalDialog
-        isOpen={showRemovalDialog}
-        onClose={() => {
-          setShowRemovalDialog(false);
-          setSelectedItemForRemoval(null);
-        }}
-        items={Array.isArray(selectedItemForRemoval) ? selectedItemForRemoval : selectedItemForRemoval ? [selectedItemForRemoval] : []}
-        loading={removingFromShopify}
-        onConfirm={() => handleRemoveFromShopify(selectedItemForRemoval)}
-      />
-
-      <ConfirmationDialog
-        open={showResyncConfirm}
-        onOpenChange={setShowResyncConfirm}
-        onConfirm={() => {
-          resyncAll.mutate({
-            storeKey: assignedStore || '',
-            locationGid: selectedLocation || ''
-          });
-          setShowResyncConfirm(false);
-        }}
-        title="Resync All Items from Shopify"
-        description="This will update your database to match Shopify's current inventory levels for all items at this location. This action cannot be undone."
-        confirmText="Resync All"
-        cancelText="Cancel"
-        icon="sync"
-      />
-
-      <InventoryDeleteDialog
-        isOpen={showDeleteDialog}
-        onClose={() => {
-          setShowDeleteDialog(false);
-          setSelectedItemsForDeletion([]);
-        }}
-        items={selectedItemsForDeletion}
-        loading={deletingItems}
-        onConfirm={() => handleDeleteItems(selectedItemsForDeletion)}
-      />
-
-      {syncDetailsRow && (
-        <ShopifySyncDetailsDialog
-          open={!!syncDetailsRow}
-          onOpenChange={(open) => !open && setSyncDetailsRow(null)}
-          row={syncDetailsRow}
-          selectedStoreKey={assignedStore}
-          selectedLocationGid={selectedLocation}
-          onRefresh={refetch}
+        {/* Dialogs */}
+        <ShopifyRemovalDialog
+          isOpen={showRemovalDialog}
+          onClose={() => {
+            setShowRemovalDialog(false);
+            setSelectedItemForRemoval(null);
+          }}
+          items={Array.isArray(selectedItemForRemoval) ? selectedItemForRemoval : selectedItemForRemoval ? [selectedItemForRemoval] : []}
+          loading={removingFromShopify}
+          onConfirm={() => handleRemoveFromShopify(selectedItemForRemoval)}
         />
-      )}
 
-      <PrintFromInventoryDialog
-        open={showPrintDialog}
-        onOpenChange={setShowPrintDialog}
-        selectedItems={selectedItemsForPrint}
-        onPrintComplete={() => {
-          refetch();
-          clearSelection();
-        }}
-      />
+        <ConfirmationDialog
+          open={showResyncConfirm}
+          onOpenChange={setShowResyncConfirm}
+          onConfirm={() => {
+            resyncAll.mutate({
+              storeKey: assignedStore || '',
+              locationGid: selectedLocation || ''
+            });
+            setShowResyncConfirm(false);
+          }}
+          title="Resync All Items from Shopify"
+          description="This will update your database to match Shopify's current inventory levels for all items at this location. This action cannot be undone."
+          confirmText="Resync All"
+          cancelText="Cancel"
+          icon="sync"
+        />
 
-      {/* Item Details Drawer */}
-      <ItemDetailsDrawer
-        item={detailsDrawerItem}
-        items={items}
-        locationsMap={locationsMap}
-        isOpen={!!detailsDrawerItem}
-        onClose={() => setDetailsDrawerItem(null)}
-        onNavigate={(item) => setDetailsDrawerItem(item)}
-        onResync={handleResync}
-        onPrint={(item) => {
-          setDetailsDrawerItem(null);
-          // Select the item and open print dialog
-          if (!selectedItems.has(item.id)) {
-            toggleSelection(item.id);
-          }
-          setShowPrintDialog(true);
-        }}
-        isResyncing={syncingRowId === detailsDrawerItem?.id}
-      />
+        <InventoryDeleteDialog
+          isOpen={showDeleteDialog}
+          onClose={() => {
+            setShowDeleteDialog(false);
+            setSelectedItemsForDeletion([]);
+          }}
+          items={selectedItemsForDeletion}
+          loading={deletingItems}
+          onConfirm={() => handleDeleteItems(selectedItemsForDeletion)}
+        />
 
+        {syncDetailsRow && (
+          <ShopifySyncDetailsDialog
+            open={!!syncDetailsRow}
+            onOpenChange={(open) => !open && setSyncDetailsRow(null)}
+            row={syncDetailsRow}
+            selectedStoreKey={assignedStore}
+            selectedLocationGid={selectedLocation}
+            onRefresh={refetch}
+          />
+        )}
 
-      {expandedItems.size > 0 && (
-        <div className="space-y-4">
-          {Array.from(expandedItems).map(itemId => {
-            const item = items.find(i => i.id === itemId);
-            return item ? (
-              <Suspense key={itemId} fallback={<div className="h-32 flex items-center justify-center"><Loader2 className="h-5 w-5 animate-spin" /></div>}>
-                <ItemTimeline key={itemId} item={item} />
-              </Suspense>
-            ) : null;
-          })}
-        </div>
-      )}
-    </div>
+        <PrintFromInventoryDialog
+          open={showPrintDialog}
+          onOpenChange={setShowPrintDialog}
+          selectedItems={selectedItemsForPrint}
+          onPrintComplete={() => {
+            refetch();
+            clearSelection();
+          }}
+        />
+
+        {/* Item Details Drawer */}
+        <ItemDetailsDrawer
+          item={detailsDrawerItem}
+          items={items}
+          locationsMap={locationsMap}
+          isOpen={!!detailsDrawerItem}
+          onClose={() => setDetailsDrawerItem(null)}
+          onNavigate={(item) => setDetailsDrawerItem(item)}
+          onResync={handleResync}
+          onPrint={(item) => {
+            setDetailsDrawerItem(null);
+            if (!selectedItems.has(item.id)) {
+              toggleSelection(item.id);
+            }
+            setShowPrintDialog(true);
+          }}
+          isResyncing={syncingRowId === detailsDrawerItem?.id}
+        />
+
+        {expandedItems.size > 0 && (
+          <div className="space-y-4">
+            {Array.from(expandedItems).map(itemId => {
+              const item = items.find(i => i.id === itemId);
+              return item ? (
+                <Suspense key={itemId} fallback={<div className="h-32 flex items-center justify-center"><Loader2 className="h-5 w-5 animate-spin" /></div>}>
+                  <ItemTimeline key={itemId} item={item} />
+                </Suspense>
+              ) : null;
+            })}
+          </div>
+        )}
+        
+        {/* Hidden keyboard shortcuts help - triggered via menu */}
+        {isDesktop && <KeyboardShortcutsHelp />}
+      </div>
+    </TooltipProvider>
   );
 };
 
