@@ -14,7 +14,10 @@ import {
   AlertTriangle, 
   Save,
   RefreshCw,
-  Timer
+  Timer,
+  LogOut,
+  FileText,
+  Trash2
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -149,6 +152,11 @@ export function SessionTimeoutWarning() {
     setTimeLeft(900);
   };
 
+  const signOut = () => {
+    localStorage.clear();
+    window.location.href = '/auth';
+  };
+
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -157,31 +165,51 @@ export function SessionTimeoutWarning() {
 
   if (!showWarning) return null;
 
+  const isUrgent = timeLeft < 60; // Less than 1 minute
+
   return (
     <Dialog open={showWarning} onOpenChange={() => {}}>
-      <DialogContent>
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Timer className="h-5 w-5 text-amber-500" />
-            Session Timeout Warning
+          <DialogTitle className="flex items-center gap-2 text-lg">
+            <div className={`p-2 rounded-full ${isUrgent ? 'bg-destructive/10' : 'bg-amber-500/10'}`}>
+              <Timer className={`h-5 w-5 ${isUrgent ? 'text-destructive animate-pulse' : 'text-amber-500'}`} />
+            </div>
+            Session Expiring Soon
           </DialogTitle>
         </DialogHeader>
         
-        <div className="space-y-4">
-          <Alert>
+        <div className="space-y-4 py-2">
+          <Alert variant={isUrgent ? "destructive" : "default"} className="border-2">
             <Clock className="h-4 w-4" />
-            <AlertDescription>
-              Your session will expire in <strong>{formatTime(timeLeft)}</strong> due to inactivity.
-              All unsaved changes will be lost.
+            <AlertDescription className="text-base">
+              Your session will expire in{' '}
+              <span className={`font-bold text-lg ${isUrgent ? 'text-destructive' : ''}`}>
+                {formatTime(timeLeft)}
+              </span>
+              {' '}due to inactivity.
             </AlertDescription>
           </Alert>
           
-          <Progress value={(timeLeft / 900) * 100} className="w-full" />
+          <p className="text-sm text-muted-foreground text-center">
+            Any unsaved work will be lost when your session expires.
+          </p>
           
-          <Button onClick={extendSession} className="w-full">
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Extend Session
-          </Button>
+          <Progress 
+            value={(timeLeft / 900) * 100} 
+            className={`w-full h-2 ${isUrgent ? '[&>div]:bg-destructive' : ''}`}
+          />
+          
+          <div className="flex flex-col gap-2 pt-2">
+            <Button onClick={extendSession} size="lg" className="w-full gap-2">
+              <RefreshCw className="h-4 w-4" />
+              Stay Signed In
+            </Button>
+            <Button onClick={signOut} variant="outline" size="lg" className="w-full gap-2">
+              <LogOut className="h-4 w-4" />
+              Sign Out Now
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
@@ -312,58 +340,86 @@ export function RecoveryMode() {
     }
   };
 
+  const dismissAndClear = () => {
+    clearPanicSave();
+    setShowRecovery(false);
+  };
+
+  const dismissKeepData = () => {
+    setShowRecovery(false);
+  };
+
   if (!showRecovery || !savedData) return null;
 
+  const savedCount = Object.keys(savedData).length;
+
   return (
-    <Dialog open={showRecovery} onOpenChange={setShowRecovery}>
-      <DialogContent>
+    <Dialog open={showRecovery} onOpenChange={dismissKeepData}>
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Shield className="h-5 w-5 text-blue-500" />
-            Recovery Mode
+          <DialogTitle className="flex items-center gap-2 text-lg">
+            <div className="p-2 rounded-full bg-blue-500/10">
+              <Shield className="h-5 w-5 text-blue-500" />
+            </div>
+            Recover Unsaved Work
           </DialogTitle>
         </DialogHeader>
         
-        <div className="space-y-4">
-          <Alert>
-            <Save className="h-4 w-4" />
-            <AlertDescription>
-              We found unsaved form data from a previous session. Would you like to restore it?
+        <div className="space-y-4 py-2">
+          <Alert className="border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950/50">
+            <Save className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+            <AlertDescription className="text-blue-800 dark:text-blue-200">
+              We found <strong>{savedCount} form{savedCount > 1 ? 's' : ''}</strong> with unsaved data from a previous session.
             </AlertDescription>
           </Alert>
           
-          <div className="space-y-2 max-h-60 overflow-y-auto">
+          <div className="rounded-lg border bg-muted/30 p-3">
+            <h4 className="text-sm font-medium mb-2">What would you like to do?</h4>
+            <ul className="text-sm text-muted-foreground space-y-1">
+              <li>• <strong>Restore</strong> – Fill the form with your saved data</li>
+              <li>• <strong>Clear All</strong> – Permanently delete saved data</li>
+              <li>• <strong>Continue</strong> – Keep data saved for later</li>
+            </ul>
+          </div>
+          
+          <div className="space-y-2 max-h-48 overflow-y-auto">
             {Object.entries(savedData).map(([key, data]: [string, any]) => (
-              <Card key={key} className="p-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-sm font-medium">
-                      Form from {data.url}
+              <Card key={key} className="p-3 hover:bg-accent/50 transition-colors">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-medium truncate flex items-center gap-1.5">
+                      <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                      {data.url}
                     </div>
-                    <div className="text-xs text-muted-foreground">
-                      Saved: {new Date(data.timestamp).toLocaleString()}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {Object.keys(data.data).length} fields
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      {new Date(data.timestamp).toLocaleString()} · {Object.keys(data.data).length} fields
                     </div>
                   </div>
                   <Button
                     size="sm"
                     onClick={() => restoreData(key)}
+                    disabled={data.url !== window.location.pathname}
+                    title={data.url !== window.location.pathname ? 'Navigate to this page to restore' : 'Restore form data'}
                   >
                     Restore
                   </Button>
                 </div>
+                {data.url !== window.location.pathname && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
+                    Navigate to {data.url} to restore this form
+                  </p>
+                )}
               </Card>
             ))}
           </div>
           
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={clearPanicSave} className="flex-1">
+          <div className="flex gap-2 pt-2">
+            <Button variant="outline" onClick={dismissAndClear} className="flex-1 gap-2">
+              <Trash2 className="h-4 w-4" />
               Clear All
             </Button>
-            <Button onClick={() => setShowRecovery(false)} className="flex-1">
-              Continue Without Recovery
+            <Button onClick={dismissKeepData} className="flex-1 gap-2">
+              Continue Without Restoring
             </Button>
           </div>
         </div>
