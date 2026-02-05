@@ -11,6 +11,7 @@ import type { InventoryItem, ShopifySyncStep, ShopifyLocation } from '@/types/in
 import { logger } from '@/lib/logger';
 import { StockByLocationSection } from '@/components/inventory/StockByLocationSection';
 import { useLocationNames } from '@/hooks/useLocationNames';
+import { QuantityChangeHistory } from '@/components/QuantityChangeHistory';
 
 interface ShopifySyncDetailsDialogProps {
   open: boolean;
@@ -352,6 +353,10 @@ export function ShopifySyncDetailsDialog({ open, onOpenChange, row, selectedStor
             locationsMap={locationsMap}
             primaryLocationGid={row.shopify_location_gid || row.last_shopify_location_gid}
           />
+
+          {/* Staff Audit - "Why did this change?" */}
+          <QuantityChangeHistory itemId={row.id} sku={row.sku} />
+
           {snapshot?.graded && (
             <div className="border rounded-lg p-4 bg-muted/30">
               <div className="flex items-center justify-between mb-3">

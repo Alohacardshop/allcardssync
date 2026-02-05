@@ -19,13 +19,15 @@ import {
   ArrowDown,
   Trash2,
   FileText,
-  ShoppingBag
+  ShoppingBag,
+  History
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 import { InlineQuantityEditor } from '@/components/inventory-card/InlineQuantityEditor';
 import { EbayStatusBadge } from '@/components/inventory/EbayStatusBadge';
 import { LocationStockPopover } from '@/components/inventory/LocationStockPopover';
+import { ItemAuditDialog } from '@/components/inventory/ItemAuditDialog';
 import { useEbayListing } from '@/hooks/useEbayListing';
 import type { VirtualInventoryListProps, InventoryListItem } from '../types';
 import type { CachedLocation } from '@/hooks/useLocationNames';
@@ -93,6 +95,7 @@ interface TableRowProps {
   onRemove: (item: InventoryListItem) => void;
   onDelete?: (item: InventoryListItem) => void;
   onSyncDetails: (item: InventoryListItem) => void;
+  onViewAudit?: (item: InventoryListItem) => void;
 }
 
 const TableRow = memo(({
@@ -112,6 +115,7 @@ const TableRow = memo(({
   onRemove,
   onDelete,
   onSyncDetails,
+  onViewAudit,
 }: TableRowProps) => {
   const { toggleListOnEbay, isToggling } = useEbayListing();
   const title = useMemo(() => generateTitle(item), [item]);
@@ -328,6 +332,15 @@ const TableRow = memo(({
                 <FileText className="h-4 w-4 mr-2" aria-hidden="true" />
                 View Details
               </DropdownMenuItem>
+              {onViewAudit && (
+                <DropdownMenuItem 
+                  onClick={() => onViewAudit(item)}
+                  aria-label="View change history"
+                >
+                  <History className="h-4 w-4 mr-2" aria-hidden="true" />
+                  Why did this change?
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem 
                 onClick={() => toggleListOnEbay(item.id, item.list_on_ebay || false)}
                 disabled={isToggling === item.id}
@@ -425,6 +438,7 @@ export const InventoryTableView = memo(({
   const parentRef = useRef<HTMLDivElement>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const [sortConfig, setSortConfig] = useState<SortConfig | null>(null);
+  const [auditDialogItem, setAuditDialogItem] = useState<InventoryListItem | null>(null);
 
   // Sort items
   const items = useMemo(() => {
@@ -556,6 +570,7 @@ export const InventoryTableView = memo(({
   const gridTemplate = "40px 90px minmax(200px, 1fr) 110px 75px 65px 85px 75px 85px 95px 70px 44px";
 
   return (
+    <>
     <TooltipProvider delayDuration={200}>
       <div className="rounded-lg border bg-card overflow-hidden flex flex-col h-full">
         {/* Horizontal scroll wrapper */}
@@ -629,6 +644,7 @@ export const InventoryTableView = memo(({
                   onRemove={onRemove}
                   onDelete={onDelete}
                   onSyncDetails={onSyncDetails}
+                  onViewAudit={setAuditDialogItem}
                 />
               </div>
             );
@@ -661,6 +677,13 @@ export const InventoryTableView = memo(({
         </div>
       </div>
     </TooltipProvider>
+
+      <ItemAuditDialog
+        open={!!auditDialogItem}
+        onOpenChange={(open) => !open && setAuditDialogItem(null)}
+        item={auditDialogItem}
+      />
+    </>
   );
 });
 
