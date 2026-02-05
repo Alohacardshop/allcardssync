@@ -1,7 +1,7 @@
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { canUseApp, getUserRole, type AppKey } from '@/lib/permissions';
-import { LoadingState } from '@/components/ui/LoadingState';
+import { FullScreenLoader } from '@/components/ui/FullScreenLoader';
 
 interface RequireAppProps {
   appKey: AppKey;
@@ -16,7 +16,7 @@ export function RequireApp({ appKey, children }: RequireAppProps) {
   const { isAdmin, isStaff, loading } = useAuth();
 
   if (loading) {
-    return <LoadingState message="Loading..." />;
+    return <FullScreenLoader title="Loading…" subtitle="Verifying app access…" />;
   }
 
   const role = getUserRole(isAdmin, isStaff);
