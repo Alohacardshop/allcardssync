@@ -8,16 +8,15 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ErrorBoundaryWrapper } from "@/components/ErrorBoundaryWrapper";
 import { AuthProvider } from "@/contexts/AuthContext";
-import { AuthGuard } from "@/components/AuthGuard";
-import { AdminGuard } from "@/components/AdminGuard";
 import { StoreProvider } from "@/contexts/StoreContext";
 import { PrintQueueProvider } from "@/contexts/PrintQueueContext";
-import { AppShell } from "@/components/layout/AppShell";
 import { GlobalLoading } from "@/components/GlobalLoading";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { FontPreloader } from "@/components/fonts/FontPreloader";
 import { RequireApp } from "@/components/RequireApp";
 import { NavigationProvider } from "@/components/NavigationProvider";
+import { AdminLayout } from "@/components/layout/AdminLayout";
+import { ProtectedLayout } from "@/components/layout/ProtectedLayout";
 
 // Lazy load heavy routes
 const DashboardHome = React.lazy(() => import("./pages/DashboardHome"));
@@ -47,7 +46,6 @@ const Privacy = React.lazy(() => import("./pages/Privacy"));
 const InventorySyncDashboard = React.lazy(() => import("./pages/admin/InventorySyncDashboard"));
 const SyncHealthPage = React.lazy(() => import("./pages/admin/SyncHealthPage"));
 
-
 const EbayApp = React.lazy(() => import("./pages/EbayApp"));
 const EbaySyncDashboard = React.lazy(() => import("./pages/EbaySyncDashboard"));
 import { GlobalKeyboardHandler } from "./components/GlobalKeyboardHandler";
@@ -56,7 +54,6 @@ import { PerformanceMonitor } from "./components/PerformanceMonitor";
 import { SessionTimeoutWarning, RecoveryMode } from "./components/OperationalSafeguards";
 import { PrintQueueStatus } from "./components/PrintQueueStatus";
 
-import { supabase } from "@/integrations/supabase/client";
 import { CatalogMigrationPlaceholder } from "@/components/CatalogMigrationPlaceholder";
 
 import { queryClient } from "@/lib/queryClient";
@@ -78,109 +75,88 @@ const App = () => (
               <NavigationProvider>
               <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><LoadingSpinner size="lg" /></div>}>
                 <Routes>
-              {/* Public routes - accessible without authentication */}
+                  {/* Public routes - accessible without authentication */}
                   <Route path="/auth" element={<Auth />} />
                   <Route path="/privacy" element={<Privacy />} />
                   
                   {/* Admin routes - WITHOUT AppShell (has its own sidebar layout) */}
-                  <Route path="/admin/*" element={
-                    <AuthGuard>
-                      <AdminGuard>
-                        <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><LoadingSpinner size="lg" /></div>}>
-                          <Routes>
-                            <Route path="" element={<Admin />} />
-                            <Route path="catalog" element={<div className="p-8"><CatalogMigrationPlaceholder /></div>} />
-                            
-                            <Route path="notifications/discord" element={<DiscordNotifications />} />
-                            <Route path="notifications/pending" element={<PendingNotifications />} />
-                            <Route path="shopify-backfill" element={<ShopifyBackfill />} />
-                            <Route path="inventory-sync" element={<InventorySyncDashboard />} />
-                            <Route path="sync-health" element={<SyncHealthPage />} />
-                            <Route path="ebay-settings" element={<Navigate to="/ebay" replace />} />
-                          </Routes>
-                        </Suspense>
-                      </AdminGuard>
-                    </AuthGuard>
-                  } />
+                  <Route path="/admin" element={<AdminLayout />}>
+                    <Route index element={<Admin />} />
+                    <Route path="catalog" element={<div className="p-8"><CatalogMigrationPlaceholder /></div>} />
+                    <Route path="notifications/discord" element={<DiscordNotifications />} />
+                    <Route path="notifications/pending" element={<PendingNotifications />} />
+                    <Route path="shopify-backfill" element={<ShopifyBackfill />} />
+                    <Route path="inventory-sync" element={<InventorySyncDashboard />} />
+                    <Route path="sync-health" element={<SyncHealthPage />} />
+                    <Route path="ebay-settings" element={<Navigate to="/ebay" replace />} />
+                  </Route>
                   
                   {/* Protected routes with AppShell */}
-                  <Route path="/*" element={
-                    <AuthGuard>
-                      <AppShell>
-                        <Suspense fallback={<div className="flex items-center justify-center min-h-[50vh]"><LoadingSpinner size="lg" /></div>}>
-                          <Routes>
-                            {/* Dashboard Home */}
-                            <Route path="/" element={<ErrorBoundaryWrapper componentName="DashboardHome"><DashboardHome /></ErrorBoundaryWrapper>} />
-                            
-                            {/* Intake App (formerly Index) */}
-                            <Route path="/intake" element={
-                              <RequireApp appKey="intake">
-                                <ErrorBoundaryWrapper componentName="Intake"><Index /></ErrorBoundaryWrapper>
-                              </RequireApp>
-                            } />
-                            <Route path="/intake/graded" element={<RequireApp appKey="intake"><GradedIntake /></RequireApp>} />
-                            <Route path="/intake/bulk" element={<RequireApp appKey="intake"><BulkIntake /></RequireApp>} />
-                            
-                            {/* Inventory App */}
-                            <Route path="/inventory" element={
-                              <RequireApp appKey="inventory">
-                                <ErrorBoundaryWrapper componentName="Inventory"><Inventory /></ErrorBoundaryWrapper>
-                              </RequireApp>
-                            } />
-                            <Route path="/batches" element={<RequireApp appKey="inventory"><ErrorBoundaryWrapper componentName="Batch Management"><Batches /></ErrorBoundaryWrapper></RequireApp>} />
-                            <Route path="/bulk-import" element={<RequireApp appKey="inventory"><BulkImport /></RequireApp>} />
-                            <Route path="/bulk-transfer" element={<RequireApp appKey="inventory"><BulkTransfer /></RequireApp>} />
-                            <Route path="/cross-region-transfers" element={<RequireApp appKey="inventory"><CrossRegionTransfers /></RequireApp>} />
-                            <Route path="/shopify-mapping" element={<RequireApp appKey="inventory"><ShopifyMapping /></RequireApp>} />
-                            <Route path="/shopify-sync" element={<RequireApp appKey="inventory"><ShopifySync /></RequireApp>} />
-                            
-                            {/* Barcode App */}
-                            <Route path="/barcode-printing" element={
-                              <RequireApp appKey="barcode">
-                                <ErrorBoundaryWrapper componentName="BarcodePrinting"><BarcodePrinting /></ErrorBoundaryWrapper>
-                              </RequireApp>
-                            } />
-                            <Route path="/barcode/label-editor" element={
-                              <RequireApp appKey="barcode">
-                                <ErrorBoundaryWrapper componentName="LabelEditor"><LabelEditorPage /></ErrorBoundaryWrapper>
-                              </RequireApp>
-                            } />
-                            
-                            {/* Documents App */}
-                            <Route path="/docs" element={
-                              <RequireApp appKey="docs">
-                                <ErrorBoundaryWrapper componentName="Documents"><DocumentsPage /></ErrorBoundaryWrapper>
-                              </RequireApp>
-                            } />
-                            
-                            {/* eBay App */}
-                            <Route path="/ebay" element={
-                              <RequireApp appKey="ebay">
-                                <ErrorBoundaryWrapper componentName="eBay"><EbayApp /></ErrorBoundaryWrapper>
-                              </RequireApp>
-                            } />
-                            <Route path="/ebay/sync" element={
-                              <RequireApp appKey="ebay">
-                                <ErrorBoundaryWrapper componentName="eBaySyncDashboard"><EbaySyncDashboard /></ErrorBoundaryWrapper>
-                              </RequireApp>
-                            } />
-                            
-                            {/* Admin routes removed - now handled above outside AppShell */}
-                            
-                            
-                            
-                            {/* Other Pages */}
-                            <Route path="/dashboard" element={<Navigate to="/" replace />} />
-                            <Route path="/test-hardware" element={<TestHardwarePage />} />
-                            <Route path="/qz-tray-test" element={<QzTrayTestPage />} />
-                            
-                            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-                            <Route path="*" element={<NotFound />} />
-                          </Routes>
-                        </Suspense>
-                      </AppShell>
-                    </AuthGuard>
-                  } />
+                  <Route element={<ProtectedLayout />}>
+                    {/* Dashboard Home */}
+                    <Route path="/" element={<ErrorBoundaryWrapper componentName="DashboardHome"><DashboardHome /></ErrorBoundaryWrapper>} />
+                    
+                    {/* Intake App (formerly Index) */}
+                    <Route path="/intake" element={
+                      <RequireApp appKey="intake">
+                        <ErrorBoundaryWrapper componentName="Intake"><Index /></ErrorBoundaryWrapper>
+                      </RequireApp>
+                    } />
+                    <Route path="/intake/graded" element={<RequireApp appKey="intake"><GradedIntake /></RequireApp>} />
+                    <Route path="/intake/bulk" element={<RequireApp appKey="intake"><BulkIntake /></RequireApp>} />
+                    
+                    {/* Inventory App */}
+                    <Route path="/inventory" element={
+                      <RequireApp appKey="inventory">
+                        <ErrorBoundaryWrapper componentName="Inventory"><Inventory /></ErrorBoundaryWrapper>
+                      </RequireApp>
+                    } />
+                    <Route path="/batches" element={<RequireApp appKey="inventory"><ErrorBoundaryWrapper componentName="Batch Management"><Batches /></ErrorBoundaryWrapper></RequireApp>} />
+                    <Route path="/bulk-import" element={<RequireApp appKey="inventory"><BulkImport /></RequireApp>} />
+                    <Route path="/bulk-transfer" element={<RequireApp appKey="inventory"><BulkTransfer /></RequireApp>} />
+                    <Route path="/cross-region-transfers" element={<RequireApp appKey="inventory"><CrossRegionTransfers /></RequireApp>} />
+                    <Route path="/shopify-mapping" element={<RequireApp appKey="inventory"><ShopifyMapping /></RequireApp>} />
+                    <Route path="/shopify-sync" element={<RequireApp appKey="inventory"><ShopifySync /></RequireApp>} />
+                    
+                    {/* Barcode App */}
+                    <Route path="/barcode-printing" element={
+                      <RequireApp appKey="barcode">
+                        <ErrorBoundaryWrapper componentName="BarcodePrinting"><BarcodePrinting /></ErrorBoundaryWrapper>
+                      </RequireApp>
+                    } />
+                    <Route path="/barcode/label-editor" element={
+                      <RequireApp appKey="barcode">
+                        <ErrorBoundaryWrapper componentName="LabelEditor"><LabelEditorPage /></ErrorBoundaryWrapper>
+                      </RequireApp>
+                    } />
+                    
+                    {/* Documents App */}
+                    <Route path="/docs" element={
+                      <RequireApp appKey="docs">
+                        <ErrorBoundaryWrapper componentName="Documents"><DocumentsPage /></ErrorBoundaryWrapper>
+                      </RequireApp>
+                    } />
+                    
+                    {/* eBay App */}
+                    <Route path="/ebay" element={
+                      <RequireApp appKey="ebay">
+                        <ErrorBoundaryWrapper componentName="eBay"><EbayApp /></ErrorBoundaryWrapper>
+                      </RequireApp>
+                    } />
+                    <Route path="/ebay/sync" element={
+                      <RequireApp appKey="ebay">
+                        <ErrorBoundaryWrapper componentName="eBaySyncDashboard"><EbaySyncDashboard /></ErrorBoundaryWrapper>
+                      </RequireApp>
+                    } />
+                    
+                    {/* Other Pages */}
+                    <Route path="/dashboard" element={<Navigate to="/" replace />} />
+                    <Route path="/test-hardware" element={<TestHardwarePage />} />
+                    <Route path="/qz-tray-test" element={<QzTrayTestPage />} />
+                    
+                    {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                    <Route path="*" element={<NotFound />} />
+                  </Route>
                 </Routes>
               </Suspense>
               
