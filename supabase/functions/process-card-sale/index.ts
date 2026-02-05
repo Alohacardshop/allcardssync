@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+ import { writeInventory, generateRequestId, locationGidToId } from '../_shared/inventory-write.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -122,30 +123,29 @@ serve(async (req) => {
           const token = credMap.get(`SHOPIFY_${storeKeyUpper}_ACCESS_TOKEN`)
 
           if (domain && token) {
-            const locationId = card.current_shopify_location_id.replace('gid://shopify/Location/', '')
+            const requestId = generateRequestId('sale-zero')
+            const locationId = locationGidToId(card.current_shopify_location_id)
             
-            const shopifyResponse = await fetch(
-              `https://${domain}/admin/api/2024-07/inventory_levels/set.json`,
-              {
-                method: 'POST',
-                headers: {
-                  'X-Shopify-Access-Token': token,
-                  'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                  location_id: locationId,
-                  inventory_item_id: card.shopify_inventory_item_id,
-                  available: 0
-                })
-              }
-            )
+            const inventoryResult = await writeInventory({
+              domain,
+              token,
+              inventory_item_id: card.shopify_inventory_item_id,
+              location_id: locationId,
+              action: 'cross_channel_zero',
+              quantity: 0,
+              request_id: requestId,
+              store_key: resolvedStoreKey,
+              sku,
+              source_function: 'process-card-sale',
+              triggered_by: 'system',
+              supabase
+            })
 
-            if (shopifyResponse.ok) {
+            if (inventoryResult.success) {
               console.log(`[process-card-sale] ✓ Shopify inventory zeroed for ${sku}`)
               crossChannelResults.push({ action: 'zero_shopify', success: true })
             } else {
-              const errorText = await shopifyResponse.text()
-              console.error(`[process-card-sale] Failed to zero Shopify: ${errorText}`)
+              console.error(`[process-card-sale] Failed to zero Shopify: ${inventoryResult.error}`)
               
               // Queue for retry
               await supabase.rpc('queue_shopify_zero', {

@@ -1,6 +1,7 @@
 import { corsHeaders } from '../_shared/cors.ts'
 import { requireAuth, requireRole, requireStoreAccess } from '../_shared/auth.ts'
 import { SendGradedSchema, SendGradedInput } from '../_shared/validation.ts'
+ import { writeInventory, generateRequestId, locationGidToId } from '../_shared/inventory-write.ts'
 
 // Helper function to generate barcode for graded items
 // Priority: Certificate number (PSA/CGC) > SKU
@@ -420,25 +421,28 @@ Deno.serve(async (req) => {
       variant = product.variants[0]
     }
 
-    // Set inventory level at location
-    const locationId = locationGid.replace('gid://shopify/Location/', '')
+    // Set inventory level at location using centralized helper
+    const requestId = generateRequestId('send-graded')
+    const locationId = locationGidToId(locationGid)
     
-    const inventoryResponse = await fetch(`https://${domain}/admin/api/2024-07/inventory_levels/set.json`, {
-      method: 'POST',
-      headers: {
-        'X-Shopify-Access-Token': token,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        location_id: locationId,
-        inventory_item_id: variant.inventory_item_id,
-        available: item.quantity || 1
-      })
+    const inventoryResult = await writeInventory({
+      domain,
+      token,
+      inventory_item_id: String(variant.inventory_item_id),
+      location_id: locationId,
+      action: 'initial_set',
+      quantity: item.quantity || 1,
+      request_id: requestId,
+      store_key: storeKey,
+      item_id: item.id,
+      sku: item.sku,
+      source_function: 'v2-shopify-send-graded',
+      triggered_by: user.id,
+      supabase
     })
 
-    if (!inventoryResponse.ok) {
-      const errorText = await inventoryResponse.text()
-      console.warn(`Failed to set inventory level: ${errorText}`)
+    if (!inventoryResult.success) {
+      console.warn(`Failed to set inventory level: ${inventoryResult.error}`)
     }
 
     // Now create metafields separately after product creation

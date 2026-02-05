@@ -107,3 +107,41 @@
  curl -X POST /functions/v1/shopify-reconcile-inventory \
    -d '{"mode": "drift_only"}'
  ```
+
+---
+
+## Centralized Write Safety
+
+All Shopify inventory writes MUST use the centralized `writeInventory()` helper in `_shared/inventory-write.ts`.
+
+### API Selection (Automatic)
+
+| Action | API | Use Case |
+|--------|-----|----------|
+| `receiving` | adjust | Adding stock from intake |
+| `transfer_out` | adjust | Moving stock from source location |
+| `transfer_in` | adjust | Moving stock to destination location |
+| `refund` | adjust | Restoring stock after refund/cancellation |
+| `manual_adjust` | adjust | User-initiated corrections |
+| `initial_set` | set | First-time inventory for new products |
+| `enforce_graded` | set | Enforcing 0/1 for graded items |
+| `cross_channel_zero` | set | Zeroing after cross-channel sale |
+
+### Safety Features
+
+1. **Optimistic Locking**: Optional `expected_available` parameter rejects stale updates
+2. **Pre-validation**: Action-specific constraints checked before API call
+3. **Comprehensive Logging**: All writes logged to `inventory_write_log` table
+4. **Latency Tracking**: Every operation timed and recorded
+
+### Audit Trail
+
+The `inventory_write_log` table captures:
+- Request ID for tracing
+- Item/SKU/inventory_item_id identification
+- Action type and API used
+- Delta or set value
+- Previous and new quantities
+- Success/failure with error messages
+- Latency in milliseconds
+- Source function and trigger context

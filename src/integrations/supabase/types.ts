@@ -1333,6 +1333,75 @@ export type Database = {
         }
         Relationships: []
       }
+      inventory_write_log: {
+        Row: {
+          action: string
+          api_used: string
+          created_at: string
+          delta: number | null
+          error_message: string | null
+          expected_available: number | null
+          id: string
+          inventory_item_id: string
+          item_id: string | null
+          latency_ms: number | null
+          location_gid: string
+          new_available: number | null
+          previous_available: number | null
+          request_id: string
+          set_value: number | null
+          sku: string | null
+          source_function: string | null
+          store_key: string
+          success: boolean
+          triggered_by: string | null
+        }
+        Insert: {
+          action: string
+          api_used: string
+          created_at?: string
+          delta?: number | null
+          error_message?: string | null
+          expected_available?: number | null
+          id?: string
+          inventory_item_id: string
+          item_id?: string | null
+          latency_ms?: number | null
+          location_gid: string
+          new_available?: number | null
+          previous_available?: number | null
+          request_id: string
+          set_value?: number | null
+          sku?: string | null
+          source_function?: string | null
+          store_key: string
+          success?: boolean
+          triggered_by?: string | null
+        }
+        Update: {
+          action?: string
+          api_used?: string
+          created_at?: string
+          delta?: number | null
+          error_message?: string | null
+          expected_available?: number | null
+          id?: string
+          inventory_item_id?: string
+          item_id?: string | null
+          latency_ms?: number | null
+          location_gid?: string
+          new_available?: number | null
+          previous_available?: number | null
+          request_id?: string
+          set_value?: number | null
+          sku?: string | null
+          source_function?: string | null
+          store_key?: string
+          success?: boolean
+          triggered_by?: string | null
+        }
+        Relationships: []
+      }
       item_snapshots: {
         Row: {
           created_at: string
