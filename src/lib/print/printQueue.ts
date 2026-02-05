@@ -8,6 +8,7 @@ export type QueueItem = {
   usePQ?: boolean;
   _skipCutTail?: boolean;
   _retryCount?: number;
+  _sentHash?: string; // Tracks if this item was already sent (for retry deduplication)
 };
 
 export type CutMode = "none" | "end-of-batch";
@@ -20,6 +21,7 @@ export interface PrintQueueOptions {
   maxRetries?: number;
   retryDelayMs?: number;
   onDeadLetter?: (items: QueueItem[], error: Error) => void;
+  onPartialSuccess?: (sentCount: number, totalCount: number, chunkIndex: number) => void;
 }
 
 const MAX_PAYLOAD_BYTES = 250_000;
@@ -34,6 +36,13 @@ function byteLen(s: string) {
 
 type Transport = (payload: string) => Promise<void>;
 
+/** Represents a chunk of ZPL with its associated queue items */
+interface PayloadChunk {
+  payload: string;
+  items: QueueItem[];
+  chunkIndex: number;
+}
+
 export class PrintQueue {
   private q: QueueItem[] = [];
   private running = false;
@@ -42,6 +51,7 @@ export class PrintQueue {
   private readonly MAX_RECENT = 1000;
   private processingStartTime: number | null = null;
   private deadLetterQueue: { items: QueueItem[]; error: Error; timestamp: number }[] = [];
+  private sentHashes = new Set<string>(); // Global set to prevent duplicate sends across retries
 
   constructor(
     private send: Transport,
@@ -111,6 +121,10 @@ export class PrintQueue {
     this.deadLetterQueue = [];
   }
   
+  public clearSentHashes() {
+    this.sentHashes.clear();
+  }
+  
   public isStuck(): boolean {
     if (!this.running || !this.processingStartTime) return false;
     return Date.now() - this.processingStartTime > PROCESSING_TIMEOUT_MS;
@@ -164,14 +178,58 @@ export class PrintQueue {
     return zpl.substring(0, xzIndex) + `^PQ${qty}\n^XZ`;
   }
 
-  private async sendWithRetry(payload: string, batchItems: QueueItem[]): Promise<void> {
+  /** Generate a unique hash for an item to track send status */
+  private async getItemHash(item: QueueItem): Promise<string> {
+    return sha1Hex(`${item.zpl}|${item.qty ?? 1}|${Date.now()}`);
+  }
+
+  /** Check if all items in a chunk have already been sent */
+  private areAllItemsSent(items: QueueItem[]): boolean {
+    return items.every(item => item._sentHash && this.sentHashes.has(item._sentHash));
+  }
+
+  /** Mark items as sent */
+  private markItemsSent(items: QueueItem[]) {
+    for (const item of items) {
+      if (item._sentHash) {
+        this.sentHashes.add(item._sentHash);
+      }
+    }
+  }
+
+  private async sendChunkWithRetry(chunk: PayloadChunk): Promise<{ success: boolean; sentItems: QueueItem[]; failedItems: QueueItem[] }> {
+    const { payload, items, chunkIndex } = chunk;
     const maxRetries = this.opts.maxRetries ?? DEFAULT_MAX_RETRIES;
     const baseDelay = this.opts.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
+    
+    // Skip if all items were already sent (retry deduplication)
+    if (this.areAllItemsSent(items)) {
+      logger.info('[print_chunk_skipped_already_sent]', { 
+        chunkIndex, 
+        itemCount: items.length 
+      }, 'print-queue');
+      return { success: true, sentItems: items, failedItems: [] };
+    }
+
+    // Filter to only unsent items for this chunk
+    const unsentItems = items.filter(item => !item._sentHash || !this.sentHashes.has(item._sentHash));
+    
+    if (unsentItems.length === 0) {
+      logger.info('[print_chunk_all_items_sent]', { chunkIndex }, 'print-queue');
+      return { success: true, sentItems: items, failedItems: [] };
+    }
+
+    logger.info('[print_chunk_send_start]', { 
+      chunkIndex, 
+      totalItems: items.length,
+      unsentItems: unsentItems.length,
+      bytes: byteLen(payload) 
+    }, 'print-queue');
     
     try {
       await withBackoff(
         () => this.send(payload),
-        `print_batch_${Date.now()}`,
+        `print_chunk_${chunkIndex}_${Date.now()}`,
         {
           maxRetries,
           baseDelay,
@@ -191,16 +249,34 @@ export class PrintQueue {
           }
         }
       );
+      
+      // Mark all items in this chunk as sent
+      this.markItemsSent(items);
+      
+      logger.info('[print_chunk_send_success]', { 
+        chunkIndex, 
+        itemCount: items.length 
+      }, 'print-queue');
+      
+      // Notify partial success
+      if (this.opts.onPartialSuccess) {
+        this.opts.onPartialSuccess(items.length, items.length, chunkIndex);
+      }
+      
+      return { success: true, sentItems: items, failedItems: [] };
+      
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
-      logger.error('[print_batch_failed_after_retries]', err, { 
-        batchSize: batchItems.length,
+      
+      logger.error('[print_chunk_failed_after_retries]', err, { 
+        chunkIndex,
+        itemCount: items.length,
         maxRetries 
       }, 'print-queue');
       
-      // Move to dead letter queue
+      // Only add unsent items to dead letter queue
       this.deadLetterQueue.push({
-        items: batchItems,
+        items: unsentItems,
         error: err,
         timestamp: Date.now()
       });
@@ -208,7 +284,7 @@ export class PrintQueue {
       // Call dead letter callback if provided
       if (this.opts.onDeadLetter) {
         try {
-          this.opts.onDeadLetter(batchItems, err);
+          this.opts.onDeadLetter(unsentItems, err);
         } catch (callbackError) {
           logger.error('[dead_letter_callback_error]', 
             callbackError instanceof Error ? callbackError : new Error(String(callbackError)), 
@@ -216,8 +292,110 @@ export class PrintQueue {
         }
       }
       
-      throw error;
+      return { success: false, sentItems: [], failedItems: unsentItems };
     }
+  }
+
+  /** Split payload into chunks, tracking which items belong to each chunk */
+  private splitPayloadIntoChunks(batch: QueueItem[]): PayloadChunk[] {
+    const parts: { zpl: string; item: QueueItem }[] = [];
+    
+    for (const item of batch) {
+      const qty = item.qty && item.qty > 1 ? item.qty : 1;
+      const usePQ = item.usePQ !== false;
+      parts.push({ 
+        zpl: this.withQty(item.zpl, qty, usePQ), 
+        item 
+      });
+    }
+    
+    const cutMode: CutMode = this.opts.cutMode ?? "none";
+    const shouldSkipCutTail = batch.some(item => item._skipCutTail);
+    
+    // Build full payload first
+    let fullPayload = parts.map(p => p.zpl).join("\n^JUS\n");
+    
+    // Add cut tail if needed
+    if (cutMode === "end-of-batch" && this.opts.endCutTail && batch.length > 1 && !shouldSkipCutTail) {
+      fullPayload = `${fullPayload}\n${this.opts.endCutTail}`;
+      logger.debug("[cut_tail_added]", { batchSize: batch.length }, 'print-queue');
+    } else if (shouldSkipCutTail) {
+      logger.debug("[cut_tail_skipped]", { reason: "single_label_mode" }, 'print-queue');
+    }
+
+    // If payload fits, return single chunk with all items
+    if (byteLen(fullPayload) <= MAX_PAYLOAD_BYTES) {
+      return [{
+        payload: fullPayload,
+        items: batch,
+        chunkIndex: 0
+      }];
+    }
+
+    // Need to split - track items per chunk
+    const chunks: PayloadChunk[] = [];
+    let currentChunkZpls: string[] = [];
+    let currentChunkItems: QueueItem[] = [];
+    let chunkIndex = 0;
+
+    for (const { zpl, item } of parts) {
+      const testPayload = currentChunkZpls.length > 0 
+        ? currentChunkZpls.join("\n^JUS\n") + "\n^JUS\n" + zpl
+        : zpl;
+      
+      if (byteLen(testPayload) > MAX_PAYLOAD_BYTES && currentChunkZpls.length > 0) {
+        // Finalize current chunk
+        chunks.push({
+          payload: currentChunkZpls.join("\n^JUS\n"),
+          items: [...currentChunkItems],
+          chunkIndex
+        });
+        
+        logger.debug('[print_chunk_created]', { 
+          chunkIndex, 
+          itemCount: currentChunkItems.length,
+          bytes: byteLen(currentChunkZpls.join("\n^JUS\n"))
+        }, 'print-queue');
+        
+        chunkIndex++;
+        currentChunkZpls = [zpl];
+        currentChunkItems = [item];
+      } else {
+        currentChunkZpls.push(zpl);
+        currentChunkItems.push(item);
+      }
+    }
+
+    // Don't forget the last chunk
+    if (currentChunkZpls.length > 0) {
+      let lastPayload = currentChunkZpls.join("\n^JUS\n");
+      
+      // Add cut tail only to the last chunk
+      if (cutMode === "end-of-batch" && this.opts.endCutTail && batch.length > 1 && !shouldSkipCutTail) {
+        lastPayload = `${lastPayload}\n${this.opts.endCutTail}`;
+      }
+      
+      chunks.push({
+        payload: lastPayload,
+        items: [...currentChunkItems],
+        chunkIndex
+      });
+      
+      logger.debug('[print_chunk_created]', { 
+        chunkIndex, 
+        itemCount: currentChunkItems.length,
+        bytes: byteLen(lastPayload),
+        isLast: true
+      }, 'print-queue');
+    }
+
+    logger.info('[print_payload_split]', { 
+      totalItems: batch.length,
+      chunkCount: chunks.length,
+      totalBytes: byteLen(fullPayload)
+    }, 'print-queue');
+
+    return chunks;
   }
 
   private async process() {
@@ -236,60 +414,49 @@ export class PrintQueue {
     this.running = true;
     this.processingStartTime = Date.now();
     
+    // Clear sent hashes at start of new processing run
+    this.sentHashes.clear();
+    
     try {
       const max = this.opts.batchMax ?? 120;
-      const cutMode: CutMode = this.opts.cutMode ?? "none";
+      let totalSent = 0;
+      let totalFailed = 0;
 
       while (this.q.length) {
         const batch = this.q.splice(0, max);
-        const parts: string[] = [];
         
-        for (const it of batch) {
-          const qty = it.qty && it.qty > 1 ? it.qty : 1;
-          const usePQ = it.usePQ !== false;
-          parts.push(this.withQty(it.zpl, qty, usePQ));
+        // Assign unique hashes to each item for tracking
+        for (const item of batch) {
+          if (!item._sentHash) {
+            item._sentHash = await this.getItemHash(item);
+          }
         }
         
-        let payload = parts.join("\n^JUS\n");
+        // Split into properly-tracked chunks
+        const chunks = this.splitPayloadIntoChunks(batch);
+        
+        logger.info('[print_batch_process_start]', { 
+          batchSize: batch.length, 
+          chunkCount: chunks.length 
+        }, 'print-queue');
 
-        // Only append cut tail for multi-item batches
-        const shouldSkipCutTail = batch.some(item => item._skipCutTail);
-        if (cutMode === "end-of-batch" && this.opts.endCutTail && batch.length > 1 && !shouldSkipCutTail) {
-          payload = `${payload}\n${this.opts.endCutTail}`;
-          logger.debug("[cut_tail_added]", { batchSize: batch.length }, 'print-queue');
-        } else if (shouldSkipCutTail) {
-          logger.debug("[cut_tail_skipped]", { reason: "single_label_mode" }, 'print-queue');
-        }
-
-        // Split big payloads at ^XA boundaries
-        if (byteLen(payload) > MAX_PAYLOAD_BYTES) {
-          const blocks = payload.split(/\n(?=\^XA)/);
-          let chunk = "";
+        // Process chunks sequentially to maintain order
+        for (const chunk of chunks) {
+          const result = await this.sendChunkWithRetry(chunk);
+          totalSent += result.sentItems.length;
+          totalFailed += result.failedItems.length;
           
-          for (const b of blocks) {
-            const next = chunk ? chunk + "\n" + b : b;
-            if (byteLen(next) > MAX_PAYLOAD_BYTES) {
-              if (chunk) { 
-                logger.info("[print_batch_send]", { bytes: byteLen(chunk) }, 'print-queue'); 
-                await this.sendWithRetry(chunk, batch);
-              }
-              chunk = b;
-            } else {
-              chunk = next;
-            }
-          }
-          
-          if (chunk) { 
-            logger.info("[print_batch_send]", { bytes: byteLen(chunk) }, 'print-queue'); 
-            await this.sendWithRetry(chunk, batch);
-          }
-        } else {
-          logger.info("[print_batch_send]", { bytes: byteLen(payload) }, 'print-queue');
-          await this.sendWithRetry(payload, batch);
+          // Yield to UI thread between chunks
+          await new Promise(resolve => setTimeout(resolve, 50));
         }
+        
+        logger.info('[print_batch_process_complete]', { 
+          batchSize: batch.length,
+          sent: totalSent,
+          failed: totalFailed
+        }, 'print-queue');
       }
     } catch (error) {
-      // Error already logged in sendWithRetry, just ensure we clean up
       logger.error('[print_queue_process_error]', 
         error instanceof Error ? error : new Error(String(error)), 
         undefined, 'print-queue');
