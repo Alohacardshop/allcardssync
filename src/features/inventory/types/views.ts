@@ -45,7 +45,7 @@ export const INVENTORY_COLUMNS: ColumnConfig[] = [
   { id: 'price', label: 'Price', defaultVisible: true, width: '80px' },
   { id: 'quantity', label: 'Qty', defaultVisible: true, width: '65px' },
   { id: 'shopify_status', label: 'Shopify', defaultVisible: true, width: '80px' },
-  { id: 'print_status', label: 'Print', defaultVisible: true, width: '75px' },
+  { id: 'print_status', label: 'Print', defaultVisible: false, width: '75px' },
   { id: 'ebay_status', label: 'eBay', defaultVisible: true, width: '80px' },
   { id: 'updated_at', label: 'Updated', defaultVisible: true, width: '100px' },
   { id: 'actions', label: '', defaultVisible: true, locked: true, width: '44px' },

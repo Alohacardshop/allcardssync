@@ -20,7 +20,8 @@ import {
   Trash2,
   FileText,
   ShoppingBag,
-  History
+  History,
+  Printer
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
@@ -419,8 +420,21 @@ const TableRow = memo(({
           )}
         </div>
 
-        {/* Kebab Menu - fixed container height */}
-        <div className="flex items-center justify-center h-[44px]">
+        {/* Print indicator + Kebab Menu - fixed container height */}
+        <div className="flex items-center justify-end gap-1 h-[44px]">
+          {/* Compact print indicator - only shows when printed */}
+          {item.printed_at && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="text-primary">
+                  <Printer className="h-3.5 w-3.5" aria-label="Printed" />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="text-xs">
+                Label printed
+              </TooltipContent>
+            </Tooltip>
+          )}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button 
