@@ -1,5 +1,6 @@
 import React from 'react';
 import { Route } from 'react-router-dom';
+import { PATHS } from './paths';
 
 const Auth = React.lazy(() => import('@/pages/Auth'));
 const Privacy = React.lazy(() => import('@/pages/Privacy'));
@@ -9,7 +10,7 @@ const Privacy = React.lazy(() => import('@/pages/Privacy'));
  */
 export const publicRoutes = (
   <>
-    <Route path="/auth" element={<Auth />} />
-    <Route path="/privacy" element={<Privacy />} />
+    <Route path={PATHS.auth} element={<Auth />} />
+    <Route path={PATHS.privacy} element={<Privacy />} />
   </>
 );

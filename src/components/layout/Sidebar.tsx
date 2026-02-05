@@ -16,7 +16,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
-import { LAYOUT } from '@/lib/design-tokens';
+import { PATHS } from '@/routes/paths';
 
 interface SidebarProps {
   className?: string;
@@ -41,16 +41,16 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { key: 'home', label: 'Home', href: '/', icon: 'Home' },
-  { key: 'intake', label: 'Intake', href: '/intake', icon: 'PackagePlus' },
-  { key: 'inventory', label: 'Inventory', href: '/inventory', icon: 'Package' },
-  { key: 'barcode', label: 'Print', href: '/barcode-printing', icon: 'Printer' },
-  { key: 'docs', label: 'Documents', href: '/docs', icon: 'FileText' },
+  { key: 'home', label: 'Home', href: PATHS.dashboard, icon: 'Home' },
+  { key: 'intake', label: 'Intake', href: PATHS.intake, icon: 'PackagePlus' },
+  { key: 'inventory', label: 'Inventory', href: PATHS.inventory, icon: 'Package' },
+  { key: 'barcode', label: 'Print', href: PATHS.barcodePrinting, icon: 'Printer' },
+  { key: 'docs', label: 'Documents', href: PATHS.docs, icon: 'FileText' },
 ];
 
 const ADMIN_ITEMS: NavItem[] = [
-  { key: 'ebay', label: 'eBay', href: '/ebay', icon: 'ShoppingBag', adminOnly: true },
-  { key: 'admin', label: 'Admin', href: '/admin', icon: 'Settings', adminOnly: true },
+  { key: 'ebay', label: 'eBay', href: PATHS.ebay, icon: 'ShoppingBag', adminOnly: true },
+  { key: 'admin', label: 'Admin', href: PATHS.admin, icon: 'Settings', adminOnly: true },
 ];
 
 /**
@@ -64,7 +64,7 @@ export function Sidebar({ className }: SidebarProps) {
   const { bgClass, accentClass } = useEcosystemTheme();
 
   const isActive = (href: string) => {
-    if (href === '/') return location.pathname === '/';
+    if (href === PATHS.dashboard) return location.pathname === PATHS.dashboard;
     return location.pathname.startsWith(href);
   };
 
