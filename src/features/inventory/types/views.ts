@@ -5,18 +5,23 @@
  /**
   * Column definitions for inventory table
   */
- export type InventoryColumn = 
-   | 'checkbox'
-   | 'sku'
-   | 'title'
-   | 'location'
-   | 'price'
-   | 'quantity'
-   | 'shopify_status'
-   | 'print_status'
-   | 'ebay_status'
-   | 'updated_at'
-   | 'actions';
+export type InventoryColumn = 
+  | 'checkbox'
+  | 'sku'
+  | 'title'
+  | 'location'
+  | 'price'
+  | 'quantity'
+  | 'shopify_status'
+  | 'print_status'
+  | 'ebay_status'
+  | 'updated_at'
+  | 'actions'
+  // Optional Shopify metadata columns
+  | 'shopify_created_at'
+  | 'shopify_cost'
+  | 'shopify_shopify_status'
+  | 'last_shopify_sync';
  
  /**
   * Column configuration for display
@@ -44,6 +49,11 @@ export const INVENTORY_COLUMNS: ColumnConfig[] = [
   { id: 'ebay_status', label: 'eBay', defaultVisible: true, width: '80px' },
   { id: 'updated_at', label: 'Updated', defaultVisible: true, width: '100px' },
   { id: 'actions', label: '', defaultVisible: true, locked: true, width: '44px' },
+  // Optional Shopify metadata columns (hidden by default)
+  { id: 'shopify_created_at', label: 'Shopify Created', defaultVisible: false, width: '110px' },
+  { id: 'shopify_cost', label: 'Shopify Cost', defaultVisible: false, width: '90px' },
+  { id: 'shopify_shopify_status', label: 'Shopify Status', defaultVisible: false, width: '100px' },
+  { id: 'last_shopify_sync', label: 'Last Sync', defaultVisible: false, width: '110px' },
 ];
  
  /**

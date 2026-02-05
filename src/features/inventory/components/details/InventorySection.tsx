@@ -21,6 +21,10 @@ export const InventorySection = React.memo(({ item, locationsMap, detailData }: 
     : 'No location';
   const nickname = getLocationNickname(locationName);
   
+  // Use cost from list item first, then fall back to detail data
+  const cost = item.cost ?? detailData?.cost;
+  const vendor = detailData?.vendor ?? item.vendor;
+  
   const getStatus = () => {
     if (item.deleted_at) return { label: 'Deleted', variant: 'destructive' as const };
     if (item.sold_at) return { label: 'Sold', variant: 'secondary' as const };
@@ -35,26 +39,26 @@ export const InventorySection = React.memo(({ item, locationsMap, detailData }: 
       <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Inventory</h3>
       <div className="grid grid-cols-3 gap-3">
         <div>
-          <span className="text-sm text-muted-foreground">Quantity</span>
+          <span className="text-xs text-muted-foreground block">Quantity</span>
           <p className="text-lg font-semibold tabular-nums">{item.quantity}</p>
         </div>
         
         <div>
-          <span className="text-sm text-muted-foreground">Price</span>
+          <span className="text-xs text-muted-foreground block">Price</span>
           <p className="text-lg font-semibold tabular-nums">${(item.price || 0).toFixed(2)}</p>
         </div>
         
-        {detailData?.cost !== undefined && detailData?.cost !== null && (
-          <div>
-            <span className="text-sm text-muted-foreground">Cost</span>
-            <p className="text-lg font-semibold tabular-nums">${detailData.cost.toFixed(2)}</p>
-          </div>
-        )}
+        <div>
+          <span className="text-xs text-muted-foreground block">Cost</span>
+          <p className="text-lg font-semibold tabular-nums">
+            {cost != null ? `$${cost.toFixed(2)}` : <span className="text-muted-foreground">—</span>}
+          </p>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <span className="text-sm text-muted-foreground">Location</span>
+          <span className="text-xs text-muted-foreground block">Location</span>
           <Tooltip>
             <TooltipTrigger asChild>
               <p className="text-sm cursor-default">{nickname}</p>
@@ -66,7 +70,7 @@ export const InventorySection = React.memo(({ item, locationsMap, detailData }: 
         </div>
         
         <div>
-          <span className="text-sm text-muted-foreground">Status</span>
+          <span className="text-xs text-muted-foreground block">Status</span>
           <div className="mt-0.5">
             <Badge variant={status.variant} className="text-xs">{status.label}</Badge>
           </div>
@@ -75,7 +79,7 @@ export const InventorySection = React.memo(({ item, locationsMap, detailData }: 
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <span className="text-sm text-muted-foreground">Label</span>
+          <span className="text-xs text-muted-foreground block">Label</span>
           <div className="mt-0.5">
             {item.printed_at ? (
               <Tooltip>
@@ -94,10 +98,10 @@ export const InventorySection = React.memo(({ item, locationsMap, detailData }: 
           </div>
         </div>
         
-        {detailData?.vendor && (
+        {vendor && (
           <div>
-            <span className="text-sm text-muted-foreground">Vendor</span>
-            <p className="text-sm">{detailData.vendor}</p>
+            <span className="text-xs text-muted-foreground block">Vendor</span>
+            <p className="text-sm">{vendor}</p>
           </div>
         )}
       </div>
