@@ -27,7 +27,7 @@ export interface DatabaseFunctionsExtended extends Database {
       }
       close_empty_batch: {
         Args: { lot_id_in: string }
-        Returns: void
+        Returns: number
       }
     }
   }

@@ -93,7 +93,7 @@ export default function Batches() {
   // Clear selection when filter changes to prevent hidden-selection bugs
   useEffect(() => {
     setSelectedBatches(new Set());
-  }, [statusFilter]);
+  }, [statusFilter, searchTerm]);
 
   // Check if user is admin
   useEffect(() => {
@@ -284,10 +284,12 @@ export default function Batches() {
   };
 
   const toggleSelectAll = () => {
-    if (selectedBatches.size === filteredLots.length) {
+    // Only select batches that can be acted upon (non-deleted)
+    const actionableLots = filteredLots.filter(lot => lot.status !== 'deleted');
+    if (selectedBatches.size === actionableLots.length && actionableLots.length > 0) {
       setSelectedBatches(new Set());
     } else {
-      setSelectedBatches(new Set(filteredLots.map(lot => lot.id)));
+      setSelectedBatches(new Set(actionableLots.map(lot => lot.id)));
     }
   };
 
@@ -307,13 +309,25 @@ export default function Batches() {
 
     setBulkActionLoading(true);
     try {
+      let successCount = 0;
       for (const lot of emptyBatches) {
-        await supabase.rpc('close_empty_batch', { lot_id_in: lot.id });
+        try {
+          const { data } = await supabase.rpc('close_empty_batch', { lot_id_in: lot.id });
+          if (data && data > 0) successCount++;
+        } catch {
+          // Continue with remaining batches
+        }
+      }
+      
+      if (successCount === 0) {
+        throw new Error('No batches were closed');
       }
       
       toast({
         title: "Batches Closed",
-        description: `${emptyBatches.length} empty batches have been closed`,
+        description: successCount === emptyBatches.length
+          ? `${successCount} empty batches closed`
+          : `${successCount} of ${emptyBatches.length} batches closed`,
       });
       
       setSelectedBatches(new Set());

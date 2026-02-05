@@ -3844,7 +3844,7 @@ export type Database = {
       cleanup_shopify_sync_queue: { Args: never; Returns: undefined }
       cleanup_user_session: { Args: never; Returns: undefined }
       clear_stale_lot_items: { Args: never; Returns: undefined }
-      close_empty_batch: { Args: { lot_id_in: string }; Returns: undefined }
+      close_empty_batch: { Args: { lot_id_in: string }; Returns: number }
       close_empty_lot_and_create_new: {
         Args: { _location_gid: string; _store_key: string }
         Returns: {
