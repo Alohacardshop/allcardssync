@@ -42,9 +42,11 @@ const App = () => (
                 <BrowserRouter>
                   <NavigationProvider>
                     <Routes>
-                      {publicRoutes}
+                      {/* Protected routes first - they match specific paths */}
                       {adminRoutes}
                       {appRoutes}
+                      {/* Public routes last - includes catch-all for NotFound */}
+                      {publicRoutes}
                     </Routes>
                     
                     {/* Global Components */}
