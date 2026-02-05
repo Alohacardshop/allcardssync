@@ -5,56 +5,13 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useEcosystemTheme } from '@/hooks/useEcosystemTheme';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { 
-  Home, 
-  PackagePlus, 
-  Package, 
-  Archive,
-  Printer, 
-  FileText, 
-  ShoppingBag, 
-  Settings,
-  ChevronLeft,
-  ChevronRight,
-} from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { PATHS } from '@/routes/paths';
+import { APP_NAV_ITEMS, APP_ADMIN_ITEMS, type AppNavItem } from '@/config/navigation';
 
 interface SidebarProps {
   className?: string;
 }
-
-const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
-  Home,
-  PackagePlus,
-  Package,
-  Archive,
-  Printer,
-  FileText,
-  ShoppingBag,
-  Settings,
-};
-
-interface NavItem {
-  key: string;
-  label: string;
-  href: string;
-  icon: string;
-  adminOnly?: boolean;
-}
-
-const NAV_ITEMS: NavItem[] = [
-  { key: 'home', label: 'Home', href: PATHS.dashboard, icon: 'Home' },
-  { key: 'intake', label: 'Intake', href: PATHS.intake, icon: 'PackagePlus' },
-  { key: 'inventory', label: 'Inventory', href: PATHS.inventory, icon: 'Package' },
-  { key: 'batches', label: 'Batches', href: PATHS.batches, icon: 'Archive' },
-  { key: 'barcode', label: 'Print', href: PATHS.barcodePrinting, icon: 'Printer' },
-  { key: 'docs', label: 'Documents', href: PATHS.docs, icon: 'FileText' },
-];
-
-const ADMIN_ITEMS: NavItem[] = [
-  { key: 'ebay', label: 'eBay', href: PATHS.ebay, icon: 'ShoppingBag', adminOnly: true },
-  { key: 'admin', label: 'Admin', href: PATHS.admin, icon: 'Settings', adminOnly: true },
-];
 
 /**
  * Sidebar navigation component for desktop/tablet
@@ -71,8 +28,8 @@ export function Sidebar({ className }: SidebarProps) {
     return location.pathname.startsWith(href);
   };
 
-  const renderNavItem = (item: NavItem) => {
-    const Icon = ICON_MAP[item.icon] || Home;
+  const renderNavItem = (item: AppNavItem) => {
+    const Icon = item.icon;
     const active = isActive(item.href);
 
     const navButton = (
@@ -143,7 +100,7 @@ export function Sidebar({ className }: SidebarProps) {
 
       {/* Main Navigation */}
       <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
-        {NAV_ITEMS.map(renderNavItem)}
+        {APP_NAV_ITEMS.map(renderNavItem)}
         
         {/* Admin section */}
         {isAdmin && (
@@ -157,7 +114,7 @@ export function Sidebar({ className }: SidebarProps) {
                   Admin
                 </p>
               )}
-              {ADMIN_ITEMS.map(renderNavItem)}
+              {APP_ADMIN_ITEMS.map(renderNavItem)}
             </div>
           </>
         )}

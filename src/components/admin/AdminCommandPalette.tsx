@@ -1,7 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Command,
   CommandDialog,
   CommandEmpty,
   CommandGroup,
@@ -10,28 +9,15 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/components/ui/command";
-import {
-  Settings,
-  Database,
-  ShoppingCart,
-  Users,
-  Server,
-  Wrench,
-  BarChart3,
-  Package,
-  Tag,
-  Home,
-  RefreshCw,
-  FileText,
-  Shield,
-  Activity
-} from 'lucide-react';
+import { Package, Database, Home } from 'lucide-react';
+import { ADMIN_NAV_SECTIONS, ADMIN_TOOLS, type AdminNavItem } from '@/config/navigation';
+import { PATHS } from '@/routes/paths';
 
 interface AdminCommand {
   id: string;
   label: string;
   description?: string;
-  icon: any;
+  icon: React.ComponentType<{ className?: string }>;
   category: string;
   action: () => void;
   keywords?: string[];
@@ -40,7 +26,7 @@ interface AdminCommand {
 interface AdminCommandPaletteProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onNavigate?: (section: string) => void;
+  onNavigate?: (sectionId: string) => void;
 }
 
 export function AdminCommandPalette({ 
@@ -51,130 +37,71 @@ export function AdminCommandPalette({
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
 
-  const commands: AdminCommand[] = useMemo(() => [
-    // Navigation
-    {
-      id: 'nav-overview',
-      label: 'Overview',
-      description: 'System overview and quick actions',
-      icon: BarChart3,
+  const commands: AdminCommand[] = useMemo(() => {
+    // Build navigation commands from centralized config
+    const navCommands: AdminCommand[] = ADMIN_NAV_SECTIONS.map(section => ({
+      id: `nav-${section.id}`,
+      label: section.title,
+      description: section.description,
+      icon: section.icon,
       category: 'Navigation',
-      action: () => onNavigate?.('overview'),
-      keywords: ['dashboard', 'home', 'stats']
-    },
-    {
-      id: 'nav-stores',
-      label: 'Store Management',
-      description: 'Shopify integration and sync',
-      icon: ShoppingCart,
-      category: 'Navigation',
-      action: () => onNavigate?.('stores'),
-      keywords: ['shopify', 'integration', 'sync']
-    },
-    {
-      id: 'nav-queue',
-      label: 'Queue Management',
-      description: 'Monitor queue health and settings',
-      icon: Package,
-      category: 'Navigation',
-      action: () => onNavigate?.('queue'),
-      keywords: ['queue', 'sync', 'health']
-    },
-    {
-      id: 'nav-hardware',
-      label: 'Hardware Test',
-      description: 'Test printers and connectivity',
-      icon: Wrench,
-      category: 'Navigation',
-      action: () => onNavigate?.('hardware'),
-      keywords: ['printer', 'test', 'zebra']
-    },
-    {
-      id: 'nav-data',
-      label: 'Data & Intake',
-      description: 'TCG database and intake settings',
-      icon: Database,
-      category: 'Navigation',
-      action: () => onNavigate?.('data'),
-      keywords: ['tcg', 'database', 'intake', 'data']
-    },
-    {
-      id: 'nav-users',
-      label: 'User Management',
-      description: 'Manage user assignments',
-      icon: Users,
-      category: 'Navigation',
-      action: () => onNavigate?.('users'),
-      keywords: ['users', 'permissions', 'access']
-    },
-    {
-      id: 'nav-categories',
-      label: 'Category Management',
-      description: 'Manage inventory categories',
-      icon: Tag,
-      category: 'Navigation',
-      action: () => onNavigate?.('categories'),
-      keywords: ['categories', 'taxonomy']
-    },
-    {
-      id: 'nav-system',
-      label: 'System & Logs',
-      description: 'View system logs',
-      icon: Server,
-      category: 'Navigation',
-      action: () => onNavigate?.('system'),
-      keywords: ['logs', 'debug', 'errors']
-    },
+      action: () => onNavigate?.(section.id),
+      keywords: section.keywords,
+    }));
 
-    // Quick Actions
-    {
-      id: 'action-inventory',
-      label: 'Go to Inventory',
-      description: 'View inventory page',
-      icon: Package,
-      category: 'Quick Actions',
-      action: () => navigate('/inventory'),
-      keywords: ['inventory', 'items']
-    },
-    {
-      id: 'action-batches',
-      label: 'Go to Batches',
-      description: 'View batch processing',
-      icon: Package,
-      category: 'Quick Actions',
-      action: () => navigate('/batches'),
-      keywords: ['batches', 'processing']
-    },
-    {
-      id: 'action-import',
-      label: 'Bulk Import',
-      description: 'Import items in bulk',
-      icon: Database,
-      category: 'Quick Actions',
-      action: () => navigate('/bulk-import'),
-      keywords: ['import', 'bulk', 'upload']
-    },
+    // Build tool commands from centralized config
+    const toolCommands: AdminCommand[] = ADMIN_TOOLS.map(tool => ({
+      id: `tool-${tool.id}`,
+      label: tool.title,
+      description: tool.description,
+      icon: tool.icon,
+      category: 'Tools',
+      action: () => navigate(tool.path),
+      keywords: tool.keywords,
+    }));
 
-    // Settings
-    {
-      id: 'settings-shopify',
-      label: 'Shopify Configuration',
-      description: 'Configure Shopify integration',
-      icon: Settings,
-      category: 'Settings',
-      action: () => onNavigate?.('stores'),
-      keywords: ['shopify', 'config', 'api']
-    },
-    {
-      id: 'settings-tcg',
-      label: 'TCG Database Settings',
-      description: 'Configure TCG database',
-      icon: Database,
-      category: 'Settings',
-      action: () => onNavigate?.('data'),
-      keywords: ['tcg', 'database', 'justtcg']
-    }
-  ], [navigate, onNavigate]);
+    // Quick actions for common app-level navigation
+    const quickActions: AdminCommand[] = [
+      {
+        id: 'action-inventory',
+        label: 'Go to Inventory',
+        description: 'View inventory page',
+        icon: Package,
+        category: 'Quick Actions',
+        action: () => navigate(PATHS.inventory),
+        keywords: ['inventory', 'items'],
+      },
+      {
+        id: 'action-batches',
+        label: 'Go to Batches',
+        description: 'View batch processing',
+        icon: Package,
+        category: 'Quick Actions',
+        action: () => navigate(PATHS.batches),
+        keywords: ['batches', 'processing'],
+      },
+      {
+        id: 'action-import',
+        label: 'Bulk Import',
+        description: 'Import items in bulk',
+        icon: Database,
+        category: 'Quick Actions',
+        action: () => navigate(PATHS.bulkImport),
+        keywords: ['import', 'bulk', 'upload'],
+      },
+      {
+        id: 'action-dashboard',
+        label: 'Go to Dashboard',
+        description: 'Return to main dashboard',
+        icon: Home,
+        category: 'Quick Actions',
+        action: () => navigate(PATHS.dashboard),
+        keywords: ['home', 'dashboard', 'main'],
+      },
+    ];
+
+    return [...navCommands, ...toolCommands, ...quickActions];
+  }, [navigate, onNavigate]);
 
   const filteredCommands = useMemo(() => {
     if (!search) return commands;
