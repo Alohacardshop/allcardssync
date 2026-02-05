@@ -12,6 +12,7 @@ import {
   FileText,
   ShoppingBag,
   Settings,
+  Archive,
 } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { EcosystemBadge } from '@/components/ui/EcosystemBadge';
@@ -30,6 +31,7 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   FileText,
   ShoppingBag,
   Settings,
+  Archive,
 };
 
 interface NavItem {
@@ -47,6 +49,7 @@ const BOTTOM_NAV_ITEMS: NavItem[] = [
 ];
 
 const MORE_ITEMS: NavItem[] = [
+  { key: 'batches', label: 'Batches', href: PATHS.batches, icon: 'Archive' },
   { key: 'docs', label: 'Documents', href: PATHS.docs, icon: 'FileText' },
   { key: 'ebay', label: 'eBay', href: PATHS.ebay, icon: 'ShoppingBag' },
   { key: 'admin', label: 'Settings', href: PATHS.admin, icon: 'Settings' },
