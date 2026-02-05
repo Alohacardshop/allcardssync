@@ -3,61 +3,19 @@ import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useEcosystemTheme } from '@/hooks/useEcosystemTheme';
-import { 
-  Home, 
-  PackagePlus, 
-  Package, 
-  Printer, 
-  Menu,
-  FileText,
-  ShoppingBag,
-  Settings,
-  Archive,
-} from 'lucide-react';
+import { Menu, Home } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { EcosystemBadge } from '@/components/ui/EcosystemBadge';
 import { PATHS } from '@/routes/paths';
+import { BOTTOM_NAV_PRIMARY, BOTTOM_NAV_MORE, type AppNavItem } from '@/config/navigation';
 
 interface BottomNavProps {
   className?: string;
 }
 
-const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
-  Home,
-  PackagePlus,
-  Package,
-  Printer,
-  Menu,
-  FileText,
-  ShoppingBag,
-  Settings,
-  Archive,
-};
-
-interface NavItem {
-  key: string;
-  label: string;
-  href: string;
-  icon: string;
-}
-
-const BOTTOM_NAV_ITEMS: NavItem[] = [
-  { key: 'home', label: 'Home', href: PATHS.dashboard, icon: 'Home' },
-  { key: 'intake', label: 'Intake', href: PATHS.intake, icon: 'PackagePlus' },
-  { key: 'inventory', label: 'Inventory', href: PATHS.inventory, icon: 'Package' },
-  { key: 'barcode', label: 'Print', href: PATHS.barcodePrinting, icon: 'Printer' },
-];
-
-const MORE_ITEMS: NavItem[] = [
-  { key: 'batches', label: 'Batches', href: PATHS.batches, icon: 'Archive' },
-  { key: 'docs', label: 'Documents', href: PATHS.docs, icon: 'FileText' },
-  { key: 'ebay', label: 'eBay', href: PATHS.ebay, icon: 'ShoppingBag' },
-  { key: 'admin', label: 'Settings', href: PATHS.admin, icon: 'Settings' },
-];
-
 /**
  * Mobile bottom navigation bar
- * Fixed at bottom of screen with 5 main actions
+ * Fixed at bottom of screen with 4 main actions + "More" menu
  */
 export function BottomNav({ className }: BottomNavProps) {
   const [moreOpen, setMoreOpen] = useState(false);
@@ -70,8 +28,8 @@ export function BottomNav({ className }: BottomNavProps) {
     return location.pathname.startsWith(href);
   };
 
-  const renderNavItem = (item: NavItem) => {
-    const Icon = ICON_MAP[item.icon] || Home;
+  const renderNavItem = (item: AppNavItem) => {
+    const Icon = item.icon || Home;
     const active = isActive(item.href);
 
     return (
@@ -100,6 +58,12 @@ export function BottomNav({ className }: BottomNavProps) {
     );
   };
 
+  // Filter more items based on admin status
+  const visibleMoreItems = BOTTOM_NAV_MORE.filter(item => {
+    if (item.adminOnly && !isAdmin) return false;
+    return true;
+  });
+
   return (
     <nav
       className={cn(
@@ -116,7 +80,7 @@ export function BottomNav({ className }: BottomNavProps) {
       )}
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
-      {BOTTOM_NAV_ITEMS.map(renderNavItem)}
+      {BOTTOM_NAV_PRIMARY.map(renderNavItem)}
       
       {/* More Menu */}
       <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
@@ -141,13 +105,8 @@ export function BottomNav({ className }: BottomNavProps) {
           </SheetHeader>
           
           <div className="grid gap-2 pb-4">
-            {MORE_ITEMS.filter(item => {
-              // Hide admin items for non-admins
-              if (item.key === 'ebay' && !isAdmin) return false;
-              if (item.key === 'admin' && !isAdmin) return false;
-              return true;
-            }).map((item) => {
-              const Icon = ICON_MAP[item.icon] || Home;
+            {visibleMoreItems.map((item) => {
+              const Icon = item.icon || Home;
               const active = isActive(item.href);
               
               return (

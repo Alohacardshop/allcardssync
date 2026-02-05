@@ -1,21 +1,6 @@
 import { useState, useEffect, Suspense } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import {
-  Settings,
-  Store,
-  Database,
-  Users,
-  Printer,
-  LayoutDashboard,
-  Package,
-  Command,
-  Menu,
-  Globe,
-  Bell,
-  RefreshCw,
-  Activity,
-  ChevronLeft,
-} from 'lucide-react';
+import { Menu, Command, ChevronLeft } from 'lucide-react';
 import {
   Sidebar,
   SidebarContent,
@@ -36,31 +21,13 @@ import { AdminGuard } from '@/components/AdminGuard';
 import { FullScreenLoader } from '@/components/ui/FullScreenLoader';
 import { AdminCommandPalette } from '@/components/admin/AdminCommandPalette';
 import { PATHS } from '@/routes/paths';
+import { ADMIN_NAV_SECTIONS, ADMIN_TOOLS, getAdminNavById } from '@/config/navigation';
 import { cn } from '@/lib/utils';
-
-// Admin navigation sections
-const ADMIN_NAV_SECTIONS = [
-  { id: 'overview', path: PATHS.admin, title: 'Overview', icon: LayoutDashboard },
-  { id: 'store', path: `${PATHS.admin}?section=store`, title: 'Store', icon: Store },
-  { id: 'data', path: `${PATHS.admin}?section=data`, title: 'Data & Intake', icon: Database },
-  { id: 'queue', path: `${PATHS.admin}?section=queue`, title: 'Queue', icon: Package },
-  { id: 'users', path: `${PATHS.admin}?section=users`, title: 'Users', icon: Users },
-  { id: 'hardware', path: `${PATHS.admin}?section=hardware`, title: 'Hardware', icon: Printer },
-  { id: 'regions', path: `${PATHS.admin}?section=regions`, title: 'Regions', icon: Globe },
-  { id: 'system', path: `${PATHS.admin}?section=system`, title: 'System', icon: Settings },
-];
-
-const ADMIN_TOOLS = [
-  { id: 'discord', path: PATHS.adminDiscordNotifications, title: 'Discord', icon: Bell },
-  { id: 'pending', path: PATHS.adminPendingNotifications, title: 'Pending', icon: Bell },
-  { id: 'backfill', path: PATHS.adminShopifyBackfill, title: 'Backfill', icon: RefreshCw },
-  { id: 'inventory-sync', path: PATHS.adminInventorySync, title: 'Inv Sync', icon: RefreshCw },
-  { id: 'sync-health', path: PATHS.adminSyncHealth, title: 'Health', icon: Activity },
-];
+import { Settings } from 'lucide-react';
 
 /**
  * Admin layout with dedicated sidebar and header
- * Completely separate from AppShell
+ * Uses centralized navigation from @/config/navigation
  */
 export function AdminLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -99,10 +66,10 @@ export function AdminLayout() {
   };
 
   const handleNavigate = (sectionId: string) => {
-    // Used by command palette - find matching section and navigate
-    const section = ADMIN_NAV_SECTIONS.find(s => s.id === sectionId);
-    if (section) {
-      navigate(section.path);
+    // Used by command palette - find matching nav item and navigate
+    const navItem = getAdminNavById(sectionId);
+    if (navItem) {
+      navigate(navItem.path);
     }
   };
 

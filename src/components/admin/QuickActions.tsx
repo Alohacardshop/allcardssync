@@ -21,7 +21,7 @@ export function QuickActions({ onNavigate }: QuickActionsProps) {
       onClick: () => onNavigate('queue'),
     },
     {
-      label: 'Data Settings',
+      label: 'Data & Intake',
       icon: Upload,
       description: 'TCG database & intake config',
       onClick: () => onNavigate('data'),
