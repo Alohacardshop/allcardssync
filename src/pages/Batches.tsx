@@ -77,7 +77,7 @@ export default function Batches() {
   const [lots, setLots] = useState<IntakeLot[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-const [statusFilter, setStatusFilter] = useState<string>("active");
+  const [statusFilter, setStatusFilter] = useState<string>("active");
   const [selectedLot, setSelectedLot] = useState<IntakeLot | null>(null);
   const [lotItems, setLotItems] = useState<IntakeItem[]>([]);
   const [loadingItems, setLoadingItems] = useState(false);
@@ -89,6 +89,11 @@ const [statusFilter, setStatusFilter] = useState<string>("active");
   const [bulkActionLoading, setBulkActionLoading] = useState(false);
   const { toast } = useToast();
   const { assignedStore, selectedLocation } = useStore();
+
+  // Clear selection when filter changes to prevent hidden-selection bugs
+  useEffect(() => {
+    setSelectedBatches(new Set());
+  }, [statusFilter]);
 
   // Check if user is admin
   useEffect(() => {
@@ -334,16 +339,28 @@ const [statusFilter, setStatusFilter] = useState<string>("active");
     
     setBulkActionLoading(true);
     try {
+    let successCount = 0;
       for (const lot of batchesToDelete) {
+      try {
         await supabase.rpc('admin_delete_batch', {
           lot_id_in: lot.id,
           reason_in: `Bulk deleted via admin interface`
         });
+        successCount++;
+      } catch {
+        // Continue with remaining batches
+      }
       }
       
+    if (successCount === 0) {
+      throw new Error('No batches were deleted');
+    }
+    
       toast({
         title: "Batches Deleted",
-      description: `${batchesToDelete.length} batches deleted. View in "Deleted" filter.`,
+      description: successCount === batchesToDelete.length 
+        ? `${successCount} batches deleted. View in "Deleted" filter.`
+        : `${successCount} of ${batchesToDelete.length} batches deleted.`,
       });
       
       setSelectedBatches(new Set());
