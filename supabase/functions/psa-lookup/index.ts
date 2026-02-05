@@ -12,6 +12,7 @@ import {
   cacheCertificateData
 } from "./helpers.ts";
 import { scrapeComicCert } from "./scraper.ts";
+import { requireAuth, requireRole } from "../_shared/auth.ts";
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -24,8 +25,12 @@ Deno.serve(async (req) => {
   const headers = buildResponseHeaders(origin, requestId);
 
   try {
+    // Authenticate user and require staff/admin role
+    const user = await requireAuth(req);
+    await requireRole(user.id, ['admin', 'staff']);
+
     const { cert_number } = await req.json().catch(() => ({}))
-    log.info('[psa-lookup] Request received', { requestId, cert_number })
+    log.info('[psa-lookup] Request received', { requestId, cert_number, userId: user.id })
     
     if (!cert_number || String(cert_number).trim() === '') {
       return buildJsonResponse(
@@ -226,6 +231,15 @@ Deno.serve(async (req) => {
     log.error('[psa-lookup] Unexpected error', { requestId, error: String(error) });
     
     const headers = buildResponseHeaders(origin, requestId);
+    
+    // Handle authentication errors
+    if (error.message?.includes('Authorization') || error.message?.includes('authentication') || error.message?.includes('permissions')) {
+      return buildJsonResponse(
+        { ok: false, error: error.message },
+        { status: 401, headers }
+      );
+    }
+    
     return buildJsonResponse(
       {
         ok: false,

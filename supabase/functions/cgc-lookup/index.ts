@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { getCorsHeaders } from "../_lib/cors.ts";
+import { requireAuth, requireRole } from "../_shared/auth.ts";
 
 const CGC_API_BASE = "https://dealer-api.collectiblesgroup.com";
 
@@ -145,6 +146,10 @@ serve(async (req) => {
   }
 
   try {
+    // Authenticate user and require staff/admin role
+    const user = await requireAuth(req);
+    await requireRole(user.id, ['admin', 'staff']);
+
     const { certNumber } = await req.json();
 
     if (!certNumber) {
@@ -166,6 +171,15 @@ serve(async (req) => {
     );
   } catch (error) {
     console.error("[cgc-lookup] Error:", error);
+    
+    // Handle authentication errors
+    if (error.message?.includes('Authorization') || error.message?.includes('authentication') || error.message?.includes('permissions')) {
+      return new Response(
+        JSON.stringify({ ok: false, error: error.message }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
     return new Response(
       JSON.stringify({ 
         ok: false, 

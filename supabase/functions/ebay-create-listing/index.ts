@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { requireAuth, requireRole, requireStoreAccess } from '../_shared/auth.ts'
 import {
   getValidAccessToken,
   createOrUpdateInventoryItem,
@@ -44,11 +45,15 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders })
   }
 
-  const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-  const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-  const supabase = createClient(supabaseUrl, supabaseKey)
-
   try {
+    // Authenticate user and require staff/admin role
+    const user = await requireAuth(req)
+    await requireRole(user.id, ['admin', 'staff'])
+
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    const supabase = createClient(supabaseUrl, supabaseKey)
+
     const { intake_item_id, store_key, template_id }: CreateListingRequest = await req.json()
 
     if (!intake_item_id || !store_key) {
@@ -288,8 +293,20 @@ serve(async (req) => {
   } catch (error) {
     console.error('[ebay-create-listing] Error:', error)
 
+    // Handle authentication errors
+    if (error.message?.includes('Authorization') || error.message?.includes('authentication') || error.message?.includes('permissions')) {
+      return new Response(
+        JSON.stringify({ success: false, error: error.message }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
     // Update item with error status if we have the ID
     try {
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+      const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+      const supabase = createClient(supabaseUrl, supabaseKey)
+      
       const body = await req.clone().json()
       if (body.intake_item_id) {
         await supabase
