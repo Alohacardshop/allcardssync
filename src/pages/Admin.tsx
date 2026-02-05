@@ -1,123 +1,32 @@
-import { useState, useEffect } from "react";
-import {
-  Settings,
-  Store,
-  Database,
-  Users,
-  Printer,
-  LayoutDashboard,
-  Package,
-  Command,
-  Menu,
-  Globe,
-} from "lucide-react";
-import { Link } from "react-router-dom";
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarProvider
-} from "@/components/ui/sidebar";
-import { Button } from "@/components/ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { SystemHealthDashboard } from "@/components/admin/SystemHealthDashboard";
-import { StoreManagementTabs } from "@/components/admin/StoreManagementTabs";
-import { QueueManagementTabs } from "@/components/admin/QueueManagementTabs";
-import { UserAssignmentManager } from "@/components/UserAssignmentManager";
-import { ActivityFeed } from "@/components/admin/ActivityFeed";
-import { AdminCommandPalette } from "@/components/admin/AdminCommandPalette";
-import { MetricsBar } from "@/components/admin/MetricsBar";
-import { EnhancedBreadcrumb } from "@/components/admin/EnhancedBreadcrumb";
-import { CatalogTabsSection } from "@/components/admin/CatalogTabsSection";
-import { HardwareTabsSection } from "@/components/admin/HardwareTabsSection";
-import { SystemTabsSection } from "@/components/admin/SystemTabsSection";
-import { RegionSettingsEditor } from "@/components/admin/RegionSettingsEditor";
-import { QuickActions } from "@/components/admin/QuickActions";
-import { ConfigurationStatus } from "@/components/admin/ConfigurationStatus";
+import { useSearchParams } from 'react-router-dom';
+import { SystemHealthDashboard } from '@/components/admin/SystemHealthDashboard';
+import { StoreManagementTabs } from '@/components/admin/StoreManagementTabs';
+import { QueueManagementTabs } from '@/components/admin/QueueManagementTabs';
+import { UserAssignmentManager } from '@/components/UserAssignmentManager';
+import { ActivityFeed } from '@/components/admin/ActivityFeed';
+import { MetricsBar } from '@/components/admin/MetricsBar';
+import { CatalogTabsSection } from '@/components/admin/CatalogTabsSection';
+import { HardwareTabsSection } from '@/components/admin/HardwareTabsSection';
+import { SystemTabsSection } from '@/components/admin/SystemTabsSection';
+import { RegionSettingsEditor } from '@/components/admin/RegionSettingsEditor';
+import { QuickActions } from '@/components/admin/QuickActions';
+import { ConfigurationStatus } from '@/components/admin/ConfigurationStatus';
 
-// Consolidated sidebar - 7 sections
-const adminSections = [
-  {
-    id: 'overview',
-    title: 'Overview',
-    icon: LayoutDashboard,
-  },
-  {
-    id: 'store',
-    title: 'Store',
-    icon: Store,
-  },
-  {
-    id: 'catalog',
-    title: 'Catalog',
-    icon: Database,
-  },
-  {
-    id: 'queue',
-    title: 'Queue',
-    icon: Package,
-  },
-  {
-    id: 'users',
-    title: 'Users',
-    icon: Users,
-  },
-  {
-    id: 'hardware',
-    title: 'Hardware',
-    icon: Printer,
-  },
-  {
-    id: 'regions',
-    title: 'Regions',
-    icon: Globe,
-  },
-  {
-    id: 'system',
-    title: 'System',
-    icon: Settings,
-  },
-];
-
+/**
+ * Admin dashboard page - renders section content based on URL query param
+ * Layout (sidebar/header) is handled by AdminLayout
+ */
 export default function Admin() {
-  const [activeSection, setActiveSection] = useState('overview');
-  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeSection = searchParams.get('section') || 'overview';
 
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // ⌘K or Ctrl+K for command palette
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault();
-        setCommandPaletteOpen(true);
-      }
-      // ⌘1-8 for quick section switching
-      if ((e.metaKey || e.ctrlKey) && e.key >= '1' && e.key <= '8') {
-        e.preventDefault();
-        const index = parseInt(e.key) - 1;
-        if (adminSections[index]) {
-          setActiveSection(adminSections[index].id);
-        }
-      }
-      // ⌘B for sidebar toggle
-      if ((e.metaKey || e.ctrlKey) && e.key === 'b') {
-        e.preventDefault();
-        setSidebarCollapsed(prev => !prev);
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  const handleNavigate = (sectionId: string) => {
+    if (sectionId === 'overview') {
+      setSearchParams({});
+    } else {
+      setSearchParams({ section: sectionId });
+    }
+  };
 
   const renderSectionContent = () => {
     switch (activeSection) {
@@ -126,7 +35,7 @@ export default function Admin() {
           <div className="space-y-6">
             <MetricsBar />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <QuickActions onNavigate={setActiveSection} />
+              <QuickActions onNavigate={handleNavigate} />
               <ConfigurationStatus />
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -154,123 +63,9 @@ export default function Admin() {
       case 'system':
         return <SystemTabsSection />;
       default:
-        return <div>Section not found</div>;
+        return <div className="text-muted-foreground">Section not found</div>;
     }
   };
 
-  return (
-    <TooltipProvider>
-      <SidebarProvider>
-        <div className="min-h-screen flex w-full bg-background">
-          {/* Compact Sidebar */}
-          <Sidebar 
-            className={sidebarCollapsed ? "w-16" : "w-72"} 
-            collapsible="icon"
-          >
-            <SidebarHeader className="border-b p-4">
-              <div className="flex items-center justify-between">
-                {!sidebarCollapsed && (
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-gradient-to-br from-primary to-accent text-primary-foreground">
-                      <Settings className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h1 className="text-lg font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">Admin</h1>
-                      <p className="text-xs text-muted-foreground">Control Center</p>
-                    </div>
-                  </div>
-                )}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-                  className="ml-auto hover:bg-primary/10"
-                >
-                  <Menu className="w-4 h-4" />
-                </Button>
-              </div>
-            </SidebarHeader>
-
-            <SidebarContent className="p-2">
-              <SidebarMenu>
-                {adminSections.map((section) => (
-                  <SidebarMenuItem key={section.id}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <SidebarMenuButton
-                          onClick={() => setActiveSection(section.id)}
-                          isActive={activeSection === section.id}
-                          className="w-full justify-start gap-3 px-3 py-2 hover:bg-accent transition-colors"
-                        >
-                          <section.icon className="w-5 h-5" />
-                          {!sidebarCollapsed && (
-                            <span className="font-medium">{section.title}</span>
-                          )}
-                        </SidebarMenuButton>
-                      </TooltipTrigger>
-                      {sidebarCollapsed && (
-                        <TooltipContent side="right">
-                          <p>{section.title}</p>
-                        </TooltipContent>
-                      )}
-                    </Tooltip>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </SidebarContent>
-
-
-            {/* Back to Dashboard Link */}
-            {!sidebarCollapsed && (
-              <div className="border-t p-4">
-                <Link to="/">
-                  <Button variant="ghost" className="w-full justify-start">
-                    ← Back to Dashboard
-                  </Button>
-                </Link>
-              </div>
-            )}
-          </Sidebar>
-
-          {/* Main Content */}
-          <main className="flex-1 overflow-auto">
-            <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
-              <div className="p-4">
-                <div className="flex items-center justify-between">
-                  <EnhancedBreadcrumb currentSection={activeSection} />
-                  
-                  <div className="flex items-center gap-2">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          onClick={() => setCommandPaletteOpen(true)}
-                        >
-                          <Command className="w-4 h-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Command Palette (⌘K)</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="p-6">
-              {renderSectionContent()}
-            </div>
-          </main>
-
-          <AdminCommandPalette
-            open={commandPaletteOpen}
-            onOpenChange={setCommandPaletteOpen}
-            onNavigate={setActiveSection}
-          />
-        </div>
-      </SidebarProvider>
-    </TooltipProvider>
-  );
+  return renderSectionContent();
 }
