@@ -5,6 +5,7 @@ import { logger } from '@/lib/logger';
 import { FullScreenLoader } from '@/components/ui/FullScreenLoader';
 import { Button } from '@/components/ui/button';
 import { ShieldX } from 'lucide-react';
+import { PATHS } from '@/routes/paths';
 
 interface AdminGuardProps {
   children: React.ReactNode;
@@ -22,7 +23,7 @@ export function AdminGuard({ children }: AdminGuardProps) {
       
       // Auto-redirect after 3 seconds
       const timer = setTimeout(() => {
-        navigate('/', { replace: true });
+        navigate(PATHS.dashboard, { replace: true });
       }, 3000);
       
       return () => clearTimeout(timer);
@@ -47,7 +48,7 @@ export function AdminGuard({ children }: AdminGuardProps) {
               Redirecting you to the dashboard…
             </p>
           </div>
-          <Button onClick={() => navigate('/', { replace: true })} variant="outline">
+          <Button onClick={() => navigate(PATHS.dashboard, { replace: true })} variant="outline">
             Go to Dashboard Now
           </Button>
         </div>

@@ -5,6 +5,7 @@ import { canUseApp, getUserRole, type AppKey } from '@/lib/permissions';
 import { FullScreenLoader } from '@/components/ui/FullScreenLoader';
 import { Button } from '@/components/ui/button';
 import { Lock } from 'lucide-react';
+import { PATHS } from '@/routes/paths';
 
 interface RequireAppProps {
   appKey: AppKey;
@@ -29,7 +30,7 @@ export function RequireApp({ appKey, children }: RequireAppProps) {
       
       // Auto-redirect after 3 seconds
       const timer = setTimeout(() => {
-        navigate('/', { replace: true });
+        navigate(PATHS.dashboard, { replace: true });
       }, 3000);
       
       return () => clearTimeout(timer);
@@ -54,7 +55,7 @@ export function RequireApp({ appKey, children }: RequireAppProps) {
               Redirecting you to the dashboard…
             </p>
           </div>
-          <Button onClick={() => navigate('/', { replace: true })} variant="outline" size="sm">
+          <Button onClick={() => navigate(PATHS.dashboard, { replace: true })} variant="outline" size="sm">
             Go to Dashboard Now
           </Button>
         </div>
