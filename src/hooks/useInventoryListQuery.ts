@@ -12,6 +12,7 @@ export interface InventoryFilters {
   printStatusFilter?: 'all' | 'printed' | 'not-printed';
   typeFilter?: 'all' | 'raw' | 'graded';
   categoryFilter?: string; // Dynamic category filter - 'all' or exact category value
+  collectionFilter?: string; // Shopify collection GID - 'all' or collection GID
   tagFilter?: string[]; // Shopify tags filter (uses normalized_tags for filtering)
   
   searchTerm?: string;
@@ -37,6 +38,7 @@ export function useInventoryListQuery(filters: InventoryFilters) {
       filters.locationGid,
       filters.activeTab,
       filters.categoryFilter,
+      filters.collectionFilter,
       filters.statusFilter,
       filters.batchFilter,
       filters.printStatusFilter,
@@ -56,6 +58,7 @@ export function useInventoryListQuery(filters: InventoryFilters) {
         locationGid,
         activeTab,
         categoryFilter = 'all',
+        collectionFilter = 'all',
         statusFilter,
         batchFilter,
         printStatusFilter = 'all',

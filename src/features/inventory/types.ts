@@ -82,7 +82,12 @@ export type InventoryStatusFilter = 'all' | 'active' | 'out-of-stock' | 'sold' |
 export type InventoryTypeFilter = 'all' | 'raw' | 'graded';
 
 /**
- * Category filter options - 'all' or dynamic category string from Shopify
+ * Collection filter options - 'all' or Shopify collection GID
+ */
+export type InventoryCollectionFilter = string;
+
+/**
+ * @deprecated Use InventoryCollectionFilter instead
  */
 export type InventoryCategoryFilter = string;
 
@@ -124,6 +129,7 @@ export interface InventoryFilterState {
   statusFilter: InventoryStatusFilter;
   typeFilter: InventoryTypeFilter;
   categoryFilter: InventoryCategoryFilter;
+  collectionFilter: InventoryCollectionFilter;
   shopifySyncFilter: ShopifySyncFilter;
   ebayStatusFilter: EbayStatusFilter;
   printStatusFilter: PrintStatusFilter;
