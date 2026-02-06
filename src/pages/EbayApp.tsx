@@ -91,6 +91,7 @@ interface EbayStoreConfig {
   default_return_policy_id: string | null;
   title_template: string | null;
   description_template: string | null;
+  price_markup_percent: number | null;
 }
 
 interface EbayPolicy {
@@ -594,7 +595,8 @@ export default function EbayApp() {
             default_payment_policy_id: newConfig.default_payment_policy_id,
             default_return_policy_id: newConfig.default_return_policy_id,
             title_template: newConfig.title_template,
-            description_template: newConfig.description_template
+            description_template: newConfig.description_template,
+            price_markup_percent: newConfig.price_markup_percent
           })
           .eq('id', newConfig.id);
         
@@ -990,6 +992,25 @@ export default function EbayApp() {
                         checked={selectedConfig.is_active || false}
                         onCheckedChange={(checked) => updateConfig({ is_active: checked })}
                       />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Price Markup (%)</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Percentage to add to item price when listing on eBay
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.5"
+                          value={selectedConfig.price_markup_percent ?? 0}
+                          onChange={(e) => updateConfig({ price_markup_percent: parseFloat(e.target.value) || 0 })}
+                          className="w-32"
+                        />
+                        <span className="text-sm text-muted-foreground">%</span>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
