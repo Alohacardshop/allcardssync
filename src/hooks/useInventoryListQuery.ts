@@ -169,6 +169,24 @@ export function useInventoryListQuery(filters: InventoryFilters) {
         query = query.eq('type', typeFilter === 'raw' ? 'Raw' : 'Graded');
       }
 
+      // Apply collection filter - fetch product IDs from the selected Shopify collection
+      if (collectionFilter && collectionFilter !== 'all') {
+        // Fetch products that belong to this collection from Shopify via edge function
+        const { data: collectionData, error: collectionError } = await supabase.functions.invoke(
+          'fetch-collection-products',
+          { body: { storeKey, collectionGid: collectionFilter } }
+        );
+        
+        if (!collectionError && collectionData?.productIds?.length > 0) {
+          // productIds are numeric IDs like "9398236774631"
+          query = query.in('shopify_product_id', collectionData.productIds);
+        } else if (!collectionError && collectionData?.productIds?.length === 0) {
+          // Collection has no products - force empty result
+          query = query.eq('id', 'no-match-force-empty');
+        }
+        // If there's an error, we fall through and show all items (graceful degradation)
+      }
+
       // Apply category filter - now uses exact category value from Shopify
       if (categoryFilter && categoryFilter !== 'all') {
         // Filter by exact category match (case-sensitive, matches Shopify product type)
