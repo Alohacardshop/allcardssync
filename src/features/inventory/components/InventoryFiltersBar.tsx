@@ -29,6 +29,9 @@ export const InventoryFiltersBar = React.memo(({
   shopifyTags,
   isLoadingTags,
   searchInputRef,
+  categories = [],
+  groupedCategories = [],
+  isLoadingCategories = false,
 }: InventoryFiltersBarProps) => {
   // Build active filter chips
   const activeChips: Array<{ key: string; label: string; onRemove: () => void }> = [];
@@ -131,14 +134,10 @@ export const InventoryFiltersBar = React.memo(({
   }
 
   if (filters.categoryFilter !== 'all') {
-    const labels: Record<string, string> = {
-      'tcg': 'TCG',
-      'comics': 'Comics',
-      'sealed': 'Sealed'
-    };
+    // For dynamic categories, just display the category name directly
     activeChips.push({
       key: 'category',
-      label: labels[filters.categoryFilter] || filters.categoryFilter,
+      label: filters.categoryFilter,
       onRemove: () => onFilterChange('categoryFilter', 'all')
     });
   }
@@ -248,6 +247,9 @@ export const InventoryFiltersBar = React.memo(({
           onTypeFilterChange={(value) => onFilterChange('typeFilter', value)}
           categoryFilter={filters.categoryFilter}
           onCategoryFilterChange={(value) => onFilterChange('categoryFilter', value)}
+          categories={categories}
+          groupedCategories={groupedCategories}
+          isLoadingCategories={isLoadingCategories}
           shopifySyncFilter={filters.shopifySyncFilter}
           onShopifySyncFilterChange={(value) => { 
             onFilterChange('shopifySyncFilter', value); 

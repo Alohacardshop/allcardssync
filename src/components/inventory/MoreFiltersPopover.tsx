@@ -9,22 +9,28 @@ import {
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { TagFilterDropdown } from './TagFilterDropdown';
 import type { TagCount } from '@/hooks/useShopifyTags';
+import type { CategoryCount, GroupedCategories } from '@/hooks/useCategoryFilter';
 
 interface MoreFiltersPopoverProps {
   // Type filter
   typeFilter: 'all' | 'raw' | 'graded';
   onTypeFilterChange: (value: 'all' | 'raw' | 'graded') => void;
   
-  // Category filter
-  categoryFilter: 'all' | 'tcg' | 'comics' | 'sealed';
-  onCategoryFilterChange: (value: 'all' | 'tcg' | 'comics' | 'sealed') => void;
+  // Category filter - now dynamic
+  categoryFilter: string;
+  onCategoryFilterChange: (value: string) => void;
+  categories?: CategoryCount[];
+  groupedCategories?: GroupedCategories[];
+  isLoadingCategories?: boolean;
   
   // Shopify sync filter
   shopifySyncFilter: 'all' | 'not-synced' | 'synced' | 'queued' | 'error';
@@ -58,6 +64,9 @@ export function MoreFiltersPopover({
   onTypeFilterChange,
   categoryFilter,
   onCategoryFilterChange,
+  categories = [],
+  groupedCategories = [],
+  isLoadingCategories = false,
   shopifySyncFilter,
   onShopifySyncFilterChange,
   ebayStatusFilter,
@@ -145,18 +154,38 @@ export function MoreFiltersPopover({
               </Select>
             </div>
 
-            {/* Category Filter */}
+            {/* Category Filter - Dynamic from Shopify */}
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-muted-foreground">Category</label>
               <Select value={categoryFilter} onValueChange={onCategoryFilterChange}>
                 <SelectTrigger className="h-8">
-                  <SelectValue />
+                  <SelectValue placeholder={isLoadingCategories ? "Loading..." : "All Categories"} />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="max-h-[300px]">
                   <SelectItem value="all">All Categories</SelectItem>
-                  <SelectItem value="tcg">🎴 TCG</SelectItem>
-                  <SelectItem value="comics">📚 Comics</SelectItem>
-                  <SelectItem value="sealed">📦 Sealed</SelectItem>
+                  
+                  {/* Render grouped categories */}
+                  {groupedCategories.map((group) => (
+                    <SelectGroup key={group.group}>
+                      <SelectLabel className="text-xs text-muted-foreground font-semibold px-2 py-1">
+                        {group.group}
+                      </SelectLabel>
+                      {group.categories.map((cat) => (
+                        <SelectItem key={cat.category} value={cat.category}>
+                          {cat.category} ({cat.count})
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  ))}
+                  
+                  {/* Fallback: if no grouped categories, show flat list */}
+                  {groupedCategories.length === 0 && categories.length > 0 && (
+                    categories.map((cat) => (
+                      <SelectItem key={cat.category} value={cat.category}>
+                        {cat.category} ({cat.count})
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
             </div>

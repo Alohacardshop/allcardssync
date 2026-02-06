@@ -98,12 +98,8 @@ export function ActiveFilterChips({
   }
 
   if (categoryFilter !== 'all') {
-    const labels: Record<string, string> = {
-      'tcg': 'TCG',
-      'comics': 'Comics',
-      'sealed': 'Sealed'
-    };
-    chips.push({ key: 'category', label: labels[categoryFilter] || categoryFilter, filterType: 'categoryFilter' });
+    // Display dynamic category name directly
+    chips.push({ key: 'category', label: categoryFilter, filterType: 'categoryFilter' });
   }
 
   if (chips.length === 0) return null;
