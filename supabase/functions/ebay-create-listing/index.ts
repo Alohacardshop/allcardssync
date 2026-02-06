@@ -201,6 +201,13 @@ serve(async (req) => {
       throw new Error(inventoryResult.error)
     }
 
+    // Calculate price with markup
+    const basePrice = item.price || 0
+    const markupPercent = storeConfig.price_markup_percent || 0
+    const finalPrice = basePrice * (1 + markupPercent / 100)
+
+    console.log(`[ebay-create-listing] Price: base=${basePrice}, markup=${markupPercent}%, final=${finalPrice.toFixed(2)}`)
+
     // Create offer
     const offer: EbayOffer = {
       sku: ebaySku,
@@ -210,7 +217,7 @@ serve(async (req) => {
       availableQuantity: item.quantity || 1,
       pricingSummary: {
         price: {
-          value: (item.price || 0).toFixed(2),
+          value: finalPrice.toFixed(2),
           currency: 'USD',
         },
       },
