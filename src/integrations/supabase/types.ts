@@ -611,6 +611,7 @@ export type Database = {
           location_key: string | null
           marketplace_id: string
           oauth_connected_at: string | null
+          price_markup_percent: number | null
           store_key: string
           sync_enabled: boolean | null
           sync_mode: string | null
@@ -634,6 +635,7 @@ export type Database = {
           location_key?: string | null
           marketplace_id?: string
           oauth_connected_at?: string | null
+          price_markup_percent?: number | null
           store_key: string
           sync_enabled?: boolean | null
           sync_mode?: string | null
@@ -657,6 +659,7 @@ export type Database = {
           location_key?: string | null
           marketplace_id?: string
           oauth_connected_at?: string | null
+          price_markup_percent?: number | null
           store_key?: string
           sync_enabled?: boolean | null
           sync_mode?: string | null
