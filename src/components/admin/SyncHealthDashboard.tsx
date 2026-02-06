@@ -48,6 +48,7 @@ interface WebhookStats {
 
 export function SyncHealthDashboard() {
   const [isReconciling, setIsReconciling] = React.useState(false);
+  const [isClearingErrors, setIsClearingErrors] = React.useState(false);
   const [expandedStores, setExpandedStores] = React.useState<Set<string>>(new Set());
 
   // Fetch reconciliation data
@@ -123,6 +124,79 @@ export function SyncHealthDashboard() {
     },
     refetchInterval: 30000,
   });
+
+  // Fetch sync error count from intake_items
+  const { data: syncErrorCount = 0, refetch: refetchErrorCount } = useQuery({
+    queryKey: ['sync-error-count'],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from('intake_items')
+        .select('*', { count: 'exact', head: true })
+        .in('shopify_sync_status', ['error', 'failed']);
+      
+      if (error) {
+        console.error('Failed to fetch sync error count:', error);
+        return 0;
+      }
+      return count || 0;
+    },
+    refetchInterval: 30000,
+  });
+
+  // Clear recent errors function
+  const clearRecentErrors = async () => {
+    setIsClearingErrors(true);
+    try {
+      let clearedCount = 0;
+
+      // Clear dead letter webhook events
+      if (totalDeadLetter > 0) {
+        const { error: webhookError } = await supabase
+          .from('webhook_events')
+          .delete()
+          .eq('dead_letter', true);
+        
+        if (webhookError) {
+          console.error('Failed to clear dead letter events:', webhookError);
+        } else {
+          clearedCount += totalDeadLetter;
+        }
+      }
+
+      // Reset sync errors in intake_items
+      if (syncErrorCount > 0) {
+        const { error: intakeError } = await supabase
+          .from('intake_items')
+          .update({
+            shopify_sync_status: 'pending',
+            last_shopify_sync_error: null,
+          })
+          .in('shopify_sync_status', ['error', 'failed']);
+        
+        if (intakeError) {
+          console.error('Failed to clear intake sync errors:', intakeError);
+        } else {
+          clearedCount += syncErrorCount;
+        }
+      }
+
+      toast({
+        title: 'Errors cleared',
+        description: `Cleared ${clearedCount} error entries. Items will retry sync automatically.`,
+      });
+
+      // Refetch data
+      refetchErrorCount();
+    } catch (error: any) {
+      toast({
+        title: 'Failed to clear errors',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsClearingErrors(false);
+    }
+  };
 
   // Trigger manual reconciliation
   const triggerReconcile = async () => {
@@ -305,7 +379,24 @@ export function SyncHealthDashboard() {
           )}
           Run Reconciliation Now
         </Button>
-        <RefreshButton queryKey={['reconciliation-runs', 'store-reconciliation-summary', 'webhook-stats']} />
+        
+        {(totalDeadLetter > 0 || syncErrorCount > 0) && (
+          <Button 
+            onClick={clearRecentErrors}
+            disabled={isClearingErrors}
+            variant="outline"
+            className="text-orange-600 border-orange-600 hover:bg-orange-50"
+          >
+            {isClearingErrors ? (
+              <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <XCircle className="h-4 w-4 mr-2" />
+            )}
+            Clear Errors ({totalDeadLetter + syncErrorCount})
+          </Button>
+        )}
+        
+        <RefreshButton queryKey={['reconciliation-runs', 'store-reconciliation-summary', 'webhook-stats', 'sync-error-count']} />
       </div>
 
       {/* Tabbed View */}
