@@ -1,47 +1,80 @@
 
-Goal: remove the “three vertical dots” that are showing up on the LEFT of every row, and keep row actions (Sync + print indicator + menu) grouped cleanly on the RIGHT near the Sync button.
 
-## What’s happening (root cause)
-Those “three black dots” are the **row overflow menu icon** (`MoreVertical`).
-In the current table row implementation, the grid defines **one** `actions` column, but the row renders **two separate grid children** for actions:
-1) a cell for the primary action button (Sync/Retry/Resync)
-2) a second cell for the print icon + kebab menu
+## Summary
+You want the category filter to dynamically show **all available categories from Shopify** instead of the current hardcoded 3 options (TCG, Comics, Sealed). Looking at your data, the `category` column in `intake_items` already contains Shopify product types like:
+- Pokemon (718 items)
+- BASEBALL CARDS (122 items)  
+- BASKETBALL CARDS (40 items)
+- FOOTBALL CARDS (31 items)
+- Comics (11 items)
+- And many more...
 
-Because the CSS grid only has one track for `actions`, the second “actions” element **wraps into a new grid row** and starts again at column 1, which makes the kebab icon appear at the far left of each row.
+## What I'll Do
 
-## Implementation changes (no behavior changes)
-### 1) Make the Actions column render exactly ONE grid cell
-In `InventoryTableView.tsx` → `TableRow`:
-- Replace the current fragment under `isColVisible('actions')` that returns two `<div>`s
-- With a single `<div>` that contains:
-  - the primary action button (or placeholder)
-  - the compact print indicator (only when printed)
-  - the kebab menu button (MoreVertical)
+**Make the category filter dynamic** - fetch actual categories from your inventory data and display them grouped for easy selection.
 
-This keeps all row actions in one place and prevents grid wrapping.
+### 1. Create a new hook to fetch available categories
+A new `useCategoryFilter` hook will query distinct categories from `intake_items` with their counts, similar to how `useShopifyTags` works.
 
-### 2) Fix the header to also render ONE placeholder cell for Actions
-In `InventoryTableView.tsx` → sticky header:
-- Replace the current `actions` header fragment that renders two `<span aria-hidden="true" />`
-- With a single placeholder element so the header has the same number of grid children as the grid template.
+### 2. Update the filter UI
+The "Category" dropdown in the More Filters popover will:
+- Show all available categories dynamically
+- Group them by main category (TCG vs Comics vs Sports)
+- Show item counts next to each option
+- Support the existing "all" option plus dynamic categories
 
-### 3) Widen the Actions column so “Sync + icon + menu” fits cleanly
-In `src/features/inventory/types/views.ts`:
-- Update the `actions` column width from `44px` to something that matches the new combined layout, e.g. `120px` (or `minmax(110px, 120px)`).
-Reason: once Sync and kebab are in the same cell, `44px` is too tight and can reintroduce awkward overflow.
+### 3. Update the query logic
+Modify `useInventoryListQuery.ts` to filter by the actual `category` column value when a specific category is selected.
 
-(Your previous change to hide `print_status` by default stays as-is.)
+---
 
-## Files to change
-1) `src/features/inventory/components/InventoryTableView.tsx`
-   - TableRow: merge the two action “cells” into one flex container
-   - Header: actions placeholder becomes a single cell
-2) `src/features/inventory/types/views.ts`
-   - `INVENTORY_COLUMNS`: widen `actions.width`
+## Technical Details
 
-## Acceptance checks (what we’ll verify after)
-- The three dots no longer appear on the left.
-- Row actions are grouped on the right: Sync button + (optional) printer icon + kebab menu.
-- Row height remains stable (44px) and doesn’t jump/wrap.
-- Clicking a row still opens the inspector; clicking buttons/menus still does not.
-- Filters, selection, and scroll position remain unchanged.
+### New hook: `src/hooks/useCategoryFilter.ts`
+```typescript
+// Query distinct categories with counts from intake_items
+// Returns: [{ category: "Pokemon", count: 718 }, { category: "BASEBALL CARDS", count: 122 }, ...]
+```
+
+### Files to modify:
+
+| File | Change |
+|------|--------|
+| `src/features/inventory/types.ts` | Change `InventoryCategoryFilter` from union type to `'all' \| string` to support dynamic values |
+| `src/hooks/useCategoryFilter.ts` | New hook to fetch categories with counts |
+| `src/components/inventory/MoreFiltersPopover.tsx` | Accept dynamic categories, render grouped dropdown |
+| `src/features/inventory/components/InventoryFiltersBar.tsx` | Pass categories from hook to popover |
+| `src/features/inventory/pages/InventoryPage.tsx` | Call the new hook, pass data down |
+| `src/hooks/useInventoryListQuery.ts` | Update category filter logic to match exact `category` column value |
+| `src/components/inventory/ActiveFilterChips.tsx` | Display dynamic category labels |
+
+### UI Changes
+The Category dropdown will transform from:
+```text
+All Categories
+TCG
+Comics  
+Sealed
+```
+
+To:
+```text
+All Categories
+── TCG ──
+  Pokemon (718)
+  TCG Cards (194)
+  Lorcana
+  One Piece
+── Sports ──
+  BASEBALL CARDS (122)
+  BASKETBALL CARDS (40)
+  FOOTBALL CARDS (31)
+  HOCKEY CARDS (1)
+── Other ──
+  Comics (11)
+  Collectibles
+```
+
+### Database efficiency
+Will use a database function (like `get_tag_counts`) for aggregation, or a simple distinct query grouped by category with counts.
+
