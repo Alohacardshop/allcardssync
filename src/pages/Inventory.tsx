@@ -33,7 +33,7 @@ import { navigateTo, routes } from '@/lib/navigation';
 import { useInventoryListQuery } from '@/hooks/useInventoryListQuery';
 import { useLocationNames, CachedLocation } from '@/hooks/useLocationNames';
 import { useShopifyTags } from '@/hooks/useShopifyTags';
-import { useCategoryFilter, groupCategories } from '@/hooks/useCategoryFilter';
+import { useShopifyCollections, groupCollections } from '@/hooks/useShopifyCollections';
 import { useKeyboardNavigation } from '@/hooks/useKeyboardNavigation';
 import { useInventoryRealtime } from '@/hooks/useInventoryRealtime';
 import { TagFilterDropdown } from '@/components/inventory/TagFilterDropdown';
@@ -255,8 +255,8 @@ const Inventory = () => {
   // Print dialog state
   const [showPrintDialog, setShowPrintDialog] = useState(false);
   
-  // Category and location filter state (replaces category tabs)
-  const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  // Collection and location filter state (replaces category tabs)
+  const [collectionFilter, setCollectionFilter] = useState<string>('all');
   const [locationFilter, setLocationFilter] = useState<string | null>(null); // null = all locations
   const [tagFilter, setTagFilter] = useState<string[]>([]); // Shopify tags filter
   
@@ -297,9 +297,9 @@ const Inventory = () => {
   // Fetch Shopify tags for filter dropdown
   const { data: shopifyTags = [], isLoading: isLoadingTags } = useShopifyTags(assignedStore);
   
-  // Fetch dynamic categories for filter dropdown
-  const { data: categories = [], isLoading: isLoadingCategories } = useCategoryFilter(assignedStore);
-  const groupedCategories = useMemo(() => groupCategories(categories), [categories]);
+  // Fetch Shopify collections for filter dropdown
+  const { data: collections = [], isLoading: isLoadingCollections } = useShopifyCollections(assignedStore);
+  const groupedCollections = useMemo(() => groupCollections(collections), [collections]);
   
   // Get user ID for current batch
   const [userId, setUserId] = useState<string | undefined>();
@@ -369,7 +369,7 @@ const Inventory = () => {
   } = useInventoryListQuery({
     storeKey: assignedStore || '',
     locationGid: locationFilter, // null = all locations
-    categoryFilter,
+    collectionFilter,
     statusFilter,
     batchFilter,
     printStatusFilter,
@@ -453,14 +453,15 @@ const Inventory = () => {
     if (!assignedStore) return;
 
     const timer = setTimeout(() => {
-      const prefetchCategory = (category: 'all' | 'tcg' | 'comics' | 'sealed') => {
+      const prefetchCollection = (collection: string) => {
         queryClient.prefetchInfiniteQuery({
           queryKey: [
             'inventory-list',
             assignedStore,
             locationFilter,
             undefined, // activeTab
-            category,
+            undefined, // categoryFilter
+            collection,
             statusFilter,
             batchFilter,
             printStatusFilter,
@@ -475,19 +476,12 @@ const Inventory = () => {
         });
       };
 
-      // Prefetch adjacent categories based on current category
-      if (categoryFilter === 'all' || categoryFilter === 'tcg') {
-        prefetchCategory('comics');
-        prefetchCategory('sealed');
-      } else if (categoryFilter === 'comics') {
-        prefetchCategory('tcg');
-      } else if (categoryFilter === 'sealed') {
-        prefetchCategory('tcg');
-      }
+      // Prefetch if there's a collection filter - no-op for now since collections are dynamic
+      // Can be extended to prefetch popular collections
     }, 2000);
 
     return () => clearTimeout(timer);
-  }, [categoryFilter, assignedStore, locationFilter, statusFilter, batchFilter, printStatusFilter, typeFilter, debouncedSearchTerm, queryClient]);
+  }, [collectionFilter, assignedStore, locationFilter, statusFilter, batchFilter, printStatusFilter, typeFilter, debouncedSearchTerm, queryClient]);
 
   // Memoized event handlers
   const handleToggleSelection = useCallback((itemId: string) => {
@@ -969,14 +963,12 @@ const Inventory = () => {
     if (preset.printStatusFilter) setPrintStatusFilter(preset.printStatusFilter);
     if (preset.dateRangeFilter) setDateRangeFilter(preset.dateRangeFilter);
     if (preset.statusFilter) setStatusFilter(preset.statusFilter);
-    if (preset.categoryFilter) setCategoryFilter(preset.categoryFilter);
     
     // Determine which preset was applied for highlighting
     if (preset.shopifySyncFilter === 'not-synced') setActiveQuickFilter('ready-to-sync');
     else if (preset.statusFilter === 'errors') setActiveQuickFilter('sync-errors');
     else if (preset.printStatusFilter === 'not-printed') setActiveQuickFilter('needs-barcode');
     else if (preset.ebayStatusFilter === 'not-listed') setActiveQuickFilter('not-on-ebay');
-    else if (preset.categoryFilter === 'sealed') setActiveQuickFilter('sealed-products');
     else if (preset.shopifySyncFilter === 'synced') setActiveQuickFilter('on-shopify');
     else if (preset.shopifySyncFilter === 'queued') setActiveQuickFilter('shopify-queued');
     else if (preset.dateRangeFilter === 'today') setActiveQuickFilter('todays-intake');
@@ -992,7 +984,7 @@ const Inventory = () => {
     setDateRangeFilter('all');
     setBatchFilter('all');
     setTypeFilter('all');
-    setCategoryFilter('all');
+    setCollectionFilter('all');
     setLocationFilter(null);
     setSearchTerm('');
     setActiveQuickFilter(null);
@@ -1379,11 +1371,11 @@ const Inventory = () => {
                       <MoreFiltersPopover
                         typeFilter={typeFilter}
                         onTypeFilterChange={(value) => setTypeFilter(value)}
-                        categoryFilter={categoryFilter}
-                        onCategoryFilterChange={(value) => setCategoryFilter(value)}
-                        categories={categories}
-                        groupedCategories={groupedCategories}
-                        isLoadingCategories={isLoadingCategories}
+                        collectionFilter={collectionFilter}
+                        onCollectionFilterChange={(value) => setCollectionFilter(value)}
+                        collections={collections}
+                        groupedCollections={groupedCollections}
+                        isLoadingCollections={isLoadingCollections}
                         shopifySyncFilter={shopifySyncFilter}
                         onShopifySyncFilterChange={(value) => { setShopifySyncFilter(value); setActiveQuickFilter(null); }}
                         ebayStatusFilter={ebayStatusFilter}

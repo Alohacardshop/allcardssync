@@ -11,7 +11,9 @@ interface ActiveFilterChipsProps {
   dateRangeFilter: string;
   statusFilter: string;
   typeFilter: string;
-  categoryFilter: string;
+  categoryFilter?: string;
+  collectionFilter?: string;
+  collectionName?: string; // Display name for the collection
   locationName?: string;
   onRemoveTag: (tag: string) => void;
   onClearFilter: (filterType: string) => void;
@@ -27,6 +29,8 @@ export function ActiveFilterChips({
   statusFilter,
   typeFilter,
   categoryFilter,
+  collectionFilter,
+  collectionName,
   locationName,
   onRemoveTag,
   onClearFilter,
@@ -97,8 +101,15 @@ export function ActiveFilterChips({
     });
   }
 
-  if (categoryFilter !== 'all') {
-    // Display dynamic category name directly
+  // Collection filter (new) - takes precedence over category
+  if (collectionFilter && collectionFilter !== 'all') {
+    chips.push({ 
+      key: 'collection', 
+      label: collectionName || 'Collection', 
+      filterType: 'collectionFilter' 
+    });
+  } else if (categoryFilter && categoryFilter !== 'all') {
+    // Legacy category filter (backwards compatibility)
     chips.push({ key: 'category', label: categoryFilter, filterType: 'categoryFilter' });
   }
 

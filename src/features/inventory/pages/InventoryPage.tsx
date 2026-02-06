@@ -33,7 +33,7 @@ import { useInventoryTruthMode } from '@/hooks/useInventoryTruthMode';
 import { useInventoryListQuery } from '@/hooks/useInventoryListQuery';
 import { useLocationNames } from '@/hooks/useLocationNames';
 import { useShopifyTags } from '@/hooks/useShopifyTags';
-import { useCategoryFilter, groupCategories } from '@/hooks/useCategoryFilter';
+import { useShopifyCollections, groupCollections } from '@/hooks/useShopifyCollections';
 import { useKeyboardNavigation } from '@/hooks/useKeyboardNavigation';
 import { useInventoryRealtime } from '@/hooks/useInventoryRealtime';
 import { useCurrentBatch } from '@/hooks/useCurrentBatch';
@@ -88,6 +88,7 @@ const InventoryPage = () => {
     statusFilter: 'active',
     typeFilter: 'all',
     categoryFilter: 'all',
+    collectionFilter: 'all',
     shopifySyncFilter: 'all',
     ebayStatusFilter: 'all',
     printStatusFilter: 'all',
@@ -154,9 +155,9 @@ const InventoryPage = () => {
   // Fetch Shopify tags for filter dropdown
   const { data: shopifyTags = [], isLoading: isLoadingTags } = useShopifyTags(assignedStore);
   
-  // Fetch dynamic categories for filter dropdown
-  const { data: categories = [], isLoading: isLoadingCategories } = useCategoryFilter(assignedStore);
-  const groupedCategories = useMemo(() => groupCategories(categories), [categories]);
+  // Fetch Shopify collections for filter dropdown
+  const { data: collections = [], isLoading: isLoadingCollections } = useShopifyCollections(assignedStore);
+  const groupedCollections = useMemo(() => groupCollections(collections), [collections]);
   
   // Get user ID for current batch
   const [userId, setUserId] = useState<string | undefined>();
@@ -189,6 +190,7 @@ const InventoryPage = () => {
   } = useInventoryListQuery({
     storeKey: assignedStore || '',
     locationGid: filters.locationFilter,
+    collectionFilter: filters.collectionFilter,
     categoryFilter: filters.categoryFilter,
     statusFilter: filters.statusFilter,
     batchFilter: filters.batchFilter,
@@ -326,6 +328,7 @@ const InventoryPage = () => {
       statusFilter: 'active',
       typeFilter: 'all',
       categoryFilter: 'all',
+      collectionFilter: 'all',
       shopifySyncFilter: 'all',
       ebayStatusFilter: 'all',
       printStatusFilter: 'all',
@@ -517,9 +520,9 @@ const InventoryPage = () => {
                   shopifyTags={shopifyTags}
                   isLoadingTags={isLoadingTags}
                   searchInputRef={searchInputRef}
-                  categories={categories}
-                  groupedCategories={groupedCategories}
-                  isLoadingCategories={isLoadingCategories}
+                  collections={collections}
+                  groupedCollections={groupedCollections}
+                  isLoadingCollections={isLoadingCollections}
                 />
               </div>
               

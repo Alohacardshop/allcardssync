@@ -6,6 +6,13 @@ import { Button } from '@/components/ui/button';
 import { Search, MapPin, X, Package } from 'lucide-react';
 import { MoreFiltersPopover } from '@/components/inventory/MoreFiltersPopover';
 import type { InventoryFiltersBarProps } from '../types';
+import type { ShopifyCollection } from '@/hooks/useShopifyCollections';
+
+interface ExtendedFiltersBarProps extends Omit<InventoryFiltersBarProps, 'categories' | 'groupedCategories' | 'isLoadingCategories'> {
+  collections?: ShopifyCollection[];
+  groupedCollections?: Array<{ group: string; collections: ShopifyCollection[] }>;
+  isLoadingCollections?: boolean;
+}
 
 // Active filter chip component
 const FilterChip = ({ label, onRemove }: { label: string; onRemove: () => void }) => (
@@ -29,10 +36,10 @@ export const InventoryFiltersBar = React.memo(({
   shopifyTags,
   isLoadingTags,
   searchInputRef,
-  categories = [],
-  groupedCategories = [],
-  isLoadingCategories = false,
-}: InventoryFiltersBarProps) => {
+  collections = [],
+  groupedCollections = [],
+  isLoadingCollections = false,
+}: ExtendedFiltersBarProps) => {
   // Build active filter chips
   const activeChips: Array<{ key: string; label: string; onRemove: () => void }> = [];
 
@@ -133,12 +140,13 @@ export const InventoryFiltersBar = React.memo(({
     });
   }
 
-  if (filters.categoryFilter !== 'all') {
-    // For dynamic categories, just display the category name directly
+  // Collection filter chip
+  if (filters.collectionFilter && filters.collectionFilter !== 'all') {
+    const collection = collections.find(c => c.collection_gid === filters.collectionFilter);
     activeChips.push({
-      key: 'category',
-      label: filters.categoryFilter,
-      onRemove: () => onFilterChange('categoryFilter', 'all')
+      key: 'collection',
+      label: collection?.title || 'Collection',
+      onRemove: () => onFilterChange('collectionFilter', 'all')
     });
   }
 
@@ -245,11 +253,11 @@ export const InventoryFiltersBar = React.memo(({
         <MoreFiltersPopover
           typeFilter={filters.typeFilter}
           onTypeFilterChange={(value) => onFilterChange('typeFilter', value)}
-          categoryFilter={filters.categoryFilter}
-          onCategoryFilterChange={(value) => onFilterChange('categoryFilter', value)}
-          categories={categories}
-          groupedCategories={groupedCategories}
-          isLoadingCategories={isLoadingCategories}
+          collectionFilter={filters.collectionFilter || 'all'}
+          onCollectionFilterChange={(value) => onFilterChange('collectionFilter', value)}
+          collections={collections}
+          groupedCollections={groupedCollections}
+          isLoadingCollections={isLoadingCollections}
           shopifySyncFilter={filters.shopifySyncFilter}
           onShopifySyncFilterChange={(value) => { 
             onFilterChange('shopifySyncFilter', value); 
@@ -298,7 +306,7 @@ export const InventoryFiltersBar = React.memo(({
             variant="ghost"
             size="sm"
             onClick={onClearAllFilters}
-            className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground shrink-0"
+            className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground shrink-0"
           >
             Clear all
           </Button>

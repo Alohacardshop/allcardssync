@@ -2513,6 +2513,39 @@ export type Database = {
           },
         ]
       }
+      shopify_collections: {
+        Row: {
+          collection_gid: string
+          collection_type: string | null
+          handle: string | null
+          id: string
+          product_count: number | null
+          store_key: string
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          collection_gid: string
+          collection_type?: string | null
+          handle?: string | null
+          id?: string
+          product_count?: number | null
+          store_key: string
+          title: string
+          updated_at?: string | null
+        }
+        Update: {
+          collection_gid?: string
+          collection_type?: string | null
+          handle?: string | null
+          id?: string
+          product_count?: number | null
+          store_key?: string
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       shopify_dead_letter_queue: {
         Row: {
           action: string
