@@ -33,6 +33,7 @@ import { useInventoryTruthMode } from '@/hooks/useInventoryTruthMode';
 import { useInventoryListQuery } from '@/hooks/useInventoryListQuery';
 import { useLocationNames } from '@/hooks/useLocationNames';
 import { useShopifyTags } from '@/hooks/useShopifyTags';
+import { useCategoryFilter, groupCategories } from '@/hooks/useCategoryFilter';
 import { useKeyboardNavigation } from '@/hooks/useKeyboardNavigation';
 import { useInventoryRealtime } from '@/hooks/useInventoryRealtime';
 import { useCurrentBatch } from '@/hooks/useCurrentBatch';
@@ -152,6 +153,10 @@ const InventoryPage = () => {
   
   // Fetch Shopify tags for filter dropdown
   const { data: shopifyTags = [], isLoading: isLoadingTags } = useShopifyTags(assignedStore);
+  
+  // Fetch dynamic categories for filter dropdown
+  const { data: categories = [], isLoading: isLoadingCategories } = useCategoryFilter(assignedStore);
+  const groupedCategories = useMemo(() => groupCategories(categories), [categories]);
   
   // Get user ID for current batch
   const [userId, setUserId] = useState<string | undefined>();
@@ -512,6 +517,9 @@ const InventoryPage = () => {
                   shopifyTags={shopifyTags}
                   isLoadingTags={isLoadingTags}
                   searchInputRef={searchInputRef}
+                  categories={categories}
+                  groupedCategories={groupedCategories}
+                  isLoadingCategories={isLoadingCategories}
                 />
               </div>
               

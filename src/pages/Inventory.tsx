@@ -33,6 +33,7 @@ import { navigateTo, routes } from '@/lib/navigation';
 import { useInventoryListQuery } from '@/hooks/useInventoryListQuery';
 import { useLocationNames, CachedLocation } from '@/hooks/useLocationNames';
 import { useShopifyTags } from '@/hooks/useShopifyTags';
+import { useCategoryFilter, groupCategories } from '@/hooks/useCategoryFilter';
 import { useKeyboardNavigation } from '@/hooks/useKeyboardNavigation';
 import { useInventoryRealtime } from '@/hooks/useInventoryRealtime';
 import { TagFilterDropdown } from '@/components/inventory/TagFilterDropdown';
@@ -255,7 +256,7 @@ const Inventory = () => {
   const [showPrintDialog, setShowPrintDialog] = useState(false);
   
   // Category and location filter state (replaces category tabs)
-  const [categoryFilter, setCategoryFilter] = useState<'all' | 'tcg' | 'comics' | 'sealed'>('all');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [locationFilter, setLocationFilter] = useState<string | null>(null); // null = all locations
   const [tagFilter, setTagFilter] = useState<string[]>([]); // Shopify tags filter
   
@@ -295,6 +296,10 @@ const Inventory = () => {
   
   // Fetch Shopify tags for filter dropdown
   const { data: shopifyTags = [], isLoading: isLoadingTags } = useShopifyTags(assignedStore);
+  
+  // Fetch dynamic categories for filter dropdown
+  const { data: categories = [], isLoading: isLoadingCategories } = useCategoryFilter(assignedStore);
+  const groupedCategories = useMemo(() => groupCategories(categories), [categories]);
   
   // Get user ID for current batch
   const [userId, setUserId] = useState<string | undefined>();
@@ -1376,6 +1381,9 @@ const Inventory = () => {
                         onTypeFilterChange={(value) => setTypeFilter(value)}
                         categoryFilter={categoryFilter}
                         onCategoryFilterChange={(value) => setCategoryFilter(value)}
+                        categories={categories}
+                        groupedCategories={groupedCategories}
+                        isLoadingCategories={isLoadingCategories}
                         shopifySyncFilter={shopifySyncFilter}
                         onShopifySyncFilterChange={(value) => { setShopifySyncFilter(value); setActiveQuickFilter(null); }}
                         ebayStatusFilter={ebayStatusFilter}

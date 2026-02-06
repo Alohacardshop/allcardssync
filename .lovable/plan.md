@@ -1,80 +1,33 @@
-
+# ✅ COMPLETED: Dynamic Category Filter
 
 ## Summary
-You want the category filter to dynamically show **all available categories from Shopify** instead of the current hardcoded 3 options (TCG, Comics, Sealed). Looking at your data, the `category` column in `intake_items` already contains Shopify product types like:
-- Pokemon (718 items)
-- BASEBALL CARDS (122 items)  
-- BASKETBALL CARDS (40 items)
-- FOOTBALL CARDS (31 items)
-- Comics (11 items)
-- And many more...
+The category filter now dynamically shows **all available categories from Shopify** instead of the hardcoded 3 options (TCG, Comics, Sealed).
 
-## What I'll Do
+## What Was Implemented
 
-**Make the category filter dynamic** - fetch actual categories from your inventory data and display them grouped for easy selection.
+### 1. New hook: `src/hooks/useCategoryFilter.ts`
+- Fetches distinct categories with counts from `intake_items`
+- Groups categories into TCG, Sports, and Other for organized display
+- Uses React Query with 5-minute caching
 
-### 1. Create a new hook to fetch available categories
-A new `useCategoryFilter` hook will query distinct categories from `intake_items` with their counts, similar to how `useShopifyTags` works.
-
-### 2. Update the filter UI
-The "Category" dropdown in the More Filters popover will:
-- Show all available categories dynamically
-- Group them by main category (TCG vs Comics vs Sports)
-- Show item counts next to each option
-- Support the existing "all" option plus dynamic categories
-
-### 3. Update the query logic
-Modify `useInventoryListQuery.ts` to filter by the actual `category` column value when a specific category is selected.
-
----
-
-## Technical Details
-
-### New hook: `src/hooks/useCategoryFilter.ts`
-```typescript
-// Query distinct categories with counts from intake_items
-// Returns: [{ category: "Pokemon", count: 718 }, { category: "BASEBALL CARDS", count: 122 }, ...]
-```
-
-### Files to modify:
-
+### 2. Updated files:
 | File | Change |
 |------|--------|
-| `src/features/inventory/types.ts` | Change `InventoryCategoryFilter` from union type to `'all' \| string` to support dynamic values |
+| `src/features/inventory/types.ts` | Changed `InventoryCategoryFilter` to `string` to support dynamic values |
 | `src/hooks/useCategoryFilter.ts` | New hook to fetch categories with counts |
-| `src/components/inventory/MoreFiltersPopover.tsx` | Accept dynamic categories, render grouped dropdown |
-| `src/features/inventory/components/InventoryFiltersBar.tsx` | Pass categories from hook to popover |
-| `src/features/inventory/pages/InventoryPage.tsx` | Call the new hook, pass data down |
-| `src/hooks/useInventoryListQuery.ts` | Update category filter logic to match exact `category` column value |
-| `src/components/inventory/ActiveFilterChips.tsx` | Display dynamic category labels |
+| `src/components/inventory/MoreFiltersPopover.tsx` | Accepts dynamic categories, renders grouped dropdown |
+| `src/features/inventory/components/InventoryFiltersBar.tsx` | Passes categories to popover |
+| `src/features/inventory/pages/InventoryPage.tsx` | Calls the new hook, passes data down |
+| `src/hooks/useInventoryListQuery.ts` | Filters by exact `category` column value |
+| `src/components/inventory/ActiveFilterChips.tsx` | Displays dynamic category labels |
+| `src/pages/Inventory.tsx` | Updated legacy page with same changes |
 
-### UI Changes
-The Category dropdown will transform from:
-```text
-All Categories
-TCG
-Comics  
-Sealed
-```
+### UI Result
+The Category dropdown now shows:
+- All Categories
+- **TCG** (grouped): Pokemon, Lorcana, One Piece, etc.
+- **Sports** (grouped): BASEBALL CARDS, BASKETBALL CARDS, etc.
+- **Other**: Comics, Collectibles, etc.
 
-To:
-```text
-All Categories
-── TCG ──
-  Pokemon (718)
-  TCG Cards (194)
-  Lorcana
-  One Piece
-── Sports ──
-  BASEBALL CARDS (122)
-  BASKETBALL CARDS (40)
-  FOOTBALL CARDS (31)
-  HOCKEY CARDS (1)
-── Other ──
-  Comics (11)
-  Collectibles
-```
-
-### Database efficiency
-Will use a database function (like `get_tag_counts`) for aggregation, or a simple distinct query grouped by category with counts.
+Each category shows its item count for quick reference.
 

@@ -82,9 +82,9 @@ export type InventoryStatusFilter = 'all' | 'active' | 'out-of-stock' | 'sold' |
 export type InventoryTypeFilter = 'all' | 'raw' | 'graded';
 
 /**
- * Category filter options
+ * Category filter options - 'all' or dynamic category string from Shopify
  */
-export type InventoryCategoryFilter = 'all' | 'tcg' | 'comics' | 'sealed';
+export type InventoryCategoryFilter = string;
 
 /**
  * Shopify sync status filter
@@ -210,6 +210,10 @@ export interface InventoryFiltersBarProps {
   shopifyTags: Array<{ tag: string; count: number }>;
   isLoadingTags: boolean;
   searchInputRef: React.RefObject<HTMLInputElement>;
+  // Dynamic category filter data
+  categories?: Array<{ category: string; count: number }>;
+  groupedCategories?: Array<{ group: string; categories: Array<{ category: string; count: number }> }>;
+  isLoadingCategories?: boolean;
 }
 
 /**

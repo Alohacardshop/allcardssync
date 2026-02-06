@@ -11,7 +11,7 @@ export interface InventoryFilters {
   batchFilter: 'all' | 'in_batch' | 'removed_from_batch' | 'current_batch';
   printStatusFilter?: 'all' | 'printed' | 'not-printed';
   typeFilter?: 'all' | 'raw' | 'graded';
-  categoryFilter?: 'all' | 'tcg' | 'comics' | 'sealed'; // New category filter
+  categoryFilter?: string; // Dynamic category filter - 'all' or exact category value
   tagFilter?: string[]; // Shopify tags filter (uses normalized_tags for filtering)
   
   searchTerm?: string;
@@ -166,17 +166,10 @@ export function useInventoryListQuery(filters: InventoryFilters) {
         query = query.eq('type', typeFilter === 'raw' ? 'Raw' : 'Graded');
       }
 
-      // Apply category filter (new unified approach)
-      if (categoryFilter !== 'all') {
-        if (categoryFilter === 'tcg') {
-          query = query.or('main_category.is.null,main_category.eq.tcg');
-        } else if (categoryFilter === 'comics') {
-          query = query.eq('main_category', 'comics');
-        } else if (categoryFilter === 'sealed') {
-          // Sealed products: filter by shopify_snapshot tags containing 'sealed'
-          // OR main_category = 'sealed' for future imports
-          query = query.or('main_category.eq.sealed,shopify_snapshot->>tags.ilike.%sealed%');
-        }
+      // Apply category filter - now uses exact category value from Shopify
+      if (categoryFilter && categoryFilter !== 'all') {
+        // Filter by exact category match (case-sensitive, matches Shopify product type)
+        query = query.eq('category', categoryFilter);
       } else if (activeTab) {
         // Legacy tab-based filtering (for backwards compatibility during transition)
         if (activeTab === 'raw') {
