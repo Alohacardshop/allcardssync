@@ -12,14 +12,14 @@ import {
 import {
   EBAY_CONDITION_IDS,
   buildGradedConditionDescriptors,
-  detectCategoryFromBrand,
-  getEbayCategoryId,
 } from '../_shared/ebayConditions.ts'
 import {
   resolveTemplate,
   buildCategoryAwareAspects,
   buildTitle,
   buildDescription,
+  detectCategoryFromBrandDB,
+  getEbayCategoryIdDB,
 } from '../_shared/ebayTemplateResolver.ts'
 
 const corsHeaders = {
@@ -137,8 +137,9 @@ serve(async (req) => {
     // Determine condition and category
     const isGraded = !!item.grade
     const conditionId = template?.condition_id || (isGraded ? EBAY_CONDITION_IDS.GRADED : EBAY_CONDITION_IDS.UNGRADED)
+    const detectedCategory = await detectCategoryFromBrandDB(supabase, item.brand_title) || item.main_category
     const categoryId = template?.category_id || 
-      getEbayCategoryId(detectCategoryFromBrand(item.brand_title) || item.main_category as any, isGraded)
+      await getEbayCategoryIdDB(supabase, detectedCategory, isGraded)
 
     // Build title from item data
     const title = buildTitle(item, template?.title_template || storeConfig.title_template)
@@ -147,7 +148,7 @@ serve(async (req) => {
     const description = buildDescription(item, template?.description_template || storeConfig.description_template)
 
     // Build aspects based on detected category (TCG, sports, or comics)
-    const aspects = buildCategoryAwareAspects(item)
+    const aspects = await buildCategoryAwareAspects(supabase, item, detectedCategory)
 
     // Build condition descriptors for graded items
     let conditionDescriptors: any[] | undefined

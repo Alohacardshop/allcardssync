@@ -18,14 +18,14 @@ import {
 import {
   EBAY_CONDITION_IDS,
   buildGradedConditionDescriptors,
-  detectCategoryFromBrand,
-  getEbayCategoryId,
 } from '../_shared/ebayConditions.ts'
 import {
   resolveTemplate,
   buildCategoryAwareAspects,
   buildTitle,
   buildDescription,
+  detectCategoryFromBrandDB,
+  getEbayCategoryIdDB,
 } from '../_shared/ebayTemplateResolver.ts'
 
 const corsHeaders = {
@@ -372,8 +372,9 @@ async function processCreate(
   // Determine condition and category from template or auto-detect
   const isGraded = !!item.grade
   const conditionId = template?.condition_id || (isGraded ? EBAY_CONDITION_IDS.GRADED : EBAY_CONDITION_IDS.UNGRADED)
+  const detectedCategory = await detectCategoryFromBrandDB(supabase, item.brand_title) || item.main_category
   const categoryId = template?.category_id || 
-    getEbayCategoryId(detectCategoryFromBrand(item.brand_title) || item.main_category as any, isGraded)
+    await getEbayCategoryIdDB(supabase, detectedCategory, isGraded)
 
   // Build condition descriptors for graded items
   let conditionDescriptors: any[] | undefined
@@ -386,7 +387,7 @@ async function processCreate(
   }
 
   // Build aspects based on detected category (TCG, sports, or comics)
-  const aspects = buildCategoryAwareAspects(item)
+  const aspects = await buildCategoryAwareAspects(supabase, item, detectedCategory)
 
   // Resolve policies: template > store config
   const fulfillmentPolicyId = template?.fulfillment_policy_id || storeConfig.default_fulfillment_policy_id || ''
@@ -549,8 +550,9 @@ async function processUpdate(
 
   const isGraded = !!item.grade
   const conditionId = template?.condition_id || (isGraded ? EBAY_CONDITION_IDS.GRADED : EBAY_CONDITION_IDS.UNGRADED)
+  const detectedCategory = await detectCategoryFromBrandDB(supabase, item.brand_title) || item.main_category
   const categoryId = template?.category_id || 
-    getEbayCategoryId(detectCategoryFromBrand(item.brand_title) || item.main_category as any, isGraded)
+    await getEbayCategoryIdDB(supabase, detectedCategory, isGraded)
 
   // Resolve policies: template > store config
   const fulfillmentPolicyId = template?.fulfillment_policy_id || storeConfig.default_fulfillment_policy_id || ''
@@ -558,7 +560,7 @@ async function processUpdate(
   const returnPolicyId = template?.return_policy_id || storeConfig.default_return_policy_id || ''
 
   // Build aspects based on detected category (TCG, sports, or comics)
-  const aspects = buildCategoryAwareAspects(item)
+  const aspects = await buildCategoryAwareAspects(supabase, item, detectedCategory)
 
   // Build condition descriptors for graded items
   let conditionDescriptors: any[] | undefined
