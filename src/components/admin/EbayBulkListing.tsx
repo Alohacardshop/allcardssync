@@ -12,16 +12,24 @@ import { Progress } from '@/components/ui/progress';
 import { Package, Search, ShoppingCart, RefreshCw, CheckCircle, Loader2, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { useEbayListing } from '@/hooks/useEbayListing';
+import { EbayListingPreview } from '@/components/admin/EbayListingPreview';
+import type { StoreConfig } from '@/lib/ebayPreviewResolver';
 
 type InventoryItem = {
   id: string;
   sku: string | null;
   psa_cert: string | null;
+  cgc_cert: string | null;
   brand_title: string | null;
   subject: string | null;
   main_category: string | null;
   price: number | null;
   grade: string | null;
+  grading_company: string;
+  year: string | null;
+  card_number: string | null;
+  variant: string | null;
+  image_urls: any;
   list_on_ebay: boolean | null;
   list_on_shopify: boolean | null;
   ebay_listing_id: string | null;
@@ -44,9 +52,10 @@ const CATEGORY_OPTIONS = [
 
 interface EbayBulkListingProps {
   storeKey?: string;
+  storeConfig?: StoreConfig | null;
 }
 
-export function EbayBulkListing({ storeKey }: EbayBulkListingProps) {
+export function EbayBulkListing({ storeKey, storeConfig }: EbayBulkListingProps) {
   const queryClient = useQueryClient();
   const { bulkToggleEbay, queueForEbaySync } = useEbayListing();
   
@@ -57,13 +66,14 @@ export function EbayBulkListing({ storeKey }: EbayBulkListingProps) {
   const [isQueueing, setIsQueueing] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const { data: items, isLoading, refetch } = useQuery({
     queryKey: ['ebay-bulk-listing-items', filterStatus, filterCategory, searchQuery],
     queryFn: async () => {
       let query = supabase
         .from('intake_items')
-        .select('id, sku, psa_cert, brand_title, subject, main_category, price, grade, list_on_ebay, list_on_shopify, ebay_listing_id, ebay_sync_status, shopify_sync_status')
+        .select('id, sku, psa_cert, cgc_cert, brand_title, subject, main_category, price, grade, grading_company, year, card_number, variant, image_urls, list_on_ebay, list_on_shopify, ebay_listing_id, ebay_sync_status, shopify_sync_status')
         .is('deleted_at', null)
         .order('created_at', { ascending: false })
         .limit(200);
@@ -124,21 +134,25 @@ export function EbayBulkListing({ storeKey }: EbayBulkListingProps) {
     refetch();
   };
 
-  const handleQueueForSync = async () => {
+  const handleOpenPreview = () => {
     if (selectedItems.size === 0) {
       toast.error('No items selected');
       return;
     }
+    const itemsToSync = items?.filter(i => selectedItems.has(i.id) && !i.ebay_listing_id) || [];
+    if (itemsToSync.length === 0) {
+      toast.error('No eligible items to sync (already listed or not selected)');
+      return;
+    }
+    setPreviewOpen(true);
+  };
+
+  const handleConfirmQueue = async (itemIds: string[]) => {
     setIsQueueing(true);
     try {
-      // Get items marked for eBay from selection
-      const itemsToSync = items?.filter(i => selectedItems.has(i.id) && !i.ebay_listing_id) || [];
-      if (itemsToSync.length === 0) {
-        toast.error('No eligible items to sync (already listed or not selected)');
-        return;
-      }
-      await queueForEbaySync(itemsToSync.map(i => i.id), 'default');
+      await queueForEbaySync(itemIds, storeKey || 'default');
       setSelectedItems(new Set());
+      setPreviewOpen(false);
       refetch();
     } finally {
       setIsQueueing(false);
@@ -291,7 +305,7 @@ export function EbayBulkListing({ storeKey }: EbayBulkListingProps) {
               </Button>
               <Button
                 size="sm"
-                onClick={handleQueueForSync}
+                onClick={handleOpenPreview}
                 disabled={isQueueing}
               >
                 {isQueueing ? (
@@ -299,7 +313,7 @@ export function EbayBulkListing({ storeKey }: EbayBulkListingProps) {
                 ) : (
                   <ShoppingCart className="h-4 w-4 mr-2" />
                 )}
-                Queue for Sync
+                Preview & Queue
               </Button>
             </div>
           </div>
@@ -396,6 +410,19 @@ export function EbayBulkListing({ storeKey }: EbayBulkListingProps) {
           </p>
         )}
       </CardContent>
+
+      {/* Listing Preview Dialog */}
+      {storeKey && storeConfig && (
+        <EbayListingPreview
+          open={previewOpen}
+          onOpenChange={setPreviewOpen}
+          items={items?.filter(i => selectedItems.has(i.id) && !i.ebay_listing_id) || []}
+          storeKey={storeKey}
+          storeConfig={storeConfig}
+          onConfirm={handleConfirmQueue}
+          isConfirming={isQueueing}
+        />
+      )}
     </Card>
   );
 }

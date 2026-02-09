@@ -1203,7 +1203,17 @@ export default function EbayApp() {
 
           {/* Bulk Listing Tab */}
           <TabsContent value="bulk">
-            <EbayBulkListing />
+            <EbayBulkListing
+              storeKey={selectedConfig?.store_key}
+              storeConfig={selectedConfig ? {
+                price_markup_percent: selectedConfig.price_markup_percent ?? null,
+                default_fulfillment_policy_id: selectedConfig.default_fulfillment_policy_id ?? null,
+                default_payment_policy_id: selectedConfig.default_payment_policy_id ?? null,
+                default_return_policy_id: selectedConfig.default_return_policy_id ?? null,
+                default_category_id: selectedConfig.default_category_id ?? null,
+                default_condition_id: selectedConfig.default_condition_id ?? null,
+              } : null}
+            />
           </TabsContent>
 
           {/* Sync Queue Tab */}
