@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -8,7 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Progress } from '@/components/ui/progress';
+
 import { Package, Search, ShoppingCart, RefreshCw, CheckCircle, Loader2, Download, Eye } from 'lucide-react';
 import { toast } from 'sonner';
 import { useEbayListing } from '@/hooks/useEbayListing';
@@ -65,7 +65,7 @@ export function EbayBulkListing({ storeKey, storeConfig }: EbayBulkListingProps)
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [isQueueing, setIsQueueing] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
-  const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(null);
+  
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewItem, setPreviewItem] = useState<InventoryItem | null>(null);
 
@@ -179,7 +179,7 @@ export function EbayBulkListing({ storeKey, storeConfig }: EbayBulkListingProps)
     }
     
     setIsImporting(true);
-    setImportProgress({ current: 0, total: 100 });
+    
     
     try {
       const { data, error } = await supabase.functions.invoke('shopify-import-inventory', {
@@ -196,7 +196,7 @@ export function EbayBulkListing({ storeKey, storeConfig }: EbayBulkListingProps)
       toast.error('Import failed: ' + error.message);
     } finally {
       setIsImporting(false);
-      setImportProgress(null);
+      
     }
   };
 
