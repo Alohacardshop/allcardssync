@@ -38,6 +38,9 @@ interface ListingTemplate {
   description_template: string | null
   default_grader: string | null
   aspects_mapping: Record<string, any>
+  fulfillment_policy_id: string | null
+  payment_policy_id: string | null
+  return_policy_id: string | null
 }
 
 serve(async (req) => {
@@ -101,39 +104,88 @@ serve(async (req) => {
       )
     }
 
-    // Get listing template
+    // Get listing template (with policy fields)
     let template: ListingTemplate | null = null
     
     if (template_id) {
       // Use specified template
       const { data: templateData } = await supabase
         .from('ebay_listing_templates')
-        .select('*')
+        .select('id, category_id, category_name, condition_id, is_graded, title_template, description_template, default_grader, aspects_mapping, fulfillment_policy_id, payment_policy_id, return_policy_id')
         .eq('id', template_id)
         .single()
       template = templateData
     } else {
-      // Auto-detect template based on category mappings
+      // Auto-detect template: first check category mappings, then fall back to template matching
       const detectedCategory = detectCategoryFromBrand(item.brand_title) || item.main_category
       const isGraded = !!item.grade
       
-      // Find matching template
-      const { data: templates } = await supabase
-        .from('ebay_listing_templates')
-        .select('*')
+      // Check category mappings for a linked template
+      const { data: mappings } = await supabase
+        .from('ebay_category_mappings')
+        .select('default_template_id, brand_match, keyword_pattern, main_category')
         .eq('store_key', store_key)
-        .eq('is_graded', isGraded)
         .eq('is_active', true)
-        .order('is_default', { ascending: false })
+        .not('default_template_id', 'is', null)
+        .order('priority', { ascending: false })
       
-      if (templates && templates.length > 0) {
-        // Try to find a template for the detected category
-        template = templates.find(t => {
-          if (detectedCategory === 'tcg' && t.category_id === '183454') return true
-          if (detectedCategory === 'sports' && t.category_id === '261328') return true
-          if (detectedCategory === 'comics' && (t.category_id === '63' || t.category_id === '259061')) return true
-          return false
-        }) || templates[0] // Fallback to first/default
+      let mappedTemplateId: string | null = null
+      if (mappings) {
+        for (const mapping of mappings) {
+          // Check brand match
+          if (mapping.brand_match?.length && item.brand_title) {
+            const brandLower = item.brand_title.toLowerCase()
+            if (mapping.brand_match.some((b: string) => brandLower.includes(b.toLowerCase()))) {
+              mappedTemplateId = mapping.default_template_id
+              break
+            }
+          }
+          // Check main_category match
+          if (mapping.main_category && detectedCategory && mapping.main_category === detectedCategory) {
+            mappedTemplateId = mapping.default_template_id
+            break
+          }
+          // Check keyword pattern
+          if (mapping.keyword_pattern && item.brand_title) {
+            try {
+              const re = new RegExp(mapping.keyword_pattern, 'i')
+              if (re.test(item.brand_title) || re.test(item.subject || '')) {
+                mappedTemplateId = mapping.default_template_id
+                break
+              }
+            } catch {}
+          }
+        }
+      }
+      
+      if (mappedTemplateId) {
+        const { data: mappedTemplate } = await supabase
+          .from('ebay_listing_templates')
+          .select('id, category_id, category_name, condition_id, is_graded, title_template, description_template, default_grader, aspects_mapping, fulfillment_policy_id, payment_policy_id, return_policy_id')
+          .eq('id', mappedTemplateId)
+          .eq('is_active', true)
+          .single()
+        template = mappedTemplate
+      }
+      
+      // Fallback: find matching template by graded status
+      if (!template) {
+        const { data: templates } = await supabase
+          .from('ebay_listing_templates')
+          .select('id, category_id, category_name, condition_id, is_graded, title_template, description_template, default_grader, aspects_mapping, fulfillment_policy_id, payment_policy_id, return_policy_id')
+          .eq('store_key', store_key)
+          .eq('is_graded', isGraded)
+          .eq('is_active', true)
+          .order('is_default', { ascending: false })
+        
+        if (templates && templates.length > 0) {
+          template = templates.find(t => {
+            if (detectedCategory === 'tcg' && t.category_id === '183454') return true
+            if (detectedCategory === 'sports' && t.category_id === '261328') return true
+            if (detectedCategory === 'comics' && (t.category_id === '63' || t.category_id === '259061')) return true
+            return false
+          }) || templates[0]
+        }
       }
     }
 
@@ -222,9 +274,9 @@ serve(async (req) => {
         },
       },
       listingPolicies: {
-        fulfillmentPolicyId: storeConfig.default_fulfillment_policy_id || '',
-        paymentPolicyId: storeConfig.default_payment_policy_id || '',
-        returnPolicyId: storeConfig.default_return_policy_id || '',
+        fulfillmentPolicyId: template?.fulfillment_policy_id || storeConfig.default_fulfillment_policy_id || '',
+        paymentPolicyId: template?.payment_policy_id || storeConfig.default_payment_policy_id || '',
+        returnPolicyId: template?.return_policy_id || storeConfig.default_return_policy_id || '',
       },
       categoryId: categoryId,
       merchantLocationKey: storeConfig.location_key || undefined,

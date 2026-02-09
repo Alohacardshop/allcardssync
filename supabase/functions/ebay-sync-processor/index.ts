@@ -15,6 +15,13 @@ import {
   getOffersBySku,
   mapConditionToEbay,
 } from '../_shared/ebayApi.ts'
+import {
+  EBAY_CONDITION_IDS,
+  buildGradedConditionDescriptors,
+  detectCategoryFromBrand,
+  getEbayCategoryId,
+  buildTradingCardAspects,
+} from '../_shared/ebayConditions.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -335,6 +342,80 @@ serve(async (req) => {
   }
 })
 
+async function resolveTemplate(
+  supabase: ReturnType<typeof createClient>,
+  item: any,
+  storeKey: string,
+): Promise<any | null> {
+  const detectedCategory = detectCategoryFromBrand(item.brand_title) || item.main_category
+  const isGraded = !!item.grade
+
+  // 1. Check category mappings for a linked template
+  const { data: mappings } = await supabase
+    .from('ebay_category_mappings')
+    .select('default_template_id, brand_match, keyword_pattern, main_category')
+    .eq('store_key', storeKey)
+    .eq('is_active', true)
+    .not('default_template_id', 'is', null)
+    .order('priority', { ascending: false })
+
+  let mappedTemplateId: string | null = null
+  if (mappings) {
+    for (const mapping of mappings) {
+      if (mapping.brand_match?.length && item.brand_title) {
+        const brandLower = item.brand_title.toLowerCase()
+        if (mapping.brand_match.some((b: string) => brandLower.includes(b.toLowerCase()))) {
+          mappedTemplateId = mapping.default_template_id
+          break
+        }
+      }
+      if (mapping.main_category && detectedCategory && mapping.main_category === detectedCategory) {
+        mappedTemplateId = mapping.default_template_id
+        break
+      }
+      if (mapping.keyword_pattern && item.brand_title) {
+        try {
+          const re = new RegExp(mapping.keyword_pattern, 'i')
+          if (re.test(item.brand_title) || re.test(item.subject || '')) {
+            mappedTemplateId = mapping.default_template_id
+            break
+          }
+        } catch {}
+      }
+    }
+  }
+
+  if (mappedTemplateId) {
+    const { data: mappedTemplate } = await supabase
+      .from('ebay_listing_templates')
+      .select('*')
+      .eq('id', mappedTemplateId)
+      .eq('is_active', true)
+      .single()
+    if (mappedTemplate) return mappedTemplate
+  }
+
+  // 2. Fallback: find template by graded status + category
+  const { data: templates } = await supabase
+    .from('ebay_listing_templates')
+    .select('*')
+    .eq('store_key', storeKey)
+    .eq('is_graded', isGraded)
+    .eq('is_active', true)
+    .order('is_default', { ascending: false })
+
+  if (templates && templates.length > 0) {
+    return templates.find(t => {
+      if (detectedCategory === 'tcg' && t.category_id === '183454') return true
+      if (detectedCategory === 'sports' && t.category_id === '261328') return true
+      if (detectedCategory === 'comics' && (t.category_id === '63' || t.category_id === '259061')) return true
+      return false
+    }) || templates[0]
+  }
+
+  return null
+}
+
 async function processCreate(
   supabase: ReturnType<typeof createClient>,
   accessToken: string,
@@ -344,18 +425,47 @@ async function processCreate(
   isDryRun: boolean = false
 ): Promise<{ success: boolean; data?: any; error?: string }> {
   const ebaySku = item.sku || `INV-${item.id.substring(0, 8)}`
-  const title = buildTitle(item).substring(0, 80)
-  const description = buildDescription(item)
+  
+  // Resolve template for this item
+  const template = await resolveTemplate(supabase, item, storeConfig.store_key)
+  console.log(`[ebay-sync-processor] Resolved template: ${template?.id || 'none'} (${template?.name || 'default'})`)
+
+  const title = buildTitle(item, template?.title_template).substring(0, 80)
+  const description = buildDescription(item, template?.description_template)
   
   // Use effective quantity (derived from cards.status for graded items)
   const quantity = item._effectiveQuantity ?? item.quantity ?? 1
+
+  // Determine condition and category from template or auto-detect
+  const isGraded = !!item.grade
+  const conditionId = template?.condition_id || (isGraded ? EBAY_CONDITION_IDS.GRADED : EBAY_CONDITION_IDS.UNGRADED)
+  const categoryId = template?.category_id || 
+    getEbayCategoryId(detectCategoryFromBrand(item.brand_title) || item.main_category as any, isGraded)
+
+  // Build condition descriptors for graded items
+  let conditionDescriptors: any[] | undefined
+  if (isGraded) {
+    conditionDescriptors = buildGradedConditionDescriptors(
+      item.grading_company || template?.default_grader || 'PSA',
+      item.grade,
+      item.psa_cert || item.cgc_cert
+    )
+  }
+
+  // Build aspects
+  const aspects = buildTradingCardAspects(item)
+
+  // Resolve policies: template > store config
+  const fulfillmentPolicyId = template?.fulfillment_policy_id || storeConfig.default_fulfillment_policy_id || ''
+  const paymentPolicyId = template?.payment_policy_id || storeConfig.default_payment_policy_id || ''
+  const returnPolicyId = template?.return_policy_id || storeConfig.default_return_policy_id || ''
 
   // DRY RUN: Simulate success without calling eBay APIs
   if (isDryRun) {
     const fakeOfferId = `DRY-RUN-OFFER-${Date.now()}`
     const fakeListingId = `DRY-RUN-LISTING-${Date.now()}`
     
-    console.log(`[ebay-sync-processor] DRY RUN: Would create listing for SKU ${ebaySku}, title: ${title}`)
+    console.log(`[ebay-sync-processor] DRY RUN: Would create listing for SKU ${ebaySku}, title: ${title}, category: ${categoryId}`)
     
     await supabase
       .from('intake_items')
@@ -373,6 +483,12 @@ async function processCreate(
           dry_run: true,
           simulated: true,
           sku: ebaySku,
+          template_id: template?.id,
+          category_id: categoryId,
+          condition_id: conditionId,
+          fulfillment_policy_id: fulfillmentPolicyId,
+          payment_policy_id: paymentPolicyId,
+          return_policy_id: returnPolicyId,
         },
       })
       .eq('id', item.id)
@@ -380,25 +496,36 @@ async function processCreate(
     return { success: true, data: { listing_id: fakeListingId, dry_run: true } }
   }
 
-  // Create inventory item
-  const inventoryResult = await createOrUpdateInventoryItem(accessToken, environment, {
+  // Create inventory item with condition descriptors
+  const inventoryPayload: any = {
     sku: ebaySku,
     product: {
       title,
       description,
+      aspects,
       imageUrls: item.image_urls || [],
     },
-    condition: mapConditionToEbay(item.grade ? 'excellent' : 'new'),
+    condition: conditionId,
     availability: {
       shipToLocationAvailability: {
         quantity,
       },
     },
-  })
+  }
+  if (conditionDescriptors?.length) {
+    inventoryPayload.conditionDescriptors = conditionDescriptors
+  }
+
+  const inventoryResult = await createOrUpdateInventoryItem(accessToken, environment, inventoryPayload)
 
   if (!inventoryResult.success) {
     return inventoryResult
   }
+
+  // Calculate price with markup
+  const basePrice = item.price || 0
+  const markupPercent = storeConfig.price_markup_percent || 0
+  const finalPrice = basePrice * (1 + markupPercent / 100)
 
   // Create offer
   const offerResult = await createOffer(accessToken, environment, {
@@ -409,16 +536,17 @@ async function processCreate(
     availableQuantity: quantity,
     pricingSummary: {
       price: {
-        value: (item.price || 0).toFixed(2),
+        value: finalPrice.toFixed(2),
         currency: 'USD',
       },
     },
     listingPolicies: {
-      fulfillmentPolicyId: storeConfig.default_fulfillment_policy_id || '',
-      paymentPolicyId: storeConfig.default_payment_policy_id || '',
-      returnPolicyId: storeConfig.default_return_policy_id || '',
+      fulfillmentPolicyId,
+      paymentPolicyId,
+      returnPolicyId,
     },
-    categoryId: storeConfig.default_category_id || '183454',
+    categoryId,
+    merchantLocationKey: storeConfig.location_key || undefined,
   })
 
   if (!offerResult.success) {
@@ -453,6 +581,12 @@ async function processCreate(
         sku: ebaySku,
         offer_id: offerResult.offerId,
         listing_id: publishResult.listingId,
+        template_id: template?.id,
+        category_id: categoryId,
+        condition_id: conditionId,
+        fulfillment_policy_id: fulfillmentPolicyId,
+        payment_policy_id: paymentPolicyId,
+        return_policy_id: returnPolicyId,
       },
     })
     .eq('id', item.id)
@@ -477,6 +611,32 @@ async function processUpdate(
   // Use effective quantity (derived from cards.status for graded items)
   const quantity = item._effectiveQuantity ?? item.quantity ?? 1
 
+  // Resolve template for this item
+  const template = await resolveTemplate(supabase, item, storeConfig.store_key)
+
+  const isGraded = !!item.grade
+  const conditionId = template?.condition_id || (isGraded ? EBAY_CONDITION_IDS.GRADED : EBAY_CONDITION_IDS.UNGRADED)
+  const categoryId = template?.category_id || 
+    getEbayCategoryId(detectCategoryFromBrand(item.brand_title) || item.main_category as any, isGraded)
+
+  // Resolve policies: template > store config
+  const fulfillmentPolicyId = template?.fulfillment_policy_id || storeConfig.default_fulfillment_policy_id || ''
+  const paymentPolicyId = template?.payment_policy_id || storeConfig.default_payment_policy_id || ''
+  const returnPolicyId = template?.return_policy_id || storeConfig.default_return_policy_id || ''
+
+  // Build aspects
+  const aspects = buildTradingCardAspects(item)
+
+  // Build condition descriptors for graded items
+  let conditionDescriptors: any[] | undefined
+  if (isGraded) {
+    conditionDescriptors = buildGradedConditionDescriptors(
+      item.grading_company || template?.default_grader || 'PSA',
+      item.grade,
+      item.psa_cert || item.cgc_cert
+    )
+  }
+
   // DRY RUN: Simulate success without calling eBay APIs
   if (isDryRun) {
     console.log(`[ebay-sync-processor] DRY RUN: Would update listing for SKU ${ebaySku}`)
@@ -493,6 +653,7 @@ async function processUpdate(
           dry_run: true,
           simulated: true,
           sku: ebaySku,
+          template_id: template?.id,
         },
       })
       .eq('id', item.id)
@@ -500,25 +661,36 @@ async function processUpdate(
     return { success: true }
   }
 
-  // Update inventory item
-  const inventoryResult = await createOrUpdateInventoryItem(accessToken, environment, {
+  // Update inventory item with proper condition and aspects
+  const inventoryPayload: any = {
     sku: ebaySku,
     product: {
-      title: buildTitle(item).substring(0, 80),
-      description: buildDescription(item),
+      title: buildTitle(item, template?.title_template).substring(0, 80),
+      description: buildDescription(item, template?.description_template),
+      aspects,
       imageUrls: item.image_urls || [],
     },
-    condition: mapConditionToEbay(item.grade ? 'excellent' : 'new'),
+    condition: conditionId,
     availability: {
       shipToLocationAvailability: {
         quantity,
       },
     },
-  })
+  }
+  if (conditionDescriptors?.length) {
+    inventoryPayload.conditionDescriptors = conditionDescriptors
+  }
+
+  const inventoryResult = await createOrUpdateInventoryItem(accessToken, environment, inventoryPayload)
 
   if (!inventoryResult.success) {
     return inventoryResult
   }
+
+  // Calculate price with markup
+  const basePrice = item.price || 0
+  const markupPercent = storeConfig.price_markup_percent || 0
+  const finalPrice = basePrice * (1 + markupPercent / 100)
 
   // Update offer if exists
   if (item.ebay_offer_id) {
@@ -529,16 +701,16 @@ async function processUpdate(
       availableQuantity: quantity,
       pricingSummary: {
         price: {
-          value: (item.price || 0).toFixed(2),
+          value: finalPrice.toFixed(2),
           currency: 'USD',
         },
       },
       listingPolicies: {
-        fulfillmentPolicyId: storeConfig.default_fulfillment_policy_id || '',
-        paymentPolicyId: storeConfig.default_payment_policy_id || '',
-        returnPolicyId: storeConfig.default_return_policy_id || '',
+        fulfillmentPolicyId,
+        paymentPolicyId,
+        returnPolicyId,
       },
-      categoryId: storeConfig.default_category_id || '183454',
+      categoryId,
     })
 
     if (!offerUpdateResult.success) {
@@ -557,6 +729,11 @@ async function processUpdate(
         timestamp: new Date().toISOString(),
         action: 'update',
         sku: ebaySku,
+        template_id: template?.id,
+        category_id: categoryId,
+        fulfillment_policy_id: fulfillmentPolicyId,
+        payment_policy_id: paymentPolicyId,
+        return_policy_id: returnPolicyId,
       },
     })
     .eq('id', item.id)
@@ -673,22 +850,62 @@ async function markQueueItemFailed(
   }
 }
 
-function buildTitle(item: any): string {
+function buildTitle(item: any, template?: string | null): string {
+  if (template) {
+    return template
+      .replace(/{subject}/g, item.subject || '')
+      .replace(/{brand_title}/g, item.brand_title || '')
+      .replace(/{brand}/g, item.brand_title || '')
+      .replace(/{year}/g, item.year || '')
+      .replace(/{grade}/g, item.grade || '')
+      .replace(/{grading_company}/g, item.grading_company || '')
+      .replace(/{card_number}/g, item.card_number || '')
+      .replace(/{variant}/g, item.variant || '')
+      .replace(/{psa_cert}/g, item.psa_cert || '')
+      .replace(/\s+/g, ' ')
+      .trim()
+  }
+
   const parts = []
   if (item.year) parts.push(item.year)
   if (item.brand_title) parts.push(item.brand_title)
   if (item.subject) parts.push(item.subject)
   if (item.card_number) parts.push(`#${item.card_number}`)
-  if (item.grade) parts.push(`PSA ${item.grade}`)
+  if (item.grade && item.grading_company) {
+    parts.push(`${item.grading_company} ${item.grade}`)
+  } else if (item.grade) {
+    parts.push(`PSA ${item.grade}`)
+  }
   return parts.join(' ') || 'Trading Card'
 }
 
-function buildDescription(item: any): string {
+function buildDescription(item: any, template?: string | null): string {
+  if (template) {
+    return template
+      .replace(/{subject}/g, item.subject || '')
+      .replace(/{brand_title}/g, item.brand_title || '')
+      .replace(/{brand}/g, item.brand_title || '')
+      .replace(/{year}/g, item.year || '')
+      .replace(/{grade}/g, item.grade || '')
+      .replace(/{grading_company}/g, item.grading_company || '')
+      .replace(/{card_number}/g, item.card_number || '')
+      .replace(/{variant}/g, item.variant || '')
+      .replace(/{sku}/g, item.sku || '')
+      .replace(/{psa_cert}/g, item.psa_cert || '')
+      .replace(/{cgc_cert}/g, item.cgc_cert || '')
+      .trim()
+  }
+
   const lines = [`<h2>${item.subject || 'Trading Card'}</h2>`]
   if (item.brand_title) lines.push(`<p><strong>Brand:</strong> ${item.brand_title}</p>`)
   if (item.year) lines.push(`<p><strong>Year:</strong> ${item.year}</p>`)
   if (item.card_number) lines.push(`<p><strong>Card #:</strong> ${item.card_number}</p>`)
-  if (item.grade) lines.push(`<p><strong>Grade:</strong> PSA ${item.grade}</p>`)
+  if (item.variant) lines.push(`<p><strong>Variant:</strong> ${item.variant}</p>`)
+  if (item.grade) {
+    const grader = item.grading_company || 'PSA'
+    lines.push(`<p><strong>Grade:</strong> ${grader} ${item.grade}</p>`)
+  }
   if (item.psa_cert) lines.push(`<p><strong>PSA Cert:</strong> ${item.psa_cert}</p>`)
+  if (item.cgc_cert) lines.push(`<p><strong>CGC Cert:</strong> ${item.cgc_cert}</p>`)
   return lines.join('\n')
 }
