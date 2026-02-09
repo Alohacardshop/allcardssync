@@ -165,7 +165,7 @@ Deno.serve(async (req) => {
       shopify_variant_id: variantId,
       shopify_inventory_item_id: inventoryItemId,
       pushed_at: new Date().toISOString(),
-      shopify_sync_status: 'success',
+      shopify_sync_status: 'synced',
       last_shopify_synced_at: new Date().toISOString(),
       last_shopify_correlation_id: run.correlationId,
       last_shopify_location_gid: locationGid,

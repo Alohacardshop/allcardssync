@@ -1,6 +1,7 @@
 import React from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { ConfirmActionDialog } from '@/components/ui/confirm-action-dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -47,8 +48,10 @@ interface WebhookStats {
 }
 
 export function SyncHealthDashboard() {
+  const queryClient = useQueryClient();
   const [isReconciling, setIsReconciling] = React.useState(false);
   const [isClearingErrors, setIsClearingErrors] = React.useState(false);
+  const [showClearConfirm, setShowClearConfirm] = React.useState(false);
   const [expandedStores, setExpandedStores] = React.useState<Set<string>>(new Set());
 
   // Fetch reconciliation data
@@ -185,8 +188,13 @@ export function SyncHealthDashboard() {
         description: `Cleared ${clearedCount} error entries. Items will retry sync automatically.`,
       });
 
-      // Refetch data
-      refetchErrorCount();
+      // Refetch all relevant queries
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['webhook-stats'] }),
+        queryClient.invalidateQueries({ queryKey: ['sync-error-count'] }),
+        queryClient.invalidateQueries({ queryKey: ['reconciliation-runs'] }),
+        queryClient.invalidateQueries({ queryKey: ['store-reconciliation-summary'] }),
+      ]);
     } catch (error: any) {
       toast({
         title: 'Failed to clear errors',
@@ -195,6 +203,7 @@ export function SyncHealthDashboard() {
       });
     } finally {
       setIsClearingErrors(false);
+      setShowClearConfirm(false);
     }
   };
 
@@ -270,7 +279,7 @@ export function SyncHealthDashboard() {
       <ShopifyHeartbeatWarning />
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         {/* Heartbeat Status Card */}
         <Card>
           <CardHeader className="pb-2">
@@ -363,6 +372,23 @@ export function SyncHealthDashboard() {
             </p>
           </CardContent>
         </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+              Sync Errors
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className={`text-2xl font-bold ${syncErrorCount > 0 ? 'text-destructive' : 'text-green-600'}`}>
+              {syncErrorCount}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              items in error/failed status
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Actions */}
@@ -381,19 +407,31 @@ export function SyncHealthDashboard() {
         </Button>
         
         {(totalDeadLetter > 0 || syncErrorCount > 0) && (
-          <Button 
-            onClick={clearRecentErrors}
-            disabled={isClearingErrors}
-            variant="outline"
-            className="text-orange-600 border-orange-600 hover:bg-orange-50"
-          >
-            {isClearingErrors ? (
-              <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <XCircle className="h-4 w-4 mr-2" />
-            )}
-            Clear Errors ({totalDeadLetter + syncErrorCount})
-          </Button>
+          <>
+            <Button 
+              onClick={() => setShowClearConfirm(true)}
+              disabled={isClearingErrors}
+              variant="outline"
+              className="text-orange-600 border-orange-600 hover:bg-orange-50"
+            >
+              {isClearingErrors ? (
+                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <XCircle className="h-4 w-4 mr-2" />
+              )}
+              Clear Errors ({totalDeadLetter + syncErrorCount})
+            </Button>
+            <ConfirmActionDialog
+              open={showClearConfirm}
+              onOpenChange={setShowClearConfirm}
+              onConfirm={clearRecentErrors}
+              title="Clear All Errors?"
+              description={`This will permanently delete ${totalDeadLetter} dead letter webhook event${totalDeadLetter !== 1 ? 's' : ''} and reset ${syncErrorCount} item${syncErrorCount !== 1 ? 's' : ''} with sync errors back to "pending" for automatic retry.`}
+              confirmLabel="Clear Errors"
+              variant="destructive"
+              loading={isClearingErrors}
+            />
+          </>
         )}
         
         <RefreshButton queryKey={['reconciliation-runs', 'store-reconciliation-summary', 'webhook-stats', 'sync-error-count']} />
