@@ -423,11 +423,14 @@ export type Database = {
           default_grader: string | null
           description: string | null
           description_template: string | null
+          fulfillment_policy_id: string | null
           id: string
           is_active: boolean | null
           is_default: boolean | null
           is_graded: boolean | null
           name: string
+          payment_policy_id: string | null
+          return_policy_id: string | null
           store_key: string
           title_template: string | null
           updated_at: string | null
@@ -441,11 +444,14 @@ export type Database = {
           default_grader?: string | null
           description?: string | null
           description_template?: string | null
+          fulfillment_policy_id?: string | null
           id?: string
           is_active?: boolean | null
           is_default?: boolean | null
           is_graded?: boolean | null
           name: string
+          payment_policy_id?: string | null
+          return_policy_id?: string | null
           store_key: string
           title_template?: string | null
           updated_at?: string | null
@@ -459,11 +465,14 @@ export type Database = {
           default_grader?: string | null
           description?: string | null
           description_template?: string | null
+          fulfillment_policy_id?: string | null
           id?: string
           is_active?: boolean | null
           is_default?: boolean | null
           is_graded?: boolean | null
           name?: string
+          payment_policy_id?: string | null
+          return_policy_id?: string | null
           store_key?: string
           title_template?: string | null
           updated_at?: string | null
