@@ -54,6 +54,9 @@ verify_jwt = true
 [functions.shopify-webhook-register]
 verify_jwt = true
 
+# eBay category fetching from Taxonomy API
+[functions.ebay-fetch-categories]
+verify_jwt = true
 
 [functions.v2-shopify-send-graded]
 verify_jwt = true
