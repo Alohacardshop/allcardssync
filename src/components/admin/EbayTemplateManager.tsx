@@ -13,6 +13,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
 import { Plus, Edit, Trash2, Copy, Check, Tag, FileText } from 'lucide-react';
 import { EbayCategorySelect } from './EbayCategorySelect';
+import { EbayCategoryMappingEditor } from './EbayCategoryMappingEditor';
 
 interface ListingTemplate {
   id: string;
@@ -65,6 +66,7 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
   const [editingTemplate, setEditingTemplate] = useState<Partial<ListingTemplate> | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [selectedCategoryName, setSelectedCategoryName] = useState('');
 
   useEffect(() => {
     loadData();
@@ -119,7 +121,7 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
         name: editingTemplate.name,
         description: editingTemplate.description || null,
         category_id: editingTemplate.category_id || '183454',
-        category_name: editingTemplate.category_id || null,
+        category_name: selectedCategoryName || editingTemplate.category_name || null,
         condition_id: editingTemplate.condition_id || '2750',
         is_graded: editingTemplate.is_graded ?? true,
         title_template: editingTemplate.title_template || null,
@@ -208,6 +210,7 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
       is_active: true,
       aspects_mapping: {},
     });
+    setSelectedCategoryName('');
     setIsDialogOpen(true);
   }
 
@@ -218,6 +221,7 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
       name: `${template.name} (Copy)`,
       is_default: false,
     });
+    setSelectedCategoryName(template.category_name || '');
     setIsDialogOpen(true);
   }
 
@@ -285,8 +289,9 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => {
+                      onClick={() => {
                           setEditingTemplate(template);
+                          setSelectedCategoryName(template.category_name || '');
                           setIsDialogOpen(true);
                         }}
                       >
@@ -326,43 +331,10 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
       </Card>
 
       {/* Category Mappings Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Tag className="h-5 w-5" />
-            Category Mappings
-          </CardTitle>
-          <CardDescription>
-            Auto-assign categories based on brand names. Items matching these brands will use the corresponding eBay category.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {mappings.length === 0 ? (
-            <div className="text-center py-4 text-muted-foreground">
-              No category mappings configured.
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {mappings.map((mapping) => (
-                <div
-                  key={mapping.id}
-                  className="flex items-center justify-between p-3 border rounded-lg"
-                >
-                  <div className="flex-1">
-                    <div className="font-medium">{mapping.category_name}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {mapping.brand_match?.slice(0, 5).join(', ')}
-                      {mapping.brand_match && mapping.brand_match.length > 5 && 
-                        ` +${mapping.brand_match.length - 5} more`}
-                    </div>
-                  </div>
-                  <Badge variant="outline">{mapping.main_category || 'any'}</Badge>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <EbayCategoryMappingEditor
+        storeKey={storeKey}
+        templates={templates.map(t => ({ id: t.id, name: t.name }))}
+      />
 
       {/* Template Editor Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -393,6 +365,7 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
                   <EbayCategorySelect
                     value={editingTemplate?.category_id || '183454'}
                     onValueChange={(value) => setEditingTemplate(prev => ({ ...prev, category_id: value }))}
+                    onCategoryNameChange={setSelectedCategoryName}
                   />
                 </div>
               </div>

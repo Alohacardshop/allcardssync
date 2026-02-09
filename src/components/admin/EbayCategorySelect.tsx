@@ -26,6 +26,7 @@ import { toast } from 'sonner';
 interface EbayCategorySelectProps {
   value: string;
   onValueChange: (value: string) => void;
+  onCategoryNameChange?: (name: string) => void;
   placeholder?: string;
   disabled?: boolean;
   filterType?: string;
@@ -49,6 +50,7 @@ interface EbayRemoteCategory {
 export function EbayCategorySelect({
   value,
   onValueChange,
+  onCategoryNameChange,
   placeholder = 'Search or select eBay category...',
   disabled,
   filterType,
@@ -136,6 +138,8 @@ export function EbayCategorySelect({
   // Select a local category
   function selectLocal(catId: string) {
     onValueChange(catId);
+    const cat = localCategories?.find(c => c.id === catId);
+    onCategoryNameChange?.(cat?.name || catId);
     setOpen(false);
     setSearchValue('');
   }
@@ -163,6 +167,7 @@ export function EbayCategorySelect({
 
       toast.success(`Imported "${cat.name}" (${cat.id})`);
       onValueChange(cat.id);
+      onCategoryNameChange?.(cat.name);
     } catch (err: any) {
       toast.error('Failed to import category: ' + err.message);
     }

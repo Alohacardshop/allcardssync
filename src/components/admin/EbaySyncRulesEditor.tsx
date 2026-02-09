@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useStore } from '@/contexts/StoreContext';
@@ -65,7 +65,7 @@ interface SyncRule {
   updated_at: string;
 }
 
-const CATEGORY_OPTIONS = [
+const DEFAULT_CATEGORY_OPTIONS = [
   { value: 'Pokemon', label: 'Pokemon' },
   { value: 'Magic', label: 'Magic: The Gathering' },
   { value: 'Yu-Gi-Oh', label: 'Yu-Gi-Oh!' },
@@ -101,6 +101,26 @@ export function EbaySyncRulesEditor() {
   const [brandInput, setBrandInput] = useState('');
   const [isApplying, setIsApplying] = useState(false);
   const [previewCount, setPreviewCount] = useState<number | null>(null);
+
+  // Fetch categories dynamically from DB
+  const { data: mainCategories } = useQuery({
+    queryKey: ['main-categories-for-rules'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('main_categories')
+        .select('id, name')
+        .order('sort_order');
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const categoryOptions = useMemo(() => {
+    if (mainCategories && mainCategories.length > 0) {
+      return mainCategories.map(c => ({ value: c.name, label: c.name }));
+    }
+    return DEFAULT_CATEGORY_OPTIONS;
+  }, [mainCategories]);
 
   // Fetch rules
   const { data: rules, isLoading } = useQuery({
@@ -548,7 +568,7 @@ export function EbaySyncRulesEditor() {
               <div className="space-y-2">
                 <Label>Categories</Label>
                 <div className="flex flex-wrap gap-2 p-3 border rounded-lg">
-                  {CATEGORY_OPTIONS.map((opt) => (
+                  {categoryOptions.map((opt) => (
                     <Badge
                       key={opt.value}
                       variant={editingRule?.category_match?.includes(opt.value) ? 'default' : 'outline'}

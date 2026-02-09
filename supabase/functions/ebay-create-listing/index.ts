@@ -14,8 +14,13 @@ import {
   buildGradedConditionDescriptors,
   detectCategoryFromBrand,
   getEbayCategoryId,
-  buildTradingCardAspects,
 } from '../_shared/ebayConditions.ts'
+import {
+  resolveTemplate,
+  buildCategoryAwareAspects,
+  buildTitle,
+  buildDescription,
+} from '../_shared/ebayTemplateResolver.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -105,8 +110,9 @@ serve(async (req) => {
     }
 
     // Get listing template (with policy fields)
+    // Get listing template
     let template: ListingTemplate | null = null
-    
+
     if (template_id) {
       // Use specified template
       const { data: templateData } = await supabase
@@ -116,77 +122,8 @@ serve(async (req) => {
         .single()
       template = templateData
     } else {
-      // Auto-detect template: first check category mappings, then fall back to template matching
-      const detectedCategory = detectCategoryFromBrand(item.brand_title) || item.main_category
-      const isGraded = !!item.grade
-      
-      // Check category mappings for a linked template
-      const { data: mappings } = await supabase
-        .from('ebay_category_mappings')
-        .select('default_template_id, brand_match, keyword_pattern, main_category')
-        .eq('store_key', store_key)
-        .eq('is_active', true)
-        .not('default_template_id', 'is', null)
-        .order('priority', { ascending: false })
-      
-      let mappedTemplateId: string | null = null
-      if (mappings) {
-        for (const mapping of mappings) {
-          // Check brand match
-          if (mapping.brand_match?.length && item.brand_title) {
-            const brandLower = item.brand_title.toLowerCase()
-            if (mapping.brand_match.some((b: string) => brandLower.includes(b.toLowerCase()))) {
-              mappedTemplateId = mapping.default_template_id
-              break
-            }
-          }
-          // Check main_category match
-          if (mapping.main_category && detectedCategory && mapping.main_category === detectedCategory) {
-            mappedTemplateId = mapping.default_template_id
-            break
-          }
-          // Check keyword pattern
-          if (mapping.keyword_pattern && item.brand_title) {
-            try {
-              const re = new RegExp(mapping.keyword_pattern, 'i')
-              if (re.test(item.brand_title) || re.test(item.subject || '')) {
-                mappedTemplateId = mapping.default_template_id
-                break
-              }
-            } catch {}
-          }
-        }
-      }
-      
-      if (mappedTemplateId) {
-        const { data: mappedTemplate } = await supabase
-          .from('ebay_listing_templates')
-          .select('id, category_id, category_name, condition_id, is_graded, title_template, description_template, default_grader, aspects_mapping, fulfillment_policy_id, payment_policy_id, return_policy_id')
-          .eq('id', mappedTemplateId)
-          .eq('is_active', true)
-          .single()
-        template = mappedTemplate
-      }
-      
-      // Fallback: find matching template by graded status
-      if (!template) {
-        const { data: templates } = await supabase
-          .from('ebay_listing_templates')
-          .select('id, category_id, category_name, condition_id, is_graded, title_template, description_template, default_grader, aspects_mapping, fulfillment_policy_id, payment_policy_id, return_policy_id')
-          .eq('store_key', store_key)
-          .eq('is_graded', isGraded)
-          .eq('is_active', true)
-          .order('is_default', { ascending: false })
-        
-        if (templates && templates.length > 0) {
-          template = templates.find(t => {
-            if (detectedCategory === 'tcg' && t.category_id === '183454') return true
-            if (detectedCategory === 'sports' && t.category_id === '261328') return true
-            if (detectedCategory === 'comics' && (t.category_id === '63' || t.category_id === '259061')) return true
-            return false
-          }) || templates[0]
-        }
-      }
+      // Use shared template resolution (category mappings > graded match > default)
+      template = await resolveTemplate(supabase, item, store_key)
     }
 
     console.log(`[ebay-create-listing] Using template: ${template?.id || 'none'}, isGraded: ${!!item.grade}`)
@@ -209,8 +146,8 @@ serve(async (req) => {
     // Build description
     const description = buildDescription(item, template?.description_template || storeConfig.description_template)
 
-    // Build aspects for trading cards
-    const aspects = buildTradingCardAspects(item)
+    // Build aspects based on detected category (TCG, sports, or comics)
+    const aspects = buildCategoryAwareAspects(item)
 
     // Build condition descriptors for graded items
     let conditionDescriptors: any[] | undefined
@@ -386,66 +323,4 @@ serve(async (req) => {
   }
 })
 
-function buildTitle(item: any, template?: string | null): string {
-  if (template) {
-    return template
-      .replace(/{subject}/g, item.subject || '')
-      .replace(/{brand_title}/g, item.brand_title || '')
-      .replace(/{brand}/g, item.brand_title || '')
-      .replace(/{year}/g, item.year || '')
-      .replace(/{grade}/g, item.grade || '')
-      .replace(/{grading_company}/g, item.grading_company || '')
-      .replace(/{card_number}/g, item.card_number || '')
-      .replace(/{variant}/g, item.variant || '')
-      .replace(/{psa_cert}/g, item.psa_cert || '')
-      .replace(/\s+/g, ' ')
-      .trim()
-  }
-
-  const parts = []
-  if (item.year) parts.push(item.year)
-  if (item.brand_title) parts.push(item.brand_title)
-  if (item.subject) parts.push(item.subject)
-  if (item.card_number) parts.push(`#${item.card_number}`)
-  if (item.grade && item.grading_company) {
-    parts.push(`${item.grading_company} ${item.grade}`)
-  } else if (item.grade) {
-    parts.push(`PSA ${item.grade}`)
-  }
-  
-  return parts.join(' ') || 'Trading Card'
-}
-
-function buildDescription(item: any, template?: string | null): string {
-  if (template) {
-    return template
-      .replace(/{subject}/g, item.subject || '')
-      .replace(/{brand_title}/g, item.brand_title || '')
-      .replace(/{brand}/g, item.brand_title || '')
-      .replace(/{year}/g, item.year || '')
-      .replace(/{grade}/g, item.grade || '')
-      .replace(/{grading_company}/g, item.grading_company || '')
-      .replace(/{card_number}/g, item.card_number || '')
-      .replace(/{variant}/g, item.variant || '')
-      .replace(/{sku}/g, item.sku || '')
-      .replace(/{psa_cert}/g, item.psa_cert || '')
-      .replace(/{cgc_cert}/g, item.cgc_cert || '')
-      .trim()
-  }
-
-  const lines = []
-  lines.push(`<h2>${item.subject || 'Trading Card'}</h2>`)
-  
-  if (item.brand_title) lines.push(`<p><strong>Brand:</strong> ${item.brand_title}</p>`)
-  if (item.year) lines.push(`<p><strong>Year:</strong> ${item.year}</p>`)
-  if (item.card_number) lines.push(`<p><strong>Card #:</strong> ${item.card_number}</p>`)
-  if (item.variant) lines.push(`<p><strong>Variant:</strong> ${item.variant}</p>`)
-  if (item.grade) {
-    const grader = item.grading_company || 'PSA'
-    lines.push(`<p><strong>Grade:</strong> ${grader} ${item.grade}</p>`)
-  }
-  if (item.psa_cert) lines.push(`<p><strong>PSA Cert:</strong> ${item.psa_cert}</p>`)
-  if (item.cgc_cert) lines.push(`<p><strong>CGC Cert:</strong> ${item.cgc_cert}</p>`)
-  
-  return lines.join('\n')
-}
+// buildTitle and buildDescription are now imported from _shared/ebayTemplateResolver.ts
