@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Progress } from '@/components/ui/progress';
-import { Package, Search, ShoppingCart, RefreshCw, CheckCircle, Loader2, Download } from 'lucide-react';
+import { Package, Search, ShoppingCart, RefreshCw, CheckCircle, Loader2, Download, Eye } from 'lucide-react';
 import { toast } from 'sonner';
 import { useEbayListing } from '@/hooks/useEbayListing';
 import { EbayListingPreview } from '@/components/admin/EbayListingPreview';
@@ -67,6 +67,7 @@ export function EbayBulkListing({ storeKey, storeConfig }: EbayBulkListingProps)
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewItem, setPreviewItem] = useState<InventoryItem | null>(null);
 
   const { data: items, isLoading, refetch } = useQuery({
     queryKey: ['ebay-bulk-listing-items', filterStatus, filterCategory, searchQuery],
@@ -134,16 +135,28 @@ export function EbayBulkListing({ storeKey, storeConfig }: EbayBulkListingProps)
     refetch();
   };
 
-  const handleOpenPreview = () => {
+  const handleQueueForSync = async () => {
     if (selectedItems.size === 0) {
       toast.error('No items selected');
       return;
     }
-    const itemsToSync = items?.filter(i => selectedItems.has(i.id) && !i.ebay_listing_id) || [];
-    if (itemsToSync.length === 0) {
-      toast.error('No eligible items to sync (already listed or not selected)');
-      return;
+    setIsQueueing(true);
+    try {
+      const itemsToSync = items?.filter(i => selectedItems.has(i.id) && !i.ebay_listing_id) || [];
+      if (itemsToSync.length === 0) {
+        toast.error('No eligible items to sync (already listed or not selected)');
+        return;
+      }
+      await queueForEbaySync(itemsToSync.map(i => i.id), storeKey || 'default');
+      setSelectedItems(new Set());
+      refetch();
+    } finally {
+      setIsQueueing(false);
     }
+  };
+
+  const handlePreviewItem = (item: InventoryItem) => {
+    setPreviewItem(item);
     setPreviewOpen(true);
   };
 
@@ -151,8 +164,8 @@ export function EbayBulkListing({ storeKey, storeConfig }: EbayBulkListingProps)
     setIsQueueing(true);
     try {
       await queueForEbaySync(itemIds, storeKey || 'default');
-      setSelectedItems(new Set());
       setPreviewOpen(false);
+      setPreviewItem(null);
       refetch();
     } finally {
       setIsQueueing(false);
@@ -305,7 +318,7 @@ export function EbayBulkListing({ storeKey, storeConfig }: EbayBulkListingProps)
               </Button>
               <Button
                 size="sm"
-                onClick={handleOpenPreview}
+                onClick={handleQueueForSync}
                 disabled={isQueueing}
               >
                 {isQueueing ? (
@@ -313,7 +326,7 @@ export function EbayBulkListing({ storeKey, storeConfig }: EbayBulkListingProps)
                 ) : (
                   <ShoppingCart className="h-4 w-4 mr-2" />
                 )}
-                Preview & Queue
+                Queue for Sync
               </Button>
             </div>
           </div>
@@ -345,6 +358,7 @@ export function EbayBulkListing({ storeKey, storeConfig }: EbayBulkListingProps)
                   <TableHead>Price</TableHead>
                   <TableHead>eBay Status</TableHead>
                   <TableHead>Shopify</TableHead>
+                  <TableHead className="w-[60px]"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -397,6 +411,22 @@ export function EbayBulkListing({ storeKey, storeConfig }: EbayBulkListingProps)
                         <span className="text-muted-foreground">-</span>
                       )}
                     </TableCell>
+                    <TableCell>
+                      {!item.ebay_listing_id && storeKey && storeConfig && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handlePreviewItem(item);
+                          }}
+                          title="Preview listing"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -412,11 +442,14 @@ export function EbayBulkListing({ storeKey, storeConfig }: EbayBulkListingProps)
       </CardContent>
 
       {/* Listing Preview Dialog */}
-      {storeKey && storeConfig && (
+      {storeKey && storeConfig && previewItem && (
         <EbayListingPreview
           open={previewOpen}
-          onOpenChange={setPreviewOpen}
-          items={items?.filter(i => selectedItems.has(i.id) && !i.ebay_listing_id) || []}
+          onOpenChange={(open) => {
+            setPreviewOpen(open);
+            if (!open) setPreviewItem(null);
+          }}
+          items={[previewItem]}
           storeKey={storeKey}
           storeConfig={storeConfig}
           onConfirm={handleConfirmQueue}
