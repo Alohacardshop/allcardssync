@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
 import { Plus, Edit, Trash2, Copy, Check, Tag, FileText } from 'lucide-react';
+import { EbayCategorySelect } from './EbayCategorySelect';
 
 interface ListingTemplate {
   id: string;
@@ -44,14 +45,6 @@ interface CategoryMapping {
   priority: number;
   is_active: boolean;
 }
-
-const CATEGORY_OPTIONS = [
-  { id: '183454', name: 'CCG Individual Cards (Pokemon, MTG, etc.)' },
-  { id: '261328', name: 'Sports Trading Cards Singles' },
-  { id: '183050', name: 'Non-Sport Trading Cards' },
-  { id: '63', name: 'Collectible Comic Books' },
-  { id: '259061', name: 'Graded Comic Books' },
-];
 
 const GRADER_OPTIONS = ['PSA', 'BGS', 'CGC', 'SGC', 'CSG', 'HGA', 'GMA', 'KSA'];
 
@@ -126,7 +119,7 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
         name: editingTemplate.name,
         description: editingTemplate.description || null,
         category_id: editingTemplate.category_id || '183454',
-        category_name: CATEGORY_OPTIONS.find(c => c.id === editingTemplate.category_id)?.name || null,
+        category_name: editingTemplate.category_id || null,
         condition_id: editingTemplate.condition_id || '2750',
         is_graded: editingTemplate.is_graded ?? true,
         title_template: editingTemplate.title_template || null,
@@ -397,21 +390,10 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="category">eBay Category</Label>
-                  <Select
+                  <EbayCategorySelect
                     value={editingTemplate?.category_id || '183454'}
                     onValueChange={(value) => setEditingTemplate(prev => ({ ...prev, category_id: value }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {CATEGORY_OPTIONS.map((cat) => (
-                        <SelectItem key={cat.id} value={cat.id}>
-                          {cat.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  />
                 </div>
               </div>
 

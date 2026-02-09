@@ -19,10 +19,12 @@ import { EbayBulkListing } from '@/components/admin/EbayBulkListing';
 import { EbayTemplateManager } from '@/components/admin/EbayTemplateManager';
 import { EbayPolicyEditor } from '@/components/admin/EbayPolicyEditor';
 import { EbaySyncRulesEditor } from '@/components/admin/EbaySyncRulesEditor';
+import { EbayCategoryManager } from '@/components/admin/EbayCategoryManager';
+import { EbayCategorySelect } from '@/components/admin/EbayCategorySelect';
 import { Link, useLocation } from 'react-router-dom';
 import { useStore } from '@/contexts/StoreContext';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { FileText, ClipboardList, Filter } from 'lucide-react';
+import { FileText, ClipboardList, Filter, FolderTree } from 'lucide-react';
 import { DeleteConfirmationDialog } from '@/components/ConfirmationDialog';
 
 // Token health status helper
@@ -647,7 +649,7 @@ export default function EbayApp() {
         />
 
         <Tabs defaultValue="settings" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-6 lg:w-auto lg:inline-grid">
+          <TabsList className="grid w-full grid-cols-7 lg:w-auto lg:inline-grid">
             <TabsTrigger value="settings" className="flex items-center gap-2">
               <Settings className="h-4 w-4" />
               Settings
@@ -659,6 +661,10 @@ export default function EbayApp() {
             <TabsTrigger value="templates" className="flex items-center gap-2">
               <FileText className="h-4 w-4" />
               Templates
+            </TabsTrigger>
+            <TabsTrigger value="categories" className="flex items-center gap-2">
+              <FolderTree className="h-4 w-4" />
+              Categories
             </TabsTrigger>
             <TabsTrigger value="rules" className="flex items-center gap-2">
               <Filter className="h-4 w-4" />
@@ -685,6 +691,11 @@ export default function EbayApp() {
                 </CardContent>
               </Card>
             )}
+          </TabsContent>
+
+          {/* Categories Tab */}
+          <TabsContent value="categories">
+            <EbayCategoryManager />
           </TabsContent>
 
           {/* Settings Tab */}
@@ -1117,22 +1128,12 @@ export default function EbayApp() {
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="space-y-2">
-                      <Label>Default Category ID</Label>
-                      <Input
-                        placeholder="e.g., 183454 (Trading Cards)"
+                      <Label>Default Category</Label>
+                      <EbayCategorySelect
                         value={selectedConfig.default_category_id || ''}
-                        onChange={(e) => updateConfig({ default_category_id: e.target.value || null })}
+                        onValueChange={(value) => updateConfig({ default_category_id: value || null })}
+                        placeholder="Select default eBay category..."
                       />
-                      <p className="text-xs text-muted-foreground">
-                        <a 
-                          href="https://www.isoldwhat.com/" 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="text-primary hover:underline"
-                        >
-                          Find eBay Category IDs
-                        </a>
-                      </p>
                     </div>
 
                     <div className="space-y-2">
