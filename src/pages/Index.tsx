@@ -28,17 +28,17 @@ export default function Index() {
 
       {/* TAB NAVIGATION - Collectible Type (Cards/Comics) */}
       <Tabs value={collectibleType} onValueChange={(value) => setCollectibleType(value as 'cards' | 'comics')} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 h-12 p-1 bg-muted/50">
+        <TabsList className="grid w-full grid-cols-2 h-14 p-1.5 bg-muted/60 rounded-xl">
           <TabsTrigger 
             value="cards" 
-            className="flex items-center gap-2 text-sm font-medium h-full data-[state=active]:bg-background data-[state=active]:shadow-sm transition-all"
+            className="flex items-center gap-2 text-sm font-semibold h-full rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
           >
             <Package className="h-4 w-4" />
             🎴 Cards
           </TabsTrigger>
           <TabsTrigger 
             value="comics" 
-            className="flex items-center gap-2 text-sm font-medium h-full data-[state=active]:bg-background data-[state=active]:shadow-sm transition-all"
+            className="flex items-center gap-2 text-sm font-semibold h-full rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all"
           >
             <Layers className="h-4 w-4" />
             📚 Comics
@@ -48,12 +48,12 @@ export default function Index() {
         {/* CARDS TAB CONTENT */}
         <TabsContent value="cards" className="mt-4">
           <Tabs value={cardCondition} onValueChange={(value) => setCardCondition(value as 'raw' | 'graded')} className="w-full">
-            <TabsList className="grid w-full grid-cols-2 mb-4">
-              <TabsTrigger value="raw" className="flex items-center gap-2">
+            <TabsList className="grid w-full grid-cols-2 mb-4 h-11 bg-muted/40 rounded-lg">
+              <TabsTrigger value="raw" className="flex items-center gap-2 font-semibold rounded-md data-[state=active]:bg-accent data-[state=active]:text-accent-foreground data-[state=active]:shadow-sm">
                 <Package className="h-4 w-4" />
                 Raw Cards
               </TabsTrigger>
-              <TabsTrigger value="graded" className="flex items-center gap-2">
+              <TabsTrigger value="graded" className="flex items-center gap-2 font-semibold rounded-md data-[state=active]:bg-accent data-[state=active]:text-accent-foreground data-[state=active]:shadow-sm">
                 <Lock className="h-4 w-4" />
                 Graded Cards
               </TabsTrigger>
@@ -72,12 +72,12 @@ export default function Index() {
         {/* COMICS TAB CONTENT */}
         <TabsContent value="comics" className="mt-4">
           <Tabs value={comicCondition} onValueChange={(value) => setComicCondition(value as 'raw' | 'graded')} className="w-full">
-            <TabsList className="grid w-full grid-cols-2 mb-4">
-              <TabsTrigger value="raw" className="flex items-center gap-2">
+            <TabsList className="grid w-full grid-cols-2 mb-4 h-11 bg-muted/40 rounded-lg">
+              <TabsTrigger value="raw" className="flex items-center gap-2 font-semibold rounded-md data-[state=active]:bg-accent data-[state=active]:text-accent-foreground data-[state=active]:shadow-sm">
                 <Package className="h-4 w-4" />
                 Raw Comics
               </TabsTrigger>
-              <TabsTrigger value="graded" className="flex items-center gap-2">
+              <TabsTrigger value="graded" className="flex items-center gap-2 font-semibold rounded-md data-[state=active]:bg-accent data-[state=active]:text-accent-foreground data-[state=active]:shadow-sm">
                 <Lock className="h-4 w-4" />
                 Graded Comics
               </TabsTrigger>
