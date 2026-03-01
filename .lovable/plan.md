@@ -1,41 +1,40 @@
 
 
-## Add Tag-to-Category Mapping Settings to eBay Admin
+## Add Per-Category Policies and Markup to Tag Mappings
 
-### Current State
-The tag-to-category mapping is hardcoded in two places:
-1. **Database trigger** (`trigger_normalize_tags`) — maps tags like `pokemon` → `primary_category: 'pokemon'`, `comics` → `'comics'`, etc.
-2. **Edge function** (`ebayConditions.ts`) — maps `primary_category` values to eBay category IDs (`tcg` → `183454`, `comics` → `259061`, etc.)
+Right now, the `tag_category_mappings` table only stores tag, category, condition, and eBay category ID. Policies and markup are either global (from `ebay_store_config`) or per-template. You want per-category control over policies and markup directly from the Tag Mappings UI.
 
-Both require code/SQL changes to modify. You want these editable from the UI.
+### What changes
 
-### Plan
+**1. Add columns to `tag_category_mappings`**
+- `fulfillment_policy_id` (text, nullable)
+- `payment_policy_id` (text, nullable)
+- `return_policy_id` (text, nullable)
+- `price_markup_percent` (numeric, nullable)
 
-**1. Create a `tag_category_mappings` table**
-- Columns: `id`, `tag_value` (text), `primary_category` (text), `condition_type` (text, nullable), `ebay_category_id` (text, nullable), `is_active` (boolean), `created_at`, `updated_at`
-- Seed with current hardcoded mappings: `pokemon` → `pokemon`, `comics` → `comics`, `sports` → `sports`, `tcg` → `tcg`, `graded` → condition `graded`, `sealed` → condition `sealed`
-- RLS: admin-only write, authenticated read
+When these are set, they override the store-wide defaults for items matching that category.
 
-**2. Update the DB trigger to read from the table**
-- Replace the hardcoded IF/ELSIF chain in `trigger_normalize_tags` with a lookup against `tag_category_mappings`
-- Falls back to `main_category` if no match found
+**2. Update `ebay-sync-processor/index.ts` policy resolution**
 
-**3. Update `ebayTemplateResolver.ts` and `ebayConditions.ts`**
-- Add a `getEbayCategoryIdDB()` call that checks `tag_category_mappings.ebay_category_id` before falling back to the hardcoded switch
-- This lets you override eBay category per tag from the admin UI
+Current priority: template policies > store config defaults.
 
-**4. Add "Tag Mappings" tab to the eBay admin page (`EbayApp.tsx`)**
-- New tab alongside Settings, Policies, Templates, Categories, etc.
-- Shows a table of all tag → category mappings with columns: Tag, Primary Category, Condition Type, eBay Category, Active
-- Inline editing for each row
-- "Add Mapping" button for new tags
-- Delete button per row
-- Uses the existing auto-save pattern from the eBay settings page
+New priority: **template policies > tag mapping policies > store config defaults**.
 
-### Files to create/modify
-- **New migration**: Create `tag_category_mappings` table + update `trigger_normalize_tags` function
-- **New component**: `src/components/admin/EbayTagCategoryMappings.tsx` — the settings UI
-- **Edit**: `src/pages/EbayApp.tsx` — add new tab
-- **Edit**: `supabase/functions/_shared/ebayTemplateResolver.ts` — DB lookup for category-to-eBay-ID override
-- **Deploy**: `ebay-sync-processor` after template resolver changes
+After resolving the template, look up the item's `primary_category` in `tag_category_mappings` and use its policy IDs / markup if the template doesn't specify them.
+
+**3. Update the Tag Mappings UI (`EbayTagCategoryMappings.tsx`)**
+
+Add columns for:
+- Fulfillment Policy (dropdown of synced policies from `ebay_fulfillment_policies`)
+- Payment Policy (dropdown from `ebay_payment_policies`)
+- Return Policy (dropdown from `ebay_return_policies`)
+- Markup % (number input)
+
+Each row becomes a full category configuration: tag → category → eBay category ID → policies → markup.
+
+### Files to change
+- **New migration** — add 4 columns to `tag_category_mappings`
+- **`src/components/admin/EbayTagCategoryMappings.tsx`** — add policy dropdowns + markup input, fetch policy lists
+- **`supabase/functions/ebay-sync-processor/index.ts`** — insert tag-mapping policy/markup lookup into the resolution chain
+- **Deploy** `ebay-sync-processor`
 
