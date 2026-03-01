@@ -62,7 +62,7 @@ export function PSACertificateDisplay({ psaData, className }: PSACertificateDisp
           <div className="flex flex-col items-center gap-1">
             <Badge 
               style={{ 
-                backgroundColor: psaData.grade === '10' ? '#dc2626' : gradeColor, 
+                backgroundColor: psaData.grade?.startsWith('10') ? '#dc2626' : gradeColor, 
                 color: 'white' 
               }}
               className="font-bold text-lg px-4 py-2"
