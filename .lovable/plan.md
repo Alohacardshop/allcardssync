@@ -1,36 +1,49 @@
 
 
-## eBay Admin Audit — Issues Found
+## Consolidate eBay Admin Tabs
 
-After reviewing every tab (Settings, Policies, Templates, Categories, Tag Mappings, Sync Rules, Bulk Listing, Queue) and the backend sync processor, here's what's missing or broken:
+After reviewing what each tab does, here's the breakdown:
 
-### 1. Template Editor missing policy dropdowns
-The `ebay_listing_templates` table has `fulfillment_policy_id`, `payment_policy_id`, and `return_policy_id` columns, and the resolution chain uses them as highest priority (`template > tag mapping > store config`). But the **Template Manager UI** (`EbayTemplateManager.tsx`) never shows or saves these fields. Templates can't actually override policies despite the backend supporting it.
+| Tab | Purpose |
+|-----|---------|
+| **Category Mappings** | "If brand/keyword matches X → use eBay category Y + template Z" |
+| **Tag Mappings** | "If Shopify tag is X → set primary_category Y, condition Z, eBay category W, policies, markup" |
+| **Sync Rules** | "Should this item be listed on eBay at all?" (include/exclude filtering) |
+| **Categories** | Registry of valid eBay categories (import from API, toggle active) |
 
-**Fix:** Add three policy dropdown selectors to the template editor dialog, fetching from the same policy tables. Include them in the `saveTemplate` data.
+### What can merge
 
-### 2. `saveConfig` misses `price_markup_percent`
-The explicit `saveConfig()` function (lines 414-443) doesn't include `price_markup_percent` in its update payload. The auto-save `updateConfig` (line 602) does include it. `saveConfig` is still called from a "Save" button path — if triggered, it would silently reset markup to whatever was there before.
+**Category Mappings + Tag Mappings → "Routing Rules"**
 
-**Fix:** Add `price_markup_percent: selectedConfig.price_markup_percent` to the `saveConfig` update payload.
+Both answer the same question: *"How should this item be listed?"* — they just trigger on different signals (brand/keyword vs Shopify tag). Merging them into a single "Routing Rules" tab with a unified table makes sense:
+- Each rule has a **match type** (tag, brand, keyword/regex)
+- Each rule maps to: eBay category, template, policies, markup, condition
+- Priority ordering resolves conflicts (same as today)
+- One place to see all routing logic instead of two
 
-### 3. Tag Mappings not scoped to store
-`EbayTagCategoryMappings` loads all `tag_category_mappings` rows without filtering by `store_key`. The policy dropdowns also load all policies across all stores. If multiple stores exist, you see policies from other stores and mappings apply globally rather than per-store.
+### What should stay separate
 
-**Fix:** The `tag_category_mappings` table doesn't have a `store_key` column — this is by design (tags are global). But the policy dropdowns should filter by the active store's `store_key`. Pass `storeKey` as a prop to `EbayTagCategoryMappings` and filter policy queries.
+- **Sync Rules** — fundamentally different concern (whether to list vs how to list). Combining would confuse the UI.
+- **Categories** — it's a reference registry, not a routing config. Stays as-is.
 
-### 4. Tag Mappings tab doesn't receive `storeKey`
-In `EbayApp.tsx` line 708, `<EbayTagCategoryMappings />` is rendered without any props. It needs the selected store's key to filter policies correctly and to show a "no store selected" message when appropriate.
+### Proposed tab layout (8 → 7 tabs)
 
-**Fix:** Pass `storeKey={selectedConfig?.store_key}` and guard rendering like the other tabs do.
+Settings | Policies | Templates | Categories | **Routing Rules** | Sync Rules | Bulk Listing | Sync Queue
 
 ### Changes
 
-| File | What |
-|------|------|
-| `src/components/admin/EbayTemplateManager.tsx` | Add policy dropdown fields (Fulfillment, Payment, Return) to the template editor dialog; include in save payload |
-| `src/pages/EbayApp.tsx` | (a) Add `price_markup_percent` to `saveConfig`; (b) Pass `storeKey` to `EbayTagCategoryMappings` |
-| `src/components/admin/EbayTagCategoryMappings.tsx` | Accept `storeKey` prop; filter policy queries by store_key |
+**New component: `EbayRoutingRules.tsx`**
+- Unified table showing all routing rules (from both `tag_category_mappings` and `ebay_category_mappings`)
+- Each row shows: match type badge (Tag/Brand/Keyword), match value, eBay category, template, policies, markup, priority, active toggle
+- Add/edit dialog with match type selector that shows relevant fields
+- Both data sources queried and displayed together, sorted by priority
 
-No database changes or edge function updates needed — this is purely UI fixes to expose what the backend already supports.
+**`src/pages/EbayApp.tsx`**
+- Replace the two tabs (Categories Mappings inside templates tab + Tag Mappings tab) with one "Routing Rules" tab
+- Remove the old `EbayCategoryMappingEditor` render from wherever it's embedded
+
+**Backend: no changes needed**
+- Keep both tables (`tag_category_mappings` and `ebay_category_mappings`) as-is
+- The new component just writes to the correct table based on match type
+- Sync processor resolution chain stays the same
 
