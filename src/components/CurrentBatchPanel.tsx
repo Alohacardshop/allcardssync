@@ -61,6 +61,16 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
 
   // Helper to format card name
   const formatCardName = (item: IntakeItem) => {
+    // Check for PSA snapshot title first - it has the best formatted title
+    const psaSnapshot = (item as any).psa_snapshot;
+    if (psaSnapshot && typeof psaSnapshot === 'object' && psaSnapshot !== null) {
+      const psaTitle = psaSnapshot.cardName || psaSnapshot.subject || psaSnapshot.title;
+      if (psaTitle) {
+        const gradePart = item.grade ? ` PSA ${item.grade}` : (psaSnapshot.grade ? ` PSA ${psaSnapshot.grade}` : '');
+        return `${psaTitle}${gradePart}`;
+      }
+    }
+
     const parts = []
     
     // Add year at the start if available (check both direct field and catalog_snapshot)
