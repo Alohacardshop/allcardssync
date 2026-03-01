@@ -27,7 +27,7 @@ export const GradedComicIntake = ({ onBatchAdd }: GradedComicIntakeProps = {}) =
   const logger = useLogger('GradedComicIntake');
   const { mutateAsync: addItem, isPending: isAdding } = useAddIntakeItem();
 
-  const [gradingService, setGradingService] = useState<'psa' | 'cgc'>('cgc');
+  const [gradingService, setGradingService] = useState<'psa' | 'cgc'>('psa');
   const [certInput, setCertInput] = useState("");
   const [barcodeInput, setBarcodeInput] = useState("");
   const [fetchState, setFetchState] = useState<'idle' | 'loading' | 'success' | 'empty' | 'error'>('idle');
