@@ -430,12 +430,13 @@ export function resolveListingPreview(
     tm => tm.is_active && tm.primary_category && tm.primary_category === (item.primary_category || detectedType)
   ) || null;
 
-  // Markup: template doesn't carry markup, so: tag mapping > store config
-  const markupPercent = matchedTagMapping?.price_markup_percent ?? storeConfig.price_markup_percent ?? 0;
-
   // Resolve template
   const { template, matchSource } = resolveTemplateForItem(item, templates, mappings, categories);
   if (!template) warnings.push('No matching template found — using auto-generated defaults');
+
+  // Markup priority: template > routing rule (tag mapping) > store config > 0
+  const templateMarkup = template ? (template as any).price_markup_percent : null;
+  const markupPercent = templateMarkup ?? matchedTagMapping?.price_markup_percent ?? storeConfig.price_markup_percent ?? 0;
 
   // Category
   const { id: categoryId, name: categoryName } = template

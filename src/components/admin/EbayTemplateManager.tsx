@@ -31,6 +31,7 @@ interface ListingTemplate {
   fulfillment_policy_id: string | null;
   payment_policy_id: string | null;
   return_policy_id: string | null;
+  price_markup_percent: number | null;
   is_default: boolean;
   is_active: boolean;
   created_at: string;
@@ -138,6 +139,7 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
         fulfillment_policy_id: editingTemplate.fulfillment_policy_id || null,
         payment_policy_id: editingTemplate.payment_policy_id || null,
         return_policy_id: editingTemplate.return_policy_id || null,
+        price_markup_percent: editingTemplate.price_markup_percent ?? null,
         is_default: editingTemplate.is_default ?? false,
         is_active: editingTemplate.is_active ?? true,
         updated_at: new Date().toISOString(),
@@ -208,6 +210,7 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
       fulfillment_policy_id: null,
       payment_policy_id: null,
       return_policy_id: null,
+      price_markup_percent: null,
     });
     setSelectedCategoryName('');
     setIsDialogOpen(true);
@@ -298,6 +301,11 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
                     <div className="text-xs text-muted-foreground mb-3">
                       {template.is_graded && template.default_grader && (
                         <span>Default grader: {template.default_grader}</span>
+                      )}
+                      {template.price_markup_percent != null && (
+                        <div className="mt-1">
+                          <Badge variant="outline" className="text-[10px]">Markup: {template.price_markup_percent}%</Badge>
+                        </div>
                       )}
                       {(template.fulfillment_policy_id || template.payment_policy_id || template.return_policy_id) && (
                         <div className="mt-1">
@@ -435,11 +443,32 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
                 />
               </div>
 
+              {/* Price Markup */}
+              <div className="space-y-3 pt-2 border-t">
+                <Label className="text-sm font-medium">Price Markup</Label>
+                <p className="text-xs text-muted-foreground">
+                  Percentage added to item price when listed via this template. Overrides routing rule markup.
+                </p>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.5"
+                    value={editingTemplate?.price_markup_percent ?? ''}
+                    onChange={(e) => setEditingTemplate(prev => ({ ...prev, price_markup_percent: e.target.value ? parseFloat(e.target.value) : null }))}
+                    placeholder="No markup"
+                    className="w-32"
+                  />
+                  <span className="text-sm text-muted-foreground">%</span>
+                </div>
+              </div>
+
               {/* Policy Overrides */}
               <div className="space-y-3 pt-2 border-t">
                 <Label className="text-sm font-medium">Policy Overrides</Label>
                 <p className="text-xs text-muted-foreground">
-                  Override store default policies for items using this template. Leave as "Store Default" to inherit.
+                  Override routing rule policies for items using this template. Leave as "Store Default" to inherit.
                 </p>
                 <div className="grid grid-cols-3 gap-4">
                   <PolicyDropdown
