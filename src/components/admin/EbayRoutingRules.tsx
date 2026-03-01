@@ -437,9 +437,9 @@ export function EbayRoutingRules({ storeKey }: EbayRoutingRulesProps) {
         <CardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <CardTitle>Mapping Rules</CardTitle>
+              <CardTitle>Routing Rules</CardTitle>
               <CardDescription>
-                Control how items are mapped to eBay categories, templates, policies, and pricing.
+                Control how items are routed to eBay categories, templates, policies, and pricing.
                 Tag rules match Shopify tags. Brand/keyword rules match item titles.
               </CardDescription>
             </div>
@@ -467,7 +467,7 @@ export function EbayRoutingRules({ storeKey }: EbayRoutingRulesProps) {
         <CardContent>
           {filteredRules.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              No mapping rules configured. Items will use store defaults.
+              No routing rules configured. Items will use store defaults.
             </div>
           ) : (
             <div className="space-y-2">
