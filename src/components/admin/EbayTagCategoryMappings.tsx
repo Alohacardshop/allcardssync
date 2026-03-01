@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { Plus, Trash2, Loader2 } from 'lucide-react';
+import { EbayCategorySelect } from '@/components/admin/EbayCategorySelect';
 
 interface TagCategoryMapping {
   id: string;
@@ -58,11 +59,11 @@ export function EbayTagCategoryMappings() {
     setLoading(true);
     try {
       const { data, error } = await supabase
-        .from('tag_category_mappings' as any)
+        .from('tag_category_mappings')
         .select('*')
         .order('tag_value');
       if (error) throw error;
-      setMappings((data as any[]) || []);
+      setMappings(data || []);
     } catch (e: any) {
       toast.error('Failed to load mappings: ' + e.message);
     } finally {
@@ -74,8 +75,8 @@ export function EbayTagCategoryMappings() {
     setSaving(id);
     try {
       const { error } = await supabase
-        .from('tag_category_mappings' as any)
-        .update(updates as any)
+        .from('tag_category_mappings')
+        .update(updates)
         .eq('id', id);
       if (error) throw error;
       setMappings(prev => prev.map(m => m.id === id ? { ...m, ...updates } : m));
@@ -95,7 +96,7 @@ export function EbayTagCategoryMappings() {
     setAdding(true);
     try {
       const { data, error } = await supabase
-        .from('tag_category_mappings' as any)
+        .from('tag_category_mappings')
         .insert({
           tag_value: newMapping.tag_value.trim().toLowerCase(),
           primary_category: newMapping.primary_category.trim() || null,
@@ -106,11 +107,11 @@ export function EbayTagCategoryMappings() {
           return_policy_id: newMapping.return_policy_id || null,
           price_markup_percent: newMapping.price_markup_percent ? parseFloat(newMapping.price_markup_percent) : null,
           is_active: true,
-        } as any)
+        })
         .select()
         .single();
       if (error) throw error;
-      setMappings(prev => [...prev, data as any]);
+      setMappings(prev => [...prev, data]);
       setNewMapping({ tag_value: '', primary_category: '', condition_type: '', ebay_category_id: '', fulfillment_policy_id: '', payment_policy_id: '', return_policy_id: '', price_markup_percent: '' });
       toast.success('Mapping added');
     } catch (e: any) {
@@ -123,7 +124,7 @@ export function EbayTagCategoryMappings() {
   const deleteMapping = async (id: string) => {
     try {
       const { error } = await supabase
-        .from('tag_category_mappings' as any)
+        .from('tag_category_mappings')
         .delete()
         .eq('id', id);
       if (error) throw error;
@@ -174,7 +175,7 @@ export function EbayTagCategoryMappings() {
                 <TableHead>Tag</TableHead>
                 <TableHead>Category</TableHead>
                 <TableHead>Condition</TableHead>
-                <TableHead>eBay Cat ID</TableHead>
+                <TableHead className="min-w-[200px]">eBay Category</TableHead>
                 <TableHead>Fulfillment</TableHead>
                 <TableHead>Payment</TableHead>
                 <TableHead>Return</TableHead>
@@ -208,13 +209,13 @@ export function EbayTagCategoryMappings() {
                     />
                   </TableCell>
                   <TableCell>
-                    <Input
-                      value={m.ebay_category_id || ''}
-                      onChange={(e) => setMappings(prev => prev.map(x => x.id === m.id ? { ...x, ebay_category_id: e.target.value || null } : x))}
-                      onBlur={() => updateMapping(m.id, { ebay_category_id: m.ebay_category_id })}
-                      placeholder="e.g. 183454"
-                      className="h-8 w-24"
-                    />
+                    <div className="w-48">
+                      <EbayCategorySelect
+                        value={m.ebay_category_id || ''}
+                        onValueChange={(val) => updateMapping(m.id, { ebay_category_id: val || null })}
+                        placeholder="Select category..."
+                      />
+                    </div>
                   </TableCell>
                   <TableCell>
                     <PolicySelect
@@ -290,12 +291,13 @@ export function EbayTagCategoryMappings() {
                   />
                 </TableCell>
                 <TableCell>
-                  <Input
-                    value={newMapping.ebay_category_id}
-                    onChange={(e) => setNewMapping(p => ({ ...p, ebay_category_id: e.target.value }))}
-                    placeholder="ebay cat id"
-                    className="h-8 w-24"
-                  />
+                  <div className="w-48">
+                    <EbayCategorySelect
+                      value={newMapping.ebay_category_id}
+                      onValueChange={(val) => setNewMapping(p => ({ ...p, ebay_category_id: val }))}
+                      placeholder="Select category..."
+                    />
+                  </div>
                 </TableCell>
                 <TableCell>
                   <PolicySelect

@@ -30,6 +30,7 @@ type InventoryItem = {
   card_number: string | null;
   variant: string | null;
   image_urls: any;
+  primary_category: string | null;
   list_on_ebay: boolean | null;
   list_on_shopify: boolean | null;
   ebay_listing_id: string | null;
@@ -74,7 +75,7 @@ export function EbayBulkListing({ storeKey, storeConfig }: EbayBulkListingProps)
     queryFn: async () => {
       let query = supabase
         .from('intake_items')
-        .select('id, sku, psa_cert, cgc_cert, brand_title, subject, main_category, price, grade, grading_company, year, card_number, variant, image_urls, list_on_ebay, list_on_shopify, ebay_listing_id, ebay_sync_status, shopify_sync_status')
+        .select('id, sku, psa_cert, cgc_cert, brand_title, subject, main_category, primary_category, price, grade, grading_company, year, card_number, variant, image_urls, list_on_ebay, list_on_shopify, ebay_listing_id, ebay_sync_status, shopify_sync_status')
         .is('deleted_at', null)
         .order('created_at', { ascending: false })
         .limit(200);
