@@ -33,6 +33,7 @@ import {
   type ListingTemplate,
   type EbayCategory,
   type PolicyRecord,
+  type TagCategoryMapping,
 } from '@/lib/ebayPreviewResolver';
 
 interface EbayListingPreviewProps {
@@ -60,7 +61,7 @@ export function EbayListingPreview({
   const { data: resolutionData, isLoading } = useQuery({
     queryKey: ['ebay-preview-resolution', storeKey],
     queryFn: async () => {
-      const [templatesRes, mappingsRes, categoriesRes, fulfillmentRes, paymentRes, returnRes] =
+      const [templatesRes, mappingsRes, categoriesRes, fulfillmentRes, paymentRes, returnRes, tagMappingsRes] =
         await Promise.all([
           supabase
             .from('ebay_listing_templates')
@@ -86,6 +87,10 @@ export function EbayListingPreview({
             .from('ebay_return_policies')
             .select('id, policy_id, name')
             .eq('store_key', storeKey),
+          supabase
+            .from('tag_category_mappings')
+            .select('*')
+            .eq('is_active', true),
         ]);
 
       return {
@@ -95,6 +100,7 @@ export function EbayListingPreview({
         fulfillmentPolicies: (fulfillmentRes.data || []) as PolicyRecord[],
         paymentPolicies: (paymentRes.data || []) as PolicyRecord[],
         returnPolicies: (returnRes.data || []) as PolicyRecord[],
+        tagMappings: (tagMappingsRes.data || []) as TagCategoryMapping[],
       };
     },
     enabled: open && !!storeKey,
@@ -112,7 +118,8 @@ export function EbayListingPreview({
         storeConfig,
         resolutionData.fulfillmentPolicies,
         resolutionData.paymentPolicies,
-        resolutionData.returnPolicies
+        resolutionData.returnPolicies,
+        resolutionData.tagMappings
       )
     );
   }, [items, resolutionData, storeConfig]);

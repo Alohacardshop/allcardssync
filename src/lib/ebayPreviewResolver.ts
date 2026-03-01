@@ -59,6 +59,7 @@ export interface PreviewItem {
   brand_title: string | null;
   subject: string | null;
   main_category: string | null;
+  primary_category?: string | null;
   price: number | null;
   grade: string | null;
   grading_company?: string;
@@ -68,6 +69,19 @@ export interface PreviewItem {
   image_urls?: any;
   list_on_ebay: boolean | null;
   ebay_listing_id: string | null;
+}
+
+export interface TagCategoryMapping {
+  id: string;
+  tag_value: string;
+  primary_category: string | null;
+  condition_type: string | null;
+  ebay_category_id: string | null;
+  fulfillment_policy_id: string | null;
+  payment_policy_id: string | null;
+  return_policy_id: string | null;
+  price_markup_percent: number | null;
+  is_active: boolean;
 }
 
 export interface StoreConfig {
@@ -400,15 +414,24 @@ export function resolveListingPreview(
   storeConfig: StoreConfig,
   fulfillmentPolicies: PolicyRecord[],
   paymentPolicies: PolicyRecord[],
-  returnPolicies: PolicyRecord[]
+  returnPolicies: PolicyRecord[],
+  tagMappings?: TagCategoryMapping[]
 ): ResolvedListing {
   const warnings: string[] = [];
   const isGraded = !!item.grade;
-  const markupPercent = storeConfig.price_markup_percent ?? 0;
 
-  // Detect category
-  const detectedType = detectCategoryFromBrand(item.brand_title, mappings) || 
+  // Detect category — prefer primary_category (from tag mappings DB trigger), then brand detection, then main_category
+  const detectedType = (item.primary_category as 'tcg' | 'sports' | 'comics' | null) ||
+    detectCategoryFromBrand(item.brand_title, mappings) || 
     (item.main_category as 'tcg' | 'sports' | 'comics' | null);
+
+  // Find matching tag mapping for policy/markup overrides
+  const matchedTagMapping = tagMappings?.find(
+    tm => tm.is_active && tm.primary_category && tm.primary_category === (item.primary_category || detectedType)
+  ) || null;
+
+  // Markup: template doesn't carry markup, so: tag mapping > store config
+  const markupPercent = matchedTagMapping?.price_markup_percent ?? storeConfig.price_markup_percent ?? 0;
 
   // Resolve template
   const { template, matchSource } = resolveTemplateForItem(item, templates, mappings, categories);
@@ -434,10 +457,10 @@ export function resolveListingPreview(
   const basePrice = item.price ?? 0;
   const finalPrice = calculateFinalPrice(item.price, markupPercent);
 
-  // Policies — template overrides > store defaults
-  const fulfillmentPolicyId = template?.fulfillment_policy_id || storeConfig.default_fulfillment_policy_id;
-  const paymentPolicyId = template?.payment_policy_id || storeConfig.default_payment_policy_id;
-  const returnPolicyId = template?.return_policy_id || storeConfig.default_return_policy_id;
+  // Policies — template > tag mapping > store defaults
+  const fulfillmentPolicyId = template?.fulfillment_policy_id || matchedTagMapping?.fulfillment_policy_id || storeConfig.default_fulfillment_policy_id;
+  const paymentPolicyId = template?.payment_policy_id || matchedTagMapping?.payment_policy_id || storeConfig.default_payment_policy_id;
+  const returnPolicyId = template?.return_policy_id || matchedTagMapping?.return_policy_id || storeConfig.default_return_policy_id;
 
   const fulfillmentPolicyName = fulfillmentPolicies.find(p => p.policy_id === fulfillmentPolicyId)?.name || null;
   const paymentPolicyName = paymentPolicies.find(p => p.policy_id === paymentPolicyId)?.name || null;
