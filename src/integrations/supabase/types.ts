@@ -851,6 +851,7 @@ export type Database = {
           priority: number | null
           rule_type: string
           store_key: string
+          tag_match: string[] | null
           updated_at: string | null
         }
         Insert: {
@@ -867,6 +868,7 @@ export type Database = {
           priority?: number | null
           rule_type: string
           store_key: string
+          tag_match?: string[] | null
           updated_at?: string | null
         }
         Update: {
@@ -883,6 +885,7 @@ export type Database = {
           priority?: number | null
           rule_type?: string
           store_key?: string
+          tag_match?: string[] | null
           updated_at?: string | null
         }
         Relationships: []

@@ -1,0 +1,1 @@
+ALTER TABLE public.ebay_sync_rules ADD COLUMN tag_match text[] DEFAULT '{}';

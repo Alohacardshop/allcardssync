@@ -55,6 +55,7 @@ interface SyncRule {
   rule_type: 'include' | 'exclude';
   category_match: string[];
   brand_match: string[];
+  tag_match: string[];
   min_price: number | null;
   max_price: number | null;
   graded_only: boolean;
@@ -83,6 +84,7 @@ const DEFAULT_RULE: Partial<SyncRule> = {
   rule_type: 'include',
   category_match: [],
   brand_match: [],
+  tag_match: [],
   min_price: null,
   max_price: null,
   graded_only: false,
@@ -99,6 +101,7 @@ export function EbaySyncRulesEditor() {
   const [editingRule, setEditingRule] = useState<Partial<SyncRule> | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [brandInput, setBrandInput] = useState('');
+  const [tagInput, setTagInput] = useState('');
   const [isApplying, setIsApplying] = useState(false);
   const [previewCount, setPreviewCount] = useState<number | null>(null);
 
@@ -149,6 +152,7 @@ export function EbaySyncRulesEditor() {
             rule_type: rule.rule_type,
             category_match: rule.category_match,
             brand_match: rule.brand_match,
+            tag_match: rule.tag_match || [],
             min_price: rule.min_price,
             max_price: rule.max_price,
             graded_only: rule.graded_only,
@@ -172,6 +176,7 @@ export function EbaySyncRulesEditor() {
             rule_type: rule.rule_type || 'include',
             category_match: rule.category_match || [],
             brand_match: rule.brand_match || [],
+            tag_match: rule.tag_match || [],
             min_price: rule.min_price,
             max_price: rule.max_price,
             graded_only: rule.graded_only ?? false,
@@ -309,6 +314,26 @@ export function EbaySyncRulesEditor() {
     });
   };
 
+  const addTag = () => {
+    if (!tagInput.trim()) return;
+    const tags = editingRule?.tag_match || [];
+    const normalized = tagInput.trim().toLowerCase();
+    if (!tags.includes(normalized)) {
+      setEditingRule({
+        ...editingRule,
+        tag_match: [...tags, normalized],
+      });
+    }
+    setTagInput('');
+  };
+
+  const removeTag = (tag: string) => {
+    setEditingRule({
+      ...editingRule,
+      tag_match: (editingRule?.tag_match || []).filter(t => t !== tag),
+    });
+  };
+
   const toggleCategory = (category: string) => {
     const categories = editingRule?.category_match || [];
     if (categories.includes(category)) {
@@ -441,6 +466,9 @@ export function EbaySyncRulesEditor() {
                       ))}
                       {rule.brand_match?.map(brand => (
                         <Badge key={brand} variant="secondary" className="text-xs">{brand}</Badge>
+                      ))}
+                      {(rule as any).tag_match?.map((tag: string) => (
+                        <Badge key={tag} className="text-xs bg-purple-600 hover:bg-purple-700 text-white">{tag}</Badge>
                       ))}
                       {rule.min_price && (
                         <Badge variant="outline" className="text-xs">≥${rule.min_price}</Badge>
@@ -603,6 +631,33 @@ export function EbaySyncRulesEditor() {
                         onClick={() => removeBrand(brand)}
                       >
                         {brand} ×
+                      </Badge>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+
+              {/* Tag Matches */}
+              <div className="space-y-2">
+                <Label>Tag Matches (AND logic — item must have ALL tags)</Label>
+                <div className="flex gap-2">
+                  <Input
+                    value={tagInput}
+                    onChange={(e) => setTagInput(e.target.value)}
+                    placeholder="Add tag (e.g., graded, comics, psa)..."
+                    onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
+                  />
+                  <Button type="button" variant="outline" onClick={addTag}>Add</Button>
+                </div>
+                {editingRule?.tag_match?.length ? (
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {editingRule.tag_match.map((tag) => (
+                      <Badge 
+                        key={tag} 
+                        className="cursor-pointer bg-purple-600 hover:bg-purple-700 text-white"
+                        onClick={() => removeTag(tag)}
+                      >
+                        {tag} ×
                       </Badge>
                     ))}
                   </div>
