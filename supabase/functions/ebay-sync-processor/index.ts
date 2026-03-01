@@ -77,7 +77,11 @@ serve(async (req) => {
           ebay_inventory_item_sku,
           ebay_offer_id,
           ebay_listing_id,
-          store_key
+          store_key,
+          variant,
+          main_category,
+          cgc_cert,
+          psa_snapshot
         )
       `)
       .eq('status', 'queued')
