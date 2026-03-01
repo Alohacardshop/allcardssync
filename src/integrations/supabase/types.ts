@@ -466,6 +466,7 @@ export type Database = {
           price_markup_percent: number | null
           return_policy_id: string | null
           store_key: string
+          tag_match: string[] | null
           title_template: string | null
           updated_at: string | null
         }
@@ -488,6 +489,7 @@ export type Database = {
           price_markup_percent?: number | null
           return_policy_id?: string | null
           store_key: string
+          tag_match?: string[] | null
           title_template?: string | null
           updated_at?: string | null
         }
@@ -510,6 +512,7 @@ export type Database = {
           price_markup_percent?: number | null
           return_policy_id?: string | null
           store_key?: string
+          tag_match?: string[] | null
           title_template?: string | null
           updated_at?: string | null
         }

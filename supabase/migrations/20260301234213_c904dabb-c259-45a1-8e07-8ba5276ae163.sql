@@ -1,0 +1,1 @@
+ALTER TABLE public.ebay_listing_templates ADD COLUMN tag_match text[] DEFAULT '{}';
