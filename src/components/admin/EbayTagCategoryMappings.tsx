@@ -5,9 +5,10 @@ import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { Plus, Trash2, Loader2, Save } from 'lucide-react';
+import { Plus, Trash2, Loader2 } from 'lucide-react';
 
 interface TagCategoryMapping {
   id: string;
@@ -15,19 +16,43 @@ interface TagCategoryMapping {
   primary_category: string | null;
   condition_type: string | null;
   ebay_category_id: string | null;
+  fulfillment_policy_id: string | null;
+  payment_policy_id: string | null;
+  return_policy_id: string | null;
+  price_markup_percent: number | null;
   is_active: boolean;
+}
+
+interface PolicyOption {
+  policy_id: string;
+  name: string;
 }
 
 export function EbayTagCategoryMappings() {
   const [mappings, setMappings] = useState<TagCategoryMapping[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
-  const [newMapping, setNewMapping] = useState({ tag_value: '', primary_category: '', condition_type: '', ebay_category_id: '' });
+  const [newMapping, setNewMapping] = useState({ tag_value: '', primary_category: '', condition_type: '', ebay_category_id: '', fulfillment_policy_id: '', payment_policy_id: '', return_policy_id: '', price_markup_percent: '' });
   const [adding, setAdding] = useState(false);
+  const [fulfillmentPolicies, setFulfillmentPolicies] = useState<PolicyOption[]>([]);
+  const [paymentPolicies, setPaymentPolicies] = useState<PolicyOption[]>([]);
+  const [returnPolicies, setReturnPolicies] = useState<PolicyOption[]>([]);
 
   useEffect(() => {
     loadMappings();
+    loadPolicies();
   }, []);
+
+  const loadPolicies = async () => {
+    const [fp, pp, rp] = await Promise.all([
+      supabase.from('ebay_fulfillment_policies').select('policy_id, name').order('name'),
+      supabase.from('ebay_payment_policies').select('policy_id, name').order('name'),
+      supabase.from('ebay_return_policies').select('policy_id, name').order('name'),
+    ]);
+    setFulfillmentPolicies(fp.data || []);
+    setPaymentPolicies(pp.data || []);
+    setReturnPolicies(rp.data || []);
+  };
 
   const loadMappings = async () => {
     setLoading(true);
@@ -76,13 +101,17 @@ export function EbayTagCategoryMappings() {
           primary_category: newMapping.primary_category.trim() || null,
           condition_type: newMapping.condition_type.trim() || null,
           ebay_category_id: newMapping.ebay_category_id.trim() || null,
+          fulfillment_policy_id: newMapping.fulfillment_policy_id || null,
+          payment_policy_id: newMapping.payment_policy_id || null,
+          return_policy_id: newMapping.return_policy_id || null,
+          price_markup_percent: newMapping.price_markup_percent ? parseFloat(newMapping.price_markup_percent) : null,
           is_active: true,
         } as any)
         .select()
         .single();
       if (error) throw error;
       setMappings(prev => [...prev, data as any]);
-      setNewMapping({ tag_value: '', primary_category: '', condition_type: '', ebay_category_id: '' });
+      setNewMapping({ tag_value: '', primary_category: '', condition_type: '', ebay_category_id: '', fulfillment_policy_id: '', payment_policy_id: '', return_policy_id: '', price_markup_percent: '' });
       toast.success('Mapping added');
     } catch (e: any) {
       toast.error('Failed to add: ' + e.message);
@@ -105,6 +134,20 @@ export function EbayTagCategoryMappings() {
     }
   };
 
+  const PolicySelect = ({ value, options, onChange, placeholder }: { value: string | null; options: PolicyOption[]; onChange: (val: string | null) => void; placeholder: string }) => (
+    <Select value={value || '__none__'} onValueChange={(v) => onChange(v === '__none__' ? null : v)}>
+      <SelectTrigger className="h-8 w-36 text-xs">
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="__none__">— Default —</SelectItem>
+        {options.map(p => (
+          <SelectItem key={p.policy_id} value={p.policy_id}>{p.name}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+
   if (loading) {
     return (
       <Card>
@@ -121,19 +164,23 @@ export function EbayTagCategoryMappings() {
         <CardHeader>
           <CardTitle>Tag → Category Mappings</CardTitle>
           <CardDescription>
-            Control how Shopify tags map to primary categories and condition types. These drive eBay category selection during sync.
+            Control how Shopify tags map to categories, eBay policies, and price markup. Per-category policies override store defaults.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Tag</TableHead>
-                <TableHead>Primary Category</TableHead>
-                <TableHead>Condition Type</TableHead>
-                <TableHead>eBay Category ID</TableHead>
+                <TableHead>Category</TableHead>
+                <TableHead>Condition</TableHead>
+                <TableHead>eBay Cat ID</TableHead>
+                <TableHead>Fulfillment</TableHead>
+                <TableHead>Payment</TableHead>
+                <TableHead>Return</TableHead>
+                <TableHead>Markup %</TableHead>
                 <TableHead>Active</TableHead>
-                <TableHead className="w-[60px]"></TableHead>
+                <TableHead className="w-[50px]"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -147,8 +194,8 @@ export function EbayTagCategoryMappings() {
                       value={m.primary_category || ''}
                       onChange={(e) => setMappings(prev => prev.map(x => x.id === m.id ? { ...x, primary_category: e.target.value || null } : x))}
                       onBlur={() => updateMapping(m.id, { primary_category: m.primary_category })}
-                      placeholder="e.g. pokemon, sports"
-                      className="h-8 w-32"
+                      placeholder="e.g. pokemon"
+                      className="h-8 w-28"
                     />
                   </TableCell>
                   <TableCell>
@@ -156,8 +203,8 @@ export function EbayTagCategoryMappings() {
                       value={m.condition_type || ''}
                       onChange={(e) => setMappings(prev => prev.map(x => x.id === m.id ? { ...x, condition_type: e.target.value || null } : x))}
                       onBlur={() => updateMapping(m.id, { condition_type: m.condition_type })}
-                      placeholder="e.g. graded, sealed"
-                      className="h-8 w-28"
+                      placeholder="e.g. graded"
+                      className="h-8 w-24"
                     />
                   </TableCell>
                   <TableCell>
@@ -166,7 +213,41 @@ export function EbayTagCategoryMappings() {
                       onChange={(e) => setMappings(prev => prev.map(x => x.id === m.id ? { ...x, ebay_category_id: e.target.value || null } : x))}
                       onBlur={() => updateMapping(m.id, { ebay_category_id: m.ebay_category_id })}
                       placeholder="e.g. 183454"
-                      className="h-8 w-28"
+                      className="h-8 w-24"
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <PolicySelect
+                      value={m.fulfillment_policy_id}
+                      options={fulfillmentPolicies}
+                      onChange={(v) => updateMapping(m.id, { fulfillment_policy_id: v })}
+                      placeholder="Fulfillment"
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <PolicySelect
+                      value={m.payment_policy_id}
+                      options={paymentPolicies}
+                      onChange={(v) => updateMapping(m.id, { payment_policy_id: v })}
+                      placeholder="Payment"
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <PolicySelect
+                      value={m.return_policy_id}
+                      options={returnPolicies}
+                      onChange={(v) => updateMapping(m.id, { return_policy_id: v })}
+                      placeholder="Return"
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      type="number"
+                      value={m.price_markup_percent ?? ''}
+                      onChange={(e) => setMappings(prev => prev.map(x => x.id === m.id ? { ...x, price_markup_percent: e.target.value ? parseFloat(e.target.value) : null } : x))}
+                      onBlur={() => updateMapping(m.id, { price_markup_percent: m.price_markup_percent })}
+                      placeholder="%"
+                      className="h-8 w-20"
                     />
                   </TableCell>
                   <TableCell>
@@ -189,7 +270,7 @@ export function EbayTagCategoryMappings() {
                     value={newMapping.tag_value}
                     onChange={(e) => setNewMapping(p => ({ ...p, tag_value: e.target.value }))}
                     placeholder="new tag"
-                    className="h-8 w-32"
+                    className="h-8 w-28"
                   />
                 </TableCell>
                 <TableCell>
@@ -197,7 +278,7 @@ export function EbayTagCategoryMappings() {
                     value={newMapping.primary_category}
                     onChange={(e) => setNewMapping(p => ({ ...p, primary_category: e.target.value }))}
                     placeholder="category"
-                    className="h-8 w-32"
+                    className="h-8 w-28"
                   />
                 </TableCell>
                 <TableCell>
@@ -205,7 +286,7 @@ export function EbayTagCategoryMappings() {
                     value={newMapping.condition_type}
                     onChange={(e) => setNewMapping(p => ({ ...p, condition_type: e.target.value }))}
                     placeholder="condition"
-                    className="h-8 w-28"
+                    className="h-8 w-24"
                   />
                 </TableCell>
                 <TableCell>
@@ -213,7 +294,40 @@ export function EbayTagCategoryMappings() {
                     value={newMapping.ebay_category_id}
                     onChange={(e) => setNewMapping(p => ({ ...p, ebay_category_id: e.target.value }))}
                     placeholder="ebay cat id"
-                    className="h-8 w-28"
+                    className="h-8 w-24"
+                  />
+                </TableCell>
+                <TableCell>
+                  <PolicySelect
+                    value={newMapping.fulfillment_policy_id || null}
+                    options={fulfillmentPolicies}
+                    onChange={(v) => setNewMapping(p => ({ ...p, fulfillment_policy_id: v || '' }))}
+                    placeholder="Fulfillment"
+                  />
+                </TableCell>
+                <TableCell>
+                  <PolicySelect
+                    value={newMapping.payment_policy_id || null}
+                    options={paymentPolicies}
+                    onChange={(v) => setNewMapping(p => ({ ...p, payment_policy_id: v || '' }))}
+                    placeholder="Payment"
+                  />
+                </TableCell>
+                <TableCell>
+                  <PolicySelect
+                    value={newMapping.return_policy_id || null}
+                    options={returnPolicies}
+                    onChange={(v) => setNewMapping(p => ({ ...p, return_policy_id: v || '' }))}
+                    placeholder="Return"
+                  />
+                </TableCell>
+                <TableCell>
+                  <Input
+                    type="number"
+                    value={newMapping.price_markup_percent}
+                    onChange={(e) => setNewMapping(p => ({ ...p, price_markup_percent: e.target.value }))}
+                    placeholder="%"
+                    className="h-8 w-20"
                   />
                 </TableCell>
                 <TableCell colSpan={2}>

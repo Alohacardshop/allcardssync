@@ -3127,9 +3127,13 @@ export type Database = {
           condition_type: string | null
           created_at: string
           ebay_category_id: string | null
+          fulfillment_policy_id: string | null
           id: string
           is_active: boolean
+          payment_policy_id: string | null
+          price_markup_percent: number | null
           primary_category: string | null
+          return_policy_id: string | null
           tag_value: string
           updated_at: string
         }
@@ -3137,9 +3141,13 @@ export type Database = {
           condition_type?: string | null
           created_at?: string
           ebay_category_id?: string | null
+          fulfillment_policy_id?: string | null
           id?: string
           is_active?: boolean
+          payment_policy_id?: string | null
+          price_markup_percent?: number | null
           primary_category?: string | null
+          return_policy_id?: string | null
           tag_value: string
           updated_at?: string
         }
@@ -3147,9 +3155,13 @@ export type Database = {
           condition_type?: string | null
           created_at?: string
           ebay_category_id?: string | null
+          fulfillment_policy_id?: string | null
           id?: string
           is_active?: boolean
+          payment_policy_id?: string | null
+          price_markup_percent?: number | null
           primary_category?: string | null
+          return_policy_id?: string | null
           tag_value?: string
           updated_at?: string
         }
