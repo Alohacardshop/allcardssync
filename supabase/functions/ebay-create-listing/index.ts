@@ -191,9 +191,9 @@ serve(async (req) => {
       throw new Error(inventoryResult.error)
     }
 
-    // Calculate price with markup
+    // Calculate price with markup: template > tag mapping > 0
     const basePrice = item.price || 0
-    const markupPercent = storeConfig.price_markup_percent || 0
+    const markupPercent = (template as any)?.price_markup_percent ?? storeConfig.price_markup_percent ?? 0
     const finalPrice = basePrice * (1 + markupPercent / 100)
 
     console.log(`[ebay-create-listing] Price: base=${basePrice}, markup=${markupPercent}%, final=${finalPrice.toFixed(2)}`)
