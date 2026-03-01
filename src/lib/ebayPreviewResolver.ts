@@ -35,6 +35,7 @@ export interface ListingTemplate {
   payment_policy_id: string | null;
   return_policy_id: string | null;
   default_grader: string | null;
+  tag_match?: string[];
 }
 
 export interface EbayCategory {
@@ -60,6 +61,7 @@ export interface PreviewItem {
   subject: string | null;
   main_category: string | null;
   primary_category?: string | null;
+  normalized_tags?: string[] | null;
   price: number | null;
   grade: string | null;
   grading_company?: string;
@@ -195,6 +197,24 @@ export function resolveTemplateForItem(
 ): ResolvedTemplate {
   const detectedCategory = detectCategoryFromBrand(item.brand_title, mappings) || item.main_category;
   const isGraded = !!item.grade;
+  const itemTags = (item.normalized_tags || []).map(t => t.toLowerCase());
+
+  // 0. Tag-matched templates (highest priority — most specific)
+  if (itemTags.length > 0) {
+    const tagMatchedTemplates = templates
+      .filter(t => t.is_active && t.tag_match && t.tag_match.length > 0)
+      .map(t => ({
+        template: t,
+        matchCount: t.tag_match!.filter(tag => itemTags.includes(tag.toLowerCase())).length,
+        totalRequired: t.tag_match!.length,
+      }))
+      .filter(m => m.matchCount === m.totalRequired) // all tags must match
+      .sort((a, b) => b.totalRequired - a.totalRequired); // most specific first
+
+    if (tagMatchedTemplates.length > 0) {
+      return { template: tagMatchedTemplates[0].template, matchSource: 'category_mapping' };
+    }
+  }
 
   // 1. Category mappings — brand match
   for (const mapping of mappings.filter(m => m.is_active && m.default_template_id)) {

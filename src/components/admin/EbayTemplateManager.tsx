@@ -32,6 +32,7 @@ interface ListingTemplate {
   payment_policy_id: string | null;
   return_policy_id: string | null;
   price_markup_percent: number | null;
+  tag_match: string[];
   is_default: boolean;
   is_active: boolean;
   created_at: string;
@@ -62,6 +63,7 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [selectedCategoryName, setSelectedCategoryName] = useState('');
+  const [tagInput, setTagInput] = useState('');
   const [fulfillmentPolicies, setFulfillmentPolicies] = useState<PolicyOption[]>([]);
   const [paymentPolicies, setPaymentPolicies] = useState<PolicyOption[]>([]);
   const [returnPolicies, setReturnPolicies] = useState<PolicyOption[]>([]);
@@ -140,6 +142,7 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
         payment_policy_id: editingTemplate.payment_policy_id || null,
         return_policy_id: editingTemplate.return_policy_id || null,
         price_markup_percent: editingTemplate.price_markup_percent ?? null,
+        tag_match: editingTemplate.tag_match || [],
         is_default: editingTemplate.is_default ?? false,
         is_active: editingTemplate.is_active ?? true,
         updated_at: new Date().toISOString(),
@@ -211,8 +214,10 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
       payment_policy_id: null,
       return_policy_id: null,
       price_markup_percent: null,
+      tag_match: [],
     });
     setSelectedCategoryName('');
+    setTagInput('');
     setIsDialogOpen(true);
   }
 
@@ -301,6 +306,13 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
                     <div className="text-xs text-muted-foreground mb-3">
                       {template.is_graded && template.default_grader && (
                         <span>Default grader: {template.default_grader}</span>
+                      )}
+                      {template.tag_match?.length > 0 && (
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {template.tag_match.map(tag => (
+                            <Badge key={tag} className="text-[10px] bg-purple-600 hover:bg-purple-700 text-white">{tag}</Badge>
+                          ))}
+                        </div>
                       )}
                       {template.price_markup_percent != null && (
                         <div className="mt-1">
@@ -441,6 +453,52 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
                   rows={6}
                   placeholder="<h2>{subject}</h2>..."
                 />
+              </div>
+
+              {/* Tag Matching */}
+              <div className="space-y-2 pt-2 border-t">
+                <Label>Tag Match (AND logic — item must have ALL tags for this template to auto-match)</Label>
+                <div className="flex gap-2">
+                  <Input
+                    value={tagInput}
+                    onChange={(e) => setTagInput(e.target.value)}
+                    placeholder="Add tag (e.g., graded, comics, psa)..."
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (!tagInput.trim()) return;
+                        const normalized = tagInput.trim().toLowerCase();
+                        const tags = editingTemplate?.tag_match || [];
+                        if (!tags.includes(normalized)) {
+                          setEditingTemplate(prev => ({ ...prev, tag_match: [...tags, normalized] }));
+                        }
+                        setTagInput('');
+                      }
+                    }}
+                  />
+                  <Button type="button" variant="outline" onClick={() => {
+                    if (!tagInput.trim()) return;
+                    const normalized = tagInput.trim().toLowerCase();
+                    const tags = editingTemplate?.tag_match || [];
+                    if (!tags.includes(normalized)) {
+                      setEditingTemplate(prev => ({ ...prev, tag_match: [...tags, normalized] }));
+                    }
+                    setTagInput('');
+                  }}>Add</Button>
+                </div>
+                {editingTemplate?.tag_match?.length ? (
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {editingTemplate.tag_match.map((tag) => (
+                      <Badge 
+                        key={tag} 
+                        className="cursor-pointer bg-purple-600 hover:bg-purple-700 text-white"
+                        onClick={() => setEditingTemplate(prev => ({ ...prev, tag_match: (prev?.tag_match || []).filter(t => t !== tag) }))}
+                      >
+                        {tag} ×
+                      </Badge>
+                    ))}
+                  </div>
+                ) : null}
               </div>
 
               {/* Price Markup */}
