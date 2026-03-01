@@ -656,7 +656,7 @@ export default function EbayApp() {
             </TabsTrigger>
             <TabsTrigger value="routing" className="flex items-center gap-2">
               <Tags className="h-4 w-4" />
-              Routing Rules
+              Mapping Rules
             </TabsTrigger>
             <TabsTrigger value="rules" className="flex items-center gap-2">
               <Filter className="h-4 w-4" />
@@ -690,7 +690,7 @@ export default function EbayApp() {
             <EbayCategoryManager />
           </TabsContent>
 
-          {/* Routing Rules Tab */}
+          {/* Mapping Rules Tab */}
           <TabsContent value="routing">
             {selectedConfig ? (
               <EbayRoutingRules storeKey={selectedConfig.store_key} />
