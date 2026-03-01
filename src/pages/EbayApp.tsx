@@ -427,7 +427,8 @@ export default function EbayApp() {
           default_payment_policy_id: selectedConfig.default_payment_policy_id,
           default_return_policy_id: selectedConfig.default_return_policy_id,
           title_template: selectedConfig.title_template,
-          description_template: selectedConfig.description_template
+          description_template: selectedConfig.description_template,
+          price_markup_percent: selectedConfig.price_markup_percent
         })
         .eq('id', selectedConfig.id);
 
@@ -705,7 +706,15 @@ export default function EbayApp() {
 
           {/* Tag Mappings Tab */}
           <TabsContent value="tag-mappings">
-            <EbayTagCategoryMappings />
+            {selectedConfig ? (
+              <EbayTagCategoryMappings storeKey={selectedConfig.store_key} />
+            ) : (
+              <Card>
+                <CardContent className="py-8 text-center text-muted-foreground">
+                  Please select or create an eBay store configuration first.
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
 
           {/* Settings Tab */}

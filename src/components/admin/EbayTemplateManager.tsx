@@ -8,10 +8,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
-import { Plus, Edit, Trash2, Copy, Check, Tag, FileText } from 'lucide-react';
+import { Plus, Edit, Trash2, Copy, Check, FileText } from 'lucide-react';
 import { EbayCategorySelect } from './EbayCategorySelect';
 import { EbayCategoryMappingEditor } from './EbayCategoryMappingEditor';
 
@@ -28,23 +28,18 @@ interface ListingTemplate {
   description_template: string | null;
   default_grader: string | null;
   aspects_mapping: Record<string, any> | null;
+  fulfillment_policy_id: string | null;
+  payment_policy_id: string | null;
+  return_policy_id: string | null;
   is_default: boolean;
   is_active: boolean;
   created_at: string;
   updated_at: string;
 }
 
-interface CategoryMapping {
-  id: string;
-  store_key: string;
-  keyword_pattern: string | null;
-  brand_match: string[] | null;
-  main_category: string | null;
-  category_id: string;
-  category_name: string;
-  default_template_id: string | null;
-  priority: number;
-  is_active: boolean;
+interface PolicyOption {
+  policy_id: string;
+  name: string;
 }
 
 const GRADER_OPTIONS = ['PSA', 'BGS', 'CGC', 'SGC', 'CSG', 'HGA', 'GMA', 'KSA'];
@@ -61,16 +56,30 @@ interface EbayTemplateManagerProps {
 
 export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
   const [templates, setTemplates] = useState<ListingTemplate[]>([]);
-  const [mappings, setMappings] = useState<CategoryMapping[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingTemplate, setEditingTemplate] = useState<Partial<ListingTemplate> | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [selectedCategoryName, setSelectedCategoryName] = useState('');
+  const [fulfillmentPolicies, setFulfillmentPolicies] = useState<PolicyOption[]>([]);
+  const [paymentPolicies, setPaymentPolicies] = useState<PolicyOption[]>([]);
+  const [returnPolicies, setReturnPolicies] = useState<PolicyOption[]>([]);
 
   useEffect(() => {
     loadData();
+    loadPolicies();
   }, [storeKey]);
+
+  async function loadPolicies() {
+    const [fp, pp, rp] = await Promise.all([
+      supabase.from('ebay_fulfillment_policies').select('policy_id, name').eq('store_key', storeKey).order('name'),
+      supabase.from('ebay_payment_policies').select('policy_id, name').eq('store_key', storeKey).order('name'),
+      supabase.from('ebay_return_policies').select('policy_id, name').eq('store_key', storeKey).order('name'),
+    ]);
+    setFulfillmentPolicies(fp.data || []);
+    setPaymentPolicies(pp.data || []);
+    setReturnPolicies(rp.data || []);
+  }
 
   async function loadData() {
     setLoading(true);
@@ -91,7 +100,6 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
       if (templatesRes.error) throw templatesRes.error;
       if (mappingsRes.error) throw mappingsRes.error;
 
-      // Cast the templates data to handle Json type
       const typedTemplates = (templatesRes.data || []).map(t => ({
         ...t,
         aspects_mapping: (typeof t.aspects_mapping === 'object' && t.aspects_mapping !== null) 
@@ -100,7 +108,6 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
       }));
 
       setTemplates(typedTemplates as ListingTemplate[]);
-      setMappings(mappingsRes.data || []);
     } catch (error: any) {
       toast.error('Failed to load templates: ' + error.message);
     } finally {
@@ -128,6 +135,9 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
         description_template: editingTemplate.description_template || null,
         default_grader: editingTemplate.default_grader || 'PSA',
         aspects_mapping: editingTemplate.aspects_mapping || {},
+        fulfillment_policy_id: editingTemplate.fulfillment_policy_id || null,
+        payment_policy_id: editingTemplate.payment_policy_id || null,
+        return_policy_id: editingTemplate.return_policy_id || null,
         is_default: editingTemplate.is_default ?? false,
         is_active: editingTemplate.is_active ?? true,
         updated_at: new Date().toISOString(),
@@ -160,12 +170,8 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
 
   async function deleteTemplate(id: string) {
     if (!confirm('Are you sure you want to delete this template?')) return;
-
     try {
-      const { error } = await supabase
-        .from('ebay_listing_templates')
-        .delete()
-        .eq('id', id);
+      const { error } = await supabase.from('ebay_listing_templates').delete().eq('id', id);
       if (error) throw error;
       toast.success('Template deleted');
       loadData();
@@ -176,18 +182,8 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
 
   async function setAsDefault(id: string) {
     try {
-      // Clear other defaults first
-      await supabase
-        .from('ebay_listing_templates')
-        .update({ is_default: false })
-        .eq('store_key', storeKey);
-
-      // Set new default
-      const { error } = await supabase
-        .from('ebay_listing_templates')
-        .update({ is_default: true })
-        .eq('id', id);
-
+      await supabase.from('ebay_listing_templates').update({ is_default: false }).eq('store_key', storeKey);
+      const { error } = await supabase.from('ebay_listing_templates').update({ is_default: true }).eq('id', id);
       if (error) throw error;
       toast.success('Default template updated');
       loadData();
@@ -209,6 +205,9 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
       is_default: false,
       is_active: true,
       aspects_mapping: {},
+      fulfillment_policy_id: null,
+      payment_policy_id: null,
+      return_policy_id: null,
     });
     setSelectedCategoryName('');
     setIsDialogOpen(true);
@@ -225,6 +224,23 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
     setIsDialogOpen(true);
   }
 
+  const PolicyDropdown = ({ label, value, options, onChange }: { label: string; value: string | null | undefined; options: PolicyOption[]; onChange: (v: string | null) => void }) => (
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      <Select value={value || '__none__'} onValueChange={(v) => onChange(v === '__none__' ? null : v)}>
+        <SelectTrigger>
+          <SelectValue placeholder={`Select ${label.toLowerCase()}...`} />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="__none__">— Store Default —</SelectItem>
+          {options.map(p => (
+            <SelectItem key={p.policy_id} value={p.policy_id}>{p.name}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+
   if (loading) {
     return (
       <div className="flex items-center justify-center p-8">
@@ -235,7 +251,6 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
 
   return (
     <div className="space-y-6">
-      {/* Templates Section */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
@@ -284,41 +299,25 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
                       {template.is_graded && template.default_grader && (
                         <span>Default grader: {template.default_grader}</span>
                       )}
+                      {(template.fulfillment_policy_id || template.payment_policy_id || template.return_policy_id) && (
+                        <div className="mt-1">
+                          <Badge variant="outline" className="text-[10px]">Policy overrides</Badge>
+                        </div>
+                      )}
                     </div>
                     <div className="flex gap-1">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                      onClick={() => {
-                          setEditingTemplate(template);
-                          setSelectedCategoryName(template.category_name || '');
-                          setIsDialogOpen(true);
-                        }}
-                      >
+                      <Button variant="outline" size="sm" onClick={() => { setEditingTemplate(template); setSelectedCategoryName(template.category_name || ''); setIsDialogOpen(true); }}>
                         <Edit className="h-3 w-3" />
                       </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => duplicateTemplate(template)}
-                      >
+                      <Button variant="outline" size="sm" onClick={() => duplicateTemplate(template)}>
                         <Copy className="h-3 w-3" />
                       </Button>
                       {!template.is_default && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setAsDefault(template.id)}
-                        >
+                        <Button variant="outline" size="sm" onClick={() => setAsDefault(template.id)}>
                           <Check className="h-3 w-3" />
                         </Button>
                       )}
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => deleteTemplate(template.id)}
-                        className="text-destructive hover:text-destructive"
-                      >
+                      <Button variant="outline" size="sm" onClick={() => deleteTemplate(template.id)} className="text-destructive hover:text-destructive">
                         <Trash2 className="h-3 w-3" />
                       </Button>
                     </div>
@@ -330,13 +329,11 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
         </CardContent>
       </Card>
 
-      {/* Category Mappings Section */}
       <EbayCategoryMappingEditor
         storeKey={storeKey}
         templates={templates.map(t => ({ id: t.id, name: t.name }))}
       />
 
-      {/* Template Editor Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh]">
           <DialogHeader>
@@ -440,6 +437,34 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
                   rows={6}
                   placeholder="<h2>{subject}</h2>..."
                 />
+              </div>
+
+              {/* Policy Overrides */}
+              <div className="space-y-3 pt-2 border-t">
+                <Label className="text-sm font-medium">Policy Overrides</Label>
+                <p className="text-xs text-muted-foreground">
+                  Override store default policies for items using this template. Leave as "Store Default" to inherit.
+                </p>
+                <div className="grid grid-cols-3 gap-4">
+                  <PolicyDropdown
+                    label="Fulfillment"
+                    value={editingTemplate?.fulfillment_policy_id}
+                    options={fulfillmentPolicies}
+                    onChange={(v) => setEditingTemplate(prev => ({ ...prev, fulfillment_policy_id: v }))}
+                  />
+                  <PolicyDropdown
+                    label="Payment"
+                    value={editingTemplate?.payment_policy_id}
+                    options={paymentPolicies}
+                    onChange={(v) => setEditingTemplate(prev => ({ ...prev, payment_policy_id: v }))}
+                  />
+                  <PolicyDropdown
+                    label="Return"
+                    value={editingTemplate?.return_policy_id}
+                    options={returnPolicies}
+                    onChange={(v) => setEditingTemplate(prev => ({ ...prev, return_policy_id: v }))}
+                  />
+                </div>
               </div>
 
               <div className="flex items-center gap-4">
