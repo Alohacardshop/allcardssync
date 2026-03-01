@@ -3122,6 +3122,39 @@ export type Database = {
         }
         Relationships: []
       }
+      tag_category_mappings: {
+        Row: {
+          condition_type: string | null
+          created_at: string
+          ebay_category_id: string | null
+          id: string
+          is_active: boolean
+          primary_category: string | null
+          tag_value: string
+          updated_at: string
+        }
+        Insert: {
+          condition_type?: string | null
+          created_at?: string
+          ebay_category_id?: string | null
+          id?: string
+          is_active?: boolean
+          primary_category?: string | null
+          tag_value: string
+          updated_at?: string
+        }
+        Update: {
+          condition_type?: string | null
+          created_at?: string
+          ebay_category_id?: string | null
+          id?: string
+          is_active?: boolean
+          primary_category?: string | null
+          tag_value?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       trade_ins: {
         Row: {
           card_number: string | null
