@@ -109,7 +109,7 @@ export async function resolveTemplate(
   item: any,
   storeKey: string,
 ): Promise<any | null> {
-  const detectedCategory = (await detectCategoryFromBrandDB(supabase, item.brand_title)) || item.main_category
+  const detectedCategory = item.primary_category || item.main_category || (await detectCategoryFromBrandDB(supabase, item.brand_title))
   const isGraded = !!item.grade
 
   // 1. Check category mappings for a linked template
@@ -199,7 +199,7 @@ export async function buildCategoryAwareAspects(
   item: any,
   detectedCategory?: string | null
 ): Promise<Record<string, string[]>> {
-  const category = detectedCategory || (await detectCategoryFromBrandDB(supabase, item.brand_title)) || item.main_category
+  const category = detectedCategory || item.primary_category || item.main_category || (await detectCategoryFromBrandDB(supabase, item.brand_title))
 
   switch (category) {
     case 'sports':
