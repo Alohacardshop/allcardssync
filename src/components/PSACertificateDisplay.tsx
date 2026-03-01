@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { PSACertificateData, PSA_GRADE_COLORS } from "@/types/psa";
-import { ExternalLink, Shield, Calendar, Trophy, User, Hash, Tag } from "lucide-react";
+import { ExternalLink, Shield, Calendar, Trophy, User, Hash, Tag, Globe, BookOpen, FileText } from "lucide-react";
 import noImagePlaceholder from "@/assets/no-image-available.png";
 
 interface PSACertificateDisplayProps {
@@ -11,8 +11,10 @@ interface PSACertificateDisplayProps {
 }
 
 export function PSACertificateDisplay({ psaData, className }: PSACertificateDisplayProps) {
-  const [imageError, setImageError] = useState(false);
+  const [imageErrors, setImageErrors] = useState<Record<number, boolean>>({});
   
+  const isComic = psaData.category?.toUpperCase().includes('COMIC') ?? false;
+
   if (!psaData.isValid) {
     return (
       <Card className={`p-4 border-destructive bg-destructive/5 ${className || ''}`}>
@@ -28,6 +30,18 @@ export function PSACertificateDisplay({ psaData, className }: PSACertificateDisp
   }
 
   const gradeColor = PSA_GRADE_COLORS[psaData.grade || ''] || 'hsl(var(--muted))';
+  
+  const handleImageError = (index: number) => {
+    setImageErrors(prev => ({ ...prev, [index]: true }));
+  };
+
+  // Build image list
+  const images: string[] = [];
+  if (psaData.imageUrls && psaData.imageUrls.length > 0) {
+    images.push(...psaData.imageUrls);
+  } else if (psaData.imageUrl) {
+    images.push(psaData.imageUrl);
+  }
 
   return (
     <Card className={`p-4 border-success bg-success/5 ${className || ''}`}>
@@ -45,7 +59,7 @@ export function PSACertificateDisplay({ psaData, className }: PSACertificateDisp
 
         {/* Grade Badge */}
         {psaData.grade && (
-          <div className="flex justify-center">
+          <div className="flex flex-col items-center gap-1">
             <Badge 
               style={{ backgroundColor: gradeColor, color: 'white' }}
               className="font-bold text-lg px-4 py-2"
@@ -53,17 +67,34 @@ export function PSACertificateDisplay({ psaData, className }: PSACertificateDisp
               <Trophy className="h-4 w-4 mr-2" />
               Grade {psaData.grade}
             </Badge>
+            {psaData.gradeLabel && (
+              <span className="text-xs text-muted-foreground">{psaData.gradeLabel}</span>
+            )}
           </div>
         )}
 
-        {/* Image */}
-        <div className="flex justify-center">
-          <img 
-            src={imageError || !psaData.imageUrl ? noImagePlaceholder : psaData.imageUrl}
-            alt={`PSA Certificate ${psaData.certNumber}`}
-            className="max-w-full h-auto rounded border max-h-80 object-contain"
-            onError={() => setImageError(true)}
-          />
+        {/* Images */}
+        <div className={`flex justify-center ${images.length >= 2 ? 'gap-2' : ''}`}>
+          {images.length >= 2 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 w-full">
+              {images.slice(0, 2).map((url, i) => (
+                <img
+                  key={i}
+                  src={imageErrors[i] ? noImagePlaceholder : url}
+                  alt={`PSA Certificate ${psaData.certNumber} - ${i === 0 ? 'Front' : 'Back'}`}
+                  className="w-full h-auto rounded border max-h-80 object-contain"
+                  onError={() => handleImageError(i)}
+                />
+              ))}
+            </div>
+          ) : (
+            <img 
+              src={imageErrors[0] || images.length === 0 ? noImagePlaceholder : images[0]}
+              alt={`PSA Certificate ${psaData.certNumber}`}
+              className="max-w-full h-auto rounded border max-h-80 object-contain"
+              onError={() => handleImageError(0)}
+            />
+          )}
         </div>
 
         {/* Certificate Number */}
@@ -80,7 +111,7 @@ export function PSACertificateDisplay({ psaData, className }: PSACertificateDisp
             <div className="flex items-center gap-2">
               <Tag className="h-4 w-4 text-muted-foreground" />
               <div>
-                <span className="text-muted-foreground">Brand: </span>
+                <span className="text-muted-foreground">{isComic ? 'Publisher' : 'Brand'}: </span>
                 <span className="font-medium">{psaData.brandTitle}</span>
               </div>
             </div>
@@ -110,7 +141,7 @@ export function PSACertificateDisplay({ psaData, className }: PSACertificateDisp
             <div className="flex items-center gap-2">
               <Hash className="h-4 w-4 text-muted-foreground" />
               <div>
-                <span className="text-muted-foreground">Card #: </span>
+                <span className="text-muted-foreground">{isComic ? 'Volume #' : 'Card #'}: </span>
                 <span className="font-medium font-mono">{psaData.cardNumber}</span>
               </div>
             </div>
@@ -135,13 +166,62 @@ export function PSACertificateDisplay({ psaData, className }: PSACertificateDisp
               </div>
             </div>
           )}
-        </div>
 
+          {psaData.publicationDate && (
+            <div className="flex items-center gap-2">
+              <Calendar className="h-4 w-4 text-muted-foreground" />
+              <div>
+                <span className="text-muted-foreground">Published: </span>
+                <span className="font-medium">{psaData.publicationDate}</span>
+              </div>
+            </div>
+          )}
+
+          {psaData.pageQuality && (
+            <div className="flex items-center gap-2">
+              <BookOpen className="h-4 w-4 text-muted-foreground" />
+              <div>
+                <span className="text-muted-foreground">Pages: </span>
+                <span className="font-medium capitalize">{psaData.pageQuality}</span>
+              </div>
+            </div>
+          )}
+
+          {psaData.language && (
+            <div className="flex items-center gap-2">
+              <Globe className="h-4 w-4 text-muted-foreground" />
+              <div>
+                <span className="text-muted-foreground">Language: </span>
+                <span className="font-medium uppercase">{psaData.language}</span>
+              </div>
+            </div>
+          )}
+
+          {psaData.country && (
+            <div className="flex items-center gap-2">
+              <Globe className="h-4 w-4 text-muted-foreground" />
+              <div>
+                <span className="text-muted-foreground">Country: </span>
+                <span className="font-medium uppercase">{psaData.country}</span>
+              </div>
+            </div>
+          )}
+        </div>
 
         {psaData.varietyPedigree && (
           <div className="text-sm text-center">
             <span className="text-muted-foreground">Variety: </span>
             <span className="font-medium">{psaData.varietyPedigree}</span>
+          </div>
+        )}
+
+        {psaData.graderNotes && (
+          <div className="text-sm p-2 rounded bg-muted/50">
+            <div className="flex items-center gap-1 text-muted-foreground mb-1">
+              <FileText className="h-3 w-3" />
+              <span className="font-medium">Grader Notes</span>
+            </div>
+            <p>{psaData.graderNotes}</p>
           </div>
         )}
 
