@@ -395,10 +395,18 @@ async function processCreate(
   // Build aspects based on detected category (TCG, sports, or comics)
   const aspects = await buildCategoryAwareAspects(supabase, item, detectedCategory)
 
-  // Resolve policies: template > store config
-  const fulfillmentPolicyId = template?.fulfillment_policy_id || storeConfig.default_fulfillment_policy_id || ''
-  const paymentPolicyId = template?.payment_policy_id || storeConfig.default_payment_policy_id || ''
-  const returnPolicyId = template?.return_policy_id || storeConfig.default_return_policy_id || ''
+  // Look up tag mapping for per-category policy/markup overrides
+  const { data: tagMappingPolicies } = detectedCategory ? await supabase
+    .from('tag_category_mappings')
+    .select('fulfillment_policy_id, payment_policy_id, return_policy_id, price_markup_percent')
+    .eq('primary_category', detectedCategory)
+    .eq('is_active', true)
+    .maybeSingle() : { data: null }
+
+  // Resolve policies: template > tag mapping > store config
+  const fulfillmentPolicyId = template?.fulfillment_policy_id || tagMappingPolicies?.fulfillment_policy_id || storeConfig.default_fulfillment_policy_id || ''
+  const paymentPolicyId = template?.payment_policy_id || tagMappingPolicies?.payment_policy_id || storeConfig.default_payment_policy_id || ''
+  const returnPolicyId = template?.return_policy_id || tagMappingPolicies?.return_policy_id || storeConfig.default_return_policy_id || ''
 
   // DRY RUN: Simulate success without calling eBay APIs
   if (isDryRun) {
@@ -462,9 +470,9 @@ async function processCreate(
     return inventoryResult
   }
 
-  // Calculate price with markup
+  // Calculate price with markup: tag mapping markup > store config markup
   const basePrice = item.price || 0
-  const markupPercent = storeConfig.price_markup_percent || 0
+  const markupPercent = tagMappingPolicies?.price_markup_percent ?? storeConfig.price_markup_percent ?? 0
   const finalPrice = basePrice * (1 + markupPercent / 100)
 
   // Create offer
@@ -560,10 +568,18 @@ async function processUpdate(
   const categoryId = template?.category_id || 
     await getEbayCategoryIdDB(supabase, detectedCategory, isGraded)
 
-  // Resolve policies: template > store config
-  const fulfillmentPolicyId = template?.fulfillment_policy_id || storeConfig.default_fulfillment_policy_id || ''
-  const paymentPolicyId = template?.payment_policy_id || storeConfig.default_payment_policy_id || ''
-  const returnPolicyId = template?.return_policy_id || storeConfig.default_return_policy_id || ''
+  // Look up tag mapping for per-category policy/markup overrides
+  const { data: tagMappingPolicies } = detectedCategory ? await supabase
+    .from('tag_category_mappings')
+    .select('fulfillment_policy_id, payment_policy_id, return_policy_id, price_markup_percent')
+    .eq('primary_category', detectedCategory)
+    .eq('is_active', true)
+    .maybeSingle() : { data: null }
+
+  // Resolve policies: template > tag mapping > store config
+  const fulfillmentPolicyId = template?.fulfillment_policy_id || tagMappingPolicies?.fulfillment_policy_id || storeConfig.default_fulfillment_policy_id || ''
+  const paymentPolicyId = template?.payment_policy_id || tagMappingPolicies?.payment_policy_id || storeConfig.default_payment_policy_id || ''
+  const returnPolicyId = template?.return_policy_id || tagMappingPolicies?.return_policy_id || storeConfig.default_return_policy_id || ''
 
   // Build aspects based on detected category (TCG, sports, or comics)
   const aspects = await buildCategoryAwareAspects(supabase, item, detectedCategory)
@@ -628,9 +644,9 @@ async function processUpdate(
     return inventoryResult
   }
 
-  // Calculate price with markup
+  // Calculate price with markup: tag mapping markup > store config markup
   const basePrice = item.price || 0
-  const markupPercent = storeConfig.price_markup_percent || 0
+  const markupPercent = tagMappingPolicies?.price_markup_percent ?? storeConfig.price_markup_percent ?? 0
   const finalPrice = basePrice * (1 + markupPercent / 100)
 
   // Update offer if exists
