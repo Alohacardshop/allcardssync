@@ -12,6 +12,7 @@ interface SyncRule {
   rule_type: 'include' | 'exclude';
   category_match: string[];
   brand_match: string[];
+  tag_match: string[];
   min_price: number | null;
   max_price: number | null;
   graded_only: boolean;
@@ -31,6 +32,7 @@ interface IntakeItem {
   list_on_ebay: boolean | null;
   ebay_listing_id: string | null;
   ebay_managed_externally: boolean | null;
+  normalized_tags: string[] | null;
 }
 
 Deno.serve(async (req) => {
@@ -73,7 +75,7 @@ Deno.serve(async (req) => {
     // Fetch eligible items (not already listed, not externally managed, not deleted)
     const { data: items, error: itemsError } = await supabase
       .from('intake_items')
-      .select('id, brand_title, main_category, sub_category, price, grade, type, list_on_ebay, ebay_listing_id, ebay_managed_externally')
+      .select('id, brand_title, main_category, sub_category, price, grade, type, list_on_ebay, ebay_listing_id, ebay_managed_externally, normalized_tags')
       .eq('store_key', store_key)
       .is('deleted_at', null)
       .is('ebay_listing_id', null)
@@ -258,6 +260,15 @@ function matchesRule(item: IntakeItem, rule: SyncRule): boolean {
   }
   if (rule.max_price !== null && (item.price === null || item.price > rule.max_price)) {
     return false;
+  }
+
+  // Tag matching (AND logic — item must have ALL specified tags)
+  if (rule.tag_match && rule.tag_match.length > 0) {
+    const itemTags = (item.normalized_tags || []).map(t => t.toLowerCase());
+    const allTagsPresent = rule.tag_match.every(tag =>
+      itemTags.includes(tag.toLowerCase())
+    );
+    if (!allTagsPresent) return false;
   }
 
   // Graded only
