@@ -134,6 +134,12 @@ export async function cacheCertificateData(
         image_url: responseData.imageUrl,
         image_urls: responseData.imageUrls,
         psa_url: responseData.psaUrl,
+        publication_date: responseData.publicationDate,
+        page_quality: responseData.pageQuality,
+        language: responseData.language,
+        country: responseData.country,
+        grade_label: responseData.gradeLabel,
+        grader_notes: responseData.graderNotes,
         scraped_at: new Date().toISOString()
       });
   } catch (err) {

@@ -1,0 +1,7 @@
+ALTER TABLE public.psa_certificates
+  ADD COLUMN IF NOT EXISTS publication_date TEXT,
+  ADD COLUMN IF NOT EXISTS page_quality TEXT,
+  ADD COLUMN IF NOT EXISTS language TEXT,
+  ADD COLUMN IF NOT EXISTS country TEXT,
+  ADD COLUMN IF NOT EXISTS grade_label TEXT,
+  ADD COLUMN IF NOT EXISTS grader_notes TEXT;

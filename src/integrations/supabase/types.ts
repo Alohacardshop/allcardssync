@@ -2161,14 +2161,20 @@ export type Database = {
           card_number: string | null
           category: string | null
           cert_number: string
+          country: string | null
           created_at: string | null
           firecrawl_response: Json | null
           grade: string | null
+          grade_label: string | null
+          grader_notes: string | null
           id: string
           image_url: string | null
           image_urls: Json | null
           is_valid: boolean
+          language: string | null
+          page_quality: string | null
           psa_url: string | null
+          publication_date: string | null
           raw_html: string | null
           raw_markdown: string | null
           scraped_at: string
@@ -2182,14 +2188,20 @@ export type Database = {
           card_number?: string | null
           category?: string | null
           cert_number: string
+          country?: string | null
           created_at?: string | null
           firecrawl_response?: Json | null
           grade?: string | null
+          grade_label?: string | null
+          grader_notes?: string | null
           id?: string
           image_url?: string | null
           image_urls?: Json | null
           is_valid?: boolean
+          language?: string | null
+          page_quality?: string | null
           psa_url?: string | null
+          publication_date?: string | null
           raw_html?: string | null
           raw_markdown?: string | null
           scraped_at?: string
@@ -2203,14 +2215,20 @@ export type Database = {
           card_number?: string | null
           category?: string | null
           cert_number?: string
+          country?: string | null
           created_at?: string | null
           firecrawl_response?: Json | null
           grade?: string | null
+          grade_label?: string | null
+          grader_notes?: string | null
           id?: string
           image_url?: string | null
           image_urls?: Json | null
           is_valid?: boolean
+          language?: string | null
+          page_quality?: string | null
           psa_url?: string | null
+          publication_date?: string | null
           raw_html?: string | null
           raw_markdown?: string | null
           scraped_at?: string
