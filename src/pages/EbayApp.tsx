@@ -422,8 +422,6 @@ export default function EbayApp() {
           environment: selectedConfig.environment,
           marketplace_id: selectedConfig.marketplace_id,
           is_active: selectedConfig.is_active,
-          title_template: selectedConfig.title_template,
-          description_template: selectedConfig.description_template,
         })
         .eq('id', selectedConfig.id);
 
@@ -589,8 +587,6 @@ export default function EbayApp() {
             environment: newConfig.environment,
             marketplace_id: newConfig.marketplace_id,
             is_active: newConfig.is_active,
-            title_template: newConfig.title_template,
-            description_template: newConfig.description_template,
           })
           .eq('id', newConfig.id);
         
@@ -1017,38 +1013,6 @@ export default function EbayApp() {
                   </CardContent>
                 </Card>
 
-                {/* Listing Templates */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Listing Defaults</CardTitle>
-                    <CardDescription>
-                      Title and description templates for new listings. Category and policies are set via Routing Rules.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                      <Label>Title Template</Label>
-                      <Input
-                        placeholder="{subject} {grade} {grading_company} - {brand_title}"
-                        value={selectedConfig.title_template || ''}
-                        onChange={(e) => updateConfig({ title_template: e.target.value || null })}
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Available: {'{subject}'}, {'{grade}'}, {'{grading_company}'}, {'{brand_title}'}, {'{year}'}
-                      </p>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Description Template</Label>
-                      <textarea
-                        className="w-full min-h-[100px] p-3 border rounded-md bg-background"
-                        placeholder="Enter your default listing description template..."
-                        value={selectedConfig.description_template || ''}
-                        onChange={(e) => updateConfig({ description_template: e.target.value || null })}
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
 
                 {/* Auto-save status indicator */}
                 <div className="flex justify-end items-center gap-2 text-sm text-muted-foreground">
