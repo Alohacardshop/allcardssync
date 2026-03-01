@@ -470,9 +470,9 @@ async function processCreate(
     return inventoryResult
   }
 
-  // Calculate price with markup: tag mapping markup > store config markup
+  // Calculate price with markup: template > tag mapping > 0
   const basePrice = item.price || 0
-  const markupPercent = tagMappingPolicies?.price_markup_percent ?? storeConfig.price_markup_percent ?? 0
+  const markupPercent = template?.price_markup_percent ?? tagMappingPolicies?.price_markup_percent ?? 0
   const finalPrice = basePrice * (1 + markupPercent / 100)
 
   // Create offer
@@ -644,9 +644,9 @@ async function processUpdate(
     return inventoryResult
   }
 
-  // Calculate price with markup: tag mapping markup > store config markup
+  // Calculate price with markup: template > tag mapping > 0
   const basePrice = item.price || 0
-  const markupPercent = tagMappingPolicies?.price_markup_percent ?? storeConfig.price_markup_percent ?? 0
+  const markupPercent = template?.price_markup_percent ?? tagMappingPolicies?.price_markup_percent ?? 0
   const finalPrice = basePrice * (1 + markupPercent / 100)
 
   // Update offer if exists

@@ -34,7 +34,6 @@ Deno.serve(async (req) => {
       'dry_run_mode',
       'sync_mode',
       'is_active',
-      'price_markup_percent',
     ];
 
     // Filter updates to only allowed fields

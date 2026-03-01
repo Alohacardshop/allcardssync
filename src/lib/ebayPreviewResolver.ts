@@ -85,7 +85,7 @@ export interface TagCategoryMapping {
 }
 
 export interface StoreConfig {
-  price_markup_percent: number | null;
+  price_markup_percent?: number | null;
   default_fulfillment_policy_id: string | null;
   default_payment_policy_id: string | null;
   default_return_policy_id: string | null;
