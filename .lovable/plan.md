@@ -1,11 +1,9 @@
 
 
-## Fix: Grade 10 red badge not triggering
+## Make all PSA grade badges red for better visibility
 
-The grade value coming from PSA for comics is `"10.0"` but the code checks for exact match `=== '10'`. Need to update the condition to handle both formats.
+Single change in `PSACertificateDisplay.tsx`: remove the conditional and always use `#dc2626` as the badge background color, regardless of grade value.
 
-**Change in `PSACertificateDisplay.tsx`:**
-- Update the backgroundColor condition from `psaData.grade === '10'` to `psaData.grade?.startsWith('10')` to catch `"10"`, `"10.0"`, etc.
-
-One-line fix.
+**File:** `src/components/PSACertificateDisplay.tsx`
+- Change the `backgroundColor` from the conditional (`startsWith('10') ? '#dc2626' : gradeColor`) to just `'#dc2626'` for all grades.
 
