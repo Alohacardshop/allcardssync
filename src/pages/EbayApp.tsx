@@ -424,7 +424,6 @@ export default function EbayApp() {
           is_active: selectedConfig.is_active,
           title_template: selectedConfig.title_template,
           description_template: selectedConfig.description_template,
-          price_markup_percent: selectedConfig.price_markup_percent
         })
         .eq('id', selectedConfig.id);
 
@@ -590,13 +589,8 @@ export default function EbayApp() {
             environment: newConfig.environment,
             marketplace_id: newConfig.marketplace_id,
             is_active: newConfig.is_active,
-            default_category_id: newConfig.default_category_id,
-            default_fulfillment_policy_id: newConfig.default_fulfillment_policy_id,
-            default_payment_policy_id: newConfig.default_payment_policy_id,
-            default_return_policy_id: newConfig.default_return_policy_id,
             title_template: newConfig.title_template,
             description_template: newConfig.description_template,
-            price_markup_percent: newConfig.price_markup_percent
           })
           .eq('id', newConfig.id);
         
@@ -1020,24 +1014,6 @@ export default function EbayApp() {
                       />
                     </div>
 
-                    <div className="space-y-2">
-                      <Label>Price Markup (%)</Label>
-                      <p className="text-sm text-muted-foreground">
-                        Percentage to add to item price when listing on eBay
-                      </p>
-                      <div className="flex items-center gap-2">
-                        <Input
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="0.5"
-                          value={selectedConfig.price_markup_percent ?? 0}
-                          onChange={(e) => updateConfig({ price_markup_percent: parseFloat(e.target.value) || 0 })}
-                          className="w-32"
-                        />
-                        <span className="text-sm text-muted-foreground">%</span>
-                      </div>
-                    </div>
                   </CardContent>
                 </Card>
 

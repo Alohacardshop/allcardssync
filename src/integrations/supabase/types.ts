@@ -463,6 +463,7 @@ export type Database = {
           is_graded: boolean | null
           name: string
           payment_policy_id: string | null
+          price_markup_percent: number | null
           return_policy_id: string | null
           store_key: string
           title_template: string | null
@@ -484,6 +485,7 @@ export type Database = {
           is_graded?: boolean | null
           name: string
           payment_policy_id?: string | null
+          price_markup_percent?: number | null
           return_policy_id?: string | null
           store_key: string
           title_template?: string | null
@@ -505,6 +507,7 @@ export type Database = {
           is_graded?: boolean | null
           name?: string
           payment_policy_id?: string | null
+          price_markup_percent?: number | null
           return_policy_id?: string | null
           store_key?: string
           title_template?: string | null
