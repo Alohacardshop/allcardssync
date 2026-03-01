@@ -12,6 +12,7 @@ import {
 import {
   EBAY_CONDITION_IDS,
   buildGradedConditionDescriptors,
+  buildComicConditionDescriptors,
 } from '../_shared/ebayConditions.ts'
 import {
   resolveTemplate,
@@ -150,14 +151,22 @@ serve(async (req) => {
     // Build aspects based on detected category (TCG, sports, or comics)
     const aspects = await buildCategoryAwareAspects(supabase, item, detectedCategory)
 
-    // Build condition descriptors for graded items
+    // Build condition descriptors for graded items (comics use different descriptor IDs)
     let conditionDescriptors: any[] | undefined
     if (isGraded) {
-      conditionDescriptors = buildGradedConditionDescriptors(
-        item.grading_company || template?.default_grader || 'PSA',
-        item.grade,
-        item.psa_cert || item.cgc_cert
-      )
+      if (detectedCategory === 'comics') {
+        conditionDescriptors = buildComicConditionDescriptors(
+          item.grading_company || template?.default_grader || 'CGC',
+          item.grade,
+          item.cgc_cert || item.psa_cert
+        )
+      } else {
+        conditionDescriptors = buildGradedConditionDescriptors(
+          item.grading_company || template?.default_grader || 'PSA',
+          item.grade,
+          item.psa_cert || item.cgc_cert
+        )
+      }
     }
 
     // Create inventory item with condition descriptors
