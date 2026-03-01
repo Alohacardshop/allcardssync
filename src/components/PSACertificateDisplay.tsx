@@ -61,7 +61,10 @@ export function PSACertificateDisplay({ psaData, className }: PSACertificateDisp
         {psaData.grade && (
           <div className="flex flex-col items-center gap-1">
             <Badge 
-              style={{ backgroundColor: gradeColor, color: 'white' }}
+              style={{ 
+                backgroundColor: psaData.grade === '10' ? '#dc2626' : gradeColor, 
+                color: 'white' 
+              }}
               className="font-bold text-lg px-4 py-2"
             >
               <Trophy className="h-4 w-4 mr-2" />
@@ -70,6 +73,15 @@ export function PSACertificateDisplay({ psaData, className }: PSACertificateDisp
             {psaData.gradeLabel && (
               <span className="text-xs text-muted-foreground">{psaData.gradeLabel}</span>
             )}
+          </div>
+        )}
+
+        {/* Title / Card Name */}
+        {(psaData.subject || psaData.brandTitle) && (
+          <div className="text-center">
+            <h3 className="font-bold text-base">
+              {[psaData.brandTitle, psaData.subject, psaData.cardNumber && `#${psaData.cardNumber}`, psaData.year].filter(Boolean).join(' ')}
+            </h3>
           </div>
         )}
 
