@@ -1,38 +1,36 @@
 
 
-## Review and Fix eBay Admin + Tag Mapping Integration
+## eBay Admin Audit — Issues Found
 
-After auditing the full eBay admin system, I found several gaps where the tag mapping system isn't fully integrated.
+After reviewing every tab (Settings, Policies, Templates, Categories, Tag Mappings, Sync Rules, Bulk Listing, Queue) and the backend sync processor, here's what's missing or broken:
 
-### Issues Found
+### 1. Template Editor missing policy dropdowns
+The `ebay_listing_templates` table has `fulfillment_policy_id`, `payment_policy_id`, and `return_policy_id` columns, and the resolution chain uses them as highest priority (`template > tag mapping > store config`). But the **Template Manager UI** (`EbayTemplateManager.tsx`) never shows or saves these fields. Templates can't actually override policies despite the backend supporting it.
 
-**1. Client-side preview resolver ignores tag mappings**
-The `ebayPreviewResolver.ts` resolves policies as `template > store config`, but the backend (`ebay-sync-processor`) does `template > tag mapping > store config`. This means the preview shows different policies/markup than what actually gets listed.
+**Fix:** Add three policy dropdown selectors to the template editor dialog, fetching from the same policy tables. Include them in the `saveTemplate` data.
 
-**2. Preview resolver doesn't use `primary_category` from item**
-The preview only detects category via brand matching. It misses the `primary_category` field that the DB trigger sets from tag mappings — so items categorized by tags (e.g., "pokemon" tag → `primary_category: 'pokemon'`) won't resolve correctly in preview.
+### 2. `saveConfig` misses `price_markup_percent`
+The explicit `saveConfig()` function (lines 414-443) doesn't include `price_markup_percent` in its update payload. The auto-save `updateConfig` (line 602) does include it. `saveConfig` is still called from a "Save" button path — if triggered, it would silently reset markup to whatever was there before.
 
-**3. Tag Mappings UI uses raw text input for eBay Category ID**
-There's already an `EbayCategorySelect` combobox (searchable, validated against the managed registry) used in templates and sync rules. The tag mappings should use it too instead of a raw text input.
+**Fix:** Add `price_markup_percent: selectedConfig.price_markup_percent` to the `saveConfig` update payload.
 
-**4. Unnecessary `as any` casts in Tag Mappings component**
-The `tag_category_mappings` table is already in the generated types. The `as any` casts can be removed for type safety.
+### 3. Tag Mappings not scoped to store
+`EbayTagCategoryMappings` loads all `tag_category_mappings` rows without filtering by `store_key`. The policy dropdowns also load all policies across all stores. If multiple stores exist, you see policies from other stores and mappings apply globally rather than per-store.
+
+**Fix:** The `tag_category_mappings` table doesn't have a `store_key` column — this is by design (tags are global). But the policy dropdowns should filter by the active store's `store_key`. Pass `storeKey` as a prop to `EbayTagCategoryMappings` and filter policy queries.
+
+### 4. Tag Mappings tab doesn't receive `storeKey`
+In `EbayApp.tsx` line 708, `<EbayTagCategoryMappings />` is rendered without any props. It needs the selected store's key to filter policies correctly and to show a "no store selected" message when appropriate.
+
+**Fix:** Pass `storeKey={selectedConfig?.store_key}` and guard rendering like the other tabs do.
 
 ### Changes
 
-**`src/lib/ebayPreviewResolver.ts`**
-- Add `tag_category_mappings` data as a new parameter to `resolveListingPreview`
-- Use item's `primary_category` (from tag-derived DB trigger) in category detection, not just brand matching
-- Insert tag mapping policy/markup into the resolution chain: `template > tag mapping > store config`
+| File | What |
+|------|------|
+| `src/components/admin/EbayTemplateManager.tsx` | Add policy dropdown fields (Fulfillment, Payment, Return) to the template editor dialog; include in save payload |
+| `src/pages/EbayApp.tsx` | (a) Add `price_markup_percent` to `saveConfig`; (b) Pass `storeKey` to `EbayTagCategoryMappings` |
+| `src/components/admin/EbayTagCategoryMappings.tsx` | Accept `storeKey` prop; filter policy queries by store_key |
 
-**`src/components/admin/EbayListingPreview.tsx`**
-- Fetch `tag_category_mappings` and pass to the resolver
-
-**`src/components/admin/EbayTagCategoryMappings.tsx`**
-- Replace the raw text input for eBay Category ID with the `EbayCategorySelect` combobox
-- Remove `as any` casts — use proper typed queries
-- Add `primary_category` to `PreviewItem` interface for the resolver
-
-**`src/components/admin/EbayBulkListing.tsx`**
-- Pass tag mappings data to the preview resolver (if it calls `resolveListingPreview`)
+No database changes or edge function updates needed — this is purely UI fixes to expose what the backend already supports.
 
