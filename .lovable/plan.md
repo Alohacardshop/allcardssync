@@ -1,70 +1,46 @@
 
 
-# PSA Comic Cert Lookup: End-to-End Fix
+# PSA Comic Data → eBay Sync Readiness Check
 
-## 1. Database Migration -- Add 6 missing columns to `psa_certificates`
+## Current State
 
-```sql
-ALTER TABLE public.psa_certificates
-  ADD COLUMN IF NOT EXISTS publication_date TEXT,
-  ADD COLUMN IF NOT EXISTS page_quality TEXT,
-  ADD COLUMN IF NOT EXISTS language TEXT,
-  ADD COLUMN IF NOT EXISTS country TEXT,
-  ADD COLUMN IF NOT EXISTS grade_label TEXT,
-  ADD COLUMN IF NOT EXISTS grader_notes TEXT;
+The PSA scraper and cache are now correctly persisting all comic fields. The eBay listing pipeline has two paths:
+
+1. **`ebay-create-listing`** (single item) — uses `select('*')` so it gets ALL intake_items columns including `variant`, `main_category`, `cgc_cert`, `psa_snapshot`. This path works.
+
+2. **`ebay-sync-processor`** (queue batch) — only selects 14 specific columns. **Missing**: `variant`, `main_category`, `cgc_cert`, `psa_snapshot`. This means batch-queued comics won't get correct aspects (no Variant Cover, no cert number for CGC, category detection may fail).
+
+## What's Already Working
+
+- `buildComicAspects()` correctly maps Publisher, Issue Number, Variant Cover, Grader, Grade, Certification Number
+- `detectCategoryFromBrandDB()` + `buildCategoryAwareAspects()` routes comics to the comic aspect builder
+- Comic listing templates exist for PSA/CGC graded comics
+- All PSA scraped fields are cached in `psa_certificates`
+
+## Gap: `ebay-sync-processor` Missing Columns
+
+The select query on line 64-81 needs these additional columns:
+
+```
+variant,
+main_category,
+cgc_cert,
+psa_snapshot
 ```
 
-All nullable TEXT. No data loss, no constraints.
+Without these, batch-processed comics will:
+- Miss the "Variant Cover" aspect
+- Miss CGC certification numbers
+- Potentially fail category detection (falls back to brand lookup only)
 
-## 2. Backend: Update `cacheCertificateData()` in `supabase/functions/psa-lookup/helpers.ts`
+## Plan
 
-Add 6 fields to the `psa_certificates` upsert (lines 122-138):
+### 1. Update `ebay-sync-processor/index.ts` select query
+Add `variant`, `main_category`, `cgc_cert`, and `psa_snapshot` to the intake_items join select (lines 64-81).
 
-```ts
-publication_date: responseData.publicationDate,
-page_quality: responseData.pageQuality,
-language: responseData.language,
-country: responseData.country,
-grade_label: responseData.gradeLabel,
-grader_notes: responseData.graderNotes,
-```
-
-`normalizePsaCertData()` already maps these columns back -- no changes needed there.
-
-## 3. Frontend: Update `PSACertificateDisplay` component
-
-**Comic detection**: `const isComic = psaData.category?.toUpperCase().includes('COMIC') ?? false;`
-
-**Image section** -- replace single image with dual-image layout:
-- If `psaData.imageUrls?.length >= 2`: render two images side-by-side (`grid grid-cols-2 gap-2` on md+, stacked on mobile)
-- If 1 image or only `imageUrl`: single image (current behavior)
-- Track error state per image index
-
-**Label changes** (conditional on `isComic`):
-- `brandTitle` label: "Publisher" for comics, "Brand" for cards
-- `cardNumber` label: "Volume #" for comics, "Card #" for cards
-
-**New fields rendered** (when present):
-- `gradeLabel` -- shown in the grade badge area as subtitle (e.g., "GEM MT 10.0")
-- `publicationDate` -- with Calendar icon, label "Published"
-- `pageQuality` -- label "Pages"
-- `language` -- label "Language"
-- `country` -- label "Country"
-- `graderNotes` -- full-width text block below the grid
-
-## 4. No changes to types
-
-`src/types/psa.ts` already has all fields defined (`gradeLabel`, `publicationDate`, `pageQuality`, `language`, `country`, `graderNotes`).
-
-## 5. No changes to intake tabs
-
-Already correctly labeled for comics.
-
-## Files Changed
-
-| File | Change |
-|------|--------|
-| Migration SQL | Add 6 columns |
-| `supabase/functions/psa-lookup/helpers.ts` | 6 fields added to `cacheCertificateData` upsert |
-| `src/components/PSACertificateDisplay.tsx` | Dual images, comic-aware labels, new field rendering |
+### 2. No other changes needed
+- `buildComicAspects` already accepts all these fields
+- `ebay-create-listing` already uses `select('*')`
+- Templates and category resolution are already wired up
+- PSA data is persisted correctly after the previous fix
 
