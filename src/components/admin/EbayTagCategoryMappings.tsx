@@ -29,7 +29,11 @@ interface PolicyOption {
   name: string;
 }
 
-export function EbayTagCategoryMappings() {
+interface EbayTagCategoryMappingsProps {
+  storeKey: string;
+}
+
+export function EbayTagCategoryMappings({ storeKey }: EbayTagCategoryMappingsProps) {
   const [mappings, setMappings] = useState<TagCategoryMapping[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
@@ -42,13 +46,13 @@ export function EbayTagCategoryMappings() {
   useEffect(() => {
     loadMappings();
     loadPolicies();
-  }, []);
+  }, [storeKey]);
 
   const loadPolicies = async () => {
     const [fp, pp, rp] = await Promise.all([
-      supabase.from('ebay_fulfillment_policies').select('policy_id, name').order('name'),
-      supabase.from('ebay_payment_policies').select('policy_id, name').order('name'),
-      supabase.from('ebay_return_policies').select('policy_id, name').order('name'),
+      supabase.from('ebay_fulfillment_policies').select('policy_id, name').eq('store_key', storeKey).order('name'),
+      supabase.from('ebay_payment_policies').select('policy_id, name').eq('store_key', storeKey).order('name'),
+      supabase.from('ebay_return_policies').select('policy_id, name').eq('store_key', storeKey).order('name'),
     ]);
     setFulfillmentPolicies(fp.data || []);
     setPaymentPolicies(pp.data || []);
