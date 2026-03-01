@@ -65,6 +65,25 @@ export async function getEbayCategoryIdDB(
     return getEbayCategoryId(null, isGraded)
   }
 
+  // 1. Check tag_category_mappings for an override ebay_category_id
+  try {
+    const { data: tagMapping } = await supabase
+      .from('tag_category_mappings')
+      .select('ebay_category_id')
+      .eq('primary_category', category)
+      .eq('is_active', true)
+      .not('ebay_category_id', 'is', null)
+      .limit(1)
+      .maybeSingle()
+
+    if (tagMapping?.ebay_category_id) {
+      return tagMapping.ebay_category_id
+    }
+  } catch (err) {
+    console.warn('[ebayTemplateResolver] tag_category_mappings lookup failed:', err)
+  }
+
+  // 2. Check ebay_categories table
   try {
     let query = supabase
       .from('ebay_categories')
@@ -96,7 +115,7 @@ export async function getEbayCategoryIdDB(
     console.warn('[ebayTemplateResolver] getEbayCategoryIdDB query failed, using hardcoded fallback:', err)
   }
 
-  // Fallback to hardcoded lookup
+  // 3. Fallback to hardcoded lookup
   return getEbayCategoryId(category as any, isGraded)
 }
 
