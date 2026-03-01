@@ -1,40 +1,38 @@
 
 
-## Add Per-Category Policies and Markup to Tag Mappings
+## Review and Fix eBay Admin + Tag Mapping Integration
 
-Right now, the `tag_category_mappings` table only stores tag, category, condition, and eBay category ID. Policies and markup are either global (from `ebay_store_config`) or per-template. You want per-category control over policies and markup directly from the Tag Mappings UI.
+After auditing the full eBay admin system, I found several gaps where the tag mapping system isn't fully integrated.
 
-### What changes
+### Issues Found
 
-**1. Add columns to `tag_category_mappings`**
-- `fulfillment_policy_id` (text, nullable)
-- `payment_policy_id` (text, nullable)
-- `return_policy_id` (text, nullable)
-- `price_markup_percent` (numeric, nullable)
+**1. Client-side preview resolver ignores tag mappings**
+The `ebayPreviewResolver.ts` resolves policies as `template > store config`, but the backend (`ebay-sync-processor`) does `template > tag mapping > store config`. This means the preview shows different policies/markup than what actually gets listed.
 
-When these are set, they override the store-wide defaults for items matching that category.
+**2. Preview resolver doesn't use `primary_category` from item**
+The preview only detects category via brand matching. It misses the `primary_category` field that the DB trigger sets from tag mappings — so items categorized by tags (e.g., "pokemon" tag → `primary_category: 'pokemon'`) won't resolve correctly in preview.
 
-**2. Update `ebay-sync-processor/index.ts` policy resolution**
+**3. Tag Mappings UI uses raw text input for eBay Category ID**
+There's already an `EbayCategorySelect` combobox (searchable, validated against the managed registry) used in templates and sync rules. The tag mappings should use it too instead of a raw text input.
 
-Current priority: template policies > store config defaults.
+**4. Unnecessary `as any` casts in Tag Mappings component**
+The `tag_category_mappings` table is already in the generated types. The `as any` casts can be removed for type safety.
 
-New priority: **template policies > tag mapping policies > store config defaults**.
+### Changes
 
-After resolving the template, look up the item's `primary_category` in `tag_category_mappings` and use its policy IDs / markup if the template doesn't specify them.
+**`src/lib/ebayPreviewResolver.ts`**
+- Add `tag_category_mappings` data as a new parameter to `resolveListingPreview`
+- Use item's `primary_category` (from tag-derived DB trigger) in category detection, not just brand matching
+- Insert tag mapping policy/markup into the resolution chain: `template > tag mapping > store config`
 
-**3. Update the Tag Mappings UI (`EbayTagCategoryMappings.tsx`)**
+**`src/components/admin/EbayListingPreview.tsx`**
+- Fetch `tag_category_mappings` and pass to the resolver
 
-Add columns for:
-- Fulfillment Policy (dropdown of synced policies from `ebay_fulfillment_policies`)
-- Payment Policy (dropdown from `ebay_payment_policies`)
-- Return Policy (dropdown from `ebay_return_policies`)
-- Markup % (number input)
+**`src/components/admin/EbayTagCategoryMappings.tsx`**
+- Replace the raw text input for eBay Category ID with the `EbayCategorySelect` combobox
+- Remove `as any` casts — use proper typed queries
+- Add `primary_category` to `PreviewItem` interface for the resolver
 
-Each row becomes a full category configuration: tag → category → eBay category ID → policies → markup.
-
-### Files to change
-- **New migration** — add 4 columns to `tag_category_mappings`
-- **`src/components/admin/EbayTagCategoryMappings.tsx`** — add policy dropdowns + markup input, fetch policy lists
-- **`supabase/functions/ebay-sync-processor/index.ts`** — insert tag-mapping policy/markup lookup into the resolution chain
-- **Deploy** `ebay-sync-processor`
+**`src/components/admin/EbayBulkListing.tsx`**
+- Pass tag mappings data to the preview resolver (if it calls `resolveListingPreview`)
 
