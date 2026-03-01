@@ -422,10 +422,6 @@ export default function EbayApp() {
           environment: selectedConfig.environment,
           marketplace_id: selectedConfig.marketplace_id,
           is_active: selectedConfig.is_active,
-          default_category_id: selectedConfig.default_category_id,
-          default_fulfillment_policy_id: selectedConfig.default_fulfillment_policy_id,
-          default_payment_policy_id: selectedConfig.default_payment_policy_id,
-          default_return_policy_id: selectedConfig.default_return_policy_id,
           title_template: selectedConfig.title_template,
           description_template: selectedConfig.description_template,
           price_markup_percent: selectedConfig.price_markup_percent
@@ -1045,116 +1041,15 @@ export default function EbayApp() {
                   </CardContent>
                 </Card>
 
-                {/* Default Policies */}
-                <Card>
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <CardTitle>Default Policies</CardTitle>
-                        <CardDescription>
-                          Select default policies for new eBay listings
-                        </CardDescription>
-                      </div>
-                      {isConnected && fulfillmentPolicies.length === 0 && (
-                        <Button variant="outline" onClick={syncPolicies} disabled={syncingPolicies}>
-                          {syncingPolicies ? (
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          ) : (
-                            <RefreshCw className="h-4 w-4 mr-2" />
-                          )}
-                          Sync from eBay
-                        </Button>
-                      )}
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {!isConnected ? (
-                      <p className="text-sm text-muted-foreground text-center py-4">
-                        Connect your eBay account first
-                      </p>
-                    ) : fulfillmentPolicies.length === 0 ? (
-                      <p className="text-sm text-muted-foreground text-center py-4">
-                        No policies yet. Sync from eBay or go to the <strong>Policies</strong> tab to create new ones.
-                      </p>
-                    ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="space-y-2">
-                          <Label>Shipping Policy</Label>
-                          <Select
-                            value={selectedConfig.default_fulfillment_policy_id || ''}
-                            onValueChange={(v) => updateConfig({ default_fulfillment_policy_id: v || null })}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select policy" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {fulfillmentPolicies.map((policy) => (
-                                <SelectItem key={policy.policy_id} value={policy.policy_id}>
-                                  {policy.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label>Payment Policy</Label>
-                          <Select
-                            value={selectedConfig.default_payment_policy_id || ''}
-                            onValueChange={(v) => updateConfig({ default_payment_policy_id: v || null })}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select policy" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {paymentPolicies.map((policy) => (
-                                <SelectItem key={policy.policy_id} value={policy.policy_id}>
-                                  {policy.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label>Return Policy</Label>
-                          <Select
-                            value={selectedConfig.default_return_policy_id || ''}
-                            onValueChange={(v) => updateConfig({ default_return_policy_id: v || null })}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select policy" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {returnPolicies.map((policy) => (
-                                <SelectItem key={policy.policy_id} value={policy.policy_id}>
-                                  {policy.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-
-                {/* Listing Defaults */}
+                {/* Listing Templates */}
                 <Card>
                   <CardHeader>
                     <CardTitle>Listing Defaults</CardTitle>
-                    <CardDescription>Default settings for new eBay listings</CardDescription>
+                    <CardDescription>
+                      Title and description templates for new listings. Category and policies are set via Routing Rules.
+                    </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                      <Label>Default Category</Label>
-                      <EbayCategorySelect
-                        value={selectedConfig.default_category_id || ''}
-                        onValueChange={(value) => updateConfig({ default_category_id: value || null })}
-                        placeholder="Select default eBay category..."
-                      />
-                    </div>
-
                     <div className="space-y-2">
                       <Label>Title Template</Label>
                       <Input
