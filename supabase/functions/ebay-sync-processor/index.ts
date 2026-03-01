@@ -80,6 +80,8 @@ serve(async (req) => {
           store_key,
           variant,
           main_category,
+          primary_category,
+          condition_type,
           cgc_cert,
           psa_snapshot
         )
@@ -376,7 +378,7 @@ async function processCreate(
   // Determine condition and category from template or auto-detect
   const isGraded = !!item.grade
   const conditionId = template?.condition_id || (isGraded ? EBAY_CONDITION_IDS.GRADED : EBAY_CONDITION_IDS.UNGRADED)
-  const detectedCategory = await detectCategoryFromBrandDB(supabase, item.brand_title) || item.main_category
+  const detectedCategory = item.primary_category || item.main_category || await detectCategoryFromBrandDB(supabase, item.brand_title)
   const categoryId = template?.category_id || 
     await getEbayCategoryIdDB(supabase, detectedCategory, isGraded)
 
@@ -554,7 +556,7 @@ async function processUpdate(
 
   const isGraded = !!item.grade
   const conditionId = template?.condition_id || (isGraded ? EBAY_CONDITION_IDS.GRADED : EBAY_CONDITION_IDS.UNGRADED)
-  const detectedCategory = await detectCategoryFromBrandDB(supabase, item.brand_title) || item.main_category
+  const detectedCategory = item.primary_category || item.main_category || await detectCategoryFromBrandDB(supabase, item.brand_title)
   const categoryId = template?.category_id || 
     await getEbayCategoryIdDB(supabase, detectedCategory, isGraded)
 
