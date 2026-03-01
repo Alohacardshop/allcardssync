@@ -21,7 +21,7 @@ import { EbayPolicyEditor } from '@/components/admin/EbayPolicyEditor';
 import { EbaySyncRulesEditor } from '@/components/admin/EbaySyncRulesEditor';
 import { EbayCategoryManager } from '@/components/admin/EbayCategoryManager';
 import { EbayCategorySelect } from '@/components/admin/EbayCategorySelect';
-import { EbayTagCategoryMappings } from '@/components/admin/EbayTagCategoryMappings';
+import { EbayRoutingRules } from '@/components/admin/EbayRoutingRules';
 import { Link, useLocation } from 'react-router-dom';
 import { useStore } from '@/contexts/StoreContext';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -651,7 +651,7 @@ export default function EbayApp() {
         />
 
         <Tabs defaultValue="settings" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-8 lg:w-auto lg:inline-grid">
+          <TabsList className="grid w-full grid-cols-7 lg:w-auto lg:inline-grid">
             <TabsTrigger value="settings" className="flex items-center gap-2">
               <Settings className="h-4 w-4" />
               Settings
@@ -668,9 +668,9 @@ export default function EbayApp() {
               <FolderTree className="h-4 w-4" />
               Categories
             </TabsTrigger>
-            <TabsTrigger value="tag-mappings" className="flex items-center gap-2">
+            <TabsTrigger value="routing" className="flex items-center gap-2">
               <Tags className="h-4 w-4" />
-              Tag Mappings
+              Routing Rules
             </TabsTrigger>
             <TabsTrigger value="rules" className="flex items-center gap-2">
               <Filter className="h-4 w-4" />
@@ -704,10 +704,10 @@ export default function EbayApp() {
             <EbayCategoryManager />
           </TabsContent>
 
-          {/* Tag Mappings Tab */}
-          <TabsContent value="tag-mappings">
+          {/* Routing Rules Tab */}
+          <TabsContent value="routing">
             {selectedConfig ? (
-              <EbayTagCategoryMappings storeKey={selectedConfig.store_key} />
+              <EbayRoutingRules storeKey={selectedConfig.store_key} />
             ) : (
               <Card>
                 <CardContent className="py-8 text-center text-muted-foreground">
