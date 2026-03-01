@@ -1,40 +1,41 @@
 
 
-## Use Tags as Primary Driver for eBay Category Selection
+## Add Tag-to-Category Mapping Settings to eBay Admin
 
-**The Problem:**
-Right now, eBay category selection works like this:
-1. Try to match `brand_title` against DB brand mappings
-2. Try hardcoded brand patterns (e.g., "Pokemon" → tcg, "Marvel" → comics)
-3. Fall back to `main_category` field
+### Current State
+The tag-to-category mapping is hardcoded in two places:
+1. **Database trigger** (`trigger_normalize_tags`) — maps tags like `pokemon` → `primary_category: 'pokemon'`, `comics` → `'comics'`, etc.
+2. **Edge function** (`ebayConditions.ts`) — maps `primary_category` values to eBay category IDs (`tcg` → `183454`, `comics` → `259061`, etc.)
 
-This is fragile — if a comic doesn't have a recognizable brand in its title, it might get categorized as TCG (the default). Meanwhile, you already have reliable tag-derived columns (`primary_category`, `condition_type`, `normalized_tags`) that are auto-populated by a DB trigger every time tags are set. These are the source of truth and should be checked **first**, not last.
+Both require code/SQL changes to modify. You want these editable from the UI.
 
-**The Fix — Flip the priority order in `ebayTemplateResolver.ts`:**
+### Plan
 
-Currently (line 112):
-```
-const detectedCategory = (await detectCategoryFromBrandDB(...)) || item.main_category
-```
+**1. Create a `tag_category_mappings` table**
+- Columns: `id`, `tag_value` (text), `primary_category` (text), `condition_type` (text, nullable), `ebay_category_id` (text, nullable), `is_active` (boolean), `created_at`, `updated_at`
+- Seed with current hardcoded mappings: `pokemon` → `pokemon`, `comics` → `comics`, `sports` → `sports`, `tcg` → `tcg`, `graded` → condition `graded`, `sealed` → condition `sealed`
+- RLS: admin-only write, authenticated read
 
-Change to check tag-derived `primary_category` first, then `main_category`, then brand detection as fallback:
-```
-const detectedCategory = item.primary_category || item.main_category || (await detectCategoryFromBrandDB(...))
-```
+**2. Update the DB trigger to read from the table**
+- Replace the hardcoded IF/ELSIF chain in `trigger_normalize_tags` with a lookup against `tag_category_mappings`
+- Falls back to `main_category` if no match found
 
-Same change in `ebay-sync-processor/index.ts` (lines 379 and 557) where the same pattern appears.
+**3. Update `ebayTemplateResolver.ts` and `ebayConditions.ts`**
+- Add a `getEbayCategoryIdDB()` call that checks `tag_category_mappings.ebay_category_id` before falling back to the hardcoded switch
+- This lets you override eBay category per tag from the admin UI
 
-**Why this is better:**
-- Tags are already set correctly during intake (comics get tagged "comics", cards get "pokemon"/"tcg", graded items get "graded")
-- The DB trigger normalizes everything consistently
-- Brand detection becomes a safety net for items missing tags, not the primary method
-- No new code needed — just reorder the priority chain
+**4. Add "Tag Mappings" tab to the eBay admin page (`EbayApp.tsx`)**
+- New tab alongside Settings, Policies, Templates, Categories, etc.
+- Shows a table of all tag → category mappings with columns: Tag, Primary Category, Condition Type, eBay Category, Active
+- Inline editing for each row
+- "Add Mapping" button for new tags
+- Delete button per row
+- Uses the existing auto-save pattern from the eBay settings page
 
-**Files to change:**
-1. **`supabase/functions/_shared/ebayTemplateResolver.ts`** — Update `resolveTemplate()` (line 112) and `buildCategoryAwareAspects()` (line 202) to prefer `primary_category` over brand detection
-2. **`supabase/functions/ebay-sync-processor/index.ts`** — Update the two `detectedCategory` assignments (lines 379, 557) to use the same priority
-3. **`supabase/functions/ebay-sync-processor/index.ts`** — Add `primary_category` and `condition_type` to the SELECT query so these columns are available
-
-**Also ensure the query fetches the tag columns:**
-The `ebay-sync-processor` SELECT must include `primary_category` and `condition_type` alongside the existing columns.
+### Files to create/modify
+- **New migration**: Create `tag_category_mappings` table + update `trigger_normalize_tags` function
+- **New component**: `src/components/admin/EbayTagCategoryMappings.tsx` — the settings UI
+- **Edit**: `src/pages/EbayApp.tsx` — add new tab
+- **Edit**: `supabase/functions/_shared/ebayTemplateResolver.ts` — DB lookup for category-to-eBay-ID override
+- **Deploy**: `ebay-sync-processor` after template resolver changes
 
