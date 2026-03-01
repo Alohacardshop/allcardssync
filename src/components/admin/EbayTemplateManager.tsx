@@ -13,7 +13,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
 import { Plus, Edit, Trash2, Copy, Check, FileText } from 'lucide-react';
 import { EbayCategorySelect } from './EbayCategorySelect';
-import { EbayCategoryMappingEditor } from './EbayCategoryMappingEditor';
+
 
 interface ListingTemplate {
   id: string;
@@ -329,10 +329,6 @@ export function EbayTemplateManager({ storeKey }: EbayTemplateManagerProps) {
         </CardContent>
       </Card>
 
-      <EbayCategoryMappingEditor
-        storeKey={storeKey}
-        templates={templates.map(t => ({ id: t.id, name: t.name }))}
-      />
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh]">
