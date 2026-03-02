@@ -48,7 +48,7 @@ export const EbayTab = React.memo(({ item }: EbayTabProps) => {
   return (
     <div className="space-y-4">
       {/* Toggle for listing */}
-      <div className="flex items-center justify-between p-3 bg-muted/30 rounded-md">
+      <div className="flex items-center justify-between p-3 bg-muted/50 rounded-md border border-border">
         <div className="space-y-0.5">
           <Label htmlFor="list-on-ebay" className="text-sm font-medium">
             List on eBay
@@ -62,6 +62,7 @@ export const EbayTab = React.memo(({ item }: EbayTabProps) => {
           checked={listOnEbay || false}
           onCheckedChange={handleToggle}
           disabled={isToggling === item.id || item.deleted_at !== null}
+          className="border border-border"
         />
       </div>
 

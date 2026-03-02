@@ -18,6 +18,7 @@ export function useEbayListing() {
         .update({ 
           list_on_ebay: enabling,
           ebay_sync_status: enabling ? 'queued' : null,
+          ebay_sync_error: enabling ? null : undefined,
           updated_at: new Date().toISOString()
         })
         .eq('id', itemId);
