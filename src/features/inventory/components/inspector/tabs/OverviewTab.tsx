@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
-import { formatDistanceToNow, format } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns';
 import { getLocationNickname } from '@/lib/locationNicknames';
 import { ImageGallery } from '../../details/ImageGallery';
+import { EditableField } from '../EditableField';
+import { InlineQuantityEditor } from '@/components/inventory-card/InlineQuantityEditor';
 import type { InventoryListItem } from '../../../types';
 import type { CachedLocation } from '@/hooks/useLocationNames';
 
@@ -15,29 +17,16 @@ interface OverviewTabProps {
     vendor?: string | null;
   } | null;
   locationsMap?: Map<string, CachedLocation>;
+  onFieldSave?: (updates: Record<string, string | number>) => void;
+  isSaving?: boolean;
 }
 
-// Generate title from item
-const generateTitle = (item: InventoryListItem): string => {
-  const parts: (string | number | null | undefined)[] = [];
-  if (item.year) parts.push(item.year);
-  if (item.brand_title) parts.push(item.brand_title);
-  if (item.subject) parts.push(item.subject);
-  if (item.card_number) parts.push(`#${item.card_number}`);
-  if (item.grade && (item.psa_cert || item.cgc_cert)) {
-    const company = item.grading_company || 'PSA';
-    parts.push(`${company} ${item.grade}`);
-  }
-  return parts.filter(Boolean).join(' ') || 'Unknown Item';
-};
-
-export const OverviewTab = React.memo(({ item, detailData, locationsMap }: OverviewTabProps) => {
+export const OverviewTab = React.memo(({ item, detailData, locationsMap, onFieldSave, isSaving }: OverviewTabProps) => {
   const locationName = item.shopify_location_gid 
     ? locationsMap?.get(item.shopify_location_gid)?.location_name || 'Unknown'
     : 'No location';
   const nickname = getLocationNickname(locationName);
   
-  // Use cost from list item first, then fall back to detail data
   const cost = item.cost ?? detailData?.cost;
   const vendor = detailData?.vendor ?? item.vendor;
   
@@ -49,7 +38,11 @@ export const OverviewTab = React.memo(({ item, detailData, locationsMap }: Overv
   };
   
   const status = getStatus();
-  const title = generateTitle(item);
+  const isDeleted = !!item.deleted_at || !!item.sold_at;
+
+  const handleSave = useCallback((field: string) => (value: string | number) => {
+    onFieldSave?.({ [field]: value });
+  }, [onFieldSave]);
 
   return (
     <div className="space-y-5">
@@ -61,39 +54,41 @@ export const OverviewTab = React.memo(({ item, detailData, locationsMap }: Overv
         <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Card Info</h4>
         
         <div className="space-y-2">
-          <div>
-            <span className="text-xs text-muted-foreground block">Title</span>
-            <p className="text-sm font-medium">{title}</p>
+          <EditableField
+            label="Subject"
+            value={item.subject}
+            onSave={handleSave('subject')}
+            disabled={isDeleted}
+          />
+          
+          <div className="grid grid-cols-2 gap-3">
+            <EditableField
+              label="Year"
+              value={item.year}
+              onSave={handleSave('year')}
+              disabled={isDeleted}
+            />
+            <EditableField
+              label="Set/Brand"
+              value={item.brand_title}
+              onSave={handleSave('brand_title')}
+              disabled={isDeleted}
+            />
           </div>
           
           <div className="grid grid-cols-2 gap-3">
-            {item.year && (
-              <div>
-                <span className="text-xs text-muted-foreground block">Year</span>
-                <p className="text-sm">{item.year}</p>
-              </div>
-            )}
-            {item.brand_title && (
-              <div>
-                <span className="text-xs text-muted-foreground block">Set/Brand</span>
-                <p className="text-sm">{item.brand_title}</p>
-              </div>
-            )}
-          </div>
-          
-          <div className="grid grid-cols-2 gap-3">
-            {item.card_number && (
-              <div>
-                <span className="text-xs text-muted-foreground block">Card #</span>
-                <p className="text-sm">#{item.card_number}</p>
-              </div>
-            )}
-            {item.variant && (
-              <div>
-                <span className="text-xs text-muted-foreground block">Variant</span>
-                <p className="text-sm">{item.variant}</p>
-              </div>
-            )}
+            <EditableField
+              label="Card #"
+              value={item.card_number}
+              onSave={handleSave('card_number')}
+              disabled={isDeleted}
+            />
+            <EditableField
+              label="Variant"
+              value={item.variant}
+              onSave={handleSave('variant')}
+              disabled={isDeleted}
+            />
           </div>
           
           {(item.grade || item.psa_cert || item.cgc_cert) && (
@@ -124,13 +119,24 @@ export const OverviewTab = React.memo(({ item, detailData, locationsMap }: Overv
         <div className="grid grid-cols-3 gap-3">
           <div>
             <span className="text-xs text-muted-foreground block">Quantity</span>
-            <p className="text-lg font-semibold tabular-nums">{item.quantity}</p>
+            <div className="mt-0.5">
+              <InlineQuantityEditor
+                itemId={item.id}
+                quantity={item.quantity}
+                shopifyProductId={item.shopify_product_id}
+                shopifyInventoryItemId={item.shopify_inventory_item_id}
+                readOnly={isDeleted}
+              />
+            </div>
           </div>
           
-          <div>
-            <span className="text-xs text-muted-foreground block">Price</span>
-            <p className="text-lg font-semibold tabular-nums">${(item.price || 0).toFixed(2)}</p>
-          </div>
+          <EditableField
+            label="Price"
+            value={item.price}
+            type="currency"
+            onSave={handleSave('price')}
+            disabled={isDeleted}
+          />
           
           <div>
             <span className="text-xs text-muted-foreground block">Cost</span>
@@ -190,6 +196,11 @@ export const OverviewTab = React.memo(({ item, detailData, locationsMap }: Overv
           )}
         </div>
       </div>
+
+      {/* Sync indicator */}
+      {isSaving && (
+        <p className="text-xs text-muted-foreground animate-pulse">Saving & syncing to marketplaces…</p>
+      )}
     </div>
   );
 });

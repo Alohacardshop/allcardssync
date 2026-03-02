@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { useInventoryItemDetail } from '@/hooks/useInventoryItemDetail';
 import { getLocationNickname } from '@/lib/locationNicknames';
 import { cn } from '@/lib/utils';
+import { useInventoryFieldSync } from '../../hooks/useInventoryFieldSync';
 
 // Tab content components
 import { OverviewTab } from './tabs/OverviewTab';
@@ -54,11 +55,19 @@ export const InspectorPanel = React.memo(({
   onPrint,
   isResyncing,
 }: InspectorPanelProps) => {
+  // Field sync hook for editable fields
+  const { updateField, isSaving } = useInventoryFieldSync();
+
   // Fetch detail data lazily when item is selected
   const { data: detailData, isLoading: isLoadingDetail } = useInventoryItemDetail(
     item?.id || null,
     !!item
   );
+
+  const handleFieldSave = useCallback((updates: Record<string, string | number>) => {
+    if (!item) return;
+    updateField(item, updates);
+  }, [item, updateField]);
 
   // Find current index for navigation
   const currentIndex = item ? items.findIndex(i => i.id === item.id) : -1;
@@ -227,7 +236,9 @@ eBay: ${item.ebay_sync_status || 'Not listed'}
                 <OverviewTab 
                   item={item} 
                   detailData={detailData}
-                  locationsMap={locationsMap} 
+                  locationsMap={locationsMap}
+                  onFieldSave={handleFieldSave}
+                  isSaving={isSaving}
                 />
               </TabsContent>
 
