@@ -773,21 +773,53 @@ async function processQueueItem(supabase: any, queueItem: SyncQueueItem) {
       }
       
       // Reorder media via GraphQL to guarantee front image is featured
+      // Wait for Shopify to finish processing uploaded images
+      await sleep(3000)
       try {
         const mediaQuery = await fetch(`https://${credentials.domain}/admin/api/2024-07/graphql.json`, {
           method: 'POST',
           headers: { 'X-Shopify-Access-Token': credentials.access_token, 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            query: `query($id:ID!){product(id:$id){media(first:10){edges{node{id}}}}}`,
+            query: `query($id:ID!){product(id:$id){media(first:10){edges{node{id ... on MediaImage{image{url}}}}}}}`,
             variables: { id: `gid://shopify/Product/${shopifyProductId}` }
           })
         })
         if (mediaQuery.ok) {
           const mediaResult = await mediaQuery.json()
           const mediaEdges = mediaResult?.data?.product?.media?.edges || []
+          console.log(`[MEDIA REORDER] Found ${mediaEdges.length} media items for product ${shopifyProductId}`)
+          
           if (mediaEdges.length >= 2) {
-            // Keep current order (already sorted front-first), just enforce positions
-            const moves = mediaEdges.map((e: any, i: number) => ({ id: e.node.id, newPosition: String(i) }))
+            // Get the front image URL (first in our sorted uniqueImageUrls)
+            const frontUrl = uniqueImageUrls[0] || ''
+            const frontFilename = frontUrl.split('/').pop() || ''
+            
+            // Find which Shopify media node matches the front image
+            let frontMediaIdx = -1
+            for (let i = 0; i < mediaEdges.length; i++) {
+              const mediaUrl = mediaEdges[i].node?.image?.url || ''
+              if (frontFilename && mediaUrl.includes(frontFilename)) {
+                frontMediaIdx = i
+                break
+              }
+            }
+            
+            console.log(`[MEDIA REORDER] Front URL filename: ${frontFilename}, matched at index: ${frontMediaIdx}`)
+            
+            // Build moves: put front image at position 0, rest follow
+            let moves: { id: string; newPosition: string }[]
+            if (frontMediaIdx >= 0) {
+              const frontId = mediaEdges[frontMediaIdx].node.id
+              const otherIds = mediaEdges.filter((_: any, i: number) => i !== frontMediaIdx).map((e: any) => e.node.id)
+              moves = [
+                { id: frontId, newPosition: "0" },
+                ...otherIds.map((id: string, i: number) => ({ id, newPosition: String(i + 1) }))
+              ]
+            } else {
+              // No URL match — keep order as-is with explicit positions
+              moves = mediaEdges.map((e: any, i: number) => ({ id: e.node.id, newPosition: String(i) }))
+            }
+            
             const reorderResp = await fetch(`https://${credentials.domain}/admin/api/2024-07/graphql.json`, {
               method: 'POST',
               headers: { 'X-Shopify-Access-Token': credentials.access_token, 'Content-Type': 'application/json' },
@@ -800,7 +832,7 @@ async function processQueueItem(supabase: any, queueItem: SyncQueueItem) {
               const reorderResult = await reorderResp.json()
               const errs = reorderResult?.data?.productReorderMedia?.mediaUserErrors || []
               if (errs.length > 0) console.warn(`[MEDIA REORDER] userErrors:`, JSON.stringify(errs))
-              else console.log(`[MEDIA REORDER] ✅ Reordered media for product ${shopifyProductId}`)
+              else console.log(`[MEDIA REORDER] ✅ Reordered media for product ${shopifyProductId}, front=${moves[0]?.id}`)
             }
           }
         }
