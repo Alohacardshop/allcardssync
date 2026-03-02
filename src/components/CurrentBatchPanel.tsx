@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Pencil, Send, Trash2, Eye, Plus, Loader2, Package } from "lucide-react";
+import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import EditIntakeItemDialog from "./EditIntakeItemDialog";
@@ -54,6 +55,8 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
   const [selectedVendor, setSelectedVendor] = useState<string>('');
   const [loadingVendors, setLoadingVendors] = useState(false);
   const [batchProgressOpen, setBatchProgressOpen] = useState(false);
+  const [largeBatchConfirmOpen, setLargeBatchConfirmOpen] = useState(false);
+  const [singleItemConfirmId, setSingleItemConfirmId] = useState<string | null>(null);
 
   const { sendChunkedBatchToShopify, isSending, progress } = useBatchSendToShopify();
   const { getAutoProcessConfig, getProcessingMode } = useBatchAutoProcessSettings();
@@ -278,7 +281,17 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
       locationGid: selectedLocation
     });
 
-    // Always show configuration dialog for vendor selection and batch settings
+    // For large batches (>10 items), require typed confirmation first
+    if (itemIds.length > 10) {
+      setLargeBatchConfirmOpen(true);
+      return;
+    }
+
+    setBatchConfigOpen(true);
+  };
+
+  const handleLargeBatchConfirmed = () => {
+    setLargeBatchConfirmOpen(false);
     setBatchConfigOpen(true);
   };
 
@@ -530,7 +543,7 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
-                            handleSendToInventory(item.id);
+                            setSingleItemConfirmId(item.id);
                           }}
                           style={{ position: 'relative', zIndex: 9999 }}
                         >
@@ -768,6 +781,33 @@ export const CurrentBatchPanel = ({ onViewFullBatch, onBatchCountUpdate, compact
         open={batchProgressOpen}
         progress={progress}
         onCancel={() => setBatchProgressOpen(false)}
+      />
+
+      {/* Large batch confirmation dialog */}
+      <ConfirmActionDialog
+        open={largeBatchConfirmOpen}
+        onOpenChange={setLargeBatchConfirmOpen}
+        onConfirm={handleLargeBatchConfirmed}
+        title="Send Large Batch to Inventory"
+        description={`You are about to send ${recentItems.length} items to inventory. This will queue all items for Shopify sync. Type CONFIRM to proceed.`}
+        requireTypedConfirmation="CONFIRM"
+        confirmLabel="Send All Items"
+        variant="default"
+      />
+
+      {/* Single item send confirmation */}
+      <ConfirmActionDialog
+        open={!!singleItemConfirmId}
+        onOpenChange={(open) => { if (!open) setSingleItemConfirmId(null); }}
+        onConfirm={() => {
+          if (singleItemConfirmId) {
+            handleSendToInventory(singleItemConfirmId);
+            setSingleItemConfirmId(null);
+          }
+        }}
+        title="Send Item to Inventory"
+        description={`Send "${singleItemConfirmId ? formatCardName(recentItems.find(i => i.id === singleItemConfirmId) || {} as IntakeItem) : ''}" to inventory? This will also queue it for Shopify sync.`}
+        confirmLabel="Send to Inventory"
       />
     </>
   );
