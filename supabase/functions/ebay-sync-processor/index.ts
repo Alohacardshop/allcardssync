@@ -384,15 +384,20 @@ async function processCreate(
 
   // Determine condition and category from template or auto-detect
   const isGraded = !!item.grade
-  let conditionId = template?.condition_id || (isGraded ? EBAY_CONDITION_IDS.GRADED : EBAY_CONDITION_IDS.UNGRADED)
   const detectedCategory = item.primary_category || item.main_category || await detectCategoryFromBrandDB(supabase, item.brand_title)
   const categoryId = template?.category_id || 
     await getEbayCategoryIdDB(supabase, detectedCategory, isGraded)
 
+  // Build preferred condition list from template
+  const preferredConditionIds: string[] = 
+    (template?.preferred_condition_ids as string[] | null) ||
+    (template?.condition_id ? [template.condition_id] : []) ||
+    [isGraded ? '2750' : '4000']
+
   // === DYNAMIC CONDITION + ASPECT VALIDATION via Category Schema ===
   const marketplaceId = storeConfig.marketplace_id || 'EBAY_US'
   const schema = await getCategorySchema(accessToken, environment, marketplaceId, categoryId)
-  conditionId = resolveConditionId(schema, conditionId, isGraded)
+  let conditionId = resolveConditionId(schema, preferredConditionIds, isGraded)
   console.log(`[ebay-sync-processor] Validated conditionId: ${conditionId} for category ${categoryId}`)
 
   // Build condition descriptors for graded items (comics use different descriptor IDs)
@@ -428,10 +433,26 @@ async function processCreate(
   }
 
   // Validate aspects against category schema (filter unsupported, enforce allowed values)
+  const gradingAspectKeys = ['Professional Grader', 'Grade', 'Certification Number', 'Graded']
+  const preValidationGradingAspects = isGraded ? gradingAspectKeys.filter(k => aspects[k]) : []
   const { validated: validatedAspects, warnings: aspectWarnings } = validateAspects(schema, aspects)
   aspects = validatedAspects
   if (aspectWarnings.length > 0) {
     console.log(`[ebay-sync-processor] Aspect warnings for ${categoryId}: ${aspectWarnings.join('; ')}`)
+  }
+
+  // If grading aspects were removed by validation, append grading info to description
+  let descriptionSuffix = ''
+  if (isGraded && preValidationGradingAspects.length > 0) {
+    const removedGradingKeys = preValidationGradingAspects.filter(k => !validatedAspects[k])
+    if (removedGradingKeys.length > 0) {
+      const grader = item.grading_company || template?.default_grader || ''
+      const grade = item.grade || ''
+      const cert = item.psa_cert || item.cgc_cert || ''
+      const parts = [grader, grade].filter(Boolean).join(' ')
+      descriptionSuffix = cert ? `\n<p><strong>Grading:</strong> ${parts} — Cert #${cert}</p>` : `\n<p><strong>Grading:</strong> ${parts}</p>`
+      console.log(`[ebay-sync-processor] Grading aspects removed by taxonomy, appended to description: ${removedGradingKeys.join(', ')}`)
+    }
   }
 
   // Look up tag mapping for per-category policy/markup overrides
@@ -488,7 +509,7 @@ async function processCreate(
     sku: ebaySku,
     product: {
       title,
-      description,
+      description: description + descriptionSuffix,
       aspects,
       imageUrls: item.image_urls || [],
     },
@@ -602,15 +623,20 @@ async function processUpdate(
   const template = await resolveTemplate(supabase, item, storeConfig.store_key)
 
   const isGraded = !!item.grade
-  let conditionId = template?.condition_id || (isGraded ? EBAY_CONDITION_IDS.GRADED : EBAY_CONDITION_IDS.UNGRADED)
   const detectedCategory = item.primary_category || item.main_category || await detectCategoryFromBrandDB(supabase, item.brand_title)
   const categoryId = template?.category_id || 
     await getEbayCategoryIdDB(supabase, detectedCategory, isGraded)
 
+  // Build preferred condition list from template
+  const preferredConditionIds: string[] = 
+    (template?.preferred_condition_ids as string[] | null) ||
+    (template?.condition_id ? [template.condition_id] : []) ||
+    [isGraded ? '2750' : '4000']
+
   // === DYNAMIC CONDITION + ASPECT VALIDATION via Category Schema ===
   const marketplaceId = storeConfig.marketplace_id || 'EBAY_US'
   const schema = await getCategorySchema(accessToken, environment, marketplaceId, categoryId)
-  conditionId = resolveConditionId(schema, conditionId, isGraded)
+  let conditionId = resolveConditionId(schema, preferredConditionIds, isGraded)
   console.log(`[ebay-sync-processor] Update: Validated conditionId: ${conditionId} for category ${categoryId}`)
 
   // Look up tag mapping for per-category policy/markup overrides
@@ -641,10 +667,26 @@ async function processUpdate(
   }
 
   // Validate aspects against category schema
+  const gradingAspectKeys = ['Professional Grader', 'Grade', 'Certification Number', 'Graded']
+  const preValidationGradingAspects = isGraded ? gradingAspectKeys.filter(k => aspects[k]) : []
   const { validated: validatedAspects, warnings: aspectWarnings } = validateAspects(schema, aspects)
   aspects = validatedAspects
   if (aspectWarnings.length > 0) {
     console.log(`[ebay-sync-processor] Update aspect warnings for ${categoryId}: ${aspectWarnings.join('; ')}`)
+  }
+
+  // If grading aspects were removed by validation, append grading info to description
+  let descriptionSuffix = ''
+  if (isGraded && preValidationGradingAspects.length > 0) {
+    const removedGradingKeys = preValidationGradingAspects.filter(k => !validatedAspects[k])
+    if (removedGradingKeys.length > 0) {
+      const grader = item.grading_company || template?.default_grader || ''
+      const grade = item.grade || ''
+      const cert = item.psa_cert || item.cgc_cert || ''
+      const parts = [grader, grade].filter(Boolean).join(' ')
+      descriptionSuffix = cert ? `\n<p><strong>Grading:</strong> ${parts} — Cert #${cert}</p>` : `\n<p><strong>Grading:</strong> ${parts}</p>`
+      console.log(`[ebay-sync-processor] Update: Grading aspects removed by taxonomy, appended to description: ${removedGradingKeys.join(', ')}`)
+    }
   }
 
   // Build condition descriptors for graded items (comics use different descriptor IDs)
@@ -694,7 +736,7 @@ async function processUpdate(
     sku: ebaySku,
     product: {
       title: buildTitle(item, template?.title_template).substring(0, 80),
-      description: buildDescription(item, template?.description_template),
+      description: buildDescription(item, template?.description_template) + descriptionSuffix,
       aspects,
       imageUrls: item.image_urls || [],
     },

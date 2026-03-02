@@ -192,24 +192,31 @@ export async function getCategorySchema(
 
 /**
  * Validate a condition ID against the schema. Returns a valid condition ID.
+ * Accepts a priority list of preferred IDs; returns the first valid match.
  */
 export function resolveConditionId(
   schema: EbayCategorySchema,
-  preferredConditionId: string,
+  preferredConditionIds: string[],
   isGraded: boolean
 ): string {
   if (schema.conditionIds.length === 0) {
-    console.warn(`[CategorySchema] No condition data, using preferred: ${preferredConditionId}`)
-    return preferredConditionId
+    const first = preferredConditionIds[0] || (isGraded ? '2750' : '4000')
+    console.warn(`[CategorySchema] No condition data, using first preferred: ${first}`)
+    return first
   }
 
-  if (schema.conditionIds.includes(preferredConditionId)) {
-    return preferredConditionId
+  // Iterate the priority list and return the first valid match
+  for (const id of preferredConditionIds) {
+    if (schema.conditionIds.includes(id)) {
+      console.log(`[CategorySchema] Matched preferred condition: ${id}`)
+      return id
+    }
   }
 
-  console.warn(`[CategorySchema] Condition ${preferredConditionId} invalid. Valid: [${schema.conditionIds.join(', ')}]`)
+  console.warn(`[CategorySchema] None of [${preferredConditionIds.join(', ')}] valid. Valid: [${schema.conditionIds.join(', ')}]`)
 
-  const fallbacks = isGraded ? ['3000', '4000'] : ['4000', '3000']
+  // Hardcoded fallbacks as last resort
+  const fallbacks = isGraded ? ['2750', '3000', '4000'] : ['4000', '3000']
   for (const fb of fallbacks) {
     if (schema.conditionIds.includes(fb)) {
       console.log(`[CategorySchema] Fallback condition: ${fb}`)
