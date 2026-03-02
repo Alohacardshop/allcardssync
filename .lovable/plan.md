@@ -1,35 +1,41 @@
 
 
-## Add 24-Hour In-Memory Caching for eBay Condition Policies and Taxonomy Aspects
+## Template-Driven Condition + Aspect Resolution
 
-### Current State
-The dynamic condition and aspect validation is already fully implemented:
-- `fetchConditionPolicies()` calls the Metadata API per listing
-- `fetchCategoryAspects()` calls the Taxonomy API per listing
-- `validateAndResolveCondition()` and `filterAspectsByTaxonomy()` guard against invalid values
-- Both `processCreate` and `processUpdate` use these
+### Problem
+Currently, each template stores a single `condition_id` (text). If that ID is invalid for the category, `resolveConditionId` falls back to a hardcoded guess (`3000` or `4000`). The user wants templates to drive a **priority list** of preferred conditions, and grading data should only appear in aspects if the taxonomy supports those keys — otherwise it falls back to description text.
 
-The only gap is **no caching** — every listing makes 2 extra API calls (~200-400ms each), which is wasteful since condition policies and taxonomy aspects rarely change.
+### Changes
 
-### Plan
+#### 1. DB Migration: Add `preferred_condition_ids` column to `ebay_listing_templates`
 
-**File: `supabase/functions/_shared/ebayApi.ts`**
+Add a `jsonb` column `preferred_condition_ids` (text array, e.g. `["2750", "3000", "4000"]`) alongside the existing `condition_id`. The processor will iterate this list and pick the first valid one. `condition_id` remains as a simple fallback if `preferred_condition_ids` is null.
 
-Add a simple in-memory cache (Map) with 24-hour TTL for both functions:
+```sql
+ALTER TABLE ebay_listing_templates 
+  ADD COLUMN preferred_condition_ids jsonb DEFAULT NULL;
 
-1. Create a module-level cache Map keyed by `${environment}:${categoryId}` for each function
-2. Before making the API call, check if a cached result exists and is less than 24 hours old
-3. If cached, return immediately; otherwise fetch, store, and return
-
-```typescript
-// Cache structure
-const conditionPolicyCache = new Map<string, { data: string[]; ts: number }>()
-const categoryAspectCache = new Map<string, { data: Set<string>; ts: number }>()
-const CACHE_TTL_MS = 24 * 60 * 60 * 1000 // 24 hours
+COMMENT ON COLUMN ebay_listing_templates.preferred_condition_ids IS 
+  'Ordered priority list of condition IDs. Processor picks the first valid one for the category.';
 ```
 
-Add cache lookup at the top of `fetchConditionPolicies` and `fetchCategoryAspects`, and cache-store after successful fetch. No other files need changes — the processor already calls these functions.
+#### 2. Update `resolveConditionId` in `ebayCategorySchema.ts`
+
+Change signature to accept `preferredIds: string[]` (a list) instead of a single string. Iterate the list and return the first match found in the schema's valid condition IDs. If none match, fall back to the first valid ID from the schema.
+
+#### 3. Update `processCreate` and `processUpdate` in `ebay-sync-processor`
+
+- Build the preferred list: `template.preferred_condition_ids || [template.condition_id] || [isGraded ? '2750' : '4000']`
+- Pass the list to `resolveConditionId`
+- After `validateAspects`, check if grading aspect keys (`Professional Grader`, `Grade`, `Certification Number`) were **removed** by the filter. If they were, append grading info to the description text instead (e.g. `"PSA 10 — Cert #146094215"`).
+
+#### 4. Update template editor UI to support `preferred_condition_ids`
+
+In the template form, replace the single condition ID input with a multi-value input where the user can add condition IDs in priority order. The existing `condition_id` field stays as a readonly fallback display.
 
 ### Files Modified
-- `supabase/functions/_shared/ebayApi.ts` — add caching to `fetchConditionPolicies` and `fetchCategoryAspects`
+- **DB migration** — add `preferred_condition_ids` column
+- `supabase/functions/_shared/ebayCategorySchema.ts` — update `resolveConditionId` to accept a list
+- `supabase/functions/ebay-sync-processor/index.ts` — build preferred list from template, grading-to-description fallback
+- Template editor component (wherever the template form lives) — multi-value condition ID input
 
