@@ -2,43 +2,58 @@
 
 ## Problem
 
-Three code paths allow graded item quantity to exceed 1:
+When you re-scan a graded comic (cert 146094215), the item exists in a **closed** lot (`a856bfe6`). The `create_raw_intake_item` RPC fires its `ON CONFLICT DO UPDATE` clause, which updates fields like quantity, subject, grade, etc. — but **does not update `lot_id`**. The item stays assigned to the closed lot and never appears in the current batch.
 
-1. **`useAddIntakeItem.ts` (two identical blocks, lines ~129 and ~253)** — When a graded item exists in a closed/removed lot and gets re-added, the code calculates `newQuantity = existing.quantity + params.quantity_in`. For graded items this should always be forced to 1.
+The client-side duplicate detection in `useAddIntakeItem.ts` (lines 61-173) should catch this first, but either it's not triggering or its lot reassignment is also failing. Either way, the RPC itself needs to be the safety net.
 
-2. **`InlineQuantityEditor.tsx`** — The inline quantity editor in the inventory UI has no concept of "graded." Staff can manually type any number and save it. For graded items, the editor should be locked to 1 (read-only).
+## Root Cause
 
-3. **Database safety net** — A trigger on `intake_items` should enforce quantity = 1 for any row where `grading_company` is set, as a last line of defense regardless of which code path writes.
+In `create_raw_intake_item`, the `ON CONFLICT DO UPDATE SET` block is missing `lot_id` reassignment. When a duplicate is found, the item needs to be moved into the user's current active lot.
 
 ## Plan
 
-### 1. Fix `useAddIntakeItem.ts` — force quantity to 1 for graded re-adds
+### 1. Fix `create_raw_intake_item` RPC — reassign lot on conflict
 
-In both the primary path (~line 129) and the race-condition retry path (~line 253), wrap the quantity calculation:
+Update the RPC to:
+- Call `get_or_create_active_lot` at the top of the function to get the current active lot ID
+- Use that lot ID in the INSERT (so new items get lot assignment)
+- Add `lot_id = v_active_lot_id` to the `ON CONFLICT DO UPDATE SET` clause
+
+This ensures that both new inserts AND conflict-updates always land in the active lot.
+
+### 2. Add guard in `useAddIntakeItem.ts` duplicate path
+
+In the duplicate detection path (line 126), add a null check for `activeLotId`. If `get_or_create_active_lot` returns empty/undefined, throw an error instead of silently passing `undefined` to the update:
 
 ```typescript
-const isGraded = !!(params.grading_company_in || existing.grading_company);
-const newQuantity = isGraded ? 1 : (existing.quantity || 0) + (params.quantity_in || 1);
+if (!activeLotId) {
+  throw new Error('Failed to get or create active lot');
+}
 ```
 
-### 2. Lock `InlineQuantityEditor` for graded items
+Same fix for the race-condition fallback path (~line 252).
 
-- Add `isGraded?: boolean` prop to `InlineQuantityEditorProps`
-- When `isGraded` is true, render the read-only locked state with reason "Graded items are always 1-of-1"
-- Update all 4 call sites to pass `isGraded` based on `grading_company` field presence
+### 3. Fix existing orphaned item
 
-### 3. Add database trigger as safety net
-
-Create a trigger `enforce_graded_quantity_one` on `intake_items` that fires `BEFORE INSERT OR UPDATE` and sets `NEW.quantity = 1` whenever `NEW.grading_company IS NOT NULL AND NEW.grading_company != 'none'`. This catches any edge case regardless of code path.
+Run a data fix to move the stranded item (`5d89030b`) into a new active lot so it appears in the current batch.
 
 ### Technical Details
 
+**Database migration** — Update `create_raw_intake_item`:
+```sql
+-- Add at top of function body:
+v_active_lot_id uuid;
+...
+SELECT id INTO v_active_lot_id 
+FROM get_or_create_active_lot(store_key_in, shopify_location_gid_in);
+
+-- Add lot_id to INSERT column list and VALUES
+-- Add to ON CONFLICT DO UPDATE SET:
+lot_id = v_active_lot_id,
+```
+
 **Files to modify:**
-- `src/hooks/useAddIntakeItem.ts` — two quantity calculation lines
-- `src/components/inventory-card/InlineQuantityEditor.tsx` — add `isGraded` prop
-- `src/features/inventory/components/InventoryTableView.tsx` — pass `isGraded`
-- `src/features/inventory/components/inspector/tabs/OverviewTab.tsx` — pass `isGraded`
-- `src/components/inventory-card/InventoryItemMetaRow.tsx` — pass `isGraded`
-- `src/components/ShopifySyncDetailsDialog.tsx` — pass `isGraded`
-- New migration: trigger `enforce_graded_quantity_one`
+- `src/hooks/useAddIntakeItem.ts` — null guard for `activeLotId` (2 locations)
+- Database migration for `create_raw_intake_item` RPC
+- Data fix for the stranded item
 
