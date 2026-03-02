@@ -2,24 +2,44 @@
 
 ## Problem
 
-`GradedComicIntake.tsx` is the component used for comic intake (not `GradedCardIntake.tsx`). It has two issues:
+The Edit Item Details dialog currently shows fields that don't match PSA's official layout. From the screenshots:
 
-1. **No normalization**: Line 154 uses raw PSA API data directly (`data.data`) without calling `normalizePSAData`, so `grade` stays "10.0"
-2. **Variant construction** (lines 264-270): It builds `variant` by concatenating `varietyPedigree + grading company + grade` (e.g., `"1 PSA 10.0"`), and also bakes this into `subject_in` as `titleWithVariant`. The variant should just be the `varietyPedigree` value ("1"), and grade info should NOT be appended to subject or variant since it's already stored in separate `grade_in` and `grading_company` fields.
+- **Subject** shows "Amazing Spider-Man 1 PSA 10.0" (polluted with grade info)
+- **Variant** shows "1 PSA 10.0" (should just be "1")
+- **Grade** shows "10.0" (should be "10")
+- No front/back image preview
+- Field order doesn't match PSA's Item Information layout
 
 ## Changes
 
-**File: `src/components/GradedComicIntake.tsx`**
+### File: `src/components/EditIntakeItemDialog.tsx`
 
-1. **Import and apply normalization** (line 154-166): Import `normalizePSAData` and run it on `data.data` before setting `psaData` and form fields. This ensures `grade` becomes "10" (stripped `.0`).
+1. **Add front/back image preview at the top** — Show thumbnail images from `imageUrl` (and a second image URL field for back image). Display side-by-side like PSA certificate display.
 
-2. **Fix variant construction** (lines 264-280): 
-   - Set `variant_in` to just `varietyPedigree` (e.g., "1") — no grade info appended
-   - Set `subject_in` to just `formData.title` (e.g., "Amazing Spider-Man") — no variant/grade info appended
-   - The grade is already stored via `grade_in` and displayed separately in batch panel
+2. **Restructure fields to match PSA layout order:**
+   - Images (front & back) at top
+   - Cert Number / Grading Company
+   - Item Grade (with `.0` strip applied on display)
+   - Name (Subject — cleaned)
+   - Volume Number / Card Number
+   - Year / Publication Date
+   - Publisher / Brand
+   - Variant (clean, just variety/pedigree)
+   - Category fields
+   - Separator
+   - Price / Cost / Quantity / SKU
 
-### Result
-- `variant`: "1" (just the PSA variety/pedigree)
-- `grade`: "10" (cleaned)
-- `subject`: "Amazing Spider-Man" (clean title only)
+3. **Clean displayed values on load** — When the dialog opens, apply `formatGrade` to strip `.0` from grade, and strip trailing grade patterns from subject/variant using the same regex from `psaNormalization.ts`.
+
+4. **Support multiple image URLs** — Change `imageUrl` from single string to support front/back. Update the `IntakeItemDetails` type to include `imageUrls?: string[]` alongside `imageUrl`. Show two input fields: "Front Image URL" and "Back Image URL".
+
+### File: `src/components/CurrentBatchPanel.tsx`
+
+5. **Pass all image URLs** — Update the data mapping (lines 698-702) to pass the full `image_urls` array so front and back images are available in the dialog.
+
+6. **Save multiple image URLs** — Update the save handler (line 731) to persist both front and back image URLs to the `image_urls` array column.
+
+### Technical Detail
+
+The `image_urls` column in `intake_items` is already a text array (`text[]`), so it natively supports front/back images. The dialog will split this into two fields. On save, both URLs are combined back into the array. The grade/subject cleaning uses the same regex patterns already in `psaNormalization.ts`: `subject.replace(/\s+\d*\s*PSA\s+\d+\.?\d*$/i, '')` and `grade.replace(/\.0$/, '')`.
 
