@@ -2,30 +2,35 @@
 
 ## Problem
 
-The PSA Certificate Display component currently shows grade as just a number (e.g., "Grade 10") and the `gradeLabel` as a subtitle. The user wants it to match PSA's exact format from their screenshot — showing the full grade label like "GEM MT 10" (with `.0` stripped) as the primary display.
+When PSA graded comics are ingested, the PSA scraper returns a `subject` field with grade info baked in (e.g., "Amazing Spider-Man 1 PSA 10.0"). This polluted value flows into both the `subject` and `variant` DB columns. The grade also stores "10.0" instead of "10".
+
+Current DB values for cert 146094215:
+- `subject`: "Amazing Spider-Man 1 PSA 10.0" → should be "Amazing Spider-Man"
+- `variant`: "1 PSA 10.0" → should be empty or just the variant description
+- `grade`: "10.0" → should be "10"
 
 ## Changes
 
-**File: `src/components/PSACertificateDisplay.tsx`**
+### 1. Clean PSA subject at normalization (`src/lib/psaNormalization.ts`)
 
-1. **Grade Badge (lines 61-76):** Change from `Grade {psaData.grade}` to show `gradeLabel` as the primary text (with `.0` stripped), falling back to `Grade {grade}` if no label exists. Remove the separate `gradeLabel` subtitle since it's now the primary display.
+In `normalizePSAData`, after extracting `subject`, strip trailing grade info patterns like `\d+ PSA \d+\.?\d*` from the subject string. This prevents "Amazing Spider-Man 1 PSA 10.0" from being stored — it becomes "Amazing Spider-Man".
 
-2. **Detail fields layout (lines 120-228):** Reorder to match PSA's exact format from the screenshot:
-   - Cert Number (already shown above)
-   - Item Grade (already the badge)
-   - Name (subject)
-   - Volume Number / Card # 
-   - Publication Date
-   - Publisher / Brand
-   - Variant
-   - Language
-   - Country
-   - Page Quality
-   - Category
+### 2. Strip `.0` from grade at normalization (`src/lib/psaNormalization.ts`)
 
-3. **Apply `formatGrade` to strip `.0`** from the `gradeLabel` display (e.g., "GEM MT 10.0" → "GEM MT 10").
+Apply `.replace(/\.0$/, '')` to the `grade` field so "10.0" becomes "10" right at the normalization layer.
 
-### Technical Detail
+### 3. Fix auto-populate in GradedCardIntake (`src/components/GradedCardIntake.tsx`)
 
-The `gradeLabel` field comes from PSA's `CardGrade` (API) or `Item Grade` (scraper) and contains the full text like "GEM MT 10.0". The `grade` field is just the numeric part ("10"). We'll use `formatGrade` from `src/lib/labelData.ts` to clean the `.0` from the label, and display it as the primary grade text in the badge.
+When PSA data is for a comic (detected via `mainCategory === 'comics'`), auto-populate `variant` with the `varietyPedigree` field (which contains actual variant info like cover variants) instead of leaving it to be manually filled with grade-polluted data.
+
+### 4. Fix existing data display in EditIntakeItemDialog
+
+In `generateTitle` (line 48-67), the title already appends grade separately via `PSA ${item.grade}`. Since we're cleaning the subject, this will now produce clean titles like "2018 Marvel Comics Amazing Spider-Man #798 PSA 10".
+
+## Summary
+
+- **Root fix**: Clean grade info from `subject` in normalization layer
+- **Grade format**: Strip `.0` at normalization 
+- **Variant**: Auto-set from `varietyPedigree` for comics, not from polluted subject
+- **No DB migration needed** — new items will be clean; existing items can be manually edited
 
