@@ -56,10 +56,12 @@ export function useInventoryFieldSync() {
           const brand = updates.brand_title ?? item.brand_title;
           const subject = updates.subject ?? item.subject;
           const cardNum = updates.card_number ?? item.card_number;
+          const variant = updates.variant ?? item.variant;
           if (year) titleParts.push(year);
           if (brand) titleParts.push(brand);
           if (subject) titleParts.push(subject);
           if (cardNum) titleParts.push(`#${cardNum}`);
+          if (variant) titleParts.push(variant);
           if (item.grade && (item.psa_cert || item.cgc_cert)) {
             titleParts.push(`${item.grading_company || 'PSA'} ${formatGrade(item.grade)}`);
           }
@@ -67,7 +69,8 @@ export function useInventoryFieldSync() {
           const shopifyUpdates: Record<string, unknown> = {};
           // Always send title if any name-related field changed
           if (updates.subject !== undefined || updates.brand_title !== undefined || 
-              updates.card_number !== undefined || updates.year !== undefined) {
+              updates.card_number !== undefined || updates.year !== undefined ||
+              updates.variant !== undefined) {
             shopifyUpdates.title = titleParts.join(' ') || 'Unknown Item';
           }
           if (updates.price !== undefined) {

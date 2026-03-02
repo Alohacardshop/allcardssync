@@ -124,10 +124,10 @@ Deno.serve(async (req) => {
     if (!title) {
       const parts = []
       if (year) parts.push(year)
-      if (brandTitle) parts.push(brandTitle.toUpperCase())
-      if (subject) parts.push(subject.toUpperCase())
+      if (brandTitle) parts.push(brandTitle)
+      if (subject) parts.push(subject)
       if (cardNumber) parts.push(`#${cardNumber}`)
-      if (cardVariant && cardVariant !== 'Normal') parts.push(cardVariant.toLowerCase())
+      if (cardVariant) parts.push(cardVariant)
       if (category && category !== 'Normal') parts.push(category.toLowerCase())
       if (grade) parts.push(`${gradingCompany} ${grade}`)
       
