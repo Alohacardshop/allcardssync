@@ -1,44 +1,42 @@
 
 
-## Assessment: Current "Send to Inventory" Flow
+## Fix Image Order and Enforce Graded Quantity = 1
 
-The recent changes (clean title, hidden advanced settings, no duplicate vendor) have already addressed the major UX issues. The dialog is now streamlined. Here's what remains worth improving:
+### Problem 1: Wrong Image Order
+PSA returns images as `[back/slab, front]`. The code currently picks only the first image (the back). Shopify should show the front image first.
 
-### Remaining Issues
+**Fix**: Send ALL images from `image_urls` to Shopify, but reverse the array so the front image comes first. PSA consistently returns back-of-slab as first image and front as second.
 
-1. **No confirmation for large batches**: Sending 50+ items happens with a single click. Per your existing `ConfirmActionDialog` pattern and memory notes, batches over 10 items should require typed confirmation to prevent accidents.
+### Problem 2: Quantity Sent as 2
+Graded items are 1-of-1 per the inventory truth contract. The code blindly uses `item.quantity || 1`, which sent 2 because the DB had quantity=2.
 
-2. **Per-item "Send to Inventory" button has no guard**: Each item row has a small Send icon button that immediately sends a single item with no confirmation at all — easy to misclick.
+**Fix**: Force `quantity = 1` for graded items regardless of what the database or input says.
 
-3. **Toast spam during chunked processing**: Each chunk fires its own success toast (`"Chunk 2/5 completed..."`). For a 50-item batch that's 10 toasts. Should consolidate to a single final summary toast.
+### Changes
 
-4. **"Processing Summary" shows chunk math**: The summary line `"5 items • 1 chunks • Estimated time: ~3s"` exposes implementation details. For most sends (under 10 items), this is noise. Should simplify to just `"5 items"` and only show chunk/time info when there are multiple chunks.
+**File: `supabase/functions/v2-shopify-send-graded/index.ts`**
 
-5. **Stale hook name**: `useBatchSendToShopify` is still named after Shopify even though it now does inventory + queue. Minor but misleading for maintenance.
+1. **Images (lines 349-353)**: Instead of sending a single `imageUrl`, build an images array from `intakeItem.image_urls` (reversed so front is first). Fall back to single `imageUrl` if no array exists.
 
-### Proposed Changes
+2. **Quantity (line 341)**: Hard-code `inventory_quantity: 1` — graded items are always 1-of-1.
 
-**1. Add large-batch confirmation** — `src/components/CurrentBatchPanel.tsx`
-- Before opening `BatchConfigDialog`, if `itemCount > 10`, show `ConfirmActionDialog` requiring typed "CONFIRM". Only proceed to the config dialog after confirmation.
+3. **Inventory write (line 435)**: Change `quantity: item.quantity || 1` to `quantity: 1` for the same reason.
 
-**2. Add confirmation to per-item send button** — `src/components/CurrentBatchPanel.tsx`
-- Wrap the inline send button's `onClick` with a simple confirmation (window.confirm or a small dialog) showing the item name.
+### Technical Detail
 
-**3. Simplify toast output** — `src/hooks/useBatchSendToShopify.ts`
-- Remove per-chunk success toasts (`toast.success("Chunk X/Y completed...")`).
-- Keep only the final summary toast and any error/warning toasts.
+```
+// Images: reverse PSA order [back, front] → [front, back]
+const allImages = (intakeItem.image_urls && Array.isArray(intakeItem.image_urls) && intakeItem.image_urls.length > 0)
+  ? [...intakeItem.image_urls].reverse().map(url => ({ src: url, alt: title }))
+  : imageUrl ? [{ src: imageUrl, alt: title }] : []
 
-**4. Simplify processing summary for small batches** — `src/components/BatchConfigDialog.tsx`
-- If `itemCount <= batchSize` (single chunk), show just `"{count} items"` plus vendor.
-- Only show chunk count and estimated time when there are multiple chunks.
+// In productData:
+images: allImages
 
-**5. No hook rename** — cosmetic, low priority, skip for now.
+// Variant quantity:
+inventory_quantity: 1  // Graded = 1-of-1, always
 
-### Files Changed
-
-| File | What |
-|------|------|
-| `src/components/CurrentBatchPanel.tsx` | Add `ConfirmActionDialog` for batches > 10 items; add confirm for per-item send |
-| `src/hooks/useBatchSendToShopify.ts` | Remove per-chunk success toasts, keep final summary only |
-| `src/components/BatchConfigDialog.tsx` | Simplify processing summary for single-chunk sends |
+// writeInventory call:
+quantity: 1  // Graded = 1-of-1, always
+```
 
