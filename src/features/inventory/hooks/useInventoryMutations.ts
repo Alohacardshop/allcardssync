@@ -155,14 +155,14 @@ export function useInventoryMutations({
             sku: item.sku || '',
             psa_cert: item.psa_cert,
             barcode: item.sku,
-            title: item.subject || '',
             price: item.price,
             grade: item.grade,
             quantity: item.quantity,
             year: item.year,
             brand_title: item.brand_title,
             subject: item.subject,
-            card_number: typeof item.card_number === 'number' ? String(item.card_number) : item.card_number
+            card_number: typeof item.card_number === 'number' ? String(item.card_number) : item.card_number,
+            variant: item.variant
           }
         });
 
