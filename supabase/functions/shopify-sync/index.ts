@@ -418,7 +418,7 @@ async function createShopifyProduct(credentials: ShopifyCredentials, item: Inven
   }
   
   // Remove duplicates and create Shopify images array
-  const uniqueImageUrls = [...new Set(imageUrls)].filter(url => url && typeof url === 'string')
+  let uniqueImageUrls = [...new Set(imageUrls)].filter(url => url && typeof url === 'string')
   
   // Add default image if no images found
   if (uniqueImageUrls.length === 0) {
@@ -426,9 +426,19 @@ async function createShopifyProduct(credentials: ShopifyCredentials, item: Inven
     uniqueImageUrls.push(defaultImageUrl)
   }
   
-  const images = [...uniqueImageUrls].reverse().map((url, index) => ({
+  // For comics with exactly 2 images and no psa_snapshot (scraped data):
+  // PSA cert pages show back first, front second — reverse so front is position 1
+  const isComic = (item as any).main_category === 'comics' || 
+                  (item as any).catalog_snapshot?.type === 'graded_comic' ||
+                  (item as any).catalog_snapshot?.type === 'psa_comic'
+  if (isComic && uniqueImageUrls.length === 2 && !(item as any).psa_snapshot?.images) {
+    uniqueImageUrls = [...uniqueImageUrls].reverse()
+  }
+  
+  const images = uniqueImageUrls.map((url, index) => ({
     src: url,
-    alt: `${title} - Image ${index + 1}`
+    alt: `${title} - Image ${index + 1}`,
+    position: index + 1  // position 1 = featured (front image)
   }))
   
   const handle = item.sku.toLowerCase().replace(/[^a-z0-9]/g, '-')
@@ -760,6 +770,42 @@ async function processQueueItem(supabase: any, queueItem: SyncQueueItem) {
         shopifyProductId = product.id.toString()
         shopifyVariantId = variant.id.toString()
         inventoryItemId = variant.inventory_item_id.toString()
+      }
+      
+      // Reorder media via GraphQL to guarantee front image is featured
+      try {
+        const mediaQuery = await fetch(`https://${credentials.domain}/admin/api/2024-07/graphql.json`, {
+          method: 'POST',
+          headers: { 'X-Shopify-Access-Token': credentials.access_token, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            query: `query($id:ID!){product(id:$id){media(first:10){edges{node{id}}}}}`,
+            variables: { id: `gid://shopify/Product/${shopifyProductId}` }
+          })
+        })
+        if (mediaQuery.ok) {
+          const mediaResult = await mediaQuery.json()
+          const mediaEdges = mediaResult?.data?.product?.media?.edges || []
+          if (mediaEdges.length >= 2) {
+            // Keep current order (already sorted front-first), just enforce positions
+            const moves = mediaEdges.map((e: any, i: number) => ({ id: e.node.id, newPosition: String(i) }))
+            const reorderResp = await fetch(`https://${credentials.domain}/admin/api/2024-07/graphql.json`, {
+              method: 'POST',
+              headers: { 'X-Shopify-Access-Token': credentials.access_token, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                query: `mutation($id:ID!,$moves:[MoveInput!]!){productReorderMedia(id:$id,moves:$moves){job{id}mediaUserErrors{field message}}}`,
+                variables: { id: `gid://shopify/Product/${shopifyProductId}`, moves }
+              })
+            })
+            if (reorderResp.ok) {
+              const reorderResult = await reorderResp.json()
+              const errs = reorderResult?.data?.productReorderMedia?.mediaUserErrors || []
+              if (errs.length > 0) console.warn(`[MEDIA REORDER] userErrors:`, JSON.stringify(errs))
+              else console.log(`[MEDIA REORDER] ✅ Reordered media for product ${shopifyProductId}`)
+            }
+          }
+        }
+      } catch (reorderErr) {
+        console.warn(`[MEDIA REORDER] Error:`, reorderErr)
       }
       
       // Set inventory level
