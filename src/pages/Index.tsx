@@ -9,9 +9,9 @@ import { CurrentBatchPanel } from '@/components/CurrentBatchPanel';
 import { PageHeader } from '@/components/layout/PageHeader';
 
 export default function Index() {
-  const [collectibleType, setCollectibleType] = useState<'cards' | 'comics'>('cards');
+  const [collectibleType, setCollectibleType] = useState<'cards' | 'comics'>('comics');
   const [cardCondition, setCardCondition] = useState<'raw' | 'graded'>('raw');
-  const [comicCondition, setComicCondition] = useState<'raw' | 'graded'>('raw');
+  const [comicCondition, setComicCondition] = useState<'raw' | 'graded'>('graded');
   const [batchCount, setBatchCount] = useState(0);
 
   const handleBatchCountUpdate = useCallback((count: number) => {
