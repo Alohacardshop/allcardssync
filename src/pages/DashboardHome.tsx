@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
@@ -7,6 +8,7 @@ import { canUseApp, getUserRole, type AppKey } from '@/lib/permissions';
 import { useEcosystemTheme } from '@/hooks/useEcosystemTheme';
 import { useAnimatedCounter } from '@/hooks/useAnimatedCounter';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { ActiveLotsDialog } from '@/components/dashboard/ActiveLotsDialog';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -135,6 +137,7 @@ export default function DashboardHome() {
 
   const role = getUserRole(isAdmin, isStaff);
   const userName = user?.email?.split('@')[0] || 'User';
+  const [lotsDialogOpen, setLotsDialogOpen] = useState(false);
 
   // Fetch real dashboard stats
   const { data: dashStats, isLoading: statsLoading } = useQuery({
@@ -203,12 +206,17 @@ export default function DashboardHome() {
 
       {/* Quick Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-        <StatCard 
-          label="Active Lots" 
-          value={formatNumber(dashStats?.activeLots ?? 0)} 
-          icon={Package}
-          isLoading={statsLoading}
-        />
+        <button
+          onClick={() => setLotsDialogOpen(true)}
+          className="text-left w-full cursor-pointer hover:ring-2 hover:ring-primary/30 rounded-xl transition-all"
+        >
+          <StatCard 
+            label="Active Lots" 
+            value={formatNumber(dashStats?.activeLots ?? 0)} 
+            icon={Package}
+            isLoading={statsLoading}
+          />
+        </button>
         <StatCard 
           label="Queue Items" 
           value={formatNumber(dashStats?.queueItems ?? 0)} 
@@ -268,6 +276,8 @@ export default function DashboardHome() {
           </div>
         )}
       </div>
+
+      <ActiveLotsDialog open={lotsDialogOpen} onOpenChange={setLotsDialogOpen} />
 
       {/* Quick Actions */}
       <div className="grid md:grid-cols-2 gap-4">
