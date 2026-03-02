@@ -1,36 +1,22 @@
 
 
-## Plan: Add "List All eBay Locations" and Fix Multi-Store Support
+## Fix: Update Comic Templates to Use Leaf Category IDs
 
-### Problem
-- The edge function uses `.single()` on `ebay_store_config` but you have 2 active configs (hawaii + las_vegas), causing it to crash.
-- There's no way to list all merchant locations registered on your eBay account.
+### The Problem
+The 4 comic templates all use `category_id: 63` ("Comic Books"), which is a **parent category** on eBay, not a leaf. eBay error 25005 rejects any listing that doesn't use a leaf category. The system is correctly pulling the category from the template — the template just has the wrong ID.
 
-### Changes
+### The Fix
+Update the `category_id` on the graded comic templates from `63` → `259061` ("Graded Comic Books"), which is the correct leaf category already in your `ebay_categories` registry.
 
-**1. Update `supabase/functions/ebay-manage-location/index.ts`**
+**Database update (SQL migration):**
+```sql
+UPDATE ebay_listing_templates
+SET category_id = '259061', category_name = 'Graded Comic Books'
+WHERE category_id = '63' AND is_graded = true;
+```
 
-- Accept a `store_key` query parameter (e.g., `?store_key=hawaii`) to select which store config to use, instead of `.single()`.
-- Add a new action via query param `?action=list` that calls `GET /sell/inventory/v1/location` (no key suffix) to return **all** locations registered on that eBay account.
-- Keep the existing `?action=verify` (default GET) behavior for checking a specific `location_key`.
+This targets all 4 graded comic templates (CGC × 2 stores, PSA × 2 stores). No code changes needed — the listing processor already reads `template.category_id` correctly.
 
-**2. Update `src/components/admin/EbayMerchantLocation.tsx`**
-
-- Pass the current `storeKey` as a prop alongside `locationKey`.
-- Add a "List All Locations" button that calls the edge function with `action=list`.
-- Display the returned locations in a table/list showing each location's key, name, address, and status.
-- The existing Verify and Register buttons continue to work as before.
-
-**3. Update `src/pages/EbayApp.tsx`**
-
-- Pass `storeKey={selectedConfig.store_key}` to `EbayMerchantLocation`.
-
-### How it works
-
-The eBay Inventory API endpoint `GET /sell/inventory/v1/location` (without a specific key) returns all registered merchant locations. The edge function will call this and return the full list. The UI will render them so you can see exactly what's registered.
-
-### Files to change
-- `supabase/functions/ebay-manage-location/index.ts` — add `store_key` param, add `action=list`
-- `src/components/admin/EbayMerchantLocation.tsx` — add list UI, accept `storeKey` prop
-- `src/pages/EbayApp.tsx` — pass `storeKey` prop
+### Optional: Verify 183454 (TCG)
+Category `183454` ("CCG Individual Cards") should also be verified as a leaf. If it's also a parent, the same fix applies for TCG templates. We can use the Schema Inspector tab you already have to check this.
 
