@@ -556,3 +556,75 @@ export function getSportsCardCategoryId(sport: string | null): string {
       return EBAY_CATEGORY_IDS.SPORTS_TRADING_CARDS;
   }
 }
+
+/**
+ * Validate a condition ID against the list of valid IDs from eBay's condition policies.
+ * Falls back to best available if preferred is invalid.
+ */
+export function validateAndResolveCondition(
+  validConditionIds: string[],
+  preferredConditionId: string,
+  isGraded: boolean
+): string {
+  // If no valid IDs returned (API error), trust the preferred ID
+  if (validConditionIds.length === 0) {
+    console.warn(`[validateAndResolveCondition] No valid condition IDs available, using preferred: ${preferredConditionId}`)
+    return preferredConditionId
+  }
+
+  // If preferred is valid, use it
+  if (validConditionIds.includes(preferredConditionId)) {
+    return preferredConditionId
+  }
+
+  console.warn(`[validateAndResolveCondition] Preferred condition ${preferredConditionId} is NOT valid for this category. Valid: [${validConditionIds.join(', ')}]`)
+
+  // Fallback logic
+  const gradedFallbacks = ['3000', '4000'] // Like New, then Ungraded
+  const ungradedFallbacks = ['4000', '3000'] // Ungraded, then Like New
+  const fallbacks = isGraded ? gradedFallbacks : ungradedFallbacks
+
+  for (const fb of fallbacks) {
+    if (validConditionIds.includes(fb)) {
+      console.log(`[validateAndResolveCondition] Using fallback condition: ${fb}`)
+      return fb
+    }
+  }
+
+  // Last resort: use first available
+  const fallback = validConditionIds[0]
+  console.log(`[validateAndResolveCondition] Using first available condition: ${fallback}`)
+  return fallback
+}
+
+/**
+ * Filter aspects to only include keys that exist in the eBay taxonomy for the category.
+ * Prevents sending invalid aspect names that would be rejected.
+ */
+export function filterAspectsByTaxonomy(
+  aspects: Record<string, string[]>,
+  validAspectNames: Set<string>
+): Record<string, string[]> {
+  // If no taxonomy data available (API error), pass through all aspects
+  if (validAspectNames.size === 0) {
+    console.warn(`[filterAspectsByTaxonomy] No valid aspect names available, passing all aspects through`)
+    return aspects
+  }
+
+  const filtered: Record<string, string[]> = {}
+  const removed: string[] = []
+
+  for (const [key, value] of Object.entries(aspects)) {
+    if (validAspectNames.has(key)) {
+      filtered[key] = value
+    } else {
+      removed.push(key)
+    }
+  }
+
+  if (removed.length > 0) {
+    console.log(`[filterAspectsByTaxonomy] Removed invalid aspects: [${removed.join(', ')}]`)
+  }
+
+  return filtered
+}

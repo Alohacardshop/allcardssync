@@ -14,11 +14,15 @@ import {
   deleteInventoryItem,
   getOffersBySku,
   mapConditionToEbay,
+  fetchConditionPolicies,
+  fetchCategoryAspects,
 } from '../_shared/ebayApi.ts'
 import {
   EBAY_CONDITION_IDS,
   buildGradedConditionDescriptors,
   buildComicConditionDescriptors,
+  validateAndResolveCondition,
+  filterAspectsByTaxonomy,
 } from '../_shared/ebayConditions.ts'
 import {
   resolveTemplate,
@@ -379,10 +383,19 @@ async function processCreate(
 
   // Determine condition and category from template or auto-detect
   const isGraded = !!item.grade
-  const conditionId = template?.condition_id || (isGraded ? EBAY_CONDITION_IDS.GRADED : EBAY_CONDITION_IDS.UNGRADED)
+  let conditionId = template?.condition_id || (isGraded ? EBAY_CONDITION_IDS.GRADED : EBAY_CONDITION_IDS.UNGRADED)
   const detectedCategory = item.primary_category || item.main_category || await detectCategoryFromBrandDB(supabase, item.brand_title)
   const categoryId = template?.category_id || 
     await getEbayCategoryIdDB(supabase, detectedCategory, isGraded)
+
+  // === DYNAMIC CONDITION VALIDATION ===
+  const marketplaceId = storeConfig.marketplace_id || 'EBAY_US'
+  const { conditionIds: validConditionIds } = await fetchConditionPolicies(accessToken, environment, marketplaceId, categoryId)
+  conditionId = validateAndResolveCondition(validConditionIds, conditionId, isGraded)
+  console.log(`[ebay-sync-processor] Validated conditionId: ${conditionId} for category ${categoryId}`)
+
+  // === DYNAMIC ASPECT VALIDATION ===
+  const { aspectNames: validAspectNames } = await fetchCategoryAspects(accessToken, environment, categoryId)
 
   // Build condition descriptors for graded items (comics use different descriptor IDs)
   let conditionDescriptors: any[] | undefined
@@ -403,7 +416,21 @@ async function processCreate(
   }
 
   // Build aspects based on detected category (TCG, sports, or comics)
-  const aspects = await buildCategoryAwareAspects(supabase, item, detectedCategory)
+  let aspects = await buildCategoryAwareAspects(supabase, item, detectedCategory)
+
+  // Add grading aspects for graded items if taxonomy supports them
+  if (isGraded) {
+    const gradingAspects: Record<string, string[]> = {}
+    if (item.grading_company) gradingAspects['Professional Grader'] = [item.grading_company]
+    if (item.grade) gradingAspects['Grade'] = [item.grade]
+    const certNumber = item.psa_cert || item.cgc_cert
+    if (certNumber) gradingAspects['Certification Number'] = [certNumber]
+    gradingAspects['Graded'] = ['Yes']
+    aspects = { ...aspects, ...gradingAspects }
+  }
+
+  // Filter aspects to only valid taxonomy names
+  aspects = filterAspectsByTaxonomy(aspects, validAspectNames)
 
   // Look up tag mapping for per-category policy/markup overrides
   const { data: tagMappingPolicies } = detectedCategory ? await supabase
@@ -573,10 +600,19 @@ async function processUpdate(
   const template = await resolveTemplate(supabase, item, storeConfig.store_key)
 
   const isGraded = !!item.grade
-  const conditionId = template?.condition_id || (isGraded ? EBAY_CONDITION_IDS.GRADED : EBAY_CONDITION_IDS.UNGRADED)
+  let conditionId = template?.condition_id || (isGraded ? EBAY_CONDITION_IDS.GRADED : EBAY_CONDITION_IDS.UNGRADED)
   const detectedCategory = item.primary_category || item.main_category || await detectCategoryFromBrandDB(supabase, item.brand_title)
   const categoryId = template?.category_id || 
     await getEbayCategoryIdDB(supabase, detectedCategory, isGraded)
+
+  // === DYNAMIC CONDITION VALIDATION ===
+  const marketplaceId = storeConfig.marketplace_id || 'EBAY_US'
+  const { conditionIds: validConditionIds } = await fetchConditionPolicies(accessToken, environment, marketplaceId, categoryId)
+  conditionId = validateAndResolveCondition(validConditionIds, conditionId, isGraded)
+  console.log(`[ebay-sync-processor] Update: Validated conditionId: ${conditionId} for category ${categoryId}`)
+
+  // === DYNAMIC ASPECT VALIDATION ===
+  const { aspectNames: validAspectNames } = await fetchCategoryAspects(accessToken, environment, categoryId)
 
   // Look up tag mapping for per-category policy/markup overrides
   const { data: tagMappingPolicies } = detectedCategory ? await supabase
@@ -592,7 +628,21 @@ async function processUpdate(
   const returnPolicyId = template?.return_policy_id || tagMappingPolicies?.return_policy_id || storeConfig.default_return_policy_id || ''
 
   // Build aspects based on detected category (TCG, sports, or comics)
-  const aspects = await buildCategoryAwareAspects(supabase, item, detectedCategory)
+  let aspects = await buildCategoryAwareAspects(supabase, item, detectedCategory)
+
+  // Add grading aspects for graded items if taxonomy supports them
+  if (isGraded) {
+    const gradingAspects: Record<string, string[]> = {}
+    if (item.grading_company) gradingAspects['Professional Grader'] = [item.grading_company]
+    if (item.grade) gradingAspects['Grade'] = [item.grade]
+    const certNumber = item.psa_cert || item.cgc_cert
+    if (certNumber) gradingAspects['Certification Number'] = [certNumber]
+    gradingAspects['Graded'] = ['Yes']
+    aspects = { ...aspects, ...gradingAspects }
+  }
+
+  // Filter aspects to only valid taxonomy names
+  aspects = filterAspectsByTaxonomy(aspects, validAspectNames)
 
   // Build condition descriptors for graded items (comics use different descriptor IDs)
   let conditionDescriptors: any[] | undefined
