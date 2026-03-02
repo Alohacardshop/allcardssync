@@ -182,15 +182,40 @@ export function useInventoryMutations({
         }
       }
 
-      return item;
+      // If item is listed on eBay, also queue an eBay resync
+      let ebayResynced = false;
+      if (item.list_on_ebay && item.ebay_listing_id) {
+        const { error: queueError } = await supabase
+          .from('ebay_sync_queue')
+          .upsert({
+            inventory_item_id: item.id,
+            action: 'update',
+            status: 'queued',
+            queue_position: 1,
+          }, { onConflict: 'inventory_item_id' });
+
+        if (!queueError) {
+          await supabase
+            .from('intake_items')
+            .update({ ebay_sync_status: 'queued' })
+            .eq('id', item.id);
+
+          // Fire-and-forget eBay processor
+          supabase.functions.invoke('ebay-sync-processor', { body: { batch_size: 1 } }).catch(() => {});
+          ebayResynced = true;
+        }
+      }
+
+      return { item, ebayResynced };
     },
-    onSuccess: (item) => {
-      toast.success(`${item.sku} resynced to Shopify with barcode`);
+    onSuccess: ({ item, ebayResynced }) => {
+      const target = ebayResynced ? 'Shopify & eBay' : 'Shopify';
+      toast.success(`${item.sku} resynced to ${target}`);
       queryClient.invalidateQueries({ queryKey: ['inventory-list'] });
       onSuccess?.();
     },
     onError: (error: Error, item) => {
-      logger.error('Resync failed', error, { itemId: item.id, sku: item.sku });
+      logger.error('Resync failed', error, { itemId: item?.id, sku: item?.sku });
       toast.error('Failed to resync: ' + error.message);
     },
   });

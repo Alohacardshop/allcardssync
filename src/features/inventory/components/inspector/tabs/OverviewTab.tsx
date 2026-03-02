@@ -241,24 +241,31 @@ export const OverviewTab = React.memo(({ item, detailData, locationsMap, onField
         <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Marketplace</h4>
         
         <div className="border border-border rounded-lg divide-y divide-border">
-          {/* Shopify row */}
+          {/* Shopify row — also resyncs eBay if listed */}
           <div className="grid grid-cols-[1fr_auto_auto] items-center gap-2 min-h-[40px] px-3 py-2">
             <span className="text-sm font-medium">Shopify</span>
             <div className="flex items-center">{getShopifyBadge()}</div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onResync?.(item)}
-              disabled={isResyncing || isDeleted}
-              className="h-7 px-2 text-xs text-muted-foreground"
-            >
-              {isResyncing ? (
-                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-              ) : (
-                <RefreshCw className="h-3 w-3 mr-1" />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onResync?.(item)}
+                  disabled={isResyncing || isDeleted}
+                  className="h-7 px-2 text-xs text-muted-foreground"
+                >
+                  {isResyncing ? (
+                    <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-3 w-3 mr-1" />
+                  )}
+                  {isListed ? 'Resync All' : 'Resync'}
+                </Button>
+              </TooltipTrigger>
+              {isListed && (
+                <TooltipContent side="bottom">Resyncs to both Shopify & eBay</TooltipContent>
               )}
-              Resync
-            </Button>
+            </Tooltip>
           </div>
 
           {/* eBay row */}
