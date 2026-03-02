@@ -1,36 +1,23 @@
 
 
-## Fix: Template Placeholder Mismatch (Double vs Single Curly Braces)
+## Plan: Unified "Resync All" for Both Shopify and eBay
 
 ### Problem
-Comic templates use `{{placeholder}}` (double curly braces) but `buildTitle()` and `buildDescription()` only replace `{placeholder}` (single curly braces). Result: `{Amazing Spider-Man}` instead of `Amazing Spider-Man`.
+The Shopify "Resync" button only syncs to Shopify. If an item is also listed on eBay, you have to separately hit the eBay Resync button. There's no single action to update both marketplaces at once.
 
-### Solution
-Update `buildTitle()` and `buildDescription()` in `supabase/functions/_shared/ebayTemplateResolver.ts` to handle **both** `{{placeholder}}` and `{placeholder}` formats.
+### Proposed Change
 
-### Changes
+**File: `src/features/inventory/hooks/useInventoryMutations.ts`**
 
-**File: `supabase/functions/_shared/ebayTemplateResolver.ts`**
+Update `resyncMutation` (line ~137) to also queue an eBay resync when the item has an active eBay listing (`list_on_ebay === true` and `ebay_listing_id` exists):
 
-In both `buildTitle()` (~line 265) and `buildDescription()` (~line 295), add double-brace replacements **before** the existing single-brace ones:
+1. After the Shopify resync succeeds, check if the item is listed on eBay
+2. If yes, upsert into `ebay_sync_queue` with `action: 'update'` and fire-and-forget invoke `ebay-sync-processor`
+3. Update the success toast to say "Resynced to Shopify & eBay" vs just "Shopify"
 
-```typescript
-// Add these BEFORE existing single-brace replacements:
-.replace(/{{subject}}/g, item.subject || '')
-.replace(/{{brand_title}}/g, item.brand_title || '')
-.replace(/{{brand}}/g, item.brand_title || '')
-.replace(/{{year}}/g, item.year || '')
-.replace(/{{grade}}/g, item.grade || '')
-.replace(/{{grading_company}}/g, item.grading_company || '')
-.replace(/{{card_number}}/g, item.card_number || '')
-.replace(/{{variant}}/g, item.variant || '')
-.replace(/{{psa_cert}}/g, item.psa_cert || '')
-.replace(/{{sku}}/g, item.sku || '')
-.replace(/{{cgc_cert}}/g, item.cgc_cert || '')
-// Then existing single-brace replacements follow...
-```
+**File: `src/features/inventory/components/inspector/tabs/OverviewTab.tsx`**
 
-Double-brace patterns must be matched first so they don't get partially consumed by single-brace patterns.
+Update the Shopify row's Resync button label/tooltip to indicate it will resync to all active marketplaces when eBay is also enabled.
 
-**No other files affected.** After deploying, re-sync the item to get corrected title and description on eBay.
+This keeps both individual resync buttons available while making the main one a convenient "sync everywhere" action.
 
